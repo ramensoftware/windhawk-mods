@@ -1,0 +1,240 @@
+{
+    "app": {
+        "version": "0.9"
+    },
+    "mods": {
+        "chrome-wheel-scroll-tabs": {
+            "details": {
+                "defaultSorting": 0.7008472464490406,
+                "published": 1646604429000,
+                "rating": 10,
+                "updated": 1646604429000,
+                "users": 97
+            },
+            "featured": true,
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32",
+                "description": "Use the mouse wheel while hovering over the tab bar to switch between tabs",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "chrome.exe",
+                    "msedge.exe",
+                    "opera.exe"
+                ],
+                "name": "Chrome/Edge scroll tabs with mouse wheel",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "notepad-dark-mode": {
+            "details": {
+                "defaultSorting": 0.5291051942301385,
+                "published": 1646604429000,
+                "rating": 9,
+                "updated": 1646604429000,
+                "users": 86
+            },
+            "featured": true,
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lgdi32 -luxtheme",
+                "description": "The missing dark mode theme for Notepad",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "notepad.exe"
+                ],
+                "name": "Dark Mode for Notepad",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "slick-window-arrangement": {
+            "details": {
+                "defaultSorting": 0.583687104566895,
+                "published": 1646604429000,
+                "rating": 9,
+                "updated": 1646604429000,
+                "users": 122
+            },
+            "featured": true,
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -ldwmapi",
+                "description": "Make window arrangement more slick and pleasant with a sliding animation and snapping",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Slick Window Arrangement",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "taskbar-button-click": {
+            "details": {
+                "defaultSorting": 0.7224598312333834,
+                "published": 1646604429000,
+                "rating": 10,
+                "updated": 1646604429000,
+                "users": 106
+            },
+            "featured": true,
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "description": "Close programs with a middle click on the taskbar instead of creating a new instance",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Middle click to close on the taskbar",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "taskbar-clock-customization": {
+            "details": {
+                "defaultSorting": 0.36481678148834923,
+                "published": 1646604429000,
+                "rating": 8,
+                "updated": 1646604429000,
+                "users": 62
+            },
+            "featured": true,
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lwininet",
+                "description": "Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Clock Customization",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "taskbar-grouping": {
+            "details": {
+                "defaultSorting": 0.2194220423751511,
+                "published": 1646604429000,
+                "rating": 7,
+                "updated": 1646604429000,
+                "users": 39
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32",
+                "description": "Causes a separate button to be created on the taskbar for each new window",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Disable grouping on the taskbar",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "text-replace": {
+            "details": {
+                "defaultSorting": 0.14168679599620415,
+                "published": 1646604429000,
+                "rating": 7,
+                "updated": 1646604429000,
+                "users": 25
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lgdi32",
+                "description": "Replace any text with any other text in any program",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Text Replace",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "timer-resolution-control": {
+            "details": {
+                "defaultSorting": 0.15874368220765284,
+                "published": 1646604429000,
+                "rating": 9,
+                "updated": 1646604429000,
+                "users": 13
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "Prevent programs from changing the Windows timer resolution and increasing power consumption",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Timer Resolution Control",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "visual-studio-anti-rich-header": {
+            "details": {
+                "defaultSorting": 0.20654329147389294,
+                "published": 1646604429000,
+                "rating": 10,
+                "updated": 1646604429000,
+                "users": 8
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "Prevent the Visual Studio linker from embedding the Rich header into new executables",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "link.exe"
+                ],
+                "name": "Visual Studio Anti-Rich-Header",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
+        "vscode-tweaker": {
+            "details": {
+                "defaultSorting": 0.33923950307558504,
+                "published": 1646604429000,
+                "rating": 9,
+                "updated": 1646604429000,
+                "users": 29
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lshlwapi",
+                "description": "Tweak Microsoft Visual Studio Code by injecting custom JavaScript and CSS code",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "code.exe"
+                ],
+                "name": "VSCode Tweaker",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        }
+    }
+}
