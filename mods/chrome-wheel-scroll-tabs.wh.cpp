@@ -9,6 +9,7 @@
 // @homepage        https://m417z.com/
 // @include         chrome.exe
 // @include         msedge.exe
+// @include         brave.exe
 // @include         opera.exe
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
