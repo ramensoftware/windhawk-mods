@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,6 +10,7 @@
 // @include         chrome.exe
 // @include         msedge.exe
 // @include         opera.exe
+// @include         brave.exe
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
@@ -19,7 +20,7 @@
 
 Use the mouse wheel while hovering over the tab bar to switch between tabs.
 
-Currently supported browsers: Google Chrome, Microsoft Edge, Opera.
+Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave.
 
 ![demonstration](https://i.imgur.com/GWCsO70.gif)
 */
