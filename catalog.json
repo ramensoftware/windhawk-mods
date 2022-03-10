@@ -8,7 +8,7 @@
                 "defaultSorting": 0.7008472464490406,
                 "published": 1646604429000,
                 "rating": 10,
-                "updated": 1646604429000,
+                "updated": 1646948445000,
                 "users": 105
             },
             "featured": true,
@@ -21,11 +21,12 @@
                 "include": [
                     "chrome.exe",
                     "msedge.exe",
-                    "opera.exe"
+                    "opera.exe",
+                    "brave.exe"
                 ],
                 "name": "Chrome/Edge scroll tabs with mouse wheel",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "notepad-dark-mode": {
