@@ -2,7 +2,7 @@
 // @id           visual-studio-anti-rich-header
 // @name         Visual Studio Anti-Rich-Header
 // @description  Prevent the Visual Studio linker from embedding the Rich header into new executables
-// @version      1.0
+// @version      1.0.1
 // @author       m417z
 // @github       https://github.com/m417z
 // @twitter      https://twitter.com/m417z
@@ -27,7 +27,7 @@ using namespace std::string_literals;
 std::string ReplaceAll(std::string str, const std::string& from, const std::string& to)
 {
     size_t start_pos = 0;
-    while((start_pos = str.find(from, start_pos)) != std::string::npos) {
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
         str.replace(start_pos, from.length(), to);
         start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
     }
@@ -71,13 +71,24 @@ BOOL Wh_ModInit(void)
     std::string_view search(from, to - from);
     std::match_results<std::string_view::const_iterator> match;
     std::regex regex(ReplaceAll(targetRegex, ".", R"([\s\S])"));
-    if(std::regex_search(search.begin(), search.end(), match, regex)) {
+    if (std::regex_search(search.begin(), search.end(), match, regex)) {
         auto pos = from + match.position(0);
 
         DWORD dlOldProtect;
         VirtualProtect(pos, targetPatch.size(), PAGE_EXECUTE_READWRITE, &dlOldProtect);
         memcpy(pos, targetPatch.data(), targetPatch.size());
         VirtualProtect(pos, targetPatch.size(), dlOldProtect, &dlOldProtect);
+    }
+    else {
+        bool proceed = MessageBox(
+            nullptr,
+            L"link.exe is incompatible, Rich header won't be removed. Proceed?",
+            L"Windhawk mod: Visual Studio Anti-Rich-Header",
+            MB_ICONWARNING | MB_TOPMOST | MB_YESNO
+        ) == IDYES;
+        if (!proceed) {
+            ExitProcess(1);
+        }
     }
 
     return TRUE;
