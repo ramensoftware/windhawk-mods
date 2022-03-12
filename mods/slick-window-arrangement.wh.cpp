@@ -2,7 +2,7 @@
 // @id              slick-window-arrangement
 // @name            Slick Window Arrangement
 // @description     Make window arrangement more slick and pleasant with a sliding animation and snapping
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -28,6 +28,12 @@ sliding animation and window snapping.
 - SnapWindowsDistance: 25
   $name: Snap windows distance
   $description: Set the required distance for windows to snap to other windows
+- KeysToDisableSnapping:
+  - Ctrl: false
+  - Alt: true
+  - Shift: false
+  $name: Keys to temporarily disable snapping
+  $description: A combination of keys that can be used to temporarily disable snapping
 - SlidingAnimation: true
   $name: Sliding animation
   $description: Keep sliding the window after it's being moved
@@ -58,6 +64,9 @@ sliding animation and window snapping.
 struct {
     bool snapWindowsWhenDragging;
     int snapWindowsDistance;
+    bool keysToDisableSnappingCtrl;
+    bool keysToDisableSnappingAlt;
+    bool keysToDisableSnappingShift;
     bool slidingAnimation;
     bool snapWindowsWhenSliding;
     int slidingAnimationSlowdown;
@@ -163,6 +172,10 @@ public:
     }
 
     void MagnetMove(HWND hSourceWnd, int* x, int* y, int* cx, int* cy) {
+        if (IsSnappingTemporarilyDisabled()) {
+            return;
+        }
+
         CalculateMetrics(hSourceWnd);
 
         RECT sourceRect = {
@@ -404,6 +417,19 @@ private:
         param.inWorkArea = false;
         EnumDisplayMonitors(nullptr, nullptr, IsRectInWorkAreaMonitorEnumProc, (LPARAM)&param);
         return param.inWorkArea;
+    }
+
+    static bool IsSnappingTemporarilyDisabled() {
+        if (!g_settings.keysToDisableSnappingCtrl &&
+            !g_settings.keysToDisableSnappingAlt &&
+            !g_settings.keysToDisableSnappingShift) {
+            return false;
+        }
+
+        return
+            (!g_settings.keysToDisableSnappingCtrl || GetKeyState(VK_CONTROL) < 0) &&
+            (!g_settings.keysToDisableSnappingAlt || GetKeyState(VK_MENU) < 0) &&
+            (!g_settings.keysToDisableSnappingShift || GetKeyState(VK_SHIFT) < 0);
     }
 };
 
@@ -1056,6 +1082,9 @@ void LoadSettings()
 {
     g_settings.snapWindowsWhenDragging = Wh_GetIntSetting(L"SnapWindowsWhenDragging");
     g_settings.snapWindowsDistance = Wh_GetIntSetting(L"SnapWindowsDistance");
+    g_settings.keysToDisableSnappingCtrl = Wh_GetIntSetting(L"KeysToDisableSnapping.Ctrl");
+    g_settings.keysToDisableSnappingAlt = Wh_GetIntSetting(L"KeysToDisableSnapping.Alt");
+    g_settings.keysToDisableSnappingShift = Wh_GetIntSetting(L"KeysToDisableSnapping.Shift");
     g_settings.slidingAnimation = Wh_GetIntSetting(L"SlidingAnimation");
     g_settings.snapWindowsWhenSliding = Wh_GetIntSetting(L"SnapWindowsWhenSliding");
     g_settings.slidingAnimationSlowdown = Wh_GetIntSetting(L"SlidingAnimationSlowdown");

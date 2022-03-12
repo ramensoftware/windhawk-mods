@@ -57,7 +57,7 @@
                 "defaultSorting": 0.583687104566895,
                 "published": 1646604429000,
                 "rating": 9,
-                "updated": 1646604429000,
+                "updated": 1647122066000,
                 "users": 141
             },
             "featured": true,
@@ -72,7 +72,7 @@
                 ],
                 "name": "Slick Window Arrangement",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-button-click": {
@@ -199,7 +199,7 @@
                 "defaultSorting": 0.20654329147389294,
                 "published": 1646604429000,
                 "rating": 10,
-                "updated": 1646604429000,
+                "updated": 1647122099000,
                 "users": 9
             },
             "metadata": {
@@ -212,7 +212,7 @@
                 ],
                 "name": "Visual Studio Anti-Rich-Header",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "vscode-tweaker": {
