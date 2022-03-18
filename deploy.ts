@@ -75,7 +75,11 @@ async function enrichCatalog(catalog: Record<string, any>) {
             details: {
                 published: getModCreatedTime(id),
                 updated: getModModifiedTime(id),
-                ...(enrichment.mods[id]?.details || {}),
+                ...(enrichment.mods[id]?.details || {
+                    defaultSorting: 0,
+                    rating: 0,
+                    users: 0,
+                }),
             },
         };
 
