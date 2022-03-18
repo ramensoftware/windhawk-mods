@@ -77,8 +77,11 @@
         },
         "start-menu-all-apps": {
             "details": {
+                "defaultSorting": 0,
                 "published": 1647604671000,
-                "updated": 1647604671000
+                "rating": 0,
+                "updated": 1647604671000,
+                "users": 0
             },
             "metadata": {
                 "architecture": [
