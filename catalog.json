@@ -75,6 +75,27 @@
                 "version": "1.0.1"
             }
         },
+        "start-menu-all-apps": {
+            "details": {
+                "published": 1647604671000,
+                "updated": 1647604671000
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "description": "When the Windows 11 start menu is opened, show all apps right away",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "StartMenuExperienceHost.exe"
+                ],
+                "name": "Show all apps by default in start menu",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-button-click": {
             "details": {
                 "defaultSorting": 0.7224598312333834,
