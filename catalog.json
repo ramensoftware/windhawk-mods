@@ -1,6 +1,6 @@
 {
     "app": {
-        "version": "0.9"
+        "version": "0.9.1"
     },
     "mods": {
         "chrome-wheel-scroll-tabs": {
@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 114
+                "users": 113
             },
             "featured": true,
             "metadata": {
@@ -58,7 +58,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 144
+                "users": 142
             },
             "featured": true,
             "metadata": {
@@ -105,7 +105,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 121
+                "users": 120
             },
             "featured": true,
             "metadata": {
@@ -156,7 +156,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 52
+                "users": 50
             },
             "metadata": {
                 "architecture": [
@@ -203,7 +203,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 19
+                "users": 18
             },
             "metadata": {
                 "author": "m417z",
@@ -224,7 +224,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1647122099000,
-                "users": 9
+                "users": 10
             },
             "metadata": {
                 "author": "m417z",
