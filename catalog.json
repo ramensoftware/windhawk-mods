@@ -35,7 +35,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 111
+                "users": 112
             },
             "featured": true,
             "metadata": {
@@ -58,7 +58,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 141
+                "users": 140
             },
             "featured": true,
             "metadata": {
@@ -77,11 +77,9 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0,
                 "published": 1647604671000,
-                "rating": 0,
                 "updated": 1647604671000,
-                "users": 0
+                "users": 1
             },
             "metadata": {
                 "architecture": [
@@ -105,7 +103,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 121
+                "users": 122
             },
             "featured": true,
             "metadata": {
@@ -130,7 +128,7 @@
                 "published": 1646604429000,
                 "rating": 8,
                 "updated": 1646604429000,
-                "users": 93
+                "users": 94
             },
             "featured": true,
             "metadata": {
@@ -156,7 +154,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 49
+                "users": 51
             },
             "metadata": {
                 "architecture": [
@@ -203,7 +201,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 18
+                "users": 19
             },
             "metadata": {
                 "author": "m417z",
@@ -245,7 +243,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 32
+                "users": 33
             },
             "metadata": {
                 "author": "m417z",
