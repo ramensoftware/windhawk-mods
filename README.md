@@ -12,7 +12,7 @@ Please refer to the corresponding wiki page: [Creating a New Mod](https://github
 
 ## Submitting a New Mod
 
-Submit a new mod by creating a pull request in this repository. The pull request must consist of a single file, `mods/<mod-id>.wh.cpp`, where `<mod-id>` is the mod id as specified in the mod file.
+Submit a new mod by creating a pull request in this repository. The pull request must consist of a single file, `mods/<mod-id>.wh.cpp`, where `<mod-id>` is the mod id as specified in the mod file. Local mod files can be found in the folder `%ProgramData%\Windhawk\ModsSource`.
 
 The mod's `github` metadata value must be specified, and must match the pull request author's GitHub profile.
 
