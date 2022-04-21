@@ -55,7 +55,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 136
+                "users": 137
             },
             "featured": true,
             "metadata": {
@@ -97,11 +97,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0,
+                "defaultSorting": 0.15893504481126164,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 9
+                "users": 11
             },
             "metadata": {
                 "architecture": [
@@ -125,7 +125,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 149
+                "users": 148
             },
             "featured": true,
             "metadata": {
@@ -176,7 +176,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 57
+                "users": 59
             },
             "metadata": {
                 "architecture": [
@@ -244,7 +244,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1647122099000,
-                "users": 11
+                "users": 12
             },
             "metadata": {
                 "author": "m417z",
@@ -265,7 +265,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 35
+                "users": 36
             },
             "metadata": {
                 "author": "m417z",
