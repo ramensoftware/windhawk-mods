@@ -29,6 +29,26 @@
                 "version": "1.0.1"
             }
         },
+        "lm-close-windbg-file-changed": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1650561701000,
+                "rating": 0,
+                "updated": 1650561701000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Mark Jansen",
+                "description": "Automatically rejects (or accepts) the dialog from WinDbg telling that a file is changed",
+                "github": "https://github.com/learn-more",
+                "include": [
+                    "windbg.exe"
+                ],
+                "name": "Close WinDbg's file changed dialog",
+                "twitter": "https://twitter.com/learn_more",
+                "version": "1.0"
+            }
+        },
         "notepad-dark-mode": {
             "details": {
                 "defaultSorting": 0.5291051942301385,
