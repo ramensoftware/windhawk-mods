@@ -18,6 +18,8 @@ The mod's `github` metadata value must be specified, and must match the pull req
 
 If the mod's `twitter` metadata value is specified, the mod author must be the owner of the Twitter profile and must be able to verify it.
 
+Mods which don't specify a license are submitted under [the MIT license](https://opensource.org/licenses/MIT). It's the author's responsibility to specify the appropriate license for third-party code.
+
 ## Submitting a Mod Update
 
 Submit a mod update by creating a pull request in this repository. The pull request must consist of changes to a single file, `mods/<mod-id>.wh.cpp`, where `<mod-id>` is the mod id.
