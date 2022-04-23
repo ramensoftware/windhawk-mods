@@ -49,6 +49,27 @@
                 "version": "1.0"
             }
         },
+        "lm-vs-solution-icon": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1650743841000,
+                "rating": 0,
+                "updated": 1650743841000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Mark Jansen",
+                "compilerOptions": "-lole32 -lgdi32",
+                "description": "Add an icon overlay on the Visual Studio task bar icon",
+                "github": "https://github.com/learn-more",
+                "include": [
+                    "devenv.exe"
+                ],
+                "name": "Visual Studio Solution Icon",
+                "twitter": "https://twitter.com/learn_more",
+                "version": "0.5"
+            }
+        },
         "notepad-dark-mode": {
             "details": {
                 "defaultSorting": 0.7875205976799496,
