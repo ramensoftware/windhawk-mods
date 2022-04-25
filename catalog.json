@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 124
+                "users": 125
             },
             "featured": true,
             "metadata": {
@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0,
+                "defaultSorting": 0.3423719528896193,
                 "published": 1650743841000,
-                "rating": 0,
+                "rating": 10,
                 "updated": 1650743841000,
-                "users": 0
+                "users": 2
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 163
+                "users": 165
             },
             "featured": true,
             "metadata": {
