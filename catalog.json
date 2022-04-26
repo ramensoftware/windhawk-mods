@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 125
+                "users": 126
             },
             "featured": true,
             "metadata": {
@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0.3423719528896193,
+                "defaultSorting": 0.43849391955098216,
                 "published": 1650743841000,
                 "rating": 10,
                 "updated": 1650743841000,
-                "users": 2
+                "users": 3
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 137
+                "users": 140
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.15893504481126164,
+                "defaultSorting": 0.16498996063982366,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 11
+                "users": 12
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 148
+                "users": 150
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 102
+                "users": 103
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 59
+                "users": 58
             },
             "metadata": {
                 "architecture": [
