@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0.3423719528896193,
+                "defaultSorting": 0.43849391955098216,
                 "published": 1650743841000,
                 "rating": 10,
                 "updated": 1650743841000,
-                "users": 2
+                "users": 3
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 141
+                "users": 139
             },
             "featured": true,
             "metadata": {
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 164
+                "users": 165
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 103
+                "users": 105
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 59
+                "users": 61
             },
             "metadata": {
                 "architecture": [
@@ -286,7 +286,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 35
+                "users": 36
             },
             "metadata": {
                 "author": "m417z",
