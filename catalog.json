@@ -1,6 +1,6 @@
 {
     "app": {
-        "version": "0.9.1"
+        "version": "0.9.2"
     },
     "mods": {
         "chrome-wheel-scroll-tabs": {
@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 127
+                "users": 129
             },
             "featured": true,
             "metadata": {
@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0.43849391955098216,
+                "defaultSorting": 0.5100999795960008,
                 "published": 1650743841000,
                 "rating": 10,
                 "updated": 1650743841000,
-                "users": 3
+                "users": 4
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 144
+                "users": 143
             },
             "featured": true,
             "metadata": {
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 167
+                "users": 168
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.14497635937793418,
+                "defaultSorting": 0.15229778906997507,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 9
+                "users": 10
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 153
+                "users": 154
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 64
+                "users": 65
             },
             "metadata": {
                 "architecture": [
@@ -222,7 +222,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 30
+                "users": 29
             },
             "metadata": {
                 "author": "m417z",
@@ -265,7 +265,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1647122099000,
-                "users": 11
+                "users": 12
             },
             "metadata": {
                 "author": "m417z",
