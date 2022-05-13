@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 132
+                "users": 131
             },
             "featured": true,
             "metadata": {
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 143
+                "users": 141
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.1705441804445528,
+                "defaultSorting": 0.16498996063982366,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 13
+                "users": 12
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 157
+                "users": 158
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 114
+                "users": 112
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 65
+                "users": 68
             },
             "metadata": {
                 "architecture": [
@@ -286,7 +286,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 36
+                "users": 35
             },
             "metadata": {
                 "author": "m417z",
