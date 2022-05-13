@@ -54,12 +54,12 @@
                 "defaultSorting": 0.5100999795960008,
                 "published": 1650743841000,
                 "rating": 10,
-                "updated": 1650743841000,
+                "updated": 1652392623000,
                 "users": 4
             },
             "metadata": {
                 "author": "Mark Jansen",
-                "compilerOptions": "-lole32 -lgdi32",
+                "compilerOptions": "-lole32 -lgdi32 -lcomctl32",
                 "description": "Add an icon overlay on the Visual Studio task bar icon",
                 "github": "https://github.com/learn-more",
                 "include": [
@@ -67,7 +67,7 @@
                 ],
                 "name": "Visual Studio Solution Icon",
                 "twitter": "https://twitter.com/learn_more",
-                "version": "0.5"
+                "version": "0.6"
             }
         },
         "notepad-dark-mode": {
