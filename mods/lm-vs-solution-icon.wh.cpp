@@ -2,12 +2,12 @@
 // @id           lm-vs-solution-icon
 // @name         Visual Studio Solution Icon
 // @description  Add an icon overlay on the Visual Studio task bar icon
-// @version      0.5
+// @version      0.6
 // @author       Mark Jansen
 // @github       https://github.com/learn-more
 // @twitter      https://twitter.com/learn_more
 // @include      devenv.exe
-// @compilerOptions -lole32 -lgdi32
+// @compilerOptions -lole32 -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,12 +24,104 @@ Tested on:
 - Visual Studio 2019
 
 Inspired by [SolutionIcon](https://github.com/ashmind/SolutionIcon/blob/master/SolutionIcon/Implementation/IconGenerator.cs)
+
+## Releases:
+- 0.6:
+  - Reload the icon when the taskbar button is refreshed
+- 0.5:
+  - Initial release
 */
 // ==/WindhawkModReadme==
 
 
 #include <string>
 #include <shobjidl.h>
+
+
+// wParam - TRUE to subclass, FALSE to unsubclass
+// lParam - subclass data
+UINT g_subclassRegisteredMsg = RegisterWindowMessage(
+    L"Windhawk_SetWindowSubclassFromAnyThread_lm-vs-solution-icon");
+UINT g_taskbarButtonCreatedMsg = RegisterWindowMessage(L"TaskbarButtonCreated");
+UINT g_taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
+
+struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
+  SUBCLASSPROC pfnSubclass;
+  UINT_PTR uIdSubclass;
+  DWORD_PTR dwRefData;
+  BOOL result;
+};
+
+LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode, WPARAM wParam,
+                                              LPARAM lParam) {
+  if (nCode == HC_ACTION) {
+    const CWPSTRUCT *cwp = (const CWPSTRUCT *)lParam;
+    if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
+      SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *param =
+          (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *)cwp->lParam;
+      param->result = SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
+                                        param->uIdSubclass, param->dwRefData);
+    }
+  }
+
+  return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass,
+                                    UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+  DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+  if (dwThreadId == 0) {
+    return FALSE;
+  }
+
+  if (dwThreadId == GetCurrentThreadId()) {
+    return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
+  }
+
+  HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass,
+                                nullptr, dwThreadId);
+  if (!hook) {
+    return FALSE;
+  }
+
+  SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
+  param.pfnSubclass = pfnSubclass;
+  param.uIdSubclass = uIdSubclass;
+  param.dwRefData = dwRefData;
+  param.result = FALSE;
+  SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
+
+  UnhookWindowsHookEx(hook);
+
+  return param.result;
+}
+
+static void ApplyIconAfterReload(void);
+LRESULT CALLBACK VSWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
+                                      _In_ WPARAM wParam, _In_ LPARAM lParam,
+                                      _In_ UINT_PTR uIdSubclass,
+                                      _In_ DWORD_PTR dwRefData) {
+  if (uMsg == g_taskbarCreatedMsg) {
+    Wh_Log("TaskbarCreated");
+    ApplyIconAfterReload();
+  }
+  if (uMsg == g_taskbarButtonCreatedMsg) {
+    Wh_Log("TaskbarButtonCreated");
+    ApplyIconAfterReload();
+  } else if (uMsg == g_subclassRegisteredMsg && !wParam) {
+    RemoveWindowSubclass(hWnd, VSWindowSubclassProc, 0);
+  }
+
+  return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+void SubclassVSWindow(HWND hWnd) {
+  SetWindowSubclassFromAnyThread(hWnd, VSWindowSubclassProc, 0, 0);
+}
+
+void UnsubclassVSWindow(HWND hWnd) {
+  SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+}
 
 HRESULT g_CoInit = E_FAIL;
 ITaskbarList3* g_TaskbarList3 = nullptr;
@@ -72,6 +164,23 @@ static void ApplyIcon(const std::wstring& commandline)
     }
 }
 
+// Either the module is reloaded, or the taskbar button is recreated
+static void ApplyIconAfterReload()
+{
+    wchar_t Buffer[RESTART_MAX_CMD_LINE+1] = {};
+    DWORD dwBufferSize = _countof(Buffer);
+
+    HRESULT hr = GetApplicationRestartSettings(GetCurrentProcess(), Buffer, &dwBufferSize, NULL);
+    if (SUCCEEDED(hr))
+    {
+        ApplyIcon(Buffer);
+    }
+    else
+    {
+        Wh_Log(L"GetApplicationRestartSettings failed: 0x%x", hr);
+    }
+}
+
 typedef decltype(&RegisterApplicationRestart) REGISTERAPPLICATIONRESTART;
 
 REGISTERAPPLICATIONRESTART oRegisterApplicationRestart;
@@ -111,23 +220,15 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModAfterInit(void)
 {
-    wchar_t Buffer[RESTART_MAX_CMD_LINE+1] = {};
-    DWORD dwBufferSize = _countof(Buffer);
-
-    HRESULT hr = GetApplicationRestartSettings(GetCurrentProcess(), Buffer, &dwBufferSize, NULL);
-    if (SUCCEEDED(hr))
-    {
-        ApplyIcon(Buffer);
-    }
-    else
-    {
-        Wh_Log(L"GetApplicationRestartSettings failed: 0x%x", hr);
-    }
+    ApplyIconAfterReload();
+    SubclassVSWindow(Utils::MainWindow());
 }
 
 void Wh_ModUninit(void)
 {
     Wh_Log(L"Uninit");
+
+    UnsubclassVSWindow(Utils::MainWindow());
 
     if (g_TaskbarList3)
     {
