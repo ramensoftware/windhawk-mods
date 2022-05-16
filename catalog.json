@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0.5100999795960008,
+                "defaultSorting": 0.5655085052479188,
                 "published": 1650743841000,
                 "rating": 10,
                 "updated": 1652392623000,
-                "users": 4
+                "users": 5
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 145
+                "users": 147
             },
             "featured": true,
             "metadata": {
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 160
+                "users": 163
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 113
+                "users": 114
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 67
+                "users": 69
             },
             "metadata": {
                 "architecture": [
@@ -222,7 +222,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 31
+                "users": 32
             },
             "metadata": {
                 "author": "m417z",
@@ -265,7 +265,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1647122099000,
-                "users": 11
+                "users": 12
             },
             "metadata": {
                 "author": "m417z",
