@@ -216,6 +216,28 @@
                 "version": "1.0"
             }
         },
+        "taskbar-volume-control": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1652940665000,
+                "rating": 0,
+                "updated": 1652940665000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -ldwmapi -lole32 -lversion",
+                "description": "Control the system volume by scrolling over the taskbar",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Volume Control",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "text-replace": {
             "details": {
                 "defaultSorting": 0.42709619037907065,
