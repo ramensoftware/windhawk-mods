@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 132
+                "users": 133
             },
             "featured": true,
             "metadata": {
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 148
+                "users": 149
             },
             "featured": true,
             "metadata": {
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 174
+                "users": 176
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 112
+                "users": 114
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 70
+                "users": 71
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0,
+                "defaultSorting": 0.07568943806213888,
                 "published": 1652940665000,
                 "rating": 0,
                 "updated": 1652940665000,
-                "users": 0
+                "users": 3
             },
             "metadata": {
                 "author": "m417z",
