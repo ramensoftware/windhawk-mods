@@ -31,11 +31,11 @@
         },
         "lm-close-windbg-file-changed": {
             "details": {
-                "defaultSorting": 0.3423719528896193,
+                "defaultSorting": 0.43849391955098216,
                 "published": 1650561701000,
                 "rating": 10,
                 "updated": 1650561701000,
-                "users": 2
+                "users": 3
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 179
+                "users": 180
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.1889191516411529,
+                "defaultSorting": 0.19276434862468408,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 17
+                "users": 18
             },
             "metadata": {
                 "architecture": [
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 71
+                "users": 72
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.15893504481126164,
+                "defaultSorting": 0.17566405347598205,
                 "published": 1652940665000,
                 "rating": 0,
                 "updated": 1652940665000,
-                "users": 11
+                "users": 14
             },
             "metadata": {
                 "author": "m417z",
@@ -266,7 +266,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 20
+                "users": 21
             },
             "metadata": {
                 "author": "m417z",
