@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 135
+                "users": 134
             },
             "featured": true,
             "metadata": {
@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0.6096569663469354,
+                "defaultSorting": 0.6755843804891231,
                 "published": 1650743841000,
                 "rating": 10,
                 "updated": 1652392623000,
-                "users": 6
+                "users": 8
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 180
+                "users": 183
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.19276434862468408,
+                "defaultSorting": 0.1889191516411529,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 18
+                "users": 17
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 164
+                "users": 162
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 118
+                "users": 121
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 72
+                "users": 73
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.17566405347598205,
+                "defaultSorting": 0.19637290396682935,
                 "published": 1652940665000,
                 "rating": 0,
                 "updated": 1652940665000,
-                "users": 14
+                "users": 19
             },
             "metadata": {
                 "author": "m417z",
@@ -266,7 +266,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 21
+                "users": 23
             },
             "metadata": {
                 "author": "m417z",
