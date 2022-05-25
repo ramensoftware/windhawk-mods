@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0.6755843804891231,
+                "defaultSorting": 0.6456611570247934,
                 "published": 1650743841000,
                 "rating": 10,
                 "updated": 1652392623000,
-                "users": 8
+                "users": 7
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 183
+                "users": 186
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.1889191516411529,
+                "defaultSorting": 0.18040414844997263,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 17
+                "users": 15
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 162
+                "users": 164
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 121
+                "users": 122
             },
             "featured": true,
             "metadata": {
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.19637290396682935,
+                "defaultSorting": 0.21418087105041278,
                 "published": 1652940665000,
                 "rating": 0,
                 "updated": 1652940665000,
-                "users": 19
+                "users": 25
             },
             "metadata": {
                 "author": "m417z",
@@ -244,7 +244,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 33
+                "users": 32
             },
             "metadata": {
                 "author": "m417z",
