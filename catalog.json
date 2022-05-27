@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 135
+                "users": 136
             },
             "featured": true,
             "metadata": {
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 147
+                "users": 149
             },
             "featured": true,
             "metadata": {
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 187
+                "users": 188
             },
             "featured": true,
             "metadata": {
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 166
+                "users": 168
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 122
+                "users": 123
             },
             "featured": true,
             "metadata": {
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.22340052047251208,
+                "defaultSorting": 0.8957265699643882,
                 "published": 1652940665000,
-                "rating": 0,
+                "rating": 10,
                 "updated": 1652940665000,
-                "users": 29
+                "users": 33
             },
             "metadata": {
                 "author": "m417z",
@@ -244,7 +244,7 @@
                 "published": 1646604429000,
                 "rating": 7,
                 "updated": 1646604429000,
-                "users": 32
+                "users": 33
             },
             "metadata": {
                 "author": "m417z",
