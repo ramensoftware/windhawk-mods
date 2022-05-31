@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.19276434862468408,
+                "defaultSorting": 0.1889191516411529,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 18
+                "users": 17
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 166
+                "users": 167
             },
             "featured": true,
             "metadata": {
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9179874299767726,
+                "defaultSorting": 0.9213457380593593,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 43
+                "users": 45
             },
             "metadata": {
                 "author": "m417z",
