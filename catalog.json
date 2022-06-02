@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 140
+                "users": 139
             },
             "featured": true,
             "metadata": {
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 153
+                "users": 154
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.19976843301470643,
+                "defaultSorting": 0.19637290396682935,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 20
+                "users": 19
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 167
+                "users": 165
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 125
+                "users": 126
             },
             "featured": true,
             "metadata": {
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9244398288016114,
+                "defaultSorting": 0.9213457380593593,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 47
+                "users": 45
             },
             "metadata": {
                 "author": "m417z",
