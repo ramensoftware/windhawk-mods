@@ -9,7 +9,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 139
+                "users": 140
             },
             "featured": true,
             "metadata": {
@@ -76,7 +76,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 165
+                "users": 169
             },
             "featured": true,
             "metadata": {
@@ -99,7 +99,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 200
+                "users": 201
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.6986210812814078,
+                "defaultSorting": 0.7025706925355861,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1647604671000,
-                "users": 26
+                "users": 27
             },
             "metadata": {
                 "architecture": [
@@ -146,7 +146,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 173
+                "users": 176
             },
             "featured": true,
             "metadata": {
@@ -171,7 +171,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 132
+                "users": 136
             },
             "featured": true,
             "metadata": {
@@ -197,7 +197,7 @@
                 "published": 1646604429000,
                 "rating": 8,
                 "updated": 1646604429000,
-                "users": 93
+                "users": 92
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9358038555118847,
+                "defaultSorting": 0.9378800031047062,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 56
+                "users": 58
             },
             "metadata": {
                 "author": "m417z",
@@ -266,7 +266,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 27
+                "users": 28
             },
             "metadata": {
                 "author": "m417z",
@@ -287,7 +287,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1647122099000,
-                "users": 13
+                "users": 14
             },
             "metadata": {
                 "author": "m417z",
