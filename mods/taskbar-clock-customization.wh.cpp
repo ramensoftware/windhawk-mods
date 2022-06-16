@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -81,6 +81,8 @@ Only Windows 10 64-bit and Windows 11 are supported.
   $description: The update interval, in minutes, of the web content
 */
 // ==/WindhawkModSettings==
+
+#include <regex>
 
 #include <wininet.h>
 
@@ -256,7 +258,7 @@ void WebContentUpdateThreadInit()
     }
 }
 
-void WebContentUpdateThreadUnnit()
+void WebContentUpdateThreadUninit()
 {
     if (g_webContentUpdateThread) {
         SetEvent(g_webContentUpdateStopEvent);
@@ -284,7 +286,8 @@ int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format)
         return 0;
     }
 
-    PWSTR bufferEnd = buffer + bufferSize;
+    PWSTR bufferStart = buffer;
+    PWSTR bufferEnd = bufferStart + bufferSize;
     while (*format && bufferEnd - buffer > 1) {
         if (*format == L'%') {
             PCWSTR srcStr = nullptr;
@@ -330,7 +333,7 @@ int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format)
 
     *buffer = L'\0';
 
-    return bufferSize - (bufferEnd - buffer);
+    return buffer - bufferStart;
 }
 
 #pragma region Win11Hooks
@@ -423,7 +426,7 @@ int WINAPI GetTimeFormatExHook_Win11(
                 return FORMATTED_BUFFER_SIZE;
             }
 
-            return FormatLine(lpTimeStr, cchTime, g_settings.topLine);
+            return FormatLine(lpTimeStr, cchTime, g_settings.topLine) + 1;
         }
     }
 
@@ -460,7 +463,7 @@ int WINAPI GetDateFormatExHook_Win11(
                 return FORMATTED_BUFFER_SIZE;
             }
 
-            return FormatLine(lpDateStr, cchDate, g_settings.bottomLine);
+            return FormatLine(lpDateStr, cchDate, g_settings.bottomLine) + 1;
         }
     }
 
@@ -575,7 +578,7 @@ int WINAPI GetTimeFormatExHook_Win10(
         InitializeFormattedStrings(lpTime);
 
         if (wcscmp(g_settings.topLine, L"-") != 0) {
-            return FormatLine(lpTimeStr, cchTime, g_settings.topLine);
+            return FormatLine(lpTimeStr, cchTime, g_settings.topLine) + 1;
         }
     }
 
@@ -604,7 +607,7 @@ int WINAPI GetDateFormatExHook_Win10(
         g_GetDateFormatExCounter++;
         PCWSTR format = g_GetDateFormatExCounter > 1 ? g_settings.middleLine : g_settings.bottomLine;
         if (wcscmp(format, L"-") != 0) {
-            return FormatLine(lpDateStr, cchDate, format);
+            return FormatLine(lpDateStr, cchDate, format) + 1;
         }
     }
 
@@ -743,7 +746,7 @@ void ApplySettings()
 }
 
 struct SYMBOLHOOKS {
-    PCWSTR symbolName;
+    std::wregex symbolRegex;
     void* hookFunction;
     void** pOriginalFunction;
 };
@@ -761,17 +764,17 @@ BOOL Wh_ModInit(void)
 
     SYMBOLHOOKS taskbarHooks11[] = {
         {
-            L"private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64",
+            std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
             (void*)ClockSystemTrayIconDataModelRefreshIconHook,
             (void**)&pOriginalClockSystemTrayIconDataModelRefreshIcon
         },
         {
-            L"private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::ScheduleNextUpdate(class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64",
+            std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::ScheduleNextUpdate\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
             (void*)ClockSystemTrayIconDataModelScheduleNextUpdateHook,
             (void**)&pOriginalClockSystemTrayIconDataModelScheduleNextUpdate
         },
         {
-            L"public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second(void)const __ptr64",
+            std::wregex(LR"(public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second\(void\)const\s*(__ptr64)?)"),
             (void*)ICalendarSecondHook,
             (void**)&pOriginalICalendarSecond
         }
@@ -780,17 +783,17 @@ BOOL Wh_ModInit(void)
 
     SYMBOLHOOKS taskbarHooks10[] = {
         {
-            L"private: unsigned int __cdecl ClockButton::UpdateTextStringsIfNecessary(bool * __ptr64) __ptr64",
+            std::wregex(LR"(private: unsigned int __cdecl ClockButton::UpdateTextStringsIfNecessary\(bool \* __ptr64\) __ptr64)"),
             (void*)ClockButtonUpdateTextStringsIfNecessaryHook,
             (void**)&pOriginalClockButtonUpdateTextStringsIfNecessary
         },
         {
-            L"public: struct tagSIZE __cdecl ClockButton::CalculateMinimumSize(struct tagSIZE) __ptr64",
+            std::wregex(LR"(public: struct tagSIZE __cdecl ClockButton::CalculateMinimumSize\(struct tagSIZE\) __ptr64)"),
             (void*)ClockButtonCalculateMinimumSizeHook,
             (void**)&pOriginalClockButtonCalculateMinimumSize
         },
         {
-            L"protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange(bool) __ptr64",
+            std::wregex(LR"(protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange\(bool\) __ptr64)"),
             nullptr,
             (void**)&pOriginalClockButtonv_OnDisplayStateChange
         }
@@ -812,14 +815,14 @@ BOOL Wh_ModInit(void)
     if (find_symbol) {
         do {
             for (size_t i = 0; i < taskbarHooksSize; i++) {
-                if (!*taskbarHooks[i].pOriginalFunction && wcscmp(symbol.symbol, taskbarHooks[i].symbolName) == 0) {
+                if (!*taskbarHooks[i].pOriginalFunction && std::regex_match(symbol.symbol, taskbarHooks[i].symbolRegex)) {
                     if (taskbarHooks[i].hookFunction) {
                         Wh_SetFunctionHook(symbol.address, taskbarHooks[i].hookFunction, taskbarHooks[i].pOriginalFunction);
-                        Wh_Log(L"Hooked %p (%s)", symbol.address, taskbarHooks[i].symbolName);
+                        Wh_Log(L"Hooked %p (%s)", symbol.address, symbol.symbol);
                     }
                     else {
                         *taskbarHooks[i].pOriginalFunction = symbol.address;
-                        Wh_Log(L"Found %p (%s)", symbol.address, taskbarHooks[i].symbolName);
+                        Wh_Log(L"Found %p (%s)", symbol.address, symbol.symbol);
                     }
                     break;
                 }
@@ -831,6 +834,7 @@ BOOL Wh_ModInit(void)
 
     for (size_t i = 0; i < taskbarHooksSize; i++) {
         if (!*taskbarHooks[i].pOriginalFunction) {
+            Wh_Log(L"Missing symbol: %d", i);
             return FALSE;
         }
     }
@@ -877,7 +881,7 @@ void Wh_ModUninit(void)
 {
     Wh_Log(L">");
 
-    WebContentUpdateThreadUnnit();
+    WebContentUpdateThreadUninit();
 
     FreeSettings();
     ApplySettings();
@@ -887,7 +891,7 @@ void Wh_ModSettingsChanged(void)
 {
     Wh_Log(L">");
 
-    WebContentUpdateThreadUnnit();
+    WebContentUpdateThreadUninit();
 
     FreeSettings();
     LoadSettings();
