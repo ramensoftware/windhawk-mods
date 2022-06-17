@@ -170,7 +170,7 @@
                 "defaultSorting": 0.9731058739190823,
                 "published": 1646604429000,
                 "rating": 10,
-                "updated": 1655414829000,
+                "updated": 1655500818000,
                 "users": 139
             },
             "featured": true,
@@ -188,7 +188,7 @@
                 ],
                 "name": "Taskbar Clock Customization",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-grouping": {
