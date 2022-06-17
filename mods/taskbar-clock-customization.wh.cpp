@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -106,7 +106,14 @@ struct {
 
 #define FORMATTED_BUFFER_SIZE 256
 
-bool g_isBeforeWin11;
+enum class WindowsVersion {
+    Invalid = 0,
+    Win10,
+    Win11,
+    Win11_22H2
+};
+
+WindowsVersion g_windowsVersion;
 HANDLE g_webContentUpdateThread;
 HANDLE g_webContentUpdateStopEvent;
 WCHAR g_timeFormatted[FORMATTED_BUFFER_SIZE];
@@ -116,6 +123,9 @@ WCHAR g_webContent[FORMATTED_BUFFER_SIZE];
 
 typedef UINT (WINAPI *GetDpiForWindow_t)(HWND hwnd);
 GetDpiForWindow_t pGetDpiForWindow;
+
+using GetLocalTime_t = decltype(&GetLocalTime);
+GetLocalTime_t pOriginalGetLocalTime;
 
 using GetTimeFormatEx_t = decltype(&GetTimeFormatEx);
 GetTimeFormatEx_t pOriginalGetTimeFormatEx;
@@ -411,6 +421,25 @@ int WINAPI ICalendarSecondHook(
     return ret;
 }
 
+VOID WINAPI GetLocalTimeHook_Win11(
+    LPSYSTEMTIME lpSystemTime)
+{
+    Wh_Log(L">");
+
+    if (g_ScheduleNextUpdateThreadId == GetCurrentThreadId()) {
+        if (g_settings.showSeconds || !*g_webContent) {
+            // Make the next refresh happen in a second.
+            memset(lpSystemTime, 0, sizeof(*lpSystemTime));
+            lpSystemTime->wSecond = 59;
+            return;
+        }
+    }
+
+    pOriginalGetLocalTime(
+        lpSystemTime
+    );
+}
+
 int WINAPI GetTimeFormatExHook_Win11(
     LPCWSTR lpLocaleName,
     DWORD dwFlags,
@@ -452,7 +481,7 @@ int WINAPI GetDateFormatExHook_Win11(
     LPCWSTR lpCalendar)
 {
     if (g_refreshIconThreadId == GetCurrentThreadId() && (dwFlags & DATE_SHORTDATE)) {
-        if (!cchDate) {
+        if (!cchDate || g_windowsVersion >= WindowsVersion::Win11_22H2) {
             // First call, initialize strings.
             InitializeFormattedStrings(lpDate);
         }
@@ -737,7 +766,7 @@ void ApplySettingsWin10()
 
 void ApplySettings()
 {
-    if (!g_isBeforeWin11) {
+    if (g_windowsVersion >= WindowsVersion::Win11) {
         ApplySettingsWin11();
     }
     else {
@@ -762,6 +791,19 @@ BOOL Wh_ModInit(void)
         pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
     }
 
+    SYMBOLHOOKS taskbarHooks11_22H2[] = {
+        {
+            std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
+            (void*)ClockSystemTrayIconDataModelRefreshIconHook,
+            (void**)&pOriginalClockSystemTrayIconDataModelRefreshIcon
+        },
+        {
+            std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::ScheduleNextUpdate\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
+            (void*)ClockSystemTrayIconDataModelScheduleNextUpdateHook,
+            (void**)&pOriginalClockSystemTrayIconDataModelScheduleNextUpdate
+        }
+    };
+
     SYMBOLHOOKS taskbarHooks11[] = {
         {
             std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
@@ -779,7 +821,6 @@ BOOL Wh_ModInit(void)
             (void**)&pOriginalICalendarSecond
         }
     };
-    size_t taskbarHooks11Size = ARRAYSIZE(taskbarHooks11);
 
     SYMBOLHOOKS taskbarHooks10[] = {
         {
@@ -798,16 +839,32 @@ BOOL Wh_ModInit(void)
             (void**)&pOriginalClockButtonv_OnDisplayStateChange
         }
     };
-    size_t taskbarHooks10Size = ARRAYSIZE(taskbarHooks10);
 
-    SYMBOLHOOKS* taskbarHooks = taskbarHooks11;
-    size_t taskbarHooksSize = taskbarHooks11Size;
-    HMODULE module = LoadLibrary(L"explorerextensions.dll");
+    HMODULE module;
+    SYMBOLHOOKS* taskbarHooks;
+    size_t taskbarHooksSize;
+
+    module = LoadLibrary(L"Taskbar.View.dll");
+    if (module) {
+        g_windowsVersion = WindowsVersion::Win11_22H2;
+        taskbarHooks = taskbarHooks11_22H2;
+        taskbarHooksSize = ARRAYSIZE(taskbarHooks11_22H2);
+    }
+
     if (!module) {
-        g_isBeforeWin11 = true;
-        taskbarHooks = taskbarHooks10;
-        taskbarHooksSize = taskbarHooks10Size;
+        module = LoadLibrary(L"ExplorerExtensions.dll");
+        if (module) {
+            g_windowsVersion = WindowsVersion::Win11;
+            taskbarHooks = taskbarHooks11;
+            taskbarHooksSize = ARRAYSIZE(taskbarHooks11);
+        }
+    }
+
+    if (!module) {
         module = GetModuleHandle(nullptr);
+        g_windowsVersion = WindowsVersion::Win10;
+        taskbarHooks = taskbarHooks10;
+        taskbarHooksSize = ARRAYSIZE(taskbarHooks10);
     }
 
     WH_FIND_SYMBOL symbol;
@@ -856,7 +913,16 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    if (!g_isBeforeWin11) {
+    if (g_windowsVersion >= WindowsVersion::Win11) {
+        if (g_windowsVersion >= WindowsVersion::Win11_22H2) {
+            FARPROC pGetLocalTime = GetProcAddress(hKernelBase, "GetLocalTime");
+            if (!pGetLocalTime) {
+                return FALSE;
+            }
+
+            Wh_SetFunctionHook((void*)pGetLocalTime, (void*)GetLocalTimeHook_Win11, (void**)&pOriginalGetLocalTime);
+        }
+
         Wh_SetFunctionHook((void*)pGetTimeFormatEx, (void*)GetTimeFormatExHook_Win11, (void**)&pOriginalGetTimeFormatEx);
         Wh_SetFunctionHook((void*)pGetDateFormatEx, (void*)GetDateFormatExHook_Win11, (void**)&pOriginalGetDateFormatEx);
     }
