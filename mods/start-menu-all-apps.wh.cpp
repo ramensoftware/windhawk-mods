@@ -2,7 +2,7 @@
 // @id              start-menu-all-apps
 // @name            Show all apps by default in start menu
 // @description     When the Windows 11 start menu is opened, show all apps right away
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -37,6 +37,8 @@ Feedback and pull requests can be submitted
 [here](https://github.com/m417z/my-windhawk-mods).
 */
 // ==/WindhawkModReadme==
+
+#include <regex>
 
 typedef void (WINAPI *ShowAllApps_t)(
     LPVOID pThis
@@ -86,7 +88,7 @@ LPVOID WINAPI StartInnerFrameConstructorHook(
 }
 
 struct SYMBOLHOOKS {
-    PCWSTR symbolName;
+    std::wregex symbolRegex;
     void* hookFunction;
     void** pOriginalFunction;
 };
@@ -95,38 +97,65 @@ BOOL Wh_ModInit(void)
 {
     Wh_Log(L">");
 
+    WCHAR szWindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory))) {
+        Wh_Log(L"GetWindowsDirectory failed");
+        return FALSE;
+    }
+
+    HMODULE module;
+
+    // Try the path for Windows 11 version 22H2.
+    WCHAR szStartmenuDllPath[MAX_PATH];
+    wcscpy_s(szStartmenuDllPath, szWindowsDirectory);
+    wcscat_s(szStartmenuDllPath, LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\StartMenu.dll)");
+    if (GetFileAttributes(szStartmenuDllPath) != INVALID_FILE_ATTRIBUTES) {
+        // Try to load dependency DLLs. At process start, if they're not loaded,
+        // loading the start menu DLL fails.
+        WCHAR szRuntimeDllPath[MAX_PATH];
+
+        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_app.dll)");
+        LoadLibrary(szRuntimeDllPath);
+
+        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_1_app.dll)");
+        LoadLibrary(szRuntimeDllPath);
+
+        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\msvcp140_app.dll)");
+        LoadLibrary(szRuntimeDllPath);
+
+        module = LoadLibrary(szStartmenuDllPath);
+    }
+    else {
+        // Try the path for Windows 11 before version 22H2.
+        wcscpy_s(szStartmenuDllPath, szWindowsDirectory);
+        wcscat_s(szStartmenuDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\StartMenu.dll)");
+        module = LoadLibrary(szStartmenuDllPath);
+    }
+
+    if (!module) {
+        Wh_Log(L"LoadLibrary failed");
+        return FALSE;
+    }
+
     WH_FIND_SYMBOL symbol;
     HANDLE findSymbol;
 
-    HMODULE module = GetModuleHandle(L"startmenu.dll");
-    if (!module) {
-        WCHAR szStartmenuDllPath[MAX_PATH];
-        if (!GetWindowsDirectory(szStartmenuDllPath, ARRAYSIZE(szStartmenuDllPath))) {
-            Wh_Log(L"GetWindowsDirectory failed");
-            return FALSE;
-        }
-
-        wcscat_s(szStartmenuDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\StartMenu.dll)");
-        module = LoadLibrary(szStartmenuDllPath);
-        if (!module) {
-            Wh_Log(L"LoadLibrary failed");
-            return FALSE;
-        }
-    }
-
     SYMBOLHOOKS taskbarHooks[] = {
         {
-            L"public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps(void)const __ptr64",
+            std::wregex(LR"(public: (void )?__cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps\(void\)const __ptr64)"),
             NULL,
             (void**)&pOriginalShowAllApps
         },
         {
-            L"public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps(void)const __ptr64",
+            std::wregex(LR"(public: (void )?__cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps\(void\)const __ptr64)"),
             (void*)HideAllAppsHook,
             (void**)&pOriginalHideAllApps
         },
         {
-            L"public: __cdecl winrt::StartMenu::implementation::StartInnerFrame::StartInnerFrame(struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController const & __ptr64,struct winrt::Windows::Foundation::IInspectable const & __ptr64) __ptr64",
+            std::wregex(LR"(public: __cdecl winrt::StartMenu::implementation::StartInnerFrame::StartInnerFrame\(struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController const & __ptr64,struct winrt::Windows::Foundation::IInspectable const & __ptr64\) __ptr64)"),
             (void*)StartInnerFrameConstructorHook,
             (void**)&pOriginalStartInnerFrameConstructor
         }
@@ -136,14 +165,14 @@ BOOL Wh_ModInit(void)
     if (findSymbol) {
         do {
             for (size_t i = 0; i < ARRAYSIZE(taskbarHooks); i++) {
-                if (!*taskbarHooks[i].pOriginalFunction && wcscmp(symbol.symbol, taskbarHooks[i].symbolName) == 0) {
+                if (!*taskbarHooks[i].pOriginalFunction && std::regex_match(symbol.symbol, taskbarHooks[i].symbolRegex)) {
                     if (taskbarHooks[i].hookFunction) {
                         Wh_SetFunctionHook(symbol.address, taskbarHooks[i].hookFunction, taskbarHooks[i].pOriginalFunction);
-                        Wh_Log(L"Hooked %p (%s)", symbol.address, taskbarHooks[i].symbolName);
+                        Wh_Log(L"Hooked %p (%s)", symbol.address, symbol.symbol);
                     }
                     else {
                         *taskbarHooks[i].pOriginalFunction = symbol.address;
-                        Wh_Log(L"Found %p (%s)", symbol.address, taskbarHooks[i].symbolName);
+                        Wh_Log(L"Found %p (%s)", symbol.address, symbol.symbol);
                     }
                     break;
                 }
@@ -155,6 +184,7 @@ BOOL Wh_ModInit(void)
 
     for (size_t i = 0; i < ARRAYSIZE(taskbarHooks); i++) {
         if (!*taskbarHooks[i].pOriginalFunction) {
+            Wh_Log(L"Missing symbol: %d", i);
             return FALSE;
         }
     }
