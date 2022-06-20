@@ -2,14 +2,14 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lwininet
+// @compilerOptions -lole32 -lwininet
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -84,6 +84,9 @@ Only Windows 10 64-bit and Windows 11 are supported.
 
 #include <regex>
 
+#include <initguid.h> // must come before knownfolders.h
+#include <knownfolders.h>
+#include <shlobj.h>
 #include <wininet.h>
 
 struct {
@@ -840,31 +843,90 @@ BOOL Wh_ModInit(void)
         }
     };
 
+    WCHAR szWindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory))) {
+        Wh_Log(L"GetWindowsDirectory failed");
+        return FALSE;
+    }
+
     HMODULE module;
     SYMBOLHOOKS* taskbarHooks;
     size_t taskbarHooksSize;
 
-    module = LoadLibrary(L"Taskbar.View.dll");
-    if (module) {
+    WCHAR szTargetDllPath[MAX_PATH];
+    wcscpy_s(szTargetDllPath, szWindowsDirectory);
+    wcscat_s(szTargetDllPath, LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
+    if (GetFileAttributes(szTargetDllPath) != INVALID_FILE_ATTRIBUTES) {
         g_windowsVersion = WindowsVersion::Win11_22H2;
+
+        // Try to load dependency DLLs. At process start, if they're not loaded,
+        // loading the taskbar view DLL fails.
+        WCHAR szRuntimeDllPath[MAX_PATH];
+
+        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_app.dll)");
+        LoadLibrary(szRuntimeDllPath);
+
+        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_1_app.dll)");
+        LoadLibrary(szRuntimeDllPath);
+
+        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\msvcp140_app.dll)");
+        LoadLibrary(szRuntimeDllPath);
+
+        module = LoadLibrary(szTargetDllPath);
         taskbarHooks = taskbarHooks11_22H2;
         taskbarHooksSize = ARRAYSIZE(taskbarHooks11_22H2);
     }
 
-    if (!module) {
-        module = LoadLibrary(L"ExplorerExtensions.dll");
-        if (module) {
+    if (g_windowsVersion == WindowsVersion::Invalid) {
+        wcscpy_s(szTargetDllPath, szWindowsDirectory);
+        wcscat_s(szTargetDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
+        if (GetFileAttributes(szTargetDllPath) != INVALID_FILE_ATTRIBUTES) {
             g_windowsVersion = WindowsVersion::Win11;
+
+            module = GetModuleHandle(szTargetDllPath);
+            if (!module) {
+                // Try to load dependency DLLs. At process start, if they're not loaded,
+                // loading the ExplorerExtensions DLL fails.
+                WCHAR szRuntimeDllPath[MAX_PATH];
+
+                PWSTR pProgramFilesDirectory;
+			    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, 0, nullptr, &pProgramFilesDirectory))) {
+                    wcscpy_s(szRuntimeDllPath, pProgramFilesDirectory);
+                    wcscat_s(szRuntimeDllPath, LR"(\WindowsApps\Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe\vcruntime140_app.dll)");
+                    LoadLibrary(szRuntimeDllPath);
+
+                    wcscpy_s(szRuntimeDllPath, pProgramFilesDirectory);
+                    wcscat_s(szRuntimeDllPath, LR"(\WindowsApps\Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe\vcruntime140_1_app.dll)");
+                    LoadLibrary(szRuntimeDllPath);
+
+                    wcscpy_s(szRuntimeDllPath, pProgramFilesDirectory);
+                    wcscat_s(szRuntimeDllPath, LR"(\WindowsApps\Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe\msvcp140_app.dll)");
+                    LoadLibrary(szRuntimeDllPath);
+
+                    CoTaskMemFree(pProgramFilesDirectory);
+
+                    module = LoadLibrary(szTargetDllPath);
+                }
+            }
+
             taskbarHooks = taskbarHooks11;
             taskbarHooksSize = ARRAYSIZE(taskbarHooks11);
         }
     }
 
-    if (!module) {
-        module = GetModuleHandle(nullptr);
+    if (g_windowsVersion == WindowsVersion::Invalid) {
         g_windowsVersion = WindowsVersion::Win10;
+        module = GetModuleHandle(nullptr);
         taskbarHooks = taskbarHooks10;
         taskbarHooksSize = ARRAYSIZE(taskbarHooks10);
+    }
+
+    if (!module) {
+        Wh_Log(L"LoadLibrary failed");
+        return FALSE;
     }
 
     WH_FIND_SYMBOL symbol;
