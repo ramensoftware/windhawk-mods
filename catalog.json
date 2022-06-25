@@ -5,11 +5,11 @@
     "mods": {
         "chrome-wheel-scroll-tabs": {
             "details": {
-                "defaultSorting": 0.9743622598797667,
+                "defaultSorting": 0.9745322245322248,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 146
+                "users": 147
             },
             "featured": true,
             "metadata": {
@@ -95,11 +95,11 @@
         },
         "slick-window-arrangement": {
             "details": {
-                "defaultSorting": 0.9452828242963847,
+                "defaultSorting": 0.9451937327700338,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 225
+                "users": 224
             },
             "featured": true,
             "metadata": {
@@ -142,11 +142,11 @@
         },
         "taskbar-button-click": {
             "details": {
-                "defaultSorting": 0.9795487261607653,
+                "defaultSorting": 0.9797641823499172,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 184
+                "users": 186
             },
             "featured": true,
             "metadata": {
@@ -193,11 +193,11 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9650260010779157,
+                "defaultSorting": 0.9659558177126165,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 106
+                "users": 109
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.959062931578319,
+                "defaultSorting": 0.9611337736337737,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 90
+                "users": 95
             },
             "metadata": {
                 "author": "m417z",
@@ -240,11 +240,11 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 0.7323395634282744,
+                "defaultSorting": 0.7346104690196185,
                 "published": 1646604429000,
                 "rating": 0,
                 "updated": 1646604429000,
-                "users": 37
+                "users": 38
             },
             "metadata": {
                 "author": "m417z",
@@ -304,11 +304,11 @@
         },
         "vscode-tweaker": {
             "details": {
-                "defaultSorting": 0.8600655798445983,
+                "defaultSorting": 0.8574986630573902,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 35
+                "users": 34
             },
             "metadata": {
                 "author": "m417z",
