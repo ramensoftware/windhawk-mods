@@ -5,11 +5,11 @@
     "mods": {
         "chrome-wheel-scroll-tabs": {
             "details": {
-                "defaultSorting": 0.9750288608542813,
+                "defaultSorting": 0.9751901297842441,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 150
+                "users": 151
             },
             "featured": true,
             "metadata": {
@@ -95,11 +95,11 @@
         },
         "slick-window-arrangement": {
             "details": {
-                "defaultSorting": 0.9455459463214055,
+                "defaultSorting": 0.9457179850862845,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 228
+                "users": 230
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.7274878240218153,
+                "defaultSorting": 0.7193135021517204,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1655511434000,
-                "users": 35
+                "users": 32
             },
             "metadata": {
                 "architecture": [
@@ -167,11 +167,11 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 0.9764089765760102,
+                "defaultSorting": 0.9765529633499672,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1655707110000,
-                "users": 159
+                "users": 160
             },
             "featured": true,
             "metadata": {
@@ -193,11 +193,11 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9665487070887205,
+                "defaultSorting": 0.9662548664108728,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 111
+                "users": 110
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9656514212958325,
+                "defaultSorting": 0.9659558177126165,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 108
+                "users": 109
             },
             "metadata": {
                 "author": "m417z",
@@ -240,11 +240,11 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 0.9059390425448562,
+                "defaultSorting": 0.90818706741616,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 37
+                "users": 38
             },
             "metadata": {
                 "author": "m417z",
