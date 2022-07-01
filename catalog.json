@@ -5,11 +5,11 @@
     "mods": {
         "chrome-wheel-scroll-tabs": {
             "details": {
-                "defaultSorting": 0.9751901297842441,
+                "defaultSorting": 0.9755064982759679,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 151
+                "users": 153
             },
             "featured": true,
             "metadata": {
@@ -72,11 +72,11 @@
         },
         "notepad-dark-mode": {
             "details": {
-                "defaultSorting": 0.9413118416423387,
+                "defaultSorting": 0.9411880102420298,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 187
+                "users": 186
             },
             "featured": true,
             "metadata": {
@@ -167,11 +167,11 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 0.9765529633499672,
+                "defaultSorting": 0.9766952031526023,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1655707110000,
-                "users": 160
+                "users": 161
             },
             "featured": true,
             "metadata": {
@@ -193,11 +193,11 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9662548664108728,
+                "defaultSorting": 0.9668374746205163,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 110
+                "users": 112
             },
             "metadata": {
                 "architecture": [
@@ -240,11 +240,11 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 0.90818706741616,
+                "defaultSorting": 0.910330146399761,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 38
+                "users": 39
             },
             "metadata": {
                 "author": "m417z",
@@ -262,11 +262,11 @@
         },
         "timer-resolution-control": {
             "details": {
-                "defaultSorting": 0.8423764108293764,
+                "defaultSorting": 0.8387944402908496,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 29
+                "users": 28
             },
             "metadata": {
                 "author": "m417z",
