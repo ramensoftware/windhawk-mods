@@ -142,11 +142,11 @@
         },
         "taskbar-button-click": {
             "details": {
-                "defaultSorting": 0.9801817566507913,
+                "defaultSorting": 0.9800789871065165,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 190
+                "users": 189
             },
             "featured": true,
             "metadata": {
@@ -167,11 +167,11 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 0.9764089765760102,
+                "defaultSorting": 0.9762632104477467,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1655707110000,
-                "users": 159
+                "users": 158
             },
             "featured": true,
             "metadata": {
