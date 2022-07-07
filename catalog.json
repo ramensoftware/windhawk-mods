@@ -95,11 +95,11 @@
         },
         "slick-window-arrangement": {
             "details": {
-                "defaultSorting": 0.9457179850862845,
+                "defaultSorting": 0.9458030163207721,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1647122066000,
-                "users": 230
+                "users": 231
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.7193135021517204,
+                "defaultSorting": 0.7221700934497529,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1655511434000,
-                "users": 32
+                "users": 33
             },
             "metadata": {
                 "architecture": [
@@ -142,11 +142,11 @@
         },
         "taskbar-button-click": {
             "details": {
-                "defaultSorting": 0.9803841471883401,
+                "defaultSorting": 0.9801817566507913,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 192
+                "users": 190
             },
             "featured": true,
             "metadata": {
@@ -193,11 +193,11 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9689797289440706,
+                "defaultSorting": 0.9701835432034374,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 120
+                "users": 125
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9699503135129721,
+                "defaultSorting": 0.9710813480114663,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 124
+                "users": 129
             },
             "featured": true,
             "metadata": {
@@ -241,11 +241,11 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 0.90818706741616,
+                "defaultSorting": 0.910330146399761,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 38
+                "users": 39
             },
             "metadata": {
                 "author": "m417z",
