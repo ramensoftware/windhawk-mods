@@ -216,6 +216,31 @@
                 "version": "1.0"
             }
         },
+        "taskbar-thumbnail-reorder": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1657401939000,
+                "rating": 0,
+                "updated": 1657401939000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32",
+                "description": "Reorder taskbar thumbnails with the left mouse button",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Thumbnail Reorder",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-volume-control": {
             "details": {
                 "defaultSorting": 0.9723310592790636,
