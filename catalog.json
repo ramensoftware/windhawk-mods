@@ -5,11 +5,11 @@
     "mods": {
         "chrome-wheel-scroll-tabs": {
             "details": {
-                "defaultSorting": 0.9764089765760102,
+                "defaultSorting": 0.9765529633499672,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646948445000,
-                "users": 159
+                "users": 160
             },
             "featured": true,
             "metadata": {
@@ -72,11 +72,11 @@
         },
         "notepad-dark-mode": {
             "details": {
-                "defaultSorting": 0.9410629870698999,
+                "defaultSorting": 0.9411880102420298,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 185
+                "users": 186
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.7299677939519038,
+                "defaultSorting": 0.7323395634282744,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1655511434000,
-                "users": 36
+                "users": 37
             },
             "metadata": {
                 "architecture": [
@@ -167,11 +167,11 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 0.9782766045998227,
+                "defaultSorting": 0.9788739210389702,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1655707110000,
-                "users": 173
+                "users": 178
             },
             "featured": true,
             "metadata": {
@@ -193,11 +193,11 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9708620041018919,
+                "defaultSorting": 0.9706393073762474,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 128
+                "users": 127
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-thumbnail-reorder": {
             "details": {
-                "defaultSorting": 0.8388698745050667,
+                "defaultSorting": 0.8793527963418923,
                 "published": 1657401939000,
                 "rating": 10,
                 "updated": 1657401939000,
-                "users": 20
+                "users": 28
             },
             "featured": true,
             "metadata": {
@@ -244,11 +244,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9740154327334122,
+                "defaultSorting": 0.9745322245322248,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 144
+                "users": 147
             },
             "featured": true,
             "metadata": {
@@ -267,11 +267,11 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 0.910330146399761,
+                "defaultSorting": 0.90818706741616,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 39
+                "users": 38
             },
             "metadata": {
                 "author": "m417z",
@@ -289,11 +289,11 @@
         },
         "timer-resolution-control": {
             "details": {
-                "defaultSorting": 0.8349846709204378,
+                "defaultSorting": 0.8423764108293764,
                 "published": 1646604429000,
                 "rating": 9,
                 "updated": 1646604429000,
-                "users": 27
+                "users": 29
             },
             "metadata": {
                 "author": "m417z",
