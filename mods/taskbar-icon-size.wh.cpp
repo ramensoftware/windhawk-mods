@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Large Taskbar Icons
 // @description     Make the taskbar icons large and crisp, or small and compact (Windows 11 only)
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -138,26 +138,31 @@ void FreeSettings() {
     // Nothing for now.
 }
 
-void ApplySettings() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (!hTaskbarWnd) {
-        return;
+bool ProtectAndMemset(DWORD protect, void* dst, const void* src, size_t size) {
+    DWORD oldProtect;
+    if (!VirtualProtect(dst, size, protect, &oldProtect)) {
+        return false;
     }
 
+    memcpy(dst, src, size);
+    VirtualProtect(dst, size, oldProtect, &oldProtect);
+    return true;
+}
+
+void ApplySettings() {
     g_applyingSettings = true;
+
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
 
     double currentTaskbarHeight = *pOriginal_double_48_value;
     double newTaskbarHeight = g_unloading ? 48 : g_settings.taskbarHeight;
 
-    DWORD oldProtect;
-    VirtualProtect(pOriginal_double_48_value,
-                   sizeof(*pOriginal_double_48_value), PAGE_READWRITE,
-                   &oldProtect);
-
     // If the height doesn't change, temporarily change it to zero to force a UI
     // refresh.
-    if (newTaskbarHeight == currentTaskbarHeight) {
-        *pOriginal_double_48_value = 0;
+    if (newTaskbarHeight == currentTaskbarHeight && hTaskbarWnd) {
+        double tempTaskbarHeight = 0;
+        ProtectAndMemset(PAGE_READWRITE, pOriginal_double_48_value,
+                         &tempTaskbarHeight, sizeof(double));
 
         // Trigger TrayUI::_HandleSettingChange.
         SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE,
@@ -174,21 +179,23 @@ void ApplySettings() {
         }
     }
 
-    *pOriginal_double_48_value = newTaskbarHeight;
-    VirtualProtect(pOriginal_double_48_value,
-                   sizeof(*pOriginal_double_48_value), oldProtect, &oldProtect);
+    ProtectAndMemset(PAGE_READWRITE, pOriginal_double_48_value,
+                     &newTaskbarHeight, sizeof(double));
 
-    // Trigger TrayUI::_HandleSettingChange.
-    SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
+    if (hTaskbarWnd) {
+        // Trigger TrayUI::_HandleSettingChange.
+        SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE,
+                    0);
 
-    HWND hReBarWindow32 =
-        FindWindowEx(hTaskbarWnd, nullptr, L"ReBarWindow32", nullptr);
-    if (hReBarWindow32) {
-        HWND hMSTaskSwWClass =
-            FindWindowEx(hReBarWindow32, nullptr, L"MSTaskSwWClass", nullptr);
-        if (hMSTaskSwWClass) {
-            // Trigger CTaskBand::_HandleSyncDisplayChange.
-            SendMessage(hMSTaskSwWClass, 0x452, 3, 0);
+        HWND hReBarWindow32 =
+            FindWindowEx(hTaskbarWnd, nullptr, L"ReBarWindow32", nullptr);
+        if (hReBarWindow32) {
+            HWND hMSTaskSwWClass = FindWindowEx(hReBarWindow32, nullptr,
+                                                L"MSTaskSwWClass", nullptr);
+            if (hMSTaskSwWClass) {
+                // Trigger CTaskBand::_HandleSyncDisplayChange.
+                SendMessage(hMSTaskSwWClass, 0x452, 3, 0);
+            }
         }
     }
 
