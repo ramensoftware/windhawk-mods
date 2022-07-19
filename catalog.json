@@ -51,11 +51,11 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 0.7574992425007574,
+                "defaultSorting": 0.7718981569447084,
                 "published": 1650743841000,
                 "rating": 10,
                 "updated": 1652392623000,
-                "users": 12
+                "users": 13
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -95,11 +95,11 @@
         },
         "slick-window-arrangement": {
             "details": {
-                "defaultSorting": 0.9843098558414911,
+                "defaultSorting": 0.9844369830693043,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1647122066000,
-                "users": 241
+                "users": 243
             },
             "featured": true,
             "metadata": {
@@ -118,11 +118,11 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.7367871841760557,
+                "defaultSorting": 0.7408818560319115,
                 "published": 1647604671000,
                 "rating": 0,
                 "updated": 1655511434000,
-                "users": 39
+                "users": 41
             },
             "metadata": {
                 "architecture": [
@@ -167,11 +167,11 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 0.9791037501849421,
+                "defaultSorting": 0.9799751461622506,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1655707110000,
-                "users": 180
+                "users": 188
             },
             "featured": true,
             "metadata": {
@@ -193,11 +193,11 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9729162671599869,
+                "defaultSorting": 0.9511316831611697,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 138
+                "users": 135
             },
             "metadata": {
                 "architecture": [
@@ -218,11 +218,11 @@
         },
         "taskbar-icon-size": {
             "details": {
-                "defaultSorting": 0.47540115217313156,
+                "defaultSorting": 0.7213231550224494,
                 "published": 1657984524000,
-                "rating": 0,
+                "rating": 9,
                 "updated": 1658010322000,
-                "users": 6
+                "users": 12
             },
             "metadata": {
                 "architecture": [
@@ -243,11 +243,11 @@
         },
         "taskbar-thumbnail-reorder": {
             "details": {
-                "defaultSorting": 0.9213457380593593,
+                "defaultSorting": 0.9433739770288436,
                 "published": 1657401939000,
                 "rating": 10,
                 "updated": 1657401939000,
-                "users": 45
+                "users": 64
             },
             "featured": true,
             "metadata": {
@@ -269,11 +269,11 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9764089765760102,
+                "defaultSorting": 0.9773812776139652,
                 "published": 1652940665000,
                 "rating": 10,
                 "updated": 1652940665000,
-                "users": 159
+                "users": 166
             },
             "featured": true,
             "metadata": {
@@ -292,11 +292,11 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 0.910330146399761,
+                "defaultSorting": 0.9143295511310926,
                 "published": 1646604429000,
                 "rating": 10,
                 "updated": 1646604429000,
-                "users": 39
+                "users": 41
             },
             "metadata": {
                 "author": "m417z",
