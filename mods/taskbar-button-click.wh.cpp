@@ -35,6 +35,10 @@ Tweaker](https://tweaker.ramensoftware.com/).
   - closeAll: Close all windows
   - closeForeground: Close foreground window
   - none: Do nothing
+- useForOldTaskbar: false
+  $name: Use for old taskbar
+  $description: >-
+    You can check this if you want to use the mod for old-style taskbar (i.e. from ExplorerPatcher). Note: change needs disable & re-enable to take into effect. 
 */
 // ==/WindhawkModSettings==
 
@@ -48,6 +52,7 @@ enum {
 
 struct {
     int multipleItemsBehavior;
+    bool useForOldTaskbar;
 } g_settings;
 
 using CTaskListWnd_HandleClick_t = long(WINAPI*)(
@@ -255,6 +260,7 @@ void LoadSettings() {
         g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_NONE;
     }
     Wh_FreeStringSetting(multipleItemsBehavior);
+    g_settings.useForOldTaskbar = Wh_GetIntSetting(L"useForOldTaskbar");
 }
 
 BOOL Wh_ModInit() {
@@ -263,7 +269,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     bool isBeforeWin11 = false;
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module = nullptr; 
+    if (!g_settings.useForOldTaskbar) {
+        module = LoadLibrary(L"taskbar.dll");
+    }
     if (!module) {
         isBeforeWin11 = true;
         module = GetModuleHandle(nullptr);
