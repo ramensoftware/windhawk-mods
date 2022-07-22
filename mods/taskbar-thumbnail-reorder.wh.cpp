@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -261,6 +261,10 @@ bool MoveTaskInGroup(LONG_PTR* taskGroup,
 
     for (HWND hWnd : g_thumbnailWindows) {
         LONG_PTR lpMMThumbnailLongPtr = GetWindowLongPtr(hWnd, 0);
+        if (!lpMMThumbnailLongPtr) {
+            continue;
+        }
+
         LONG_PTR lpMMTaskListLongPtr =
             *(LONG_PTR*)(lpMMThumbnailLongPtr + 0x50) - 0x30;
 
@@ -421,6 +425,12 @@ LRESULT CALLBACK ThumbnailWindowSubclassProc(HWND hWnd,
 
             if (!processed)
                 result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            break;
+
+        case WM_DESTROY:
+            g_thumbnailWindows.erase(hWnd);
+
+            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
             break;
 
         default:
