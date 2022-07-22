@@ -257,7 +257,7 @@
                 "published": 1657401939000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1657401939000,
+                "updated": 1658481010000,
                 "users": 83
             },
             "featured": true,
@@ -275,7 +275,7 @@
                 ],
                 "name": "Taskbar Thumbnail Reorder",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-volume-control": {
