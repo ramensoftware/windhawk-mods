@@ -375,7 +375,7 @@
                 "published": 1646604429000,
                 "rating": 9,
                 "ratingUsers": 0,
-                "updated": 1646604429000,
+                "updated": 1659090573000,
                 "users": 36
             },
             "metadata": {
@@ -389,7 +389,7 @@
                 ],
                 "name": "VSCode Tweaker",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         }
     }
