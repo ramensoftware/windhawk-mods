@@ -2,7 +2,7 @@
 // @id              vscode-tweaker
 // @name            VSCode Tweaker
 // @description     Tweak Microsoft Visual Studio Code by injecting custom JavaScript and CSS code
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -31,11 +31,15 @@ No files are modified on disk - to revert all changes, disable the mod and resta
       $options:
       - js: JavaScript
       - css: CSS
+      - electron_main_js: Electron main.js
+      - electron_workbench_html: Electron workbench.html
+      - electron_workbench_js: Electron workbench.js
     - Source: inline
       $name: Snippet source
       $options:
       - inline: Inline code
       - file: Code from a file
+      - inline_replace: 'Inline code regex replace (syntax: search=>replace)'
     - Code: >-
         setInterval(()=>{
         var t='WINDHAWK!',
@@ -61,13 +65,46 @@ No files are modified on disk - to revert all changes, disable the mod and resta
 #include <sstream>
 #include <string>
 
-WCHAR g_jsFilePath[MAX_PATH];
-WCHAR g_cssFilePath[MAX_PATH];
-WCHAR g_productFilePath[MAX_PATH];
+enum VSCODE_FILE {
+    // Configurable with the mod.
+    VSCODE_FILE_JS,
+    VSCODE_FILE_CSS,
+    VSCODE_FILE_ELECTRON_MAIN_JS,
+    VSCODE_FILE_ELECTRON_WORKBENCH_HTML,
+    VSCODE_FILE_ELECTRON_WORKBENCH_JS,
 
-WCHAR g_newJsFilePath[MAX_PATH];
-WCHAR g_newCssFilePath[MAX_PATH];
-WCHAR g_newProductFilePath[MAX_PATH];
+    // Contains file hashes.
+    VSCODE_FILE_PRODUCT_JSON,
+
+    VSCODE_FILE_COUNT,
+};
+
+PCWSTR g_vscodeFileTypes[] = {
+    L"js",
+    L"css",
+    L"electron_main_js",
+    L"electron_workbench_html",
+    L"electron_workbench_js",
+};
+
+static_assert(ARRAYSIZE(g_vscodeFileTypes) == VSCODE_FILE_COUNT - 1);
+
+PCWSTR g_vscodeFilePaths[] = {
+    L"resources\\app\\out\\vs\\workbench\\workbench.desktop.main.js",
+    L"resources\\app\\out\\vs\\workbench\\workbench.desktop.main.css",
+    L"resources\\app\\out\\main.js",
+    L"resources\\app\\out\\vs\\code\\electron-browser\\workbench\\workbench.html",
+    L"resources\\app\\out\\vs\\code\\electron-browser\\workbench\\workbench.js",
+    L"resources\\app\\product.json",
+};
+
+static_assert(ARRAYSIZE(g_vscodeFilePaths) == VSCODE_FILE_COUNT);
+
+struct {
+    WCHAR filePath[MAX_PATH];
+    WCHAR newFilePath[MAX_PATH];
+    std::string newFileHash;
+} g_vscodeFiles[VSCODE_FILE_COUNT];
 
 // https://gist.github.com/tomykaira/f0fd86b6c73063283afe550bc5d77594
 std::string Base64Encode(const BYTE* data, size_t in_len)
@@ -111,6 +148,8 @@ std::string Base64Encode(const BYTE* data, size_t in_len)
 
 // Calculates base64(md5(contents))
 // Based on: https://github.com/DownWithUp/SHA-ME
+// VSCode reference:
+// computeChecksum in build\gulpfile.vscode.js
 std::string FileHash(PCWSTR lpszFile)
 {
     HCRYPTPROV	hProv;
@@ -169,17 +208,14 @@ HANDLE WINAPI CreateFileWHook(
         compareFileName += 4;
     }
 
-    if (wcsicmp(compareFileName, g_jsFilePath) == 0) {
-        Wh_Log(L"lpFileName = g_newJsFilePath");
-        lpFileName = g_newJsFilePath;
-    }
-    else if (wcsicmp(compareFileName, g_cssFilePath) == 0) {
-        Wh_Log(L"lpFileName = g_newCssFilePath");
-        lpFileName = g_newCssFilePath;
-    }
-    else if (wcsicmp(compareFileName, g_productFilePath) == 0) {
-        Wh_Log(L"lpFileName = g_newProductFilePath");
-        lpFileName = g_newProductFilePath;
+    for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
+        if (wcsicmp(compareFileName, g_vscodeFiles[i].filePath) == 0) {
+            Wh_Log(L"lpFileName = %s", compareFileName);
+            Wh_Log(L"=>");
+            Wh_Log(L"lpFileName = %s", g_vscodeFiles[i].newFilePath);
+            lpFileName = g_vscodeFiles[i].newFilePath;
+            break;
+        }
     }
 
     return pOriginalCreateFileW(
@@ -205,17 +241,14 @@ BOOL WINAPI GetFileAttributesExWHook(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS 
         compareFileName += 4;
     }
 
-    if (wcsicmp(compareFileName, g_jsFilePath) == 0) {
-        Wh_Log(L"lpFileName = g_newJsFilePath");
-        lpFileName = g_newJsFilePath;
-    }
-    else if (wcsicmp(compareFileName, g_cssFilePath) == 0) {
-        Wh_Log(L"lpFileName = g_newCssFilePath");
-        lpFileName = g_newCssFilePath;
-    }
-    else if (wcsicmp(compareFileName, g_productFilePath) == 0) {
-        Wh_Log(L"lpFileName = g_newProductFilePath");
-        lpFileName = g_newProductFilePath;
+    for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
+        if (wcsicmp(compareFileName, g_vscodeFiles[i].filePath) == 0) {
+            Wh_Log(L"lpFileName = %s", compareFileName);
+            Wh_Log(L"=>");
+            Wh_Log(L"lpFileName = %s", g_vscodeFiles[i].newFilePath);
+            lpFileName = g_vscodeFiles[i].newFilePath;
+            break;
+        }
     }
 
     return pOriginalGetFileAttributesExW(
@@ -258,14 +291,12 @@ void RenameToFinalTempFileName(WCHAR tempFileName[MAX_PATH], const std::string& 
 // https://stackoverflow.com/a/69410299
 std::string wide_string_to_string(PCWSTR wide_string)
 {
-    if (!*wide_string)
-    {
+    if (!*wide_string) {
         return "";
     }
 
     int size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, nullptr, 0, nullptr, nullptr);
-    if (size_needed <= 0)
-    {
+    if (size_needed <= 0) {
         throw std::runtime_error("WideCharToMultiByte() failed: " + std::to_string(size_needed));
     }
 
@@ -274,6 +305,49 @@ std::string wide_string_to_string(PCWSTR wide_string)
     std::string result(size_needed, 0);
     WideCharToMultiByte(CP_UTF8, 0, wide_string, size_needed, result.data(), size_needed, nullptr, nullptr);
     return result;
+}
+
+std::string MakeReplacementsInCode(std::string code, PCWSTR fileType)
+{
+    for (int i = 0; ; i++) {
+        PCWSTR type = Wh_GetStringSetting(L"CodeSnippets[%d].Type", i);
+        bool done = !*type;
+        bool typeMatch = !done && wcscmp(type, fileType) == 0;
+        Wh_FreeStringSetting(type);
+
+        if (done) {
+            break;
+        }
+
+        if (!typeMatch) {
+            continue;
+        }
+
+        PCWSTR source = Wh_GetStringSetting(L"CodeSnippets[%d].Source", i);
+        bool isInlineReplace = wcscmp(source, L"inline_replace") == 0;
+        Wh_FreeStringSetting(source);
+
+        if (!isInlineReplace) {
+            continue;
+        }
+
+        PCWSTR searchReplaceCode = Wh_GetStringSetting(L"CodeSnippets[%d].Code", i);
+        std::string searchReplace = wide_string_to_string(searchReplaceCode);
+        Wh_FreeStringSetting(searchReplaceCode);
+
+        auto splitPos = searchReplace.find("=>");
+        if (splitPos == std::string::npos) {
+            continue;
+        }
+
+        std::string search = searchReplace.substr(0, splitPos);
+        std::string replace = searchReplace.substr(splitPos + 2);
+
+        std::regex regex(search);
+        code = std::regex_replace(code, regex, replace);
+    }
+
+    return code;
 }
 
 void AppendModCodeToStream(std::ofstream& output, PCWSTR typeToAppend)
@@ -294,6 +368,7 @@ void AppendModCodeToStream(std::ofstream& output, PCWSTR typeToAppend)
 
         PCWSTR source = Wh_GetStringSetting(L"CodeSnippets[%d].Source", i);
         bool fromFile = wcscmp(source, L"file") == 0;
+        bool fromInlineCode = wcscmp(source, L"inline") == 0;
         Wh_FreeStringSetting(source);
 
         PCWSTR code = Wh_GetStringSetting(L"CodeSnippets[%d].Code", i);
@@ -304,7 +379,7 @@ void AppendModCodeToStream(std::ofstream& output, PCWSTR typeToAppend)
             std::ifstream input(code);
             output << input.rdbuf();
         }
-        else {
+        else if (fromInlineCode) {
             output << wide_string_to_string(code);
         }
 
@@ -312,7 +387,7 @@ void AppendModCodeToStream(std::ofstream& output, PCWSTR typeToAppend)
     }
 }
 
-std::string CreateNewJsFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePath[MAX_PATH])
+std::string CreateNewVscodeFile(PCWSTR fileType, WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePath[MAX_PATH])
 {
     std::stringstream buffer;
     {
@@ -325,8 +400,8 @@ std::string CreateNewJsFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePath
 
     {
         std::ofstream output(tempFilePath);
-        output << buffer.str();
-        AppendModCodeToStream(output, L"js");
+        output << MakeReplacementsInCode(buffer.str(), fileType);
+        AppendModCodeToStream(output, fileType);
     }
 
     std::string fileHash = FileHash(tempFilePath);
@@ -335,7 +410,7 @@ std::string CreateNewJsFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePath
     return fileHash;
 }
 
-std::string CreateNewCssFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePath[MAX_PATH])
+std::string CreateNewProductFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePath[MAX_PATH])
 {
     std::stringstream buffer;
     {
@@ -343,35 +418,33 @@ std::string CreateNewCssFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePat
         buffer << input.rdbuf();
     }
 
-    WCHAR tempFilePath[MAX_PATH];
-    GetInitialTempFileName(tempFilePath);
+    struct {
+        std::string regexPath;
+        std::string& newHash;
+    } hashItems[] = {
+        {
+            R"(vs/workbench/workbench\.desktop\.main\.js)",
+            g_vscodeFiles[VSCODE_FILE_JS].newFileHash
+        },
+        {
+            R"(vs/workbench/workbench\.desktop\.main\.css)",
+            g_vscodeFiles[VSCODE_FILE_CSS].newFileHash
+        },
+        {
+            R"(vs/code/electron-browser/workbench/workbench\.html)",
+            g_vscodeFiles[VSCODE_FILE_ELECTRON_WORKBENCH_HTML].newFileHash
+        },
+        {
+            R"(vs/code/electron-browser/workbench/workbench\.js)",
+            g_vscodeFiles[VSCODE_FILE_ELECTRON_WORKBENCH_JS].newFileHash
+        },
+    };
 
-    {
-        std::ofstream output(tempFilePath);
-        output << buffer.str();
-        AppendModCodeToStream(output, L"css");
+    std::string newContent = buffer.str();
+    for (const auto& item : hashItems) {
+        std::regex regex(R"((")" + item.regexPath + R"("\s*:\s*")[A-Za-z0-9+/]+("))");
+        newContent = std::regex_replace(newContent, regex, "$01" + item.newHash + "$02");
     }
-
-    std::string fileHash = FileHash(tempFilePath);
-    RenameToFinalTempFileName(tempFilePath, fileHash, targetFilePath);
-
-    return fileHash;
-}
-
-std::string CreateNewProductFile(WCHAR sourceFilePath[MAX_PATH], WCHAR targetFilePath[MAX_PATH],
-    std::string newJsFileHash, std::string newCssFileHash)
-{
-    std::stringstream buffer;
-    {
-        std::ifstream input(sourceFilePath);
-        buffer << input.rdbuf();
-    }
-
-    std::regex jsHashRegex(R"(("vs/workbench/workbench\.desktop\.main\.js"\s*:\s*")[A-Za-z0-9+/]+("))");
-    std::string newContent = std::regex_replace(buffer.str(), jsHashRegex, "$01" + newJsFileHash + "$02");
-
-    std::regex cssHashRegex(R"(("vs/workbench/workbench\.desktop\.main\.css"\s*:\s*")[A-Za-z0-9+/]+("))");
-    newContent = std::regex_replace(newContent, cssHashRegex, "$01" + newCssFileHash + "$02");
 
     WCHAR tempFilePath[MAX_PATH];
     GetInitialTempFileName(tempFilePath);
@@ -395,13 +468,18 @@ BOOL Wh_ModInit(void)
     GetModuleFileName(nullptr, modulePath, ARRAYSIZE(modulePath));
     PathRemoveFileSpec(modulePath);
 
-    PathCombine(g_jsFilePath, modulePath, L"resources\\app\\out\\vs\\workbench\\workbench.desktop.main.js");
-    PathCombine(g_cssFilePath, modulePath, L"resources\\app\\out\\vs\\workbench\\workbench.desktop.main.css");
-    PathCombine(g_productFilePath, modulePath, L"resources\\app\\product.json");
+    for (size_t i = 0; i < VSCODE_FILE_COUNT; i++) {
+        PathCombine(g_vscodeFiles[i].filePath, modulePath, g_vscodeFilePaths[i]);
 
-    std::string jsFileHash = CreateNewJsFile(g_jsFilePath, g_newJsFilePath);
-    std::string cssFileHash = CreateNewCssFile(g_cssFilePath, g_newCssFilePath);
-    CreateNewProductFile(g_productFilePath, g_newProductFilePath, jsFileHash, cssFileHash);
+        if (i != VSCODE_FILE_PRODUCT_JSON) {
+            g_vscodeFiles[i].newFileHash = CreateNewVscodeFile(
+                g_vscodeFileTypes[i], g_vscodeFiles[i].filePath, g_vscodeFiles[i].newFilePath);
+        }
+    }
+
+    CreateNewProductFile(
+        g_vscodeFiles[VSCODE_FILE_PRODUCT_JSON].filePath,
+        g_vscodeFiles[VSCODE_FILE_PRODUCT_JSON].newFilePath);
 
     Wh_SetFunctionHook((void*)CreateFileW, (void*)CreateFileWHook, (void**)&pOriginalCreateFileW);
     Wh_SetFunctionHook((void*)GetFileAttributesExW, (void*)GetFileAttributesExWHook, (void**)&pOriginalGetFileAttributesExW);
