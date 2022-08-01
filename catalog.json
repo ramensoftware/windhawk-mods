@@ -75,12 +75,12 @@
         },
         "notepad-dark-mode": {
             "details": {
-                "defaultSorting": 0.9806800991341853,
+                "defaultSorting": 0.9807767752059631,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1646604429000,
-                "users": 195
+                "users": 196
             },
             "featured": true,
             "metadata": {
@@ -123,12 +123,12 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.7464536187325125,
+                "defaultSorting": 0.744666286122436,
                 "published": 1647604671000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1655511434000,
-                "users": 44
+                "users": 43
             },
             "metadata": {
                 "architecture": [
@@ -148,12 +148,12 @@
         },
         "taskbar-button-click": {
             "details": {
-                "defaultSorting": 0.9829898477516984,
+                "defaultSorting": 0.9828378639180563,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1658005193000,
-                "users": 222
+                "users": 220
             },
             "featured": true,
             "metadata": {
@@ -174,12 +174,12 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 0.9448302105036894,
+                "defaultSorting": 0.982914193814668,
                 "published": 1646604429000,
-                "rating": 9,
-                "ratingUsers": 5,
+                "rating": 10,
+                "ratingUsers": 4,
                 "updated": 1655707110000,
-                "users": 220
+                "users": 221
             },
             "featured": true,
             "metadata": {
@@ -201,12 +201,12 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9734772330601154,
+                "defaultSorting": 0.9736590931531197,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1646604429000,
-                "users": 141
+                "users": 142
             },
             "metadata": {
                 "architecture": [
@@ -280,12 +280,12 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9813371058134022,
+                "defaultSorting": 0.9815166934819592,
                 "published": 1652940665000,
                 "rating": 10,
                 "ratingUsers": 8,
                 "updated": 1652940665000,
-                "users": 202
+                "users": 204
             },
             "featured": true,
             "metadata": {
@@ -330,7 +330,7 @@
                 "defaultSorting": 0.8349846709204378,
                 "published": 1646604429000,
                 "rating": 9,
-                "ratingUsers": 0,
+                "ratingUsers": 1,
                 "updated": 1646604429000,
                 "users": 27
             },
@@ -352,7 +352,7 @@
                 "defaultSorting": 0.7846829880728186,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 0,
+                "ratingUsers": 1,
                 "updated": 1647122099000,
                 "users": 14
             },
@@ -371,12 +371,12 @@
         },
         "vscode-tweaker": {
             "details": {
-                "defaultSorting": 0.8648310090261736,
+                "defaultSorting": 0.9035781695514236,
                 "published": 1646604429000,
-                "rating": 9,
+                "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1659090573000,
-                "users": 37
+                "users": 36
             },
             "metadata": {
                 "author": "m417z",
