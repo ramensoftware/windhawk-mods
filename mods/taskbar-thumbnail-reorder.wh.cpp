@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -116,24 +116,15 @@ bool MoveThumbnail(LONG_PTR lpMMThumbnailLongPtr, int indexFrom, int indexTo) {
 
     LONG_PTR** thumbs = (LONG_PTR**)thumbnailArray->pArray;
 
-    // The pointers are saved with an offset to skip a couple of vtables.
-    size_t thumbOffsetInAllocation = sizeof(LONG_PTR) * 2;
-    size_t bufferSize = HeapSize(GetProcessHeap(), 0,
-                                 (BYTE*)thumbs[0] - thumbOffsetInAllocation) -
-                        thumbOffsetInAllocation;
-    std::vector<BYTE> buffer(bufferSize);
-
-    memcpy(&buffer[0], thumbs[indexFrom], bufferSize);
+    LONG_PTR* thumbTemp = thumbs[indexFrom];
     if (indexFrom < indexTo) {
-        for (int i = indexFrom; i < indexTo; i++) {
-            memcpy(thumbs[i], thumbs[i + 1], bufferSize);
-        }
+        memmove(&thumbs[indexFrom], &thumbs[indexFrom + 1],
+                (indexTo - indexFrom) * sizeof(LONG_PTR*));
     } else {
-        for (int i = indexFrom; i > indexTo; i--) {
-            memcpy(thumbs[i], thumbs[i - 1], bufferSize);
-        }
+        memmove(&thumbs[indexTo + 1], &thumbs[indexTo],
+                (indexFrom - indexTo) * sizeof(LONG_PTR*));
     }
-    memcpy(thumbs[indexTo], &buffer[0], bufferSize);
+    thumbs[indexTo] = thumbTemp;
 
     int* activeIndex = ThumbnailActiveIndex(lpMMThumbnailLongPtr);
     if (*activeIndex == indexFrom) {
