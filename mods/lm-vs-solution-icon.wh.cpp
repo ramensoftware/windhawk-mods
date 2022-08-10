@@ -2,7 +2,7 @@
 // @id           lm-vs-solution-icon
 // @name         Visual Studio Solution Icon
 // @description  Add an icon overlay on the Visual Studio task bar icon
-// @version      0.6
+// @version      0.7
 // @author       Mark Jansen
 // @github       https://github.com/learn-more
 // @twitter      https://twitter.com/learn_more
@@ -15,17 +15,21 @@
 # Visual Studio Solution Icon
 Add an icon overlay on the Visual Studio task bar icon.
 
-The icon will be generated from the solution filename.
+If the file .editoricon.ico exists, this will be used as overlay icon.
+When this file does not exist, an icon will be generated from the solution filename.
 
-![Example](https://i.imgur.com/qm3EfYH.png)
+![Example](https://i.imgur.com/PKKHt5a.png)
 
 Tested on:
 - Visual Studio 2017
 - Visual Studio 2019
+- Visual Studio 2022
 
 Inspired by [SolutionIcon](https://github.com/ashmind/SolutionIcon/blob/master/SolutionIcon/Implementation/IconGenerator.cs)
 
 ## Releases:
+- 0.7:
+  - Try to use/load .editoricon.ico
 - 0.6:
   - Reload the icon when the taskbar button is refreshed
 - 0.5:
@@ -35,6 +39,7 @@ Inspired by [SolutionIcon](https://github.com/ashmind/SolutionIcon/blob/master/S
 
 
 #include <string>
+#include <filesystem>
 #include <shobjidl.h>
 
 
@@ -44,6 +49,9 @@ UINT g_subclassRegisteredMsg = RegisterWindowMessage(
     L"Windhawk_SetWindowSubclassFromAnyThread_lm-vs-solution-icon");
 UINT g_taskbarButtonCreatedMsg = RegisterWindowMessage(L"TaskbarButtonCreated");
 UINT g_taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
+
+constexpr int kImageWidth = 16;
+constexpr int kImageHeight = 16;
 
 struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
   SUBCLASSPROC pfnSubclass;
@@ -59,23 +67,23 @@ LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode, WPARAM wParam,
     if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
       SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *param =
           (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *)cwp->lParam;
-      param->result = SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
+      param->result = ::SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
                                         param->uIdSubclass, param->dwRefData);
     }
   }
 
-  return CallNextHookEx(nullptr, nCode, wParam, lParam);
+  return ::CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass,
                                     UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-  DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+  DWORD dwThreadId = ::GetWindowThreadProcessId(hWnd, nullptr);
   if (dwThreadId == 0) {
     return FALSE;
   }
 
-  if (dwThreadId == GetCurrentThreadId()) {
-    return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
+  if (dwThreadId == ::GetCurrentThreadId()) {
+    return ::SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
   }
 
   HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass,
@@ -136,6 +144,7 @@ static HICON CreateCustomIcon(const std::wstring& full_path, const std::wstring&
 
 static void ApplyIcon(const std::wstring& commandline)
 {
+    Wh_Log(L"Got %s", commandline.c_str());
     std::wstring::size_type restartManager = commandline.find(L"/restartManager");
     if (restartManager != std::wstring::npos)
     {
@@ -147,19 +156,38 @@ static void ApplyIcon(const std::wstring& commandline)
         {
             tmp = tmp.substr(1, tmp.size() - 2);
         }
-        // Convert a full path into a 2-letter abbreviation
-        std::wstring ico = Utils::LettersFromFilename(tmp);
-        Wh_Log(L"'%s' => '%s'", tmp.c_str(), ico.c_str());
 
-        if (tmp.empty() || ico.empty())
+        HICON icon = NULL;
+        if (!tmp.empty())
+        {
+            std::filesystem::path path = tmp;
+            path.replace_filename(".editoricon.ico");
+            if (std::filesystem::exists(path))
+            {
+                icon = (HICON)::LoadImageW(NULL, path.c_str(), IMAGE_ICON, kImageWidth, kImageHeight, LR_LOADFROMFILE);
+                Wh_Log(L"Found %s (loaded:%p)", path.c_str(), icon);
+            }
+
+            // No custom icon found yet?
+            if (icon == NULL)
+            {
+                // Convert a full path into a 2-letter abbreviation
+                std::wstring ico = Utils::LettersFromFilename(tmp);
+                Wh_Log(L"'%s' => '%s'", tmp.c_str(), ico.c_str());
+                // Generate an icon
+                icon = Utils::CreateCustomIcon(tmp, ico);
+            }
+        }
+
+        // Did we find something to show as icon?
+        if (icon == NULL)
         {
             g_TaskbarList3->SetOverlayIcon(Utils::MainWindow(), NULL, NULL);
         }
         else
         {
-            HICON icon = Utils::CreateCustomIcon(tmp, ico);
             g_TaskbarList3->SetOverlayIcon(Utils::MainWindow(), icon, NULL);
-            DestroyIcon(icon);
+            ::DestroyIcon(icon);
         }
     }
 }
@@ -170,7 +198,7 @@ static void ApplyIconAfterReload()
     wchar_t Buffer[RESTART_MAX_CMD_LINE+1] = {};
     DWORD dwBufferSize = _countof(Buffer);
 
-    HRESULT hr = GetApplicationRestartSettings(GetCurrentProcess(), Buffer, &dwBufferSize, NULL);
+    HRESULT hr = ::GetApplicationRestartSettings(::GetCurrentProcess(), Buffer, &dwBufferSize, NULL);
     if (SUCCEEDED(hr))
     {
         ApplyIcon(Buffer);
@@ -198,14 +226,14 @@ BOOL Wh_ModInit(void)
     if (!Utils::Selftest())
         return FALSE;
 
-    g_CoInit = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    g_CoInit = ::CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (!SUCCEEDED(g_CoInit))
     {
         Wh_Log(L"CoInitializeEx failed: 0x%x", g_CoInit);
         return FALSE;
     }
 
-    HRESULT hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_TaskbarList3));
+    HRESULT hr = ::CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_TaskbarList3));
     if (!SUCCEEDED(hr))
     {
         Wh_Log(L"CoCreateInstance failed: 0x%x", hr);
@@ -213,7 +241,7 @@ BOOL Wh_ModInit(void)
     }
     g_TaskbarList3->HrInit();
 
-    Wh_SetFunctionHook((void*)RegisterApplicationRestart, (void*)hkRegisterApplicationRestart, (void**)&oRegisterApplicationRestart);
+    Wh_SetFunctionHook((void*)::RegisterApplicationRestart, (void*)hkRegisterApplicationRestart, (void**)&oRegisterApplicationRestart);
 
     return TRUE;
 }
@@ -243,21 +271,11 @@ void Wh_ModUninit(void)
 
 std::wstring Utils::LettersFromFilename(const std::wstring& str)
 {
-    std::wstring tmp;
-    // Cut off the path, keeping the filename
-    std::wstring::size_type pos = str.find_last_of(L"\\/");
-    if (pos == std::wstring::npos)
-        tmp = str;
-    else
-        tmp = str.substr(pos+1);
-
-    // Cut off the extension
-    pos = tmp.find_last_of('.');
-    if (pos != std::wstring::npos)
-        tmp = tmp.erase(pos);
+    // Cut off the path, keeping the filename (without extension)
+    std::wstring tmp = std::filesystem::path(str).stem();
 
     // Cut off 'CompanyName.'
-    pos = tmp.find_last_of('.');
+    std::wstring::size_type pos = tmp.find_last_of('.');
     if (pos != std::wstring::npos)
         tmp = tmp.substr(pos+1);
 
@@ -296,7 +314,7 @@ bool Utils::Selftest()
     EXPECT_LETTERS(L"c:/whatever\\.\\testsolution.sln", L"te");
     EXPECT_LETTERS(L"Testsolution.sln", L"Te");
     EXPECT_LETTERS(L"T.sln", L"T ");
-    EXPECT_LETTERS(L".sln", L"");
+    EXPECT_LETTERS(L".sln", L"sl");
     EXPECT_LETTERS(L"\\\\network\\something.TestSolution.sln", L"TS");
 
     return pass;
@@ -308,8 +326,8 @@ struct handle_data
 };
 
 BOOL is_main_window(HWND handle)
-{   
-    return GetWindow(handle, GW_OWNER) == (HWND)0 && IsWindowVisible(handle);
+{
+    return ::GetWindow(handle, GW_OWNER) == (HWND)0 && ::IsWindowVisible(handle);
 }
 
 BOOL CALLBACK enum_windows_callback(HWND handle, LPARAM lParam)
@@ -320,7 +338,7 @@ BOOL CALLBACK enum_windows_callback(HWND handle, LPARAM lParam)
     if (GetCurrentProcessId() != process_id || !is_main_window(handle))
         return TRUE;
     data.window_handle = handle;
-    return FALSE;   
+    return FALSE;
 }
 
 // Adapted from https://stackoverflow.com/a/21767578/4928207
@@ -330,7 +348,6 @@ HWND Utils::MainWindow()
     data.window_handle = 0;
     EnumWindows(enum_windows_callback, (LPARAM)&data);
     return data.window_handle;
-
 }
 
 // Mostly ported from https://github.com/ashmind/SolutionIcon/blob/master/SolutionIcon/Implementation/IconGenerator.cs
@@ -346,7 +363,7 @@ static COLORREF GetColor(const std::wstring& txt)
     for( wchar_t c : txt) {
         hash += c;
         hash += (hash << 10);
-        hash ^= (hash >> 6);    
+        hash ^= (hash >> 6);
     }
     hash += (hash << 3);
     hash ^= (hash >> 11);
@@ -359,12 +376,9 @@ static COLORREF GetColor(const std::wstring& txt)
 HICON Utils::CreateCustomIcon(const std::wstring& full_path, const std::wstring& text)
 {
     HDC hMem = ::CreateCompatibleDC(NULL);
+    HBITMAP hbm = ::CreateBitmap(kImageWidth, kImageHeight, 1, 32, NULL);
 
-    constexpr int kImageWidth = 16;
-    constexpr int kImageHeight = 16;
-    HBITMAP hbm = CreateBitmap(kImageWidth, kImageHeight, 1, 32, NULL);
-
-    HGDIOBJ hOldBM = SelectObject(hMem, hbm);
+    HGDIOBJ hOldBM = ::SelectObject(hMem, hbm);
 
     if (hOldBM)
     {
@@ -377,35 +391,35 @@ HICON Utils::CreateCustomIcon(const std::wstring& full_path, const std::wstring&
         HFONT font = CreateFontIndirect(&lf);
         if (font)
         {
-            HGDIOBJ hOldFont = SelectObject(hMem, font);
+            HGDIOBJ hOldFont = ::SelectObject(hMem, font);
 
             RECT rc = {0, 0, kImageWidth, kImageHeight};
 
-            HBRUSH hBG = CreateSolidBrush(GetColor(full_path));
-            FillRect(hMem, &rc, hBG);
-            DeleteObject(hBG);
+            HBRUSH hBG = ::CreateSolidBrush(::GetColor(full_path));
+            ::FillRect(hMem, &rc, hBG);
+            ::DeleteObject(hBG);
 
-            SetTextColor(hMem, RGB(255, 255, 255));
-            SetBkMode(hMem, TRANSPARENT);
+            ::SetTextColor(hMem, RGB(255, 255, 255));
+            ::SetBkMode(hMem, TRANSPARENT);
 
             ::DrawTextW(hMem, text.c_str(), text.length(), &rc, DT_NOPREFIX | DT_CENTER | DT_VCENTER | DT_NOCLIP);
 
-            SelectObject(hMem, hOldFont);
-            DeleteObject(font);
+            ::SelectObject(hMem, hOldFont);
+            ::DeleteObject(font);
         }
 
-        SelectObject(hMem, hOldBM);
+        ::SelectObject(hMem, hOldBM);
     }
 
-    HBITMAP hbmpMask = CreateCompatibleBitmap(hMem, kImageWidth, kImageHeight);
+    HBITMAP hbmpMask = ::CreateCompatibleBitmap(hMem, kImageWidth, kImageHeight);
     ICONINFO ii;
     ii.fIcon = TRUE;
     ii.hbmMask = hbmpMask;
     ii.hbmColor = hbm;
-    HICON hIcon = CreateIconIndirect(&ii);
-    DeleteObject(hbmpMask);
-    DeleteObject(hbm);
-    DeleteDC(hMem);
+    HICON hIcon = ::CreateIconIndirect(&ii);
+    ::DeleteObject(hbmpMask);
+    ::DeleteObject(hbm);
+    ::DeleteDC(hMem);
 
     return hIcon;
 }
