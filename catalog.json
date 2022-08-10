@@ -57,7 +57,7 @@
                 "published": 1650743841000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1652392623000,
+                "updated": 1660152079000,
                 "users": 15
             },
             "metadata": {
@@ -70,7 +70,7 @@
                 ],
                 "name": "Visual Studio Solution Icon",
                 "twitter": "https://twitter.com/learn_more",
-                "version": "0.6"
+                "version": "0.7"
             }
         },
         "notepad-dark-mode": {
