@@ -2,7 +2,7 @@
 // @id           visual-studio-anti-rich-header
 // @name         Visual Studio Anti-Rich-Header
 // @description  Prevent the Visual Studio linker from embedding the Rich header into new executables
-// @version      1.0.1
+// @version      1.0.2
 // @author       m417z
 // @github       https://github.com/m417z
 // @twitter      https://twitter.com/m417z
@@ -52,8 +52,15 @@ BOOL Wh_ModInit(void)
         R"(\x8B\x44\x24.)"            // mov eax,dword ptr ss:[esp+??]
         R"(\x5F)"                     // pop edi
         R"(\x5E)"                     // pop esi
+        R"(()"
+        // VS 2019
         R"(\xC7\x03\x52\x69\x63\x68)" // mov dword ptr ds:[ebx],68636952
         R"(\x89\x4B\x04)"             // mov dword ptr ds:[ebx+4],ecx
+        R"(|)"
+        // VS 2022
+        R"(\x89\x59\x04)"             // mov dword ptr ds:[ecx+4],ebx
+        R"(\xC7\x01\x52\x69\x63\x68)" // mov dword ptr ds:[ecx],68636952
+        R"())"
         R"(\x5B)"                     // pop ebx
         ;
     std::string targetPatch = "\x31\xC0\x90\x90"s; // xor eax,eax ; nop ; nop
