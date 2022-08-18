@@ -353,7 +353,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1647122099000,
+                "updated": 1660853592000,
                 "users": 11
             },
             "metadata": {
@@ -366,7 +366,7 @@
                 ],
                 "name": "Visual Studio Anti-Rich-Header",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "vscode-tweaker": {
