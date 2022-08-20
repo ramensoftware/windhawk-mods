@@ -148,12 +148,12 @@
         },
         "taskbar-button-click": {
             "details": {
-                "defaultSorting": 0.9832858803628239,
+                "defaultSorting": 0.9833582855083313,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1658005193000,
-                "users": 226
+                "users": 227
             },
             "featured": true,
             "metadata": {
@@ -201,12 +201,12 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9773812776139652,
+                "defaultSorting": 0.9772473134582945,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 5,
+                "ratingUsers": 4,
                 "updated": 1646604429000,
-                "users": 166
+                "users": 165
             },
             "metadata": {
                 "architecture": [
@@ -227,12 +227,12 @@
         },
         "taskbar-icon-size": {
             "details": {
-                "defaultSorting": 0.904684997626739,
+                "defaultSorting": 0.9069432867768582,
                 "published": 1657984524000,
                 "rating": 9,
                 "ratingUsers": 5,
                 "updated": 1658010322000,
-                "users": 67
+                "users": 70
             },
             "metadata": {
                 "architecture": [
@@ -253,12 +253,12 @@
         },
         "taskbar-thumbnail-reorder": {
             "details": {
-                "defaultSorting": 0.9751901297842441,
+                "defaultSorting": 0.9756616760093665,
                 "published": 1657401939000,
                 "rating": 10,
                 "ratingUsers": 8,
                 "updated": 1659490126000,
-                "users": 151
+                "users": 154
             },
             "featured": true,
             "metadata": {
@@ -280,12 +280,12 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 0.9843098558414911,
+                "defaultSorting": 0.9846851558912079,
                 "published": 1652940665000,
                 "rating": 10,
-                "ratingUsers": 8,
+                "ratingUsers": 7,
                 "updated": 1652940665000,
-                "users": 241
+                "users": 247
             },
             "featured": true,
             "metadata": {
@@ -304,12 +304,12 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 0.9143295511310926,
+                "defaultSorting": 0.9179874299767726,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1646604429000,
-                "users": 41
+                "users": 43
             },
             "metadata": {
                 "author": "m417z",
