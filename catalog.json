@@ -251,6 +251,31 @@
                 "version": "1.0.1"
             }
         },
+        "taskbar-labels": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1661149953000,
+                "rating": 0,
+                "updated": 1661149953000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -lruntimeobject",
+                "description": "Show text labels for running programs on the taskbar (Windows 11 only)",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Labels for Windows 11",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-thumbnail-reorder": {
             "details": {
                 "defaultSorting": 0.9759662065444792,
