@@ -8,7 +8,7 @@
                 "defaultSorting": 0.9771117529861488,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 1,
+                "ratingUsers": 2,
                 "updated": 1646948445000,
                 "users": 164
             },
@@ -75,12 +75,12 @@
         },
         "notepad-dark-mode": {
             "details": {
-                "defaultSorting": 0.9801817566507913,
+                "defaultSorting": 0.9802834712915518,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 1,
+                "ratingUsers": 2,
                 "updated": 1646604429000,
-                "users": 190
+                "users": 191
             },
             "featured": true,
             "metadata": {
@@ -123,12 +123,12 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 0.7514427241690336,
+                "defaultSorting": 0.7529927291394518,
                 "published": 1647604671000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1655511434000,
-                "users": 47
+                "users": 48
             },
             "metadata": {
                 "architecture": [
@@ -148,12 +148,12 @@
         },
         "taskbar-button-click": {
             "details": {
-                "defaultSorting": 0.9832858803628239,
+                "defaultSorting": 0.9832128424202594,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1658005193000,
-                "users": 226
+                "users": 225
             },
             "featured": true,
             "metadata": {
@@ -174,12 +174,12 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 0.9844997772770999,
+                "defaultSorting": 0.9845620667926906,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 5,
+                "ratingUsers": 4,
                 "updated": 1655707110000,
-                "users": 244
+                "users": 245
             },
             "featured": true,
             "metadata": {
@@ -201,12 +201,12 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 0.9775136734846782,
+                "defaultSorting": 0.978028112302793,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1646604429000,
-                "users": 167
+                "users": 171
             },
             "metadata": {
                 "architecture": [
@@ -227,12 +227,12 @@
         },
         "taskbar-icon-size": {
             "details": {
-                "defaultSorting": 0.907657620739913,
+                "defaultSorting": 0.9069432867768582,
                 "published": 1657984524000,
                 "rating": 9,
                 "ratingUsers": 5,
                 "updated": 1658010322000,
-                "users": 71
+                "users": 70
             },
             "metadata": {
                 "architecture": [
@@ -253,12 +253,12 @@
         },
         "taskbar-thumbnail-reorder": {
             "details": {
-                "defaultSorting": 0.9756616760093665,
+                "defaultSorting": 0.9759662065444792,
                 "published": 1657401939000,
                 "rating": 10,
                 "ratingUsers": 8,
                 "updated": 1659490126000,
-                "users": 154
+                "users": 156
             },
             "featured": true,
             "metadata": {
