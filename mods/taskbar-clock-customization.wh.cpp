@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -352,13 +352,9 @@ int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format)
 #pragma region Win11Hooks
 
 DWORD g_refreshIconThreadId;
-DWORD g_ScheduleNextUpdateThreadId;
+bool g_refreshIconNeedToAdjustTimer;
 
 typedef void (WINAPI *ClockSystemTrayIconDataModelRefreshIcon_t)(
-    LPVOID pThis,
-    LPVOID // SystemTrayTelemetry::ClockUpdate&
-);
-typedef void (WINAPI *ClockSystemTrayIconDataModelScheduleNextUpdate_t)(
     LPVOID pThis,
     LPVOID // SystemTrayTelemetry::ClockUpdate&
 );
@@ -367,7 +363,6 @@ typedef int (WINAPI *ICalendarSecond_t)(
 );
 
 ClockSystemTrayIconDataModelRefreshIcon_t pOriginalClockSystemTrayIconDataModelRefreshIcon;
-ClockSystemTrayIconDataModelScheduleNextUpdate_t pOriginalClockSystemTrayIconDataModelScheduleNextUpdate;
 ICalendarSecond_t pOriginalICalendarSecond;
 
 void WINAPI ClockSystemTrayIconDataModelRefreshIconHook(
@@ -378,6 +373,7 @@ void WINAPI ClockSystemTrayIconDataModelRefreshIconHook(
     Wh_Log(L">");
 
     g_refreshIconThreadId = GetCurrentThreadId();
+    g_refreshIconNeedToAdjustTimer = g_settings.showSeconds || !*g_webContent;
 
     pOriginalClockSystemTrayIconDataModelRefreshIcon(
         pThis,
@@ -385,23 +381,7 @@ void WINAPI ClockSystemTrayIconDataModelRefreshIconHook(
     );
 
     g_refreshIconThreadId = 0;
-}
-
-void WINAPI ClockSystemTrayIconDataModelScheduleNextUpdateHook(
-    LPVOID pThis,
-    LPVOID param1
-)
-{
-    Wh_Log(L">");
-
-    g_ScheduleNextUpdateThreadId = GetCurrentThreadId();
-
-    pOriginalClockSystemTrayIconDataModelScheduleNextUpdate(
-        pThis,
-        param1
-    );
-
-    g_ScheduleNextUpdateThreadId = 0;
+    g_refreshIconNeedToAdjustTimer = false;
 }
 
 int WINAPI ICalendarSecondHook(
@@ -410,11 +390,11 @@ int WINAPI ICalendarSecondHook(
 {
     Wh_Log(L">");
 
-    if (g_ScheduleNextUpdateThreadId == GetCurrentThreadId()) {
-        if (g_settings.showSeconds || !*g_webContent) {
-            // Make the next refresh happen in a second.
-            return 59;
-        }
+    if (g_refreshIconThreadId == GetCurrentThreadId() && g_refreshIconNeedToAdjustTimer) {
+        g_refreshIconNeedToAdjustTimer = false;
+
+        // Make the next refresh happen in a second.
+        return 59;
     }
 
     int ret = pOriginalICalendarSecond(
@@ -429,13 +409,13 @@ VOID WINAPI GetLocalTimeHook_Win11(
 {
     Wh_Log(L">");
 
-    if (g_ScheduleNextUpdateThreadId == GetCurrentThreadId()) {
-        if (g_settings.showSeconds || !*g_webContent) {
-            // Make the next refresh happen in a second.
-            memset(lpSystemTime, 0, sizeof(*lpSystemTime));
-            lpSystemTime->wSecond = 59;
-            return;
-        }
+    if (g_refreshIconThreadId == GetCurrentThreadId() && g_refreshIconNeedToAdjustTimer) {
+        g_refreshIconNeedToAdjustTimer = false;
+
+        // Make the next refresh happen in a second.
+        memset(lpSystemTime, 0, sizeof(*lpSystemTime));
+        lpSystemTime->wSecond = 59;
+        return;
     }
 
     pOriginalGetLocalTime(
@@ -799,11 +779,6 @@ BOOL Wh_ModInit(void)
             std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
             (void*)ClockSystemTrayIconDataModelRefreshIconHook,
             (void**)&pOriginalClockSystemTrayIconDataModelRefreshIcon
-        },
-        {
-            std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::ScheduleNextUpdate\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
-            (void*)ClockSystemTrayIconDataModelScheduleNextUpdateHook,
-            (void**)&pOriginalClockSystemTrayIconDataModelScheduleNextUpdate
         }
     };
 
@@ -812,11 +787,6 @@ BOOL Wh_ModInit(void)
             std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
             (void*)ClockSystemTrayIconDataModelRefreshIconHook,
             (void**)&pOriginalClockSystemTrayIconDataModelRefreshIcon
-        },
-        {
-            std::wregex(LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::ScheduleNextUpdate\(class SystemTrayTelemetry::ClockUpdate &\s*(__ptr64)?\)\s*(__ptr64)?)"),
-            (void*)ClockSystemTrayIconDataModelScheduleNextUpdateHook,
-            (void**)&pOriginalClockSystemTrayIconDataModelScheduleNextUpdate
         },
         {
             std::wregex(LR"(public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second\(void\)const\s*(__ptr64)?)"),
@@ -859,23 +829,27 @@ BOOL Wh_ModInit(void)
     if (GetFileAttributes(szTargetDllPath) != INVALID_FILE_ATTRIBUTES) {
         g_windowsVersion = WindowsVersion::Win11_22H2;
 
-        // Try to load dependency DLLs. At process start, if they're not loaded,
-        // loading the taskbar view DLL fails.
-        WCHAR szRuntimeDllPath[MAX_PATH];
+        module = GetModuleHandle(szTargetDllPath);
+        if (!module) {
+            // Try to load dependency DLLs. At process start, if they're not loaded,
+            // loading the taskbar view DLL fails.
+            WCHAR szRuntimeDllPath[MAX_PATH];
 
-        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_app.dll)");
-        LoadLibrary(szRuntimeDllPath);
+            wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+            wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_app.dll)");
+            LoadLibrary(szRuntimeDllPath);
 
-        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_1_app.dll)");
-        LoadLibrary(szRuntimeDllPath);
+            wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+            wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_1_app.dll)");
+            LoadLibrary(szRuntimeDllPath);
 
-        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\msvcp140_app.dll)");
-        LoadLibrary(szRuntimeDllPath);
+            wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
+            wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\msvcp140_app.dll)");
+            LoadLibrary(szRuntimeDllPath);
 
-        module = LoadLibrary(szTargetDllPath);
+            module = LoadLibrary(szTargetDllPath);
+        }
+
         taskbarHooks = taskbarHooks11_22H2;
         taskbarHooksSize = ARRAYSIZE(taskbarHooks11_22H2);
     }
