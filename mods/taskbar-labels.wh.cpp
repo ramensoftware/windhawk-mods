@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1225,6 +1225,19 @@ void UpdateTaskListButtonCustomizations(void* pTaskListButtonImpl) {
         return;
     }
 
+    double taskListButtonWidth = 0;
+    pTaskListButtonElement->get_ActualWidth(&taskListButtonWidth);
+
+    double iconPanelWidth = 0;
+    pIconPanelElement->get_ActualWidth(&iconPanelWidth);
+
+    // Check if non-positive or NaN.
+    if (!(taskListButtonWidth > 0) || !(iconPanelWidth > 0)) {
+        return;
+    }
+
+    static double initialWidth = iconPanelWidth;
+
     void* taskListButtonProducer = (BYTE*)pTaskListButtonImpl + 0x10;
 
     bool isRunning = false;
@@ -1232,14 +1245,6 @@ void UpdateTaskListButtonCustomizations(void* pTaskListButtonImpl) {
                                                 &isRunning);
 
     bool showLabels = isRunning && !g_unloading;
-
-    double taskListButtonWidth = 0;
-    pTaskListButtonElement->get_Width(&taskListButtonWidth);
-
-    double iconPanelWidth = 0;
-    pIconPanelElement->get_Width(&iconPanelWidth);
-
-    static double initialWidth = iconPanelWidth;
 
     double widthToSet = showLabels ? g_settings.taskbarItemWidth : initialWidth;
 
