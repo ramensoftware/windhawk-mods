@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -26,7 +26,18 @@ Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- reverseScrollingDirection: false
+  $name: Reverse Scrolling Direction
+*/
+// ==/WindhawkModSettings==
+
 #include <commctrl.h>
+
+struct {
+    bool reverseScrollingDirection;
+} g_settings;
 
 DWORD g_uiThreadId;
 DWORD g_lastScrollTime;
@@ -108,6 +119,10 @@ void OnMouseWheel(HWND hWnd, short delta)
 
     int clicks = delta / WHEEL_DELTA;
     Wh_Log(L"%d clicks (delta=%d)", clicks, delta);
+
+    if (g_settings.reverseScrollingDirection) {
+        clicks = -clicks;
+    }
 
     WORD key = VK_PRIOR;
     if (clicks < 0) {
@@ -282,9 +297,16 @@ HWND WINAPI CreateWindowExWHook(
     return hWnd;
 }
 
-BOOL Wh_ModInit(void)
+void LoadSettings()
+{
+    g_settings.reverseScrollingDirection = Wh_GetIntSetting(L"reverseScrollingDirection");
+}
+
+BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
+
+    LoadSettings();
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
 
@@ -293,11 +315,18 @@ BOOL Wh_ModInit(void)
     return TRUE;
 }
 
-void Wh_ModUninit(void)
+void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
 
     if (g_uiThreadId != 0) {
         EnumThreadWindows(g_uiThreadId, EnumBrowserWindowsUnsubclassFunc, 0);
     }
+}
+
+void Wh_ModSettingsChanged()
+{
+    Wh_Log(L"SettingsChanged");
+
+    LoadSettings();
 }
