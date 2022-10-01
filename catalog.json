@@ -51,6 +51,27 @@
                 "version": "1.0"
             }
         },
+        "lm-mediakey-explorer-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1664663103000,
+                "rating": 0,
+                "updated": 1664663103000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Mark Jansen",
+                "compilerOptions": "-luuid -lole32",
+                "description": "Fix the Media 'play' key being suppressed in Explorer when a file is selected.",
+                "github": "https://github.com/learn-more",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Play-Media-Key fix in Explorer",
+                "twitter": "https://twitter.com/learn_more",
+                "version": "1.0"
+            }
+        },
         "lm-vs-solution-icon": {
             "details": {
                 "defaultSorting": 0.9059390425448562,
