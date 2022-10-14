@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -463,6 +463,38 @@ int WINAPI GetDateFormatExHook_Win11(
     int cchDate,
     LPCWSTR lpCalendar)
 {
+    // This is a fix for the following situation. The code inside
+    // winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon
+    // looks similar to the following (pseudo code):
+    //
+    // ----------------------------------------
+    // if (someFlag) {
+    //     SYSTEMTIME t1;
+    //     GetLocalTime(&t1);
+    //     setTimeout(nextUpdate, calcNextUpdate(t1.wSecond));
+    // }
+    // SYSTEMTIME t2;
+    // GetLocalTime(&t2);
+    // GetDateFormatEx(..., &t2, ...);
+    // ----------------------------------------
+    //
+    // We hook GetLocalTime and change wSecond to update the clock every second,
+    // which works if someFlag is set. But in case someFlag isn't set, we end up
+    // changing the result of the second GetLocalTime call. To handle this, we
+    // check whether the time we get here is the time we set in the hook, and if
+    // so, we call GetLocalTime explicitly to pass the correct date to
+    // GetDateFormatEx.
+    //
+    // I'm not sure what someFlag means, but it becomes false when the monitor
+    // turns off.
+
+    SYSTEMTIME sentinelSystemTime;
+    memset(&sentinelSystemTime, 0, sizeof(sentinelSystemTime));
+    sentinelSystemTime.wSecond = 59;
+    if (memcmp(lpDate, &sentinelSystemTime, sizeof(sentinelSystemTime)) == 0) {
+        pOriginalGetLocalTime(const_cast<SYSTEMTIME*>(lpDate));
+    }
+
     if (g_refreshIconThreadId == GetCurrentThreadId() && (dwFlags & DATE_SHORTDATE)) {
         if (!cchDate || g_windowsVersion >= WindowsVersion::Win11_22H2) {
             // First call, initialize strings.
@@ -867,7 +899,7 @@ BOOL Wh_ModInit(void)
                 WCHAR szRuntimeDllPath[MAX_PATH];
 
                 PWSTR pProgramFilesDirectory;
-			    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, 0, nullptr, &pProgramFilesDirectory))) {
+                if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, 0, nullptr, &pProgramFilesDirectory))) {
                     wcscpy_s(szRuntimeDllPath, pProgramFilesDirectory);
                     wcscat_s(szRuntimeDllPath, LR"(\WindowsApps\Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe\vcruntime140_app.dll)");
                     LoadLibrary(szRuntimeDllPath);
