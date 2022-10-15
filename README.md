@@ -27,3 +27,5 @@ Submit a mod update by creating a pull request in this repository. The pull requ
 The mod's `version` metadata value must be changed to a newer version.
 
 The mod's `github` metadata value must match the pull request author's GitHub profile. This means that you can only submit an update for a mod that you originally submitted. If you'd like to update a mod that you didn't submit, you can either submit the changes to the mod author, or submit a new mod instead.
+
+The commit message should include information about the new version. The information will be shown in the mod's changelog.
