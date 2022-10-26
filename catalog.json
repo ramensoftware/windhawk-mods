@@ -279,7 +279,7 @@
                 "published": 1661149953000,
                 "rating": 10,
                 "ratingUsers": 5,
-                "updated": 1661409940000,
+                "updated": 1666786625000,
                 "users": 363
             },
             "metadata": {
@@ -296,7 +296,7 @@
                 ],
                 "name": "Taskbar Labels for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-thumbnail-reorder": {
