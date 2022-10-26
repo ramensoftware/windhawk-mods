@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Large Taskbar Icons
 // @description     Make the taskbar icons large and crisp, or small and compact (Windows 11 only)
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -138,7 +138,7 @@ void FreeSettings() {
     // Nothing for now.
 }
 
-bool ProtectAndMemset(DWORD protect, void* dst, const void* src, size_t size) {
+bool ProtectAndMemcpy(DWORD protect, void* dst, const void* src, size_t size) {
     DWORD oldProtect;
     if (!VirtualProtect(dst, size, protect, &oldProtect)) {
         return false;
@@ -153,6 +153,11 @@ void ApplySettings() {
     g_applyingSettings = true;
 
     HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+    DWORD dwTaskbarProcessId = 0;
+    if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwTaskbarProcessId) &&
+        dwTaskbarProcessId != GetCurrentProcessId()) {
+        hTaskbarWnd = nullptr;
+    }
 
     double currentTaskbarHeight = *pOriginal_double_48_value;
     double newTaskbarHeight = g_unloading ? 48 : g_settings.taskbarHeight;
@@ -161,7 +166,7 @@ void ApplySettings() {
     // refresh.
     if (newTaskbarHeight == currentTaskbarHeight && hTaskbarWnd) {
         double tempTaskbarHeight = 0;
-        ProtectAndMemset(PAGE_READWRITE, pOriginal_double_48_value,
+        ProtectAndMemcpy(PAGE_READWRITE, pOriginal_double_48_value,
                          &tempTaskbarHeight, sizeof(double));
 
         // Trigger TrayUI::_HandleSettingChange.
@@ -179,7 +184,7 @@ void ApplySettings() {
         }
     }
 
-    ProtectAndMemset(PAGE_READWRITE, pOriginal_double_48_value,
+    ProtectAndMemcpy(PAGE_READWRITE, pOriginal_double_48_value,
                      &newTaskbarHeight, sizeof(double));
 
     if (hTaskbarWnd) {
