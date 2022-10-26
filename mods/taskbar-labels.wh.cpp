@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1436,7 +1436,7 @@ void FreeSettings() {
     // Nothing for now.
 }
 
-bool ProtectAndMemspy(DWORD protect, void* dst, const void* src, size_t size) {
+bool ProtectAndMemcpy(DWORD protect, void* dst, const void* src, size_t size) {
     DWORD oldProtect;
     if (!VirtualProtect(dst, size, protect, &oldProtect)) {
         return false;
@@ -1448,15 +1448,24 @@ bool ProtectAndMemspy(DWORD protect, void* dst, const void* src, size_t size) {
 }
 
 void ApplySettings() {
-    g_applyingSettings = true;
-
     HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+    DWORD dwTaskbarProcessId = 0;
+    if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwTaskbarProcessId) &&
+        dwTaskbarProcessId != GetCurrentProcessId()) {
+        hTaskbarWnd = nullptr;
+    }
+
+    if (!hTaskbarWnd) {
+        return;
+    }
+
+    g_applyingSettings = true;
 
     double prevTaskbarHeight = *double_48_value_Original;
 
     // Temporarily change the height to zero to force a UI refresh.
     double tempTaskbarHeight = 0;
-    ProtectAndMemspy(PAGE_READWRITE, double_48_value_Original,
+    ProtectAndMemcpy(PAGE_READWRITE, double_48_value_Original,
                      &tempTaskbarHeight, sizeof(double));
 
     // Trigger TrayUI::_HandleSettingChange.
@@ -1472,7 +1481,7 @@ void ApplySettings() {
         Sleep(100);
     }
 
-    ProtectAndMemspy(PAGE_READWRITE, double_48_value_Original,
+    ProtectAndMemcpy(PAGE_READWRITE, double_48_value_Original,
                      &prevTaskbarHeight, sizeof(double));
 
     if (hTaskbarWnd) {
