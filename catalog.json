@@ -253,7 +253,7 @@
                 "published": 1657984524000,
                 "rating": 10,
                 "ratingUsers": 8,
-                "updated": 1658010322000,
+                "updated": 1666786568000,
                 "users": 221
             },
             "metadata": {
@@ -270,7 +270,7 @@
                 ],
                 "name": "Large Taskbar Icons",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-labels": {
