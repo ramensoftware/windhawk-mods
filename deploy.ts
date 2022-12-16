@@ -156,7 +156,7 @@ function generateModChangelog(modId: string) {
 
         const modVersionUrl = `https://github.com/ramensoftware/windhawk-mods/blob/${commit}/mods/${modId}.wh.cpp`;
 
-        changelog += `# ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
+        changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
 
         if (commit !== lastCommit) {
             const message = gitExec([
