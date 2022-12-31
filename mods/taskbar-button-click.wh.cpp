@@ -2,13 +2,14 @@
 // @id              taskbar-button-click
 // @name            Middle click to close on the taskbar
 // @description     Close programs with a middle click on the taskbar instead of creating a new instance
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,6 +22,9 @@ instance.
 Only Windows 10 64-bit and Windows 11 are supported.
 For other Windows version check out [7+ Taskbar
 Tweaker](https://tweaker.ramensoftware.com/).
+
+Note: To customize the old taskbar on Windows 11 (if using Explorer Patcher or a
+similar tool), enable the relevant option in the mod's settings.
 */
 // ==/WindhawkModReadme==
 
@@ -35,10 +39,19 @@ Tweaker](https://tweaker.ramensoftware.com/).
   - closeAll: Close all windows
   - closeForeground: Close foreground window
   - none: Do nothing
+- oldTaskbarOnWin11: false
+  $name: Customize the old taskbar on Windows 11
+  $description: >-
+    Enable this option to customize the old taskbar on Windows 11 (if using
+    Explorer Patcher or a similar tool). Note: Disable and re-enable the mod to
+    apply this option.
 */
 // ==/WindhawkModSettings==
 
-#include <regex>
+#include <algorithm>
+#include <string>
+#include <string_view>
+#include <vector>
 
 enum {
     MULTIPLE_ITEMS_BEHAVIOR_NONE,
@@ -48,7 +61,16 @@ enum {
 
 struct {
     int multipleItemsBehavior;
+    bool oldTaskbarOnWin11;
 } g_settings;
+
+enum class WinVersion {
+    Unsupported,
+    Win10,
+    Win11,
+};
+
+WinVersion g_winVersion;
 
 using CTaskListWnd_HandleClick_t = long(WINAPI*)(
     LPVOID pThis,
@@ -56,6 +78,8 @@ using CTaskListWnd_HandleClick_t = long(WINAPI*)(
     LPVOID,  // ITaskItem *
     LPVOID   // winrt::Windows::System::LauncherOptions const &
 );
+CTaskListWnd_HandleClick_t CTaskListWnd_HandleClick_Original;
+
 using CTaskListWnd__HandleClick_t =
     void(WINAPI*)(LPVOID pThis,
                   LPVOID,  // ITaskBtnGroup *
@@ -63,28 +87,46 @@ using CTaskListWnd__HandleClick_t =
                   int,  // enum CTaskListWnd::eCLICKACTION
                   int,
                   int);
+CTaskListWnd__HandleClick_t CTaskListWnd__HandleClick_Original;
+
 using CTaskBand_Launch_t = long(WINAPI*)(LPVOID pThis,
                                          LPVOID,  // ITaskGroup *
                                          LPVOID,  // tagPOINT const &
                                          int  // enum LaunchFromTaskbarOptions
 );
+CTaskBand_Launch_t CTaskBand_Launch_Original;
+
+using CTaskListWnd_GetActiveBtn_t = HRESULT(WINAPI*)(LPVOID pThis,
+                                                     LPVOID*,  // ITaskGroup **
+                                                     int*);
+CTaskListWnd_GetActiveBtn_t CTaskListWnd_GetActiveBtn_Original;
+
 using CTaskListWnd_ProcessJumpViewCloseWindow_t =
     void(WINAPI*)(LPVOID pThis,
                   HWND,
                   LPVOID,  // struct ITaskGroup *
                   HMONITOR);
-using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(LPVOID pThis);
-
-CTaskListWnd_HandleClick_t pOriginal_CTaskListWnd_HandleClick;
-CTaskListWnd__HandleClick_t pOriginal_CTaskListWnd__HandleClick;
-CTaskBand_Launch_t pOriginal_CTaskBand_Launch;
 CTaskListWnd_ProcessJumpViewCloseWindow_t
-    pOriginal_CTaskListWnd_ProcessJumpViewCloseWindow;
-CTaskBtnGroup_GetGroupType_t pOriginal_CTaskBtnGroup_GetGroupType;
+    CTaskListWnd_ProcessJumpViewCloseWindow_Original;
 
-LPVOID pCTaskListWndHandlingClick;
-LPVOID pCTaskListWndTaskBtnGroup;
-int CTaskListWndClickAction = -1;
+using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(LPVOID pThis);
+CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType_Original;
+
+using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(LPVOID pThis, int);
+CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem_Original;
+
+using CWindowTaskItem_GetWindow_t = HWND(WINAPI*)(LPVOID pThis);
+CWindowTaskItem_GetWindow_t CWindowTaskItem_GetWindow_Original;
+
+using CImmersiveTaskItem_GetWindow_t = HWND(WINAPI*)(LPVOID pThis);
+CImmersiveTaskItem_GetWindow_t CImmersiveTaskItem_GetWindow_Original;
+
+void* CImmersiveTaskItem_vftable;
+
+LPVOID g_pCTaskListWndHandlingClick;
+LPVOID g_pCTaskListWndTaskBtnGroup;
+int g_CTaskListWndTaskItemIndex = -1;
+int g_CTaskListWndClickAction = -1;
 
 long WINAPI CTaskListWnd_HandleClick_Hook(LPVOID pThis,
                                           LPVOID param1,
@@ -92,41 +134,42 @@ long WINAPI CTaskListWnd_HandleClick_Hook(LPVOID pThis,
                                           LPVOID param3) {
     Wh_Log(L">");
 
-    pCTaskListWndHandlingClick = pThis;
+    g_pCTaskListWndHandlingClick = pThis;
 
-    long ret =
-        pOriginal_CTaskListWnd_HandleClick(pThis, param1, param2, param3);
+    long ret = CTaskListWnd_HandleClick_Original(pThis, param1, param2, param3);
 
-    pCTaskListWndHandlingClick = nullptr;
+    g_pCTaskListWndHandlingClick = nullptr;
 
     return ret;
 }
 
 void WINAPI CTaskListWnd__HandleClick_Hook(LPVOID pThis,
                                            LPVOID taskBtnGroup,
-                                           int param2,
+                                           int taskItemIndex,
                                            int clickAction,
                                            int param4,
                                            int param5) {
     Wh_Log(L"> %d", clickAction);
 
-    if (!pOriginal_CTaskListWnd_HandleClick) {
-        // A magic number for pre-Win11.
-        pCTaskListWndHandlingClick = (BYTE*)pThis + 0x28;
+    if (!CTaskListWnd_HandleClick_Original) {
+        // A magic number for Win10.
+        g_pCTaskListWndHandlingClick = (BYTE*)pThis + 0x28;
     }
 
-    pCTaskListWndTaskBtnGroup = taskBtnGroup;
-    CTaskListWndClickAction = clickAction;
+    g_pCTaskListWndTaskBtnGroup = taskBtnGroup;
+    g_CTaskListWndTaskItemIndex = taskItemIndex;
+    g_CTaskListWndClickAction = clickAction;
 
-    pOriginal_CTaskListWnd__HandleClick(pThis, taskBtnGroup, param2,
-                                        clickAction, param4, param5);
+    CTaskListWnd__HandleClick_Original(pThis, taskBtnGroup, taskItemIndex,
+                                       clickAction, param4, param5);
 
-    if (!pOriginal_CTaskListWnd_HandleClick) {
-        pCTaskListWndHandlingClick = nullptr;
+    if (!CTaskListWnd_HandleClick_Original) {
+        g_pCTaskListWndHandlingClick = nullptr;
     }
 
-    pCTaskListWndTaskBtnGroup = nullptr;
-    CTaskListWndClickAction = -1;
+    g_pCTaskListWndTaskBtnGroup = nullptr;
+    g_CTaskListWndTaskItemIndex = -1;
+    g_CTaskListWndClickAction = -1;
 }
 
 long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
@@ -135,110 +178,317 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
                                   int param3) {
     Wh_Log(L">");
 
-    BOOL isShiftKeyDown = GetKeyState(VK_SHIFT) < 0;
+    auto original = [&]() {
+        return CTaskBand_Launch_Original(pThis, taskGroup, param2, param3);
+    };
+
+    if (!g_pCTaskListWndHandlingClick || !g_pCTaskListWndTaskBtnGroup) {
+        return original();
+    }
 
     // The click action of launching a new instance can happen in two ways:
     // * Middle click.
     // * Shift + Left click.
     // Exclude the second click action by checking whether the shift key is
     // down.
-    if (pCTaskListWndHandlingClick && CTaskListWndClickAction == 3 &&
-        !isShiftKeyDown) {
-        int groupType = -1;
-        if (pCTaskListWndTaskBtnGroup) {
-            // Group types:
-            // 1 - Single item
-            // 2 - Pinned item
-            // 3 - Multiple items
-            groupType =
-                pOriginal_CTaskBtnGroup_GetGroupType(pCTaskListWndTaskBtnGroup);
-        }
+    if (g_CTaskListWndClickAction != 3 || GetKeyState(VK_SHIFT) < 0) {
+        return original();
+    }
 
-        if (groupType == 3 &&
-            g_settings.multipleItemsBehavior == MULTIPLE_ITEMS_BEHAVIOR_NONE) {
+    // Group types:
+    // 1 - Single item (or multiple uncombined items - Win10)
+    // 2 - Pinned item
+    // 3 - Multiple combined items
+    int groupType =
+        CTaskBtnGroup_GetGroupType_Original(g_pCTaskListWndTaskBtnGroup);
+    if (groupType != 1 && groupType != 3) {
+        return original();
+    }
+
+    int taskItemIndex = -1;
+
+    if (groupType == 3) {
+        if (g_settings.multipleItemsBehavior == MULTIPLE_ITEMS_BEHAVIOR_NONE) {
             return 0;
         }
 
-        if (groupType == 3 && g_settings.multipleItemsBehavior ==
-                                  MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND) {
-            HWND hForegroundWindow = GetForegroundWindow();
-            if (hForegroundWindow) {
-                WCHAR szClassName[32];
-                if (GetClassName(hForegroundWindow, szClassName,
-                                 ARRAYSIZE(szClassName)) &&
-                    (wcsicmp(szClassName, L"Shell_TrayWnd") == 0 ||
-                     wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0)) {
-                    hForegroundWindow = nullptr;
-                }
+        if (g_settings.multipleItemsBehavior ==
+            MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND) {
+            void* activeTaskGroup;
+            if (FAILED(CTaskListWnd_GetActiveBtn_Original(
+                    (BYTE*)g_pCTaskListWndHandlingClick + 0x18,
+                    &activeTaskGroup, &taskItemIndex)) ||
+                !activeTaskGroup) {
+                return 0;
             }
 
-            if (hForegroundWindow) {
-                POINT pt;
-                GetCursorPos(&pt);
-                HMONITOR monitor =
-                    MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-                pOriginal_CTaskListWnd_ProcessJumpViewCloseWindow(
-                    pCTaskListWndHandlingClick, hForegroundWindow, taskGroup,
-                    monitor);
+            ((IUnknown*)activeTaskGroup)->Release();
+            if (activeTaskGroup != taskGroup || taskItemIndex < 0) {
+                return 0;
             }
-
-            return 0;
         }
+    } else if (g_winVersion <= WinVersion::Win10) {
+        taskItemIndex = g_CTaskListWndTaskItemIndex;
+    }
 
-        if (groupType != 2) {
-            POINT pt;
-            GetCursorPos(&pt);
-            HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-            pOriginal_CTaskListWnd_ProcessJumpViewCloseWindow(
-                pCTaskListWndHandlingClick, nullptr, taskGroup, monitor);
-            return 0;
+    HWND hWnd = nullptr;
+
+    if (taskItemIndex >= 0) {
+        void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
+            g_pCTaskListWndTaskBtnGroup, taskItemIndex);
+        if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
+            hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
+        } else {
+            hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
         }
     }
 
-    return pOriginal_CTaskBand_Launch(pThis, taskGroup, param2, param3);
+    Wh_Log(L"Closing HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+
+    POINT pt;
+    GetCursorPos(&pt);
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    CTaskListWnd_ProcessJumpViewCloseWindow_Original(
+        g_pCTaskListWndHandlingClick, hWnd, taskGroup, monitor);
+    return 0;
+}
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen)
+        *puPtrLen = uPtrLen;
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+WinVersion GetWindowsVersion() {
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo)
+        return WinVersion::Unsupported;
+
+    WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD qfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    Wh_Log(L"Version: %u.%u.%u.%u", major, minor, build, qfe);
+
+    switch (major) {
+        case 10:
+            if (build < 22000)
+                return WinVersion::Win10;
+            else
+                return WinVersion::Win11;
+            break;
+    }
+
+    return WinVersion::Unsupported;
 }
 
 struct SYMBOL_HOOK {
-    std::wregex symbolRegex;
+    std::vector<std::wstring_view> symbols;
     void** pOriginalFunction;
     void* hookFunction = nullptr;
     bool optional = false;
 };
 
-bool HookSymbols(HMODULE module,
-                 SYMBOL_HOOK* symbolHooks,
+bool HookSymbols(PCWSTR cacheId,
+                 HMODULE module,
+                 const SYMBOL_HOOK* symbolHooks,
                  size_t symbolHooksCount) {
-    WH_FIND_SYMBOL symbol;
-    HANDLE findSymbol = Wh_FindFirstSymbol(module, nullptr, &symbol);
-    if (!findSymbol) {
+    const WCHAR cacheVer = L'1';
+    const WCHAR cacheSep = L'@';
+    constexpr size_t cacheMaxSize = 10240;
+
+    WCHAR cacheBuffer[cacheMaxSize + 1];
+    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + cacheId;
+    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
+
+    std::wstring_view cacheBufferView(cacheBuffer);
+
+    // https://stackoverflow.com/a/46931770
+    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
+        size_t pos_start = 0, pos_end;
+        std::wstring_view token;
+        std::vector<std::wstring_view> res;
+
+        while ((pos_end = s.find(delimiter, pos_start)) !=
+               std::wstring_view::npos) {
+            token = s.substr(pos_start, pos_end - pos_start);
+            pos_start = pos_end + 1;
+            res.push_back(token);
+        }
+
+        res.push_back(s.substr(pos_start));
+        return res;
+    };
+
+    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
+
+    std::vector<bool> symbolResolved(symbolHooksCount, false);
+    std::wstring newSystemCacheStr;
+
+    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
+                             cacheSep, &newSystemCacheStr,
+                             module](std::wstring_view symbol, void* address) {
+        for (size_t i = 0; i < symbolHooksCount; i++) {
+            if (symbolResolved[i]) {
+                continue;
+            }
+
+            bool match = false;
+            for (auto hookSymbol : symbolHooks[i].symbols) {
+                if (hookSymbol == symbol) {
+                    match = true;
+                    break;
+                }
+            }
+
+            if (!match) {
+                continue;
+            }
+
+            if (symbolHooks[i].hookFunction) {
+                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
+                                   symbolHooks[i].pOriginalFunction);
+                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
+                       symbol.data());
+            } else {
+                *symbolHooks[i].pOriginalFunction = address;
+                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
+                       symbol.data());
+            }
+
+            symbolResolved[i] = true;
+
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr += symbol;
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr +=
+                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
+
+            break;
+        }
+    };
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    newSystemCacheStr += cacheVer;
+    newSystemCacheStr += cacheSep;
+    newSystemCacheStr += timeStamp;
+    newSystemCacheStr += cacheSep;
+    newSystemCacheStr += imageSize;
+
+    if (cacheParts.size() >= 3 &&
+        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
+        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
+        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
+            auto symbol = cacheParts[i];
+            auto address = cacheParts[i + 1];
+            if (address.length() == 0) {
+                continue;
+            }
+
+            void* addressPtr =
+                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
+                        (ULONG_PTR)module);
+
+            onSymbolResolved(symbol, addressPtr);
+        }
+
+        for (size_t i = 0; i < symbolHooksCount; i++) {
+            if (symbolResolved[i] || !symbolHooks[i].optional) {
+                continue;
+            }
+
+            int noAddressMatchCount = 0;
+            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
+                auto symbol = cacheParts[j];
+                auto address = cacheParts[j + 1];
+                if (address.length() != 0) {
+                    continue;
+                }
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    if (hookSymbol == symbol) {
+                        noAddressMatchCount++;
+                        break;
+                    }
+                }
+            }
+
+            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
+                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+                symbolResolved[i] = true;
+            }
+        }
+
+        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
+                        [](bool b) { return b; })) {
+            return true;
+        }
+    }
+
+    Wh_Log(L"Couldn't resolve all symbols from cache");
+
+    WH_FIND_SYMBOL findSymbol;
+    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
+    if (!findSymbolHandle) {
+        Wh_Log(L"Wh_FindFirstSymbol failed");
         return false;
     }
 
     do {
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (!*symbolHooks[i].pOriginalFunction &&
-                std::regex_match(symbol.symbol, symbolHooks[i].symbolRegex)) {
-                if (symbolHooks[i].hookFunction) {
-                    Wh_SetFunctionHook(symbol.address,
-                                       symbolHooks[i].hookFunction,
-                                       symbolHooks[i].pOriginalFunction);
-                    Wh_Log(L"Hooked %p (%s)", symbol.address, symbol.symbol);
-                } else {
-                    *symbolHooks[i].pOriginalFunction = symbol.address;
-                    Wh_Log(L"Found %p (%s)", symbol.address, symbol.symbol);
-                }
-                break;
-            }
-        }
-    } while (Wh_FindNextSymbol(findSymbol, &symbol));
+        onSymbolResolved(findSymbol.symbol, findSymbol.address);
+    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
 
-    Wh_FindCloseSymbol(findSymbol);
+    Wh_FindCloseSymbol(findSymbolHandle);
 
     for (size_t i = 0; i < symbolHooksCount; i++) {
-        if (!symbolHooks[i].optional && !*symbolHooks[i].pOriginalFunction) {
-            Wh_Log(L"Missing symbol: %d", i);
+        if (symbolResolved[i]) {
+            continue;
+        }
+
+        if (!symbolHooks[i].optional) {
+            Wh_Log(L"Unresolved symbol: %d", i);
             return false;
         }
+
+        Wh_Log(L"Optional symbol %d doesn't exist", i);
+
+        for (auto hookSymbol : symbolHooks[i].symbols) {
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr += hookSymbol;
+            newSystemCacheStr += cacheSep;
+        }
+    }
+
+    if (newSystemCacheStr.length() <= cacheMaxSize) {
+        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
+    } else {
+        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
     }
 
     return true;
@@ -255,45 +505,97 @@ void LoadSettings() {
         g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_NONE;
     }
     Wh_FreeStringSetting(multipleItemsBehavior);
+
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    g_winVersion = GetWindowsVersion();
+    if (g_winVersion == WinVersion::Unsupported) {
+        Wh_Log(L"Unsupported Windows version");
+        return FALSE;
+    }
+
     LoadSettings();
 
-    bool isBeforeWin11 = false;
-    HMODULE module = LoadLibrary(L"taskbar.dll");
-    if (!module) {
-        isBeforeWin11 = true;
-        module = GetModuleHandle(nullptr);
-    }
-
-    SYMBOL_HOOK symbolHooks[] = {
-        {std::wregex(
-             LR"(public: virtual long __cdecl CTaskListWnd::HandleClick\(struct ITaskGroup \* __ptr64,struct ITaskItem \* __ptr64,struct winrt::Windows::System::LauncherOptions const & __ptr64\) __ptr64)"),
-         (void**)&pOriginal_CTaskListWnd_HandleClick,
+    SYMBOL_HOOK
+    symbolHooks[] = {
+        // Win11 only:
+        {{
+             LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))",
+             LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64,struct winrt::Windows::System::LauncherOptions const & __ptr64) __ptr64)",
+         },
+         (void**)&CTaskListWnd_HandleClick_Original,
          (void*)CTaskListWnd_HandleClick_Hook},
-        {std::wregex(
-             LR"(protected: void __cdecl CTaskListWnd::_HandleClick\(struct ITaskBtnGroup \* __ptr64,int,enum CTaskListWnd::eCLICKACTION,int,int\) __ptr64)"),
-         (void**)&pOriginal_CTaskListWnd__HandleClick,
+        // Win10 and Win11:
+        {{
+             LR"(protected: void __cdecl CTaskListWnd::_HandleClick(struct ITaskBtnGroup *,int,enum CTaskListWnd::eCLICKACTION,int,int))",
+             LR"(protected: void __cdecl CTaskListWnd::_HandleClick(struct ITaskBtnGroup * __ptr64,int,enum CTaskListWnd::eCLICKACTION,int,int) __ptr64)",
+         },
+         (void**)&CTaskListWnd__HandleClick_Original,
          (void*)CTaskListWnd__HandleClick_Hook},
-        {std::wregex(
-             LR"(public: virtual long __cdecl CTaskBand::Launch\(struct ITaskGroup \* __ptr64,struct tagPOINT const & __ptr64,enum LaunchFromTaskbarOptions\) __ptr64)"),
-         (void**)&pOriginal_CTaskBand_Launch, (void*)CTaskBand_Launch_Hook},
-        {std::wregex(
-             LR"(public: virtual void __cdecl CTaskListWnd::ProcessJumpViewCloseWindow\(struct HWND__ \* __ptr64,struct ITaskGroup \* __ptr64,struct HMONITOR__ \* __ptr64\) __ptr64)"),
-         (void**)&pOriginal_CTaskListWnd_ProcessJumpViewCloseWindow},
-        {std::wregex(
-             LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType\(void\) __ptr64)"),
-         (void**)&pOriginal_CTaskBtnGroup_GetGroupType}};
+        {{
+             LR"(public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup *,struct tagPOINT const &,enum LaunchFromTaskbarOptions))",
+             LR"(public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup * __ptr64,struct tagPOINT const & __ptr64,enum LaunchFromTaskbarOptions) __ptr64)",
+         },
+         (void**)&CTaskBand_Launch_Original,
+         (void*)CTaskBand_Launch_Hook},
+        {{
+             LR"(public: virtual long __cdecl CTaskListWnd::GetActiveBtn(struct ITaskGroup * *,int *))",
+             LR"(public: virtual long __cdecl CTaskListWnd::GetActiveBtn(struct ITaskGroup * __ptr64 * __ptr64,int * __ptr64) __ptr64)",
+         },
+         (void**)&CTaskListWnd_GetActiveBtn_Original},
+        {{
+             LR"(public: virtual void __cdecl CTaskListWnd::ProcessJumpViewCloseWindow(struct HWND__ *,struct ITaskGroup *,struct HMONITOR__ *))",
+             LR"(public: virtual void __cdecl CTaskListWnd::ProcessJumpViewCloseWindow(struct HWND__ * __ptr64,struct ITaskGroup * __ptr64,struct HMONITOR__ * __ptr64) __ptr64)",
+         },
+         (void**)&CTaskListWnd_ProcessJumpViewCloseWindow_Original},
+        {{
+             LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))",
+             LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void) __ptr64)",
+         },
+         (void**)&CTaskBtnGroup_GetGroupType_Original},
+        {{
+             LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))",
+             LR"(public: virtual struct ITaskItem * __ptr64 __cdecl CTaskBtnGroup::GetTaskItem(int) __ptr64)",
+         },
+         (void**)&CTaskBtnGroup_GetTaskItem_Original},
+        {{
+             LR"(public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void))",
+             LR"(public: virtual struct HWND__ * __ptr64 __cdecl CWindowTaskItem::GetWindow(void) __ptr64)",
+         },
+         (void**)&CWindowTaskItem_GetWindow_Original},
+        {{
+             LR"(public: virtual struct HWND__ * __cdecl CImmersiveTaskItem::GetWindow(void))",
+             LR"(public: virtual struct HWND__ * __ptr64 __cdecl CImmersiveTaskItem::GetWindow(void) __ptr64)",
+         },
+         (void**)&CImmersiveTaskItem_GetWindow_Original},
+        {{
+             LR"(const CImmersiveTaskItem::`vftable'{for `ITaskItem'})",
+             LR"(const CImmersiveTaskItem::`vftable'{for `ITaskItem'} __ptr64)",
+         },
+         (void**)&CImmersiveTaskItem_vftable}};
 
-    if (isBeforeWin11) {
-        symbolHooks[0].optional = true;
-    }
+    if (g_winVersion <= WinVersion::Win10 || g_settings.oldTaskbarOnWin11) {
+        SYMBOL_HOOK* symbolHooksWin10 = symbolHooks + 1;
+        size_t symbolHooksWin10Count = ARRAYSIZE(symbolHooks) - 1;
+        if (!HookSymbols(L"explorer.exe", GetModuleHandle(nullptr),
+                         symbolHooksWin10, symbolHooksWin10Count)) {
+            return FALSE;
+        }
+    } else {
+        HMODULE taskbarModule = LoadLibrary(L"taskbar.dll");
+        if (!taskbarModule) {
+            Wh_Log(L"Couldn't load taskbar.dll");
+            return FALSE;
+        }
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-        return FALSE;
+        if (!HookSymbols(L"taskbar.dll", taskbarModule, symbolHooks,
+                         ARRAYSIZE(symbolHooks))) {
+            return FALSE;
+        }
     }
 
     return TRUE;
