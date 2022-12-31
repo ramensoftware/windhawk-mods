@@ -306,7 +306,7 @@
                 "published": 1657401939000,
                 "rating": 10,
                 "ratingUsers": 21,
-                "updated": 1659490126000,
+                "updated": 1672518473000,
                 "users": 677
             },
             "featured": true,
@@ -315,7 +315,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32",
+                "compilerOptions": "-lcomctl32 -lversion",
                 "description": "Reorder taskbar thumbnails with the left mouse button",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -324,7 +324,7 @@
                 ],
                 "name": "Taskbar Thumbnail Reorder",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "taskbar-volume-control": {

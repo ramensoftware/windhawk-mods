@@ -2,14 +2,14 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32
+// @compilerOptions -lcomctl32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,19 +17,48 @@
 # Taskbar Thumbnail Reorder
 Reorder taskbar thumbnails with the left mouse button.
 
-Only Windows 10 64-bit and Windows 11 are supported. \
-For other Windows version check out [7+ Taskbar
-Tweaker](https://tweaker.ramensoftware.com/).
+Only Windows 10 64-bit and Windows 11 are supported. For other Windows version
+check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
+
+Note: To customize the old taskbar on Windows 11 (if using Explorer Patcher or a
+similar tool), enable the relevant option in the mod's settings.
 
 ![demonstration](https://i.imgur.com/wGGe2RS.gif)
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- oldTaskbarOnWin11: false
+  $name: Customize the old taskbar on Windows 11
+  $description: >-
+    Enable this option to customize the old taskbar on Windows 11 (if using
+    Explorer Patcher or a similar tool). Note: Disable and re-enable the mod to
+    apply this option.
+*/
+// ==/WindhawkModSettings==
+
 #include <commctrl.h>
 
-#include <regex>
+#include <algorithm>
+#include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
+
+struct {
+    bool oldTaskbarOnWin11;
+} g_settings;
+
+enum class WinVersion {
+    Unsupported,
+    Win10,
+    Win11,
+};
+
+WinVersion g_winVersion;
+
+std::unordered_set<HWND> g_thumbnailWindows;
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -47,8 +76,6 @@ typedef struct _DPA {
     int cpCapacity;
     int cpGrow;
 } DPA, *HDPA;
-
-static std::unordered_set<HWND> g_thumbnailWindows;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -478,22 +505,66 @@ void FindCurrentProcessThumbnailWindows() {
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t pOriginalCreateWindowExW;
-HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
-                                LPCWSTR lpClassName,
-                                LPCWSTR lpWindowName,
-                                DWORD dwStyle,
-                                int X,
-                                int Y,
-                                int nWidth,
-                                int nHeight,
-                                HWND hWndParent,
-                                HMENU hMenu,
-                                HINSTANCE hInstance,
-                                LPVOID lpParam) {
-    HWND hWnd = pOriginalCreateWindowExW(dwExStyle, lpClassName, lpWindowName,
+CreateWindowExW_t CreateWindowExW_Original;
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 LPVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
                                          dwStyle, X, Y, nWidth, nHeight,
                                          hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd)
+        return hWnd;
+
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+    if (bTextualClassName &&
+        wcsicmp(lpClassName, L"TaskListThumbnailWnd") == 0) {
+        Wh_Log(L"Thumbnail window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        HandleIdentifiedThumbnailWindow(hWnd);
+    }
+
+    return hWnd;
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           LPVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    LPVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
     if (!hWnd)
         return hWnd;
 
@@ -548,64 +619,301 @@ bool InitOffsets() {
     return true;
 }
 
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen)
+        *puPtrLen = uPtrLen;
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+WinVersion GetWindowsVersion() {
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo)
+        return WinVersion::Unsupported;
+
+    WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD qfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    Wh_Log(L"Version: %u.%u.%u.%u", major, minor, build, qfe);
+
+    switch (major) {
+        case 10:
+            if (build < 22000)
+                return WinVersion::Win10;
+            else
+                return WinVersion::Win11;
+            break;
+    }
+
+    return WinVersion::Unsupported;
+}
+
 struct SYMBOL_HOOK {
-    std::wregex symbolRegex;
+    std::vector<std::wstring_view> symbols;
     void** pOriginalFunction;
     void* hookFunction = nullptr;
     bool optional = false;
 };
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Init");
+bool HookSymbols(PCWSTR cacheId,
+                 HMODULE module,
+                 const SYMBOL_HOOK* symbolHooks,
+                 size_t symbolHooksCount) {
+    const WCHAR cacheVer = L'1';
+    const WCHAR cacheSep = L'@';
+    constexpr size_t cacheMaxSize = 10240;
 
-    HMODULE module = LoadLibrary(L"taskbar.dll");
-    if (!module) {
-        module = GetModuleHandle(nullptr);
-    }
+    WCHAR cacheBuffer[cacheMaxSize + 1];
+    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + cacheId;
+    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
 
-    SYMBOL_HOOK symbolHooks[] = {
-        {std::wregex(
-             LR"(private: void __cdecl CTaskListThumbnailWnd::_RefreshThumbnail\(int\) __ptr64)"),
-         (void**)&CTaskListThumbnailWnd__RefreshThumbnail},
-        {std::wregex(
-             LR"(public: virtual struct ITaskGroup \* __ptr64 __cdecl CTaskListThumbnailWnd::GetTaskGroup\(void\)const __ptr64)"),
-         (void**)&CTaskListThumbnailWnd_GetTaskGroup},
-        {std::wregex(
-             LR"(public: virtual int __cdecl CTaskListThumbnailWnd::GetHoverIndex\(void\)const __ptr64)"),
-         (void**)&CTaskListThumbnailWnd_GetHoverIndex},
-        {std::wregex(
-             LR"(protected: struct ITaskBtnGroup \* __ptr64 __cdecl CTaskListWnd::_GetTBGroupFromGroup\(struct ITaskGroup \* __ptr64,int \* __ptr64\) __ptr64)"),
-         (void**)&CTaskListWnd__GetTBGroupFromGroup}};
+    std::wstring_view cacheBufferView(cacheBuffer);
 
-    WH_FIND_SYMBOL symbol;
-    HANDLE findSymbol = Wh_FindFirstSymbol(module, NULL, &symbol);
-    if (findSymbol) {
-        do {
-            for (size_t i = 0; i < ARRAYSIZE(symbolHooks); i++) {
-                if (!*symbolHooks[i].pOriginalFunction &&
-                    std::regex_match(symbol.symbol,
-                                     symbolHooks[i].symbolRegex)) {
-                    if (symbolHooks[i].hookFunction) {
-                        Wh_SetFunctionHook(symbol.address,
-                                           symbolHooks[i].hookFunction,
-                                           symbolHooks[i].pOriginalFunction);
-                        Wh_Log(L"Hooked %p (%s)", symbol.address,
-                               symbol.symbol);
-                    } else {
-                        *symbolHooks[i].pOriginalFunction = symbol.address;
-                        Wh_Log(L"Found %p (%s)", symbol.address, symbol.symbol);
-                    }
+    // https://stackoverflow.com/a/46931770
+    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
+        size_t pos_start = 0, pos_end;
+        std::wstring_view token;
+        std::vector<std::wstring_view> res;
+
+        while ((pos_end = s.find(delimiter, pos_start)) !=
+               std::wstring_view::npos) {
+            token = s.substr(pos_start, pos_end - pos_start);
+            pos_start = pos_end + 1;
+            res.push_back(token);
+        }
+
+        res.push_back(s.substr(pos_start));
+        return res;
+    };
+
+    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
+
+    std::vector<bool> symbolResolved(symbolHooksCount, false);
+    std::wstring newSystemCacheStr;
+
+    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
+                             cacheSep, &newSystemCacheStr,
+                             module](std::wstring_view symbol, void* address) {
+        for (size_t i = 0; i < symbolHooksCount; i++) {
+            if (symbolResolved[i]) {
+                continue;
+            }
+
+            bool match = false;
+            for (auto hookSymbol : symbolHooks[i].symbols) {
+                if (hookSymbol == symbol) {
+                    match = true;
                     break;
                 }
             }
-        } while (Wh_FindNextSymbol(findSymbol, &symbol));
 
-        Wh_FindCloseSymbol(findSymbol);
+            if (!match) {
+                continue;
+            }
+
+            if (symbolHooks[i].hookFunction) {
+                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
+                                   symbolHooks[i].pOriginalFunction);
+                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
+                       symbol.data());
+            } else {
+                *symbolHooks[i].pOriginalFunction = address;
+                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
+                       symbol.data());
+            }
+
+            symbolResolved[i] = true;
+
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr += symbol;
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr +=
+                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
+
+            break;
+        }
+    };
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    newSystemCacheStr += cacheVer;
+    newSystemCacheStr += cacheSep;
+    newSystemCacheStr += timeStamp;
+    newSystemCacheStr += cacheSep;
+    newSystemCacheStr += imageSize;
+
+    if (cacheParts.size() >= 3 &&
+        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
+        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
+        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
+            auto symbol = cacheParts[i];
+            auto address = cacheParts[i + 1];
+            if (address.length() == 0) {
+                continue;
+            }
+
+            void* addressPtr =
+                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
+                        (ULONG_PTR)module);
+
+            onSymbolResolved(symbol, addressPtr);
+        }
+
+        for (size_t i = 0; i < symbolHooksCount; i++) {
+            if (symbolResolved[i] || !symbolHooks[i].optional) {
+                continue;
+            }
+
+            int noAddressMatchCount = 0;
+            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
+                auto symbol = cacheParts[j];
+                auto address = cacheParts[j + 1];
+                if (address.length() != 0) {
+                    continue;
+                }
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    if (hookSymbol == symbol) {
+                        noAddressMatchCount++;
+                        break;
+                    }
+                }
+            }
+
+            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
+                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+                symbolResolved[i] = true;
+            }
+        }
+
+        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
+                        [](bool b) { return b; })) {
+            return true;
+        }
     }
 
-    for (size_t i = 0; i < ARRAYSIZE(symbolHooks); i++) {
-        if (!symbolHooks[i].optional && !*symbolHooks[i].pOriginalFunction) {
-            Wh_Log(L"Missing symbol: %d", i);
+    Wh_Log(L"Couldn't resolve all symbols from cache");
+
+    WH_FIND_SYMBOL findSymbol;
+    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
+    if (!findSymbolHandle) {
+        Wh_Log(L"Wh_FindFirstSymbol failed");
+        return false;
+    }
+
+    do {
+        onSymbolResolved(findSymbol.symbol, findSymbol.address);
+    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
+
+    Wh_FindCloseSymbol(findSymbolHandle);
+
+    for (size_t i = 0; i < symbolHooksCount; i++) {
+        if (symbolResolved[i]) {
+            continue;
+        }
+
+        if (!symbolHooks[i].optional) {
+            Wh_Log(L"Unresolved symbol: %d", i);
+            return false;
+        }
+
+        Wh_Log(L"Optional symbol %d doesn't exist", i);
+
+        for (auto hookSymbol : symbolHooks[i].symbols) {
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr += hookSymbol;
+            newSystemCacheStr += cacheSep;
+        }
+    }
+
+    if (newSystemCacheStr.length() <= cacheMaxSize) {
+        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
+    } else {
+        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
+    }
+
+    return true;
+}
+
+void LoadSettings() {
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    g_winVersion = GetWindowsVersion();
+    if (g_winVersion == WinVersion::Unsupported) {
+        Wh_Log(L"Unsupported Windows version");
+        return FALSE;
+    }
+
+    LoadSettings();
+
+    SYMBOL_HOOK symbolHooks[] = {
+        {{
+             LR"(private: void __cdecl CTaskListThumbnailWnd::_RefreshThumbnail(int) __ptr64)",
+             LR"(private: void __cdecl CTaskListThumbnailWnd::_RefreshThumbnail(int))",
+         },
+         (void**)&CTaskListThumbnailWnd__RefreshThumbnail},
+        {{
+             LR"(public: virtual struct ITaskGroup * __ptr64 __cdecl CTaskListThumbnailWnd::GetTaskGroup(void)const __ptr64)",
+             LR"(public: virtual struct ITaskGroup * __cdecl CTaskListThumbnailWnd::GetTaskGroup(void)const )",
+         },
+         (void**)&CTaskListThumbnailWnd_GetTaskGroup},
+        {{
+             LR"(public: virtual int __cdecl CTaskListThumbnailWnd::GetHoverIndex(void)const __ptr64)",
+             LR"(public: virtual int __cdecl CTaskListThumbnailWnd::GetHoverIndex(void)const )",
+         },
+         (void**)&CTaskListThumbnailWnd_GetHoverIndex},
+        {{
+             LR"(protected: struct ITaskBtnGroup * __ptr64 __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup * __ptr64,int * __ptr64) __ptr64)",
+             LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))",
+         },
+         (void**)&CTaskListWnd__GetTBGroupFromGroup}};
+
+    HMODULE module;
+
+    if (g_winVersion <= WinVersion::Win10 || g_settings.oldTaskbarOnWin11) {
+        module = GetModuleHandle(nullptr);
+        if (!HookSymbols(L"explorer.exe", module, symbolHooks,
+                         ARRAYSIZE(symbolHooks))) {
+            return FALSE;
+        }
+    } else {
+        module = LoadLibrary(L"taskbar.dll");
+        if (!module) {
+            Wh_Log(L"Couldn't load taskbar.dll");
+            return FALSE;
+        }
+
+        if (!HookSymbols(L"taskbar.dll", module, symbolHooks,
+                         ARRAYSIZE(symbolHooks))) {
             return FALSE;
         }
     }
@@ -614,8 +922,19 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook,
-                       (void**)&pOriginalCreateWindowExW);
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
+                       (void**)&CreateWindowExW_Original);
+
+    HMODULE user32Module = LoadLibrary(L"user32.dll");
+    if (user32Module) {
+        void* pCreateWindowInBand =
+            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
+        if (pCreateWindowInBand) {
+            Wh_SetFunctionHook(pCreateWindowInBand,
+                               (void*)CreateWindowInBand_Hook,
+                               (void**)&CreateWindowInBand_Original);
+        }
+    }
 
     WNDCLASS wndclass;
     if (GetClassInfo(module, L"TaskListThumbnailWnd", &wndclass)) {
@@ -630,9 +949,15 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
+    Wh_Log(L">");
 
     for (HWND hWnd : g_thumbnailWindows) {
         UnsubclassThumbnailWindow(hWnd);
     }
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    LoadSettings();
 }
