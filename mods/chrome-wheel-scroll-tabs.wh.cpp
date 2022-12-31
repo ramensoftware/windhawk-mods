@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -56,23 +56,27 @@ struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
     BOOL result;
 };
 
-LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode, WPARAM wParam, LPARAM lParam)
-{
+LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode,
+                                              WPARAM wParam,
+                                              LPARAM lParam) {
     if (nCode == HC_ACTION) {
         const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
         if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
             SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param =
                 (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
-            param->result = SetWindowSubclass(
-                cwp->hwnd, param->pfnSubclass, param->uIdSubclass, param->dwRefData);
+            param->result =
+                SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
+                                  param->uIdSubclass, param->dwRefData);
         }
     }
 
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
-{
+BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
+                                    SUBCLASSPROC pfnSubclass,
+                                    UINT_PTR uIdSubclass,
+                                    DWORD_PTR dwRefData) {
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) {
         return FALSE;
@@ -82,7 +86,8 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
         return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
     }
 
-    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass, nullptr, dwThreadId);
+    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass,
+                                  nullptr, dwThreadId);
     if (!hook) {
         return FALSE;
     }
@@ -99,17 +104,17 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
     return param.result;
 }
 
-void OnMouseWheel(HWND hWnd, short delta)
-{
-    if (GetForegroundWindow() != hWnd) {
+bool OnMouseWheel(HWND hWnd, short delta) {
+    HWND hForegroundWnd = GetForegroundWindow();
+    if (!hForegroundWnd || GetAncestor(hForegroundWnd, GA_ROOTOWNER) != hWnd) {
         g_lastScrollWnd = nullptr;
-        return;
+        return false;
     }
 
-    if (GetKeyState(VK_CONTROL) < 0 ||
-        GetKeyState(VK_PRIOR) < 0 ||
+    if (GetKeyState(VK_CONTROL) < 0 || GetKeyState(VK_MENU) < 0 ||
+        GetKeyState(VK_SHIFT) < 0 || GetKeyState(VK_PRIOR) < 0 ||
         GetKeyState(VK_NEXT) < 0) {
-        return;
+        return false;
     }
 
     if (hWnd == g_lastScrollWnd &&
@@ -158,44 +163,43 @@ void OnMouseWheel(HWND hWnd, short delta)
     g_lastScrollTime = GetTickCount();
     g_lastScrollWnd = hWnd;
     g_lastScrollDeltaRemainder = delta % WHEEL_DELTA;
+
+    return true;
 }
 
-LRESULT CALLBACK BrowserWindowSubclassProc(
-    _In_ HWND hWnd,
-    _In_ UINT uMsg,
-    _In_ WPARAM wParam,
-    _In_ LPARAM lParam,
-    _In_ UINT_PTR uIdSubclass,
-    _In_ DWORD_PTR dwRefData
-    )
-{
-    switch (uMsg)
-    {
-    case WM_MOUSEWHEEL:
-        switch (SendMessage(hWnd, WM_NCHITTEST, 0, lParam)) {
-        case HTCLIENT:
-        case HTCAPTION:
-        case HTSYSMENU:
-        case HTMINBUTTON:
-        case HTMAXBUTTON:
-        case HTCLOSE:
-            OnMouseWheel(hWnd, GET_WHEEL_DELTA_WPARAM(wParam));
+LRESULT CALLBACK BrowserWindowSubclassProc(_In_ HWND hWnd,
+                                           _In_ UINT uMsg,
+                                           _In_ WPARAM wParam,
+                                           _In_ LPARAM lParam,
+                                           _In_ UINT_PTR uIdSubclass,
+                                           _In_ DWORD_PTR dwRefData) {
+    switch (uMsg) {
+        case WM_MOUSEWHEEL:
+            switch (SendMessage(hWnd, WM_NCHITTEST, 0, lParam)) {
+                case HTCLIENT:
+                case HTCAPTION:
+                case HTSYSMENU:
+                case HTMINBUTTON:
+                case HTMAXBUTTON:
+                case HTCLOSE:
+                    if (OnMouseWheel(hWnd, GET_WHEEL_DELTA_WPARAM(wParam))) {
+                        return 0;
+                    }
+                    break;
+            }
             break;
-        }
-        break;
 
-    default:
-        if (uMsg == g_subclassRegisteredMsg && !wParam)
-            RemoveWindowSubclass(hWnd, BrowserWindowSubclassProc, 0);
-        break;
+        default:
+            if (uMsg == g_subclassRegisteredMsg && !wParam)
+                RemoveWindowSubclass(hWnd, BrowserWindowSubclassProc, 0);
+            break;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 // Best effort determination as of whether the window is a browser window.
-bool IsBrowserWindow(HWND hWnd)
-{
+bool IsBrowserWindow(HWND hWnd) {
     if (!(GetWindowLong(hWnd, GWL_STYLE) & WS_SYSMENU)) {
         return false;
     }
@@ -209,8 +213,7 @@ bool IsBrowserWindow(HWND hWnd)
     return true;
 }
 
-BOOL CALLBACK InitialEnumBrowserWindowsFunc(HWND hWnd, LPARAM lParam)
-{
+BOOL CALLBACK InitialEnumBrowserWindowsFunc(HWND hWnd, LPARAM lParam) {
     DWORD dwProcessId = 0;
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &dwProcessId);
     if (!dwThreadId || dwProcessId != GetCurrentProcessId()) {
@@ -234,8 +237,7 @@ BOOL CALLBACK InitialEnumBrowserWindowsFunc(HWND hWnd, LPARAM lParam)
     return TRUE;
 }
 
-BOOL CALLBACK EnumBrowserWindowsUnsubclassFunc(HWND hWnd, LPARAM lParam)
-{
+BOOL CALLBACK EnumBrowserWindowsUnsubclassFunc(HWND hWnd, LPARAM lParam) {
     if (IsBrowserWindow(hWnd)) {
         Wh_Log(L"Browser window to unsubclass: %08X", (DWORD)(ULONG_PTR)hWnd);
 
@@ -247,34 +249,21 @@ BOOL CALLBACK EnumBrowserWindowsUnsubclassFunc(HWND hWnd, LPARAM lParam)
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t pOriginalCreateWindowExW;
-HWND WINAPI CreateWindowExWHook(
-    DWORD dwExStyle,
-    LPCWSTR lpClassName,
-    LPCWSTR lpWindowName,
-    DWORD dwStyle,
-    int X,
-    int Y,
-    int nWidth,
-    int nHeight,
-    HWND hWndParent,
-    HMENU hMenu,
-    HINSTANCE hInstance,
-    LPVOID lpParam)
-{
-    HWND hWnd = pOriginalCreateWindowExW(
-        dwExStyle,
-        lpClassName,
-        lpWindowName,
-        dwStyle,
-        X,
-        Y,
-        nWidth,
-        nHeight,
-        hWndParent,
-        hMenu,
-        hInstance,
-        lpParam
-    );
+HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
+                                LPCWSTR lpClassName,
+                                LPCWSTR lpWindowName,
+                                DWORD dwStyle,
+                                int X,
+                                int Y,
+                                int nWidth,
+                                int nHeight,
+                                HWND hWndParent,
+                                HMENU hMenu,
+                                HINSTANCE hInstance,
+                                LPVOID lpParam) {
+    HWND hWnd = pOriginalCreateWindowExW(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
 
     if (!hWnd) {
         return hWnd;
@@ -297,36 +286,34 @@ HWND WINAPI CreateWindowExWHook(
     return hWnd;
 }
 
-void LoadSettings()
-{
-    g_settings.reverseScrollingDirection = Wh_GetIntSetting(L"reverseScrollingDirection");
+void LoadSettings() {
+    g_settings.reverseScrollingDirection =
+        Wh_GetIntSetting(L"reverseScrollingDirection");
 }
 
-BOOL Wh_ModInit()
-{
-    Wh_Log(L"Init");
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
 
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook,
+                       (void**)&pOriginalCreateWindowExW);
 
     EnumWindows(InitialEnumBrowserWindowsFunc, 0);
 
     return TRUE;
 }
 
-void Wh_ModUninit()
-{
-    Wh_Log(L"Uninit");
+void Wh_ModUninit() {
+    Wh_Log(L">");
 
     if (g_uiThreadId != 0) {
         EnumThreadWindows(g_uiThreadId, EnumBrowserWindowsUnsubclassFunc, 0);
     }
 }
 
-void Wh_ModSettingsChanged()
-{
-    Wh_Log(L"SettingsChanged");
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
 
     LoadSettings();
 }
