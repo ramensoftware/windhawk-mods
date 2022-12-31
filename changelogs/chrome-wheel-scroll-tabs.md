@@ -1,3 +1,8 @@
+## 1.0.3 ([Dec 31, 2022](https://github.com/ramensoftware/windhawk-mods/blob/c323dbab16d3ed2e63b923a87b325278ff43e767/mods/chrome-wheel-scroll-tabs.wh.cpp))
+
+* Fix scrolling in Edge with the find bar open.
+* Prevent scrolling vertical tabs in Edge.
+
 ## 1.0.2 ([Sep 11, 2022](https://github.com/ramensoftware/windhawk-mods/blob/fe435c7219cd3aa8656728841496d75a3acb32ff/mods/chrome-wheel-scroll-tabs.wh.cpp))
 
 * Add an option to reverse scrolling direction.
