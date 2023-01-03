@@ -73,6 +73,26 @@
                 "version": "1.0"
             }
         },
+        "lm-vmplayer-vnc": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1672692734000,
+                "rating": 0,
+                "updated": 1672692734000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Mark Jansen",
+                "description": "Enable the builtin VNC in VMWare Player",
+                "github": "https://github.com/learn-more",
+                "include": [
+                    "vmplayer.exe"
+                ],
+                "name": "Enable VMPlayer's VNC",
+                "twitter": "https://twitter.com/learn_more",
+                "version": "1.0"
+            }
+        },
         "lm-vs-solution-icon": {
             "details": {
                 "defaultSorting": 0.936858991216536,
