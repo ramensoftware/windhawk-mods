@@ -1,3 +1,11 @@
+## 1.0.6 ([Jan 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/73cb003a7158fe622a169362a6669ccc9bfbd95e/mods/taskbar-clock-customization.wh.cpp))
+
+* Fix tooltip when secondary clocks are used.
+* Add option to add an extra line to the tooltip.
+* Add week number as %weeknum%.
+* Add support for the old taskbar on Windows 11 (e.g. with Explorer Patcher).
+* Improve loading speed by caching symbols.
+
 ## 1.0.5 ([Oct 14, 2022](https://github.com/ramensoftware/windhawk-mods/blob/18343f1646f86232bfa309f20ab19857cbbd9cb1/mods/taskbar-clock-customization.wh.cpp))
 
 * Fix an explorer crash when the monitor turns off.
