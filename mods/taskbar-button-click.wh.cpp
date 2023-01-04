@@ -2,7 +2,7 @@
 // @id              taskbar-button-click
 // @name            Middle click to close on the taskbar
 // @description     Close programs with a middle click on the taskbar instead of creating a new instance
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -61,7 +61,6 @@ enum {
 
 struct {
     int multipleItemsBehavior;
-    bool oldTaskbarOnWin11;
 } g_settings;
 
 enum class WinVersion {
@@ -505,8 +504,6 @@ void LoadSettings() {
         g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_NONE;
     }
     Wh_FreeStringSetting(multipleItemsBehavior);
-
-    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
 BOOL Wh_ModInit() {
@@ -518,10 +515,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (g_winVersion >= WinVersion::Win11 &&
+        Wh_GetIntSetting(L"oldTaskbarOnWin11")) {
+        g_winVersion = WinVersion::Win10;
+    }
+
     LoadSettings();
 
-    SYMBOL_HOOK
-    symbolHooks[] = {
+    SYMBOL_HOOK symbolHooks[] = {
         // Win11 only:
         {{
              LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))",
@@ -578,7 +579,7 @@ BOOL Wh_ModInit() {
          },
          (void**)&CImmersiveTaskItem_vftable}};
 
-    if (g_winVersion <= WinVersion::Win10 || g_settings.oldTaskbarOnWin11) {
+    if (g_winVersion <= WinVersion::Win10) {
         SYMBOL_HOOK* symbolHooksWin10 = symbolHooks + 1;
         size_t symbolHooksWin10Count = ARRAYSIZE(symbolHooks) - 1;
         if (!HookSymbols(L"explorer.exe", GetModuleHandle(nullptr),
