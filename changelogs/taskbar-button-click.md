@@ -1,3 +1,7 @@
+## 1.0.3 ([Jan 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/5f8922e7da38b162738fc5b7e4c86528654a6e6a/mods/taskbar-button-click.wh.cpp))
+
+* Fix support for the Never Combine configuration for the old taskbar in Windows 11.
+
 ## 1.0.2 ([Dec 31, 2022](https://github.com/ramensoftware/windhawk-mods/blob/2bf09d3193530d74167e7123f7ff4d0412bdda4f/mods/taskbar-button-click.wh.cpp))
 
 * Add support for the Never Combine configuration in Windows 10.
