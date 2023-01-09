@@ -30,6 +30,23 @@
                 "version": "1.0.3"
             }
         },
+        "ignore-focus-loss": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1673179779000,
+                "rating": 0,
+                "updated": 1673179779000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Vasher",
+                "compilerOptions": "-lcomctl32",
+                "description": "Make games believe they're always on top",
+                "github": "https://github.com/VasherMC",
+                "name": "Ignore Focus Loss",
+                "version": "1.0.0"
+            }
+        },
         "lm-close-windbg-file-changed": {
             "details": {
                 "defaultSorting": 0.8241154494176252,
