@@ -1,0 +1,31 @@
+name: PR mod validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Test changed-files
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Get changed files in the mods folder
+        id: changed-files-specific
+        uses: tj-actions/changed-files@v35
+        with:
+          files: |
+            mods/**
+
+      - name: Validate the change mods
+        if: steps.changed-files-specific.outputs.any_changed == 'true'
+        run: |
+          python .github/pr_validation.py --author ${{ github.actor }} ${{ steps.changed-files-specific.outputs.all_changed_files }}
