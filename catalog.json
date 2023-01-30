@@ -139,12 +139,15 @@
                 "defaultSorting": 0,
                 "published": 1675042345000,
                 "rating": 0,
-                "updated": 1675042345000,
+                "updated": 1675107343000,
                 "users": 0
             },
             "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
                 "author": "ahmed605",
-                "compilerOptions": "-lole32 -lruntimeobject -lgdi32",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
                 "description": "Forcing dark mode in the new Microsoft Paint",
                 "github": "https://github.com/ahmed605",
                 "homepage": "https://ahmed-walid.tk/",
@@ -153,7 +156,7 @@
                 ],
                 "name": "Dark Paint",
                 "twitter": "https://twitter.com/AhmedWalid605",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "notepad-dark-mode": {
