@@ -134,6 +134,28 @@
                 "version": "0.7"
             }
         },
+        "mspaint-dark": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1675042345000,
+                "rating": 0,
+                "updated": 1675042345000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ahmed605",
+                "compilerOptions": "-lole32 -lruntimeobject -lgdi32",
+                "description": "Forcing dark mode in the new Microsoft Paint",
+                "github": "https://github.com/ahmed605",
+                "homepage": "https://ahmed-walid.tk/",
+                "include": [
+                    "mspaint.exe"
+                ],
+                "name": "Dark Paint",
+                "twitter": "https://twitter.com/AhmedWalid605",
+                "version": "1.0.0"
+            }
+        },
         "notepad-dark-mode": {
             "details": {
                 "defaultSorting": 0.9945029030899133,
