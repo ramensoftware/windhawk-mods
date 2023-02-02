@@ -48,6 +48,29 @@
                 "version": "1.0.0"
             }
         },
+        "legacy-file-copy": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1675346734000,
+                "rating": 0,
+                "updated": 1675346734000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "rounk-ctrl",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldbghelp",
+                "description": "Restores the Windows 7 file copy dialog",
+                "github": "https://github.com/rounk-ctrl",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Legacy File Copy",
+                "version": "1.0.0"
+            }
+        },
         "lm-close-windbg-file-changed": {
             "details": {
                 "defaultSorting": 150,
