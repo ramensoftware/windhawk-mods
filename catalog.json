@@ -184,6 +184,27 @@
                 "version": "1.0.1"
             }
         },
+        "no-focus-rectangle": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1676392345000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1676392345000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Removes the focus rectangle",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "*"
+                ],
+                "name": "No Focus Rectangle",
+                "version": "1.0.0"
+            }
+        },
         "notepad-dark-mode": {
             "details": {
                 "defaultSorting": 7750,

@@ -102,6 +102,7 @@ async function enrichCatalog(catalog: Record<string, any>) {
                 defaultSorting: 0,
                 rating: 0,
                 users: 0,
+                ratingUsers: 0,
                 ...enrichment.mods[id]?.details,
             },
         };
