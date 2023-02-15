@@ -2,7 +2,7 @@
 // @id              hide-search-bar
 // @name            Hide Search Bar
 // @description     Removes the search bar that is next to the file explorer
-// @version         1.0.0
+// @version         1.0.1
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         explorer.exe
@@ -16,6 +16,8 @@
 This mod removes the search bar in File Explorer.
 
 It also expands itself to the right to take place of the search bar that was removed.
+
+The code is based on the implementation in [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher).
 
 ![Screenshot](https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/hide-search-bar.png)
 */
