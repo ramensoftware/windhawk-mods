@@ -17,8 +17,6 @@ This mod removes the search bar in File Explorer.
 
 It also expands itself to the right to take place of the search bar that was removed.
 
-The code is based on the implementation in [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher).
-
 ![Screenshot](https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/hide-search-bar.png)
 */
 // ==/WindhawkModReadme==
