@@ -30,6 +30,27 @@
                 "version": "1.0.3"
             }
         },
+        "hide-search-bar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1676481572000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1676481572000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "compilerOptions": "-lcomctl32",
+                "description": "Removes the search bar that is next to the file explorer",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Hide Search Bar",
+                "version": "1.0.0"
+            }
+        },
         "ignore-focus-loss": {
             "details": {
                 "defaultSorting": 387,
