@@ -6,7 +6,7 @@
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         explorer.exe
-// @compilerOptions -lgdi32
+// @compilerOptions -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -39,6 +39,9 @@ struct {
 // Windows Header Files:
 #include <windows.h>
 #include <shellapi.h>
+#include <commctrl.h>
+#include <string.h>
+#include <unordered_set>
 
 //msvcrt.lib;msvcrtd.lib
 #ifdef _DEBUG
@@ -49,88 +52,17 @@ struct {
 
 
 
-//Icons
 #define MYICON_SETTING 0
 #define MYICON_TASKMGR 1
 #define MYICON_SHOWDESKTOP 2
 #define MyIcons_Count 3
 
-//Icon
 #define STANDARD_DPI 96
 #define DPI_SCALE(in) in * GetDPI() / STANDARD_DPI
 
+std::unordered_set<HWND> handles;
 
-//Custom Messages
-#define WM_TWEAKER 0x0409
-#define TWEAKER_EXIT 0x90
-
-
-
-// Memory functions
-#pragma function(memcpy)
-void* __cdecl memcpy(void* dst, const void* src, size_t count)
-{
-	void* ret = dst;
-
-#if defined (_M_IA64)
-	{
-		extern void RtlMoveMemory(void*, const void*, size_t count);
-
-		RtlMoveMemory(dst, src, count);
-	}
-#else /* defined (_M_IA64) */
-	/*
-	* copy from lower addresses to higher addresses
-	*/
-	while (count--) {
-		*(char*)dst = *(char*)src;
-		dst = (char*)dst + 1;
-		src = (char*)src + 1;
-	}
-#endif /* defined (_M_IA64) */
-
-	return(ret);
-}
-
-
-
-#pragma function(memset)
-void* __cdecl memset(void* src, int c, size_t count)
-{
-	char* tmpsrc = (char*)src;
-	while (count--)
-		*tmpsrc++ = (char)c;
-	return src;
-}
-
-
-#pragma function(strcmp)
-int __cdecl strcmp(const char* src, const char* dst)
-{
-	int   ret = 0;
-
-	while (!(ret = *(unsigned   char*)src - *(unsigned   char*)dst) && *dst)
-		++src, ++dst;
-
-	if (ret < 0)
-		ret = -1;
-	else   if (ret > 0)
-		ret = 1;
-
-	return(ret);
-}
-
-#pragma function(strlen)
-size_t __cdecl strlen(char const* _Str) {
-	if (_Str == NULL)
-		return 0;
-
-	size_t len = 0;
-	for (; *_Str++ != '\0';)
-		len++;
-
-	return len;
-}
+UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_classic-taskbar-context-menu");
 
 
 int GetDPI() {
@@ -142,9 +74,6 @@ int GetDPI() {
 
 
 
-
-
-// Icon functions
 #define ICON_SETTING_INDEX 21
 #define ICON_SHOWDESKTOP_INDEX 34
 
@@ -279,6 +208,7 @@ HBITMAP MyIcons_Get(unsigned char index) {
 	return MyIcons[index];
 }
 
+
 void MyIcons_Load() {
 	HICON hIcon = NULL;
 	ExtractIconEx(L"shell32.dll", ICON_SETTING_INDEX, NULL, &hIcon, 1);
@@ -294,6 +224,7 @@ void MyIcons_Load() {
 	DestroyIcon(hIcon);
 }
 
+
 void MyIcons_Free() {
 	for (int i = 0; i < MyIcons_Count; i++) {
 		if (MyIcons[i] != NULL) DeleteObject(MyIcons[i]);
@@ -301,32 +232,13 @@ void MyIcons_Free() {
 }
 
 
-
-typedef struct MENU98_INIT_T {
-	HWND hWnd_TaskBar;
-	void* TrackPopupMenuEx;
-	LPSTR cmdLine;
-} MENU98_INIT;
-
-
-typedef DWORD(__cdecl* FPT___Menu98Init)(MENU98_INIT*);
-typedef DWORD(__cdecl* FPT___Menu98Unload)(LPVOID);
-
-
-
-static HMODULE gLibModule = 0;
-
-static LONG_PTR OldWndProc_TaskBar = NULL;
-static LONG_PTR OldWndProc_TaskBar_SecondScreen = NULL;
-
 static HWND hWnd_TaskBar = 0;
 static HWND hWnd_TaskBar_SecondScreen = NULL;
 static HWND hWnd_ATL1 = 0;
 static HWND hWnd_ATL2 = 0;
 
-static HMODULE menu98Module = 0;
 
-void ClassicMenu(HMENU hMenu) {
+void ApplyClassicMenu(HMENU hMenu) {
 	MENUINFO info;
 
 	info.cbSize = sizeof(MENUINFO);
@@ -353,71 +265,83 @@ void ClassicMenu(HMENU hMenu) {
 	}
 }
 
-void ClassicMenuIfPossible(HWND hWnd, HMENU hMenu) {
+
+void ApplyClassicMenuIfPossible(HWND hWnd, HMENU hMenu) {
 	char clsName[256];
 	GetClassNameA(hWnd, clsName, 256);
 
-	if (strcmp(clsName, "TrayShowDesktopButtonWClass") == 0) {
+    if (strcmp(clsName, "TrayShowDesktopButtonWClass") == 0) {
 		if (settings.showIcons) SetMenuItemBitmaps(hMenu, 0x1A2D, MF_BYCOMMAND, MyIcons_Get(MYICON_SHOWDESKTOP), MyIcons_Get(MYICON_SHOWDESKTOP));
-		ClassicMenu(hMenu);
-	} else if (
-		strcmp(clsName, "NotificationsMenuOwner") == 0 ||		// Notification Button
-		strcmp(clsName, "LauncherTipWnd") == 0 ||				// Win+X menu
-		strcmp(clsName, "MultitaskingViewFrame") == 0 ||		// Multitask Button
-		
-        hWnd == hWnd_ATL1 || hWnd == hWnd_ATL2) {				// Network Icon and Volumn Icon
-		ClassicMenu(hMenu);
+		ApplyClassicMenu(hMenu);
 
-		for (int i = 0; i < GetMenuItemCount(hMenu); i++)
-			ClassicMenu(GetSubMenu(hMenu, i));
-	}
-}
+    } else if
+    (
+        strcmp(clsName, "NotificationsMenuOwner") == 0 ||       // Notification Button
+        strcmp(clsName, "LauncherTipWnd") == 0 ||               // Win+X menu
+        strcmp(clsName, "MultitaskingViewFrame") == 0 ||        // Multitask Button
+        hWnd == hWnd_ATL1 || hWnd == hWnd_ATL2                  // Network Icon and Volumn Icon
+    ) {
+        ApplyClassicMenu(hMenu);
 
-void RestoreWndProc() {
-	if (OldWndProc_TaskBar != NULL) {
-		SetWindowLongPtr(hWnd_TaskBar, GWLP_WNDPROC, OldWndProc_TaskBar);
+        for (int i = 0; i < GetMenuItemCount(hMenu); i++) ApplyClassicMenu(GetSubMenu(hMenu, i));
     }
-
-	if (OldWndProc_TaskBar_SecondScreen != NULL) {
-		SetWindowLongPtr(hWnd_TaskBar_SecondScreen, GWLP_WNDPROC, OldWndProc_TaskBar_SecondScreen);
-    }
+ // a
 }
 
-void CloseBackground() {
-	MyIcons_Free();
-	RestoreWndProc();
 
-	if (menu98Module != NULL) {
-		FPT___Menu98Unload fpMenu98Unload = (FPT___Menu98Unload)GetProcAddress(menu98Module, "__Menu98Unload");
+struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
+    SUBCLASSPROC pfnSubclass;
+    UINT_PTR uIdSubclass;
+    DWORD_PTR dwRefData;
+    BOOL result;
+};
 
-		if (fpMenu98Unload != NULL) {
-			fpMenu98Unload(NULL);
-		} else {
-			MessageBoxW(0, L"Failed to unload Menu98!", L"Fatal Error", MB_ICONERROR);
-		}
-	}
-
-
-	CloseHandle(CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)FreeLibraryAndExitThread, gLibModule, 0, NULL));
-}
-
-LRESULT CALLBACK WndProc_TaskBar(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-	WNDPROC fpWndProcOld = WNDPROC(OldWndProc_TaskBar);
-
-	switch (uMsg) {
-        case WM_TWEAKER: {
-            if (wParam == TWEAKER_EXIT) CloseBackground();
-            return 0;
+LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+        if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
+            SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param = (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
+            param->result = SetWindowSubclass(cwp->hwnd, param->pfnSubclass, param->uIdSubclass, param->dwRefData);
         }
+    }
 
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    
+    if (dwThreadId == 0) return FALSE;
+    if (dwThreadId == GetCurrentThreadId()) return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
+
+    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass, nullptr, dwThreadId);
+
+    if (!hook) return FALSE;
+
+    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
+    param.pfnSubclass = pfnSubclass;
+    param.uIdSubclass = uIdSubclass;
+    param.dwRefData = dwRefData;
+    param.result = FALSE;
+    
+    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return param.result;
+}
+
+
+
+
+LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+	switch (uMsg) {
         case WM_INITMENUPOPUP: {
-            LRESULT ret = fpWndProcOld(hwnd, uMsg, wParam, lParam);
+            ApplyClassicMenu((HMENU)wParam);
 
-            ClassicMenu((HMENU)wParam);
+            if (!settings.showIcons) return DefSubclassProc(hWnd, uMsg, wParam, lParam);;
 
-            if (!settings.showIcons) return ret;
-
-            HWND hWnd_NotifyWnd = FindWindowEx(hwnd, NULL, TEXT("TrayNotifyWnd"), NULL);
+            HWND hWnd_NotifyWnd = FindWindowEx(hWnd, NULL, TEXT("TrayNotifyWnd"), NULL);
             HWND hWnd_Clock = FindWindowEx(hWnd_NotifyWnd, NULL, TEXT("TrayClockWClass"), NULL);
 
             RECT rect;
@@ -430,7 +354,8 @@ LRESULT CALLBACK WndProc_TaskBar(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                 SetMenuItemBitmaps((HMENU)wParam, 413, MF_BYCOMMAND, MyIcons_Get(MYICON_SETTING), MyIcons_Get(MYICON_SETTING));
                 SetMenuItemBitmaps((HMENU)wParam, 420, MF_BYCOMMAND, MyIcons_Get(MYICON_TASKMGR), MyIcons_Get(MYICON_TASKMGR));
                 SetMenuItemBitmaps((HMENU)wParam, 407, MF_BYCOMMAND, MyIcons_Get(MYICON_SHOWDESKTOP), MyIcons_Get(MYICON_SHOWDESKTOP));
-            } else if (hWnd_NotifyWnd == hwnd || hWnd_TaskBar == hwnd) {
+
+            } else if (hWnd_NotifyWnd == hWnd || hWnd_TaskBar == hWnd) {
                 SetMenuItemBitmaps((HMENU)wParam, 414, MF_BYCOMMAND, MyIcons_Get(MYICON_SETTING), MyIcons_Get(MYICON_SETTING));
                 SetMenuItemBitmaps((HMENU)wParam, 421, MF_BYCOMMAND, MyIcons_Get(MYICON_TASKMGR), MyIcons_Get(MYICON_TASKMGR));
                 SetMenuItemBitmaps((HMENU)wParam, 408, MF_BYCOMMAND, MyIcons_Get(MYICON_SHOWDESKTOP), MyIcons_Get(MYICON_SHOWDESKTOP));
@@ -438,60 +363,57 @@ LRESULT CALLBACK WndProc_TaskBar(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                 SetMenuItemBitmaps((HMENU)wParam, 413, MF_BYCOMMAND, MyIcons_Get(MYICON_SETTING), MyIcons_Get(MYICON_SETTING));
                 SetMenuItemBitmaps((HMENU)wParam, 420, MF_BYCOMMAND, MyIcons_Get(MYICON_TASKMGR), MyIcons_Get(MYICON_TASKMGR));
                 SetMenuItemBitmaps((HMENU)wParam, 407, MF_BYCOMMAND, MyIcons_Get(MYICON_SHOWDESKTOP), MyIcons_Get(MYICON_SHOWDESKTOP));
+
             } else {
                 SetMenuItemBitmaps((HMENU)wParam, 0x019E, MF_BYCOMMAND, MyIcons_Get(MYICON_SETTING), MyIcons_Get(MYICON_SETTING));
                 SetMenuItemBitmaps((HMENU)wParam, 0x01A5, MF_BYCOMMAND, MyIcons_Get(MYICON_TASKMGR), MyIcons_Get(MYICON_TASKMGR));
                 SetMenuItemBitmaps((HMENU)wParam, 0x0198, MF_BYCOMMAND, MyIcons_Get(MYICON_SHOWDESKTOP), MyIcons_Get(MYICON_SHOWDESKTOP));
             }
-
-            return ret;
         }
+
+        default:
+            if (uMsg == g_subclassRegisteredMsg && !wParam) RemoveWindowSubclass(hWnd, TaskbarSubclassProc, 0);
+            break;
 	}
 
-	return fpWndProcOld(hwnd, uMsg, wParam, lParam);
+	return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-LRESULT CALLBACK WndProc_TaskBar_SecondScreen(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-	WNDPROC fpWndProcOld = WNDPROC(OldWndProc_TaskBar_SecondScreen);
+LRESULT CALLBACK SecondTaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (uMsg == g_subclassRegisteredMsg && !wParam) RemoveWindowSubclass(hWnd, SecondTaskbarSubclassProc, 0);
 
 	if (uMsg == WM_INITMENUPOPUP) {
-		LRESULT ret = fpWndProcOld(hwnd, uMsg, wParam, lParam);
+        ApplyClassicMenu((HMENU)wParam);
 
-        ClassicMenu((HMENU)wParam);
-		if (!settings.showIcons) return ret;
+		if (!settings.showIcons) return DefSubclassProc(hWnd, uMsg, wParam, lParam);;
 
 		SetMenuItemBitmaps((HMENU)wParam, 0x19d, MF_BYCOMMAND, MyIcons_Get(MYICON_SETTING), MyIcons_Get(MYICON_SETTING));
 		SetMenuItemBitmaps((HMENU)wParam, 0x1a4, MF_BYCOMMAND, MyIcons_Get(MYICON_TASKMGR), MyIcons_Get(MYICON_TASKMGR));
 		SetMenuItemBitmaps((HMENU)wParam, 0x197, MF_BYCOMMAND, MyIcons_Get(MYICON_SHOWDESKTOP), MyIcons_Get(MYICON_SHOWDESKTOP));
-
-		return ret;
 	}
 
-	return fpWndProcOld(hwnd, uMsg, wParam, lParam);
+	return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 
-//DWORD WINAPI ThreadProc(LPVOID lpParameter);
 
-typedef BOOL (WINAPI *FPT_TrackPopupMenu)(HMENU, UINT, int, int, int, HWND, CONST RECT*);
-typedef BOOL(WINAPI *FPT_TrackPopupMenuEx)(HMENU, UINT, int, int, HWND, LPTPMPARAMS);
-
-// Pointer for calling original MessageBoxW.
-FPT_TrackPopupMenu pOriginalTrackPopupMenu;
-FPT_TrackPopupMenuEx pOriginalTrackPopupMenuEx;
-
-// Detour function which overrides TrackPopupMenu.
+using TrackPopupMenu_t = decltype(&TrackPopupMenu);
+TrackPopupMenu_t pOriginalTrackPopupMenu;
 BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nReserved, HWND hWnd, CONST RECT* prcRect) {
-	if (IsWindow(hWnd)) ClassicMenuIfPossible(hWnd, hMenu);
+	if (IsWindow(hWnd)) ApplyClassicMenuIfPossible(hWnd, hMenu);
 
 	return pOriginalTrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
 }
 
+using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
+TrackPopupMenuEx_t pOriginalTrackPopupMenuEx;
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
-	if (IsWindow(hWnd)) ClassicMenuIfPossible(hWnd, hMenu);
+	if (IsWindow(hWnd)) ApplyClassicMenuIfPossible(hWnd, hMenu);
 	
 	return pOriginalTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
 }
+
+
 
 BOOL CALLBACK EnumWindowsCallBack(HWND hwnd, LPARAM lParam) {
 	if (GetWindowThreadProcessId(hwnd, NULL) == (DWORD)lParam) {
@@ -509,14 +431,6 @@ BOOL CALLBACK EnumWindowsCallBack(HWND hwnd, LPARAM lParam) {
 }
 
 
-
-
-
-
-
-
-
-
 void LoadSettings() {
     settings.showIcons = Wh_GetIntSetting(L"showIcons");
 }
@@ -527,44 +441,27 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-
     Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&pOriginalTrackPopupMenu);
     Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&pOriginalTrackPopupMenuEx);
-    
+
+
+    // The taskbar on the first screen
+    hWnd_TaskBar = FindWindowW(L"Shell_TrayWnd", NULL);
+	if (IsWindow(hWnd_TaskBar)) {
+        handles.insert(hWnd_TaskBar);
+        SetWindowSubclassFromAnyThread(hWnd_TaskBar, TaskbarSubclassProc, 0, 0);
+	}
+
+	// The taskbar on the rest of the screens
+	hWnd_TaskBar_SecondScreen = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
+	if (IsWindow(hWnd_TaskBar_SecondScreen)) {
+        handles.insert(hWnd_TaskBar_SecondScreen);
+        SetWindowSubclassFromAnyThread(hWnd_TaskBar_SecondScreen, SecondTaskbarSubclassProc, 1, 0);
+	}
+
 
 
 	MyIcons_Load();
-
-	hWnd_TaskBar = FindWindow(TEXT("Shell_TrayWnd"), NULL);
-	// hWnd_TaskBar = *(HWND*)param;
-	if (IsWindow(hWnd_TaskBar)) {
-		OldWndProc_TaskBar = GetWindowLongPtr(hWnd_TaskBar, GWLP_WNDPROC);
-
-		if (OldWndProc_TaskBar != NULL) SetWindowLongPtr(hWnd_TaskBar, GWLP_WNDPROC, (LONG_PTR)&WndProc_TaskBar);
-	}
-
-	// The taskbar on the second screen
-	hWnd_TaskBar_SecondScreen = FindWindowA("Shell_SecondaryTrayWnd", NULL);
-	if (IsWindow(hWnd_TaskBar_SecondScreen)) {
-		OldWndProc_TaskBar_SecondScreen = GetWindowLongPtr(hWnd_TaskBar_SecondScreen, GWLP_WNDPROC);
-		
-        if (OldWndProc_TaskBar_SecondScreen != NULL) SetWindowLongPtr(hWnd_TaskBar_SecondScreen, GWLP_WNDPROC, (LONG_PTR)&WndProc_TaskBar_SecondScreen);
-	}
-
-	menu98Module = LoadLibraryA("menu98.dll");
-	if (menu98Module != NULL) {
-		FPT___Menu98Init fpMenu98Init = (FPT___Menu98Init)GetProcAddress(menu98Module, "__Menu98Init");
-
-		if (fpMenu98Init != NULL) {
-			MENU98_INIT menu98InitInfo;
-
-			menu98InitInfo.hWnd_TaskBar = hWnd_TaskBar;
-			menu98InitInfo.TrackPopupMenuEx = (void *) pOriginalTrackPopupMenuEx;
-			menu98InitInfo.cmdLine = (char*)hWnd_TaskBar + sizeof(HWND);
-
-			fpMenu98Init(&menu98InitInfo);
-		}
-	}
 
 	// Network & Volumn
 	HWND hPNIHiddenWnd = FindWindowA("PNIHiddenWnd", NULL);
@@ -573,7 +470,6 @@ BOOL Wh_ModInit() {
 	// Notification
 	HWND hNotificationWindow = FindWindowA("NotifyIconOverflowWindow", NULL); // EnumChildWindows
 
-
     return TRUE;
 }
 
@@ -581,7 +477,12 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 
-    CloseBackground();
+	MyIcons_Free();
+
+    // EnumThreadWindows(g_uiThreadId1, EnumBrowserWindowsUnsubclassFunc, 0);
+    // EnumThreadWindows(g_uiThreadId2, EnumBrowserWindowsUnsubclassFunc, 0);
+
+    for (const HWND& hWnd : handles) SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
 }
 
 void Wh_ModSettingsChanged() {
