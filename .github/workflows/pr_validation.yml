@@ -18,14 +18,10 @@ jobs:
         with:
           python-version: 3.8
 
-      - name: Get changed files in the mods folder
-        id: changed-files-specific
+      - name: Get changed files
+        id: changed-files
         uses: tj-actions/changed-files@v35
-        with:
-          files: |
-            mods/**
 
-      - name: Validate the change mods
-        if: steps.changed-files-specific.outputs.any_changed == 'true'
+      - name: Validate the changes
         run: |
-          python .github/pr_validation.py --author ${{ github.actor }} ${{ steps.changed-files-specific.outputs.all_changed_files }}
+          python .github/pr_validation.py --author ${{ github.actor }} ${{ steps.changed-files.outputs.all_changed_files }}

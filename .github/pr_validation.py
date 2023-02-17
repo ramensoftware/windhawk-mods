@@ -11,6 +11,7 @@ import sys
 
 def add_warning(file: Path, line: int, message: str):
     print(f'::warning file={file!s},line={line}::{message}')
+    return 1
 
 
 def parse_file(file: Path, expected_author):
@@ -24,23 +25,20 @@ def parse_file(file: Path, expected_author):
         if line.startswith('@github'):
             line = line[7:].strip()
             if line != f'https://github.com/{expected_author}':
-                add_warning(file, idx + 1,
-                            f'Expected the author to be "{expected_author}"')
-                warnings += 1
+                warnings += add_warning(file, idx + 1,
+                                        f'Expected the author to be "{expected_author}"')
         # Validate the mod ID against the filename
         if line.startswith('@id'):
             line = line[3:].strip()
             expected = file.with_suffix('').with_suffix(
                 '').name    # Strip the two extensions
             if line != expected:
-                add_warning(file, idx + 1,
-                            f'Expected the id to be "{expected}"')
-                warnings += 1
+                warnings += add_warning(file, idx + 1,
+                                        f'Expected the id to be "{expected}"')
 
     # Validate that this file has the required extensions
     if ''.join(file.suffixes) != '.wh.cpp':
-        add_warning(file, 1, 'Filename should end with .wh.cpp')
-        warnings += 1
+        warnings += add_warning(file, 1, 'Filename should end with .wh.cpp')
 
     return warnings
 
@@ -53,10 +51,21 @@ def main():
         parser.error("Please specify the PR author")
 
     warnings = 0
-    for path in [Path(filename) for filename in args]:
+    for idx, path in enumerate([Path(filename) for filename in args]):
+        if not path or len(path.parts) == 0:
+            # Not sure if this could ever happen, but we should not crash
+            warnings += add_warning(Path(__file__), 1,
+                                    f'Unable to parse arguments: {args}')
+            continue
         # We expect relative paths from the repo root
-        if len(path.parts) > 0 and path.parts[0] == 'mods':
+        if path.parts[0] != 'mods':
+            warnings += add_warning(path, 1,
+                                    'File is not placed in the mods folder')
+        # Validate everything as if it were a mod, if it has the .cpp extension
+        if path.name.endswith('.cpp'):
             warnings += parse_file(path, options.author)
+        if idx > 0:
+            warnings += add_warning(path, 1, 'More than one file was changed')
     if warnings > 0:
         sys.exit(f'Got {warnings} warnings, please inspect the PR')
 
