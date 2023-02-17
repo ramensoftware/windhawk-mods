@@ -30,6 +30,27 @@
                 "version": "1.0.3"
             }
         },
+        "classic-taskbar-context-menu": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1676627538000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1676627538000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "compilerOptions": "-lgdi32 -lcomctl32",
+                "description": "Restores the classic taskbar context menu",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Taskbar Context Menu",
+                "version": "1.0.0"
+            }
+        },
         "hide-search-bar": {
             "details": {
                 "defaultSorting": 0,
