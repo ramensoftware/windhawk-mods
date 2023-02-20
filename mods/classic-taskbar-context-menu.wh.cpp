@@ -2,7 +2,7 @@
 // @id              classic-taskbar-context-menu
 // @name            Classic Taskbar Context Menu
 // @description     Restores the classic taskbar context menu
-// @version         1.0.0
+// @version         1.0.1
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         explorer.exe
@@ -63,6 +63,49 @@ struct {
 std::unordered_set<HWND> handles;
 
 UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_classic-taskbar-context-menu");
+const UINT WM_TASKBARCREATED = RegisterWindowMessage(L"TaskbarCreated");
+
+struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
+    SUBCLASSPROC pfnSubclass;
+    UINT_PTR uIdSubclass;
+    DWORD_PTR dwRefData;
+    BOOL result;
+};
+
+LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+        if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
+            SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param = (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
+            param->result = SetWindowSubclass(cwp->hwnd, param->pfnSubclass, param->uIdSubclass, param->dwRefData);
+        }
+    }
+
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    
+    if (dwThreadId == 0) return FALSE;
+    if (dwThreadId == GetCurrentThreadId()) return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
+
+    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass, nullptr, dwThreadId);
+
+    if (!hook) return FALSE;
+
+    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
+    param.pfnSubclass = pfnSubclass;
+    param.uIdSubclass = uIdSubclass;
+    param.dwRefData = dwRefData;
+    param.result = FALSE;
+    
+    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return param.result;
+}
 
 
 int GetDPI() {
@@ -285,50 +328,6 @@ void ApplyClassicMenuIfPossible(HWND hWnd, HMENU hMenu) {
 
         for (int i = 0; i < GetMenuItemCount(hMenu); i++) ApplyClassicMenu(GetSubMenu(hMenu, i));
     }
- // a
-}
-
-
-struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
-    SUBCLASSPROC pfnSubclass;
-    UINT_PTR uIdSubclass;
-    DWORD_PTR dwRefData;
-    BOOL result;
-};
-
-LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION) {
-        const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-        if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
-            SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param = (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
-            param->result = SetWindowSubclass(cwp->hwnd, param->pfnSubclass, param->uIdSubclass, param->dwRefData);
-        }
-    }
-
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
-}
-
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    
-    if (dwThreadId == 0) return FALSE;
-    if (dwThreadId == GetCurrentThreadId()) return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
-
-    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProcForWindowSubclass, nullptr, dwThreadId);
-
-    if (!hook) return FALSE;
-
-    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
-    param.pfnSubclass = pfnSubclass;
-    param.uIdSubclass = uIdSubclass;
-    param.dwRefData = dwRefData;
-    param.result = FALSE;
-    
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return param.result;
 }
 
 
@@ -405,6 +404,7 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
 	return pOriginalTrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
 }
 
+
 using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
 TrackPopupMenuEx_t pOriginalTrackPopupMenuEx;
 BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
@@ -431,6 +431,106 @@ BOOL CALLBACK EnumWindowsCallBack(HWND hwnd, LPARAM lParam) {
 }
 
 
+
+
+LRESULT CALLBACK ExplorerWindowSubclassProc(
+    _In_ HWND hWnd,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam,
+    _In_ UINT_PTR uIdSubclass,
+    _In_ DWORD_PTR dwRefData
+) {
+    if (uMsg == WM_TASKBARCREATED) {
+        HWND hWnd = GetShellWindow();
+        if(!hWnd) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+        // The taskbar on the first screen
+        hWnd_TaskBar = FindWindowW(L"Shell_TrayWnd", NULL);
+
+        if (IsWindow(hWnd_TaskBar)) {
+            handles.insert(hWnd_TaskBar);
+            SetWindowSubclassFromAnyThread(hWnd_TaskBar, TaskbarSubclassProc, 0, 0);
+        }
+
+        // The taskbar on the rest of the screens
+        hWnd_TaskBar_SecondScreen = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
+
+        if (IsWindow(hWnd_TaskBar_SecondScreen)) {
+            handles.insert(hWnd_TaskBar_SecondScreen);
+            SetWindowSubclassFromAnyThread(hWnd_TaskBar_SecondScreen, SecondTaskbarSubclassProc, 0, 0);
+        }
+
+
+        // Network & Volumn
+        HWND hPNIHiddenWnd = FindWindowA("PNIHiddenWnd", NULL);
+        EnumWindows(EnumWindowsCallBack, GetWindowThreadProcessId(hPNIHiddenWnd, NULL));
+
+        // Notification
+        HWND hNotificationWindow = FindWindowA("NotifyIconOverflowWindow", NULL); // EnumChildWindows
+    }
+    
+    else if (uMsg == g_subclassRegisteredMsg && !wParam) RemoveWindowSubclass(hWnd, ExplorerWindowSubclassProc, 0);
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+
+BOOL CALLBACK InitialEnumWindowsFunc(HWND hWnd, LPARAM lParam) {
+    handles.insert(hWnd);
+    SetWindowSubclass(hWnd, ExplorerWindowSubclassProc, 0, 0);
+    
+    return TRUE;
+}
+
+BOOL CALLBACK EnumBrowserWindowsUnsubclassFunc(HWND hWnd, LPARAM lParam) {
+    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+
+    return TRUE;
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t pOriginalCreateWindowExW;
+HWND WINAPI CreateWindowExWHook(
+    DWORD dwExStyle,
+    LPCWSTR lpClassName,
+    LPCWSTR lpWindowName,
+    DWORD dwStyle,
+    int X,
+    int Y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam
+) {
+    HWND hWnd = pOriginalCreateWindowExW(
+        dwExStyle, lpClassName, lpWindowName,
+        dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam
+    );
+
+    if (!hWnd) return hWnd;
+    
+
+    handles.insert(hWnd);
+    SetWindowSubclass(hWnd, ExplorerWindowSubclassProc, 0, 0);
+
+    return hWnd;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 void LoadSettings() {
     settings.showIcons = Wh_GetIntSetting(L"showIcons");
 }
@@ -441,12 +541,22 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
+    EnumWindows(InitialEnumWindowsFunc, 0); // In case the mod was started after the shell is already running, but the taskbar has not initialized yet.
+
+
     Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&pOriginalTrackPopupMenu);
     Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&pOriginalTrackPopupMenuEx);
 
+	MyIcons_Load();
+
+    HWND hWnd = GetShellWindow();
+
+    if(!hWnd) return TRUE; // Mod started before explorer opened, it is not necesarrily an issue so we return TRUE.
 
     // The taskbar on the first screen
     hWnd_TaskBar = FindWindowW(L"Shell_TrayWnd", NULL);
+    
 	if (IsWindow(hWnd_TaskBar)) {
         handles.insert(hWnd_TaskBar);
         SetWindowSubclassFromAnyThread(hWnd_TaskBar, TaskbarSubclassProc, 0, 0);
@@ -454,14 +564,12 @@ BOOL Wh_ModInit() {
 
 	// The taskbar on the rest of the screens
 	hWnd_TaskBar_SecondScreen = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
+
 	if (IsWindow(hWnd_TaskBar_SecondScreen)) {
         handles.insert(hWnd_TaskBar_SecondScreen);
-        SetWindowSubclassFromAnyThread(hWnd_TaskBar_SecondScreen, SecondTaskbarSubclassProc, 1, 0);
+        SetWindowSubclassFromAnyThread(hWnd_TaskBar_SecondScreen, SecondTaskbarSubclassProc, 0, 0);
 	}
 
-
-
-	MyIcons_Load();
 
 	// Network & Volumn
 	HWND hPNIHiddenWnd = FindWindowA("PNIHiddenWnd", NULL);
@@ -478,9 +586,6 @@ void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 
 	MyIcons_Free();
-
-    // EnumThreadWindows(g_uiThreadId1, EnumBrowserWindowsUnsubclassFunc, 0);
-    // EnumThreadWindows(g_uiThreadId2, EnumBrowserWindowsUnsubclassFunc, 0);
 
     for (const HWND& hWnd : handles) SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
 }
