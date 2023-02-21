@@ -2,10 +2,10 @@
 // @id              no-focus-rectangle
 // @name            No Focus Rectangle
 // @description     Removes the focus rectangle
-// @version         1.0.0
+// @version         1.0.1
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
-// @include         *
+// @include         explorer.exe
 // @compilerOptions -lcomdlg32
 // ==/WindhawkMod==
 
@@ -29,13 +29,15 @@ And, this is the focus rectangle removed, with the mod installed:
 
 
 BOOL(*pOriginalDrawFocusRect)(
-    IN HDC hDC,
-    IN const RECT *lprc
+    HDC hDC,
+    const RECT *lprc
 );
 
-BOOL DrawFocusRectHook()
-{
-    return TRUE; // returning false may cause unintended behaviour, we want to pretend that the focus rectangle is shown, while its actually not.
+BOOL DrawFocusRectHook(
+    HDC hDC,
+    const RECT *lprc
+) {
+    return TRUE; // Returning TRUE because returning FALSE would indicate that the function has failed.
 }
 
 
