@@ -2,7 +2,7 @@
 // @id              classic-taskbar-context-menu
 // @name            Classic Taskbar Context Menu
 // @description     Restores the classic taskbar context menu
-// @version         1.0.1
+// @version         1.0.2
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         explorer.exe
