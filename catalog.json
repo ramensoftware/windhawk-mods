@@ -232,7 +232,7 @@
                 "published": 1676392345000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1676392345000,
+                "updated": 1676975706000,
                 "users": 38
             },
             "metadata": {
@@ -241,10 +241,10 @@
                 "description": "Removes the focus rectangle",
                 "github": "https://github.com/ItsProfessional",
                 "include": [
-                    "*"
+                    "explorer.exe"
                 ],
                 "name": "No Focus Rectangle",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "notepad-dark-mode": {
