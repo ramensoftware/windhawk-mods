@@ -60,6 +60,7 @@ struct {
 #define STANDARD_DPI 96
 #define DPI_SCALE(in) in * GetDPI() / STANDARD_DPI
 
+
 std::unordered_set<HWND> handles;
 
 UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_classic-taskbar-context-menu");
@@ -430,6 +431,29 @@ BOOL CALLBACK EnumWindowsCallBack(HWND hwnd, LPARAM lParam) {
 	return TRUE;
 }
 
+void SubclassTaskbars()
+{
+    // The taskbar on the first screen
+    hWnd_TaskBar = FindWindowW(L"Shell_TrayWnd", NULL);
+
+    if (IsWindow(hWnd_TaskBar)) {
+        handles.insert(hWnd_TaskBar);
+        SetWindowSubclassFromAnyThread(hWnd_TaskBar, TaskbarSubclassProc, 0, 0);
+    }
+
+    // The taskbar on the rest of the screens
+    hWnd_TaskBar_SecondScreen = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
+
+    if (IsWindow(hWnd_TaskBar_SecondScreen)) {
+        handles.insert(hWnd_TaskBar_SecondScreen);
+        SetWindowSubclassFromAnyThread(hWnd_TaskBar_SecondScreen, SecondTaskbarSubclassProc, 0, 0);
+    }
+
+
+    // Network & Volumn
+    HWND hPNIHiddenWnd = FindWindowA("PNIHiddenWnd", NULL);
+    EnumWindows(EnumWindowsCallBack, GetWindowThreadProcessId(hPNIHiddenWnd, NULL));
+}
 
 
 
@@ -441,53 +465,41 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(
     _In_ UINT_PTR uIdSubclass,
     _In_ DWORD_PTR dwRefData
 ) {
-    if (uMsg == WM_TASKBARCREATED) {
-        HWND hWnd = GetShellWindow();
-        if(!hWnd) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    if(!hWnd) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        // The taskbar on the first screen
-        hWnd_TaskBar = FindWindowW(L"Shell_TrayWnd", NULL);
-
-        if (IsWindow(hWnd_TaskBar)) {
-            handles.insert(hWnd_TaskBar);
-            SetWindowSubclassFromAnyThread(hWnd_TaskBar, TaskbarSubclassProc, 0, 0);
-        }
-
-        // The taskbar on the rest of the screens
-        hWnd_TaskBar_SecondScreen = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
-
-        if (IsWindow(hWnd_TaskBar_SecondScreen)) {
-            handles.insert(hWnd_TaskBar_SecondScreen);
-            SetWindowSubclassFromAnyThread(hWnd_TaskBar_SecondScreen, SecondTaskbarSubclassProc, 0, 0);
-        }
-
-
-        // Network & Volumn
-        HWND hPNIHiddenWnd = FindWindowA("PNIHiddenWnd", NULL);
-        EnumWindows(EnumWindowsCallBack, GetWindowThreadProcessId(hPNIHiddenWnd, NULL));
-
-        // Notification
-        HWND hNotificationWindow = FindWindowA("NotifyIconOverflowWindow", NULL); // EnumChildWindows
+    if (uMsg == g_subclassRegisteredMsg && !wParam) {
+        RemoveWindowSubclass(hWnd, ExplorerWindowSubclassProc, 0);
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
-    
-    else if (uMsg == g_subclassRegisteredMsg && !wParam) RemoveWindowSubclass(hWnd, ExplorerWindowSubclassProc, 0);
 
+    HWND hWnd_Shell = GetShellWindow();
+    if(!hWnd_Shell) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    if(hWnd != hWnd_Shell) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+
+    if (uMsg == WM_TASKBARCREATED) SubclassTaskbars();
+
+    
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 
-BOOL CALLBACK InitialEnumWindowsFunc(HWND hWnd, LPARAM lParam) {
+BOOL CALLBACK EnumExplorerWindowsFunc(HWND hWnd, LPARAM lParam) {
+    if(!hWnd) return TRUE;
+
+    HWND hWnd_Shell = GetShellWindow();
+    if(!hWnd_Shell) return TRUE;
+
+    if(hWnd != hWnd_Shell) return TRUE;
+
     handles.insert(hWnd);
     SetWindowSubclass(hWnd, ExplorerWindowSubclassProc, 0, 0);
     
     return TRUE;
 }
 
-BOOL CALLBACK EnumBrowserWindowsUnsubclassFunc(HWND hWnd, LPARAM lParam) {
-    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
 
-    return TRUE;
-}
+
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t pOriginalCreateWindowExW;
@@ -526,11 +538,6 @@ HWND WINAPI CreateWindowExWHook(
 
 
 
-
-
-
-
-
 void LoadSettings() {
     settings.showIcons = Wh_GetIntSetting(L"showIcons");
 }
@@ -541,42 +548,23 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    MyIcons_Load();
+
+    // For the case where the shell is not already running and thus taskbar has not initialized yet
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
-    EnumWindows(InitialEnumWindowsFunc, 0); // In case the mod was started after the shell is already running, but the taskbar has not initialized yet.
+
+    // For the case where the mod was started after the shell is already running, but the taskbar has not initialized yet.
+    EnumWindows(EnumExplorerWindowsFunc, 0);
 
 
     Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&pOriginalTrackPopupMenu);
     Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&pOriginalTrackPopupMenuEx);
 
-	MyIcons_Load();
 
+    // For the case where the mod started the shell is already and after taskbar has already initialized.
     HWND hWnd = GetShellWindow();
+    if(hWnd) SubclassTaskbars();
 
-    if(!hWnd) return TRUE; // Mod started before explorer opened, it is not necesarrily an issue so we return TRUE.
-
-    // The taskbar on the first screen
-    hWnd_TaskBar = FindWindowW(L"Shell_TrayWnd", NULL);
-    
-	if (IsWindow(hWnd_TaskBar)) {
-        handles.insert(hWnd_TaskBar);
-        SetWindowSubclassFromAnyThread(hWnd_TaskBar, TaskbarSubclassProc, 0, 0);
-	}
-
-	// The taskbar on the rest of the screens
-	hWnd_TaskBar_SecondScreen = FindWindowW(L"Shell_SecondaryTrayWnd", NULL);
-
-	if (IsWindow(hWnd_TaskBar_SecondScreen)) {
-        handles.insert(hWnd_TaskBar_SecondScreen);
-        SetWindowSubclassFromAnyThread(hWnd_TaskBar_SecondScreen, SecondTaskbarSubclassProc, 0, 0);
-	}
-
-
-	// Network & Volumn
-	HWND hPNIHiddenWnd = FindWindowA("PNIHiddenWnd", NULL);
-	EnumWindows(EnumWindowsCallBack, GetWindowThreadProcessId(hPNIHiddenWnd, NULL));
-
-	// Notification
-	HWND hNotificationWindow = FindWindowA("NotifyIconOverflowWindow", NULL); // EnumChildWindows
 
     return TRUE;
 }
@@ -587,8 +575,10 @@ void Wh_ModUninit() {
 
 	MyIcons_Free();
 
+    // Unsubclass the taskbars
     for (const HWND& hWnd : handles) SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
 }
+
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
