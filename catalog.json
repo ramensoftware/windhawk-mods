@@ -36,7 +36,7 @@
                 "published": 1676627538000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1676916254000,
+                "updated": 1677065628000,
                 "users": 24
             },
             "metadata": {
@@ -48,7 +48,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Taskbar Context Menu",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "hide-search-bar": {
