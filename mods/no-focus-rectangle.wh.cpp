@@ -2,7 +2,7 @@
 // @id              no-focus-rectangle
 // @name            No Focus Rectangle
 // @description     Removes the focus rectangle
-// @version         1.0.1
+// @version         1.0.2
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         explorer.exe
@@ -16,13 +16,13 @@ Removes the dotted focus rectangle, that it sometimes shown when deselecting fil
 
 The code is based on [NoDrawFocusRectW11](https://github.com/NoDrawFocusRectW11/NoDrawFocusRectW11).
 
-This is how the focus rectangle looks like, by default:
+This is how the focus rectangle looks like (without this mod):
 
-![Screenshot](https://raw.githubusercontent.com/NoDrawFocusRectW11/NoDrawFocusRectW11/main/SelectedWithFocusRect.png)
+![Screenshot](https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/no-focus-rectangle/with_focus_rectangle.png)
 
-And, this is the focus rectangle removed, with the mod installed:
+This is the focus rectangle removed, with the mod installed:
 
-![Screenshot](https://raw.githubusercontent.com/NoDrawFocusRectW11/NoDrawFocusRectW11/main/NoFocusRect.png)
+![Screenshot](https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/no-focus-rectangle/no_focus_rectangle.png)
 */
 // ==/WindhawkModReadme==
 
