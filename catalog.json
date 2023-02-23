@@ -232,7 +232,7 @@
                 "published": 1676392345000,
                 "rating": 10,
                 "ratingUsers": 4,
-                "updated": 1676975706000,
+                "updated": 1677162292000,
                 "users": 53
             },
             "metadata": {
@@ -244,7 +244,7 @@
                     "explorer.exe"
                 ],
                 "name": "No Focus Rectangle",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "notepad-dark-mode": {
