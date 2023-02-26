@@ -247,6 +247,23 @@
                 "version": "1.0.2"
             }
         },
+        "no-hidden-cursor": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1677399865000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1677399865000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Prevent programs (and games) from hiding your cursor",
+                "github": "https://github.com/ItsProfessional",
+                "name": "No Hidden Cursor",
+                "version": "1.0.0"
+            }
+        },
         "notepad-dark-mode": {
             "details": {
                 "defaultSorting": 8030,
