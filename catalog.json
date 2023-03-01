@@ -36,19 +36,19 @@
                 "published": 1676627538000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1677065628000,
+                "updated": 1677657525000,
                 "users": 59
             },
             "metadata": {
                 "author": "ItsProfessional",
                 "compilerOptions": "-lgdi32 -lcomctl32",
-                "description": "Restores the classic taskbar context menu",
+                "description": "Restores the non-immersive taskbar context menu",
                 "github": "https://github.com/ItsProfessional",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Classic Taskbar Context Menu",
-                "version": "1.0.2"
+                "name": "Non Immersive Taskbar Context Menu",
+                "version": "1.0.3"
             }
         },
         "hide-search-bar": {

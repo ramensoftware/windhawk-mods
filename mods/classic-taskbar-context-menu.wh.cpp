@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              classic-taskbar-context-menu
-// @name            Classic Taskbar Context Menu
-// @description     Restores the classic taskbar context menu
-// @version         1.0.2
+// @name            Non Immersive Taskbar Context Menu
+// @description     Restores the non-immersive taskbar context menu
+// @version         1.0.3
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         explorer.exe
@@ -11,10 +11,12 @@
 
 // ==WindhawkModReadme==
 /*
-# Classic Taskbar Context Menu
-This mod restores the classic taskbar context menu.
+# Non Immersive Taskbar Context Menu
+This mod restores the non-immersive taskbar context menus.
 
 You can also disable icons in the context menu in the settings of this mod.
+
+**Only works on the Windows 10 taskbar.**
 
 The code is based on [Taskbar-Context-Menu-Tweaker](https://github.com/rikka0w0/Taskbar-Context-Menu-Tweaker).
 

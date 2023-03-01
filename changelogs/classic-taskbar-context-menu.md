@@ -1,3 +1,8 @@
+## 1.0.3 ([Mar 1, 2023](https://github.com/ramensoftware/windhawk-mods/blob/97c8aee81a71a356f145b60251c26353197255a4/mods/classic-taskbar-context-menu.wh.cpp))
+
+Make it clear that the mod does not work on Windows 11
+
+
 ## 1.0.2 ([Feb 22, 2023](https://github.com/ramensoftware/windhawk-mods/blob/7ec6ef65e9d65020ee4b264b1bb2720fc0dfcf80/mods/classic-taskbar-context-menu.wh.cpp))
 
 Improve code
