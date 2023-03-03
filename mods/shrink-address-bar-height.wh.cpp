@@ -15,7 +15,7 @@ This mod shrinks the address bar height in file explorer.
 
 The code is based on the implementation in [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher).
 
-![Screenshot](https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/win7-command-bar.png)
+![Screenshot](https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/shrink-address-bar-height.png)
 */
 // ==/WindhawkModReadme==
 
