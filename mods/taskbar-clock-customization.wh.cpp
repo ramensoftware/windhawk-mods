@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0.6
+// @version         1.0.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -53,8 +53,8 @@ similar tool), enable the relevant option in the mod's settings.
   $name: Top line
   $description: >-
     Text to be shown on the first line, set to "-" for the default value, the
-    following patterns can be used: %time%, %date%, %weekday%, %weeknum%, %web%,
-    %web_full%
+    following patterns can be used: %time%, %date%, %weekday%, %weekday_num%,
+    %weeknum%, %web%, %web_full%
 - BottomLine: '%web%'
   $name: Bottom line
   $description: >-
@@ -142,6 +142,7 @@ HANDLE g_webContentUpdateStopEvent;
 WCHAR g_timeFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_dateFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_weekdayFormatted[FORMATTED_BUFFER_SIZE];
+WCHAR g_weekdayNumFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_weeknumFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_webContent[FORMATTED_BUFFER_SIZE];
 WCHAR g_webContentFull[FORMATTED_BUFFER_SIZE];
@@ -236,11 +237,11 @@ int StringCopyTruncated(PWSTR dest,
     return i;
 }
 
-void UpdateWebContent() {
+bool UpdateWebContent() {
     DWORD dwLength;
     LPBYTE pUrlContent = GetUrlContent(g_settings.webContentsUrl, &dwLength);
     if (!pUrlContent) {
-        return;
+        return false;
     }
 
     // Assume UTF-8.
@@ -288,15 +289,23 @@ void UpdateWebContent() {
     }
 
     delete[] unicodeContent;
+
+    return true;
 }
 
 DWORD WINAPI WebContentUpdateThread(LPVOID lpThreadParameter) {
-    while (true) {
-        UpdateWebContent();
+    constexpr DWORD kSecondsForQuickRetry = 30;
 
-        DWORD dwWaitResult = WaitForSingleObject(
-            g_webContentUpdateStopEvent,
-            g_settings.webContentsUpdateInterval * 60 * 1000);
+    while (true) {
+        bool succeeded = UpdateWebContent();
+
+        DWORD seconds = g_settings.webContentsUpdateInterval * 60;
+        if (!succeeded && seconds > kSecondsForQuickRetry) {
+            seconds = kSecondsForQuickRetry;
+        }
+
+        DWORD dwWaitResult =
+            WaitForSingleObject(g_webContentUpdateStopEvent, seconds * 1000);
         if (dwWaitResult != WAIT_TIMEOUT) {
             break;
         }
@@ -327,6 +336,48 @@ void WebContentUpdateThreadUninit() {
     }
 }
 
+int CalculateWeeknum(const SYSTEMTIME* time, DWORD startDayOfWeek) {
+    SYSTEMTIME secondWeek{
+        .wYear = time->wYear,
+        .wMonth = 1,
+        .wDay = 1,
+    };
+
+    // Calculate wDayOfWeek.
+    FILETIME fileTime;
+    SystemTimeToFileTime(&secondWeek, &fileTime);
+    FileTimeToSystemTime(&fileTime, &secondWeek);
+
+    do {
+        secondWeek.wDay++;
+        secondWeek.wDayOfWeek = (secondWeek.wDayOfWeek + 1) % 7;
+    } while (secondWeek.wDayOfWeek != startDayOfWeek);
+
+    FILETIME targetFileTime;
+    SystemTimeToFileTime(time, &targetFileTime);
+    ULARGE_INTEGER targetFileTimeInt{
+        .LowPart = targetFileTime.dwLowDateTime,
+        .HighPart = targetFileTime.dwHighDateTime,
+    };
+
+    FILETIME secondWeekFileTime;
+    SystemTimeToFileTime(&secondWeek, &secondWeekFileTime);
+    ULARGE_INTEGER secondWeekFileTimeInt{
+        .LowPart = secondWeekFileTime.dwLowDateTime,
+        .HighPart = secondWeekFileTime.dwHighDateTime,
+    };
+
+    int weeknum = 1;
+    if (targetFileTimeInt.QuadPart >= secondWeekFileTimeInt.QuadPart) {
+        ULONGLONG diff =
+            targetFileTimeInt.QuadPart - secondWeekFileTimeInt.QuadPart;
+        ULONGLONG weekIn100Ns = 10000000ULL * 60 * 60 * 24 * 7;
+        weeknum += 1 + diff / weekIn100Ns;
+    }
+
+    return weeknum;
+}
+
 void InitializeFormattedStrings(const SYSTEMTIME* time) {
     GetTimeFormatEx_Original(
         nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
@@ -340,7 +391,21 @@ void InitializeFormattedStrings(const SYSTEMTIME* time) {
         nullptr, DATE_AUTOLAYOUT, time,
         *g_settings.weekdayFormat ? g_settings.weekdayFormat : nullptr,
         g_weekdayFormatted, ARRAYSIZE(g_weekdayFormatted), nullptr);
-    swprintf_s(g_weeknumFormatted, L"%d", time->wDayOfWeek + 1);
+
+    // https://stackoverflow.com/a/39344961
+    DWORD startDayOfWeek;
+    GetLocaleInfoEx(
+        LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER,
+        (PWSTR)&startDayOfWeek, sizeof(startDayOfWeek) / sizeof(WCHAR));
+
+    // Start from Sunday instead of Monday.
+    startDayOfWeek = (startDayOfWeek + 1) % 7;
+
+    swprintf_s(g_weekdayNumFormatted, L"%d",
+               1 + (7 + time->wDayOfWeek - startDayOfWeek) % 7);
+
+    swprintf_s(g_weeknumFormatted, L"%d",
+               CalculateWeeknum(time, startDayOfWeek));
 }
 
 int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format) {
@@ -365,6 +430,10 @@ int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format) {
                        0) {
                 srcStr = g_weekdayFormatted;
                 formatTokenLen = sizeof("%weekday%") - 1;
+            } else if (wcsncmp(L"%weekday_num%", format,
+                               sizeof("%weekday_num%") - 1) == 0) {
+                srcStr = g_weekdayNumFormatted;
+                formatTokenLen = sizeof("%weekday_num%") - 1;
             } else if (wcsncmp(L"%weeknum%", format, sizeof("%weeknum%") - 1) ==
                        0) {
                 srcStr = g_weeknumFormatted;
@@ -873,7 +942,7 @@ WinVersion GetWindowsVersion() {
         case 10:
             if (build < 22000)
                 return WinVersion::Win10;
-            else if (build < 22621)
+            else if (build <= 22000)
                 return WinVersion::Win11;
             else
                 return WinVersion::Win11_22H2;
