@@ -51,6 +51,26 @@
                 "version": "1.0.3"
             }
         },
+        "disable-navigation-bar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1677864781000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1677864781000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Disables the navigation bar in file explorer",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "*"
+                ],
+                "name": "Disable Navigation Bar",
+                "version": "1.0.0"
+            }
+        },
         "hide-search-bar": {
             "details": {
                 "defaultSorting": 252,
