@@ -609,6 +609,29 @@
                 "twitter": "https://twitter.com/m417z",
                 "version": "1.0.1"
             }
+        },
+        "win7-command-bar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1677843666000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1677843666000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "ItsProfessional",
+                "description": "Restores the Windows 7 file command bar in the file explorer",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Windows 7 Command Bar",
+                "version": "1.0.0"
+            }
         }
     }
 }
