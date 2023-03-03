@@ -288,6 +288,26 @@
                 "version": "1.0"
             }
         },
+        "shrink-address-bar-height": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1677861723000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1677861723000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Shrinks the address bar height in file explorer",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "*"
+                ],
+                "name": "Shrink Address Bar Height",
+                "version": "1.0.0"
+            }
+        },
         "slick-window-arrangement": {
             "details": {
                 "defaultSorting": 8310,
