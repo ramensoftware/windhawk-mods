@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1463,8 +1463,11 @@ void ApplySettings() {
 
     double prevTaskbarHeight = *double_48_value_Original;
 
-    // Temporarily change the height to zero to force a UI refresh.
-    double tempTaskbarHeight = 0;
+    RECT taskbarRect{};
+    GetWindowRect(hTaskbarWnd, &taskbarRect);
+
+    // Temporarily change the height to force a UI refresh.
+    double tempTaskbarHeight = 1;
     ProtectAndMemcpy(PAGE_READWRITE, double_48_value_Original,
                      &tempTaskbarHeight, sizeof(double));
 
@@ -1472,9 +1475,9 @@ void ApplySettings() {
     SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
 
     // Wait for the change to apply.
+    RECT newTaskbarRect{};
     int counter = 0;
-    RECT rc;
-    while (GetWindowRect(hTaskbarWnd, &rc) && rc.bottom > rc.top) {
+    while (GetWindowRect(hTaskbarWnd, &newTaskbarRect) && newTaskbarRect.top == taskbarRect.top) {
         if (++counter >= 100) {
             break;
         }

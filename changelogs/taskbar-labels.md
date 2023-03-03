@@ -1,3 +1,8 @@
+## 1.0.3 ([Mar 3, 2023](https://github.com/ramensoftware/windhawk-mods/blob/c0b092ca7a1fb39f131ce0ae0c201184b006dbd3/mods/taskbar-labels.wh.cpp))
+
+* Fix compatibility with Windows 11 update KB5022913.
+
+
 ## 1.0.2 ([Oct 26, 2022](https://github.com/ramensoftware/windhawk-mods/blob/d84761e1bf6fe6bc43c1eb03a3ee10b5d758b743/mods/taskbar-labels.wh.cpp))
 
 * Fix slow loading of the explorer process.
