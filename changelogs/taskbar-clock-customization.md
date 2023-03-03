@@ -1,3 +1,11 @@
+## 1.0.7 ([Mar 3, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f3e95f4a815d683fc2c2777b0299248b09854f1d/mods/taskbar-clock-customization.wh.cpp))
+
+* Renamed `%weeknum%` to `%weekday_num%`.
+
+* Improved `%weekday_num%` to take the configured first day of the week into account.
+* Added the week number of the year as `%weeknum%`.
+* Reduced news fetching retry time when the request fails.
+* Improved Windows version detection.
 ## 1.0.6 ([Jan 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/73cb003a7158fe622a169362a6669ccc9bfbd95e/mods/taskbar-clock-customization.wh.cpp))
 
 * Fix tooltip when secondary clocks are used.
