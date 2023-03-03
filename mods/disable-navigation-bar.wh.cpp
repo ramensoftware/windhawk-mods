@@ -13,6 +13,8 @@
 # Disable Navigation Bar
 This mod disables the navigation bar in file explorer.
 
+Note: This mod applies to explorer folders as well as save/open dialogs in all programs.
+
 The code is based on the implementation in [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher).
 
 ![Screenshot](https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/disable-navigation-bar.png)
