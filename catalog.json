@@ -605,6 +605,32 @@
                 "version": "1.0"
             }
         },
+        "virtual-desktop-taskbar-order": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1677867923000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1677867923000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lversion",
+                "description": "The order on the taskbar isn't preserved between virtual desktop switches, this mod fixes it",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Virtual Desktop Preserve Taskbar Order",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "visual-studio-anti-rich-header": {
             "details": {
                 "defaultSorting": 126,
