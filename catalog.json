@@ -51,6 +51,26 @@
                 "version": "1.0.3"
             }
         },
+        "disable-feedback-hub-hotkey": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1677930361000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1677930361000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Disables the feedback hub (Win+F) hotkey in Windows",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Disable Feedback Hub Hotkey",
+                "version": "1.0.0"
+            }
+        },
         "disable-navigation-bar": {
             "details": {
                 "defaultSorting": 0,
