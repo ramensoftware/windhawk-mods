@@ -1,8 +1,8 @@
-## 1.0.8 ([Mar 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/06b88af8c1e1c64edbdbde19d9ee8bb54c61dfe8/mods/taskbar-clock-customization.wh.cpp))
+## 1.0.8 ([Mar 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0a2d75864aab7e62da9262f5e054cba6e37baba7/mods/taskbar-clock-customization.wh.cpp))
 
 * Added the ISO week number as `%weeknum_iso%`.
 
-## 1.0.7 ([Mar 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/d6ed5134408bc63ec29e761fa10be6e788a4ad51/mods/taskbar-clock-customization.wh.cpp))
+## 1.0.7 ([Mar 3, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0dbb93c0ff0d66038a539dd3d6c97690701d4757/mods/taskbar-clock-customization.wh.cpp))
 
 * Renamed `%weeknum%` to `%weekday_num%`.
 * Improved `%weekday_num%` to take the configured first day of the week into account.
