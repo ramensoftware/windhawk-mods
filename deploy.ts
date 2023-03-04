@@ -165,7 +165,7 @@ function generateModChangelog(modId: string) {
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]);
+            ]).replace(/^.* \(#\d+\)\n\n/, '');
             changelog += `${message}\n`;
         } else {
             changelog += 'Initial release.\n';
