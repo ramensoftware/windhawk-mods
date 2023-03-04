@@ -117,7 +117,7 @@
                 "published": 1676481572000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1676482586000,
+                "updated": 1677950123000,
                 "users": 29
             },
             "metadata": {
@@ -129,7 +129,7 @@
                     "explorer.exe"
                 ],
                 "name": "Hide Search Bar",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "ignore-focus-loss": {
