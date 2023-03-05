@@ -26,14 +26,9 @@ For disabling immersive context menus on the *taskbar*, use my [Non Immersive Ta
 */
 // ==/WindhawkModReadme==
 
-BOOL(*pOriginalSystemParametersInfoW)(
-    UINT  uiAction,
-    UINT  uiParam,
-    PVOID pvParam,
-    UINT  fWinIni
-);
-
-BOOL WINAPI SystemParametersInfoWHook(
+using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
+SystemParametersInfoW_t pOriginalSystemParametersInfoW;
+BOOL WINAPI SystemParametersInfoW_Hook(
     UINT  uiAction,
     UINT  uiParam,
     PVOID pvParam,
@@ -51,10 +46,6 @@ BOOL WINAPI SystemParametersInfoWHook(
 
 
 BOOL Wh_ModInit() {
-    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
-
-    void* origFunc = (void*)GetProcAddress(hUser32, "SystemParametersInfoW");
-    Wh_SetFunctionHook(origFunc, (void*)SystemParametersInfoWHook, (void**)&pOriginalSystemParametersInfoW);
-
+    Wh_SetFunctionHook((void*)SystemParametersInfoW, (void*)SystemParametersInfoW_Hook, (void**)&pOriginalSystemParametersInfoW);
     return TRUE;
 }
