@@ -71,6 +71,26 @@
                 "version": "1.0.0"
             }
         },
+        "disable-immersive-context-menus": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1678030978000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1678030978000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Disables immersive context menus in File Explorer",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "*"
+                ],
+                "name": "Disable Immersive Context Menus",
+                "version": "1.0.0"
+            }
+        },
         "disable-navigation-bar": {
             "details": {
                 "defaultSorting": 0,
