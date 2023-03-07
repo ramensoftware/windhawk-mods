@@ -2,7 +2,7 @@
 // @id              virtual-desktop-taskbar-order
 // @name            Virtual Desktop Preserve Taskbar Order
 // @description     The order on the taskbar isn't preserved between virtual desktop switches, this mod fixes it
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -41,8 +41,7 @@ enum class WinVersion {
 
 WinVersion g_winVersion;
 DWORD g_taskbarThreadId;
-LONG_PTR g_lpTaskSwLongPtr;
-LONG_PTR g_lpTaskListLongPtr;
+HWND g_hTaskbarWnd;
 
 #pragma region offsets
 
@@ -90,11 +89,11 @@ HDPA* EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(LONG_PTR lp) {
     return (HDPA*)(lp + offset);
 }
 
-LONG_PTR* EV_TASK_SW_APP_VIEW_MGR() {
+LONG_PTR* EV_TASK_SW_APP_VIEW_MGR(LONG_PTR lp) {
     static size_t offset =
         OffsetFromAssembly(CTaskBand__EnumExistingImmersiveApps, 0x220);
 
-    return (LONG_PTR*)(g_lpTaskSwLongPtr + offset);
+    return (LONG_PTR*)(lp + offset);
 }
 
 size_t EV_APP_VIEW_MGR_APP_ARRAY_LOCK_OFFSET() {
@@ -266,7 +265,7 @@ ULONG WINAPI TaskItemReleaseHook(LONG_PTR this_ptr) {
     return ulRet;
 }
 
-void OnButtonGroupInserted(LONG_PTR lpMMTaskListLongPtr,
+void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
                            HDPA hButtonGroupsDpa,
                            int nButtonGroupIndex) {
     LONG_PTR* plp = (LONG_PTR*)hButtonGroupsDpa;
@@ -304,7 +303,7 @@ void OnButtonGroupInserted(LONG_PTR lpMMTaskListLongPtr,
     PointerRedirectionAdd(ppTaskItemRelease, (void*)TaskItemReleaseHook,
                           &prTaskItemRelease);
 
-    LONG_PTR lpAppViewMgr = *EV_TASK_SW_APP_VIEW_MGR();
+    LONG_PTR lpAppViewMgr = *EV_TASK_SW_APP_VIEW_MGR(lpTaskSwLongPtr);
     SRWLOCK* pArrayLock = EV_APP_VIEW_MGR_APP_ARRAY_LOCK(lpAppViewMgr);
 
     AcquireSRWLockExclusive(pArrayLock);
@@ -326,7 +325,7 @@ void OnButtonGroupInserted(LONG_PTR lpMMTaskListLongPtr,
         g_taskGroupVirtualDesktopReleased = NULL;
         g_taskItemVirtualDesktopReleased = NULL;
 
-        LONG_PTR this_ptr = (LONG_PTR)(g_lpTaskSwLongPtr + 0x70);
+        LONG_PTR this_ptr = (LONG_PTR)(lpTaskSwLongPtr + 0x70);
         plp = *(LONG_PTR**)this_ptr;
 
         ReleaseSRWLockExclusive(pArrayLock);
@@ -428,9 +427,21 @@ void ComFuncVirtualDesktopFixAfterDPA_InsertPtr(HDPA pdpa, int index, void* p) {
 
     HDPA hButtonGroupsDpa =
         *EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(g_tryMoveGroup_taskListLongPtr);
-    if (hButtonGroupsDpa && pdpa == hButtonGroupsDpa) {
-        OnButtonGroupInserted(g_tryMoveGroup_taskListLongPtr, pdpa, index);
+    if (!hButtonGroupsDpa || pdpa != hButtonGroupsDpa) {
+        return;
     }
+
+    HWND hTaskSwWnd = (HWND)GetProp(g_hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd) {
+        return;
+    }
+
+    LONG_PTR lpTaskSwLongPtr = GetWindowLongPtr(hTaskSwWnd, 0);
+    if (!lpTaskSwLongPtr) {
+        return;
+    }
+
+    OnButtonGroupInserted(lpTaskSwLongPtr, pdpa, index);
 }
 
 bool InitializeTaskbarVariables(HWND hTaskbarWnd) {
@@ -449,18 +460,10 @@ bool InitializeTaskbarVariables(HWND hTaskbarWnd) {
         return false;
     }
 
-    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
-    LONG_PTR lpTaskSwLongPtr = GetWindowLongPtr(hTaskSwWnd, 0);
-
-    HWND hTaskListWnd =
-        FindWindowEx(hTaskSwWnd, nullptr, L"MSTaskListWClass", nullptr);
-    LONG_PTR lpTaskListLongPtr = GetWindowLongPtr(hTaskListWnd, 0);
-
     Wh_Log(L"Initialized for taskbar %08X", (DWORD)(ULONG_PTR)hTaskbarWnd);
 
     g_taskbarThreadId = taskbarThreadId;
-    g_lpTaskSwLongPtr = lpTaskSwLongPtr;
-    g_lpTaskListLongPtr = lpTaskListLongPtr;
+    g_hTaskbarWnd = hTaskbarWnd;
     return true;
 }
 
