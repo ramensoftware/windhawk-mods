@@ -1,3 +1,11 @@
+## 1.1 ([Mar 11, 2023](https://github.com/ramensoftware/windhawk-mods/blob/2192e42078b228d8f7995c07bb63644765f8e57d/mods/taskbar-labels.wh.cpp))
+
+* Implemented adaptive sizing when there are too many items.
+* Fixed missing labels when switching between virtual desktops or moving windows between monitors.
+* Fixed wrong badge placement.
+* Added several customization options such as running indicator style, font size and label string format.
+* Improved compatibility with the Large Taskbar Icons mod.
+* Improved loading speed by caching symbols.
 ## 1.0.3 ([Mar 3, 2023](https://github.com/ramensoftware/windhawk-mods/blob/c0b092ca7a1fb39f131ce0ae0c201184b006dbd3/mods/taskbar-labels.wh.cpp))
 
 * Fix compatibility with Windows 11 update KB5022913.
