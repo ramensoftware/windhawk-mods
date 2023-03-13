@@ -1,3 +1,6 @@
+## 1.1.1 ([Mar 13, 2023](https://github.com/ramensoftware/windhawk-mods/blob/944eed5252e88f92ec24a738af705c092f3ac0c4/mods/taskbar-labels.wh.cpp))
+
+* Fixed overflow handling for high DPI setups.
 ## 1.1 ([Mar 11, 2023](https://github.com/ramensoftware/windhawk-mods/blob/2192e42078b228d8f7995c07bb63644765f8e57d/mods/taskbar-labels.wh.cpp))
 
 * Implemented adaptive sizing when there are too many items.
