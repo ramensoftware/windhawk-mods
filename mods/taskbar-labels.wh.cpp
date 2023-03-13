@@ -2,14 +2,14 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -loleaut32 -lole32 -lruntimeobject
+// @compilerOptions -DWINVER=0x0605 -loleaut32 -lole32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -116,6 +116,8 @@ std::unordered_set<FrameworkElement> g_taskListButtonsWithLabelMissing;
 #ifndef SPI_SETLOGICALDPIOVERRIDE
 #define SPI_SETLOGICALDPIOVERRIDE 0x009F
 #endif
+
+WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
     int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
@@ -350,7 +352,8 @@ double CalculateTaskbarItemWidth(FrameworkElement taskbarFrameRepeaterElement,
 
         MapWindowPoints(HWND_DESKTOP, hTaskbarWnd, (LPPOINT)&rcTrayNotify, 2);
 
-        taskbarFrameRepeaterEndOffset = rcTrayNotify.left;
+        taskbarFrameRepeaterEndOffset =
+            MulDiv(rcTrayNotify.left, 96, GetDpiForWindow(hTrayNotifyWnd));
     }
 
     bool hasOverflowButton = false;
