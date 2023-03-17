@@ -2,7 +2,7 @@
 // @id              shrink-address-bar-height
 // @name            Shrink Address Bar Height
 // @description     Shrinks the address bar height in file explorer
-// @version         1.0.0
+// @version         1.0.1
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         *
