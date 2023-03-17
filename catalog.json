@@ -374,7 +374,7 @@
                 "published": 1677861723000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1677861723000,
+                "updated": 1679051738000,
                 "users": 40
             },
             "metadata": {
@@ -385,7 +385,7 @@
                     "*"
                 ],
                 "name": "Shrink Address Bar Height",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "slick-window-arrangement": {
