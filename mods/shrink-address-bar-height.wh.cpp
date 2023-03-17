@@ -21,6 +21,7 @@ The code is based on the implementation in [ExplorerPatcher](https://github.com/
 */
 // ==/WindhawkModReadme==
 
+
 int (WINAPI *GetSystemMetricsForDpiOrig)(int nIndex, UINT dpi);
 int WINAPI GetSystemMetricsForDpiHook(int nIndex, UINT dpi)
 {
