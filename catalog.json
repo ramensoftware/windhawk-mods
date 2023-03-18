@@ -523,7 +523,7 @@
                 "published": 1657984524000,
                 "rating": 10,
                 "ratingUsers": 30,
-                "updated": 1666786568000,
+                "updated": 1679101923000,
                 "users": 1856
             },
             "metadata": {
@@ -531,16 +531,16 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lole32",
-                "description": "Make the taskbar icons large and crisp, or small and compact (Windows 11 only)",
+                "compilerOptions": "-DWINVER=0x0605 -lole32",
+                "description": "Control the taskbar height and icon size, improve icon quality (Windows 11 only)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Large Taskbar Icons",
+                "name": "Taskbar height and icon size",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.1"
             }
         },
         "taskbar-labels": {
