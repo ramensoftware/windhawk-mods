@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as https from 'https';
 import * as path from 'path';
 import ModSourceUtils from './modSourceUtils';
+import { Feed } from 'feed';
+import showdown from 'showdown';
 
 // Inspired by https://gist.github.com/ktheory/df3440b01d4b9d3197180d5254d7fb65
 async function fetchJson(url: string) {
@@ -187,12 +189,119 @@ function generateModChangelogs(modIds: string[]) {
     }
 }
 
+function generateRssFeed() {
+    type FeedItem = {
+        commit: string;
+        title: string;
+        content: string;
+        url: string;
+        date: Date;
+    };
+
+    let feedItems: FeedItem[] = [];
+
+    const modSourceUtils = new ModSourceUtils('mods');
+
+    const commits = gitExec([
+        'rev-list',
+        'HEAD',
+    ]).trim().split('\n');
+
+    for (const commit of commits) {
+        const changedFiles = gitExec([
+            'show',
+            '--name-status',
+            '--pretty=format:',
+            commit,
+        ]).trim().split('\n');
+        if (changedFiles.length !== 1) {
+            continue;
+        }
+
+        const [changeType, filePath] = changedFiles[0].split('\t');
+        if (changeType !== 'A' && changeType !== 'M') {
+            continue;
+        }
+
+        const match = filePath.match(/^mods\/(.+)\.wh\.cpp$/);
+        if (!match) {
+            continue;
+        }
+
+        const modId = match[1];
+
+        const modFile = gitExec([
+            'show',
+            `${commit}:mods/${modId}.wh.cpp`,
+        ]);
+
+        const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
+
+        const commitTime = parseInt(gitExec([
+            'log',
+            '--format=%ct',
+            '-1',
+            commit,
+        ]), 10);
+
+        let content = '';
+        if (changeType === 'M') {
+            content = gitExec([
+                'log',
+                '-1',
+                '--pretty=format:%B',
+                commit,
+            ]).replace(/^.* \(#\d+\)\n\n/, '');
+        } else {
+            content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
+        }
+
+        feedItems.push({
+            commit,
+            title: `${metadata.name} ${metadata.version}`,
+            content,
+            url: `https://windhawk.net/mods/${modId}`,
+            date: new Date(commitTime * 1000),
+        });
+
+        if (feedItems.length >= 20) {
+            break;
+        }
+    }
+
+    const feed = new Feed({
+        title: 'Windhawk Mod Updates',
+        description: 'Updates in the official collection of Windhawk mods',
+        id: 'https://windhawk.net/',
+        link: 'https://windhawk.net/',
+        favicon: 'https://windhawk.net/favicon.ico',
+        copyright: 'Ramen Software',
+        updated: feedItems[0].date,
+    });
+
+    const showdownConverter = new showdown.Converter();
+
+    for (const feedItem of feedItems) {
+        feed.addItem({
+            title: feedItem.title,
+            id: feedItem.url + '#' + feedItem.commit,
+            link: feedItem.url,
+            content: showdownConverter.makeHtml(feedItem.content),
+            date: feedItem.date,
+        });
+    }
+
+    return feed.atom1();
+}
+
 async function main() {
     const catalog = await generateModCatalog();
     fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
 
     const modIds = Object.keys(catalog.mods);
     generateModChangelogs(modIds);
+
+    fs.writeFileSync('updates.atom', generateRssFeed());
 
     const srcPath = 'public';
     for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {

@@ -227,4 +227,13 @@ export default class ModSourceUtils {
 
 		return mods;
 	}
+
+	public extractReadme(modSource: string) {
+		const readmeBlockMatch = modSource.match(/^\/\/[ \t]+==WindhawkModReadme==[ \t]*$\s*\/\*\s*([\s\S]+?)\s*\*\/\s*^\/\/[ \t]+==\/WindhawkModReadme==[ \t]*$/m);
+		if (readmeBlockMatch === null) {
+			return null;
+		}
+
+		return readmeBlockMatch[1];
+	}
 }
