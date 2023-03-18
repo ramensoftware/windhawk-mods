@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://windhawk.net/</id>
+    <title>Windhawk Mod Updates</title>
+    <updated>2023-03-18T01:12:03.000Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://windhawk.net/"/>
+    <subtitle>Updates in the official collection of Windhawk mods</subtitle>
+    <icon>https://windhawk.net/favicon.ico</icon>
+    <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#a4f9caa90467d6d6f733dafc41ec9d078b6091cb</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2023-03-18T01:12:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed from "Large Taskbar Icons" to "Taskbar height and icon size".</li>
+<li>Fixed support for secondary taskbars.</li>
+<li>Fixed sizes of widget icons (start button and others) in some cases.</li>
+<li>Fixed notification area misalignment on Windows 11 22H2 (known issue on Windows 11 21H2 with small icons).</li>
+<li>Fixed mod applying before explorer starts running (e.g. on system startup) on new Windows 11 21H2 versions.</li>
+<li>Improved loading speed by caching symbols.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Shrink Address Bar Height 1.0.1]]></title>
+        <id>https://windhawk.net/mods/shrink-address-bar-height#1e467c7caa7a1ac8d33e7a96efe735f52c1c73e7</id>
+        <link href="https://windhawk.net/mods/shrink-address-bar-height"/>
+        <updated>2023-03-17T11:15:38.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix bug where some applications would crash due to this mod when showing open/save dialogs</p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#944eed5252e88f92ec24a738af705c092f3ac0c4</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-03-13T07:51:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed overflow handling for high DPI setups.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#2192e42078b228d8f7995c07bb63644765f8e57d</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-03-11T17:52:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Implemented adaptive sizing when there are too many items.</li>
+<li>Fixed missing labels when switching between virtual desktops or moving windows between monitors.</li>
+<li>Fixed wrong badge placement.</li>
+<li>Added several customization options such as running indicator style, font size and label string format.</li>
+<li>Improved compatibility with the Large Taskbar Icons mod.</li>
+<li>Improved loading speed by caching symbols.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.1]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#e286fcfd5b82e62a934de48dfce17044e5fbc642</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
+        <updated>2023-03-07T07:28:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed mod sometimes failing to initialize on system startup.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Disable Immersive Context Menus 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disable-immersive-context-menus#0e2034570272223ebcba7c71a541c32c4b906135</id>
+        <link href="https://windhawk.net/mods/disable-immersive-context-menus"/>
+        <updated>2023-03-05T15:42:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disableimmersivecontextmenus">Disable Immersive Context Menus</h1>
+<p>This mod disables immersive context menus in file explorer.</p>
+<p>This mod applies to explorer folders as well as save/open dialogs in all programs.</p>
+<p>Note: This mod disables immersive context menus for <em>file explorer</em>, <em>desktop</em>, etc.<br />
+For disabling immersive context menus on the <em>taskbar</em>, use my <a href="https://windhawk.net/mods/classic-taskbar-context-menu">Non Immersive Taskbar Context Menu</a> mod.</p>
+<p><strong>Without</strong> this mod:
+<img src="https://i.imgur.com/0iRYrCJ.png" alt="Screenshot" /></p>
+<p><strong>With</strong> this mod:
+<img src="https://i.imgur.com/1bkNHyT.png" alt="Screenshot" /></p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hide Search Bar 1.0.2]]></title>
+        <id>https://windhawk.net/mods/hide-search-bar#5c52c28ccbd07387061bcd9543820347ce1f642d</id>
+        <link href="https://windhawk.net/mods/hide-search-bar"/>
+        <updated>2023-03-04T17:15:23.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix bug with views becoming blank in VSCode-like programs</p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Disable Office Hotkeys 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disable-office-hotkeys#b0611a488b2abde7b504255368ca48c583319189</id>
+        <link href="https://windhawk.net/mods/disable-office-hotkeys"/>
+        <updated>2023-03-04T11:49:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disableofficehotkeys">Disable Office Hotkeys</h1>
+<p>This mod disables the office hotkeys (Ctrl+Shift+Alt+Win combinations) in Windows.</p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Disable Feedback Hub Hotkey 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disable-feedback-hub-hotkey#2802bbae81a2ad951ef0709e1ab3f33369d8873d</id>
+        <link href="https://windhawk.net/mods/disable-feedback-hub-hotkey"/>
+        <updated>2023-03-04T11:46:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablefeedbackhubhotkey">Disable Feedback Hub Hotkey</h1>
+<p>This mod disables the feedback hub (Win+F) hotkey in Windows.</p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.0.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#0a2d75864aab7e62da9262f5e054cba6e37baba7</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2023-03-04T08:56:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the ISO week number as <code>%weeknum_iso%</code>.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.0.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#0dbb93c0ff0d66038a539dd3d6c97690701d4757</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2023-03-03T20:38:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed <code>%weeknum%</code> to <code>%weekday_num%</code>.</li>
+<li>Improved <code>%weekday_num%</code> to take the configured first day of the week into account.</li>
+<li>Added the week number of the year as <code>%weeknum%</code>.</li>
+<li>Reduced news fetching retry time when the request fails.</li>
+<li>Improved Windows version detection.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#b70aef6c50d96d52e70edd680ed72ce37cf3afce</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
+        <updated>2023-03-03T18:25:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="virtualdesktoppreservetaskbarorder">Virtual Desktop Preserve Taskbar Order</h1>
+<p>The order on the taskbar isn't preserved between virtual desktop switches, this
+mod fixes it.</p>
+<p>Only Windows 11 is currently supported. For older Windows version check out <a href="https://tweaker.ramensoftware.com/">7+
+Taskbar Tweaker</a>.</p>
+<p><img src="https://i.imgur.com/ie8Q9cl.gif" alt="Demonstration" /></p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Disable Navigation Bar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disable-navigation-bar#3818111c20bf1ca45a911abfecf8f7496d2fd593</id>
+        <link href="https://windhawk.net/mods/disable-navigation-bar"/>
+        <updated>2023-03-03T17:33:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablenavigationbar">Disable Navigation Bar</h1>
+<p>This mod disables the navigation bar in file explorer.</p>
+<p>Note: This mod applies to explorer folders as well as save/open dialogs in all programs.</p>
+<p>The code is based on the implementation in <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>.</p>
+<p><img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/disable-navigation-bar.png" alt="Screenshot" /></p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Shrink Address Bar Height 1.0.0]]></title>
+        <id>https://windhawk.net/mods/shrink-address-bar-height#e8c077136038a9855b2d356445f992bd24348ea5</id>
+        <link href="https://windhawk.net/mods/shrink-address-bar-height"/>
+        <updated>2023-03-03T16:42:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="shrinkaddressbarheight">Shrink Address Bar Height</h1>
+<p>This mod shrinks the address bar height in file explorer.</p>
+<p>Note: This mod applies to explorer folders as well as save/open dialogs in all programs.</p>
+<p>The code is based on the implementation in <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>.</p>
+<p><img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/shrink-address-bar-height.png" alt="Screenshot" /></p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Command Bar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-command-bar#b0d5b0d881100045001be827105285cb4cf03b09</id>
+        <link href="https://windhawk.net/mods/win7-command-bar"/>
+        <updated>2023-03-03T11:41:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7commandbar">Windows 7 Command Bar</h1>
+<p>This mod restores the Windows 7 file command bar in the file explorer.</p>
+<p>The code is based on the implementation in <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>.</p>
+<p><img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/win7-command-bar.png" alt="Screenshot" /></p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.0.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#c0b092ca7a1fb39f131ce0ae0c201184b006dbd3</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-03-03T11:40:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix compatibility with Windows 11 update KB5022913.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Non Immersive Taskbar Context Menu 1.0.3]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-context-menu#97c8aee81a71a356f145b60251c26353197255a4</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-context-menu"/>
+        <updated>2023-03-01T07:58:45.000Z</updated>
+        <content type="html"><![CDATA[<p>Make it clear that the mod does not work on Windows 11</p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[No Hidden Cursor 1.0.0]]></title>
+        <id>https://windhawk.net/mods/no-hidden-cursor#7957fd5882329fec62c81c9c638d771c5efc4255</id>
+        <link href="https://windhawk.net/mods/no-hidden-cursor"/>
+        <updated>2023-02-26T08:24:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="nohiddencursor">No Hidden Cursor</h1>
+<p>Some video games will hide your cursor in-game.
+This mod will prevent games from hiding your cursor.</p>
+<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
+<p>In Windhawk, go to the "Advanced" tab and scroll down to
+"Custom process inclusion list". In that box, put the filename of the <code>.exe</code>.
+The mod will immediately apply to those programs after you click "Save".</p>
+<h2 id="knownissuescaveats">Known Issues / Caveats</h2>
+<ul>
+<li>This mod makes <strong>no guarantees</strong> of anti-cheat compatibility,
+and has not been tested with any games that use anti-cheat software.</li>
+</ul>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[No Focus Rectangle 1.0.2]]></title>
+        <id>https://windhawk.net/mods/no-focus-rectangle#f5154ee7e725c6d473f05e0636e6fc4dc7ceabcf</id>
+        <link href="https://windhawk.net/mods/no-focus-rectangle"/>
+        <updated>2023-02-23T14:24:52.000Z</updated>
+        <content type="html"><![CDATA[<p>Update screenshots</p>]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar Context Menu 1.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-context-menu#7ec6ef65e9d65020ee4b264b1bb2720fc0dfcf80</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-context-menu"/>
+        <updated>2023-02-22T11:33:48.000Z</updated>
+        <content type="html"><![CDATA[<p>Improve code</p>]]></content>
+    </entry>
+</feed>
