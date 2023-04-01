@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-01T11:53:49.000Z</updated>
+    <updated>2023-04-01T12:22:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[More space in language indicator 1.0]]></title>
+        <id>https://windhawk.net/mods/more-space-in-language-indicator#dedd12082874eb7de1f055814b16b3f8446d0f82</id>
+        <link href="https://windhawk.net/mods/more-space-in-language-indicator"/>
+        <updated>2023-04-01T12:22:07.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="morespaceinlanguageindicator">More space in language indicator</h1>
+<p>Enables to see two lines in the language indicator with small taskbar icons
+(Windows 10).</p>
+<p>Example:</p>
+<p><img src="https://i.imgur.com/VztpH9B.png" alt="Screenshot" /></p>
+<p>By default, Windows only shows a single line (ENG) with small taskbar buttons.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#e75309dae64419bf625a4aa116471d2715b4e9b4</id>
@@ -212,12 +224,5 @@ The mod will immediately apply to those programs after you click "Save".</p>
 <li>This mod makes <strong>no guarantees</strong> of anti-cheat compatibility,
 and has not been tested with any games that use anti-cheat software.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Focus Rectangle 1.0.2]]></title>
-        <id>https://windhawk.net/mods/no-focus-rectangle#f5154ee7e725c6d473f05e0636e6fc4dc7ceabcf</id>
-        <link href="https://windhawk.net/mods/no-focus-rectangle"/>
-        <updated>2023-02-23T14:24:52.000Z</updated>
-        <content type="html"><![CDATA[<p>Update screenshots</p>]]></content>
     </entry>
 </feed>

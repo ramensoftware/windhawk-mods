@@ -280,6 +280,28 @@
                 "version": "0.7"
             }
         },
+        "more-space-in-language-indicator": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1680351727000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1680351727000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "Enables to see two lines in the language indicator with small taskbar icons (Windows 10)",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "More space in language indicator",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "mspaint-dark": {
             "details": {
                 "defaultSorting": 5688,
