@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-03-18T01:12:03.000Z</updated>
+    <updated>2023-04-01T11:53:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#e75309dae64419bf625a4aa116471d2715b4e9b4</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-04-01T11:53:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a separate option for progress indicator style.</li>
+<li>Improved badge handling and fixed badge position for UWP apps.</li>
+<li>Improved support for small item width.</li>
+<li>Fixed pinned items sometimes being too wide.</li>
+<li>Fixed mod applying before explorer starts running (e.g. on system startup) on some Windows 11 21H2 versions.</li>
+<li>Fixed compatibility with some insider builds.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#a4f9caa90467d6d6f733dafc41ec9d078b6091cb</id>
@@ -205,12 +219,5 @@ and has not been tested with any games that use anti-cheat software.</li>
         <link href="https://windhawk.net/mods/no-focus-rectangle"/>
         <updated>2023-02-23T14:24:52.000Z</updated>
         <content type="html"><![CDATA[<p>Update screenshots</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Taskbar Context Menu 1.0.2]]></title>
-        <id>https://windhawk.net/mods/classic-taskbar-context-menu#7ec6ef65e9d65020ee4b264b1bb2720fc0dfcf80</id>
-        <link href="https://windhawk.net/mods/classic-taskbar-context-menu"/>
-        <updated>2023-02-22T11:33:48.000Z</updated>
-        <content type="html"><![CDATA[<p>Improve code</p>]]></content>
     </entry>
 </feed>

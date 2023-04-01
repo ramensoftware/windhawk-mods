@@ -1,3 +1,11 @@
+## 1.1.2 ([Apr 1, 2023](https://github.com/ramensoftware/windhawk-mods/blob/e75309dae64419bf625a4aa116471d2715b4e9b4/mods/taskbar-labels.wh.cpp))
+
+* Added a separate option for progress indicator style.
+* Improved badge handling and fixed badge position for UWP apps.
+* Improved support for small item width.
+* Fixed pinned items sometimes being too wide.
+* Fixed mod applying before explorer starts running (e.g. on system startup) on some Windows 11 21H2 versions.
+* Fixed compatibility with some insider builds.
 ## 1.1.1 ([Mar 13, 2023](https://github.com/ramensoftware/windhawk-mods/blob/944eed5252e88f92ec24a738af705c092f3ac0c4/mods/taskbar-labels.wh.cpp))
 
 * Fixed overflow handling for high DPI setups.
