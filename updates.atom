@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-01T12:22:07.000Z</updated>
+    <updated>2023-04-02T17:55:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control#504d0704581f14714990fe7c3271070711679b0e</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
+        <updated>2023-04-02T17:55:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the new Windows 11 volume indicator.</li>
+<li>Added middle click to mute.</li>
+<li>Removed mouse hooks and made the mod more robust and work in more scenarios, e.g. when an elevated program is focused.</li>
+<li>Removed the ugly border in the Windows 10 volume indicator.</li>
+<li>Removed the tooltip volume indicator which wasn't supported on Windows 11 and was buggy on Windows 10.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[More space in language indicator 1.0]]></title>
         <id>https://windhawk.net/mods/more-space-in-language-indicator#dedd12082874eb7de1f055814b16b3f8446d0f82</id>
@@ -206,23 +219,5 @@ Taskbar Tweaker</a>.</p>
         <link href="https://windhawk.net/mods/classic-taskbar-context-menu"/>
         <updated>2023-03-01T07:58:45.000Z</updated>
         <content type="html"><![CDATA[<p>Make it clear that the mod does not work on Windows 11</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Hidden Cursor 1.0.0]]></title>
-        <id>https://windhawk.net/mods/no-hidden-cursor#7957fd5882329fec62c81c9c638d771c5efc4255</id>
-        <link href="https://windhawk.net/mods/no-hidden-cursor"/>
-        <updated>2023-02-26T08:24:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="nohiddencursor">No Hidden Cursor</h1>
-<p>Some video games will hide your cursor in-game.
-This mod will prevent games from hiding your cursor.</p>
-<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
-<p>In Windhawk, go to the "Advanced" tab and scroll down to
-"Custom process inclusion list". In that box, put the filename of the <code>.exe</code>.
-The mod will immediately apply to those programs after you click "Save".</p>
-<h2 id="knownissuescaveats">Known Issues / Caveats</h2>
-<ul>
-<li>This mod makes <strong>no guarantees</strong> of anti-cheat compatibility,
-and has not been tested with any games that use anti-cheat software.</li>
-</ul>]]></content>
     </entry>
 </feed>
