@@ -1,3 +1,7 @@
+## 1.1.3 ([Apr 3, 2023](https://github.com/ramensoftware/windhawk-mods/blob/d655abb41851b0ad352af334461da59b45a1867d/mods/taskbar-labels.wh.cpp))
+
+* Undid the fix of the pinned items sometimes being too wide, since it caused more problems.
+* Fixed compatibility with some insider builds (wasn't included in v1.1.2 by mistake).
 ## 1.1.2 ([Apr 1, 2023](https://github.com/ramensoftware/windhawk-mods/blob/e75309dae64419bf625a4aa116471d2715b4e9b4/mods/taskbar-labels.wh.cpp))
 
 * Added a separate option for progress indicator style.

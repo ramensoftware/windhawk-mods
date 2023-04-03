@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-02T17:55:30.000Z</updated>
+    <updated>2023-04-03T06:53:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#d655abb41851b0ad352af334461da59b45a1867d</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-04-03T06:53:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Undid the fix of the pinned items sometimes being too wide, since it caused more problems.</li>
+<li>Fixed compatibility with some insider builds (wasn't included in v1.1.2 by mistake).</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Control 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-control#504d0704581f14714990fe7c3271070711679b0e</id>
@@ -212,12 +222,5 @@ Taskbar Tweaker</a>.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fix compatibility with Windows 11 update KB5022913.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Non Immersive Taskbar Context Menu 1.0.3]]></title>
-        <id>https://windhawk.net/mods/classic-taskbar-context-menu#97c8aee81a71a356f145b60251c26353197255a4</id>
-        <link href="https://windhawk.net/mods/classic-taskbar-context-menu"/>
-        <updated>2023-03-01T07:58:45.000Z</updated>
-        <content type="html"><![CDATA[<p>Make it clear that the mod does not work on Windows 11</p>]]></content>
     </entry>
 </feed>

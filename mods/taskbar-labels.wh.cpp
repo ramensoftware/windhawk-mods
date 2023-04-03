@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -604,6 +604,25 @@ LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_Hook(void* pThis,
     return ret;
 }
 
+using CTaskListWnd_TaskDestroyed_2_t = LONG_PTR(WINAPI*)(void* pThis,
+                                                         void* taskGroup,
+                                                         void* taskItem);
+CTaskListWnd_TaskDestroyed_2_t CTaskListWnd_TaskDestroyed_2_Original;
+LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_2_Hook(void* pThis,
+                                                  void* taskGroup,
+                                                  void* taskItem) {
+    Wh_Log(L">");
+
+    LONG_PTR ret =
+        CTaskListWnd_TaskDestroyed_2_Original(pThis, taskGroup, taskItem);
+
+    // Trigger CTaskListWnd::GroupChanged to trigger the title change.
+    int taskGroupProperty = 4;  // saw this in the debugger
+    CTaskListWnd_GroupChanged_Hook(pThis, taskGroup, taskGroupProperty);
+
+    return ret;
+}
+
 void UpdateTaskListButtonWidth(FrameworkElement taskListButtonElement,
                                double widthToSet,
                                bool showLabels) {
@@ -618,12 +637,10 @@ void UpdateTaskListButtonWidth(FrameworkElement taskListButtonElement,
         return;
     }
 
-    iconPanelElement.Width(widthToSet);
+    // Reset in case an old version of the mod was installed.
+    taskListButtonElement.Width(std::numeric_limits<double>::quiet_NaN());
 
-    // Left margin is used for the overflow button.
-    auto iconPanelElementMargin = iconPanelElement.Margin();
-    taskListButtonElement.Width(iconPanelElementMargin.Left + widthToSet +
-                                iconPanelElementMargin.Right);
+    iconPanelElement.Width(widthToSet);
 
     iconElement.HorizontalAlignment(showLabels ? HorizontalAlignment::Left
                                                : HorizontalAlignment::Stretch);
@@ -1373,12 +1390,24 @@ bool HookTaskbarDllSymbols() {
             (void*)CTaskListWnd_GroupChanged_Hook,
         },
         {
+            // An older variant, see the newer variant below.
             {
                 LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *,enum TaskDestroyedFlags))",
                 LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64,enum TaskDestroyedFlags) __ptr64)",
             },
             (void**)&CTaskListWnd_TaskDestroyed_Original,
             (void*)CTaskListWnd_TaskDestroyed_Hook,
+            true,
+        },
+        {
+            // A newer variant seen in insider builds.
+            {
+                LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *))",
+                LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
+            },
+            (void**)&CTaskListWnd_TaskDestroyed_2_Original,
+            (void*)CTaskListWnd_TaskDestroyed_2_Hook,
+            true,
         },
     };
 
