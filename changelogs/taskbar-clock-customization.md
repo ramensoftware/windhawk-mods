@@ -1,3 +1,6 @@
+## 1.0.9 ([Apr 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f053e22f61b37e9561a8de8786541dd79be955f1/mods/taskbar-clock-customization.wh.cpp))
+
+* Added a feature that allows the user to customize the spacing between each line in the clock. Along with supporting custom text spacing, no spacing will be used if the user specifies no text for the bottom and middle lines, allowing one line on a large taskbar. Contributed by Nightlinbit.
 ## 1.0.8 ([Mar 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0a2d75864aab7e62da9262f5e054cba6e37baba7/mods/taskbar-clock-customization.wh.cpp))
 
 * Added the ISO week number as `%weeknum_iso%`.
