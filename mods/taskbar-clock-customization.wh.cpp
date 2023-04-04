@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0.8
+// @version         1.0.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -13,6 +13,12 @@
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
 
 // ==WindhawkModReadme==
 /*
@@ -91,6 +97,11 @@ patterns can be used:
   $name: Clock width (Windows 10 only)
 - Height: 60
   $name: Clock height (Windows 10 only)
+- TextSpacing: 0
+  $name: Text spacing (Windows 10 only)
+  $description: >-
+    Set 0 for the default system value. A negative value can be used for
+    negative spacing.
 - WebContentsUrl: https://feeds.bbci.co.uk/news/world/rss.xml
   $name: Web content URL
   $description: >-
@@ -141,6 +152,7 @@ struct {
     PCWSTR tooltipLine;
     int width;
     int height;
+    int textSpacing;
     PCWSTR webContentsUrl;
     PCWSTR webContentsBlockStart;
     PCWSTR webContentsStart;
@@ -285,7 +297,7 @@ bool UpdateWebContent() {
             if (end) {
                 *end = L'\0';
 
-                size_t maxLen = ARRAYSIZE(g_webContent) - 1;
+                int maxLen = ARRAYSIZE(g_webContent) - 1;
                 if (g_settings.webContentsMaxLength < maxLen) {
                     maxLen = g_settings.webContentsMaxLength;
                 }
@@ -859,6 +871,11 @@ using ClockButton_CalculateMinimumSize_t = LPSIZE(WINAPI*)(LPVOID pThis,
                                                            SIZE);
 ClockButton_CalculateMinimumSize_t ClockButton_CalculateMinimumSize_Original;
 
+using ClockButton_GetTextSpacingForOrientation_t =
+    int(WINAPI*)(LPVOID pThis, bool, DWORD, DWORD, DWORD, DWORD);
+ClockButton_GetTextSpacingForOrientation_t
+    ClockButton_GetTextSpacingForOrientation_Original;
+
 using ClockButton_v_GetTooltipText_t =
     HRESULT(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
 ClockButton_v_GetTooltipText_t ClockButton_v_GetTooltipText_Original;
@@ -945,6 +962,42 @@ LPSIZE WINAPI ClockButton_CalculateMinimumSize_Hook(LPVOID pThis,
     }
 
     return ret;
+}
+
+int WINAPI ClockButton_GetTextSpacingForOrientation_Hook(LPVOID pThis,
+                                                         bool horizontal,
+                                                         DWORD dwSiteHeight,
+                                                         DWORD dwLine1Height,
+                                                         DWORD dwLine2Height,
+                                                         DWORD dwLine3Height) {
+    Wh_Log(L">");
+
+    int textSpacing = g_settings.textSpacing;
+    if (textSpacing == 0) {
+        return ClockButton_GetTextSpacingForOrientation_Original(
+            pThis, horizontal, dwSiteHeight, dwLine1Height, dwLine2Height,
+            dwLine3Height);
+    }
+
+    // 1 line.
+    if (dwLine3Height == 0 && dwLine2Height == 0) {
+        return 0;
+    }
+
+    // Since 0 is reserved, shift negative values so that any spacing value can
+    // be used.
+    if (textSpacing < 0) {
+        textSpacing++;
+    }
+
+    HWND hWnd = *((HWND*)pThis + 1);
+    UINT windowDpi = pGetDpiForWindow ? pGetDpiForWindow(hWnd) : 0;
+
+    if (windowDpi) {
+        return MulDiv(textSpacing, windowDpi, 96);
+    }
+
+    return textSpacing;
 }
 
 int WINAPI GetTimeFormatEx_Hook_Win10(LPCWSTR lpLocaleName,
@@ -1068,16 +1121,29 @@ struct SYMBOL_HOOK {
     bool optional = false;
 };
 
-bool HookSymbols(PCWSTR cacheId,
-                 HMODULE module,
+bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
                  size_t symbolHooksCount) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'@';
     constexpr size_t cacheMaxSize = 10240;
 
+    WCHAR moduleFilePath[MAX_PATH];
+    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
     WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + cacheId;
+    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
     Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
 
     std::wstring_view cacheBufferView(cacheBuffer);
@@ -1105,7 +1171,7 @@ bool HookSymbols(PCWSTR cacheId,
     std::wstring newSystemCacheStr;
 
     auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
-                             cacheSep, &newSystemCacheStr,
+                             &newSystemCacheStr,
                              module](std::wstring_view symbol, void* address) {
         for (size_t i = 0; i < symbolHooksCount; i++) {
             if (symbolResolved[i]) {
@@ -1181,7 +1247,7 @@ bool HookSymbols(PCWSTR cacheId,
                 continue;
             }
 
-            int noAddressMatchCount = 0;
+            size_t noAddressMatchCount = 0;
             for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
                 auto symbol = cacheParts[j];
                 auto address = cacheParts[j + 1];
@@ -1263,6 +1329,7 @@ void LoadSettings() {
     g_settings.tooltipLine = Wh_GetStringSetting(L"TooltipLine");
     g_settings.width = Wh_GetIntSetting(L"Width");
     g_settings.height = Wh_GetIntSetting(L"Height");
+    g_settings.textSpacing = Wh_GetIntSetting(L"TextSpacing");
     g_settings.webContentsUrl = Wh_GetStringSetting(L"WebContentsUrl");
     g_settings.webContentsBlockStart =
         Wh_GetStringSetting(L"WebContentsBlockStart");
@@ -1475,6 +1542,14 @@ BOOL Wh_ModInit() {
         },
         {
             {
+                LR"(private: int __cdecl ClockButton::GetTextSpacingForOrientation(bool,int,int,int,int))",
+                LR"(private: int __cdecl ClockButton::GetTextSpacingForOrientation(bool,int,int,int,int) __ptr64)",
+            },
+            (void**)&ClockButton_GetTextSpacingForOrientation_Original,
+            (void*)ClockButton_GetTextSpacingForOrientation_Hook,
+        },
+        {
+            {
                 LR"(protected: virtual long __cdecl ClockButton::v_GetTooltipText(struct HINSTANCE__ * *,unsigned short * *,unsigned short *,unsigned __int64))",
                 LR"(protected: virtual long __cdecl ClockButton::v_GetTooltipText(struct HINSTANCE__ * __ptr64 * __ptr64,unsigned short * __ptr64 * __ptr64,unsigned short * __ptr64,unsigned __int64) __ptr64)",
             },
@@ -1491,8 +1566,8 @@ BOOL Wh_ModInit() {
         }};
 
     if (g_winVersion <= WinVersion::Win10) {
-        if (!HookSymbols(L"explorer.exe", GetModuleHandle(nullptr),
-                         taskbarHooks10, ARRAYSIZE(taskbarHooks10))) {
+        if (!HookSymbols(GetModuleHandle(nullptr), taskbarHooks10,
+                         ARRAYSIZE(taskbarHooks10))) {
             return FALSE;
         }
     } else {
@@ -1545,14 +1620,15 @@ BOOL Wh_ModInit() {
 
                 CoTaskMemFree(pProgramFilesDirectory);
 
-                module = LoadLibrary(szTargetDllPath);
+                module = LoadLibraryEx(szTargetDllPath, nullptr,
+                                       LOAD_WITH_ALTERED_SEARCH_PATH);
                 if (!module) {
                     Wh_Log(L"LoadLibrary failed");
                     return FALSE;
                 }
             }
 
-            if (!HookSymbols(L"ExplorerExtensions.dll", module, taskbarHooks11,
+            if (!HookSymbols(module, taskbarHooks11,
                              ARRAYSIZE(taskbarHooks11))) {
                 return FALSE;
             }
@@ -1563,38 +1639,14 @@ BOOL Wh_ModInit() {
                 szTargetDllPath,
                 LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
 
-            HMODULE module = GetModuleHandle(szTargetDllPath);
+            HMODULE module = LoadLibraryEx(szTargetDllPath, nullptr,
+                                           LOAD_WITH_ALTERED_SEARCH_PATH);
             if (!module) {
-                // Try to load dependency DLLs. At process start, if they're not
-                // loaded, loading the taskbar view DLL fails.
-                WCHAR szRuntimeDllPath[MAX_PATH];
-
-                wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-                wcscat_s(
-                    szRuntimeDllPath,
-                    LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_app.dll)");
-                LoadLibrary(szRuntimeDllPath);
-
-                wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-                wcscat_s(
-                    szRuntimeDllPath,
-                    LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_1_app.dll)");
-                LoadLibrary(szRuntimeDllPath);
-
-                wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-                wcscat_s(
-                    szRuntimeDllPath,
-                    LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\msvcp140_app.dll)");
-                LoadLibrary(szRuntimeDllPath);
-
-                module = LoadLibrary(szTargetDllPath);
-                if (!module) {
-                    Wh_Log(L"LoadLibrary failed");
-                    return FALSE;
-                }
+                Wh_Log(L"LoadLibrary failed");
+                return FALSE;
             }
 
-            if (!HookSymbols(L"Taskbar.View.dll", module, taskbarHooks11_22H2,
+            if (!HookSymbols(module, taskbarHooks11_22H2,
                              ARRAYSIZE(taskbarHooks11_22H2))) {
                 return FALSE;
             }
