@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -433,6 +433,22 @@ HRESULT WINAPI CTaskGroup_GetLauncherName_Hook(PVOID pThis, LPWSTR* ppwsz) {
     return CTaskGroup_GetLauncherName_Original(pThis, ppwsz);
 }
 
+using CTaskBand_HandleTaskGroupSwitchItemAdded_t =
+    void(WINAPI*)(PVOID pThis, PVOID switchItem);
+CTaskBand_HandleTaskGroupSwitchItemAdded_t
+    CTaskBand_HandleTaskGroupSwitchItemAdded_Original;
+void WINAPI CTaskBand_HandleTaskGroupSwitchItemAdded_Hook(PVOID pThis,
+                                                          PVOID switchItem) {
+    Wh_Log(L">");
+
+    // Disable creating groups on the taskbar when snapping windows, as it
+    // doesn't work well with ungrouping. The function creates new task items
+    // with the same AppId as the target windows, but the taskbar has other
+    // AppIds for them, so there's no match and explorer crashes.
+
+    // CTaskBand_HandleTaskGroupSwitchItemAdded_Original(pThis, switchItem);
+}
+
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     void* pFixedFileInfo = nullptr;
     UINT uPtrLen = 0;
@@ -759,6 +775,14 @@ bool HookTaskbarSymbols() {
             },
             (void**)&CTaskGroup_GetLauncherName_Original,
             (void*)CTaskGroup_GetLauncherName_Hook,
+        },
+        {
+            {
+                LR"(protected: void __cdecl CTaskBand::HandleTaskGroupSwitchItemAdded(struct winrt::Windows::Internal::ComposableShell::Multitasking::ISwitchItem const &))",
+                LR"(protected: void __cdecl CTaskBand::HandleTaskGroupSwitchItemAdded(struct winrt::Windows::Internal::ComposableShell::Multitasking::ISwitchItem const & __ptr64) __ptr64)",
+            },
+            (void**)&CTaskBand_HandleTaskGroupSwitchItemAdded_Original,
+            (void*)CTaskBand_HandleTaskGroupSwitchItemAdded_Hook,
         },
     };
 
