@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-15T15:54:22.000Z</updated>
+    <updated>2023-04-18T06:00:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#3ba4830923ea4d304c20a50f41b49a8bff6f47d8</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2023-04-18T06:00:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a crash on window snapping by disabling the snapping groups in taskbar previews.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#2931b75955e2e4db928760c5c29fb3048c4e6f7e</id>
@@ -215,16 +224,5 @@ Taskbar Tweaker</a>.</p>
 <p>Note: This mod applies to explorer folders as well as save/open dialogs in all programs.</p>
 <p>The code is based on the implementation in <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>.</p>
 <p><img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/disable-navigation-bar.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shrink Address Bar Height 1.0.0]]></title>
-        <id>https://windhawk.net/mods/shrink-address-bar-height#e8c077136038a9855b2d356445f992bd24348ea5</id>
-        <link href="https://windhawk.net/mods/shrink-address-bar-height"/>
-        <updated>2023-03-03T16:42:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="shrinkaddressbarheight">Shrink Address Bar Height</h1>
-<p>This mod shrinks the address bar height in file explorer.</p>
-<p>Note: This mod applies to explorer folders as well as save/open dialogs in all programs.</p>
-<p>The code is based on the implementation in <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>.</p>
-<p><img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/shrink-address-bar-height.png" alt="Screenshot" /></p>]]></content>
     </entry>
 </feed>

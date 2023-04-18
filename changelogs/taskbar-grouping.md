@@ -1,3 +1,6 @@
+## 1.1.1 ([Apr 18, 2023](https://github.com/ramensoftware/windhawk-mods/blob/3ba4830923ea4d304c20a50f41b49a8bff6f47d8/mods/taskbar-grouping.wh.cpp))
+
+* Fixed a crash on window snapping by disabling the snapping groups in taskbar previews.
 ## 1.1 ([Apr 15, 2023](https://github.com/ramensoftware/windhawk-mods/blob/2931b75955e2e4db928760c5c29fb3048c4e6f7e/mods/taskbar-grouping.wh.cpp))
 
 * Reimplemented and made to work in more cases.
