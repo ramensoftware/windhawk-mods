@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-22T10:02:59.000Z</updated>
+    <updated>2023-04-22T12:40:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Open pinned items with double click 1.0]]></title>
+        <id>https://windhawk.net/mods/pinned-items-double-click#1747f9d78c39898698e21b587b1c950604f5702b</id>
+        <link href="https://windhawk.net/mods/pinned-items-double-click"/>
+        <updated>2023-04-22T12:40:33.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="openpinneditemswithdoubleclick">Open pinned items with double click</h1>
+<p>Only open pinned items when double clicking on them to avoid accidental clicks.</p>
+<p><img src="https://i.imgur.com/Si3siPm.gif" alt="Demonstration" /></p>
+<p>Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
+check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a>.</p>
+<p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using Explorer Patcher
+or a similar tool), enable the relevant option in the mod's settings.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#f472d07a9c4fc0cf94c18fde2a52570b6fbd82f2</id>
@@ -213,17 +226,5 @@ For disabling immersive context menus on the <em>taskbar</em>, use my <a href="h
 <li>Reduced news fetching retry time when the request fails.</li>
 <li>Improved Windows version detection.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#b70aef6c50d96d52e70edd680ed72ce37cf3afce</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
-        <updated>2023-03-03T18:25:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="virtualdesktoppreservetaskbarorder">Virtual Desktop Preserve Taskbar Order</h1>
-<p>The order on the taskbar isn't preserved between virtual desktop switches, this
-mod fixes it.</p>
-<p>Only Windows 11 is currently supported. For older Windows version check out <a href="https://tweaker.ramensoftware.com/">7+
-Taskbar Tweaker</a>.</p>
-<p><img src="https://i.imgur.com/ie8Q9cl.gif" alt="Demonstration" /></p>]]></content>
     </entry>
 </feed>

@@ -389,6 +389,32 @@
                 "version": "1.0"
             }
         },
+        "pinned-items-double-click": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1682167233000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1682167233000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Only open pinned items when double clicking on them to avoid accidental clicks",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Open pinned items with double click",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "shrink-address-bar-height": {
             "details": {
                 "defaultSorting": 2493,
