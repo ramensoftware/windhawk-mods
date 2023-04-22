@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-18T06:00:17.000Z</updated>
+    <updated>2023-04-22T10:02:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#f472d07a9c4fc0cf94c18fde2a52570b6fbd82f2</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2023-04-22T10:02:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Pinned items, if not separated, are now shown only when the last window closes.</li>
+<li>Jump lists always show the relevant items, such as recent files.</li>
+<li>Improved icon consistency.</li>
+<li>New option: Place ungrouped items together.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#3ba4830923ea4d304c20a50f41b49a8bff6f47d8</id>
@@ -213,16 +225,5 @@ mod fixes it.</p>
 <p>Only Windows 11 is currently supported. For older Windows version check out <a href="https://tweaker.ramensoftware.com/">7+
 Taskbar Tweaker</a>.</p>
 <p><img src="https://i.imgur.com/ie8Q9cl.gif" alt="Demonstration" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Navigation Bar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/disable-navigation-bar#3818111c20bf1ca45a911abfecf8f7496d2fd593</id>
-        <link href="https://windhawk.net/mods/disable-navigation-bar"/>
-        <updated>2023-03-03T17:33:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablenavigationbar">Disable Navigation Bar</h1>
-<p>This mod disables the navigation bar in file explorer.</p>
-<p>Note: This mod applies to explorer folders as well as save/open dialogs in all programs.</p>
-<p>The code is based on the implementation in <a href="https://github.com/valinet/ExplorerPatcher">ExplorerPatcher</a>.</p>
-<p><img src="https://raw.githubusercontent.com/ItsProfessional/Screenshots/main/Windhawk/disable-navigation-bar.png" alt="Screenshot" /></p>]]></content>
     </entry>
 </feed>

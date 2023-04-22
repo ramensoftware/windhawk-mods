@@ -1,3 +1,9 @@
+## 1.2 ([Apr 22, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f472d07a9c4fc0cf94c18fde2a52570b6fbd82f2/mods/taskbar-grouping.wh.cpp))
+
+* Pinned items, if not separated, are now shown only when the last window closes.
+* Jump lists always show the relevant items, such as recent files.
+* Improved icon consistency.
+* New option: Place ungrouped items together.
 ## 1.1.1 ([Apr 18, 2023](https://github.com/ramensoftware/windhawk-mods/blob/3ba4830923ea4d304c20a50f41b49a8bff6f47d8/mods/taskbar-grouping.wh.cpp))
 
 * Fixed a crash on window snapping by disabling the snapping groups in taskbar previews.
