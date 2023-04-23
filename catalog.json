@@ -511,6 +511,29 @@
                 "version": "1.0.3"
             }
         },
+        "taskbar-button-scroll": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1682233932000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1682233932000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-DWINVER=0x0602 -lcomctl32 -loleaut32 -lole32",
+                "description": "Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews (Windows 11 only)",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar minimize/restore on scroll",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-clock-customization": {
             "details": {
                 "defaultSorting": 22870,

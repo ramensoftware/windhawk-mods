@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-22T12:40:33.000Z</updated>
+    <updated>2023-04-23T07:12:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-scroll#120b7b15054aea462b3c12d03ee4b080eb39d5ac</id>
+        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
+        <updated>2023-04-23T07:12:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarminimizerestoreonscroll">Taskbar minimize/restore on scroll</h1>
+<p>Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail
+previews.</p>
+<p>Only Windows 11 is currently supported. For older Windows versions check out <a href="https://tweaker.ramensoftware.com/">7+
+Taskbar Tweaker</a>.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Open pinned items with double click 1.0]]></title>
         <id>https://windhawk.net/mods/pinned-items-double-click#1747f9d78c39898698e21b587b1c950604f5702b</id>
@@ -212,19 +223,6 @@ For disabling immersive context menus on the <em>taskbar</em>, use my <a href="h
         <updated>2023-03-04T08:56:13.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added the ISO week number as <code>%weeknum_iso%</code>.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.0.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#0dbb93c0ff0d66038a539dd3d6c97690701d4757</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2023-03-03T20:38:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed <code>%weeknum%</code> to <code>%weekday_num%</code>.</li>
-<li>Improved <code>%weekday_num%</code> to take the configured first day of the week into account.</li>
-<li>Added the week number of the year as <code>%weeknum%</code>.</li>
-<li>Reduced news fetching retry time when the request fails.</li>
-<li>Improved Windows version detection.</li>
 </ul>]]></content>
     </entry>
 </feed>
