@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-24T21:33:11.000Z</updated>
+    <updated>2023-04-24T21:35:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-scroll#4e3c50df072814f5bd007c52f52184bb2ec128c6</id>
+        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
+        <updated>2023-04-24T21:35:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a bug which could cause the taskbar to freeze.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#59bcbf7c877ecdd7a5b70216e989489f899e7a80</id>
@@ -218,13 +227,5 @@ For disabling immersive context menus on the <em>taskbar</em>, use my <a href="h
         <updated>2023-03-04T11:49:04.000Z</updated>
         <content type="html"><![CDATA[<h1 id="disableofficehotkeys">Disable Office Hotkeys</h1>
 <p>This mod disables the office hotkeys (Ctrl+Shift+Alt+Win combinations) in Windows.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Feedback Hub Hotkey 1.0.0]]></title>
-        <id>https://windhawk.net/mods/disable-feedback-hub-hotkey#2802bbae81a2ad951ef0709e1ab3f33369d8873d</id>
-        <link href="https://windhawk.net/mods/disable-feedback-hub-hotkey"/>
-        <updated>2023-03-04T11:46:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablefeedbackhubhotkey">Disable Feedback Hub Hotkey</h1>
-<p>This mod disables the feedback hub (Win+F) hotkey in Windows.</p>]]></content>
     </entry>
 </feed>
