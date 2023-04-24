@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -37,7 +37,7 @@ choose to group Paint and Notepad:
 **Note:** After enabling the mod, the relevant windows must be reopened to apply
 the grouping settings.
 
-Only Windows 10 64-bit and Windows 11 are supported. For other Windows version
+Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 **Note:** To customize the old taskbar on Windows 11 (if using Explorer Patcher
@@ -55,6 +55,14 @@ or a similar tool), enable the relevant option in the mod's settings.
   $name: Place ungrouped items together
   $description: >-
     Place each newly opened item next to existing items it would group with.
+- useWindowIcons: false
+  $name: Use window icons
+  $description: >-
+    By default, application icons are used. Enable this option to use window
+    icons instead. Usually it doesn't matter, an example where it does is an
+    open folder window - with application icons, the icon on the taskbar is
+    always the icon of Explorer, while with window icons, the icon changes
+    depending on the open folder.
 - customGroups:
   - - name: Group 1
       $name: Group name
@@ -108,6 +116,7 @@ struct RESOLVEDWINDOW {
 struct {
     bool keepPinnedItemsSeparated;
     bool placeUngroupedItemsTogether;
+    bool useWindowIcons;
     std::unordered_set<std::wstring> excludedProgramPaths;
     std::unordered_set<std::wstring> excludedProgramNames;
     std::vector<std::wstring> customGroupNames;
@@ -129,11 +138,16 @@ WinVersion g_winVersion;
 
 bool g_inTaskBandLaunch = false;
 bool g_inUpdateItemIcon = false;
+bool g_inTaskBtnGroupGetIcon = false;
 bool g_inGetJumpViewParams = false;
 bool g_disableGetLauncherName = false;
 std::atomic<DWORD> g_compareStringOrdinalHookThreadId = 0;
 bool g_compareStringOrdinalIgnoreSuffix = false;
 bool g_compareStringOrdinalAnySuffixEqual = false;
+
+winrt::com_ptr<IUnknown> GetTaskGroupWithoutSuffix(
+    PVOID taskGroup,
+    IUnknown** taskItem = nullptr);
 
 // constexpr size_t kAppIdSuffixLen = 13;
 
@@ -182,27 +196,6 @@ bool RemoveAppIdSuffix(WCHAR appIdStripped[MAX_PATH], PCWSTR appIdWithSuffix) {
               suffix - appIdWithSuffix);
     return true;
 }
-
-using CTaskGroup_GetApplicationIDList_t = ITEMIDLIST*(WINAPI*)(PVOID pThis);
-CTaskGroup_GetApplicationIDList_t CTaskGroup_GetApplicationIDList_Original;
-
-using CTaskGroup_GetShortcutIDList_t = const ITEMIDLIST*(WINAPI*)(PVOID pThis);
-CTaskGroup_GetShortcutIDList_t CTaskGroup_GetShortcutIDList_Original;
-const ITEMIDLIST* WINAPI CTaskGroup_GetShortcutIDList_Hook(PVOID pThis) {
-    // Wh_Log(L">");
-
-    // Fixes launching a new instance on middle click or Shift+click for some
-    // apps. Actually I think that might be a Windows bug.
-    if (g_inTaskBandLaunch) {
-        return CTaskGroup_GetApplicationIDList_Original(pThis);
-    }
-
-    return CTaskGroup_GetShortcutIDList_Original(pThis);
-}
-
-using CTaskGroup_SetShortcutIDList_t =
-    HRESULT(WINAPI*)(PVOID pThis, const ITEMIDLIST* itList);
-CTaskGroup_SetShortcutIDList_t CTaskGroup_SetShortcutIDList_Original;
 
 using CTaskGroup_GetNumItems_t = int(WINAPI*)(PVOID pThis);
 CTaskGroup_GetNumItems_t CTaskGroup_GetNumItems_Original;
@@ -385,6 +378,19 @@ HRESULT WINAPI CTaskBand__Launch_Hook(PVOID pThis) {
 
 using CTaskGroup_GetAppID_t = PCWSTR(WINAPI*)(PVOID pThis);
 CTaskGroup_GetAppID_t CTaskGroup_GetAppID_Original;
+PCWSTR WINAPI CTaskGroup_GetAppID_Hook(PVOID pThis) {
+    Wh_Log(L">");
+
+    if (g_inUpdateItemIcon) {
+        winrt::com_ptr<IUnknown> taskGroupWithoutSuffix =
+            GetTaskGroupWithoutSuffix(pThis);
+        if (taskGroupWithoutSuffix) {
+            return CTaskGroup_GetAppID_Original(taskGroupWithoutSuffix.get());
+        }
+    }
+
+    return CTaskGroup_GetAppID_Original(pThis);
+}
 
 using CTaskGroup_SetAppID_t = HRESULT(WINAPI*)(PVOID pThis, PCWSTR appId);
 CTaskGroup_SetAppID_t CTaskGroup_SetAppID_Original;
@@ -427,7 +433,7 @@ PVOID GetTaskBand() {
 
 winrt::com_ptr<IUnknown> GetTaskGroupWithoutSuffix(
     PVOID taskGroup,
-    IUnknown** taskItem = nullptr) {
+    IUnknown** taskItem /*= nullptr*/) {
     PVOID taskBand = GetTaskBand();
     if (!taskBand) {
         return nullptr;
@@ -459,38 +465,62 @@ winrt::com_ptr<IUnknown> GetTaskGroupWithoutSuffix(
     return taskGroupMatched;
 }
 
-using CTaskGroup_GetIconId_t = HRESULT(WINAPI*)(PVOID pThis,
-                                                PVOID taskItem,
-                                                int* id);
-CTaskGroup_GetIconId_t CTaskGroup_GetIconId_Original;
-HRESULT WINAPI CTaskGroup_GetIconId_Hook(PVOID pThis, PVOID taskItem, int* id) {
-    // Wh_Log(L">");
-
-    auto original = [&]() {
-        return CTaskGroup_GetIconId_Original(pThis, taskItem, id);
-    };
+using CTaskGroup_IsImmersiveGroup_t = bool(WINAPI*)(PVOID pThis);
+CTaskGroup_IsImmersiveGroup_t CTaskGroup_IsImmersiveGroup_Original;
+bool WINAPI CTaskGroup_IsImmersiveGroup_Hook(PVOID pThis) {
+    Wh_Log(L">");
 
     if (g_inUpdateItemIcon) {
-        // Make sure items don't update other items' icons.
-        return original();
+        winrt::com_ptr<IUnknown> taskGroupWithoutSuffix =
+            GetTaskGroupWithoutSuffix(pThis);
+        if (taskGroupWithoutSuffix) {
+            return CTaskGroup_IsImmersiveGroup_Original(
+                taskGroupWithoutSuffix.get());
+        }
     }
 
-    winrt::com_ptr<IUnknown> taskItemWithoutSuffix;
-    winrt::com_ptr<IUnknown> taskGroupWithoutSuffix =
-        GetTaskGroupWithoutSuffix(pThis, taskItemWithoutSuffix.put());
-    if (taskGroupWithoutSuffix) {
-        return CTaskGroup_GetIconId_Original(
-            taskGroupWithoutSuffix.get(),
-            taskItem ? taskItemWithoutSuffix.get() : nullptr, id);
-    }
-
-    return original();
+    return CTaskGroup_IsImmersiveGroup_Original(pThis);
 }
 
-using CTaskGroup_SetIconId_t = HRESULT(WINAPI*)(PVOID pThis,
-                                                PVOID taskItem,
-                                                int id);
-CTaskGroup_SetIconId_t CTaskGroup_SetIconId_Original;
+using CTaskGroup_GetApplicationIDList_t = ITEMIDLIST*(WINAPI*)(PVOID pThis);
+CTaskGroup_GetApplicationIDList_t CTaskGroup_GetApplicationIDList_Original;
+
+using CTaskGroup_GetShortcutIDList_t = const ITEMIDLIST*(WINAPI*)(PVOID pThis);
+CTaskGroup_GetShortcutIDList_t CTaskGroup_GetShortcutIDList_Original;
+const ITEMIDLIST* WINAPI CTaskGroup_GetShortcutIDList_Hook(PVOID pThis) {
+    // Wh_Log(L">");
+
+    // Fixes launching a new instance on middle click or Shift+click for some
+    // apps. Actually I think that might be a Windows bug.
+    if (g_inTaskBandLaunch) {
+        return CTaskGroup_GetApplicationIDList_Original(pThis);
+    }
+
+    if (g_inTaskBtnGroupGetIcon && CTaskGroup_GetNumItems_Original(pThis) > 0) {
+        winrt::com_ptr<IUnknown> taskGroupWithoutSuffix =
+            GetTaskGroupWithoutSuffix(pThis);
+
+        if (taskGroupWithoutSuffix && CTaskGroup_IsImmersiveGroup_Original(
+                                          taskGroupWithoutSuffix.get())) {
+            return nullptr;
+        }
+
+        if (g_settings.useWindowIcons) {
+            return nullptr;
+        }
+
+        if (taskGroupWithoutSuffix) {
+            return CTaskGroup_GetShortcutIDList_Original(
+                taskGroupWithoutSuffix.get());
+        }
+    }
+
+    return CTaskGroup_GetShortcutIDList_Original(pThis);
+}
+
+using CTaskGroup_SetShortcutIDList_t =
+    HRESULT(WINAPI*)(PVOID pThis, const ITEMIDLIST* itList);
+CTaskGroup_SetShortcutIDList_t CTaskGroup_SetShortcutIDList_Original;
 
 using CTaskGroup_GetIconResource_t = PCWSTR(WINAPI*)(PVOID pThis);
 CTaskGroup_GetIconResource_t CTaskGroup_GetIconResource_Original;
@@ -514,7 +544,7 @@ CTaskBand__UpdateItemIcon_t CTaskBand__UpdateItemIcon_Original;
 void WINAPI CTaskBand__UpdateItemIcon_Hook(PVOID pThis,
                                            PVOID taskGroup,
                                            PVOID taskItem) {
-    // Wh_Log(L">");
+    Wh_Log(L">");
 
     g_inUpdateItemIcon = true;
     CTaskBand__UpdateItemIcon_Original(pThis, taskGroup, taskItem);
@@ -589,6 +619,38 @@ HRESULT WINAPI CTaskListWnd__GetJumpViewParams_Hook(PVOID pThis,
     g_inGetJumpViewParams = false;
 
     return ret;
+}
+
+using CTaskBtnGroup_GetIcon_t = HRESULT(WINAPI*)(PVOID pThis,
+                                                 PVOID taskItem,
+                                                 HICON** icon);
+CTaskBtnGroup_GetIcon_t CTaskBtnGroup_GetIcon_Original;
+HRESULT WINAPI CTaskBtnGroup_GetIcon_Hook(PVOID pThis,
+                                          PVOID taskItem,
+                                          HICON** icon) {
+    Wh_Log(L">");
+
+    g_inTaskBtnGroupGetIcon = true;
+    HRESULT ret = CTaskBtnGroup_GetIcon_Original(pThis, taskItem, icon);
+    g_inTaskBtnGroupGetIcon = false;
+
+    return ret;
+}
+
+using CTaskBtnGroup__DrawRegularButton_t = void(WINAPI*)(PVOID pThis,
+                                                         PVOID param1,
+                                                         PVOID param2);
+CTaskBtnGroup__DrawRegularButton_t CTaskBtnGroup__DrawRegularButton_Original;
+void WINAPI CTaskBtnGroup__DrawRegularButton_Hook(PVOID pThis,
+                                                  PVOID param1,
+                                                  PVOID param2) {
+    Wh_Log(L">");
+
+    // This call resembles CTaskBtnGroup::GetIcon of Windows 11 regarding icon
+    // handling.
+    g_inTaskBtnGroupGetIcon = true;
+    CTaskBtnGroup__DrawRegularButton_Original(pThis, param1, param2);
+    g_inTaskBtnGroupGetIcon = false;
 }
 
 using CTaskBtnGroup_GetGroup_t = PVOID(WINAPI*)(PVOID pThis);
@@ -710,11 +772,6 @@ void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
 
     DWORD flags1Copy = CTaskGroup_GetFlags_Original(taskGroup1);
 
-    int iconId1Copy = 0;
-    int iconId2Copy = 0;
-    CTaskGroup_GetIconId_Original(taskGroup1, nullptr, &iconId1Copy);
-    CTaskGroup_GetIconId_Original(taskGroup2, nullptr, &iconId2Copy);
-
     g_disableGetLauncherName = true;
     WCHAR tip1Copy[MAX_PATH] = L"";
     WCHAR tip2Copy[MAX_PATH] = L"";
@@ -728,13 +785,11 @@ void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
         taskGroup1, CTaskGroup_GetShortcutIDList_Original(taskGroup2));
     CTaskGroup_UpdateFlags_Original(taskGroup1, ~0,
                                     CTaskGroup_GetFlags_Original(taskGroup2));
-    CTaskGroup_SetIconId_Original(taskGroup1, nullptr, iconId2Copy);
     CTaskGroup_SetTip_Original(taskGroup1, tip2Copy);
 
     CTaskGroup_SetAppID_Original(taskGroup2, appId1Copy);
     CTaskGroup_SetShortcutIDList_Original(taskGroup2, idList1Copy);
     CTaskGroup_UpdateFlags_Original(taskGroup2, ~0, flags1Copy);
-    CTaskGroup_SetIconId_Original(taskGroup2, nullptr, iconId1Copy);
     CTaskGroup_SetTip_Original(taskGroup2, tip1Copy);
 
     if (idList1Copy) {
@@ -742,7 +797,7 @@ void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
     }
 }
 
-void OnBeforeTaskDestroyed(PVOID taskGroup) {
+void SwapTaskGroupIdsWithUnsuffixedInstance(PVOID taskGroup) {
     if (CTaskGroup_GetNumItems_Original(taskGroup) > 1) {
         return;
     }
@@ -793,10 +848,20 @@ LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_Hook(PVOID pThis,
                                                 int taskDestroyedFlags) {
     Wh_Log(L">");
 
-    OnBeforeTaskDestroyed(taskGroup);
+    int numItems = CTaskGroup_GetNumItems_Original(taskGroup);
 
-    return CTaskListWnd_TaskDestroyed_Original(pThis, taskGroup, taskItem,
-                                               taskDestroyedFlags);
+    if (numItems == 1) {
+        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
+    }
+
+    LONG_PTR ret = CTaskListWnd_TaskDestroyed_Original(
+        pThis, taskGroup, taskItem, taskDestroyedFlags);
+
+    if (numItems == 0) {
+        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
+    }
+
+    return ret;
 }
 
 using CTaskListWnd_TaskDestroyed_2_t = LONG_PTR(WINAPI*)(PVOID pThis,
@@ -808,9 +873,20 @@ LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_2_Hook(PVOID pThis,
                                                   PVOID taskItem) {
     Wh_Log(L">");
 
-    OnBeforeTaskDestroyed(taskGroup);
+    int numItems = CTaskGroup_GetNumItems_Original(taskGroup);
 
-    return CTaskListWnd_TaskDestroyed_2_Original(pThis, taskGroup, taskItem);
+    if (numItems == 1) {
+        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
+    }
+
+    LONG_PTR ret =
+        CTaskListWnd_TaskDestroyed_2_Original(pThis, taskGroup, taskItem);
+
+    if (numItems == 0) {
+        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
+    }
+
+    return ret;
 }
 
 using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
@@ -1107,28 +1183,6 @@ bool HookTaskbarSymbols() {
         {
             {
                 {
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE * __cdecl CTaskGroup::GetApplicationIDList(void))",
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE * __ptr64 __cdecl CTaskGroup::GetApplicationIDList(void) __ptr64)",
-                },
-                (void**)&CTaskGroup_GetApplicationIDList_Original,
-            },
-            {
-                {
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __cdecl CTaskGroup::GetShortcutIDList(void))",
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __ptr64 __cdecl CTaskGroup::GetShortcutIDList(void) __ptr64)",
-                },
-                (void**)&CTaskGroup_GetShortcutIDList_Original,
-                (void*)CTaskGroup_GetShortcutIDList_Hook,
-            },
-            {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const * __ptr64) __ptr64)",
-                },
-                (void**)&CTaskGroup_SetShortcutIDList_Original,
-            },
-            {
-                {
                     LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void))",
                     LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void) __ptr64)",
                 },
@@ -1170,6 +1224,7 @@ bool HookTaskbarSymbols() {
                     LR"(public: virtual unsigned short const * __ptr64 __cdecl CTaskGroup::GetAppID(void) __ptr64)",
                 },
                 (void**)&CTaskGroup_GetAppID_Original,
+                (void*)CTaskGroup_GetAppID_Hook,
             },
             {
                 {
@@ -1208,18 +1263,33 @@ bool HookTaskbarSymbols() {
             },
             {
                 {
-                    LR"(public: virtual long __cdecl CTaskGroup::GetIconId(struct ITaskItem *,int *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::GetIconId(struct ITaskItem * __ptr64,int * __ptr64) __ptr64)",
+                    LR"(public: virtual bool __cdecl CTaskGroup::IsImmersiveGroup(void))",
+                    LR"(public: virtual bool __cdecl CTaskGroup::IsImmersiveGroup(void) __ptr64)",
                 },
-                (void**)&CTaskGroup_GetIconId_Original,
-                (void*)CTaskGroup_GetIconId_Hook,
+                (void**)&CTaskGroup_IsImmersiveGroup_Original,
+                (void*)CTaskGroup_IsImmersiveGroup_Hook,
             },
             {
                 {
-                    LR"(public: virtual long __cdecl CTaskGroup::SetIconId(struct ITaskItem *,int))",
-                    LR"(public: virtual long __cdecl CTaskGroup::SetIconId(struct ITaskItem * __ptr64,int) __ptr64)",
+                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE * __cdecl CTaskGroup::GetApplicationIDList(void))",
+                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE * __ptr64 __cdecl CTaskGroup::GetApplicationIDList(void) __ptr64)",
                 },
-                (void**)&CTaskGroup_SetIconId_Original,
+                (void**)&CTaskGroup_GetApplicationIDList_Original,
+            },
+            {
+                {
+                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __cdecl CTaskGroup::GetShortcutIDList(void))",
+                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __ptr64 __cdecl CTaskGroup::GetShortcutIDList(void) __ptr64)",
+                },
+                (void**)&CTaskGroup_GetShortcutIDList_Original,
+                (void*)CTaskGroup_GetShortcutIDList_Hook,
+            },
+            {
+                {
+                    LR"(public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *))",
+                    LR"(public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskGroup_SetShortcutIDList_Original,
             },
             {
                 {
@@ -1260,6 +1330,26 @@ bool HookTaskbarSymbols() {
                 },
                 (void**)&CTaskListWnd__GetJumpViewParams_Original,
                 (void*)CTaskListWnd__GetJumpViewParams_Hook,
+            },
+            {
+                // Available from Windows 11.
+                {
+                    LR"(public: virtual long __cdecl CTaskBtnGroup::GetIcon(struct ITaskItem *,struct HICON__ * *))",
+                    LR"(public: virtual long __cdecl CTaskBtnGroup::GetIcon(struct ITaskItem * __ptr64,struct HICON__ * __ptr64 * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskBtnGroup_GetIcon_Original,
+                (void*)CTaskBtnGroup_GetIcon_Hook,
+                true,
+            },
+            {
+                // Available until Windows 10.
+                {
+                    LR"(private: void __cdecl CTaskBtnGroup::_DrawRegularButton(struct HDC__ *,struct BUTTONRENDERINFO const &))",
+                    LR"(private: void __cdecl CTaskBtnGroup::_DrawRegularButton(struct HDC__ * __ptr64,struct BUTTONRENDERINFO const & __ptr64) __ptr64)",
+                },
+                (void**)&CTaskBtnGroup__DrawRegularButton_Original,
+                (void*)CTaskBtnGroup__DrawRegularButton_Hook,
+                true,
             },
             {
                 {
@@ -1328,6 +1418,7 @@ void LoadSettings() {
         Wh_GetIntSetting(L"keepPinnedItemsSeparated");
     g_settings.placeUngroupedItemsTogether =
         Wh_GetIntSetting(L"placeUngroupedItemsTogether");
+    g_settings.useWindowIcons = Wh_GetIntSetting(L"useWindowIcons");
 
     g_settings.excludedProgramPaths.clear();
     g_settings.excludedProgramNames.clear();
