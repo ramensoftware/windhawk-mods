@@ -2,7 +2,7 @@
 // @id              taskbar-button-click
 // @name            Middle click to close on the taskbar
 // @description     Close programs with a middle click on the taskbar instead of creating a new instance
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -20,7 +20,7 @@ Close programs with the middle click on the taskbar instead of creating a new
 instance.
 
 Only Windows 10 64-bit and Windows 11 are supported.
-For other Windows version check out [7+ Taskbar
+For other Windows versions check out [7+ Taskbar
 Tweaker](https://tweaker.ramensoftware.com/).
 
 Note: To customize the old taskbar on Windows 11 (if using Explorer Patcher or a
@@ -111,6 +111,9 @@ CTaskListWnd_ProcessJumpViewCloseWindow_t
 using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(LPVOID pThis);
 CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType_Original;
 
+using CTaskBtnGroup_GetGroup_t = LPVOID(WINAPI*)(LPVOID pThis);
+CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup_Original;
+
 using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(LPVOID pThis, int);
 CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem_Original;
 
@@ -185,6 +188,15 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
         return original();
     }
 
+    // Get the task group from taskBtnGroup instead of relying on taskGroup for
+    // compatibility with the taskbar-grouping mod, which hooks this function
+    // and replaces taskGroup. An ugly workaround but it works.
+    LPVOID realTaskGroup =
+        CTaskBtnGroup_GetGroup_Original(g_pCTaskListWndTaskBtnGroup);
+    if (!realTaskGroup) {
+        return original();
+    }
+
     // The click action of launching a new instance can happen in two ways:
     // * Middle click.
     // * Shift + Left click.
@@ -222,7 +234,7 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
             }
 
             ((IUnknown*)activeTaskGroup)->Release();
-            if (activeTaskGroup != taskGroup || taskItemIndex < 0) {
+            if (activeTaskGroup != realTaskGroup || taskItemIndex < 0) {
                 return 0;
             }
         }
@@ -248,7 +260,7 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
     GetCursorPos(&pt);
     HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     CTaskListWnd_ProcessJumpViewCloseWindow_Original(
-        g_pCTaskListWndHandlingClick, hWnd, taskGroup, monitor);
+        g_pCTaskListWndHandlingClick, hWnd, realTaskGroup, monitor);
     return 0;
 }
 
@@ -558,6 +570,11 @@ BOOL Wh_ModInit() {
              LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void) __ptr64)",
          },
          (void**)&CTaskBtnGroup_GetGroupType_Original},
+        {{
+             LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))",
+             LR"(public: virtual struct ITaskGroup * __ptr64 __cdecl CTaskBtnGroup::GetGroup(void) __ptr64)",
+         },
+         (void**)&CTaskBtnGroup_GetGroup_Original},
         {{
              LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))",
              LR"(public: virtual struct ITaskItem * __ptr64 __cdecl CTaskBtnGroup::GetTaskItem(int) __ptr64)",
