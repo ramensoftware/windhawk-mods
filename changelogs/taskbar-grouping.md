@@ -1,3 +1,8 @@
+## 1.2.1 ([Apr 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/59bcbf7c877ecdd7a5b70216e989489f899e7a80/mods/taskbar-grouping.wh.cpp))
+
+* Improved icon handling.
+* Added the option to use window icons instead of application icons.
+* Made unpinning a separated pinned item slightly less buggy.
 ## 1.2 ([Apr 22, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f472d07a9c4fc0cf94c18fde2a52570b6fbd82f2/mods/taskbar-grouping.wh.cpp))
 
 * Pinned items, if not separated, are now shown only when the last window closes.
