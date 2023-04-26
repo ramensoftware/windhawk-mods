@@ -1,3 +1,6 @@
+## 1.0.3 ([Apr 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/ba27a96436b8808fca3fc051ddc80c10d5094c10/mods/taskbar-button-scroll.wh.cpp))
+
+* Improved switching to windows with additional popup windows.
 ## 1.0.2 ([Apr 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a3300d6fe7a987529fa3e2522d4ac2db2b192eee/mods/taskbar-button-scroll.wh.cpp))
 
 * Changed the way taskbar button scroll events are captured, making the mod more robust.

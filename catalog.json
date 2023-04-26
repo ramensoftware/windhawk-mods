@@ -517,7 +517,7 @@
                 "published": 1682233932000,
                 "rating": 9,
                 "ratingUsers": 2,
-                "updated": 1682507323000,
+                "updated": 1682528100000,
                 "users": 14
             },
             "metadata": {
@@ -531,7 +531,7 @@
                 ],
                 "name": "Taskbar minimize/restore on scroll",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "taskbar-clock-customization": {
