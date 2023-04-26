@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-26T16:55:00.000Z</updated>
+    <updated>2023-04-26T21:36:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#3ac219c53d72765565b0a330b3d881c05726353c</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2023-04-26T21:36:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added keyboard shortcuts.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.3]]></title>
         <id>https://windhawk.net/mods/taskbar-button-scroll#ba27a96436b8808fca3fc051ddc80c10d5094c10</id>
@@ -213,20 +222,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
         <updated>2023-03-13T07:51:12.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed overflow handling for high DPI setups.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#2192e42078b228d8f7995c07bb63644765f8e57d</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2023-03-11T17:52:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Implemented adaptive sizing when there are too many items.</li>
-<li>Fixed missing labels when switching between virtual desktops or moving windows between monitors.</li>
-<li>Fixed wrong badge placement.</li>
-<li>Added several customization options such as running indicator style, font size and label string format.</li>
-<li>Improved compatibility with the Large Taskbar Icons mod.</li>
-<li>Improved loading speed by caching symbols.</li>
 </ul>]]></content>
     </entry>
 </feed>
