@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-26T11:08:43.000Z</updated>
+    <updated>2023-04-26T16:44:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#591c5067b69c86c307102fca027efb45c5fde4de</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2023-04-26T16:44:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cycletaskbarbuttonswithmousewheel">Cycle taskbar buttons with mouse wheel</h1>
+<p>Use the mouse wheel while hovering over the taskbar to cycle between taskbar
+buttons.</p>
+<p><img src="https://i.imgur.com/FtpUjt1.gif" alt="Demonstration" /></p>
+<p>Only Windows 11 is currently supported. For older Windows versions check out <a href="https://tweaker.ramensoftware.com/">7+
+Taskbar Tweaker</a>.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.2]]></title>
         <id>https://windhawk.net/mods/taskbar-button-scroll#a3300d6fe7a987529fa3e2522d4ac2db2b192eee</id>
@@ -216,20 +228,5 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
         <content type="html"><![CDATA[<ul>
 <li>Fixed mod sometimes failing to initialize on system startup.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Immersive Context Menus 1.0.0]]></title>
-        <id>https://windhawk.net/mods/disable-immersive-context-menus#0e2034570272223ebcba7c71a541c32c4b906135</id>
-        <link href="https://windhawk.net/mods/disable-immersive-context-menus"/>
-        <updated>2023-03-05T15:42:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disableimmersivecontextmenus">Disable Immersive Context Menus</h1>
-<p>This mod disables immersive context menus in file explorer.</p>
-<p>This mod applies to explorer folders as well as save/open dialogs in all programs.</p>
-<p>Note: This mod disables immersive context menus for <em>file explorer</em>, <em>desktop</em>, etc.<br />
-For disabling immersive context menus on the <em>taskbar</em>, use my <a href="https://windhawk.net/mods/classic-taskbar-context-menu">Non Immersive Taskbar Context Menu</a> mod.</p>
-<p><strong>Without</strong> this mod:
-<img src="https://i.imgur.com/0iRYrCJ.png" alt="Screenshot" /></p>
-<p><strong>With</strong> this mod:
-<img src="https://i.imgur.com/1bkNHyT.png" alt="Screenshot" /></p>]]></content>
     </entry>
 </feed>

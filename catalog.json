@@ -692,6 +692,29 @@
                 "version": "1.1"
             }
         },
+        "taskbar-wheel-cycle": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1682527457000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1682527457000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -loleaut32 -lole32",
+                "description": "Use the mouse wheel while hovering over the taskbar to cycle between taskbar buttons (Windows 11 only)",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Cycle taskbar buttons with mouse wheel",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "text-replace": {
             "details": {
                 "defaultSorting": 1116,
