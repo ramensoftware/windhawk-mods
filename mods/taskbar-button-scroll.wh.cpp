@@ -2,7 +2,7 @@
 // @id              taskbar-button-scroll
 // @name            Taskbar minimize/restore on scroll
 // @description     Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews (Windows 11 only)
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -241,10 +241,37 @@ BOOL CanRestoreWindow(HWND hWnd) {
     return TRUE;
 }
 
+void SwitchToWindow(HWND hWnd) {
+    BOOL bRestore = FALSE;
+    HWND hActiveWnd = hWnd;
+    HWND hTempWnd = GetLastActivePopup(GetAncestor(hWnd, GA_ROOTOWNER));
+
+    if (hTempWnd && hTempWnd != hWnd && IsWindowVisible(hTempWnd) &&
+        IsWindowEnabled(hTempWnd)) {
+        HWND hOwnerWnd = GetWindow(hTempWnd, GW_OWNER);
+
+        while (hOwnerWnd && hOwnerWnd != hWnd)
+            hOwnerWnd = GetWindow(hOwnerWnd, GW_OWNER);
+
+        if (hOwnerWnd == hWnd) {
+            bRestore = IsIconic(hWnd);
+            hActiveWnd = hTempWnd;
+        }
+    }
+
+    if (IsIconic(hActiveWnd) && !IsWindowEnabled(hActiveWnd)) {
+        ShowWindowAsync(hWnd, SW_RESTORE);
+    } else {
+        SwitchToThisWindow(hActiveWnd, TRUE);
+        if (bRestore)
+            ShowWindowAsync(hWnd, SW_RESTORE);
+    }
+}
+
 bool MinimizeWithScroll(HWND hWnd) {
     if (g_settings.maximizeAndRestore && CanRestoreWindow(hWnd) &&
         IsZoomed(hWnd)) {
-        SwitchToThisWindow(hWnd, TRUE);
+        SwitchToWindow(hWnd);
         return PostMessage(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
     }
 
@@ -261,11 +288,11 @@ bool MinimizeWithScroll(HWND hWnd) {
 bool RestoreWithScroll(HWND hWnd) {
     if (g_settings.maximizeAndRestore && CanMaximizeWindow(hWnd) &&
         !IsIconic(hWnd) && !IsZoomed(hWnd)) {
-        SwitchToThisWindow(hWnd, TRUE);
+        SwitchToWindow(hWnd);
         return PostMessage(hWnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
     }
 
-    SwitchToThisWindow(hWnd, TRUE);
+    SwitchToWindow(hWnd);
     return true;
 }
 
