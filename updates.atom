@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-04-24T21:49:29.000Z</updated>
+    <updated>2023-04-26T11:08:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-scroll#a3300d6fe7a987529fa3e2522d4ac2db2b192eee</id>
+        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
+        <updated>2023-04-26T11:08:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Changed the way taskbar button scroll events are captured, making the mod more robust.</li>
+<li>Improved focus grabbing to bring other apps to front.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.4]]></title>
         <id>https://windhawk.net/mods/taskbar-button-click#0ff37a61a6d89141553c7109ffd4170e5a0d5009</id>
@@ -221,12 +231,5 @@ For disabling immersive context menus on the <em>taskbar</em>, use my <a href="h
 <img src="https://i.imgur.com/0iRYrCJ.png" alt="Screenshot" /></p>
 <p><strong>With</strong> this mod:
 <img src="https://i.imgur.com/1bkNHyT.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Search Bar 1.0.2]]></title>
-        <id>https://windhawk.net/mods/hide-search-bar#5c52c28ccbd07387061bcd9543820347ce1f642d</id>
-        <link href="https://windhawk.net/mods/hide-search-bar"/>
-        <updated>2023-03-04T17:15:23.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix bug with views becoming blank in VSCode-like programs</p>]]></content>
     </entry>
 </feed>

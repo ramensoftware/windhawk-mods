@@ -1,3 +1,7 @@
+## 1.0.2 ([Apr 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a3300d6fe7a987529fa3e2522d4ac2db2b192eee/mods/taskbar-button-scroll.wh.cpp))
+
+* Changed the way taskbar button scroll events are captured, making the mod more robust.
+* Improved focus grabbing to bring other apps to front.
 ## 1.0.1 ([Apr 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/4e3c50df072814f5bd007c52f52184bb2ec128c6/mods/taskbar-button-scroll.wh.cpp))
 
 * Fixed a bug which could cause the taskbar to freeze.

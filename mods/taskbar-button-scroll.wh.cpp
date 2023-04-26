@@ -2,13 +2,13 @@
 // @id              taskbar-button-scroll
 // @name            Taskbar minimize/restore on scroll
 // @description     Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews (Windows 11 only)
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
-// @compilerOptions -DWINVER=0x0602 -lcomctl32 -loleaut32 -lole32
+// @compilerOptions -lcomctl32 -loleaut32 -lole32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -25,6 +25,8 @@
 
 Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail
 previews.
+
+![Demonstration](https://i.imgur.com/rnnwOss.gif)
 
 Only Windows 11 is currently supported. For older Windows versions check out [7+
 Taskbar Tweaker](https://tweaker.ramensoftware.com/).
@@ -47,13 +49,14 @@ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 */
 // ==/WindhawkModSettings==
 
-#include <initguid.h>
+#undef GetCurrentTime
 
 #include <commctrl.h>
-#include <comutil.h>
-#include <uiautomation.h>
 #include <windowsx.h>
-#include <winrt/base.h>
+
+#include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 
 #include <algorithm>
 #include <atomic>
@@ -63,9 +66,7 @@ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 #include <unordered_set>
 #include <vector>
 
-#ifndef WM_POINTERWHEEL
-#define WM_POINTERWHEEL 0x024E
-#endif
+using namespace winrt::Windows::UI::Xaml;
 
 struct {
     bool scrollOverTaskbarButtons;
@@ -74,9 +75,7 @@ struct {
     bool reverseScrollingDirection;
 } g_settings;
 
-bool g_initialized = false;
-bool g_inputSiteProcHooked = false;
-WPARAM g_invokingTaskListElementOnPointWParam = 0;
+double g_invokingTaskListButtonAutomationInvokeMouseWheelDelta = 0;
 WPARAM g_invokingContextMenuWParam = 0;
 PVOID g_lastScrollTarget = nullptr;
 DWORD g_lastScrollTime;
@@ -84,277 +83,7 @@ short g_lastScrollDeltaRemainder;
 std::atomic<DWORD> g_groupMenuCommandThreadId;
 ULONGLONG g_noDismissHoverUIUntil = 0;
 
-HWND g_hTaskbarWnd;
-DWORD g_dwTaskbarThreadId;
 std::unordered_set<HWND> g_thumbnailWindows;
-
-#pragma region uiaclientinterfaces_p
-
-#ifndef __IUIAutomationInvokePattern_INTERFACE_DEFINED__
-#define __IUIAutomationInvokePattern_INTERFACE_DEFINED__
-
-// interface IUIAutomationInvokePattern
-// [unique][uuid][object]
-
-// {FB377FBE-8EA6-46D5-9C73-6499642D3059}
-const IID IID_IUIAutomationInvokePattern = {
-    0xFB377FBE,
-    0x8EA6,
-    0x46D5,
-    {0x9C, 0x73, 0x64, 0x99, 0x64, 0x2D, 0x30, 0x59}};
-
-MIDL_INTERFACE("fb377fbe-8ea6-46d5-9c73-6499642d3059")
-IUIAutomationInvokePattern : public IUnknown {
-   public:
-    virtual HRESULT STDMETHODCALLTYPE Invoke(void) = 0;
-};
-
-#endif  // __IUIAutomationInvokePattern_INTERFACE_DEFINED__
-
-enum TreeScope {
-    TreeScope_Element = 0x1,
-    TreeScope_Children = 0x2,
-    TreeScope_Descendants = 0x4,
-    TreeScope_Parent = 0x8,
-    TreeScope_Ancestors = 0x10,
-    TreeScope_Subtree =
-        TreeScope_Element | TreeScope_Children | TreeScope_Descendants,
-};
-
-enum OrientationType {
-    OrientationType_None = 0,
-    OrientationType_Horizontal = 1,
-    OrientationType_Vertical = 2,
-};
-
-enum PropertyConditionFlags {
-    PropertyConditionFlags_None = 0x00,
-    PropertyConditionFlags_IgnoreCase = 0x01,
-};
-
-typedef void* UIA_HWND;
-
-// Source:
-// https://github.com/qt/qtbase/blob/544464c3d173246e58d39351599b0ffa87ec43df/src/gui/accessible/windows/apisupport/uiaclientinterfaces_p.h
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR
-// GPL-2.0-only OR GPL-3.0-only
-
-// clang-format off
-
-#ifndef __IUIAutomationElement_INTERFACE_DEFINED__
-
-using IUIAutomationCondition = IUnknown;
-struct IUIAutomationCacheRequest;
-struct IUIAutomationElementArray;
-struct IUIAutomationTreeWalker;
-struct IUIAutomationEventHandler;
-struct IUIAutomationPropertyChangedEventHandler;
-struct IUIAutomationStructureChangedEventHandler;
-struct IUIAutomationFocusChangedEventHandler;
-struct IUIAutomationProxyFactory;
-struct IUIAutomationProxyFactoryEntry;
-struct IUIAutomationProxyFactoryMapping;
-#ifndef __IAccessible_FWD_DEFINED__
-#define __IAccessible_FWD_DEFINED__
-struct IAccessible;
-#endif   /* __IAccessible_FWD_DEFINED__ */
-
-#define __IUIAutomationElement_INTERFACE_DEFINED__
-DEFINE_GUID(IID_IUIAutomationElement, 0xd22108aa, 0x8ac5, 0x49a5, 0x83,0x7b, 0x37,0xbb,0xb3,0xd7,0x59,0x1e);
-MIDL_INTERFACE("d22108aa-8ac5-49a5-837b-37bbb3d7591e")
-IUIAutomationElement : public IUnknown
-{
-public:
-    virtual HRESULT STDMETHODCALLTYPE SetFocus() = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetRuntimeId(__RPC__deref_out_opt SAFEARRAY **runtimeId) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindFirst(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition *condition, __RPC__deref_out_opt IUIAutomationElement **found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindAll(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition *condition, __RPC__deref_out_opt IUIAutomationElementArray **found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindFirstBuildCache(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition *condition, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindAllBuildCache(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition *condition, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElementArray **found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE BuildUpdatedCache(__RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **updatedElement) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPropertyValue(PROPERTYID propertyId, __RPC__out VARIANT *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPropertyValueEx(PROPERTYID propertyId, BOOL ignoreDefaultValue, __RPC__out VARIANT *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPropertyValue(PROPERTYID propertyId, __RPC__out VARIANT *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPropertyValueEx(PROPERTYID propertyId, BOOL ignoreDefaultValue, __RPC__out VARIANT *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPatternAs(PATTERNID patternId, __RPC__in REFIID riid, __RPC__deref_out_opt void **patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPatternAs(PATTERNID patternId, __RPC__in REFIID riid, __RPC__deref_out_opt void **patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPattern(PATTERNID patternId, __RPC__deref_out_opt IUnknown **patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPattern(PATTERNID patternId, __RPC__deref_out_opt IUnknown **patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedParent(__RPC__deref_out_opt IUIAutomationElement **parent) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedChildren(__RPC__deref_out_opt IUIAutomationElementArray **children) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentProcessId(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentControlType(__RPC__out CONTROLTYPEID *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentLocalizedControlType(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentName(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAcceleratorKey(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAccessKey(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentHasKeyboardFocus(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsKeyboardFocusable(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsEnabled(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAutomationId(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentClassName(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentHelpText(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentCulture(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsControlElement(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsContentElement(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsPassword(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentNativeWindowHandle(__RPC__deref_out_opt UIA_HWND *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentItemType(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsOffscreen(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentOrientation(__RPC__out enum OrientationType *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentFrameworkId(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsRequiredForForm(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentItemStatus(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentBoundingRectangle(__RPC__out RECT *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentLabeledBy(__RPC__deref_out_opt IUIAutomationElement **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAriaRole(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAriaProperties(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsDataValidForForm(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentControllerFor(__RPC__deref_out_opt IUIAutomationElementArray **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentDescribedBy(__RPC__deref_out_opt IUIAutomationElementArray **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentFlowsTo(__RPC__deref_out_opt IUIAutomationElementArray **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentProviderDescription(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedProcessId(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedControlType(__RPC__out CONTROLTYPEID *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedLocalizedControlType(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedName(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAcceleratorKey(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAccessKey(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedHasKeyboardFocus(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsKeyboardFocusable(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsEnabled(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAutomationId(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedClassName(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedHelpText(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedCulture(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsControlElement(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsContentElement(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsPassword(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedNativeWindowHandle(__RPC__deref_out_opt UIA_HWND *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedItemType(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsOffscreen(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedOrientation(__RPC__out enum OrientationType *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedFrameworkId(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsRequiredForForm(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedItemStatus(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedBoundingRectangle(__RPC__out RECT *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedLabeledBy(__RPC__deref_out_opt IUIAutomationElement **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAriaRole(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAriaProperties(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsDataValidForForm(__RPC__out BOOL *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedControllerFor(__RPC__deref_out_opt IUIAutomationElementArray **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedDescribedBy(__RPC__deref_out_opt IUIAutomationElementArray **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedFlowsTo(__RPC__deref_out_opt IUIAutomationElementArray **retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedProviderDescription(__RPC__deref_out_opt BSTR *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetClickablePoint(__RPC__out POINT *clickable, __RPC__out BOOL *gotClickable) = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomationElement, 0xd22108aa, 0x8ac5, 0x49a5, 0x83,0x7b, 0x37,0xbb,0xb3,0xd7,0x59,0x1e)
-#endif
-#endif
-
-
-#ifndef __IUIAutomation_INTERFACE_DEFINED__
-#define __IUIAutomation_INTERFACE_DEFINED__
-DEFINE_GUID(IID_IUIAutomation, 0x30cbe57d, 0xd9d0, 0x452a, 0xab,0x13, 0x7a,0xc5,0xac,0x48,0x25,0xee);
-MIDL_INTERFACE("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee")
-IUIAutomation : public IUnknown
-{
-public:
-    virtual HRESULT STDMETHODCALLTYPE CompareElements(__RPC__in_opt IUIAutomationElement *el1, __RPC__in_opt IUIAutomationElement *el2, __RPC__out BOOL *areSame) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CompareRuntimeIds(__RPC__in SAFEARRAY * runtimeId1, __RPC__in SAFEARRAY * runtimeId2, __RPC__out BOOL *areSame) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetRootElement(__RPC__deref_out_opt IUIAutomationElement **root) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromHandle(__RPC__in UIA_HWND hwnd, __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromPoint(POINT pt, __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFocusedElement(__RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetRootElementBuildCache(__RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **root) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromHandleBuildCache(__RPC__in UIA_HWND hwnd, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromPointBuildCache(POINT pt, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFocusedElementBuildCache(__RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateTreeWalker(__RPC__in_opt IUIAutomationCondition *pCondition, __RPC__deref_out_opt IUIAutomationTreeWalker **walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ControlViewWalker(__RPC__deref_out_opt IUIAutomationTreeWalker **walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ContentViewWalker(__RPC__deref_out_opt IUIAutomationTreeWalker **walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_RawViewWalker(__RPC__deref_out_opt IUIAutomationTreeWalker **walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_RawViewCondition(__RPC__deref_out_opt IUIAutomationCondition **condition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ControlViewCondition(__RPC__deref_out_opt IUIAutomationCondition **condition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ContentViewCondition(__RPC__deref_out_opt IUIAutomationCondition **condition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateCacheRequest(__RPC__deref_out_opt IUIAutomationCacheRequest **cacheRequest) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateTrueCondition(__RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateFalseCondition(__RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreatePropertyCondition(PROPERTYID propertyId, VARIANT value, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreatePropertyConditionEx(PROPERTYID propertyId, VARIANT value, enum PropertyConditionFlags flags, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateAndCondition(__RPC__in_opt IUIAutomationCondition *condition1, __RPC__in_opt IUIAutomationCondition *condition2, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateAndConditionFromArray(__RPC__in_opt SAFEARRAY * conditions, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateAndConditionFromNativeArray(__RPC__in_ecount_full(conditionCount) IUIAutomationCondition **conditions, int conditionCount, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateOrCondition(__RPC__in_opt IUIAutomationCondition *condition1, __RPC__in_opt IUIAutomationCondition *condition2, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateOrConditionFromArray(__RPC__in_opt SAFEARRAY * conditions, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateOrConditionFromNativeArray(__RPC__in_ecount_full(conditionCount) IUIAutomationCondition **conditions, int conditionCount, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateNotCondition(__RPC__in_opt IUIAutomationCondition *condition, __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddAutomationEventHandler(EVENTID eventId, __RPC__in_opt IUIAutomationElement *element, enum TreeScope scope, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__in_opt IUIAutomationEventHandler *handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveAutomationEventHandler(EVENTID eventId, __RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationEventHandler *handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddPropertyChangedEventHandlerNativeArray(__RPC__in_opt IUIAutomationElement *element, enum TreeScope scope, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__in_opt IUIAutomationPropertyChangedEventHandler *handler, __RPC__in_ecount_full(propertyCount) PROPERTYID *propertyArray, int propertyCount) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddPropertyChangedEventHandler(__RPC__in_opt IUIAutomationElement *element, enum TreeScope scope, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__in_opt IUIAutomationPropertyChangedEventHandler *handler, __RPC__in SAFEARRAY * propertyArray) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemovePropertyChangedEventHandler(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationPropertyChangedEventHandler *handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddStructureChangedEventHandler(__RPC__in_opt IUIAutomationElement *element, enum TreeScope scope, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__in_opt IUIAutomationStructureChangedEventHandler *handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveStructureChangedEventHandler(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationStructureChangedEventHandler *handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddFocusChangedEventHandler(__RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__in_opt IUIAutomationFocusChangedEventHandler *handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveFocusChangedEventHandler(__RPC__in_opt IUIAutomationFocusChangedEventHandler *handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveAllEventHandlers() = 0;
-    virtual HRESULT STDMETHODCALLTYPE IntNativeArrayToSafeArray(__RPC__in_ecount_full(arrayCount) int *array, int arrayCount, __RPC__deref_out_opt SAFEARRAY **safeArray) = 0;
-    virtual HRESULT STDMETHODCALLTYPE IntSafeArrayToNativeArray(__RPC__in SAFEARRAY * intArray, __RPC__deref_out_ecount_full_opt(*arrayCount) int **array, __RPC__out int *arrayCount) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RectToVariant(RECT rc, __RPC__out VARIANT *var) = 0;
-    virtual HRESULT STDMETHODCALLTYPE VariantToRect(VARIANT var, __RPC__out RECT *rc) = 0;
-    virtual HRESULT STDMETHODCALLTYPE SafeArrayToRectNativeArray(__RPC__in SAFEARRAY * rects, __RPC__deref_out_ecount_full_opt(*rectArrayCount) RECT **rectArray, __RPC__out int *rectArrayCount) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateProxyFactoryEntry(__RPC__in_opt IUIAutomationProxyFactory *factory, __RPC__deref_out_opt IUIAutomationProxyFactoryEntry **factoryEntry) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ProxyFactoryMapping(__RPC__deref_out_opt IUIAutomationProxyFactoryMapping **factoryMapping) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPropertyProgrammaticName(PROPERTYID property, __RPC__deref_out_opt BSTR *name) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPatternProgrammaticName(PATTERNID pattern, __RPC__deref_out_opt BSTR *name) = 0;
-    virtual HRESULT STDMETHODCALLTYPE PollForPotentialSupportedPatterns(__RPC__in_opt IUIAutomationElement *pElement, __RPC__deref_out_opt SAFEARRAY **patternIds, __RPC__deref_out_opt SAFEARRAY **patternNames) = 0;
-    virtual HRESULT STDMETHODCALLTYPE PollForPotentialSupportedProperties(__RPC__in_opt IUIAutomationElement *pElement, __RPC__deref_out_opt SAFEARRAY **propertyIds, __RPC__deref_out_opt SAFEARRAY **propertyNames) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CheckNotSupported(VARIANT value, __RPC__out BOOL *isNotSupported) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ReservedNotSupportedValue(__RPC__deref_out_opt IUnknown **notSupportedValue) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ReservedMixedAttributeValue(__RPC__deref_out_opt IUnknown **mixedAttributeValue) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromIAccessible(__RPC__in_opt IAccessible *accessible, int childId, __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromIAccessibleBuildCache(__RPC__in_opt IAccessible *accessible, int childId, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomation, 0x30cbe57d, 0xd9d0, 0x452a, 0xab,0x13, 0x7a,0xc5,0xac,0x48,0x25,0xee)
-#endif
-#endif
-
-
-#ifndef __IUIAutomationTreeWalker_INTERFACE_DEFINED__
-#define __IUIAutomationTreeWalker_INTERFACE_DEFINED__
-DEFINE_GUID(IID_IUIAutomationTreeWalker, 0x4042c624, 0x389c, 0x4afc, 0xa6,0x30, 0x9d,0xf8,0x54,0xa5,0x41,0xfc);
-MIDL_INTERFACE("4042c624-389c-4afc-a630-9df854a541fc")
-IUIAutomationTreeWalker : public IUnknown
-{
-public:
-    virtual HRESULT STDMETHODCALLTYPE GetParentElement(__RPC__in_opt IUIAutomationElement *element, __RPC__deref_out_opt IUIAutomationElement **parent) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFirstChildElement(__RPC__in_opt IUIAutomationElement *element, __RPC__deref_out_opt IUIAutomationElement **first) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetLastChildElement(__RPC__in_opt IUIAutomationElement *element, __RPC__deref_out_opt IUIAutomationElement **last) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetNextSiblingElement(__RPC__in_opt IUIAutomationElement *element, __RPC__deref_out_opt IUIAutomationElement **next) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPreviousSiblingElement(__RPC__in_opt IUIAutomationElement *element, __RPC__deref_out_opt IUIAutomationElement **previous) = 0;
-    virtual HRESULT STDMETHODCALLTYPE NormalizeElement(__RPC__in_opt IUIAutomationElement *element, __RPC__deref_out_opt IUIAutomationElement **normalized) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetParentElementBuildCache(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **parent) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFirstChildElementBuildCache(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **first) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetLastChildElementBuildCache(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **last) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetNextSiblingElementBuildCache(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **next) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPreviousSiblingElementBuildCache(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **previous) = 0;
-    virtual HRESULT STDMETHODCALLTYPE NormalizeElementBuildCache(__RPC__in_opt IUIAutomationElement *element, __RPC__in_opt IUIAutomationCacheRequest *cacheRequest, __RPC__deref_out_opt IUIAutomationElement **normalized) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_Condition(__RPC__deref_out_opt IUIAutomationCondition **condition) = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomationTreeWalker, 0x4042c624, 0x389c, 0x4afc, 0xa6,0x30, 0x9d,0xf8,0x54,0xa5,0x41,0xfc)
-#endif
-#endif
-
-DEFINE_GUID(CLSID_CUIAutomation, 0xff48dba4, 0x60ef, 0x4201, 0xaa,0x87, 0x54,0x10,0x3e,0xef,0x59,0x4e);
-
-// clang-format on
-
-#pragma endregion  // uiaclientinterfaces_p
 
 #pragma region offsets
 
@@ -425,13 +154,13 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
                                            int param5) {
     Wh_Log(L"> %d", clickAction);
 
-    if (!g_invokingTaskListElementOnPointWParam) {
+    if (!g_invokingTaskListButtonAutomationInvokeMouseWheelDelta) {
         return CTaskListWnd__HandleClick_Original(
             pThis, taskBtnGroup, taskItemIndex, clickAction, param4, param5);
     }
 
-    short delta =
-        GET_WHEEL_DELTA_WPARAM(g_invokingTaskListElementOnPointWParam);
+    short delta = static_cast<short>(
+        g_invokingTaskListButtonAutomationInvokeMouseWheelDelta);
 
     if (g_lastScrollTarget == taskBtnGroup &&
         GetTickCount() - g_lastScrollTime < 1000 * 5) {
@@ -456,11 +185,6 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
     if (command) {
         PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(taskBtnGroup);
         if (taskGroup) {
-            // Allows to steal focus.
-            INPUT input;
-            ZeroMemory(&input, sizeof(INPUT));
-            SendInput(1, &input, sizeof(INPUT));
-
             g_groupMenuCommandThreadId = GetCurrentThreadId();
             CTaskGroup_GroupMenuCommand_Original(
                 taskGroup, *EV_MM_TASKLIST_TASK_ITEM_FILTER(pThis), command);
@@ -569,165 +293,66 @@ BOOL WINAPI CApi_PostMessageW_Hook(PVOID pThis,
     return CApi_PostMessageW_Original(pThis, hWnd, Msg, wParam, lParam);
 }
 
-bool IsTaskbarWindow(HWND hWnd) {
-    WCHAR szClassName[32];
-    if (!GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
-        return false;
-    }
+using TaskListButton_AutomationInvoke_t = void(WINAPI*)(PVOID pThis);
+TaskListButton_AutomationInvoke_t TaskListButton_AutomationInvoke_Original;
 
-    return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 ||
-           _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
-}
+// {7C3E0575-EB65-5A36-B1CF-8322C06C53C3}
+constexpr winrt::guid ITaskListButton{
+    0x7C3E0575,
+    0xEB65,
+    0x5A36,
+    {0xB1, 0xCF, 0x83, 0x22, 0xC0, 0x6C, 0x53, 0xC3}};
 
-bool InvokeTaskListElementOnPoint(POINT pt) {
-    HRESULT hr;
+using TaskListButton_OnPointerWheelChanged_t = int(WINAPI*)(PVOID pThis,
+                                                            PVOID pArgs);
+TaskListButton_OnPointerWheelChanged_t
+    TaskListButton_OnPointerWheelChanged_Original;
+int TaskListButton_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
+    Wh_Log(L">");
 
-    auto uia = winrt::create_instance<IUIAutomation>(CLSID_CUIAutomation);
-    if (!uia) {
-        return false;
-    }
+    auto original = [&]() {
+        return TaskListButton_OnPointerWheelChanged_Original(pThis, pArgs);
+    };
 
-    winrt::com_ptr<IUIAutomationElement> element;
-    hr = uia->ElementFromPoint(pt, element.put());
-    if (FAILED(hr) || !element) {
-        return false;
-    }
-
-    winrt::com_ptr<IUIAutomationCondition> trueCondition;
-    hr = uia->CreateTrueCondition(trueCondition.put());
-    if (FAILED(hr) || !trueCondition) {
-        return false;
-    }
-
-    winrt::com_ptr<IUIAutomationTreeWalker> treeWalker;
-    hr = uia->CreateTreeWalker(trueCondition.get(), treeWalker.put());
-    if (FAILED(hr) || !treeWalker) {
-        return false;
-    }
-
-    const std::wstring_view taskListButtonClassName =
-        L"Taskbar.TaskListButtonAutomationPeer";
-
-    while (true) {
-        _bstr_t className;
-        hr = element->get_CurrentClassName(className.GetAddress());
-        if (SUCCEEDED(hr) && className.GetBSTR() == taskListButtonClassName) {
-            break;
-        }
-
-        winrt::com_ptr<IUIAutomationElement> parentElement;
-        hr = treeWalker->GetParentElement(element.get(), parentElement.put());
-        if (FAILED(hr) || !parentElement) {
-            return false;
-        }
-
-        element = std::move(parentElement);
-    }
-
-    winrt::com_ptr<IUIAutomationInvokePattern> patternInvoke;
-    hr = element->GetCurrentPatternAs(UIA_InvokePatternId,
-                                      IID_IUIAutomationInvokePattern,
-                                      patternInvoke.put_void());
-    if (FAILED(hr) || !patternInvoke) {
-        return false;
-    }
-
-    hr = patternInvoke->Invoke();
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    return true;
-}
-
-bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     if (!g_settings.scrollOverTaskbarButtons) {
-        return false;
+        return original();
     }
 
-    if (GetCapture()) {
-        return false;
+    winrt::Windows::Foundation::IUnknown taskListButton = nullptr;
+    ((IUnknown*)pThis)
+        ->QueryInterface(ITaskListButton, winrt::put_abi(taskListButton));
+    if (!taskListButton) {
+        return original();
     }
 
-    POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    UIElement taskListButtonElement = taskListButton.as<UIElement>();
 
-    g_invokingTaskListElementOnPointWParam = wParam;
-    bool result = InvokeTaskListElementOnPoint(pt);
-    g_invokingTaskListElementOnPointWParam = 0;
-
-    return result;
-}
-
-WNDPROC InputSiteWindowProc_Original;
-LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd,
-                                          UINT uMsg,
-                                          WPARAM wParam,
-                                          LPARAM lParam) {
-    switch (uMsg) {
-        case WM_POINTERWHEEL:
-            if (HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-                IsTaskbarWindow(hRootWnd) &&
-                OnMouseWheel(hRootWnd, wParam, lParam)) {
-                return 0;
-            }
-            break;
+    Input::PointerRoutedEventArgs args = nullptr;
+    ((IUnknown*)pArgs)
+        ->QueryInterface(winrt::guid_of<Input::PointerRoutedEventArgs>(),
+                         winrt::put_abi(args));
+    if (!args) {
+        return original();
     }
 
-    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
-}
-
-void HandleIdentifiedInputSiteWindow(HWND hWnd) {
-    if (!g_dwTaskbarThreadId ||
-        GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId) {
-        return;
+    double delta = args.GetCurrentPoint(taskListButtonElement)
+                       .Properties()
+                       .MouseWheelDelta();
+    if (!delta) {
+        return original();
     }
 
-    HWND hParentWnd = GetParent(hWnd);
-    WCHAR szClassName[64];
-    if (!hParentWnd ||
-        !GetClassName(hParentWnd, szClassName, ARRAYSIZE(szClassName)) ||
-        _wcsicmp(szClassName,
-                 L"Windows.UI.Composition.DesktopWindowContentBridge") != 0) {
-        return;
-    }
+    // Allows to steal focus.
+    INPUT input;
+    ZeroMemory(&input, sizeof(INPUT));
+    SendInput(1, &input, sizeof(INPUT));
 
-    hParentWnd = GetParent(hParentWnd);
-    if (!hParentWnd || !IsTaskbarWindow(hParentWnd)) {
-        return;
-    }
+    g_invokingTaskListButtonAutomationInvokeMouseWheelDelta = delta;
+    TaskListButton_AutomationInvoke_Original(
+        (BYTE*)winrt::get_abi(taskListButton) - 0x18);
+    g_invokingTaskListButtonAutomationInvokeMouseWheelDelta = 0;
 
-    // At first, I tried to subclass the window instead of hooking its wndproc,
-    // but the inputsite.dll code checks that the value wasn't changed, and
-    // crashes otherwise.
-    void* wndProc = (void*)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
-    Wh_SetFunctionHook(wndProc, (void*)InputSiteWindowProc_Hook,
-                       (void**)&InputSiteWindowProc_Original);
-
-    if (g_initialized) {
-        Wh_ApplyHookOperations();
-    }
-
-    Wh_Log(L"Hooked InputSite wndproc %p", wndProc);
-    g_inputSiteProcHooked = true;
-}
-
-void HandleIdentifiedTaskbarWindow(HWND hWnd) {
-    g_hTaskbarWnd = hWnd;
-    g_dwTaskbarThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-
-    if (!g_inputSiteProcHooked) {
-        HWND hXamlIslandWnd = FindWindowEx(
-            hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge",
-            nullptr);
-        if (hXamlIslandWnd) {
-            HWND hInputSiteWnd = FindWindowEx(
-                hXamlIslandWnd, nullptr,
-                L"Windows.UI.Input.InputSite.WindowClass", nullptr);
-            if (hInputSiteWnd) {
-                HandleIdentifiedInputSiteWindow(hInputSiteWnd);
-            }
-        }
-    }
+    return 0;
 }
 
 // wParam - TRUE to subclass, FALSE to unsubclass
@@ -889,6 +514,11 @@ bool OnThumbnailWheelScroll(HWND hWnd,
         return false;
     }
 
+    // Allows to steal focus.
+    INPUT input;
+    ZeroMemory(&input, sizeof(INPUT));
+    SendInput(1, &input, sizeof(INPUT));
+
     POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
     g_invokingContextMenuWParam = wParam;
@@ -989,11 +619,8 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
 
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
 
-    if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
-        Wh_Log(L"Taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        HandleIdentifiedTaskbarWindow(hWnd);
-    } else if (bTextualClassName &&
-               _wcsicmp(lpClassName, L"TaskListThumbnailWnd") == 0) {
+    if (bTextualClassName &&
+        _wcsicmp(lpClassName, L"TaskListThumbnailWnd") == 0) {
         Wh_Log(L"Thumbnail window created: %08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedThumbnailWindow(hWnd);
     }
@@ -1038,13 +665,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
 
     if (bTextualClassName &&
-        _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) {
-        Wh_Log(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        if (!g_inputSiteProcHooked) {
-            HandleIdentifiedInputSiteWindow(hWnd);
-        }
-    } else if (bTextualClassName &&
-               _wcsicmp(lpClassName, L"TaskListThumbnailWnd") == 0) {
+        _wcsicmp(lpClassName, L"TaskListThumbnailWnd") == 0) {
         Wh_Log(L"Thumbnail window created: %08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedThumbnailWindow(hWnd);
     }
@@ -1266,10 +887,69 @@ void LoadSettings() {
         Wh_GetIntSetting(L"reverseScrollingDirection");
 }
 
-BOOL Wh_ModInit() {
-    Wh_Log(L">");
+bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
+    WCHAR szWindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectory(szWindowsDirectory,
+                             ARRAYSIZE(szWindowsDirectory))) {
+        Wh_Log(L"GetWindowsDirectory failed");
+        return false;
+    }
 
-    LoadSettings();
+    // Windows 11 version 22H2.
+    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
+    wcscat_s(
+        path, MAX_PATH,
+        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
+    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
+        return true;
+    }
+
+    // Windows 11 version 21H2.
+    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
+    wcscat_s(
+        path, MAX_PATH,
+        LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
+    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
+        return true;
+    }
+
+    return false;
+}
+
+bool HookTaskbarViewDllSymbols() {
+    WCHAR dllPath[MAX_PATH];
+    if (!GetTaskbarViewDllPath(dllPath)) {
+        Wh_Log(L"Taskbar view module not found");
+        return false;
+    }
+
+    HMODULE module =
+        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (module) {
+        Wh_Log(L"Taskbar view module couldn't be loaded");
+    }
+
+    SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListButton::AutomationInvoke(void))"},
+            (void**)&TaskListButton_AutomationInvoke_Original,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerWheelChanged(void *))"},
+            (void**)&TaskListButton_OnPointerWheelChanged_Original,
+            (void*)TaskListButton_OnPointerWheelChanged_Hook,
+        },
+    };
+
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+}
+
+BOOL HookTaskbarDllSymbols() {
+    HMODULE module = LoadLibrary(L"taskbar.dll");
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return FALSE;
+    }
 
     SYMBOL_HOOK symbolHooks[] = {
         {
@@ -1327,13 +1007,19 @@ BOOL Wh_ModInit() {
         },
     };
 
-    HMODULE taskbarModule = LoadLibrary(L"taskbar.dll");
-    if (!taskbarModule) {
-        Wh_Log(L"Couldn't load taskbar.dll");
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    LoadSettings();
+
+    if (!HookTaskbarViewDllSymbols()) {
         return FALSE;
     }
 
-    if (!HookSymbols(taskbarModule, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookTaskbarDllSymbols()) {
         return FALSE;
     }
 
@@ -1351,8 +1037,6 @@ BOOL Wh_ModInit() {
         }
     }
 
-    g_initialized = true;
-
     return TRUE;
 }
 
@@ -1363,8 +1047,6 @@ void Wh_ModAfterInit() {
     HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
     if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) &&
         dwProcessId == dwCurrentProcessId) {
-        HandleIdentifiedTaskbarWindow(hTaskbarWnd);
-
         FindCurrentProcessThumbnailWindows(hTaskbarWnd);
         for (HWND hWnd : g_thumbnailWindows) {
             Wh_Log(L"Thumbnail window found: %08X", (DWORD)(ULONG_PTR)hWnd);
