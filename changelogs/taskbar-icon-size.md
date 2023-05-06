@@ -1,3 +1,6 @@
+## 1.2 ([May 6, 2023](https://github.com/ramensoftware/windhawk-mods/blob/3c6652f30f4745c6ab50521fb879edd22ed2aba2/mods/taskbar-icon-size.wh.cpp))
+
+* Added an option to control the width of taskbar buttons.
 ## 1.1 ([Mar 18, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a4f9caa90467d6d6f733dafc41ec9d078b6091cb/mods/taskbar-icon-size.wh.cpp))
 
 * Renamed from "Large Taskbar Icons" to "Taskbar height and icon size".
