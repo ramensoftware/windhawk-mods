@@ -698,7 +698,7 @@
                 "published": 1682527457000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1682544986000,
+                "updated": 1683579686000,
                 "users": 40
             },
             "metadata": {
@@ -715,7 +715,7 @@
                 ],
                 "name": "Cycle taskbar buttons with mouse wheel",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "text-replace": {
