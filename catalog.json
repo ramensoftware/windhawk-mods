@@ -567,7 +567,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 58,
-                "updated": 1682371991000,
+                "updated": 1683581240000,
                 "users": 3164
             },
             "metadata": {
@@ -584,7 +584,7 @@
                 ],
                 "name": "Disable grouping on the taskbar",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.1"
+                "version": "1.2.2"
             }
         },
         "taskbar-icon-size": {

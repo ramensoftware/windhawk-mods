@@ -1,3 +1,6 @@
+## 1.2.2 ([May 8, 2023](https://github.com/ramensoftware/windhawk-mods/blob/fe7c3b4be6113f48dcdd876ed401e5ce104335da/mods/taskbar-grouping.wh.cpp))
+
+* Fixed a rare crash.
 ## 1.2.1 ([Apr 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/59bcbf7c877ecdd7a5b70216e989489f899e7a80/mods/taskbar-grouping.wh.cpp))
 
 * Improved icon handling.

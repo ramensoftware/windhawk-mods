@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-05-08T21:01:26.000Z</updated>
+    <updated>2023-05-08T21:27:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#fe7c3b4be6113f48dcdd876ed401e5ce104335da</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2023-05-08T21:27:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a rare crash.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#2d36c1716cebfe0cf00aff248d355336456cc4c6</id>
@@ -211,20 +220,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
 <li>Fixed pinned items sometimes being too wide.</li>
 <li>Fixed mod applying before explorer starts running (e.g. on system startup) on some Windows 11 21H2 versions.</li>
 <li>Fixed compatibility with some insider builds.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#a4f9caa90467d6d6f733dafc41ec9d078b6091cb</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2023-03-18T01:12:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed from "Large Taskbar Icons" to "Taskbar height and icon size".</li>
-<li>Fixed support for secondary taskbars.</li>
-<li>Fixed sizes of widget icons (start button and others) in some cases.</li>
-<li>Fixed notification area misalignment on Windows 11 22H2 (known issue on Windows 11 21H2 with small icons).</li>
-<li>Fixed mod applying before explorer starts running (e.g. on system startup) on new Windows 11 21H2 versions.</li>
-<li>Improved loading speed by caching symbols.</li>
 </ul>]]></content>
     </entry>
 </feed>
