@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-05-20T18:37:18.000Z</updated>
+    <updated>2023-05-20T19:12:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#9c814a48137a68e5e1262b98d84be86b08ab96e9</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2023-05-20T19:12:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the first clock line flashing on hover on Windows 11 version 22H2 and newer.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#0718eb23fbfa530f9a7bc1c1892f071db8b4fb41</id>
@@ -260,19 +269,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
         <content type="html"><![CDATA[<ul>
 <li>Undid the fix of the pinned items sometimes being too wide, since it caused more problems.</li>
 <li>Fixed compatibility with some insider builds (wasn't included in v1.1.2 by mistake).</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control#504d0704581f14714990fe7c3271070711679b0e</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
-        <updated>2023-04-02T17:55:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the new Windows 11 volume indicator.</li>
-<li>Added middle click to mute.</li>
-<li>Removed mouse hooks and made the mod more robust and work in more scenarios, e.g. when an elevated program is focused.</li>
-<li>Removed the ugly border in the Windows 10 volume indicator.</li>
-<li>Removed the tooltip volume indicator which wasn't supported on Windows 11 and was buggy on Windows 10.</li>
 </ul>]]></content>
     </entry>
 </feed>

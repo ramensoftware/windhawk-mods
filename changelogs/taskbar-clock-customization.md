@@ -1,3 +1,6 @@
+## 1.1.1 ([May 20, 2023](https://github.com/ramensoftware/windhawk-mods/blob/9c814a48137a68e5e1262b98d84be86b08ab96e9/mods/taskbar-clock-customization.wh.cpp))
+
+* Fixed the first clock line flashing on hover on Windows 11 version 22H2 and newer.
 ## 1.1 ([May 20, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0718eb23fbfa530f9a7bc1c1892f071db8b4fb41/mods/taskbar-clock-customization.wh.cpp))
 
 * Added settings for text styles, such as the font color and size, for Windows 11 version 22H2 and newer.
