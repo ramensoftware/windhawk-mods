@@ -540,7 +540,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 78,
-                "updated": 1680644384000,
+                "updated": 1684607838000,
                 "users": 2377
             },
             "featured": true,
@@ -549,7 +549,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lole32 -lversion -lwininet",
+                "compilerOptions": "-D__USE_MINGW_ANSI_STDIO=0 -lole32 -loleaut32 -lversion -lwininet",
                 "description": "Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -558,7 +558,7 @@
                 ],
                 "name": "Taskbar Clock Customization",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.9"
+                "version": "1.1"
             }
         },
         "taskbar-grouping": {

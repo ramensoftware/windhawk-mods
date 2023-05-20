@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-05-19T15:14:10.000Z</updated>
+    <updated>2023-05-20T18:37:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#0718eb23fbfa530f9a7bc1c1892f071db8b4fb41</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2023-05-20T18:37:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added settings for text styles, such as the font color and size, for Windows 11 version 22H2 and newer.</li>
+<li>Added the <code>%timezone%</code> pattern for the time zone in ISO 8601 format.</li>
+<li>Fixed handling of the "Web content end" value.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.0]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#dd94ba0dad734db104daf98094a6497bb2911039</id>
@@ -263,17 +274,5 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
 <li>Removed the ugly border in the Windows 10 volume indicator.</li>
 <li>Removed the tooltip volume indicator which wasn't supported on Windows 11 and was buggy on Windows 10.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[More space in language indicator 1.0]]></title>
-        <id>https://windhawk.net/mods/more-space-in-language-indicator#dedd12082874eb7de1f055814b16b3f8446d0f82</id>
-        <link href="https://windhawk.net/mods/more-space-in-language-indicator"/>
-        <updated>2023-04-01T12:22:07.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="morespaceinlanguageindicator">More space in language indicator</h1>
-<p>Enables to see two lines in the language indicator with small taskbar icons
-(Windows 10).</p>
-<p>Example:</p>
-<p><img src="https://i.imgur.com/VztpH9B.png" alt="Screenshot" /></p>
-<p>By default, Windows only shows a single line (ENG) with small taskbar buttons.</p>]]></content>
     </entry>
 </feed>

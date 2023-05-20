@@ -1,3 +1,8 @@
+## 1.1 ([May 20, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0718eb23fbfa530f9a7bc1c1892f071db8b4fb41/mods/taskbar-clock-customization.wh.cpp))
+
+* Added settings for text styles, such as the font color and size, for Windows 11 version 22H2 and newer.
+* Added the `%timezone%` pattern for the time zone in ISO 8601 format.
+* Fixed handling of the "Web content end" value.
 ## 1.0.9 ([Apr 4, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f053e22f61b37e9561a8de8786541dd79be955f1/mods/taskbar-clock-customization.wh.cpp))
 
 * Added a feature that allows the user to customize the spacing between each line in the clock. Along with supporting custom text spacing, no spacing will be used if the user specifies no text for the bottom and middle lines, allowing one line on a large taskbar. Contributed by Nightlinbit.

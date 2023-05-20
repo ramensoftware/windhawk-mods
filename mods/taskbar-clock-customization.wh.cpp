@@ -2,14 +2,14 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.0.9
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lversion -lwininet
+// @compilerOptions -D__USE_MINGW_ANSI_STDIO=0 -lole32 -loleaut32 -lversion -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -29,8 +29,8 @@ a news feed, and more.
 
 Only Windows 10 64-bit and Windows 11 are supported.
 
-Note: To customize the old taskbar on Windows 11 (if using Explorer Patcher or a
-similar tool), enable the relevant option in the mod's settings.
+**Note:** To customize the old taskbar on Windows 11 (if using Explorer Patcher
+or a similar tool), enable the relevant option in the mod's settings.
 
 ![Screenshot](https://i.imgur.com/gM9kbH5.png)
 
@@ -52,8 +52,16 @@ patterns can be used:
   of week according to the system configuration.
 * `%weeknum_iso%` - the [ISO week
   number](https://en.wikipedia.org/wiki/ISO_week_date).
+* `%timezone%` - the time zone in ISO 8601 format.
 * `%web%` - the web contents as configured in settings, truncated with ellipsis.
 * `%web_full%` - the full web contents as configured in settings.
+
+## Text styles
+
+For Windows 11 version 22H2 and newer, the mod allows to change the clock text
+styles, such as the font color and size.
+
+![Screenshot](https://i.imgur.com/3JiXwjT.png)
 */
 // ==/WindhawkModReadme==
 
@@ -65,18 +73,21 @@ patterns can be used:
     hh':'mm':'ss tt
   $name: Time format
   $description: >-
-    Leave empty for the default format, for syntax see:
+    Leave empty for the default format, for syntax refer to the following page:
+
     https://docs.microsoft.com/en-us/windows/win32/api/datetimeapi/nf-datetimeapi-gettimeformatex#remarks
 - DateFormat: >-
     ddd',' MMM dd yyyy
   $name: Date format
   $description: >-
-    Leave empty for the default format, for syntax see:
+    Leave empty for the default format, for syntax refer to the following page:
+
     https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
 - WeekdayFormat: dddd
   $name: Week day format
   $description: >-
-    Leave empty for the default format, for syntax see:
+    Leave empty for the default format, for syntax refer to the following page:
+
     https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
 - TopLine: '%date% | %time%'
   $name: Top line
@@ -121,14 +132,133 @@ patterns can be used:
 - WebContentsUpdateInterval: 10
   $name: Web content update interval
   $description: The update interval, in minutes, of the web content
+- TimeStyle:
+  - Visible: true
+  - TextColor: ""
+    $name: Text color
+    $description: >-
+      Can be a color name (Red, Black, ...) or an RGB/ARGB color code (like
+      #00FF00, #CC00FF00, ...)
+  - FontSize: 0
+    $name: Font size
+    $description: Set to zero for the default size
+  - FontFamily: ""
+    $name: Font family
+    $description: >-
+      For a list of fonts that are shipped with Windows 11, refer to the
+      following page:
+
+      https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
+  - FontWeight: ""
+    $name: Font weight
+    $options:
+    - "": Default
+    - Thin: Thin
+    - ExtraLight: Extra light
+    - Light: Light
+    - SemiLight: Semi light
+    - Normal: Normal
+    - Medium: Medium
+    - SemiBold: Semi bold
+    - Bold: Bold
+    - ExtraBold: Extra bold
+    - Black: Black
+    - ExtraBlack: Extra black
+  - FontStyle: ""
+    $name: Font style
+    $options:
+    - "": Default
+    - Normal: Normal
+    - Oblique: Oblique
+    - Italic: Italic
+  - FontStretch: ""
+    $name: Font stretch
+    $description: Only supported for some fonts
+    $options:
+    - "": Default
+    - Undefined: Undefined
+    - UltraCondensed: Ultra condensed
+    - ExtraCondensed: Extra condensed
+    - Condensed: Condensed
+    - SemiCondensed: Semi condensed
+    - Normal: Normal
+    - SemiExpanded: Semi expanded
+    - Expanded: Expanded
+    - ExtraExpanded: Extra expanded
+    - UltraExpanded: Ultra expanded
+  - CharacterSpacing: 0
+    $name: Character spacing
+    $description: Can be a positive or a negative number
+  $name: Top line style (Windows 11 version 22H2 and newer)
+  $description: Hover over the clock to apply the style
+- DateStyle:
+  - TextColor: ""
+    $name: Text color
+    $description: >-
+      Can be a color name (Red, Black, ...) or an RGB/ARGB color code (like
+      #00FF00, #CC00FF00, ...)
+  - FontSize: 0
+    $name: Font size
+    $description: Set to zero for the default size
+  - FontFamily: ""
+    $name: Font family
+    $description: >-
+      For a list of fonts that are shipped with Windows 11, refer to the
+      following page:
+
+      https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
+  - FontWeight: ""
+    $name: Font weight
+    $options:
+    - "": Default
+    - Thin: Thin
+    - ExtraLight: Extra light
+    - Light: Light
+    - SemiLight: Semi light
+    - Normal: Normal
+    - Medium: Medium
+    - SemiBold: Semi bold
+    - Bold: Bold
+    - ExtraBold: Extra bold
+    - Black: Black
+    - ExtraBlack: Extra black
+  - FontStyle: ""
+    $name: Font style
+    $options:
+    - "": Default
+    - Normal: Normal
+    - Oblique: Oblique
+    - Italic: Italic
+  - FontStretch: ""
+    $name: Font stretch
+    $description: Only supported for some fonts
+    $options:
+    - "": Default
+    - Undefined: Undefined
+    - UltraCondensed: Ultra condensed
+    - ExtraCondensed: Extra condensed
+    - Condensed: Condensed
+    - SemiCondensed: Semi condensed
+    - Normal: Normal
+    - SemiExpanded: Semi expanded
+    - Expanded: Expanded
+    - ExtraExpanded: Extra expanded
+    - UltraExpanded: Ultra expanded
+  - CharacterSpacing: 0
+    $name: Character spacing
+    $description: Can be a positive or a negative number
+  $name: Bottom line style (Windows 11 version 22H2 and newer)
+  $description: Hover over the clock to apply the style
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: Disable and re-enable the mod to
-    apply this option.
+    Explorer Patcher or a similar tool). Note: For Windhawk versions older
+    than 1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
+
+#undef GetCurrentTime
 
 #include <algorithm>
 #include <string>
@@ -141,24 +271,68 @@ patterns can be used:
 #include <shlobj.h>
 #include <wininet.h>
 
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+
+using namespace winrt::Windows::UI::Xaml;
+
+class StringSetting {
+   public:
+    StringSetting() = default;
+    StringSetting(PCWSTR valueName) : m_stringSetting(valueName) {}
+    operator PCWSTR() const { return m_stringSetting.get(); }
+    PCWSTR get() const { return m_stringSetting.get(); }
+
+   private:
+    // https://stackoverflow.com/a/51274008
+    template <auto fn>
+    struct deleter_from_fn {
+        template <typename T>
+        constexpr void operator()(T* arg) const {
+            fn(arg);
+        }
+    };
+    using string_setting_unique_ptr =
+        std::unique_ptr<const WCHAR[], deleter_from_fn<Wh_FreeStringSetting>>;
+
+    string_setting_unique_ptr m_stringSetting;
+};
+
+struct TextStyleSettings {
+    bool visible;
+    StringSetting textColor;
+    int fontSize;
+    StringSetting fontFamily;
+    StringSetting fontWeight;
+    StringSetting fontStyle;
+    StringSetting fontStretch;
+    int characterSpacing;
+};
+
 struct {
     bool showSeconds;
-    PCWSTR timeFormat;
-    PCWSTR dateFormat;
-    PCWSTR weekdayFormat;
-    PCWSTR topLine;
-    PCWSTR bottomLine;
-    PCWSTR middleLine;
-    PCWSTR tooltipLine;
+    StringSetting timeFormat;
+    StringSetting dateFormat;
+    StringSetting weekdayFormat;
+    StringSetting topLine;
+    StringSetting bottomLine;
+    StringSetting middleLine;
+    StringSetting tooltipLine;
     int width;
     int height;
     int textSpacing;
-    PCWSTR webContentsUrl;
-    PCWSTR webContentsBlockStart;
-    PCWSTR webContentsStart;
-    PCWSTR webContentsEnd;
+    StringSetting webContentsUrl;
+    StringSetting webContentsBlockStart;
+    StringSetting webContentsStart;
+    StringSetting webContentsEnd;
     int webContentsMaxLength;
     int webContentsUpdateInterval;
+    TextStyleSettings timeStyle;
+    TextStyleSettings dateStyle;
+    bool oldTaskbarOnWin11;
 } g_settings;
 
 #define FORMATTED_BUFFER_SIZE 256
@@ -179,6 +353,7 @@ WCHAR g_weekdayFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_weekdayNumFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_weeknumFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_weeknumIsoFormatted[FORMATTED_BUFFER_SIZE];
+WCHAR g_timezoneFormatted[FORMATTED_BUFFER_SIZE];
 WCHAR g_webContent[FORMATTED_BUFFER_SIZE];
 WCHAR g_webContentFull[FORMATTED_BUFFER_SIZE];
 
@@ -293,7 +468,7 @@ bool UpdateWebContent() {
         if (start) {
             start += wcslen(g_settings.webContentsStart);
 
-            PWSTR end = wcsstr(block, g_settings.webContentsEnd);
+            PWSTR end = wcsstr(start, g_settings.webContentsEnd);
             if (end) {
                 *end = L'\0';
 
@@ -493,18 +668,43 @@ int CalculateWeeknumIso(const SYSTEMTIME* time) {
     return WeekNumber;
 }
 
+// Adopted from:
+// https://github.com/microsoft/cpp_client_telemetry/blob/25bc0806f21ecb2587154494f073bfa581cd5089/lib/pal/desktop/WindowsEnvironmentInfo.hpp#L39
+void GetTimeZone(WCHAR* buffer, size_t bufferSize) {
+    long bias;
+
+    TIME_ZONE_INFORMATION timeZone = {};
+    if (GetTimeZoneInformation(&timeZone) == TIME_ZONE_ID_DAYLIGHT) {
+        bias = timeZone.Bias + timeZone.DaylightBias;
+    } else {
+        // TODO: [MG] - ref.
+        // https://docs.microsoft.com/en-us/windows/win32/api/timezoneapi/nf-timezoneapi-gettimezoneinformation
+        // Need to handle the case when API return TIME_ZONE_ID_UNKNOWN.
+        // Otherwise we may be reporting invalid timeZone.Bias
+        bias = timeZone.Bias + timeZone.StandardBias;
+    }
+
+    auto hours = (long long)abs(bias) / 60;
+    auto minutes = (long long)abs(bias) % 60;
+
+    // UTC = local time + bias; bias sign should be interved.
+    _snwprintf_s(buffer, bufferSize, _TRUNCATE, L"%c%02d:%02d",
+                 bias <= 0 ? L'+' : L'-', static_cast<int>(hours),
+                 static_cast<int>(minutes));
+}
+
 void InitializeFormattedStrings(const SYSTEMTIME* time) {
     GetTimeFormatEx_Original(
         nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
-        *g_settings.timeFormat ? g_settings.timeFormat : nullptr,
+        *g_settings.timeFormat ? g_settings.timeFormat.get() : nullptr,
         g_timeFormatted, ARRAYSIZE(g_timeFormatted));
     GetDateFormatEx_Original(
         nullptr, DATE_AUTOLAYOUT, time,
-        *g_settings.dateFormat ? g_settings.dateFormat : nullptr,
+        *g_settings.dateFormat ? g_settings.dateFormat.get() : nullptr,
         g_dateFormatted, ARRAYSIZE(g_dateFormatted), nullptr);
     GetDateFormatEx_Original(
         nullptr, DATE_AUTOLAYOUT, time,
-        *g_settings.weekdayFormat ? g_settings.weekdayFormat : nullptr,
+        *g_settings.weekdayFormat ? g_settings.weekdayFormat.get() : nullptr,
         g_weekdayFormatted, ARRAYSIZE(g_weekdayFormatted), nullptr);
 
     // https://stackoverflow.com/a/39344961
@@ -523,6 +723,8 @@ void InitializeFormattedStrings(const SYSTEMTIME* time) {
                CalculateWeeknum(time, startDayOfWeek));
 
     swprintf_s(g_weeknumIsoFormatted, L"%d", CalculateWeeknumIso(time));
+
+    GetTimeZone(g_timezoneFormatted, ARRAYSIZE(g_timezoneFormatted));
 }
 
 int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format) {
@@ -559,6 +761,10 @@ int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format) {
                                sizeof("%weeknum_iso%") - 1) == 0) {
                 srcStr = g_weeknumIsoFormatted;
                 formatTokenLen = sizeof("%weeknum_iso%") - 1;
+            } else if (wcsncmp(L"%timezone%", format,
+                               sizeof("%timezone%") - 1) == 0) {
+                srcStr = g_timezoneFormatted;
+                formatTokenLen = sizeof("%timezone%") - 1;
             } else if (wcsncmp(L"%web%", format, sizeof("%web%") - 1) == 0) {
                 srcStr = *g_webContent ? g_webContent : L"Loading...";
                 formatTokenLen = sizeof("%web%") - 1;
@@ -612,6 +818,17 @@ using ClockSystemTrayIconDataModel_GetTimeToolTipString_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
 ClockSystemTrayIconDataModel_GetTimeToolTipString_t
     ClockSystemTrayIconDataModel_GetTimeToolTipString_Original;
+
+using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(LPVOID pThis);
+DateTimeIconContent_OnApplyTemplate_t
+    DateTimeIconContent_OnApplyTemplate_Original;
+
+using DateTimeIconContent_OnPointerEntered_t = void(WINAPI*)(LPVOID pThis,
+                                                             LPVOID pArgs);
+DateTimeIconContent_OnPointerEntered_t
+    DateTimeIconContent_OnPointerEntered_Original;
+
+void* DateTimeIconContent_vftable;
 
 using ClockSystemTrayIconDataModel_GetTimeToolTipString_2_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
@@ -707,6 +924,211 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook(LPVOID pThis,
     g_inGetTimeToolTipString = false;
 
     return ret;
+}
+
+FrameworkElement FindChildByName(FrameworkElement element,
+                                 winrt::hstring name) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
+            continue;
+        }
+
+        if (child.Name() == name) {
+            return child;
+        }
+    }
+
+    return nullptr;
+}
+
+void ApplyTextBlockStyles(Controls::TextBlock textBlock,
+                          const TextStyleSettings& textStyleSettings) {
+    if (!textStyleSettings.visible) {
+        textBlock.Visibility(Visibility::Collapsed);
+        return;
+    }
+
+    textBlock.Visibility(Visibility::Visible);
+
+    if (*textStyleSettings.textColor) {
+        auto textColor =
+            Markup::XamlBindingHelper::ConvertValue(
+                winrt::xaml_typename<winrt::Windows::UI::Color>(),
+                winrt::box_value(textStyleSettings.textColor.get()))
+                .as<winrt::Windows::UI::Color>();
+        textBlock.Foreground(Media::SolidColorBrush{textColor});
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::ForegroundProperty());
+    }
+
+    if (textStyleSettings.fontSize) {
+        textBlock.FontSize(textStyleSettings.fontSize);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::FontSizeProperty());
+    }
+
+    if (*textStyleSettings.fontFamily) {
+        auto fontFamily =
+            Markup::XamlBindingHelper::ConvertValue(
+                winrt::xaml_typename<Media::FontFamily>(),
+                winrt::box_value(textStyleSettings.fontFamily.get()))
+                .as<Media::FontFamily>();
+        textBlock.FontFamily(fontFamily);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::FontFamilyProperty());
+    }
+
+    if (*textStyleSettings.fontWeight) {
+        auto fontWeight =
+            Markup::XamlBindingHelper::ConvertValue(
+                winrt::xaml_typename<winrt::Windows::UI::Text::FontWeight>(),
+                winrt::box_value(textStyleSettings.fontWeight.get()))
+                .as<winrt::Windows::UI::Text::FontWeight>();
+        textBlock.FontWeight(fontWeight);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::FontWeightProperty());
+    }
+
+    if (*textStyleSettings.fontStyle) {
+        auto fontStyle =
+            Markup::XamlBindingHelper::ConvertValue(
+                winrt::xaml_typename<winrt::Windows::UI::Text::FontStyle>(),
+                winrt::box_value(textStyleSettings.fontStyle.get()))
+                .as<winrt::Windows::UI::Text::FontStyle>();
+        textBlock.FontStyle(fontStyle);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::FontStyleProperty());
+    }
+
+    if (*textStyleSettings.fontStretch) {
+        auto fontStretch =
+            Markup::XamlBindingHelper::ConvertValue(
+                winrt::xaml_typename<winrt::Windows::UI::Text::FontStretch>(),
+                winrt::box_value(textStyleSettings.fontStretch.get()))
+                .as<winrt::Windows::UI::Text::FontStretch>();
+        textBlock.FontStretch(fontStretch);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::FontStretchProperty());
+    }
+
+    if (textStyleSettings.characterSpacing) {
+        textBlock.CharacterSpacing(textStyleSettings.characterSpacing);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::CharacterSpacingProperty());
+    }
+}
+
+void ApplyDateTimeIconContentStyles(
+    FrameworkElement dateTimeIconContentElement) {
+    auto containerGridElement =
+        FindChildByName(dateTimeIconContentElement, L"ContainerGrid")
+            .as<Controls::Grid>();
+    if (!containerGridElement) {
+        return;
+    }
+
+    auto stackPanelChildren = containerGridElement.Children()
+                                  .GetAt(0)
+                                  .as<Controls::StackPanel>()
+                                  .Children();
+
+    Controls::TextBlock dateInnerTextBlock;
+    Controls::TextBlock timeInnerTextBlock;
+
+    for (const auto& child : stackPanelChildren) {
+        auto childTextBlock = child.try_as<Controls::TextBlock>();
+        if (!childTextBlock) {
+            continue;
+        }
+
+        if (childTextBlock.Name() == L"DateInnerTextBlock") {
+            dateInnerTextBlock = childTextBlock;
+            continue;
+        }
+
+        if (childTextBlock.Name() == L"TimeInnerTextBlock") {
+            timeInnerTextBlock = childTextBlock;
+            continue;
+        }
+    }
+
+    if (dateInnerTextBlock) {
+        ApplyTextBlockStyles(dateInnerTextBlock, g_settings.dateStyle);
+    }
+
+    if (timeInnerTextBlock) {
+        ApplyTextBlockStyles(timeInnerTextBlock, g_settings.timeStyle);
+    }
+}
+
+void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
+    Wh_Log(L">");
+
+    DateTimeIconContent_OnApplyTemplate_Original(pThis);
+
+    IUnknown* dateTimeIconContentElementIUnknownPtr = *((IUnknown**)pThis + 1);
+    if (!dateTimeIconContentElementIUnknownPtr) {
+        return;
+    }
+
+    FrameworkElement dateTimeIconContentElement = nullptr;
+    dateTimeIconContentElementIUnknownPtr->QueryInterface(
+        winrt::guid_of<FrameworkElement>(),
+        winrt::put_abi(dateTimeIconContentElement));
+    if (!dateTimeIconContentElement) {
+        return;
+    }
+
+    try {
+        ApplyDateTimeIconContentStyles(dateTimeIconContentElement);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
+}
+
+void WINAPI DateTimeIconContent_OnPointerEntered_Hook(LPVOID pThis,
+                                                      LPVOID pArgs) {
+    Wh_Log(L">");
+
+    DateTimeIconContent_OnPointerEntered_Original(pThis, pArgs);
+
+    if (!DateTimeIconContent_vftable ||
+        *(void**)pThis != DateTimeIconContent_vftable) {
+        return;
+    }
+
+    IUnknown* dateTimeIconContentElementIUnknownPtr = *((IUnknown**)pThis + 1);
+    if (!dateTimeIconContentElementIUnknownPtr) {
+        return;
+    }
+
+    FrameworkElement dateTimeIconContentElement = nullptr;
+    dateTimeIconContentElementIUnknownPtr->QueryInterface(
+        winrt::guid_of<FrameworkElement>(),
+        winrt::put_abi(dateTimeIconContentElement));
+    if (!dateTimeIconContentElement) {
+        return;
+    }
+
+    try {
+        ApplyDateTimeIconContentStyles(dateTimeIconContentElement);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
 }
 
 LPVOID WINAPI
@@ -1338,20 +1760,38 @@ void LoadSettings() {
     g_settings.webContentsMaxLength = Wh_GetIntSetting(L"WebContentsMaxLength");
     g_settings.webContentsUpdateInterval =
         Wh_GetIntSetting(L"WebContentsUpdateInterval");
-}
 
-void FreeSettings() {
-    Wh_FreeStringSetting(g_settings.timeFormat);
-    Wh_FreeStringSetting(g_settings.dateFormat);
-    Wh_FreeStringSetting(g_settings.weekdayFormat);
-    Wh_FreeStringSetting(g_settings.topLine);
-    Wh_FreeStringSetting(g_settings.bottomLine);
-    Wh_FreeStringSetting(g_settings.middleLine);
-    Wh_FreeStringSetting(g_settings.tooltipLine);
-    Wh_FreeStringSetting(g_settings.webContentsUrl);
-    Wh_FreeStringSetting(g_settings.webContentsBlockStart);
-    Wh_FreeStringSetting(g_settings.webContentsStart);
-    Wh_FreeStringSetting(g_settings.webContentsEnd);
+    g_settings.timeStyle.visible = Wh_GetIntSetting(L"TimeStyle.Visible");
+    g_settings.timeStyle.textColor =
+        Wh_GetStringSetting(L"TimeStyle.TextColor");
+    g_settings.timeStyle.fontSize = Wh_GetIntSetting(L"TimeStyle.FontSize");
+    g_settings.timeStyle.fontFamily =
+        Wh_GetStringSetting(L"TimeStyle.FontFamily");
+    g_settings.timeStyle.fontWeight =
+        Wh_GetStringSetting(L"TimeStyle.FontWeight");
+    g_settings.timeStyle.fontStyle =
+        Wh_GetStringSetting(L"TimeStyle.FontStyle");
+    g_settings.timeStyle.fontStretch =
+        Wh_GetStringSetting(L"TimeStyle.FontStretch");
+    g_settings.timeStyle.characterSpacing =
+        Wh_GetIntSetting(L"TimeStyle.CharacterSpacing");
+
+    g_settings.dateStyle.visible = Wh_GetIntSetting(L"DateStyle.Visible");
+    g_settings.dateStyle.textColor =
+        Wh_GetStringSetting(L"DateStyle.TextColor");
+    g_settings.dateStyle.fontSize = Wh_GetIntSetting(L"DateStyle.FontSize");
+    g_settings.dateStyle.fontFamily =
+        Wh_GetStringSetting(L"DateStyle.FontFamily");
+    g_settings.dateStyle.fontWeight =
+        Wh_GetStringSetting(L"DateStyle.FontWeight");
+    g_settings.dateStyle.fontStyle =
+        Wh_GetStringSetting(L"DateStyle.FontStyle");
+    g_settings.dateStyle.fontStretch =
+        Wh_GetStringSetting(L"DateStyle.FontStretch");
+    g_settings.dateStyle.characterSpacing =
+        Wh_GetIntSetting(L"DateStyle.CharacterSpacing");
+
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
 void ApplySettingsWin11() {
@@ -1451,14 +1891,15 @@ void ApplySettings() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    LoadSettings();
+
     g_winVersion = GetWindowsVersion();
     if (g_winVersion == WinVersion::Unsupported) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
-    if (g_winVersion >= WinVersion::Win11 &&
-        Wh_GetIntSetting(L"oldTaskbarOnWin11")) {
+    if (g_winVersion >= WinVersion::Win11 && g_settings.oldTaskbarOnWin11) {
         g_winVersion = WinVersion::Win10;
     }
 
@@ -1467,25 +1908,6 @@ BOOL Wh_ModInit() {
         pGetDpiForWindow =
             (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
     }
-
-    SYMBOL_HOOK taskbarHooks11_22H2[] = {
-        {
-            {
-                LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))",
-                LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
-            },
-            (void**)&ClockSystemTrayIconDataModel_RefreshIcon_Original,
-            (void*)ClockSystemTrayIconDataModel_RefreshIcon_Hook,
-        },
-        {
-            {
-                LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))",
-                LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const & __ptr64,struct _SYSTEMTIME const & __ptr64,class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
-            },
-            (void**)&ClockSystemTrayIconDataModel_GetTimeToolTipString_Original,
-            (void*)ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook,
-            true,
-        }};
 
     SYMBOL_HOOK taskbarHooks11[] = {
         {
@@ -1507,12 +1929,39 @@ BOOL Wh_ModInit() {
         },
         {
             {
+                LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))",
+                LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void) __ptr64)",
+            },
+            (void**)&DateTimeIconContent_OnApplyTemplate_Original,
+            (void*)DateTimeIconContent_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: __cdecl winrt::Windows::UI::Xaml::Controls::IControlOverridesT<struct winrt::SystemTray::implementation::DateTimeIconContent>::OnPointerEntered(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &)const )",
+                LR"(public: __cdecl winrt::Windows::UI::Xaml::Controls::IControlOverridesT<struct winrt::SystemTray::implementation::DateTimeIconContent>::OnPointerEntered(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const & __ptr64)const __ptr64)",
+            },
+            (void**)&DateTimeIconContent_OnPointerEntered_Original,
+            (void*)DateTimeIconContent_OnPointerEntered_Hook,
+            true,
+        },
+        {
+            {
+                LR"(const winrt::SystemTray::implementation::DateTimeIconContent::`vftable')",
+                LR"(const winrt::SystemTray::implementation::DateTimeIconContent::`vftable' __ptr64)",
+            },
+            &DateTimeIconContent_vftable,
+            nullptr,
+            true,
+        },
+        {
+            {
                 LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME *,struct _TIME_DYNAMIC_ZONE_INFORMATION *,class SystemTrayTelemetry::ClockUpdate &))",
                 LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME * __ptr64,struct _TIME_DYNAMIC_ZONE_INFORMATION * __ptr64,class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
             },
             (void**)&ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Original,
             (void*)ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Hook,
-            true,
+            true,  // Until Windows 11 version 21H2.
         },
         {
             {
@@ -1521,7 +1970,9 @@ BOOL Wh_ModInit() {
             },
             (void**)&ICalendar_Second_Original,
             (void*)ICalendar_Second_Hook,
-        }};
+            true,  // Until Windows 11 version 21H2.
+        },
+    };
 
     SYMBOL_HOOK taskbarHooks10[] = {
         {
@@ -1563,7 +2014,8 @@ BOOL Wh_ModInit() {
                 LR"(protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange(bool) __ptr64)",
             },
             (void**)&ClockButton_v_OnDisplayStateChange_Original,
-        }};
+        },
+    };
 
     if (g_winVersion <= WinVersion::Win10) {
         if (!HookSymbols(GetModuleHandle(nullptr), taskbarHooks10,
@@ -1578,6 +2030,8 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
+        HMODULE module = nullptr;
+
         if (g_winVersion == WinVersion::Win11) {
             WCHAR szTargetDllPath[MAX_PATH];
             wcscpy_s(szTargetDllPath, szWindowsDirectory);
@@ -1585,7 +2039,7 @@ BOOL Wh_ModInit() {
                 szTargetDllPath,
                 LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
 
-            HMODULE module = GetModuleHandle(szTargetDllPath);
+            module = GetModuleHandle(szTargetDllPath);
             if (!module) {
                 // Try to load dependency DLLs. At process start, if they're not
                 // loaded, loading the ExplorerExtensions DLL fails.
@@ -1622,15 +2076,6 @@ BOOL Wh_ModInit() {
 
                 module = LoadLibraryEx(szTargetDllPath, nullptr,
                                        LOAD_WITH_ALTERED_SEARCH_PATH);
-                if (!module) {
-                    Wh_Log(L"LoadLibrary failed");
-                    return FALSE;
-                }
-            }
-
-            if (!HookSymbols(module, taskbarHooks11,
-                             ARRAYSIZE(taskbarHooks11))) {
-                return FALSE;
             }
         } else {
             WCHAR szTargetDllPath[MAX_PATH];
@@ -1639,17 +2084,17 @@ BOOL Wh_ModInit() {
                 szTargetDllPath,
                 LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
 
-            HMODULE module = LoadLibraryEx(szTargetDllPath, nullptr,
-                                           LOAD_WITH_ALTERED_SEARCH_PATH);
-            if (!module) {
-                Wh_Log(L"LoadLibrary failed");
-                return FALSE;
-            }
+            module = LoadLibraryEx(szTargetDllPath, nullptr,
+                                   LOAD_WITH_ALTERED_SEARCH_PATH);
+        }
 
-            if (!HookSymbols(module, taskbarHooks11_22H2,
-                             ARRAYSIZE(taskbarHooks11_22H2))) {
-                return FALSE;
-            }
+        if (!module) {
+            Wh_Log(L"Failed loading Taskbar View module");
+            return FALSE;
+        }
+
+        if (!HookSymbols(module, taskbarHooks11, ARRAYSIZE(taskbarHooks11))) {
+            return FALSE;
         }
     }
 
@@ -1704,15 +2149,13 @@ BOOL Wh_ModInit() {
                            (void**)&GetDateFormatEx_Original);
     }
 
-    LoadSettings();
-
-    WebContentUpdateThreadInit();
-
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
+
+    WebContentUpdateThreadInit();
 
     ApplySettings();
 }
@@ -1722,16 +2165,36 @@ void Wh_ModUninit() {
 
     WebContentUpdateThreadUninit();
 
-    FreeSettings();
     ApplySettings();
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
     WebContentUpdateThreadUninit();
 
-    FreeSettings();
+    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+
+    LoadSettings();
+
+    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+    if (*bReload) {
+        return TRUE;
+    }
+
+    WebContentUpdateThreadInit();
+
+    ApplySettings();
+
+    return TRUE;
+}
+
+// For pre-1.3 Windhawk compatibility.
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"> pre-1.3");
+
+    WebContentUpdateThreadUninit();
+
     LoadSettings();
 
     WebContentUpdateThreadInit();
