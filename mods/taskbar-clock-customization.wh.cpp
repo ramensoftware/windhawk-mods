@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -258,9 +258,8 @@ styles, such as the font color and size.
 */
 // ==/WindhawkModSettings==
 
-#undef GetCurrentTime
-
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -270,6 +269,8 @@ styles, such as the font color and size.
 #include <knownfolders.h>
 #include <shlobj.h>
 #include <wininet.h>
+
+#undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -302,7 +303,7 @@ class StringSetting {
 };
 
 struct TextStyleSettings {
-    bool visible;
+    std::optional<bool> visible;
     StringSetting textColor;
     int fontSize;
     StringSetting fontFamily;
@@ -948,12 +949,14 @@ FrameworkElement FindChildByName(FrameworkElement element,
 
 void ApplyTextBlockStyles(Controls::TextBlock textBlock,
                           const TextStyleSettings& textStyleSettings) {
-    if (!textStyleSettings.visible) {
-        textBlock.Visibility(Visibility::Collapsed);
-        return;
-    }
+    if (textStyleSettings.visible) {
+        if (!*textStyleSettings.visible) {
+            textBlock.Visibility(Visibility::Collapsed);
+            return;
+        }
 
-    textBlock.Visibility(Visibility::Visible);
+        textBlock.Visibility(Visibility::Visible);
+    }
 
     if (*textStyleSettings.textColor) {
         auto textColor =
@@ -1776,7 +1779,6 @@ void LoadSettings() {
     g_settings.timeStyle.characterSpacing =
         Wh_GetIntSetting(L"TimeStyle.CharacterSpacing");
 
-    g_settings.dateStyle.visible = Wh_GetIntSetting(L"DateStyle.Visible");
     g_settings.dateStyle.textColor =
         Wh_GetStringSetting(L"DateStyle.TextColor");
     g_settings.dateStyle.fontSize = Wh_GetIntSetting(L"DateStyle.FontSize");
