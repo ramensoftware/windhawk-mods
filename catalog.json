@@ -131,6 +131,29 @@
                 "version": "1.0.0"
             }
         },
+        "flight-simulator-focus-helper": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1688766152000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1688766152000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32",
+                "description": "Makes the game window active on mouse hover and inactive on mouse leave",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "FlightSimulator.exe"
+                ],
+                "name": "Flight Simulator window focus helper",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "hide-search-bar": {
             "details": {
                 "defaultSorting": 1476,
