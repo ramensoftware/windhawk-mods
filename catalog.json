@@ -154,6 +154,29 @@
                 "version": "1.0"
             }
         },
+        "force-thick-frames": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1688844521000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1688844521000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Alcatel",
+                "description": "Force windows to have thick frames like in Windows Vista/7",
+                "exclude": [
+                    "notepad++.exe"
+                ],
+                "github": "https://github.com/arukateru",
+                "include": [
+                    "*"
+                ],
+                "name": "Force thick frames",
+                "version": "2"
+            }
+        },
         "hide-search-bar": {
             "details": {
                 "defaultSorting": 1485,
