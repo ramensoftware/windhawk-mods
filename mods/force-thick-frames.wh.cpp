@@ -12,6 +12,7 @@
 // ==WindhawkModReadme== 
  /*  
  Force windows to have thick frames like in Windows Vista/7. This theme should already have thick borders (so like, not the default Windows 10 or 11 theme)
+ 
  ![Screenshot](https://raw.githubusercontent.com/arukateru/ThickFramer/main/251890469-a04311e7-bbed-449f-9c92-79c642c36005.png) 
  */ 
 // ==/WindhawkModReadme== 
