@@ -9,15 +9,14 @@
 // @exclude         notepad++.exe
 // ==/WindhawkMod==
 
- // ==WindhawkModReadme== 
+// ==WindhawkModReadme== 
  /*  
  Force windows to have thick frames like in Windows Vista/7. This theme should already have thick borders (so like, not the default Windows 10 or 11 theme)
- ![Screenshot](https://user-images.githubusercontent.com/84914212/251890469-a04311e7-bbed-449f-9c92-79c642c36005.png) 
+ ![Screenshot](https://raw.githubusercontent.com/arukateru/ThickFramer/main/251890469-a04311e7-bbed-449f-9c92-79c642c36005.png) 
  */ 
- // ==/WindhawkModReadme== 
- 
- using PUNICODE_STRING = PVOID;
+// ==/WindhawkModReadme== 
 
+using PUNICODE_STRING = PVOID;
 // https://github.com/sandboxie-plus/Sandboxie/blob/294966c7d6e99cd153ede87ad09aa39ef29e34c3/Sandboxie/core/dll/Win32.c#L25
 using NtUserCreateWindowEx_t =
     NTSTATUS(WINAPI*)(DWORD dwExStyle,
