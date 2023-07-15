@@ -1,3 +1,6 @@
+## 1.2 ([Jul 15, 2023](https://github.com/ramensoftware/windhawk-mods/blob/16e1e6b2ef632628f27b36f035ada31cc904e97d/mods/taskbar-volume-control.wh.cpp))
+
+* Added support for the old taskbar on Windows 11 (e.g. with Explorer Patcher).
 ## 1.1.1 ([Jul 15, 2023](https://github.com/ramensoftware/windhawk-mods/blob/976339b249645ff6874144f4037886085e0f1411/mods/taskbar-volume-control.wh.cpp))
 
 * Fixed a crash in Windows 11 version 21H2.
