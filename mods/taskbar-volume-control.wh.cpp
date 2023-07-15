@@ -2,7 +2,7 @@
 // @id              taskbar-volume-control
 // @name            Taskbar Volume Control
 // @description     Control the system volume by scrolling over the taskbar
-// @version         1.1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -67,6 +67,12 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
     Allows to configure the volume change that will occur with each notch of
     mouse wheel movement. This option has effect only for the Windows 11, None
     control indicators. For the Windows 11 indicator, must be a multiple of 2.
+- oldTaskbarOnWin11: false
+  $name: Customize the old taskbar on Windows 11
+  $description: >-
+    Enable this option to customize the old taskbar on Windows 11 (if using
+    Explorer Patcher or a similar tool). Note: For Windhawk versions older
+    than 1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
 
@@ -101,6 +107,7 @@ struct {
     bool middleClickToMute;
     bool noAutomaticMuteToggle;
     int volumeChangeStep;
+    bool oldTaskbarOnWin11;
 } g_settings;
 
 bool g_initialized = false;
@@ -140,6 +147,7 @@ enum {
 #endif
 
 static int g_nWinVersion;
+static int g_nExplorerVersion;
 static HWND g_hTaskbarWnd;
 static DWORD g_dwTaskbarThreadId;
 
@@ -165,7 +173,7 @@ bool IsPointInsideScrollArea(HWND hWnd, POINT pt) {
                 FindWindowEx(hWnd, NULL, L"TrayNotifyWnd", NULL);
             if (hTrayNotifyWnd)
                 GetWindowRect(hTrayNotifyWnd, &rc);
-        } else if (g_nWinVersion >= WIN_VERSION_11_21H2) {
+        } else if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
             RECT rcTaskbar;
             GetWindowRect(hWnd, &rcTaskbar);
             HWND hBridgeWnd = FindWindowEx(
@@ -186,7 +194,7 @@ bool IsPointInsideScrollArea(HWND hWnd, POINT pt) {
                     hWnd, hBridgeWnd,
                     L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
             }
-        } else if (g_nWinVersion >= WIN_VERSION_10_R1) {
+        } else if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
             HWND hClockButtonWnd =
                 FindWindowEx(hWnd, NULL, L"ClockButton", NULL);
             if (hClockButtonWnd)
@@ -583,7 +591,7 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
     PROCESS_INFORMATION pi;
 
     if (g_settings.volumeIndicator == VOLUME_INDICATOR_WIN11 &&
-        g_nWinVersion >= WIN_VERSION_11_21H2) {
+        g_nWinVersion >= WIN_VERSION_11_22H2) {
         return Win11IndicatorAdjustVolumeLevelWithMouseWheel(
             GET_WHEEL_DELTA_WPARAM(wParam));
     }
@@ -683,7 +691,7 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
                        NULL, &si, &pi))
         return FALSE;
 
-    if (g_nWinVersion <= WIN_VERSION_7)
+    if (g_nExplorerVersion <= WIN_VERSION_7)
         SendMessage(g_hTaskbarWnd, WM_USER + 12, 0, 0);  // Close start menu
 
     AllowSetForegroundWindow(pi.dwProcessId);
@@ -754,7 +762,7 @@ static BOOL OpenScrollSndVolInternal(WPARAM wParam,
         {
             if (IsSndVolWndInitialized(hSndVolDlg) &&
                 MoveSndVolCenterMouse(hSndVolDlg)) {
-                if (g_nWinVersion <= WIN_VERSION_7)
+                if (g_nExplorerVersion <= WIN_VERSION_7)
                     SendMessage(g_hTaskbarWnd, WM_USER + 12, 0,
                                 0);  // Close start menu
 
@@ -767,7 +775,7 @@ static BOOL OpenScrollSndVolInternal(WPARAM wParam,
         } else if (IsWindowVisible(
                        hSndVolDlg))  // Another dialog, e.g. volume mixer
         {
-            if (g_nWinVersion <= WIN_VERSION_7)
+            if (g_nExplorerVersion <= WIN_VERSION_7)
                 SendMessage(g_hTaskbarWnd, WM_USER + 12, 0,
                             0);  // Close start menu
 
@@ -1247,7 +1255,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
         }
 
         case WM_MOUSEWHEEL:
-            if (g_nWinVersion < WIN_VERSION_11_21H2 &&
+            if (g_nExplorerVersion < WIN_VERSION_11_21H2 &&
                 OnMouseWheel(hWnd, wParam, lParam)) {
                 result = 0;
             } else {
@@ -1341,7 +1349,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd) {
         SubclassTaskbarWindow(hSecondaryWnd);
     }
 
-    if (g_nWinVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
         HWND hXamlIslandWnd = FindWindowEx(
             hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge",
             nullptr);
@@ -1365,7 +1373,7 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd) {
     g_secondaryTaskbarWindows.insert(hWnd);
     SubclassTaskbarWindow(hWnd);
 
-    if (g_nWinVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
         HWND hXamlIslandWnd = FindWindowEx(
             hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge",
             nullptr);
@@ -1489,7 +1497,8 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
     if (bTextualClassName &&
         _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) {
         Wh_Log(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        if (g_nWinVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+        if (g_nExplorerVersion >= WIN_VERSION_11_21H2 &&
+            !g_inputSiteProcHooked) {
             HandleIdentifiedInputSiteWindow(hWnd);
         }
     }
@@ -1524,6 +1533,7 @@ void LoadSettings() {
     g_settings.noAutomaticMuteToggle =
         Wh_GetIntSetting(L"noAutomaticMuteToggle");
     g_settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
 using VolumeSystemTrayIconDataModel_OnIconClicked_t =
@@ -1806,11 +1816,18 @@ bool HookTaskbarViewDllSymbols() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    LoadSettings();
+
     if (!WindowsVersionInit()) {
+        Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
-    LoadSettings();
+    g_nExplorerVersion = g_nWinVersion;
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 &&
+        g_settings.oldTaskbarOnWin11) {
+        g_nExplorerVersion = WIN_VERSION_10_20H1;
+    }
 
     if (g_nWinVersion >= WIN_VERSION_11_22H2) {
         HookTaskbarViewDllSymbols();
@@ -1859,8 +1876,22 @@ void Wh_ModUninit() {
     SndVolUninit();
 }
 
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    Wh_Log(L">");
+
+    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
 
     LoadSettings();
+
+    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+
+    return TRUE;
+}
+
+// For pre-1.3 Windhawk compatibility.
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"> pre-1.3");
+
+    BOOL bReload = FALSE;
+    Wh_ModSettingsChanged(&bReload);
 }
