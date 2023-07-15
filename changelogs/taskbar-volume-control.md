@@ -1,3 +1,6 @@
+## 1.1.1 ([Jul 15, 2023](https://github.com/ramensoftware/windhawk-mods/blob/976339b249645ff6874144f4037886085e0f1411/mods/taskbar-volume-control.wh.cpp))
+
+* Fixed a crash in Windows 11 version 21H2.
 ## 1.1 ([Apr 2, 2023](https://github.com/ramensoftware/windhawk-mods/blob/504d0704581f14714990fe7c3271070711679b0e/mods/taskbar-volume-control.wh.cpp))
 
 * Added the new Windows 11 volume indicator.

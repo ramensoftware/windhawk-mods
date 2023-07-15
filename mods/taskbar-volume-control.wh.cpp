@@ -2,7 +2,7 @@
 // @id              taskbar-volume-control
 // @name            Taskbar Volume Control
 // @description     Control the system volume by scrolling over the taskbar
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,9 +11,18 @@
 // @compilerOptions -DWINVER=0x0602 -lcomctl32 -ldwmapi -lole32 -lversion
 // ==/WindhawkMod==
 
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
+
 // ==WindhawkModReadme==
 /*
 # Taskbar Volume Control
+
 Control the system volume by scrolling over the taskbar.
 
 **Note:** Some laptop touchpads might not support scrolling over the taskbar. A
@@ -43,8 +52,7 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $name: Middle click to mute
   $description: >-
     With this option enabled, middle clicking the volume tray icon will
-    mute/unmute the system volume (Windows 11 only, Windhawk 1.3 or newer
-    required).
+    mute/unmute the system volume (Windows 11 version 22H2 or newer).
 - noAutomaticMuteToggle: false
   $name: No automatic mute toggle
   $description: >-
@@ -62,11 +70,6 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 */
 // ==/WindhawkModSettings==
 
-#if __has_include(<windhawk_utils.h>)
-#include <windhawk_utils.h>
-#define WINDHAWK_UTILS
-#endif
-
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <endpointvolume.h>
@@ -74,7 +77,11 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 #include <objbase.h>
 #include <windowsx.h>
 
+#include <algorithm>
+#include <string>
+#include <string_view>
 #include <unordered_set>
+#include <vector>
 
 enum {
     VOLUME_INDICATOR_NONE,
@@ -117,6 +124,7 @@ enum {
     WIN_VERSION_10_20H1,      // 2004, 20H2, 21H1, 21H2
     WIN_VERSION_SERVER_2022,  // Server 2022
     WIN_VERSION_11_21H2,
+    WIN_VERSION_11_22H2,
 };
 
 #if defined(__GNUC__) && __GNUC__ > 8
@@ -278,8 +286,10 @@ BOOL WindowsVersionInit() {
                 g_nWinVersion = WIN_VERSION_10_20H1;
             else if (nBuild <= 20348)
                 g_nWinVersion = WIN_VERSION_SERVER_2022;
-            else
+            else if (nBuild <= 22000)
                 g_nWinVersion = WIN_VERSION_11_21H2;
+            else
+                g_nWinVersion = WIN_VERSION_11_22H2;
             break;
     }
 
@@ -1516,7 +1526,6 @@ void LoadSettings() {
     g_settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
 }
 
-#ifdef WINDHAWK_UTILS
 using VolumeSystemTrayIconDataModel_OnIconClicked_t =
     void(WINAPI*)(void* pThis, void* iconClickedEventArgs);
 VolumeSystemTrayIconDataModel_OnIconClicked_t
@@ -1533,6 +1542,210 @@ VolumeSystemTrayIconDataModel_OnIconClicked_Hook(void* pThis,
 
     VolumeSystemTrayIconDataModel_OnIconClicked_Original(pThis,
                                                          iconClickedEventArgs);
+}
+
+struct SYMBOL_HOOK {
+    std::vector<std::wstring_view> symbols;
+    void** pOriginalFunction;
+    void* hookFunction = nullptr;
+    bool optional = false;
+};
+
+bool HookSymbols(HMODULE module,
+                 const SYMBOL_HOOK* symbolHooks,
+                 size_t symbolHooksCount) {
+    const WCHAR cacheVer = L'1';
+    const WCHAR cacheSep = L'#';
+    constexpr size_t cacheMaxSize = 10240;
+
+    WCHAR moduleFilePath[MAX_PATH];
+    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned an unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
+    WCHAR cacheBuffer[cacheMaxSize + 1];
+    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
+    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
+
+    std::wstring_view cacheBufferView(cacheBuffer);
+
+    // https://stackoverflow.com/a/46931770
+    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
+        size_t pos_start = 0, pos_end;
+        std::wstring_view token;
+        std::vector<std::wstring_view> res;
+
+        while ((pos_end = s.find(delimiter, pos_start)) !=
+               std::wstring_view::npos) {
+            token = s.substr(pos_start, pos_end - pos_start);
+            pos_start = pos_end + 1;
+            res.push_back(token);
+        }
+
+        res.push_back(s.substr(pos_start));
+        return res;
+    };
+
+    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
+
+    std::vector<bool> symbolResolved(symbolHooksCount, false);
+    std::wstring newSystemCacheStr;
+
+    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
+                             &newSystemCacheStr,
+                             module](std::wstring_view symbol, void* address) {
+        for (size_t i = 0; i < symbolHooksCount; i++) {
+            if (symbolResolved[i]) {
+                continue;
+            }
+
+            bool match = false;
+            for (auto hookSymbol : symbolHooks[i].symbols) {
+                if (hookSymbol == symbol) {
+                    match = true;
+                    break;
+                }
+            }
+
+            if (!match) {
+                continue;
+            }
+
+            if (symbolHooks[i].hookFunction) {
+                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
+                                   symbolHooks[i].pOriginalFunction);
+                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
+                       symbol.data());
+            } else {
+                *symbolHooks[i].pOriginalFunction = address;
+                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
+                       symbol.data());
+            }
+
+            symbolResolved[i] = true;
+
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr += symbol;
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr +=
+                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
+
+            break;
+        }
+    };
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    newSystemCacheStr += cacheVer;
+    newSystemCacheStr += cacheSep;
+    newSystemCacheStr += timeStamp;
+    newSystemCacheStr += cacheSep;
+    newSystemCacheStr += imageSize;
+
+    if (cacheParts.size() >= 3 &&
+        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
+        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
+        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
+            auto symbol = cacheParts[i];
+            auto address = cacheParts[i + 1];
+            if (address.length() == 0) {
+                continue;
+            }
+
+            void* addressPtr =
+                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
+                        (ULONG_PTR)module);
+
+            onSymbolResolved(symbol, addressPtr);
+        }
+
+        for (size_t i = 0; i < symbolHooksCount; i++) {
+            if (symbolResolved[i] || !symbolHooks[i].optional) {
+                continue;
+            }
+
+            size_t noAddressMatchCount = 0;
+            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
+                auto symbol = cacheParts[j];
+                auto address = cacheParts[j + 1];
+                if (address.length() != 0) {
+                    continue;
+                }
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    if (hookSymbol == symbol) {
+                        noAddressMatchCount++;
+                        break;
+                    }
+                }
+            }
+
+            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
+                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+                symbolResolved[i] = true;
+            }
+        }
+
+        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
+                        [](bool b) { return b; })) {
+            return true;
+        }
+    }
+
+    Wh_Log(L"Couldn't resolve all symbols from cache");
+
+    WH_FIND_SYMBOL findSymbol;
+    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
+    if (!findSymbolHandle) {
+        Wh_Log(L"Wh_FindFirstSymbol failed");
+        return false;
+    }
+
+    do {
+        onSymbolResolved(findSymbol.symbol, findSymbol.address);
+    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
+
+    Wh_FindCloseSymbol(findSymbolHandle);
+
+    for (size_t i = 0; i < symbolHooksCount; i++) {
+        if (symbolResolved[i]) {
+            continue;
+        }
+
+        if (!symbolHooks[i].optional) {
+            Wh_Log(L"Unresolved symbol: %d", i);
+            return false;
+        }
+
+        Wh_Log(L"Optional symbol %d doesn't exist", i);
+
+        for (auto hookSymbol : symbolHooks[i].symbols) {
+            newSystemCacheStr += cacheSep;
+            newSystemCacheStr += hookSymbol;
+            newSystemCacheStr += cacheSep;
+        }
+    }
+
+    if (newSystemCacheStr.length() <= cacheMaxSize) {
+        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
+    } else {
+        Wh_Log(L"Cache is too large (%Iu)", newSystemCacheStr.length());
+    }
+
+    return true;
 }
 
 bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
@@ -1573,11 +1786,12 @@ bool HookTaskbarViewDllSymbols() {
 
     HMODULE module =
         LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (module) {
+    if (!module) {
         Wh_Log(L"Taskbar view module couldn't be loaded");
+        return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: void __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::OnIconClicked(struct winrt::SystemTray::IconClickedEventArgs const &))"},
             (void**)&VolumeSystemTrayIconDataModel_OnIconClicked_Original,
@@ -1588,7 +1802,6 @@ bool HookTaskbarViewDllSymbols() {
 
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
-#endif  // WINDHAWK_UTILS
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
@@ -1599,11 +1812,9 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-#ifdef WINDHAWK_UTILS
-    if (g_nWinVersion >= WIN_VERSION_11_21H2) {
+    if (g_nWinVersion >= WIN_VERSION_11_22H2) {
         HookTaskbarViewDllSymbols();
     }
-#endif  // WINDHAWK_UTILS
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
