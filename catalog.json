@@ -137,7 +137,7 @@
                 "published": 1688766152000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1688766152000,
+                "updated": 1689709104000,
                 "users": 6
             },
             "metadata": {
@@ -151,7 +151,7 @@
                 ],
                 "name": "Flight Simulator window focus helper",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "force-thick-frames": {
