@@ -2,11 +2,11 @@
 // @id              dwm-ghost-mods
 // @name            DWM Ghost Mods
 // @description     Allows you to use basic or classic theme with your DWM ghost windows and more!
-// @version         1.0
+// @version         1.1
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         dwm.exe
-// @compilerOptions -ldwmapi
+// @compilerOptions -ldwmapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,10 +17,62 @@ This mod injects into DWM and allows you to modify the behaviour of DWM ghost (n
 example, you can restore non-DWM window frames, making this useful for blending in non-responsive windows
 with the basic or classic theme.
 
+![Preview image](https://raw.githubusercontent.com/ephemeralViolette/images/main/dwmghostmods.png)
+
+**This mod should be used with a tool such as BasicThemer or ClassicThemeTray.** It enhances the behaviour of
+these tools, and will not work properly with standard DWM window frames.
+
 Currently, you can:
 - Disable the DWM-rendered window frames on ghost windows.
 - Modify or disable the frost effect introduced with Windows Vista, which lightens the ghost window after
   sending inputs to it a few times.
+
+# ⚠ Important usage note ⚠
+
+In order to use this mod, you must enable Windhawk to inject into system processes in its advanced settings.
+If you do not do this, it will silently fail to inject. **Changing the Windhawk advanced settings will also
+affect any other mod you have installed, and may cause instability as any other mod that injects into all
+processes will now inject into system processes too.**
+
+This also means that the mod will not work with the portable version of Windhawk.
+
+# Tested compatible Windows versions
+
+The mod is tested on the following versions of Windows and is confirmed to work as intended.
+
+- ✅ Windows 8.1 (build 9600)
+- ✅ Windows 10 version 1607 (build 14393)
+- ✅ Windows 10 version 1809 (build 17763)
+- ✅ Windows 10 version 20H2 (build 19042)
+- ✅ Windows 10 version 21H1 (build 19043)
+- ✅ Windows 10 version 21H2 (build 19044)
+- ✅ Windows 11 version 22H2 (build 22621)
+
+# Easy testing
+
+You can use [BadApp](https://www.ntwind.com/freeware/badapp.html) to easily test a hung process.
+
+# Common problems
+
+## Failed to download symbols:
+
+Sometimes, Windhawk may fail to download the symbols for DWM. This doesn't necessarily mean that your version
+of Windows is incompatible, but it means that DWM cannot connect to the internet (which is how Windhawk
+attempts to download symbols).
+
+You can work around this issue by manually downloading the symbols and dropping them in the Windhawk symbols
+folder. In order to do this, use a tool such as [PDB Downloader](https://github.com/rajkumar-rangaraj/PDB-Downloader/releases)
+and download the symbols for `%SystemRoot%\System32\dwmghost.dll`.
+
+The standard (non-portable) version of Windhawk stores symbols in `C:\ProgramData\Windhawk\Engine\Symbols`.
+
+If you encounter this error, a message box will be displayed warning you of the failure.
+
+# Known issues
+
+- On Windows 10 and Windows 11, if the source window has DWM frames (you aren't using BasicThemer or anything like 
+  that), the thumbnail of the source window inside the ghost window will be overly-cropped, leaving white borders 
+  behind. This is because of the 1 pixel visual borders used for DWM top-level windows since Windows 10.
 */
 // ==/WindhawkModReadme==
 
@@ -32,6 +84,17 @@ Currently, you can:
   $description: >-
     Tools like BasicThemer will often not affect ghost windows since they are not reported to their
     observers. This will force the basic appearance for that window.
+# g_prefUseClassicTheme
+- useClassicTheme: false
+  $name: Use classic theme
+  $description: >-
+    Enables the classic theme in DWM child windows (such as ghosts). This will technically affect any
+    other framed window spawned by DWM, but I think ghosts are the only ones that do that.
+
+
+    If this is not set, then the window will use the UXTheme frames, even if the classic theme is
+    otherwise set (i.e. with ClassicThemeTray). This is because the theme is (and must be) kept open
+    in DWM or else it will crash.
 # g_prefFrostPolicy
 - frostPolicy: basic
   $name: Frost behaviour
@@ -55,12 +118,15 @@ enum class FrostPolicyType
 // Global properties:
 //
 bool             g_prefDisableDwmFrames;
+bool             g_prefUseClassicTheme;
 FrostPolicyType  g_prefFrostPolicy;
 
 //==============================================================================================================================
 // Setup, external things:
 //
+#include <VersionHelpers.h>
 #include <dwmapi.h>
+#include <uxtheme.h>
 
 #include <initializer_list>
 namespace YukisCoffee::WindhawkUtils
@@ -156,6 +222,20 @@ namespace YukisCoffee::WindhawkUtils
 // Main implementation:
 //
 
+/*
+ * DisplayErrorMessage: Open and activate a message box that informs the user of an issue with
+ *                      the mod.
+ */
+void DisplayErrorMessage(LPCWSTR text)
+{
+    MessageBoxW(
+        NULL,
+        text,
+        L"Windhawk : DWM Ghost Mods",
+        MB_OK | MB_ICONERROR
+    );
+}
+
 typedef struct
 {
     int topBorderHeight;
@@ -184,17 +264,34 @@ HRESULT GetNCWindowSizes(NCWindowSizes *out)
     return S_OK;
 }
 
-typedef HWND (*CGhostWindow__CreateGhostWindow_t)(void *);
-CGhostWindow__CreateGhostWindow_t CGhostWindow__CreateGhostWindow_orig;
-HWND CGhostWindow__CreateGhostWindow_Hook(void *pThis)
+/*
+ * ApplyDesiredWindowTheme: Apply basic frames or the classic theme to a specified DWM child window. 
+ */
+void ApplyDesiredWindowTheme(HWND hWnd)
 {
-    HWND hWnd = CGhostWindow__CreateGhostWindow_orig(pThis);
+    if (g_prefUseClassicTheme)
+    {
+        SetThemeAppProperties(STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT);
+    }
+    else
+    {
+        SetThemeAppProperties(STAP_ALLOW_NONCLIENT | STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT);
+    }
 
     if (g_prefDisableDwmFrames)
     {
         DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
         DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(BOOL));
     }
+}
+
+typedef HWND (*CGhostWindow__CreateGhostWindow_t)(void *);
+CGhostWindow__CreateGhostWindow_t CGhostWindow__CreateGhostWindow_orig;
+HWND CGhostWindow__CreateGhostWindow_Hook(void *pThis)
+{
+    HWND hWnd = CGhostWindow__CreateGhostWindow_orig(pThis);
+
+    ApplyDesiredWindowTheme(hWnd);
 
     return hWnd;
 }
@@ -205,11 +302,7 @@ __int64 CGhostWindow__s_GhostWndProc_Hook(HWND hWnd, int a, __int64 b, __int64 c
 {
     __int64 result = CGhostWindow__s_GhostWndProc_orig(hWnd, a, b, c);
 
-    if (g_prefDisableDwmFrames)
-    {
-        DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
-        DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(BOOL));
-    }
+    ApplyDesiredWindowTheme(hWnd);
 
     return result;
 }
@@ -265,6 +358,7 @@ BOOL DwmUpdateThumbnailProperties_Hook(HTHUMBNAIL hThumbnail, DWM_THUMBNAIL_PROP
 void LoadSettings()
 {
     g_prefDisableDwmFrames = Wh_GetIntSetting(L"disableDwmFrames");
+    g_prefUseClassicTheme = Wh_GetIntSetting(L"useClassicTheme");
 
     PCWSTR pszFrostPolicy = Wh_GetStringSetting(L"frostPolicy");
     
@@ -282,6 +376,18 @@ void LoadSettings()
     }
 
     Wh_FreeStringSetting(pszFrostPolicy);
+
+    // Validate:
+    if (g_prefUseClassicTheme && !g_prefDisableDwmFrames)
+    {
+        DisplayErrorMessage(
+            L"Loaded invalid settings. In order to enable the classic theme on dialogs, "
+            L"you must also enable the \"Disable DWM frames\" setting. Please enable that "
+            L"option and try again."
+        );
+
+        g_prefUseClassicTheme = FALSE;
+    }
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
@@ -307,13 +413,46 @@ BOOL Wh_ModInit()
 
     LoadSettings();
 
-    HMODULE dwmghost = LoadLibrary(L"dwmghost.dll");
+    HMODULE dwmghost;
     HMODULE dwmapi = LoadLibrary(L"dwmapi.dll");
 
-    if (!dwmghost && !dwmapi)
-        return FALSE;
+    // Prior to Windows 10, ghosting is implemented directly into dwm.exe.
+    if (IsWindows10OrGreater())
+    {
+        dwmghost = LoadLibrary(L"dwmghost.dll");
+    }
+    else
+    {
+        dwmghost = GetModuleHandle(NULL);
+    }
 
-    YukisCoffee::WindhawkUtils::hookWithSymbols(dwmghost, {
+    if (!dwmghost && !dwmapi)
+    {
+        DisplayErrorMessage(
+            L"Failed to load both dwmghost.dll and dwmapi.dll. This should never happen."
+        );
+
+        return FALSE;
+    }
+    else if (!dwmghost)
+    {
+        DisplayErrorMessage(
+            L"Failed to load dwmghost.dll. This most likely means that you are using an "
+            L"early beta version of Windows 10, which is unsupported."
+        );
+
+        return FALSE;
+    }
+    else if (!dwmapi)
+    {
+        DisplayErrorMessage(
+            L"Failed to load dwmapi.dll."
+        );
+
+        return FALSE;
+    }
+
+    bool hookSuccess = YukisCoffee::WindhawkUtils::hookWithSymbols(dwmghost, {
         {
             L"public: int __cdecl CGhostWindow::CreateGhostWindow(void)",
             (void *)CGhostWindow__CreateGhostWindow_Hook,
@@ -325,6 +464,17 @@ BOOL Wh_ModInit()
             (void **)&CGhostWindow__s_GhostWndProc_orig
         }
     });
+
+    if (!hookSuccess)
+    {
+        DisplayErrorMessage(
+            L"Failed to download symbols. \r\n\r\n"
+            L"This is most likely an issue with Windhawk rather than your version of Windows. "
+            L"Please see the \"Details\" page of the mod for more details."
+        );
+
+        return FALSE;
+    }
 
     Wh_SetFunctionHook(
         (void *)GetProcAddress(dwmapi, "DwmUpdateThumbnailProperties"),
