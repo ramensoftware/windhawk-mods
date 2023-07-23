@@ -34,7 +34,10 @@ If you do not do this, it will silently fail to inject. **Changing the Windhawk 
 affect any other mod you have installed, and may cause instability as any other mod that injects into all
 processes will now inject into system processes too.**
 
-This also means that the mod will not work with the portable version of Windhawk.
+This mod will not work on portable versions of Windhawk because DWM is a protected process and can only be
+modified by a system account. Since the portable version of Windhawk only runs as administrator under your
+own user account, it will not have the privilege required to inject into DWM. (You may not be so lucky with
+forcing the portable version to run as `NT AUTHORITY\SYSTEM` either, as this didn't work in my testing.)
 
 # Tested compatible Windows versions
 
@@ -394,21 +397,6 @@ void LoadSettings()
 // initialization stuff if required.
 BOOL Wh_ModInit()
 {
-    #ifdef _WIN64
-    const int offset_same_teb_flags = 0x17EE;
-    #define NT_CURRENT_TEB_T __int64
-    #else
-    const int offset_same_teb_flags = 0x0FCA;
-    #define NT_CURRENT_TEB_T long
-    #endif
-
-    // 0x0400 = InitialThread
-    bool already_running = (!*(USHORT *)(((NT_CURRENT_TEB_T *)NtCurrentTeb()) + offset_same_teb_flags) & 0x0400);
-
-    // restart loop prevention
-    if (already_running)
-        return FALSE;
-
     Wh_Log(L"Init " WH_MOD_ID L" version " WH_MOD_VERSION);
 
     LoadSettings();
