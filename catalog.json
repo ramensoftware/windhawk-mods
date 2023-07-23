@@ -131,6 +131,27 @@
                 "version": "1.0.0"
             }
         },
+        "dwm-ghost-mods": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1690150313000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1690150313000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ephemeralViolette",
+                "compilerOptions": "-ldwmapi -luxtheme",
+                "description": "Allows you to use basic or classic theme with your DWM ghost windows and more!",
+                "github": "https://github.com/ephemeralViolette",
+                "include": [
+                    "dwm.exe"
+                ],
+                "name": "DWM Ghost Mods",
+                "version": "1.1"
+            }
+        },
         "flight-simulator-focus-helper": {
             "details": {
                 "defaultSorting": 36,
