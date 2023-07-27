@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-07-23T22:11:53.000Z</updated>
+    <updated>2023-07-27T18:28:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#945959053f99f73a7babdd46a097e905f0f1f4e2</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2023-07-27T18:28:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the ability to target control child elements</li>
+<li>New styles are now applied without restarting Explorer (but previously set styles aren't cleared)</li>
+<li>Fixed showing the Explorer restart prompt message on startup</li>
+<li>Added an option to completely disable the Explorer restart prompt message</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DWM Ghost Mods 1.1]]></title>
         <id>https://windhawk.net/mods/dwm-ghost-mods#ffac038e2801e9d978ec0286903b1036a20a4a1f</id>
@@ -297,17 +309,6 @@ Taskbar Tweaker</a>.</p>]]></content>
         <updated>2023-04-24T21:35:58.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a bug which could cause the taskbar to freeze.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable grouping on the taskbar 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-grouping#59bcbf7c877ecdd7a5b70216e989489f899e7a80</id>
-        <link href="https://windhawk.net/mods/taskbar-grouping"/>
-        <updated>2023-04-24T21:33:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved icon handling.</li>
-<li>Added the option to use window icons instead of application icons.</li>
-<li>Made unpinning a separated pinned item slightly less buggy.</li>
 </ul>]]></content>
     </entry>
 </feed>

@@ -951,7 +951,7 @@
                 "published": 1684509250000,
                 "rating": 10,
                 "ratingUsers": 4,
-                "updated": 1684509250000,
+                "updated": 1690482536000,
                 "users": 188
             },
             "metadata": {
@@ -968,7 +968,7 @@
                 ],
                 "name": "Windows 11 Taskbar Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.1"
             }
         }
     }
