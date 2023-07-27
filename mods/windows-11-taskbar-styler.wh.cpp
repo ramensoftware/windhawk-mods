@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,6 +11,14 @@
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
 
 // ==WindhawkModReadme==
 /*
@@ -30,13 +38,18 @@ here are XAML resources which were obtained via other means for your
 convenience: [TaskbarResources.xbf and
 SystemTrayResources.xbf](https://gist.github.com/m417z/ad0ab39351aca905f1d186b1f1c3d8c7).
 
+The [UWPSpy](https://ramensoftware.com/uwpspy) tool can be used to inspect the
+taskbar's control elements in real time, and experiment with various styles.
+
 ## Control styles
 
 Each entry has a target control and list of styles.
 
 The target control is written as `Control` or `Control#Name`, i.e. the target
 control tag name, such as `taskbar:TaskListButton` or `Rectangle`, optionally
-followed by `#` and the target control's `x:Name` attribute.
+followed by `#` and the target control's `x:Name` attribute. The target control
+can also include parent elements, separated by `>`, for example:
+`ParentControl#ParentName > Control#Name`.
 
 Each style is written as `Style=Value`, for example: `Height=5`.
 
@@ -48,6 +61,13 @@ A couple of practical examples:
 
 * Target: `taskbar:TaskListButton`
 * Style: `CornerRadius=0`
+
+### Task list button background color
+
+![Screenshot](https://i.imgur.com/eP13uBu.png)
+
+* Target: `taskbar:TaskListButtonPanel > Border#BackgroundElement`
+* Style: `Background=gray`
 
 ### Running indicator size and color
 
@@ -112,22 +132,21 @@ relevant `#pragma region` regions in the code editor.
     - value: "0"
       $name: Value
   $name: Resource variables
+- promptForExplorerRestart: true
+  $name: Prompt for Explorer restart
+  $description: >-
+    Show a message prompting to restart Explorer on each style change
 */
 // ==/WindhawkModSettings==
 
-// Source code is published under The GNU General Public License v3.0.
-//
-// For bug reports and feature requests, please open an issue here:
-// https://github.com/ramensoftware/windhawk-mods/issues
-//
-// For pull requests, development takes place here:
-// https://github.com/m417z/my-windhawk-mods
+#include <atomic>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.UI.Xaml.h>
 
-bool g_disabled = false;
+std::atomic<bool> g_disabled = false;
+std::atomic<DWORD> g_targetThreadId = 0;
 
 void ApplyCustomizations(winrt::Windows::UI::Xaml::FrameworkElement element);
 
@@ -1060,13 +1079,11 @@ void VisualTreeWatcher::SetXamlDiagnostics(winrt::com_ptr<IXamlDiagnostics> diag
     m_XamlDiagnostics = std::move(diagnostics);
 }
 
-VisualTreeWatcher::~VisualTreeWatcher()
-{
-}
+VisualTreeWatcher::~VisualTreeWatcher() = default;
 
 HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
 {
-    if (g_disabled)
+    if (g_disabled || GetCurrentThreadId() != g_targetThreadId)
     {
         return S_OK;
     }
@@ -1115,7 +1132,11 @@ catch (...)
 {
     HRESULT hr = winrt::to_hresult();
     Wh_Log(L"Error %08X", hr);
-    return hr;
+
+    // Returning an error prevents (some?) further messages, always return
+    // success.
+    // return hr;
+    return S_OK;
 }
 
 HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementState, LPCWSTR) noexcept
@@ -1322,7 +1343,6 @@ HRESULT InjectWindhawkTAP() noexcept
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <atomic>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -1350,39 +1370,67 @@ struct deleter_from_fn {
 using string_setting_unique_ptr =
     std::unique_ptr<const WCHAR[], deleter_from_fn<Wh_FreeStringSetting>>;
 
-std::atomic<bool> g_roGetActivationFactoryCalledForTaskbar = false;
-
 HANDLE g_restartExplorerPromptThread;
 std::atomic<HWND> g_restartExplorerPromptWindow;
 
 using PropertyKeyValue =
     std::pair<DependencyProperty, winrt::Windows::Foundation::IInspectable>;
 
+struct ElementMatcher {
+    std::wstring type;
+    std::wstring name;
+};
+
 struct ElementPropertyOverrides {
-    std::wstring elementType;
-    std::wstring elementName;
+    ElementMatcher elementMatcher;
+    std::vector<ElementMatcher> parentElementMatchers;
     std::vector<PropertyKeyValue> propertyValues;
 };
 
 std::vector<ElementPropertyOverrides> g_propertyOverrides;
+DWORD g_propertyOverridesUpdateCount = 0;
+
+bool TestElementMatcher(FrameworkElement element,
+                        const ElementMatcher& matcher) {
+    if (!matcher.type.empty() &&
+        matcher.type != winrt::get_class_name(element)) {
+        return false;
+    }
+
+    if (!matcher.name.empty() && matcher.name != element.Name()) {
+        return false;
+    }
+
+    return true;
+}
 
 const std::vector<PropertyKeyValue>* FindElementPropertyOverrides(
     FrameworkElement element) {
-    auto elementType = winrt::get_class_name(element);
-    auto elementName = element.Name();
-
     for (const auto& override : g_propertyOverrides) {
-        if (!override.elementType.empty() &&
-            override.elementType != elementType) {
+        if (!TestElementMatcher(element, override.elementMatcher)) {
             continue;
         }
 
-        if (!override.elementName.empty() &&
-            override.elementName != elementName) {
-            continue;
+        auto parentElementIter = element;
+        bool parentElementMatchFailed = false;
+
+        for (const auto& matcher : override.parentElementMatchers) {
+            parentElementIter =
+                parentElementIter.Parent().try_as<FrameworkElement>();
+            if (!parentElementIter) {
+                parentElementMatchFailed = true;
+                break;
+            }
+
+            if (!TestElementMatcher(parentElementIter, matcher)) {
+                parentElementMatchFailed = true;
+                break;
+            }
         }
 
-        return &override.propertyValues;
+        if (!parentElementMatchFailed) {
+            return &override.propertyValues;
+        }
     }
 
     return nullptr;
@@ -1394,16 +1442,19 @@ void ApplyCustomizations(FrameworkElement element) {
         return;
     }
 
-    Wh_Log(L"Applying %u styles", static_cast<UINT>(propertyValues->size()));
+    Wh_Log(L"Applying %zu styles", propertyValues->size());
 
     auto elementDo = element.as<DependencyObject>();
 
     for (const auto& [property, value] : *propertyValues) {
         element.SetValue(property, value);
         elementDo.RegisterPropertyChangedCallback(
-            property, [value = value](DependencyObject sender,
-                                      DependencyProperty property) {
-                if (g_disabled) {
+            property,
+            [value = value,
+             propertyOverridesUpdateCount = g_propertyOverridesUpdateCount](
+                DependencyObject sender, DependencyProperty property) {
+                if (g_disabled || propertyOverridesUpdateCount !=
+                                      g_propertyOverridesUpdateCount) {
                     return;
                 }
 
@@ -1418,7 +1469,7 @@ void ApplyCustomizations(FrameworkElement element) {
 }
 
 // https://stackoverflow.com/a/5665377
-std::wstring escapeXmlAttribute(std::wstring_view data) {
+std::wstring EscapeXmlAttribute(std::wstring_view data) {
     std::wstring buffer;
     buffer.reserve(data.size());
     for (size_t pos = 0; pos != data.size(); ++pos) {
@@ -1455,8 +1506,30 @@ std::wstring_view TrimStringView(std::wstring_view s) {
     return s;
 }
 
-void AddStylesToOverrides(
-    std::wstring_view name,
+// https://stackoverflow.com/a/46931770
+std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
+                                               std::wstring_view delimiter) {
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    std::wstring_view token;
+    std::vector<std::wstring_view> res;
+
+    while ((pos_end = s.find(delimiter, pos_start)) !=
+           std::wstring_view::npos) {
+        token = s.substr(pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back(token);
+    }
+
+    res.push_back(s.substr(pos_start));
+    return res;
+}
+
+struct ResolveTypeAndStylesResult {
+    std::wstring type;
+    std::vector<PropertyKeyValue> propertyValues;
+};
+
+ResolveTypeAndStylesResult ResolveTypeAndStyles(
     std::wstring_view targetType,
     std::vector<std::pair<std::wstring, std::wstring>> styles) {
     std::wstring xaml =
@@ -1471,20 +1544,15 @@ void AddStylesToOverrides(
     xmlns:systemtray="using:SystemTray">
     <Style)";
 
-    if (targetType.empty()) {
-        Wh_Log(L"TargetType must not be empty, skipping styles");
-        return;
-    }
-
     xaml += L" TargetType=\"";
-    xaml += escapeXmlAttribute(targetType);
+    xaml += EscapeXmlAttribute(targetType);
     xaml += L"\">\n";
 
     for (const auto& [property, value] : styles) {
         xaml += L"        <Setter Property=\"";
-        xaml += escapeXmlAttribute(property);
+        xaml += EscapeXmlAttribute(property);
         xaml += L"\" Value=\"";
-        xaml += escapeXmlAttribute(value);
+        xaml += EscapeXmlAttribute(value);
         xaml += L"\" />\n";
     }
 
@@ -1516,12 +1584,62 @@ void AddStylesToOverrides(
         });
     }
 
-    Wh_Log(L"%s: %u styles", style.TargetType().Name.c_str(),
-           static_cast<UINT>(propertyValues.size()));
+    Wh_Log(L"%s: %zu styles", style.TargetType().Name.c_str(),
+           propertyValues.size());
+
+    return {
+        .type = std::wstring(style.TargetType().Name),
+        .propertyValues = std::move(propertyValues),
+    };
+}
+
+void AddStylesToOverrides(
+    std::wstring_view target,
+    std::vector<std::pair<std::wstring, std::wstring>> styles) {
+    ElementMatcher elementMatcher;
+    std::vector<ElementMatcher> parentElementMatchers;
+    std::vector<PropertyKeyValue> propertyValues;
+
+    auto targetParts = SplitStringView(target, L" > ");
+
+    bool first = true;
+    for (auto i = targetParts.rbegin(); i != targetParts.rend(); ++i) {
+        const auto& targetPart = *i;
+
+        std::wstring_view name;
+        std::wstring_view targetType;
+        if (auto pos = targetPart.find(L'#'); pos != targetPart.npos) {
+            targetType = TrimStringView(targetPart.substr(0, pos));
+            name = TrimStringView(targetPart.substr(pos + 1));
+        } else {
+            targetType = TrimStringView(targetPart);
+        }
+
+        if (targetType.empty()) {
+            Wh_Log(L"TargetType must not be empty, skipping styles");
+            return;
+        }
+
+        auto resolved = ResolveTypeAndStyles(targetType, std::move(styles));
+        styles.clear();
+
+        if (first) {
+            elementMatcher.type = std::move(resolved.type);
+            elementMatcher.name = std::wstring(name);
+            propertyValues = std::move(resolved.propertyValues);
+        } else {
+            parentElementMatchers.push_back({
+                .type = std::move(resolved.type),
+                .name = std::wstring(name),
+            });
+        }
+
+        first = false;
+    }
 
     g_propertyOverrides.push_back(ElementPropertyOverrides{
-        .elementType = std::wstring(style.TargetType().Name),
-        .elementName = std::wstring(name),
+        .elementMatcher = std::move(elementMatcher),
+        .parentElementMatchers = std::move(parentElementMatchers),
         .propertyValues = std::move(propertyValues),
     });
 }
@@ -1534,17 +1652,6 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
     }
 
     Wh_Log(L"Processing styles for %s", targetStringSetting.get());
-
-    std::wstring_view target = targetStringSetting.get();
-
-    std::wstring_view name;
-    std::wstring_view targetType;
-    if (auto pos = target.find(L'#'); pos != target.npos) {
-        targetType = TrimStringView(target.substr(0, pos));
-        name = TrimStringView(target.substr(pos + 1));
-    } else {
-        targetType = TrimStringView(target);
-    }
 
     std::vector<std::pair<std::wstring, std::wstring>> styles;
 
@@ -1569,7 +1676,7 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
     }
 
     if (styles.size() > 0) {
-        AddStylesToOverrides(name, targetType, std::move(styles));
+        AddStylesToOverrides(targetStringSetting.get(), std::move(styles));
     }
 
     return true;
@@ -1638,29 +1745,61 @@ void ProcessResourceVariablesFromSettings() {
     }
 }
 
-using RoGetActivationFactory_t = decltype(&RoGetActivationFactory);
-RoGetActivationFactory_t RoGetActivationFactory_Original;
-HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING activatableClassId,
-                                           REFIID iid,
-                                           void** factory) {
-    if (!g_roGetActivationFactoryCalledForTaskbar &&
-        wcscmp(WindowsGetStringRawBuffer(activatableClassId, nullptr),
-               L"SystemTray.SystemTrayController") == 0 &&
-        !g_roGetActivationFactoryCalledForTaskbar.exchange(true)) {
-        ProcessAllStylesFromSettings();
+void InitializeSettingsAndTap() {
+    g_targetThreadId = GetCurrentThreadId();
 
-        ProcessResourceVariablesFromSettings();
+    g_propertyOverrides.clear();
+    g_propertyOverridesUpdateCount++;
 
-        HRESULT hr = InjectWindhawkTAP();
-        if (FAILED(hr)) {
-            Wh_Log(L"Error %08X", hr);
-        }
+    ProcessAllStylesFromSettings();
+    ProcessResourceVariablesFromSettings();
+
+    HRESULT hr = InjectWindhawkTAP();
+    if (FAILED(hr)) {
+        Wh_Log(L"Error %08X", hr);
+    }
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 PVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd) {
+        return hWnd;
     }
 
-    return RoGetActivationFactory_Original(activatableClassId, iid, factory);
+    WCHAR className[64];
+    if (!g_targetThreadId && hWndParent &&
+        GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className,
+                 L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 &&
+        GetClassName(hWndParent, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+        Wh_Log(L"Initializing - Created DesktopWindowContentBridge window");
+        InitializeSettingsAndTap();
+    }
+
+    return hWnd;
 }
 
 void PromptForExplorerRestart() {
+    if (!Wh_GetIntSetting(L"promptForExplorerRestart")) {
+        return;
+    }
+
     if (g_restartExplorerPromptThread) {
         if (WaitForSingleObject(g_restartExplorerPromptThread, 0) !=
             WAIT_OBJECT_0) {
@@ -1680,8 +1819,8 @@ void PromptForExplorerRestart() {
                 .pszWindowTitle = L"Windows 11 Taskbar Styler",
                 .pszMainIcon = TD_INFORMATION_ICON,
                 .pszContent =
-                    L"Explorer must be restarted to apply the new styles. "
-                    L"Restart now?",
+                    L"Explorer might need to be restarted to apply the new "
+                    L"styles. Restart now?",
                 .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam,
                                  LPARAM lParam, LONG_PTR lpRefData)
                                   WINAPI -> HRESULT {
@@ -1724,22 +1863,85 @@ void PromptForExplorerRestart() {
         nullptr, 0, nullptr);
 }
 
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (WPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+HWND GetTaskbarUiWnd() {
+    DWORD dwProcessId;
+    DWORD dwCurrentProcessId = GetCurrentProcessId();
+
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) ||
+        dwProcessId != dwCurrentProcessId) {
+        return nullptr;
+    }
+
+    return FindWindowEx(hTaskbarWnd, nullptr,
+                        L"Windows.UI.Composition.DesktopWindowContentBridge",
+                        nullptr);
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     if (g_disabled) {
-        Wh_Log(L"Already loaded, explorer restart is required");
-
-        // Still return TRUE to show the explorer restart message.
+        Wh_Log(L"Already loaded");
+        PromptForExplorerRestart();
+        g_disabled = false;
         return TRUE;
     }
 
-    HMODULE winrtModule = LoadLibrary(L"api-ms-win-core-winrt-l1-1-0.dll");
-    void* pRoGetActivationFactory =
-        (void*)GetProcAddress(winrtModule, "RoGetActivationFactory");
-    Wh_SetFunctionHook(pRoGetActivationFactory,
-                       (void*)RoGetActivationFactory_Hook,
-                       (void**)&RoGetActivationFactory_Original);
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
+                       (void**)&CreateWindowExW_Original);
 
     return TRUE;
 }
@@ -1747,13 +1949,12 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    DWORD dwProcessId;
-    DWORD dwCurrentProcessId = GetCurrentProcessId();
-
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) &&
-        dwProcessId == dwCurrentProcessId) {
-        PromptForExplorerRestart();
+    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
+    if (hTaskbarUiWnd) {
+        Wh_Log(L"Initializing - Found DesktopWindowContentBridge window");
+        RunFromWindowThread(
+            hTaskbarUiWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
+            nullptr);
     }
 }
 
@@ -1778,12 +1979,13 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    DWORD dwProcessId;
-    DWORD dwCurrentProcessId = GetCurrentProcessId();
+    PromptForExplorerRestart();
 
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) &&
-        dwProcessId == dwCurrentProcessId) {
-        PromptForExplorerRestart();
+    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
+    if (hTaskbarUiWnd) {
+        Wh_Log(L"Initializing - Found DesktopWindowContentBridge window");
+        RunFromWindowThread(
+            hTaskbarUiWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
+            nullptr);
     }
 }
