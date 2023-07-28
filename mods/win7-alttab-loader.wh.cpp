@@ -3,9 +3,10 @@
 // @name            Windows 7 Alt+Tab Loader
 // @description     Loads Windows 7 Alt+Tab on Windows 10.
 // @version         1.0
-// @author          ephemeralViolette, aubymori
+// @author          ephemeralViolette
 // @include         explorer.exe
 // @compilerOptions -lole32 -luuid -ldwmapi -luxtheme -ldbghelp
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,6 +25,8 @@ This mod allows the Windows 7 Alt+Tab UI to work on Windows 10.
 
 ![DWM (with thumbnails)](https://raw.githubusercontent.com/aubymori/images/main/win7-alt-tab-dwm.png)
 ![Basic (no thumbnails)](https://raw.githubusercontent.com/aubymori/images/main/win7-alt-tab-basic.png)
+
+*Co-authored by ephemeralViolette and aubymori.*
 */
 // ==/WindhawkModReadme==
 
@@ -598,7 +601,8 @@ BOOL Wh_ModInit()
     {
         // I FUCKING HATE C++ I FUCKING HATE C++ I FUCKING HATE C++
         // THAT CAST WOULD NOT BE NECESSARY IN C
-        HRESULT(*pDllGetClassObject)(REFCLSID, REFIID, LPVOID) = (HRESULT(*)(REFCLSID, REFIID, LPVOID))GetProcAddress(g_hAltTab, "DllGetClassObject");
+        HRESULT(*pDllGetClassObject)(REFCLSID, REFIID, LPVOID) = 
+            (decltype(pDllGetClassObject))GetProcAddress(g_hAltTab, "DllGetClassObject");
 
         IClassFactory *pFactory = NULL;
         if (
