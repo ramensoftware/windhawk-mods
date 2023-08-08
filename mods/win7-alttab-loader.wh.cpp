@@ -2,7 +2,7 @@
 // @id              win7-alttab-loader
 // @name            Windows 7 Alt+Tab Loader
 // @description     Loads Windows 7 Alt+Tab on Windows 10.
-// @version         1.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
