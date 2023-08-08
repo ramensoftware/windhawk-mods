@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-07-29T00:26:02.000Z</updated>
+    <updated>2023-08-08T21:25:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 1.0.1]]></title>
+        <id>https://windhawk.net/mods/win7-alttab-loader#f960450eb653d48c9ab3177e706b93b59a4e8394</id>
+        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
+        <updated>2023-08-08T21:25:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Update README to link to more proper theme</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 1.0]]></title>
         <id>https://windhawk.net/mods/win7-alttab-loader#5f590e1d63e94d5c7a371e0fb0a9374e757531e7</id>
@@ -312,15 +321,6 @@ Taskbar Tweaker</a>.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Changed the way taskbar button scroll events are captured, making the mod more robust.</li>
 <li>Improved focus grabbing to bring other apps to front.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-click#0ff37a61a6d89141553c7109ffd4170e5a0d5009</id>
-        <link href="https://windhawk.net/mods/taskbar-button-click"/>
-        <updated>2023-04-24T21:49:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved compatibility with the taskbar-grouping mod. Previously, using both mods could lead to a middle click closing the wrong window.</li>
 </ul>]]></content>
     </entry>
 </feed>
