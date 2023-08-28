@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-08-08T21:25:54.000Z</updated>
+    <updated>2023-08-28T16:18:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Scroll Actions 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-scroll-actions#728f68a866267c3884937ba38fdf3342aa28c1d0</id>
+        <link href="https://windhawk.net/mods/taskbar-scroll-actions"/>
+        <updated>2023-08-28T16:18:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarscrollactions">Taskbar Scroll Actions</h1>
+<p>Assign actions for scrolling over the taskbar, including virtual desktop
+switching and monitor brightness control.</p>
+<p>Currently, the following actions are supported:</p>
+<ul>
+<li>Switch virtual desktop</li>
+<li>Change monitor brightness</li>
+</ul>
+<p>Also check out the following related mods:</p>
+<ul>
+<li>Taskbar Volume Control</li>
+<li>Cycle taskbar buttons with mouse wheel</li>
+</ul>
+<p><strong>Note:</strong> Some laptop touchpads might not support scrolling over the taskbar. A
+workaround is to use the "pinch to zoom" gesture. For details, check out <a href="https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt-trigger-mouse-wheel-options">a
+relevant
+issue</a>.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 1.0.1]]></title>
         <id>https://windhawk.net/mods/win7-alttab-loader#f960450eb653d48c9ab3177e706b93b59a4e8394</id>
@@ -312,15 +335,5 @@ buttons.</p>
 <p><img src="https://i.imgur.com/FtpUjt1.gif" alt="Demonstration" /></p>
 <p>Only Windows 11 is currently supported. For older Windows versions check out <a href="https://tweaker.ramensoftware.com/">7+
 Taskbar Tweaker</a>.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-scroll#a3300d6fe7a987529fa3e2522d4ac2db2b192eee</id>
-        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
-        <updated>2023-04-26T11:08:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Changed the way taskbar button scroll events are captured, making the mod more robust.</li>
-<li>Improved focus grabbing to bring other apps to front.</li>
-</ul>]]></content>
     </entry>
 </feed>

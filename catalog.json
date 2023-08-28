@@ -729,6 +729,29 @@
                 "version": "1.1.3"
             }
         },
+        "taskbar-scroll-actions": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1693239523000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1693239523000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lversion",
+                "description": "Assign actions for scrolling over the taskbar, including virtual desktop switching and monitor brightness control",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Scroll Actions",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-thumbnail-reorder": {
             "details": {
                 "defaultSorting": 22110,
