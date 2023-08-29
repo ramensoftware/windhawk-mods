@@ -1,3 +1,7 @@
+## 1.2 ([Aug 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/8ab7ca1f13850e0ebb9ac2a9aee7ac75cc947d81/mods/taskbar-clock-customization.wh.cpp))
+
+* Added support for multiple web content sources.
+* Fixed the number of seconds updating with a slight delay, finally causing one second to be skipped.
 ## 1.1.1 ([May 20, 2023](https://github.com/ramensoftware/windhawk-mods/blob/9c814a48137a68e5e1262b98d84be86b08ab96e9/mods/taskbar-clock-customization.wh.cpp))
 
 * Fixed the first clock line flashing on hover on Windows 11 version 22H2 and newer.

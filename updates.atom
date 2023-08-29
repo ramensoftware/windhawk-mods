@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-08-28T16:18:43.000Z</updated>
+    <updated>2023-08-29T06:52:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#8ab7ca1f13850e0ebb9ac2a9aee7ac75cc947d81</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2023-08-29T06:52:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for multiple web content sources.</li>
+<li>Fixed the number of seconds updating with a slight delay, finally causing one second to be skipped.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Scroll Actions 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-scroll-actions#728f68a866267c3884937ba38fdf3342aa28c1d0</id>
@@ -323,17 +333,5 @@ relevant <code>#pragma region</code> regions in the code editor.</p>]]></content
         <content type="html"><![CDATA[<ul>
 <li>Improved switching to windows with additional popup windows.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#591c5067b69c86c307102fca027efb45c5fde4de</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2023-04-26T16:44:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cycletaskbarbuttonswithmousewheel">Cycle taskbar buttons with mouse wheel</h1>
-<p>Use the mouse wheel while hovering over the taskbar to cycle between taskbar
-buttons.</p>
-<p><img src="https://i.imgur.com/FtpUjt1.gif" alt="Demonstration" /></p>
-<p>Only Windows 11 is currently supported. For older Windows versions check out <a href="https://tweaker.ramensoftware.com/">7+
-Taskbar Tweaker</a>.</p>]]></content>
     </entry>
 </feed>
