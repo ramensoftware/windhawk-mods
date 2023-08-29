@@ -1,3 +1,6 @@
+## 1.2.1 ([Aug 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/122aa5caae18036ac97f187119f589b70a76c917/mods/taskbar-clock-customization.wh.cpp))
+
+* Fixed a crash for new mod installations.
 ## 1.2 ([Aug 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/8ab7ca1f13850e0ebb9ac2a9aee7ac75cc947d81/mods/taskbar-clock-customization.wh.cpp))
 
 * Added support for multiple web content sources.

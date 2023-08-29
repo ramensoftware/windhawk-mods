@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -620,7 +620,8 @@ void WebContentUpdateThreadInit() {
     g_webContentStringsFull.clear();
     g_webContentStringsFull.resize(g_settings.webContentsItems.size());
 
-    if (*g_settings.webContentsUrl || g_settings.webContentsItems.size() > 0) {
+    if ((g_settings.webContentsUrl && *g_settings.webContentsUrl) ||
+        g_settings.webContentsItems.size() > 0) {
         g_webContentUpdateStopEvent =
             CreateEvent(nullptr, TRUE, FALSE, nullptr);
         g_webContentUpdateThread = CreateThread(
