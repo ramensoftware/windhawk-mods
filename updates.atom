@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-02T17:41:46.000Z</updated>
+    <updated>2023-09-02T19:54:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Center Titlebar 1.0]]></title>
+        <id>https://windhawk.net/mods/center-titlebar#7e3c46ec5bf519a6d333ac8e0b203e7b163742a3</id>
+        <link href="https://windhawk.net/mods/center-titlebar"/>
+        <updated>2023-09-02T19:54:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="centertitlebar">Center Titlebar</h1>
+<p>A port of valinet's <a href="https://github.com/valinet/WinCenterTitle">WinCenterTitle</a>.</p>
+<p><img src="https://i.imgur.com/ULXuIQn.png" alt="Screenshot" /></p>
+<p>Only has the non-aero path for now.</p>
+<h1 id="importantusagenote">⚠ Important usage note ⚠</h1>
+<p>In order to use this mod, you must enable Windhawk to inject into system processes in its advanced settings. 
+ If you do not do this, it will silently fail to inject. <strong>Changing the Windhawk advanced settings will also 
+ affect any other mod you have installed, and may cause instability as any other mod that injects into all 
+ processes will now inject into system processes too.</strong> </p>
+<p>This mod will not work on portable versions of Windhawk because DWM is a protected process and can only be 
+ modified by a system account. Since the portable version of Windhawk only runs as administrator under your 
+ own user account, it will not have the privilege required to inject into DWM. (You may not be so lucky with 
+ forcing the portable version to run as <code>NT AUTHORITY\SYSTEM</code> either, as this didn't work in my testing.)</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Font Fix 1.1]]></title>
         <id>https://windhawk.net/mods/msg-box-font-fix#f4942e9c7cba28ea5fa515307e4dd843969a7902</id>
@@ -331,16 +350,6 @@ relevant <code>#pragma region</code> regions in the code editor.</p>]]></content
         <updated>2023-05-08T21:27:20.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a rare crash.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#2d36c1716cebfe0cf00aff248d355336456cc4c6</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2023-05-08T21:01:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Extended scrolling handling to the whole task list, including the empty space.</li>
-<li>Restored support for Windows 11 version 21H2.</li>
 </ul>]]></content>
     </entry>
 </feed>
