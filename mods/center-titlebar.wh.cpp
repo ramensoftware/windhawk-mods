@@ -12,7 +12,22 @@
 /*
 # Center Titlebar
 A port of valinet's [WinCenterTitle](https://github.com/valinet/WinCenterTitle).
+
+![Screenshot](https://i.imgur.com/ULXuIQn.png)
+
 Only has the non-aero path for now.
+
+# ⚠ Important usage note ⚠ 
+  
+ In order to use this mod, you must enable Windhawk to inject into system processes in its advanced settings. 
+ If you do not do this, it will silently fail to inject. **Changing the Windhawk advanced settings will also 
+ affect any other mod you have installed, and may cause instability as any other mod that injects into all 
+ processes will now inject into system processes too.** 
+  
+ This mod will not work on portable versions of Windhawk because DWM is a protected process and can only be 
+ modified by a system account. Since the portable version of Windhawk only runs as administrator under your 
+ own user account, it will not have the privilege required to inject into DWM. (You may not be so lucky with 
+ forcing the portable version to run as `NT AUTHORITY\SYSTEM` either, as this didn't work in my testing.) 
 */
 // ==/WindhawkModReadme==
 
