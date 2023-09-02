@@ -416,10 +416,13 @@
                 "published": 1693642476000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1693676506000,
+                "updated": 1693685540000,
                 "users": 0
             },
             "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
                 "author": "aubymori",
                 "compilerOptions": "-luser32 -lgdi32",
                 "description": "Fixes the MessageBox font size in 1709+",
@@ -428,7 +431,7 @@
                     "*"
                 ],
                 "name": "Message Box Font Fix",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "mspaint-dark": {

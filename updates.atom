@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-02T19:54:48.000Z</updated>
+    <updated>2023-09-02T20:12:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Font Fix 1.2]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#cc1a729e476a6b5044cd09d1068f6ad195292cbe</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2023-09-02T20:12:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Temporarily x64 only</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Center Titlebar 1.0]]></title>
         <id>https://windhawk.net/mods/center-titlebar#7e3c46ec5bf519a6d333ac8e0b203e7b163742a3</id>
@@ -342,14 +351,5 @@ context menu.</p></li>
 code from the <strong>TranslucentTB</strong> project.</p>
 <p>Some code is borrowed from MSVC generated headers. To reduce the noise, hide the
 relevant <code>#pragma region</code> regions in the code editor.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable grouping on the taskbar 1.2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-grouping#fe7c3b4be6113f48dcdd876ed401e5ce104335da</id>
-        <link href="https://windhawk.net/mods/taskbar-grouping"/>
-        <updated>2023-05-08T21:27:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a rare crash.</li>
-</ul>]]></content>
     </entry>
 </feed>
