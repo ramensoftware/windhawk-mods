@@ -2,15 +2,19 @@
 // @id              msg-box-font-fix
 // @name            Message Box Font Fix
 // @description     Fixes the MessageBox font size in 1709+
-// @version         1.1
+// @version         1.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
 // @compilerOptions -luser32 -lgdi32
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
+# IMPORTANT
+Due to a bug with Windhawk's symbols system, this mod will only work on 64-bit applications for now.
+
 # Message Box Font Fix
 Starting with Windows 10 1709, message boxes render their font size 1pt less than the
 user-defined size.\* You cannot just set this size higher, as many applications still query
