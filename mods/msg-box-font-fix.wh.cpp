@@ -57,12 +57,7 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L"Initializing Message Box Font Fix");
 
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-
-    if (!hUser32)
-    {
-        hUser32 = LoadLibraryW(L"user32.dll");
-    }
+    HMODULE hUser32 = LoadLibraryW(L"user32.dll");
 
     if (!hUser32)
     {
