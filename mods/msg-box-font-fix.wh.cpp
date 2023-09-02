@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Font Fix
 // @description     Fixes the MessageBox font size in 1709+
-// @version         1.0
+// @version         1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -147,7 +147,12 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L"Initializing Message Box Font Fix");
 
-    HMODULE hUser32 = LoadLibraryW(L"user32.dll");
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+
+    if (!hUser32)
+    {
+        hUser32 = LoadLibraryW(L"user32.dll");
+    }
 
     if (!hUser32)
     {
