@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-02T08:14:36.000Z</updated>
+    <updated>2023-09-02T17:41:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Font Fix 1.1]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#f4942e9c7cba28ea5fa515307e4dd843969a7902</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2023-09-02T17:41:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Use built-in WindhawkUtils</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Font Fix 1.0]]></title>
         <id>https://windhawk.net/mods/msg-box-font-fix#dd74a66cba0597c67f530df2d84259bcbc94432d</id>
@@ -332,15 +341,6 @@ relevant <code>#pragma region</code> regions in the code editor.</p>]]></content
         <content type="html"><![CDATA[<ul>
 <li>Extended scrolling handling to the whole task list, including the empty space.</li>
 <li>Restored support for Windows 11 version 21H2.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#3c6652f30f4745c6ab50521fb879edd22ed2aba2</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2023-05-06T19:26:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to control the width of taskbar buttons.</li>
 </ul>]]></content>
     </entry>
 </feed>
