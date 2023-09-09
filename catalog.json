@@ -50,6 +50,33 @@
                 "version": "1.0.3"
             }
         },
+        "classic-maximized-windows-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1694245393000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1694245393000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ephemeralViolette",
+                "compilerOptions": "-lgdi32 -luser32",
+                "description": "Fix maximized windows having borders that spill out onto additional displays when using the classic theme.",
+                "exclude": [
+                    "windhawk.exe",
+                    "vscodium.exe",
+                    "conhost.exe",
+                    "consent.exe"
+                ],
+                "github": "https://github.com/ephemeralViolette",
+                "include": [
+                    "*"
+                ],
+                "name": "Fix Classic Theme Maximized Windows",
+                "version": "1.0"
+            }
+        },
         "classic-taskbar-context-menu": {
             "details": {
                 "defaultSorting": 1970,
