@@ -2,7 +2,7 @@
 // @id              acrylic-effect-radius-changer
 // @name            Acrylic Effect Radius Changer
 // @description     Allows the user to change the Acrylic effect blur radius
-// @version         1.0.1
+// @version         1.0.2
 // @author          Dulappy
 // @github          https://github.com/Dulappy
 // @include         dwm.exe
@@ -91,13 +91,6 @@ float CCustomBlur_DetermineOutputScale_Hook(float f1, float f2, DWORD optimizati
 BOOL Wh_ModInit() {	
     HMODULE dwmcore = GetModuleHandle(L"dwmcore.dll");
     if (!dwmcore) return FALSE;
-
-    WH_FIND_SYMBOL findSymbol;
-    HANDLE findSymbolHandle = Wh_FindFirstSymbol(dwmcore, nullptr, &findSymbol);
-    if (!findSymbolHandle) {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
-        return FALSE;
-    }
 
     LoadSettings();
 
