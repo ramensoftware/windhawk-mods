@@ -2,16 +2,19 @@
 // @id              acrylic-effect-radius-changer
 // @name            Acrylic Effect Radius Changer
 // @description     Allows the user to change the Acrylic effect blur radius
-// @version         1.0.0
+// @version         1.0.1
 // @author          Dulappy
 // @github          https://github.com/Dulappy
 // @include         dwm.exe
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Acrylic blur radius changer
 By default, the Acrylic effect comes with a blur radius of 30, both horizontally and vertically, while not allowing developers or users to modify it. This mod allows the user to modify the default blur radius across **all** apps that utilize the Acrylic effect, by injecting into DWM and hooking all functions necessary to set the aforementioned blur radius.
+
+This will only work on Windows 10, as Windows 11 seems to have changed the functions that make this implementation work.
 
 ## ⚠ Important usage note ⚠
 
@@ -54,6 +57,7 @@ You can scroll down to see some examples of different custom blur radii in actio
 #include <d2d1.h>
 #include <d2d1effects.h>
 #include <dcommon.h>
+#include <windhawk_utils.h>
 
 struct {
     int width;
@@ -67,11 +71,10 @@ void LoadSettings() {
 
 long (*CCustomBlur_BuildEffect_orig)(void* pThis, ID2D1Image* image, D2D_RECT_F*, D2D_SIZE_F*, DWORD, D2D_VECTOR_2F*, D2D_VECTOR_2F*);
 
-long CCustomBlur_BuildEffect_Hook(void* pThis, ID2D1Image* image, D2D_RECT_F* blurrect, D2D_SIZE_F* blurradius, DWORD optimization, D2D_VECTOR_2F* vector1, D2D_VECTOR_2F* vector2) {
+long CCustomBlur_BuildEffect_Hook(void* pThis, ID2D1Image* image, D2D_RECT_F* blurrect, D2D_SIZE_F* blurradius, DWORD optimization, D2D_VECTOR_2F* scale, D2D_VECTOR_2F* vector2) {
     blurradius->width = (float)settings.width;
     blurradius->height = (float)settings.height;
-    Wh_Log(L"%i", settings.width);
-    return CCustomBlur_BuildEffect_orig(pThis, image, blurrect, blurradius, optimization, vector1, vector2);
+    return CCustomBlur_BuildEffect_orig(pThis, image, blurrect, blurradius, optimization, scale, vector2);
 }
 
 float (*CCustomBlur_DetermineOutputScale_orig)(float, float, DWORD);
@@ -95,33 +98,25 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Wh_FindFirstSymbol failed");
         return FALSE;
     }
-    
-    void* DetermineOutputScaleAddr = nullptr;
-    void* BuildEffectAddr = nullptr;
-
-    do {
-        if (_wcsicmp(findSymbol.symbol, L"public: static float __cdecl CCustomBlur::DetermineOutputScale(float,float,enum D2D1_GAUSSIANBLUR_OPTIMIZATION)") == 0) {
-            DetermineOutputScaleAddr = findSymbol.address;
-            Wh_Log(L"symbol: %s, Addr: %i", findSymbol.symbol, findSymbol.address);
-        }
-        else if (_wcsicmp(findSymbol.symbol, L"public: long __cdecl CCustomBlur::BuildEffect(struct ID2D1Image *,struct D2D_RECT_F const &,struct D2D_SIZE_F const &,enum D2D1_GAUSSIANBLUR_OPTIMIZATION,struct D2D_VECTOR_2F const &,struct D2D_VECTOR_2F *)") == 0) {
-            BuildEffectAddr = findSymbol.address;
-            Wh_Log(L"symbol: %s, Addr: %i", findSymbol.symbol, findSymbol.address);
-        }
-        /*else {
-            Wh_Log(L"symbol: %s", findSymbol.symbol);
-        }*/
-    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
-
-    Wh_SetFunctionHook(DetermineOutputScaleAddr, (void*)CCustomBlur_DetermineOutputScale_Hook, (void**)&CCustomBlur_DetermineOutputScale_orig);
-
-    Wh_SetFunctionHook(BuildEffectAddr, (void*)CCustomBlur_BuildEffect_Hook, (void**)&CCustomBlur_BuildEffect_orig);
-
-    Wh_FindCloseSymbol(findSymbolHandle);
 
     LoadSettings();
 
-    return TRUE;
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {L"public: static float __cdecl CCustomBlur::DetermineOutputScale(float,float,enum D2D1_GAUSSIANBLUR_OPTIMIZATION)"},
+            (void**)&CCustomBlur_DetermineOutputScale_orig,
+            (void*)CCustomBlur_DetermineOutputScale_Hook,
+            true,
+        },
+        {
+            {L"public: long __cdecl CCustomBlur::BuildEffect(struct ID2D1Image *,struct D2D_RECT_F const &,struct D2D_SIZE_F const &,enum D2D1_GAUSSIANBLUR_OPTIMIZATION,struct D2D_VECTOR_2F const &,struct D2D_VECTOR_2F *)"},
+            (void**)&CCustomBlur_BuildEffect_orig,
+            (void*)CCustomBlur_BuildEffect_Hook,
+            true,
+        },
+    };
+
+    return WindhawkUtils::HookSymbols(dwmcore, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 
 // The mod is being unloaded, free all allocated resources.
