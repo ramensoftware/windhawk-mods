@@ -3,6 +3,29 @@
         "version": "1.3.1"
     },
     "mods": {
+        "acrylic-effect-radius-changer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1694438292000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1694438292000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Dulappy",
+                "description": "Allows the user to change the Acrylic effect blur radius",
+                "github": "https://github.com/Dulappy",
+                "include": [
+                    "dwm.exe"
+                ],
+                "name": "Acrylic Effect Radius Changer",
+                "version": "1.0.2"
+            }
+        },
         "center-titlebar": {
             "details": {
                 "defaultSorting": 168,

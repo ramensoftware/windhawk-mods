@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-09T07:43:13.000Z</updated>
+    <updated>2023-09-11T13:18:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Acrylic Effect Radius Changer 1.0.2]]></title>
+        <id>https://windhawk.net/mods/acrylic-effect-radius-changer#34cd0d43cf80ab19af0be7278b49ef2c395de6c9</id>
+        <link href="https://windhawk.net/mods/acrylic-effect-radius-changer"/>
+        <updated>2023-09-11T13:18:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="acrylicblurradiuschanger">Acrylic blur radius changer</h1>
+<p>By default, the Acrylic effect comes with a blur radius of 30, both horizontally and vertically, while not allowing developers or users to modify it. This mod allows the user to modify the default blur radius across <strong>all</strong> apps that utilize the Acrylic effect, by injecting into DWM and hooking all functions necessary to set the aforementioned blur radius.</p>
+<p>This will only work on Windows 10, as Windows 11 seems to have changed the functions that make this implementation work.</p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In order to use this mod, you must enable Windhawk to inject into system processes in its advanced settings.
+If you do not do this, it will silently fail to inject. <strong>Changing the Windhawk advanced settings will also
+affect any other mod you have installed, and may cause instability as any other mod that injects into all
+processes will now inject into system processes too.</strong></p>
+<p>This mod will not work on portable versions of Windhawk because DWM is a protected process and can only be
+modified by a system account. Since the portable version of Windhawk only runs as administrator under your
+own user account, it will not have the privilege required to inject into DWM.</p>
+<h2 id="examples">Examples</h2>
+<p>You can scroll down to see some examples of different custom blur radii in action:</p>
+<p><img src="https://i.imgur.com/AZM5rzq.png" alt="Default radius" /> \
+<em>Default blur radius (30x30)</em></p>
+<p><img src="https://i.imgur.com/kDj5G4l.png" alt="Custom radius lite" /> \
+<em>Custom blur radius (4x4)</em></p>
+<p><img src="https://i.imgur.com/GA1meqE.png" alt="Custom radius customized" /> \
+<em>Custom blur radius (24x2)</em></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 1.0]]></title>
         <id>https://windhawk.net/mods/classic-maximized-windows-fix#59d4fcd662a854e70f166ea1756cf92ca940b02e</id>
@@ -292,17 +317,6 @@ This mod fixes that.</p>]]></content>
         <updated>2023-05-20T19:12:17.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the first clock line flashing on hover on Windows 11 version 22H2 and newer.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#0718eb23fbfa530f9a7bc1c1892f071db8b4fb41</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2023-05-20T18:37:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added settings for text styles, such as the font color and size, for Windows 11 version 22H2 and newer.</li>
-<li>Added the <code>%timezone%</code> pattern for the time zone in ISO 8601 format.</li>
-<li>Fixed handling of the "Web content end" value.</li>
 </ul>]]></content>
     </entry>
 </feed>
