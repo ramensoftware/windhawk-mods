@@ -303,9 +303,6 @@ function generateRssFeed() {
 }
 
 async function main() {
-    fs.writeFileSync('updates.atom', generateRssFeed());
-    return;
-
     const catalog = await generateModCatalog();
     fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
 
