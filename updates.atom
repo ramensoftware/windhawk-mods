@@ -26,11 +26,11 @@ modified by a system account. Since the portable version of Windhawk only runs a
 own user account, it will not have the privilege required to inject into DWM.</p>
 <h2 id="examples">Examples</h2>
 <p>You can scroll down to see some examples of different custom blur radii in action:</p>
-<p><img src="https://i.imgur.com/AZM5rzq.png" alt="Default radius" /> \
+<p><img src="https://i.imgur.com/AZM5rzq.png" alt="Default radius" /><br />
 <em>Default blur radius (30x30)</em></p>
-<p><img src="https://i.imgur.com/kDj5G4l.png" alt="Custom radius lite" /> \
+<p><img src="https://i.imgur.com/kDj5G4l.png" alt="Custom radius lite" /><br />
 <em>Custom blur radius (4x4)</em></p>
-<p><img src="https://i.imgur.com/GA1meqE.png" alt="Custom radius customized" /> \
+<p><img src="https://i.imgur.com/GA1meqE.png" alt="Custom radius customized" /><br />
 <em>Custom blur radius (24x2)</em></p>]]></content>
     </entry>
     <entry>
