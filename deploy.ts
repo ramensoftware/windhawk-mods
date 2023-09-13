@@ -281,12 +281,20 @@ function generateRssFeed() {
 
     const showdownConverter = new showdown.Converter();
 
+    const markdownToHtml = (markdown: string) => {
+        // Showdown doesn't support trailing backslashes as newlines. Use double
+        // spaces instead. https://github.com/showdownjs/showdown/issues/394
+        markdown = markdown.replace(/\\\n/g, '  \n');
+
+        return showdownConverter.makeHtml(markdown);
+    }
+
     for (const feedItem of feedItems) {
         feed.addItem({
             title: feedItem.title,
             id: feedItem.url + '#' + feedItem.commit,
             link: feedItem.url,
-            content: showdownConverter.makeHtml(feedItem.content),
+            content: markdownToHtml(feedItem.content),
             date: feedItem.date,
         });
     }
