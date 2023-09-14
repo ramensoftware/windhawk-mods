@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-11T13:18:12.000Z</updated>
+    <updated>2023-09-14T06:57:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Acrylic Effect Radius Changer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/acrylic-effect-radius-changer#8eefc68c13d0cc15c9d0e62c89ff4e61da4d7af0</id>
+        <link href="https://windhawk.net/mods/acrylic-effect-radius-changer"/>
+        <updated>2023-09-14T06:57:56.000Z</updated>
+        <content type="html"><![CDATA[<p>Added an optimization option. Set to true by default to imitate Windows 10's default settings.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Acrylic Effect Radius Changer 1.0.2]]></title>
         <id>https://windhawk.net/mods/acrylic-effect-radius-changer#34cd0d43cf80ab19af0be7278b49ef2c395de6c9</id>
@@ -309,14 +316,5 @@ work again.</p>]]></content>
         <content type="html"><![CDATA[<h1 id="allowmultipleinstancesofregedit">Allow multiple instances of regedit</h1>
 <p>By default, regedit does not allow multiple instances running at the same time.
 This mod fixes that.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#9c814a48137a68e5e1262b98d84be86b08ab96e9</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2023-05-20T19:12:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the first clock line flashing on hover on Windows 11 version 22H2 and newer.</li>
-</ul>]]></content>
     </entry>
 </feed>

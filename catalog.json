@@ -9,7 +9,7 @@
                 "published": 1694438292000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1694438292000,
+                "updated": 1694674676000,
                 "users": 23
             },
             "metadata": {
@@ -23,7 +23,7 @@
                     "dwm.exe"
                 ],
                 "name": "Acrylic Effect Radius Changer",
-                "version": "1.0.2"
+                "version": "1.1.0"
             }
         },
         "center-titlebar": {
