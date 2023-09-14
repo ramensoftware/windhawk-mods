@@ -53,7 +53,7 @@ You can scroll down to see some examples of different custom blur radii in actio
   $description: Set the radius of the Acrylic blur effect to any number
 - optimization: true
   $name: Optimizization
-  $description: Optmizes the blur, especially for higher radii, in exchange for graphical fidelity (virtually unnoticeable)
+  $description: Optimizes the blur, especially for higher radii, in exchange for graphical fidelity (virtually unnoticeable)
 */
 // ==/WindhawkModSettings==
 
