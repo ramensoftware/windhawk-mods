@@ -2,7 +2,7 @@
 // @id              acrylic-effect-radius-changer
 // @name            Acrylic Effect Radius Changer
 // @description     Allows the user to change the Acrylic effect blur radius
-// @version         1.0.2
+// @version         1.1.0
 // @author          Dulappy
 // @github          https://github.com/Dulappy
 // @include         dwm.exe
@@ -51,6 +51,9 @@ You can scroll down to see some examples of different custom blur radii in actio
   - height: 30
   $name: Blur radius
   $description: Set the radius of the Acrylic blur effect to any number
+- optimization: true
+  $name: Optimizization
+  $description: Optimizes the blur, especially for higher radii, in exchange for graphical fidelity (virtually unnoticeable)
 */
 // ==/WindhawkModSettings==
 
@@ -62,11 +65,13 @@ You can scroll down to see some examples of different custom blur radii in actio
 struct {
     int width;
     int height;
+    bool optimize;
 } settings;
 
 void LoadSettings() {
     settings.width = Wh_GetIntSetting(L"radius.width");
     settings.height = Wh_GetIntSetting(L"radius.height");
+    settings.optimize = Wh_GetIntSetting(L"optimization");
 }
 
 long (*CCustomBlur_BuildEffect_orig)(void* pThis, ID2D1Image* image, D2D_RECT_F*, D2D_SIZE_F*, DWORD, D2D_VECTOR_2F*, D2D_VECTOR_2F*);
@@ -80,8 +85,8 @@ long CCustomBlur_BuildEffect_Hook(void* pThis, ID2D1Image* image, D2D_RECT_F* bl
 float (*CCustomBlur_DetermineOutputScale_orig)(float, float, DWORD);
 
 float CCustomBlur_DetermineOutputScale_Hook(float f1, float f2, DWORD optimization) {
-    f1 = 0; // Makes the effect slightly less optimized, but makes it look significantly better in some cases
-    f2 = 0; // In a future update, I might try to reimplement the lost optimization.
+    f1 = (float)(settings.optimize * settings.width);
+    f2 = (float)(settings.optimize * settings.width);
 
     return CCustomBlur_DetermineOutputScale_orig(f1, f2, optimization);
 }
