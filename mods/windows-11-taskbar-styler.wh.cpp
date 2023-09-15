@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1355,6 +1355,7 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
 using namespace winrt::Windows::UI::Xaml;
@@ -1415,8 +1416,10 @@ const std::vector<PropertyKeyValue>* FindElementPropertyOverrides(
         bool parentElementMatchFailed = false;
 
         for (const auto& matcher : override.parentElementMatchers) {
+            // Using parentElementIter.Parent() was sometimes returning null.
             parentElementIter =
-                parentElementIter.Parent().try_as<FrameworkElement>();
+                Media::VisualTreeHelper::GetParent(parentElementIter)
+                    .try_as<FrameworkElement>();
             if (!parentElementIter) {
                 parentElementMatchFailed = true;
                 break;
