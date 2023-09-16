@@ -1,3 +1,6 @@
+## 1.1.2 ([Sep 16, 2023](https://github.com/ramensoftware/windhawk-mods/blob/3ab1f3e504481a1a704e331709a3508fe1980eec/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Fixed a crash loop when some styles are used.
 ## 1.1.1 ([Sep 15, 2023](https://github.com/ramensoftware/windhawk-mods/blob/c8bd45d3c8292364a173776354e9909934fb3817/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Improved parent control matching.

@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-15T17:20:26.000Z</updated>
+    <updated>2023-09-16T17:36:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.1.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#3ab1f3e504481a1a704e331709a3508fe1980eec</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2023-09-16T17:36:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a crash loop when some styles are used.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.1.1]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#c8bd45d3c8292364a173776354e9909934fb3817</id>
@@ -301,20 +310,5 @@ behind. This is because of the 1 pixel visual borders used for DWM top-level win
         <updated>2023-07-08T19:28:41.000Z</updated>
         <content type="html"><![CDATA[<p>Force windows to have thick frames like in Windows Vista/7. This theme should already have thick borders (so like, not the default Windows 10 or 11 theme).</p>
 <p><img src="https://raw.githubusercontent.com/arukateru/ThickFramer/main/251890469-a04311e7-bbed-449f-9c92-79c642c36005.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Flight Simulator window focus helper 1.0]]></title>
-        <id>https://windhawk.net/mods/flight-simulator-focus-helper#651eb9226d6ed5e4815b9125626f3f49be8ce224</id>
-        <link href="https://windhawk.net/mods/flight-simulator-focus-helper"/>
-        <updated>2023-07-07T21:42:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="flightsimulatorwindowfocushelper">Flight Simulator window focus helper</h1>
-<p>Makes the game window active on mouse hover and inactive on mouse leave.</p>
-<p>The Microsoft Flight Simulator game has non-standard mouse scrolling handling -
-the scrolling affects the game depending on whether the window is active or not,
-unlike other apps for which mouse scrolling works when the mouse is hovered over
-the window. This mod helps with this quirk by making the game window inactive
-when the mouse leaves it, so mouse scrolling no longer affects it, and by making
-the game window active when the mouse hovers over it, making mouse scrolling
-work again.</p>]]></content>
     </entry>
 </feed>
