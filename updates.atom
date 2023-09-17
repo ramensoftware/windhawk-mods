@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-16T17:36:48.000Z</updated>
+    <updated>2023-09-17T07:51:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Desktop Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-desktop-icons#92fc89155a43c02efc33637807256301b5c7db97</id>
+        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
+        <updated>2023-09-17T07:51:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicdesktopicons">Classic Desktop Icons</h1>
+<p>This mod will enable classic theme on desktop icons when themes are enabled,
+and will optionally let you restore the Windows 2000 behavior of rendering
+the desktop color on the items' labels.</p>
+<h2 id="forlabelbackgroundstoshowyoumustdisabledesktopiconlabelshadows">For label backgrounds to show, you must DISABLE desktop icon label shadows.</h2>
+<h2 id="screenshots">Screenshots</h2>
+<p><strong>Windows XP style (shadows, no label backgrounds)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-xp-style.png" alt="Windows XP style desktop icons" /></p>
+<p><strong>Windows 2000 style (no shadows, label backgrounds)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-2k-style.png" alt="Windows 2000 style desktop icons" /></p>
+<p><em>Mod originally authored by Taniko Yamamoto.</em></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.1.2]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#3ab1f3e504481a1a704e331709a3508fe1980eec</id>
@@ -302,13 +319,5 @@ behind. This is because of the 1 pixel visual borders used for DWM top-level win
         <content type="html"><![CDATA[<ul>
 <li>Fixed a crash in Windows 11 version 21H2.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force thick frames 2]]></title>
-        <id>https://windhawk.net/mods/force-thick-frames#0d791deae004ab2098ebe0efb82cc9da718e82d9</id>
-        <link href="https://windhawk.net/mods/force-thick-frames"/>
-        <updated>2023-07-08T19:28:41.000Z</updated>
-        <content type="html"><![CDATA[<p>Force windows to have thick frames like in Windows Vista/7. This theme should already have thick borders (so like, not the default Windows 10 or 11 theme).</p>
-<p><img src="https://raw.githubusercontent.com/arukateru/ThickFramer/main/251890469-a04311e7-bbed-449f-9c92-79c642c36005.png" alt="Screenshot" /></p>]]></content>
     </entry>
 </feed>

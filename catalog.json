@@ -73,6 +73,27 @@
                 "version": "1.0.3"
             }
         },
+        "classic-desktop-icons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1694937060000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1694937060000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-luser32 -luxtheme -lcomctl32",
+                "description": "Enables the classic selection style on desktop icons.",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Desktop Icons",
+                "version": "1.0.0"
+            }
+        },
         "classic-maximized-windows-fix": {
             "details": {
                 "defaultSorting": 90,
