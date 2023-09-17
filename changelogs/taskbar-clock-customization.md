@@ -1,3 +1,11 @@
+## 1.3 ([Sep 17, 2023](https://github.com/ramensoftware/windhawk-mods/blob/18081443a8c4f967d07c82997d3096f3b9faba6c/mods/taskbar-clock-customization.wh.cpp))
+
+Taskbar Clock Customization v1.3
+
+* Added text alignment customization option (Windows 11).
+* Styles are applied automatically without having to hover over the clock, and are restored when the mod is disabled (Windows 11).
+* Text spacing can now be customized on Windows 11, not only on Windows 10.
+
 ## 1.2.1 ([Aug 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/122aa5caae18036ac97f187119f589b70a76c917/mods/taskbar-clock-customization.wh.cpp))
 
 * Fixed a crash for new mod installations.

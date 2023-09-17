@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-17T07:51:00.000Z</updated>
+    <updated>2023-09-17T22:02:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#18081443a8c4f967d07c82997d3096f3b9faba6c</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2023-09-17T22:02:41.000Z</updated>
+        <content type="html"><![CDATA[<p>Taskbar Clock Customization v1.3</p>
+<ul>
+<li>Added text alignment customization option (Windows 11).</li>
+<li>Styles are applied automatically without having to hover over the clock, and are restored when the mod is disabled (Windows 11).</li>
+<li>Text spacing can now be customized on Windows 11, not only on Windows 10.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Desktop Icons 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-desktop-icons#92fc89155a43c02efc33637807256301b5c7db97</id>
@@ -309,15 +321,6 @@ behind. This is because of the 1 pixel visual borders used for DWM top-level win
         <updated>2023-07-15T10:26:47.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added support for the old taskbar on Windows 11 (e.g. with Explorer Patcher).</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control#976339b249645ff6874144f4037886085e0f1411</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
-        <updated>2023-07-15T09:21:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash in Windows 11 version 21H2.</li>
 </ul>]]></content>
     </entry>
 </feed>
