@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.2.1
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -111,7 +111,7 @@ styles, such as the font color and size.
 - Height: 60
   $name: Clock height (Windows 10 only)
 - TextSpacing: 0
-  $name: Text spacing (Windows 10 only)
+  $name: Text spacing
   $description: >-
     Set 0 for the default system value. A negative value can be used for
     negative spacing.
@@ -144,6 +144,13 @@ styles, such as the font color and size.
     $description: >-
       Can be a color name (Red, Black, ...) or an RGB/ARGB color code (like
       #00FF00, #CC00FF00, ...)
+  - TextAlignment: ""
+    $name: Text alignment
+    $options:
+    - "": Default
+    - Right: Right
+    - Center: Center
+    - Left: Left
   - FontSize: 0
     $name: Font size
     $description: Set to zero for the default size
@@ -195,13 +202,19 @@ styles, such as the font color and size.
     $name: Character spacing
     $description: Can be a positive or a negative number
   $name: Top line style (Windows 11 version 22H2 and newer)
-  $description: Hover over the clock to apply the style
 - DateStyle:
   - TextColor: ""
     $name: Text color
     $description: >-
       Can be a color name (Red, Black, ...) or an RGB/ARGB color code (like
       #00FF00, #CC00FF00, ...)
+  - TextAlignment: ""
+    $name: Text alignment
+    $options:
+    - "": Default
+    - Right: Right
+    - Center: Center
+    - Left: Left
   - FontSize: 0
     $name: Font size
     $description: Set to zero for the default size
@@ -253,7 +266,6 @@ styles, such as the font color and size.
     $name: Character spacing
     $description: Can be a positive or a negative number
   $name: Bottom line style (Windows 11 version 22H2 and newer)
-  $description: Hover over the clock to apply the style
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
@@ -274,6 +286,7 @@ styles, such as the font color and size.
 #include <initguid.h>  // must come before knownfolders.h
 
 #include <knownfolders.h>
+#include <inspectable.h>
 #include <shlobj.h>
 #include <wininet.h>
 
@@ -320,6 +333,7 @@ struct WebContentsSettings {
 struct TextStyleSettings {
     std::optional<bool> visible;
     StringSetting textColor;
+    StringSetting textAlignment;
     int fontSize;
     StringSetting fontFamily;
     StringSetting fontWeight;
@@ -346,7 +360,7 @@ struct {
     TextStyleSettings dateStyle;
     bool oldTaskbarOnWin11;
 
-    // Kept for compatiblity with old settings:
+    // Kept for compatibility with old settings:
     StringSetting webContentsUrl;
     StringSetting webContentsBlockStart;
     StringSetting webContentsStart;
@@ -381,9 +395,18 @@ std::atomic<bool> g_webContentLoaded;
 std::vector<std::optional<std::wstring>> g_webContentStrings;
 std::vector<std::optional<std::wstring>> g_webContentStringsFull;
 
-// Kept for compatiblity with old settings:
+// Kept for compatibility with old settings:
 WCHAR g_webContent[FORMATTED_BUFFER_SIZE];
 WCHAR g_webContentFull[FORMATTED_BUFFER_SIZE];
+
+struct ClockElementStyleData {
+    winrt::weak_ref<FrameworkElement> dateTimeIconContentElement;
+    DWORD styleIndex;
+};
+
+std::atomic<bool> g_clockElementStyleEnabled;
+std::atomic<DWORD> g_clockElementStyleIndex;
+std::vector<ClockElementStyleData> g_clockElementStyleData;
 
 using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
 GetDpiForWindow_t pGetDpiForWindow;
@@ -504,7 +527,7 @@ void UpdateWebContent() {
     std::wstring lastUrl;
     std::optional<std::wstring> urlContent;
 
-    // Kept for compatiblity with old settings:
+    // Kept for compatibility with old settings:
     if (g_settings.webContentsUrl && g_settings.webContentsBlockStart &&
         g_settings.webContentsStart && g_settings.webContentsEnd) {
         lastUrl = g_settings.webContentsUrl;
@@ -847,7 +870,7 @@ size_t ResolveFormatToken(PCWSTR format, PCWSTR* resolved) {
         return sizeof("%timezone%") - 1;
     }
 
-    // Kept for compatiblity with old settings:
+    // Kept for compatibility with old settings:
     if (wcsncmp(L"%web%", format, sizeof("%web%") - 1) == 0) {
         std::lock_guard<std::mutex> guard(g_webContentMutex);
         *resolved = *g_webContent ? g_webContent : L"Loading...";
@@ -968,12 +991,9 @@ using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(LPVOID pThis);
 DateTimeIconContent_OnApplyTemplate_t
     DateTimeIconContent_OnApplyTemplate_Original;
 
-using DateTimeIconContent_OnPointerEntered_t = void(WINAPI*)(LPVOID pThis,
-                                                             LPVOID pArgs);
-DateTimeIconContent_OnPointerEntered_t
-    DateTimeIconContent_OnPointerEntered_Original;
-
-void* DateTimeIconContent_vftable;
+using BadgeIconContent_get_ViewModel_t = HRESULT(WINAPI*)(LPVOID pThis,
+                                                          LPVOID pArgs);
+BadgeIconContent_get_ViewModel_t BadgeIconContent_get_ViewModel_Original;
 
 using ClockSystemTrayIconDataModel_GetTimeToolTipString_2_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
@@ -1107,22 +1127,29 @@ FrameworkElement FindChildByName(FrameworkElement element,
     return nullptr;
 }
 
-void ApplyTextBlockStyles(Controls::TextBlock textBlock,
-                          const TextStyleSettings& textStyleSettings) {
-    if (textStyleSettings.visible) {
-        if (!*textStyleSettings.visible) {
-            textBlock.Visibility(Visibility::Collapsed);
-            return;
-        }
+void ApplyStackPanelStyles(Controls::StackPanel stackPanel, int textSpacing) {
+    if (textSpacing) {
+        stackPanel.Spacing(textSpacing);
+    } else {
+        stackPanel.as<DependencyObject>().ClearValue(
+            Controls::StackPanel::SpacingProperty());
+    }
+}
 
-        textBlock.Visibility(Visibility::Visible);
+void ApplyTextBlockStyles(Controls::TextBlock textBlock,
+                          const TextStyleSettings* textStyleSettings) {
+    if (textStyleSettings && !textStyleSettings->visible.value_or(true)) {
+        textBlock.Visibility(Visibility::Collapsed);
+        return;
     }
 
-    if (*textStyleSettings.textColor) {
+    textBlock.Visibility(Visibility::Visible);
+
+    if (textStyleSettings && *textStyleSettings->textColor) {
         auto textColor =
             Markup::XamlBindingHelper::ConvertValue(
                 winrt::xaml_typename<winrt::Windows::UI::Color>(),
-                winrt::box_value(textStyleSettings.textColor.get()))
+                winrt::box_value(textStyleSettings->textColor.get()))
                 .as<winrt::Windows::UI::Color>();
         textBlock.Foreground(Media::SolidColorBrush{textColor});
     } else {
@@ -1130,18 +1157,29 @@ void ApplyTextBlockStyles(Controls::TextBlock textBlock,
             Controls::TextBlock::ForegroundProperty());
     }
 
-    if (textStyleSettings.fontSize) {
-        textBlock.FontSize(textStyleSettings.fontSize);
+    if (textStyleSettings && *textStyleSettings->textAlignment) {
+        auto textAlignment =
+            Markup::XamlBindingHelper::ConvertValue(
+                winrt::xaml_typename<TextAlignment>(),
+                winrt::box_value(textStyleSettings->textAlignment.get()))
+                .as<TextAlignment>();
+        textBlock.TextAlignment(textAlignment);
+    } else {
+        textBlock.TextAlignment(TextAlignment::End);
+    }
+
+    if (textStyleSettings && textStyleSettings->fontSize) {
+        textBlock.FontSize(textStyleSettings->fontSize);
     } else {
         textBlock.as<DependencyObject>().ClearValue(
             Controls::TextBlock::FontSizeProperty());
     }
 
-    if (*textStyleSettings.fontFamily) {
+    if (textStyleSettings && *textStyleSettings->fontFamily) {
         auto fontFamily =
             Markup::XamlBindingHelper::ConvertValue(
                 winrt::xaml_typename<Media::FontFamily>(),
-                winrt::box_value(textStyleSettings.fontFamily.get()))
+                winrt::box_value(textStyleSettings->fontFamily.get()))
                 .as<Media::FontFamily>();
         textBlock.FontFamily(fontFamily);
     } else {
@@ -1149,11 +1187,11 @@ void ApplyTextBlockStyles(Controls::TextBlock textBlock,
             Controls::TextBlock::FontFamilyProperty());
     }
 
-    if (*textStyleSettings.fontWeight) {
+    if (textStyleSettings && *textStyleSettings->fontWeight) {
         auto fontWeight =
             Markup::XamlBindingHelper::ConvertValue(
                 winrt::xaml_typename<winrt::Windows::UI::Text::FontWeight>(),
-                winrt::box_value(textStyleSettings.fontWeight.get()))
+                winrt::box_value(textStyleSettings->fontWeight.get()))
                 .as<winrt::Windows::UI::Text::FontWeight>();
         textBlock.FontWeight(fontWeight);
     } else {
@@ -1161,11 +1199,11 @@ void ApplyTextBlockStyles(Controls::TextBlock textBlock,
             Controls::TextBlock::FontWeightProperty());
     }
 
-    if (*textStyleSettings.fontStyle) {
+    if (textStyleSettings && *textStyleSettings->fontStyle) {
         auto fontStyle =
             Markup::XamlBindingHelper::ConvertValue(
                 winrt::xaml_typename<winrt::Windows::UI::Text::FontStyle>(),
-                winrt::box_value(textStyleSettings.fontStyle.get()))
+                winrt::box_value(textStyleSettings->fontStyle.get()))
                 .as<winrt::Windows::UI::Text::FontStyle>();
         textBlock.FontStyle(fontStyle);
     } else {
@@ -1173,11 +1211,11 @@ void ApplyTextBlockStyles(Controls::TextBlock textBlock,
             Controls::TextBlock::FontStyleProperty());
     }
 
-    if (*textStyleSettings.fontStretch) {
+    if (textStyleSettings && *textStyleSettings->fontStretch) {
         auto fontStretch =
             Markup::XamlBindingHelper::ConvertValue(
                 winrt::xaml_typename<winrt::Windows::UI::Text::FontStretch>(),
-                winrt::box_value(textStyleSettings.fontStretch.get()))
+                winrt::box_value(textStyleSettings->fontStretch.get()))
                 .as<winrt::Windows::UI::Text::FontStretch>();
         textBlock.FontStretch(fontStretch);
     } else {
@@ -1185,8 +1223,8 @@ void ApplyTextBlockStyles(Controls::TextBlock textBlock,
             Controls::TextBlock::FontStretchProperty());
     }
 
-    if (textStyleSettings.characterSpacing) {
-        textBlock.CharacterSpacing(textStyleSettings.characterSpacing);
+    if (textStyleSettings && textStyleSettings->characterSpacing) {
+        textBlock.CharacterSpacing(textStyleSettings->characterSpacing);
     } else {
         textBlock.as<DependencyObject>().ClearValue(
             Controls::TextBlock::CharacterSpacingProperty());
@@ -1195,6 +1233,37 @@ void ApplyTextBlockStyles(Controls::TextBlock textBlock,
 
 void ApplyDateTimeIconContentStyles(
     FrameworkElement dateTimeIconContentElement) {
+    ClockElementStyleData* clockElementStyleData = nullptr;
+
+    for (auto it = g_clockElementStyleData.begin();
+         it != g_clockElementStyleData.end();) {
+        auto& data = *it;
+        auto element = data.dateTimeIconContentElement.get();
+        if (!element) {
+            it = g_clockElementStyleData.erase(it);
+            continue;
+        }
+
+        if (element == dateTimeIconContentElement) {
+            clockElementStyleData = &data;
+            break;
+        }
+
+        ++it;
+    }
+
+    bool clockElementStyleEnabled = g_clockElementStyleEnabled;
+    DWORD clockElementStyleIndex = g_clockElementStyleIndex;
+
+    if (!clockElementStyleData && !clockElementStyleEnabled) {
+        return;
+    }
+
+    if (clockElementStyleData &&
+        clockElementStyleData->styleIndex == clockElementStyleIndex) {
+        return;
+    }
+
     auto containerGridElement =
         FindChildByName(dateTimeIconContentElement, L"ContainerGrid")
             .as<Controls::Grid>();
@@ -1202,15 +1271,13 @@ void ApplyDateTimeIconContentStyles(
         return;
     }
 
-    auto stackPanelChildren = containerGridElement.Children()
-                                  .GetAt(0)
-                                  .as<Controls::StackPanel>()
-                                  .Children();
+    auto stackPanel =
+        containerGridElement.Children().GetAt(0).as<Controls::StackPanel>();
 
     Controls::TextBlock dateInnerTextBlock;
     Controls::TextBlock timeInnerTextBlock;
 
-    for (const auto& child : stackPanelChildren) {
+    for (const auto& child : stackPanel.Children()) {
         auto childTextBlock = child.try_as<Controls::TextBlock>();
         if (!childTextBlock) {
             continue;
@@ -1227,13 +1294,27 @@ void ApplyDateTimeIconContentStyles(
         }
     }
 
-    if (dateInnerTextBlock) {
-        ApplyTextBlockStyles(dateInnerTextBlock, g_settings.dateStyle);
+    if (!dateInnerTextBlock || !timeInnerTextBlock) {
+        return;
     }
 
-    if (timeInnerTextBlock) {
-        ApplyTextBlockStyles(timeInnerTextBlock, g_settings.timeStyle);
+    if (!clockElementStyleData) {
+        g_clockElementStyleData.push_back(ClockElementStyleData{
+            .dateTimeIconContentElement = dateTimeIconContentElement,
+        });
+        clockElementStyleData = &g_clockElementStyleData.back();
     }
+
+    ApplyStackPanelStyles(
+        stackPanel, clockElementStyleEnabled ? g_settings.textSpacing : 0);
+    ApplyTextBlockStyles(dateInnerTextBlock, clockElementStyleEnabled
+                                                 ? &g_settings.dateStyle
+                                                 : nullptr);
+    ApplyTextBlockStyles(timeInnerTextBlock, clockElementStyleEnabled
+                                                 ? &g_settings.timeStyle
+                                                 : nullptr);
+
+    clockElementStyleData->styleIndex = clockElementStyleIndex;
 }
 
 void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
@@ -1262,36 +1343,31 @@ void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
     }
 }
 
-void WINAPI DateTimeIconContent_OnPointerEntered_Hook(LPVOID pThis,
-                                                      LPVOID pArgs) {
-    Wh_Log(L">");
+HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis, LPVOID pArgs) {
+    // Wh_Log(L">");
 
-    DateTimeIconContent_OnPointerEntered_Original(pThis, pArgs);
-
-    if (!DateTimeIconContent_vftable ||
-        *(void**)pThis != DateTimeIconContent_vftable) {
-        return;
-    }
-
-    IUnknown* dateTimeIconContentElementIUnknownPtr = *((IUnknown**)pThis + 1);
-    if (!dateTimeIconContentElementIUnknownPtr) {
-        return;
-    }
-
-    FrameworkElement dateTimeIconContentElement = nullptr;
-    dateTimeIconContentElementIUnknownPtr->QueryInterface(
-        winrt::guid_of<FrameworkElement>(),
-        winrt::put_abi(dateTimeIconContentElement));
-    if (!dateTimeIconContentElement) {
-        return;
-    }
+    HRESULT ret = BadgeIconContent_get_ViewModel_Original(pThis, pArgs);
 
     try {
-        ApplyDateTimeIconContentStyles(dateTimeIconContentElement);
+        winrt::Windows::Foundation::IInspectable obj = nullptr;
+        winrt::check_hresult(
+            ((IInspectable*)pThis)
+                ->QueryInterface(
+                    winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
+                    winrt::put_abi(obj)));
+
+        if (winrt::get_class_name(obj) == L"SystemTray.DateTimeIconContent") {
+            auto dateTimeIconContentElement = obj.as<FrameworkElement>();
+            if (dateTimeIconContentElement.IsLoaded()) {
+                ApplyDateTimeIconContentStyles(dateTimeIconContentElement);
+            }
+        }
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"Error %08X", hr);
     }
+
+    return ret;
 }
 
 LPVOID WINAPI
@@ -1930,6 +2006,8 @@ void LoadSettings() {
     g_settings.timeStyle.visible = Wh_GetIntSetting(L"TimeStyle.Visible");
     g_settings.timeStyle.textColor =
         Wh_GetStringSetting(L"TimeStyle.TextColor");
+    g_settings.timeStyle.textAlignment =
+        Wh_GetStringSetting(L"TimeStyle.TextAlignment");
     g_settings.timeStyle.fontSize = Wh_GetIntSetting(L"TimeStyle.FontSize");
     g_settings.timeStyle.fontFamily =
         Wh_GetStringSetting(L"TimeStyle.FontFamily");
@@ -1944,6 +2022,8 @@ void LoadSettings() {
 
     g_settings.dateStyle.textColor =
         Wh_GetStringSetting(L"DateStyle.TextColor");
+    g_settings.dateStyle.textAlignment =
+        Wh_GetStringSetting(L"DateStyle.TextAlignment");
     g_settings.dateStyle.fontSize = Wh_GetIntSetting(L"DateStyle.FontSize");
     g_settings.dateStyle.fontFamily =
         Wh_GetStringSetting(L"DateStyle.FontFamily");
@@ -1956,9 +2036,23 @@ void LoadSettings() {
     g_settings.dateStyle.characterSpacing =
         Wh_GetIntSetting(L"DateStyle.CharacterSpacing");
 
+    g_clockElementStyleEnabled =
+        (g_settings.textSpacing || !*g_settings.timeStyle.visible ||
+         *g_settings.timeStyle.textColor ||
+         *g_settings.timeStyle.textAlignment || g_settings.timeStyle.fontSize ||
+         *g_settings.timeStyle.fontFamily || *g_settings.timeStyle.fontWeight ||
+         *g_settings.timeStyle.fontStyle || *g_settings.timeStyle.fontStretch ||
+         g_settings.timeStyle.characterSpacing ||
+         *g_settings.dateStyle.textColor ||
+         *g_settings.dateStyle.textAlignment || g_settings.dateStyle.fontSize ||
+         *g_settings.dateStyle.fontFamily || *g_settings.dateStyle.fontWeight ||
+         *g_settings.dateStyle.fontStyle || *g_settings.dateStyle.fontStretch ||
+         g_settings.dateStyle.characterSpacing);
+    g_clockElementStyleIndex++;
+
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 
-    // Kept for compatiblity with old settings:
+    // Kept for compatibility with old settings:
     if (wcsstr(g_settings.topLine, L"%web%") ||
         wcsstr(g_settings.bottomLine, L"%web%") ||
         wcsstr(g_settings.middleLine, L"%web%") ||
@@ -2130,20 +2224,11 @@ BOOL Wh_ModInit() {
             },
             {
                 {
-                    LR"(public: __cdecl winrt::Windows::UI::Xaml::Controls::IControlOverridesT<struct winrt::SystemTray::implementation::DateTimeIconContent>::OnPointerEntered(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &)const )",
-                    LR"(public: __cdecl winrt::Windows::UI::Xaml::Controls::IControlOverridesT<struct winrt::SystemTray::implementation::DateTimeIconContent>::OnPointerEntered(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const & __ptr64)const __ptr64)",
+                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * *))",
+                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * __ptr64 * __ptr64) __ptr64)",
                 },
-                (void**)&DateTimeIconContent_OnPointerEntered_Original,
-                (void*)DateTimeIconContent_OnPointerEntered_Hook,
-                true,
-            },
-            {
-                {
-                    LR"(const winrt::SystemTray::implementation::DateTimeIconContent::`vftable')",
-                    LR"(const winrt::SystemTray::implementation::DateTimeIconContent::`vftable' __ptr64)",
-                },
-                &DateTimeIconContent_vftable,
-                nullptr,
+                (void**)&BadgeIconContent_get_ViewModel_Original,
+                (void*)BadgeIconContent_get_ViewModel_Hook,
                 true,
             },
             {
@@ -2360,6 +2445,32 @@ void Wh_ModAfterInit() {
     WebContentUpdateThreadInit();
 
     ApplySettings();
+}
+
+void Wh_ModBeforeUninit() {
+    if (g_winVersion >= WinVersion::Win11 &&
+        g_clockElementStyleEnabled.exchange(false)) {
+        DWORD styleIndex = ++g_clockElementStyleIndex;
+
+        ApplySettings();
+
+        // Wait for styles to be restored.
+        for (int i = 0; i < 20; i++) {
+            bool allRestored = true;
+            for (const auto& data : g_clockElementStyleData) {
+                if (data.styleIndex < styleIndex) {
+                    allRestored = false;
+                    break;
+                }
+            }
+
+            if (allRestored) {
+                break;
+            }
+
+            Sleep(100);
+        }
+    }
 }
 
 void Wh_ModUninit() {
