@@ -70,8 +70,6 @@ void UpdateDesktop(void)
     }
 }
 
-#define LVM_GETACCVERSION 0x10C1
-
 LRESULT CALLBACK DesktopSubclassProc(
     HWND      hWnd,
     UINT      uMsg,
