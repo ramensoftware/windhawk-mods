@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.0.0
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -50,25 +50,18 @@ struct
 } settings;
 
 HWND hDesktop;
+BOOL bSubclassed = FALSE;
 
 #define LABELBG settings.background     \
         ? GetSysColor(COLOR_BACKGROUND) \
         : CLR_NONE
 
-void UpdateDesktop(void)
-{
-    if (hDesktop != NULL)
-    {
-        // Untheme the desktop
-        SetWindowTheme(hDesktop, NULL, NULL);
-        SendMessageW(hDesktop, WM_THEMECHANGED, 0, 0);
-
-        // Apply the desktop background color 
-        DWORD dwBgColor = LABELBG;
-
-        SendMessageW(hDesktop, LVM_SETTEXTBKCOLOR, NULL, (LPARAM)dwBgColor);
-    }
-}
+/**
+  * UpdateDesktop references DesktopSubclassProc
+  * and vice-versa, so we need to define one before
+  * the other without defining the function content.
+  */
+void UpdateDesktop(void);
 
 LRESULT CALLBACK DesktopSubclassProc(
     HWND      hWnd,
@@ -84,6 +77,27 @@ LRESULT CALLBACK DesktopSubclassProc(
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+void UpdateDesktop(void)
+{
+    if (hDesktop != NULL)
+    {
+        /* Untheme the desktop */
+        SetWindowTheme(hDesktop, NULL, NULL);
+        SendMessageW(hDesktop, WM_THEMECHANGED, 0, 0);
+
+        /* Apply the desktop background color */
+        DWORD dwBgColor = LABELBG;
+
+        SendMessageW(hDesktop, LVM_SETTEXTBKCOLOR, NULL, (LPARAM)dwBgColor);
+
+        /* Subclass to update label backgrounds (they get removed normally) */
+        if (!bSubclassed)
+        {
+            bSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc, NULL);
+        }
+    }
 }
 
 HWND FindDesktopWindow(void)
@@ -105,6 +119,61 @@ HWND FindDesktopWindow(void)
     return NULL;
 }
 
+
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_orig;
+HWND CreateWindowExW_hook(
+    DWORD     dwExStyle,
+    LPCWSTR   lpClassName,
+    LPCWSTR   lpWindowName,
+    DWORD     dwStyle,
+    int       X,
+    int       Y,
+    int       nWidth,
+    int       nHeight,
+    HWND      hWndParent,
+    HMENU     hMenu,
+    HINSTANCE hInstance,
+    LPVOID    lpParam
+)
+{
+    HWND hRes = CreateWindowExW_orig(
+        dwExStyle, lpClassName, lpWindowName,
+        dwStyle, X, Y, nWidth, nHeight, hWndParent,
+        hMenu, hInstance, lpParam
+    );
+
+    /**
+      * Check that the following criteria is met:
+      * - The window has a parent
+      * - lpClassName is non-null and not a bad pointer (MANY windows pass a bad pointer to lpClassName)
+      * - The window's class name is "SysListView32"
+      * - The window's parent's class name is "SHELLDLL_DefView"
+      */
+    if (hWndParent != NULL
+    && lpClassName != NULL
+    && !IsBadStringPtrW(lpClassName, 256))
+    {
+        if (0 == wcscmp(L"SysListView32", lpClassName))
+        {
+            LPWSTR lpPrntCls = (LPWSTR)malloc(sizeof(WCHAR) * 256);
+            GetClassNameW(hWndParent, lpPrntCls, 256);
+
+            if (!IsBadStringPtrW(lpPrntCls, 256)
+            && 0 == wcscmp(lpPrntCls, L"SHELLDLL_DefView"))
+            {
+                hDesktop = hRes;
+                UpdateDesktop();
+            }
+
+            free(lpPrntCls);
+        }
+    }
+
+    return hRes;
+}
+
 void LoadSettings(void)
 {
     settings.background = Wh_GetIntSetting(L"background");
@@ -115,12 +184,18 @@ BOOL Wh_ModInit(void)
     Wh_Log(L"Initializing Classic Desktop Icons");
     LoadSettings();
 
-    // Initially update the desktop.
+    /* Initially update the desktop if it already exists. */
     hDesktop = FindDesktopWindow();
-    UpdateDesktop();
+    if (hDesktop != NULL)
+    {
+        UpdateDesktop();
+    }
 
-    // Subclass to update label backgrounds (they get removed normally)
-    WindhawkUtils::SetWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc, NULL);
+    Wh_SetFunctionHook(
+        (void *)CreateWindowExW,
+        (void *)CreateWindowExW_hook,
+        (void **)&CreateWindowExW_orig
+    );
 
     Wh_Log(L"Done initializing Classic Desktop Icons");
     return TRUE;
@@ -128,9 +203,11 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModUninit(void)
 {
-    // Theme the desktop icons again, and remove any text
-    // background that was set
-    // Also remove the subclass we set
+    /**
+      * Theme the desktop icons again, and remove any text
+      * background that was set
+      * Also remove the subclass we set
+      */
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc);
     SendMessageW(hDesktop, LVM_SETTEXTBKCOLOR, NULL, CLR_NONE);
     SetWindowTheme(hDesktop, L"Desktop", NULL);
