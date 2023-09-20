@@ -160,8 +160,7 @@ HWND WINAPI CreateWindowExW_hook(
             WCHAR lpPrntCls[256];
             GetClassNameW(hWndParent, lpPrntCls, 256);
 
-            if (TextualClassName(lpPrntCls)
-            && 0 == wcscmp(lpPrntCls, L"SHELLDLL_DefView"))
+            if (0 == wcscmp(lpPrntCls, L"SHELLDLL_DefView"))
             {
                 hDesktop = hRes;
                 UpdateDesktop();
