@@ -119,11 +119,11 @@ HWND FindDesktopWindow(void)
     return NULL;
 }
 
-
+#define TextualClassName(x) (((ULONG_PTR)x & ~(ULONG_PTR)0xffff) != 0)
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_orig;
-HWND CreateWindowExW_hook(
+HWND WINAPI CreateWindowExW_hook(
     DWORD     dwExStyle,
     LPCWSTR   lpClassName,
     LPCWSTR   lpWindowName,
@@ -153,21 +153,19 @@ HWND CreateWindowExW_hook(
       */
     if (hWndParent != NULL
     && lpClassName != NULL
-    && !IsBadStringPtrW(lpClassName, 256))
+    && TextualClassName(lpClassName))
     {
         if (0 == wcscmp(L"SysListView32", lpClassName))
         {
-            LPWSTR lpPrntCls = (LPWSTR)malloc(sizeof(WCHAR) * 256);
+            WCHAR lpPrntCls[256];
             GetClassNameW(hWndParent, lpPrntCls, 256);
 
-            if (!IsBadStringPtrW(lpPrntCls, 256)
+            if (TextualClassName(lpPrntCls)
             && 0 == wcscmp(lpPrntCls, L"SHELLDLL_DefView"))
             {
                 hDesktop = hRes;
                 UpdateDesktop();
             }
-
-            free(lpPrntCls);
         }
     }
 
