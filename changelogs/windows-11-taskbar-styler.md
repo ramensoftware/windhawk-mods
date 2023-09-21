@@ -1,3 +1,6 @@
+## 1.1.3 ([Sep 21, 2023](https://github.com/ramensoftware/windhawk-mods/blob/7eb55c75224aa0dfff6a524fa3d993ece8a41704/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Fixed mod not unloading when disabled.
 ## 1.1.2 ([Sep 16, 2023](https://github.com/ramensoftware/windhawk-mods/blob/3ab1f3e504481a1a704e331709a3508fe1980eec/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Fixed a crash loop when some styles are used.
