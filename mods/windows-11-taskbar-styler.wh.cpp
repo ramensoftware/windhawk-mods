@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -145,10 +145,20 @@ relevant `#pragma region` regions in the code editor.
 
 #include <winrt/Windows.UI.Xaml.h>
 
-std::atomic<bool> g_disabled = false;
 std::atomic<DWORD> g_targetThreadId = 0;
 
 void ApplyCustomizations(winrt::Windows::UI::Xaml::FrameworkElement element);
+
+HMODULE GetCurrentModuleHandle() {
+    HMODULE module;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           L"", &module)) {
+        return nullptr;
+    }
+
+    return module;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // clang-format off
@@ -1038,9 +1048,10 @@ extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsou
 
 #include <winrt/Windows.UI.Xaml.h>
 
-struct VisualTreeWatcher : winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile>
+class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile>
 {
-    VisualTreeWatcher() = default;
+public:
+    VisualTreeWatcher(winrt::com_ptr<IUnknown> site);
 
     VisualTreeWatcher(const VisualTreeWatcher&) = delete;
     VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
@@ -1048,9 +1059,9 @@ struct VisualTreeWatcher : winrt::implements<VisualTreeWatcher, IVisualTreeServi
     VisualTreeWatcher(VisualTreeWatcher&&) = delete;
     VisualTreeWatcher& operator=(VisualTreeWatcher&&) = delete;
 
-    void SetXamlDiagnostics(winrt::com_ptr<IXamlDiagnostics> diagnostics);
-
     ~VisualTreeWatcher();
+
+    void UnadviseVisualTreeChange();
 
 private:
     HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) override;
@@ -1074,16 +1085,27 @@ private:
 
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 
-void VisualTreeWatcher::SetXamlDiagnostics(winrt::com_ptr<IXamlDiagnostics> diagnostics)
+VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
+    m_XamlDiagnostics(site.as<IXamlDiagnostics>())
 {
-    m_XamlDiagnostics = std::move(diagnostics);
+    Wh_Log(L"Constructing VisualTreeWatcher");
+    winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
 }
 
-VisualTreeWatcher::~VisualTreeWatcher() = default;
+VisualTreeWatcher::~VisualTreeWatcher()
+{
+    Wh_Log(L"Destructing VisualTreeWatcher");
+}
+
+void VisualTreeWatcher::UnadviseVisualTreeChange()
+{
+    Wh_Log(L"UnadviseVisualTreeChange VisualTreeWatcher");
+    winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this));
+}
 
 HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
 {
-    if (g_disabled || GetCurrentThreadId() != g_targetThreadId)
+    if (GetCurrentThreadId() != g_targetThreadId)
     {
         return S_OK;
     }
@@ -1150,26 +1172,20 @@ HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementSt
 
 #include <ocidl.h>
 
+// TODO: weak_ref might be better here.
+winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+
 // {C85D8CC7-5463-40E8-A432-F5916B6427E5}
 static constexpr CLSID CLSID_WindhawkTAP = { 0xc85d8cc7, 0x5463, 0x40e8, { 0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5 } };
 
-struct WindhawkTAP : winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile>
+class WindhawkTAP : public winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile>
 {
+public:
     HRESULT STDMETHODCALLTYPE SetSite(IUnknown *pUnkSite) override;
     HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void **ppvSite) noexcept override;
 
 private:
-    template<typename T>
-    static winrt::com_ptr<T> FromIUnknown(IUnknown *pSite)
-    {
-        winrt::com_ptr<IUnknown> site;
-        site.copy_from(pSite);
-
-        return site.as<T>();
-    }
-
-    winrt::com_ptr<IVisualTreeService3> visualTreeService;
-    winrt::com_ptr<VisualTreeWatcher> visualTreeWatcher;
+    winrt::com_ptr<IUnknown> site;
 };
 
 #pragma endregion  // tap_hpp
@@ -1178,23 +1194,21 @@ private:
 
 HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
 {
-    if (visualTreeService && visualTreeWatcher)
+    // Only ever 1 VTW at once.
+    if (g_visualTreeWatcher)
     {
-        winrt::check_hresult(visualTreeService->UnadviseVisualTreeChange(visualTreeWatcher.get()));
-        visualTreeWatcher->SetXamlDiagnostics(nullptr);
+        g_visualTreeWatcher->UnadviseVisualTreeChange();
+        g_visualTreeWatcher = nullptr;
     }
 
-    visualTreeService = FromIUnknown<IVisualTreeService3>(pUnkSite);
+    site.copy_from(pUnkSite);
 
-    if (visualTreeService)
+    if (site)
     {
-        if (!visualTreeWatcher)
-        {
-            visualTreeWatcher = winrt::make_self<VisualTreeWatcher>();
-        }
+        // Decrease refcount increased by InitializeXamlDiagnosticsEx.
+        FreeLibrary(GetCurrentModuleHandle());
 
-        visualTreeWatcher->SetXamlDiagnostics(visualTreeService.as<IXamlDiagnostics>());
-        winrt::check_hresult(visualTreeService->AdviseVisualTreeChange(visualTreeWatcher.get()));
+        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
     }
 
     return S_OK;
@@ -1206,7 +1220,7 @@ catch (...)
 
 HRESULT WindhawkTAP::GetSite(REFIID riid, void **ppvSite) noexcept
 {
-    return visualTreeService.as(riid, ppvSite);
+    return site.as(riid, ppvSite);
 }
 
 #pragma endregion  // tap_cpp
@@ -1288,18 +1302,6 @@ _Use_decl_annotations_ STDAPI DllCanUnloadNow(void)
 #pragma region api_cpp
 
 using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX = decltype(&InitializeXamlDiagnosticsEx);
-
-HMODULE GetCurrentModuleHandle()
-{
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module)) {
-        return nullptr;
-    }
-
-    return module;
-}
 
 HRESULT InjectWindhawkTAP() noexcept
 {
@@ -1466,8 +1468,8 @@ void ApplyCustomizations(FrameworkElement element) {
             [value = value,
              propertyOverridesUpdateCount = g_propertyOverridesUpdateCount](
                 DependencyObject sender, DependencyProperty property) {
-                if (g_disabled || propertyOverridesUpdateCount !=
-                                      g_propertyOverridesUpdateCount) {
+                if (propertyOverridesUpdateCount !=
+                    g_propertyOverridesUpdateCount) {
                     return;
                 }
 
@@ -1944,13 +1946,6 @@ HWND GetTaskbarUiWnd() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    if (g_disabled) {
-        Wh_Log(L"Already loaded");
-        PromptForExplorerRestart();
-        g_disabled = false;
-        return TRUE;
-    }
-
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
 
@@ -1972,6 +1967,11 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
+    if (g_visualTreeWatcher) {
+        g_visualTreeWatcher->UnadviseVisualTreeChange();
+        g_visualTreeWatcher = nullptr;
+    }
+
     HWND restartExplorerPromptWindow = g_restartExplorerPromptWindow;
     if (restartExplorerPromptWindow) {
         PostMessage(restartExplorerPromptWindow, WM_CLOSE, 0, 0);
@@ -1982,9 +1982,6 @@ void Wh_ModUninit() {
         CloseHandle(g_restartExplorerPromptThread);
         g_restartExplorerPromptThread = nullptr;
     }
-
-    // TODO: Explore a way to stop the monitoring and unload the dll.
-    g_disabled = true;
 }
 
 void Wh_ModSettingsChanged() {
