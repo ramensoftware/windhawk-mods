@@ -26,6 +26,8 @@ Windows Vista look.
 */
 // ==/WindhawkModReadme==
 
+#include <VersionHelpers.h>
+#include <versionhelpers.h>
 #include <windhawk_utils.h>
 
 typedef void (* CTaskBtnGroup__DrawHotTrackingLight_t)(HDC, void *, const RECT *, int, int, int, int, int, unsigned char);
@@ -47,6 +49,12 @@ void __cdecl CTaskBtnGroup__DrawHotTrackingLight_hook(
 
 BOOL Wh_ModInit(void)
 {
+    if (IsWindows10OrGreater())
+    {
+        Wh_Log(L"This mod is designed for Windows 8.1 and below");
+        return FALSE;
+    }
+
     HMODULE hExplorer = GetModuleHandleW(NULL);
     if (!hExplorer)
     {
