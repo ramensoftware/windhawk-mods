@@ -26,7 +26,6 @@ Windows Vista look.
 */
 // ==/WindhawkModReadme==
 
-#include <VersionHelpers.h>
 #include <versionhelpers.h>
 #include <windhawk_utils.h>
 
