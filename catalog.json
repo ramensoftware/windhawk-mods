@@ -569,6 +569,29 @@
                 "version": "1.0.0"
             }
         },
+        "no-taskbar-item-glow": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1695580544000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1695580544000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Disables the glow hover effect on Windows 7 and 8",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "No Taskbar Item Glow",
+                "version": "1.0.0"
+            }
+        },
         "notepad-dark-mode": {
             "details": {
                 "defaultSorting": 14340,
