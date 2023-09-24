@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-24T18:35:44.000Z</updated>
+    <updated>2023-09-24T23:24:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Themed Regedit ListView 1.0.0]]></title>
+        <id>https://windhawk.net/mods/themed-regedit-listview#897fe1e616539213676bd2f7f835ce29b3976781</id>
+        <link href="https://windhawk.net/mods/themed-regedit-listview"/>
+        <updated>2023-09-24T23:24:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="themedregeditlistview">Themed Regedit ListView</h1>
+<p>For a brief time during Windows 10's life, the Registry Editor had a themed
+ListView. This mod restores that.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/themed-regedit-listview-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/themed-regedit-listview-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No Taskbar Item Glow 1.0.0]]></title>
         <id>https://windhawk.net/mods/no-taskbar-item-glow#8a12f776ea295d87ae83b2b6ac91c508ca3150dd</id>
@@ -266,17 +279,5 @@ issue</a>.</p>]]></content>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/win7-alt-tab-dwm.png" alt="DWM (with thumbnails)" />
 <img src="https://raw.githubusercontent.com/aubymori/images/main/win7-alt-tab-basic.png" alt="Basic (no thumbnails)" /></p>
 <p><em>Co-authored by ephemeralViolette and aubymori.</em></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#945959053f99f73a7babdd46a097e905f0f1f4e2</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2023-07-27T18:28:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the ability to target control child elements</li>
-<li>New styles are now applied without restarting Explorer (but previously set styles aren't cleared)</li>
-<li>Fixed showing the Explorer restart prompt message on startup</li>
-<li>Added an option to completely disable the Explorer restart prompt message</li>
-</ul>]]></content>
     </entry>
 </feed>
