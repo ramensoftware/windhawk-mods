@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.1.0
+// @version         1.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -49,7 +49,7 @@ struct
     BOOL background;
 } settings;
 
-HWND hDesktop;
+HWND hDesktop = NULL;
 BOOL bSubclassed = FALSE;
 
 #define LABELBG settings.background     \
@@ -146,12 +146,14 @@ HWND WINAPI CreateWindowExW_hook(
 
     /**
       * Check that the following criteria is met:
+      * - The desktop is not already set
       * - The window has a parent
       * - lpClassName is non-null and not a bad pointer (MANY windows pass a bad pointer to lpClassName)
       * - The window's class name is "SysListView32"
       * - The window's parent's class name is "SHELLDLL_DefView"
       */
-    if (hWndParent != NULL
+    if (hDesktop == NULL
+    && hWndParent != NULL
     && lpClassName != NULL
     && TextualClassName(lpClassName))
     {
