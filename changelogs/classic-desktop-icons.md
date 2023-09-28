@@ -1,3 +1,6 @@
+## 1.1.1 ([Sep 28, 2023](https://github.com/ramensoftware/windhawk-mods/blob/95e4d640b853ee587b9e6d391c2bb3c5f32e7f37/mods/classic-desktop-icons.wh.cpp))
+
+Fix conflict with Explorer in SysListView32 mode
 ## 1.1.0 ([Sep 20, 2023](https://github.com/ramensoftware/windhawk-mods/blob/cb55aac7d78798c1fc39c1811093b6d62e7803c9/mods/classic-desktop-icons.wh.cpp))
 
 * Fix for initial Explorer launch

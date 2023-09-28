@@ -79,7 +79,7 @@
                 "published": 1694937060000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1695244542000,
+                "updated": 1695935787000,
                 "users": 23
             },
             "metadata": {
@@ -91,7 +91,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Desktop Icons",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "classic-maximized-windows-fix": {
