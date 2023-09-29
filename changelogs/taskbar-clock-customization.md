@@ -1,3 +1,6 @@
+## 1.3.1 ([Sep 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/9422e42496cbf69949fb5cedce029b6bf3f0ddb8/mods/taskbar-clock-customization.wh.cpp))
+
+* Fixed the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update).
 ## 1.3 ([Sep 17, 2023](https://github.com/ramensoftware/windhawk-mods/blob/18081443a8c4f967d07c82997d3096f3b9faba6c/mods/taskbar-clock-customization.wh.cpp))
 
 Taskbar Clock Customization v1.3

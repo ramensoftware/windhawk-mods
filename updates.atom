@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-28T21:16:27.000Z</updated>
+    <updated>2023-09-29T22:57:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.3.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#9422e42496cbf69949fb5cedce029b6bf3f0ddb8</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2023-09-29T22:57:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update).</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Desktop Icons 1.1.1]]></title>
         <id>https://windhawk.net/mods/classic-desktop-icons#95e4d640b853ee587b9e6d391c2bb3c5f32e7f37</id>
@@ -256,14 +265,5 @@ switching and monitor brightness control.</p>
 workaround is to use the "pinch to zoom" gesture. For details, check out <a href="https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt-trigger-mouse-wheel-options">a
 relevant
 issue</a>.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 1.0.1]]></title>
-        <id>https://windhawk.net/mods/win7-alttab-loader#f960450eb653d48c9ab3177e706b93b59a4e8394</id>
-        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
-        <updated>2023-08-08T21:25:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Update README to link to more proper theme</li>
-</ul>]]></content>
     </entry>
 </feed>
