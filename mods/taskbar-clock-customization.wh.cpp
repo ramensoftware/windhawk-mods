@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -285,8 +285,8 @@ styles, such as the font color and size.
 
 #include <initguid.h>  // must come before knownfolders.h
 
-#include <knownfolders.h>
 #include <inspectable.h>
+#include <knownfolders.h>
 #include <shlobj.h>
 #include <wininet.h>
 
@@ -967,7 +967,6 @@ int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format) {
 
 DWORD g_refreshIconThreadId;
 bool g_refreshIconNeedToAdjustTimer;
-bool g_inScheduleNextUpdate;
 bool g_inGetTimeToolTipString;
 
 using ClockSystemTrayIconDataModel_RefreshIcon_t = void(WINAPI*)(
@@ -976,11 +975,6 @@ using ClockSystemTrayIconDataModel_RefreshIcon_t = void(WINAPI*)(
 );
 ClockSystemTrayIconDataModel_RefreshIcon_t
     ClockSystemTrayIconDataModel_RefreshIcon_Original;
-
-using ClockSystemTrayIconDataModel_ScheduleNextUpdate_t =
-    void(WINAPI*)(LPVOID pThis);
-ClockSystemTrayIconDataModel_ScheduleNextUpdate_t
-    ClockSystemTrayIconDataModel_ScheduleNextUpdate_Original;
 
 using ClockSystemTrayIconDataModel_GetTimeToolTipString_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
@@ -1003,10 +997,11 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString_2_t
 using ICalendar_Second_t = int(WINAPI*)(LPVOID pThis);
 ICalendar_Second_t ICalendar_Second_Original;
 
-using ThreadPoolTimer_CreateTimer_t = LPVOID(WINAPI*)(LPVOID param1,
-                                                      LPVOID param2,
-                                                      ULONGLONG* elapse);
-ThreadPoolTimer_CreateTimer_t ThreadPoolTimer_CreateTimer_Original;
+using ThreadPoolTimer_CreateTimer_lambda_t = LPVOID(WINAPI*)(DWORD_PTR** param1,
+                                                             LPVOID param2,
+                                                             LPVOID param3);
+ThreadPoolTimer_CreateTimer_lambda_t
+    ThreadPoolTimer_CreateTimer_lambda_Original;
 
 void WINAPI ClockSystemTrayIconDataModel_RefreshIcon_Hook(LPVOID pThis,
                                                           LPVOID param1) {
@@ -1020,16 +1015,6 @@ void WINAPI ClockSystemTrayIconDataModel_RefreshIcon_Hook(LPVOID pThis,
 
     g_refreshIconThreadId = 0;
     g_refreshIconNeedToAdjustTimer = false;
-}
-
-void WINAPI ClockSystemTrayIconDataModel_ScheduleNextUpdate_Hook(LPVOID pThis) {
-    Wh_Log(L">");
-
-    g_inScheduleNextUpdate = true;
-
-    ClockSystemTrayIconDataModel_ScheduleNextUpdate_Original(pThis);
-
-    g_inScheduleNextUpdate = false;
 }
 
 void UpdateToolTipString(LPVOID tooltipPtrPtr) {
@@ -1394,7 +1379,9 @@ int WINAPI ICalendar_Second_Hook(LPVOID pThis) {
     Wh_Log(L">");
 
     if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        g_inScheduleNextUpdate && g_refreshIconNeedToAdjustTimer) {
+        !g_inGetTimeToolTipString && g_refreshIconNeedToAdjustTimer) {
+        g_refreshIconNeedToAdjustTimer = false;
+
         // Make the next refresh happen in a second.
         return 59;
     }
@@ -1404,39 +1391,33 @@ int WINAPI ICalendar_Second_Hook(LPVOID pThis) {
     return ret;
 }
 
-LPVOID WINAPI ThreadPoolTimer_CreateTimer_Hook(LPVOID param1,
-                                               LPVOID param2,
-                                               ULONGLONG* elapse) {
-    Wh_Log(L">");
+LPVOID WINAPI ThreadPoolTimer_CreateTimer_lambda_Hook(DWORD_PTR** param1,
+                                                      LPVOID param2,
+                                                      LPVOID param3) {
+    DWORD_PTR* elapse = param1[1];
 
-    ULONGLONG elapseNew;
+    Wh_Log(L"> %zu", *elapse);
 
     if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        g_inScheduleNextUpdate && g_refreshIconNeedToAdjustTimer) {
-        // Make the next refresh happen next second. This hook is only relevant
-        // for recent Windows 11 22H2 versions, previous Windows versions used
-        // other timer functions. Without this hook, the timer was always set
-        // one second forward, and so the clock was accumulating a delay,
-        // finally caused one second to be skipped.
-        //
-        // Note that with this solution, the following hooks aren't necessary,
-        // but they're kept for older Windows 11 versions:
-        // - ICalendar_Second_Hook
-        // - GetLocalTime_Hook_Win11
+        !g_inGetTimeToolTipString && *elapse == 10000000) {
+        // Make the next refresh happen next second. Without this hook, the
+        // timer was always set one second forward, and so the clock was
+        // accumulating a delay, finally caused one second to be skipped.
         SYSTEMTIME time;
         GetLocalTime_Original(&time);
-        elapseNew = 10000ULL * (1000 - time.wMilliseconds);
-        elapse = &elapseNew;
+        *elapse = 10000ULL * (1000 - time.wMilliseconds);
     }
 
-    return ThreadPoolTimer_CreateTimer_Original(param1, param2, elapse);
+    return ThreadPoolTimer_CreateTimer_lambda_Original(param1, param2, param3);
 }
 
 VOID WINAPI GetLocalTime_Hook_Win11(LPSYSTEMTIME lpSystemTime) {
     Wh_Log(L">");
 
     if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        g_inScheduleNextUpdate && g_refreshIconNeedToAdjustTimer) {
+        !g_inGetTimeToolTipString && g_refreshIconNeedToAdjustTimer) {
+        g_refreshIconNeedToAdjustTimer = false;
+
         // Make the next refresh happen in a second.
         memset(lpSystemTime, 0, sizeof(*lpSystemTime));
         lpSystemTime->wSecond = 59;
@@ -1453,7 +1434,7 @@ int WINAPI GetTimeFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
                                       LPWSTR lpTimeStr,
                                       int cchTime) {
     if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inScheduleNextUpdate && !g_inGetTimeToolTipString) {
+        !g_inGetTimeToolTipString) {
         if (wcscmp(g_settings.topLine, L"-") != 0) {
             if (!cchTime) {
                 // Hopefully a large enough buffer size.
@@ -1478,7 +1459,40 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
                                       int cchDate,
                                       LPCWSTR lpCalendar) {
     if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inScheduleNextUpdate && !g_inGetTimeToolTipString) {
+        !g_inGetTimeToolTipString) {
+        // Below is a fix for the following situation. The code inside
+        // winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon
+        // looks similar to the following (pseudo code):
+        //
+        // ----------------------------------------
+        // if (someFlag) {
+        //     SYSTEMTIME t1;
+        //     GetLocalTime(&t1);
+        //     setTimeout(nextUpdate, calcNextUpdate(t1.wSecond));
+        // }
+        // SYSTEMTIME t2;
+        // GetLocalTime(&t2);
+        // GetDateFormatEx(..., &t2, ...);
+        // ----------------------------------------
+        //
+        // We hook GetLocalTime and change wSecond to update the clock every
+        // second, which works if someFlag is set. But in case someFlag isn't
+        // set, we end up changing the result of the second GetLocalTime call.
+        // To handle this, we check whether the time we get here is the time we
+        // set in the hook, and if so, we call GetLocalTime explicitly to pass
+        // the correct date to GetDateFormatEx.
+        //
+        // I'm not sure what someFlag means, but it becomes false when the
+        // monitor turns off.
+
+        SYSTEMTIME sentinelSystemTime;
+        memset(&sentinelSystemTime, 0, sizeof(sentinelSystemTime));
+        sentinelSystemTime.wSecond = 59;
+        if (memcmp(lpDate, &sentinelSystemTime, sizeof(sentinelSystemTime)) ==
+            0) {
+            GetLocalTime_Original(const_cast<SYSTEMTIME*>(lpDate));
+        }
+
         if (dwFlags & DATE_SHORTDATE) {
             if (!cchDate || g_winVersion >= WinVersion::Win11_22H2) {
                 // First call, initialize strings.
@@ -2198,14 +2212,6 @@ BOOL Wh_ModInit() {
             },
             {
                 {
-                    LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::ScheduleNextUpdate(class SystemTrayTelemetry::ClockUpdate &))",
-                    LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::ScheduleNextUpdate(class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
-                },
-                (void**)&ClockSystemTrayIconDataModel_ScheduleNextUpdate_Original,
-                (void*)ClockSystemTrayIconDataModel_ScheduleNextUpdate_Hook,
-            },
-            {
-                {
                     LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))",
                     LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const & __ptr64,struct _SYSTEMTIME const & __ptr64,class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
                 },
@@ -2251,13 +2257,12 @@ BOOL Wh_ModInit() {
             },
             {
                 {
-                    LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &))",
-                    LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const & __ptr64,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const & __ptr64) __ptr64)",
+                    LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
+                    LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const & __ptr64)const __ptr64)",
                 },
-                (void**)&ThreadPoolTimer_CreateTimer_Original,
-                (void*)ThreadPoolTimer_CreateTimer_Hook,
-                true,  // For newer Windows 11 22H2 versions with the option to
-                       // show seconds.
+                (void**)&ThreadPoolTimer_CreateTimer_lambda_Original,
+                (void*)ThreadPoolTimer_CreateTimer_lambda_Hook,
+                true,  // Only for more precise clock, see comment in the hook.
             },
         };
 
