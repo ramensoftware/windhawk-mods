@@ -2,12 +2,13 @@
 // @id              taskbar-button-scroll
 // @name            Taskbar minimize/restore on scroll
 // @description     Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews (Windows 11 only)
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lcomctl32 -loleaut32 -lole32
 // ==/WindhawkMod==
 
@@ -26,10 +27,10 @@
 Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail
 previews.
 
-![Demonstration](https://i.imgur.com/rnnwOss.gif)
+Only Windows 11 version 22H2 or newer is currently supported. For older Windows
+versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
-Only Windows 11 is currently supported. For older Windows versions check out [7+
-Taskbar Tweaker](https://tweaker.ramensoftware.com/).
+![Demonstration](https://i.imgur.com/rnnwOss.gif)
 */
 // ==/WindhawkModReadme==
 
@@ -93,6 +94,11 @@ size_t OffsetFromAssembly(void* func,
                           size_t defValue,
                           std::string opcode = "mov",
                           int limit = 30) {
+    // Example: mov rax, [rcx+0xE0]
+    std::regex regex(
+        opcode +
+        R"( r(?:[a-z]{2}|\d{1,2}), \[r(?:[a-z]{2}|\d{1,2})\+(0x[0-9A-F]+)\])");
+
     BYTE* p = (BYTE*)func;
     for (int i = 0; i < limit; i++) {
         WH_DISASM_RESULT result;
@@ -107,10 +113,6 @@ size_t OffsetFromAssembly(void* func,
             break;
         }
 
-        // Example: mov rax, [rcx+0xE0]
-        std::regex regex(
-            opcode +
-            R"( r(?:[a-z]{2}|\d{1,2}), \[r(?:[a-z]{2}|\d{1,2})\+(0x[0-9A-F]+)\])");
         std::match_results<std::string_view::const_iterator> match;
         if (std::regex_match(s.begin(), s.end(), match, regex)) {
             // Wh_Log(L"%S", result.text);
@@ -323,13 +325,6 @@ BOOL WINAPI CApi_PostMessageW_Hook(PVOID pThis,
 using TaskListButton_AutomationInvoke_t = void(WINAPI*)(PVOID pThis);
 TaskListButton_AutomationInvoke_t TaskListButton_AutomationInvoke_Original;
 
-// {7C3E0575-EB65-5A36-B1CF-8322C06C53C3}
-constexpr winrt::guid ITaskListButton{
-    0x7C3E0575,
-    0xEB65,
-    0x5A36,
-    {0xB1, 0xCF, 0x83, 0x22, 0xC0, 0x6C, 0x53, 0xC3}};
-
 using TaskListButton_OnPointerWheelChanged_t = int(WINAPI*)(PVOID pThis,
                                                             PVOID pArgs);
 TaskListButton_OnPointerWheelChanged_t
@@ -345,10 +340,20 @@ int TaskListButton_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
         return original();
     }
 
-    winrt::Windows::Foundation::IUnknown taskListButton = nullptr;
+    winrt::Windows::Foundation::IInspectable taskListButton = nullptr;
     ((IUnknown*)pThis)
-        ->QueryInterface(ITaskListButton, winrt::put_abi(taskListButton));
+        ->QueryInterface(
+            winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
+            winrt::put_abi(taskListButton));
+
     if (!taskListButton) {
+        return original();
+    }
+
+    auto className = winrt::get_class_name(taskListButton);
+    Wh_Log(L"%s", className.c_str());
+
+    if (className != L"Taskbar.TaskListButton") {
         return original();
     }
 
@@ -512,7 +517,7 @@ void WINAPI CTaskListWnd_OnContextMenu_Hook(PVOID pThis,
     g_lastScrollDeltaRemainder = delta % WHEEL_DELTA;
 }
 
-using CTaskListWnd_DismissHoverUI_t = HRESULT(WINAPI*)(PVOID pThi);
+using CTaskListWnd_DismissHoverUI_t = HRESULT(WINAPI*)(PVOID pThis);
 CTaskListWnd_DismissHoverUI_t CTaskListWnd_DismissHoverUI_Original;
 HRESULT WINAPI CTaskListWnd_DismissHoverUI_Hook(PVOID pThis) {
     if (GetTickCount64() < g_noDismissHoverUIUntil) {
@@ -952,8 +957,9 @@ bool HookTaskbarViewDllSymbols() {
 
     HMODULE module =
         LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (module) {
+    if (!module) {
         Wh_Log(L"Taskbar view module couldn't be loaded");
+        return false;
     }
 
     SYMBOL_HOOK symbolHooks[] = {
@@ -1068,6 +1074,8 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
     DWORD dwProcessId;
     DWORD dwCurrentProcessId = GetCurrentProcessId();
 
