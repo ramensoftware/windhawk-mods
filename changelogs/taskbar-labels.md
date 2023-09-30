@@ -1,3 +1,6 @@
+## 1.1.4 ([Sep 30, 2023](https://github.com/ramensoftware/windhawk-mods/blob/6a427c77a7a4c23efa5db4274c1c7ef5369b3eca/mods/taskbar-labels.wh.cpp))
+
+* Initial fixes for the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update). There are still known bugs, but it's mostly usable.
 ## 1.1.3 ([Apr 3, 2023](https://github.com/ramensoftware/windhawk-mods/blob/d655abb41851b0ad352af334461da59b45a1867d/mods/taskbar-labels.wh.cpp))
 
 * Undid the fix of the pinned items sometimes being too wide, since it caused more problems.
