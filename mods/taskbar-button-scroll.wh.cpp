@@ -2,7 +2,7 @@
 // @id              taskbar-button-scroll
 // @name            Taskbar minimize/restore on scroll
 // @description     Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews (Windows 11 only)
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -81,6 +81,8 @@ WPARAM g_invokingContextMenuWParam = 0;
 PVOID g_lastScrollTarget = nullptr;
 DWORD g_lastScrollTime;
 short g_lastScrollDeltaRemainder;
+int g_lastScrollCommand;
+DWORD g_lastScrollCommandTime;
 std::atomic<DWORD> g_groupMenuCommandThreadId;
 ULONGLONG g_noDismissHoverUIUntil = 0;
 
@@ -184,7 +186,9 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
         command = SC_MINIMIZE;
     }
 
-    if (command) {
+    if (command &&
+        (g_lastScrollTarget != taskBtnGroup || command != g_lastScrollCommand ||
+         GetTickCount() - g_lastScrollCommandTime >= 500)) {
         PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(taskBtnGroup);
         if (taskGroup) {
             g_groupMenuCommandThreadId = GetCurrentThreadId();
@@ -192,6 +196,9 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
                 taskGroup, *EV_MM_TASKLIST_TASK_ITEM_FILTER(pThis), command);
             g_groupMenuCommandThreadId = 0;
         }
+
+        g_lastScrollCommand = command;
+        g_lastScrollCommandTime = GetTickCount();
     }
 
     g_lastScrollTarget = taskBtnGroup;
@@ -384,6 +391,7 @@ int TaskListButton_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
         (BYTE*)winrt::get_abi(taskListButton) - 0x18);
     g_invokingTaskListButtonAutomationInvokeMouseWheelDelta = 0;
 
+    args.Handled(true);
     return 0;
 }
 
