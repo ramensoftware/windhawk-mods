@@ -1,3 +1,7 @@
+## 1.0.5 ([Sep 30, 2023](https://github.com/ramensoftware/windhawk-mods/blob/eb081300de3950ca47306e7c7ebd73c18d1ee6cf/mods/taskbar-button-scroll.wh.cpp))
+
+* Improved compatiblity with other mods such as: Cycle taskbar buttons with mouse wheel.
+* Fixed command invoking multiple times on rapid scrolling, which could cause a window to be un-maximized when restored.
 ## 1.0.4 ([Sep 30, 2023](https://github.com/ramensoftware/windhawk-mods/blob/bda321aa7a4e17c6e5f5df9e6df406a72fdd94b6/mods/taskbar-button-scroll.wh.cpp))
 
 * Fixed the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update).

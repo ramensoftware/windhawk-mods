@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-30T09:21:59.000Z</updated>
+    <updated>2023-09-30T09:24:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-scroll#eb081300de3950ca47306e7c7ebd73c18d1ee6cf</id>
+        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
+        <updated>2023-09-30T09:24:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved compatiblity with other mods such as: Cycle taskbar buttons with mouse wheel.</li>
+<li>Fixed command invoking multiple times on rapid scrolling, which could cause a window to be un-maximized when restored.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#0bc6f2152e17cb5e05271e021f86c50ea9a03e98</id>
@@ -241,14 +251,5 @@ it, and will show up with bigger fonts.</p>
 <p><em>*Microsoft changed the way the font size was calculator for Per-Monitor V2 DPI awareness. It ALWAYS gets
 1pt below the font size, even when on a higher DPI. This is because Microsoft decided to do some weird math
 instead of just using <code>SystemParametersInfoW</code> like a normal person.</em></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#122aa5caae18036ac97f187119f589b70a76c917</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2023-08-29T07:16:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash for new mod installations.</li>
-</ul>]]></content>
     </entry>
 </feed>
