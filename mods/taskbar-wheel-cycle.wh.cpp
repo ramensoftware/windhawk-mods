@@ -2,7 +2,7 @@
 // @id              taskbar-wheel-cycle
 // @name            Cycle taskbar buttons with mouse wheel
 // @description     Use the mouse wheel while hovering over the taskbar to cycle between taskbar buttons (Windows 11 only)
-// @version         1.1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -551,20 +551,6 @@ HWND TaskListFromPoint(POINT pt) {
     return nullptr;
 }
 
-// {DEF37FDC-D6AD-5F57-94F3-E5B6269D88F3}
-constexpr winrt::guid ITaskbarFrame_W11_21H2{
-    0xDEF37FDC,
-    0xD6AD,
-    0x5F57,
-    {0x94, 0xF3, 0xE5, 0xB6, 0x26, 0x9D, 0x88, 0xF3}};
-
-// {544EF193-6AC5-5B31-A731-AAAAB261AA3F}
-constexpr winrt::guid ITaskbarFrame_W11_22H2{
-    0x544EF193,
-    0x6AC5,
-    0x5B31,
-    {0xA7, 0x31, 0xAA, 0xAA, 0xB2, 0x61, 0xAA, 0x3F}};
-
 using TaskbarFrame_OnPointerWheelChanged_t = int(WINAPI*)(PVOID pThis,
                                                           PVOID pArgs);
 TaskbarFrame_OnPointerWheelChanged_t
@@ -576,17 +562,20 @@ int TaskbarFrame_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
         return TaskbarFrame_OnPointerWheelChanged_Original(pThis, pArgs);
     };
 
-    winrt::Windows::Foundation::IUnknown taskbarFrame = nullptr;
+    winrt::Windows::Foundation::IInspectable taskbarFrame = nullptr;
     ((IUnknown*)pThis)
-        ->QueryInterface(ITaskbarFrame_W11_22H2, winrt::put_abi(taskbarFrame));
+        ->QueryInterface(
+            winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
+            winrt::put_abi(taskbarFrame));
 
     if (!taskbarFrame) {
-        ((IUnknown*)pThis)
-            ->QueryInterface(ITaskbarFrame_W11_21H2,
-                             winrt::put_abi(taskbarFrame));
+        return original();
     }
 
-    if (!taskbarFrame) {
+    auto className = winrt::get_class_name(taskbarFrame);
+    Wh_Log(L"%s", className.c_str());
+
+    if (className != L"Taskbar.TaskbarFrame") {
         return original();
     }
 
@@ -620,6 +609,7 @@ int TaskbarFrame_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
 
     OnTaskListScroll(hMMTaskListWnd, static_cast<short>(delta));
 
+    args.Handled(true);
     return 0;
 }
 
