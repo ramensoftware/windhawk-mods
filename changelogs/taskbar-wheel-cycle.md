@@ -1,3 +1,6 @@
+## 1.1.2 ([Sep 30, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0bc6f2152e17cb5e05271e021f86c50ea9a03e98/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Fixed the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update).
 ## 1.1.1 ([May 8, 2023](https://github.com/ramensoftware/windhawk-mods/blob/2d36c1716cebfe0cf00aff248d355336456cc4c6/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Extended scrolling handling to the whole task list, including the empty space.

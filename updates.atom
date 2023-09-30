@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-09-30T08:29:39.000Z</updated>
+    <updated>2023-09-30T09:21:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#0bc6f2152e17cb5e05271e021f86c50ea9a03e98</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2023-09-30T09:21:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update).</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.4]]></title>
         <id>https://windhawk.net/mods/taskbar-button-scroll#bda321aa7a4e17c6e5f5df9e6df406a72fdd94b6</id>
@@ -240,16 +249,6 @@ instead of just using <code>SystemParametersInfoW</code> like a normal person.</
         <updated>2023-08-29T07:16:04.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a crash for new mod installations.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#8ab7ca1f13850e0ebb9ac2a9aee7ac75cc947d81</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2023-08-29T06:52:59.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for multiple web content sources.</li>
-<li>Fixed the number of seconds updating with a slight delay, finally causing one second to be skipped.</li>
 </ul>]]></content>
     </entry>
 </feed>
