@@ -1,3 +1,6 @@
+## 1.0.4 ([Sep 30, 2023](https://github.com/ramensoftware/windhawk-mods/blob/bda321aa7a4e17c6e5f5df9e6df406a72fdd94b6/mods/taskbar-button-scroll.wh.cpp))
+
+* Fixed the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update).
 ## 1.0.3 ([Apr 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/ba27a96436b8808fca3fc051ddc80c10d5094c10/mods/taskbar-button-scroll.wh.cpp))
 
 * Improved switching to windows with additional popup windows.
