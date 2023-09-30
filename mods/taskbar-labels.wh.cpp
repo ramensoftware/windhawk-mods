@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.1.3
+// @version         1.1.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -23,6 +23,7 @@
 // ==WindhawkModReadme==
 /*
 # Taskbar Labels for Windows 11
+
 Show text labels for running programs on the taskbar (Windows 11 only).
 
 By default, the Windows 11 taskbar only shows icons for taskbar items, without
@@ -101,6 +102,17 @@ choose one of the following running indicator styles:
 
 using namespace winrt::Windows::UI::Xaml;
 
+// https://stackoverflow.com/a/51274008
+template <auto fn>
+struct deleter_from_fn {
+    template <typename T>
+    constexpr void operator()(T* arg) const {
+        fn(arg);
+    }
+};
+using string_setting_unique_ptr =
+    std::unique_ptr<const WCHAR[], deleter_from_fn<Wh_FreeStringSetting>>;
+
 // #define EXTRA_DBG_LOG
 
 enum class IndicatorStyle {
@@ -117,8 +129,8 @@ struct {
     int fontSize;
     int leftAndRightPaddingSize;
     int spaceBetweenIconAndLabel;
-    PCWSTR labelForSingleItem;
-    PCWSTR labelForMultipleItems;
+    string_setting_unique_ptr labelForSingleItem;
+    string_setting_unique_ptr labelForMultipleItems;
 } g_settings;
 
 WCHAR g_taskbarViewDllPath[MAX_PATH];
@@ -296,6 +308,23 @@ constexpr winrt::guid IItemsRepeater{
     0x5DDF,
     {0xA1, 0x66, 0x2D, 0xB1, 0x4B, 0xBF, 0xDF, 0x35}};
 
+int ItemsRepeater_GetElementIndex(FrameworkElement taskbarFrameRepeaterElement,
+                                  UIElement element) {
+    winrt::Windows::Foundation::IUnknown pThis = nullptr;
+    taskbarFrameRepeaterElement.as(IItemsRepeater, winrt::put_abi(pThis));
+
+    using GetElementIndex_t =
+        HRESULT(WINAPI*)(void* pThis, void* element, void* index);
+
+    void** vtable = *(void***)winrt::get_abi(pThis);
+    auto GetElementIndex = (GetElementIndex_t)vtable[19];
+
+    int index = -1;
+    GetElementIndex(winrt::get_abi(pThis), winrt::get_abi(element), &index);
+
+    return index;
+}
+
 FrameworkElement ItemsRepeater_TryGetElement(
     FrameworkElement taskbarFrameRepeaterElement,
     int index) {
@@ -303,7 +332,7 @@ FrameworkElement ItemsRepeater_TryGetElement(
     taskbarFrameRepeaterElement.as(IItemsRepeater, winrt::put_abi(pThis));
 
     using TryGetElement_t =
-        void*(WINAPI*)(void* pThis, int index, void** uiElement);
+        HRESULT(WINAPI*)(void* pThis, int index, void** uiElement);
 
     void** vtable = *(void***)winrt::get_abi(pThis);
     auto TryGetElement = (TryGetElement_t)vtable[20];
@@ -378,11 +407,18 @@ double CalculateTaskbarItemWidth(FrameworkElement taskbarFrameRepeaterElement,
     int taskListRunningButtonsCount = 0;
     double otherElementsWidth = 0;
 
-    for (int i = 0;; i++) {
+    for (auto panelChild :
+         taskbarFrameRepeaterElement.as<Controls::Panel>().Children()) {
+        int index = ItemsRepeater_GetElementIndex(taskbarFrameRepeaterElement,
+                                                  panelChild);
+        if (index < 0) {
+            continue;
+        }
+
         auto child =
-            ItemsRepeater_TryGetElement(taskbarFrameRepeaterElement, i);
+            ItemsRepeater_TryGetElement(taskbarFrameRepeaterElement, index);
         if (!child) {
-            break;
+            continue;
         }
 
         auto childOffset = child.ActualOffset();
@@ -570,8 +606,8 @@ LONG_PTR WINAPI CTaskListWnd_GroupChanged_Hook(void* pThis,
 
     FormatLabel(textBuffer, numItems, g_taskBtnGroupTitleInGroupChanged,
                 ARRAYSIZE(g_taskBtnGroupTitleInGroupChanged),
-                numItems > 1 ? g_settings.labelForMultipleItems
-                             : g_settings.labelForSingleItem);
+                numItems > 1 ? g_settings.labelForMultipleItems.get()
+                             : g_settings.labelForSingleItem.get());
 
     g_inGroupChanged = true;
     LONG_PTR ret =
@@ -641,6 +677,20 @@ void UpdateTaskListButtonWidth(FrameworkElement taskListButtonElement,
     taskListButtonElement.Width(std::numeric_limits<double>::quiet_NaN());
 
     iconPanelElement.Width(widthToSet);
+
+    // Hide second column if running with the Windows labels implementation.
+    auto columnDefinitions =
+        iconPanelElement.as<Controls::Grid>().ColumnDefinitions();
+    if (columnDefinitions.Size() == 2) {
+        columnDefinitions.GetAt(0).Width(GridLength({
+            .Value = 1,
+            .GridUnitType = GridUnitType::Star,
+        }));
+        columnDefinitions.GetAt(1).Width(GridLength({
+            .Value = 0.0,
+            .GridUnitType = GridUnitType::Pixel,
+        }));
+    }
 
     iconElement.HorizontalAlignment(showLabels ? HorizontalAlignment::Left
                                                : HorizontalAlignment::Stretch);
@@ -804,7 +854,9 @@ void UpdateTaskListButtonCustomizations(
         widthToSet = CalculateTaskbarItemWidth(
             taskbarFrameRepeaterElement, minWidth, g_settings.taskbarItemWidth);
 
-        if (widthToSet <= g_initialTaskbarItemWidth + 16) {
+        if (widthToSet <= iconElement.ActualWidth() +
+                              g_settings.leftAndRightPaddingSize * 2 +
+                              g_settings.spaceBetweenIconAndLabel + 8) {
             showLabels = false;
         }
     } else {
@@ -1006,6 +1058,30 @@ void WINAPI TaskListButton_Icon_Hook(void* pThis, LONG_PTR randomAccessStream) {
     }
 }
 
+using ISizeChangedEventArgs_PreviousSize_t = winrt::Windows::Foundation::Size*(
+    WINAPI*)(void* pThis, winrt::Windows::Foundation::Size* size);
+ISizeChangedEventArgs_PreviousSize_t
+    ISizeChangedEventArgs_PreviousSize_Original;
+winrt::Windows::Foundation::Size* WINAPI
+ISizeChangedEventArgs_PreviousSize_Hook(
+    void* pThis,
+    winrt::Windows::Foundation::Size* size) {
+    Wh_Log(L">");
+
+    ISizeChangedEventArgs_PreviousSize_Original(pThis, size);
+
+    // Return initial item width to prevent auto collapse if running with the
+    // Windows labels implementation.
+    winrt::Windows::Foundation::IInspectable obj = nullptr;
+    winrt::copy_from_abi(obj, *(void**)pThis);
+    if (winrt::get_class_name(obj) == L"Taskbar.TaskListButton" &&
+        g_initialTaskbarItemWidth) {
+        size->Width = g_initialTaskbarItemWidth;
+    }
+
+    return size;
+}
+
 void LoadSettings() {
     g_settings.taskbarItemWidth = Wh_GetIntSetting(L"taskbarItemWidth");
 
@@ -1036,14 +1112,10 @@ void LoadSettings() {
         Wh_GetIntSetting(L"leftAndRightPaddingSize");
     g_settings.spaceBetweenIconAndLabel =
         Wh_GetIntSetting(L"spaceBetweenIconAndLabel");
-    g_settings.labelForSingleItem = Wh_GetStringSetting(L"labelForSingleItem");
-    g_settings.labelForMultipleItems =
-        Wh_GetStringSetting(L"labelForMultipleItems");
-}
-
-void FreeSettings() {
-    Wh_FreeStringSetting(g_settings.labelForSingleItem);
-    Wh_FreeStringSetting(g_settings.labelForMultipleItems);
+    g_settings.labelForSingleItem.reset(
+        Wh_GetStringSetting(L"labelForSingleItem"));
+    g_settings.labelForMultipleItems.reset(
+        Wh_GetStringSetting(L"labelForMultipleItems"));
 }
 
 void ApplySettings() {
@@ -1332,6 +1404,15 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             (void**)&TaskListButton_Icon_Original,
             (void*)TaskListButton_Icon_Hook,
         },
+        {
+            {
+                LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_ISizeChangedEventArgs<struct winrt::Windows::UI::Xaml::ISizeChangedEventArgs>::PreviousSize(void)const )",
+                LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_ISizeChangedEventArgs<struct winrt::Windows::UI::Xaml::ISizeChangedEventArgs>::PreviousSize(void)const __ptr64)",
+            },
+            (void**)&ISizeChangedEventArgs_PreviousSize_Original,
+            (void*)ISizeChangedEventArgs_PreviousSize_Hook,
+            true,
+        },
     };
 
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
@@ -1508,14 +1589,11 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
-
-    FreeSettings();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    FreeSettings();
     LoadSettings();
 
     if (g_taskbarViewDllLoaded) {
