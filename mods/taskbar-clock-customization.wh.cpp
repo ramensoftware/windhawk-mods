@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.3.1
+// @version         1.3.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -469,9 +469,11 @@ std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
     InternetCloseHandle(hOpenHandle);
 
     // Assume UTF-8.
-    std::wstring unicodeContent(dwLength, L'\0');
-    DWORD dw = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
-                                   unicodeContent.data(), dwLength * 2);
+    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
+                                          dwLength, nullptr, 0);
+    std::wstring unicodeContent(charsNeeded, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
+                        unicodeContent.data(), unicodeContent.size());
 
     HeapFree(GetProcessHeap(), 0, pUrlContent);
 
@@ -997,6 +999,11 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString_2_t
 using ICalendar_Second_t = int(WINAPI*)(LPVOID pThis);
 ICalendar_Second_t ICalendar_Second_Original;
 
+using ThreadPoolTimer_CreateTimer_t = LPVOID(WINAPI*)(LPVOID param1,
+                                                      LPVOID param2,
+                                                      ULONGLONG* elapse);
+ThreadPoolTimer_CreateTimer_t ThreadPoolTimer_CreateTimer_Original;
+
 using ThreadPoolTimer_CreateTimer_lambda_t = LPVOID(WINAPI*)(DWORD_PTR** param1,
                                                              LPVOID param2,
                                                              LPVOID param3);
@@ -1391,6 +1398,31 @@ int WINAPI ICalendar_Second_Hook(LPVOID pThis) {
     return ret;
 }
 
+// Similar to ThreadPoolTimer_CreateTimer_lambda_Hook. Only one of them is
+// called in some Windows versions due to function inlining.
+LPVOID WINAPI ThreadPoolTimer_CreateTimer_Hook(LPVOID param1,
+                                               LPVOID param2,
+                                               ULONGLONG* elapse) {
+    Wh_Log(L"> %zu", *elapse);
+
+    ULONGLONG elapseNew;
+
+    if (g_refreshIconThreadId == GetCurrentThreadId() &&
+        !g_inGetTimeToolTipString && *elapse == 10000000) {
+        // Make the next refresh happen next second. Without this hook, the
+        // timer was always set one second forward, and so the clock was
+        // accumulating a delay, finally caused one second to be skipped.
+        SYSTEMTIME time;
+        GetLocalTime_Original(&time);
+        elapseNew = 10000ULL * (1000 - time.wMilliseconds);
+        elapse = &elapseNew;
+    }
+
+    return ThreadPoolTimer_CreateTimer_Original(param1, param2, elapse);
+}
+
+// Similar to ThreadPoolTimer_CreateTimer_Hook. Only one of them is called in
+// some Windows versions due to function inlining.
 LPVOID WINAPI ThreadPoolTimer_CreateTimer_lambda_Hook(DWORD_PTR** param1,
                                                       LPVOID param2,
                                                       LPVOID param3) {
@@ -2254,6 +2286,15 @@ BOOL Wh_ModInit() {
                 (void**)&ICalendar_Second_Original,
                 (void*)ICalendar_Second_Hook,
                 true,  // Until Windows 11 version 21H2.
+            },
+            {
+                {
+                    LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &))",
+                    LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const & __ptr64,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const & __ptr64) __ptr64)",
+                },
+                (void**)&ThreadPoolTimer_CreateTimer_Original,
+                (void*)ThreadPoolTimer_CreateTimer_Hook,
+                true,  // Only for more precise clock, see comment in the hook.
             },
             {
                 {
