@@ -710,6 +710,27 @@
                 "version": "1.0.1"
             }
         },
+        "taskbar-autohide-better": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1696232707000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1696232707000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Cirn09",
+                "description": "Allow taskbar autohide when inactive window notified",
+                "github": "https://github.com/Cirn09",
+                "homepage": "https://blog.cirn09.xyz/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Better Taskbar Autohide",
+                "version": "1.0"
+            }
+        },
         "taskbar-button-click": {
             "details": {
                 "defaultSorting": 19300,
