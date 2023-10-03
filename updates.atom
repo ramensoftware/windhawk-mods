@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-03T13:33:43.000Z</updated>
+    <updated>2023-10-03T19:49:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix PPEE Wow64 filesystem redirection 1.0]]></title>
+        <id>https://windhawk.net/mods/lm-ppee-wow64#94f657fd52c7d1972d33dc6f7139ce9898f732d7</id>
+        <link href="https://windhawk.net/mods/lm-ppee-wow64"/>
+        <updated>2023-10-03T19:49:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixwow64filesystemredirectionforppee">Fix Wow64 filesystem redirection for PPEE</h1>
+<p>When loading a file from <code>C:\Windows\System32</code>, PPEE would automatically be redirected to <code>C:\Windows\SysWOW64</code>.</p>
+<p>This mod disables that redirection, so that the correct file is loaded.</p>
+<h2 id="before">Before:</h2>
+<p><img src="https://i.imgur.com/pJx8oPy.png" alt="before" /></p>
+<h2 id="after">After:</h2>
+<p><img src="https://i.imgur.com/DBmkYJe.png" alt="after" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Taskbar Autohide 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-autohide-better#dcffa1c7a41ec5d2bb914c455fc4f8c132373c0a</id>
@@ -213,26 +226,5 @@ own user account, it will not have the privilege required to inject into DWM.</p
 <em>Custom blur radius (4x4)</em></p>
 <p><img src="https://i.imgur.com/GA1meqE.png" alt="Custom radius customized" /><br />
 <em>Custom blur radius (24x2)</em></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-maximized-windows-fix#59d4fcd662a854e70f166ea1756cf92ca940b02e</id>
-        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
-        <updated>2023-09-09T07:43:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicmaximizedwindowsfix">Classic Maximized Windows Fix</h1>
-<p>Fixes the window borders on classic theme windows when DWM is active from spilling over to other monitors.</p>
-<p>It occurred with DWM on because DWM is only compatible with manual window clipping via SetWindowRgn, like
-UxTheme uses, and not the special override that Win32k applies for rendering maximized windows with default
-(classic) frames. This simply makes all windows use classic theme frames.</p>
-<p>Command Prompt windows will still not be properly clipped, however this issue already happened on older
-versions of Windows. Technically, there is a timing issue with Windhawk injecting into console windows,
-so rarely they may be affected. For consistency, I manually excluded <code>conhost.exe</code>.</p>
-<h2 id="knownproblems">Known problems</h2>
-<ul>
-<li>This will not work correctly without the classic theme. Whenever a window would be maximized, its frame
-would change to the classic frames (this is a special behaviour implemented in UxTheme for compatibility
-with historical use of this function), and hittesting would not work correctly on the new classic frames,
-which would interfere with UX quite a lot I think.</li>
-</ul>]]></content>
     </entry>
 </feed>

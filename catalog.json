@@ -395,6 +395,27 @@
                 "version": "1.0"
             }
         },
+        "lm-ppee-wow64": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1696362574000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1696362574000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Mark Jansen",
+                "description": "Disables Wow64 filesystem redirection when loading a file in PPEE",
+                "github": "https://github.com/learn-more",
+                "include": [
+                    "ppee.exe"
+                ],
+                "name": "Fix PPEE Wow64 filesystem redirection",
+                "twitter": "https://twitter.com/learn_more",
+                "version": "1.0"
+            }
+        },
         "lm-regedit-multi-instance": {
             "details": {
                 "defaultSorting": 712,
