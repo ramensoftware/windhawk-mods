@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-02T07:45:07.000Z</updated>
+    <updated>2023-10-03T13:33:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Taskbar Autohide 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-autohide-better#dcffa1c7a41ec5d2bb914c455fc4f8c132373c0a</id>
+        <link href="https://windhawk.net/mods/taskbar-autohide-better"/>
+        <updated>2023-10-03T13:33:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Support Windows 11</li>
+<li>Fix image URL in readme</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Taskbar Autohide 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-autohide-better#8494ed1331f06a1dd9d71d2866dadbb47b4a46d9</id>
@@ -223,15 +233,6 @@ so rarely they may be affected. For consistency, I manually excluded <code>conho
 would change to the classic frames (this is a special behaviour implemented in UxTheme for compatibility
 with historical use of this function), and hittesting would not work correctly on the new classic frames,
 which would interfere with UX quite a lot I think.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Message Box Font Fix 1.2]]></title>
-        <id>https://windhawk.net/mods/msg-box-font-fix#cc1a729e476a6b5044cd09d1068f6ad195292cbe</id>
-        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
-        <updated>2023-09-02T20:12:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Temporarily x64 only</li>
 </ul>]]></content>
     </entry>
 </feed>

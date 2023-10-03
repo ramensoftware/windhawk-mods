@@ -716,11 +716,12 @@
                 "published": 1696232707000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1696232707000,
+                "updated": 1696340023000,
                 "users": 1
             },
             "metadata": {
                 "author": "Cirn09",
+                "compilerOptions": "-lversion",
                 "description": "Allow taskbar autohide when inactive window notified",
                 "github": "https://github.com/Cirn09",
                 "homepage": "https://blog.cirn09.xyz/",
@@ -728,7 +729,7 @@
                     "explorer.exe"
                 ],
                 "name": "Better Taskbar Autohide",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "taskbar-button-click": {
