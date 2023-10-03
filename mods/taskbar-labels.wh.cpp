@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.1.4
+// @version         1.1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -95,6 +95,7 @@ choose one of the following running indicator styles:
 #include <algorithm>
 #include <atomic>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -678,7 +679,8 @@ void UpdateTaskListButtonWidth(FrameworkElement taskListButtonElement,
 
     iconPanelElement.Width(widthToSet);
 
-    // Hide second column if running with the Windows labels implementation.
+    // Hide second column if running with the native labels implementation of
+    // Windows.
     auto columnDefinitions =
         iconPanelElement.as<Controls::Grid>().ColumnDefinitions();
     if (columnDefinitions.Size() == 2) {
@@ -1071,12 +1073,29 @@ ISizeChangedEventArgs_PreviousSize_Hook(
     ISizeChangedEventArgs_PreviousSize_Original(pThis, size);
 
     // Return initial item width to prevent auto collapse if running with the
-    // Windows labels implementation.
+    // native labels implementation of Windows.
     winrt::Windows::Foundation::IInspectable obj = nullptr;
     winrt::copy_from_abi(obj, *(void**)pThis);
     if (winrt::get_class_name(obj) == L"Taskbar.TaskListButton" &&
         g_initialTaskbarItemWidth) {
-        size->Width = g_initialTaskbarItemWidth;
+        static std::optional<bool> windowsLabelsImplementation;
+        if (!windowsLabelsImplementation) {
+            auto taskListButtonElement = obj.try_as<FrameworkElement>();
+            if (taskListButtonElement) {
+                auto iconPanelElement =
+                    FindChildByName(taskListButtonElement, L"IconPanel");
+                if (iconPanelElement) {
+                    auto columnDefinitions =
+                        iconPanelElement.as<Controls::Grid>()
+                            .ColumnDefinitions();
+                    windowsLabelsImplementation = columnDefinitions.Size() == 2;
+                }
+            }
+        }
+
+        if (windowsLabelsImplementation.value_or(false)) {
+            size->Width = g_initialTaskbarItemWidth;
+        }
     }
 
     return size;
