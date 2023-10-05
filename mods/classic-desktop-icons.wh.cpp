@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.1.1
+// @version         1.2.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -38,6 +38,9 @@ the desktop color on the items' labels.
 - background: false
   $name: Desktop color as label background
   $description: Renders the desktop color on the labels' backgrounds, like Windows 2000.
+- noselect: false
+  $name: Non-translucent selection rectangle
+  $description: Force the desktop to use a non-transparent selection rectangle, like Windows XP.
 */
 // ==/WindhawkModSettings==
 
@@ -47,6 +50,7 @@ the desktop color on the items' labels.
 struct
 {
     BOOL background;
+    BOOL noselect;
 } settings;
 
 HWND hDesktop = NULL;
@@ -88,9 +92,18 @@ void UpdateDesktop(void)
         SendMessageW(hDesktop, WM_THEMECHANGED, 0, 0);
 
         /* Apply the desktop background color */
-        DWORD dwBgColor = LABELBG;
+        SendMessageW(hDesktop, LVM_SETTEXTBKCOLOR, NULL, (LPARAM)LABELBG);
 
-        SendMessageW(hDesktop, LVM_SETTEXTBKCOLOR, NULL, (LPARAM)dwBgColor);
+        /* Force non-translucent selection rectangle */
+        if (settings.noselect)
+        {
+            SendMessageW(
+                hDesktop,
+                LVM_SETEXTENDEDLISTVIEWSTYLE,
+                LVS_EX_DOUBLEBUFFER,
+                FALSE
+            );
+        }
 
         /* Subclass to update label backgrounds (they get removed normally) */
         if (!bSubclassed)
@@ -176,6 +189,7 @@ HWND WINAPI CreateWindowExW_hook(
 void LoadSettings(void)
 {
     settings.background = Wh_GetIntSetting(L"background");
+    settings.noselect = Wh_GetIntSetting(L"noselect");
 }
 
 BOOL Wh_ModInit(void) 
