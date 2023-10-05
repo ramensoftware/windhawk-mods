@@ -2,7 +2,7 @@
 // @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
-// @version         1.0
+// @version         1.1
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         *
@@ -12,6 +12,11 @@
 
 // @exclude         conhost.exe
 // @exclude         consent.exe
+// @exclude         dwm.exe
+// @exclude         lsass.exe
+// @exclude         winlogon.exe
+// @exclude         logonui.exe
+// @exclude         ApplicationFrameHost.exe
 
 // @compilerOptions -lgdi32 -luser32
 // ==/WindhawkMod==
@@ -76,6 +81,66 @@ int GetSystemMetricsForWindow(HWND hWnd, int nIndex)
 }
 
 /*
+ * ApplyWindowMasking: Applies a mask to the window to clip the borders drawn
+ *                     by the window manager.
+ */
+LRESULT ApplyWindowMasking(HWND hWnd)
+{
+    int sizeBorders =
+        GetSystemMetricsForWindow(hWnd, SM_CXSIZEFRAME) +
+        GetSystemMetricsForWindow(hWnd, SM_CXPADDEDBORDER);
+
+    RECT rcWindow;
+    GetWindowRect(hWnd, &rcWindow);
+
+    int cxWindow = rcWindow.right - rcWindow.left;
+    int cyWindow = rcWindow.bottom - rcWindow.top;
+
+    // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
+    // our responsibility to clean.
+    HRGN hRgn = CreateRectRgn(
+        0 + sizeBorders, 0 + sizeBorders,
+        cxWindow - sizeBorders, cyWindow - sizeBorders
+    );
+
+    g_affectedWindows.push_back(hWnd);
+
+    if (SetWindowRgn(hWnd, hRgn, TRUE))
+    {
+        return S_OK;
+    }
+
+    return E_FAIL;
+}
+
+/*
+ * UndoWindowMasking: Removes the masking region set by ApplyWindowMasking.
+ */
+LRESULT UndoWindowMasking(HWND hWnd)
+{
+    std::vector<HWND>::iterator i;
+
+    BOOL canLock = TryEnterCriticalSection(&g_lockForAffectedWindows);
+
+    if (canLock)
+    {
+        if ((i = std::find(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd)) != g_affectedWindows.end())
+        {
+            std::vector<HWND>::iterator newEnd = std::remove(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd);
+            g_affectedWindows.erase(newEnd, g_affectedWindows.end());
+
+            SetWindowRgn(hWnd, NULL, TRUE);
+        }
+
+        LeaveCriticalSection(&g_lockForAffectedWindows);
+
+        return S_OK;
+    }
+
+    return E_FAIL;
+}
+
+/*
  * HandleMaxForWindow: Handle the window position changed event and set a region 
  */
 void HandleMaxForWindow(HWND hWnd, UINT uMsg)
@@ -88,45 +153,12 @@ void HandleMaxForWindow(HWND hWnd, UINT uMsg)
         {
             if (std::find(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd) == g_affectedWindows.end())
             {
-                int sizeBorders = 
-                    GetSystemMetricsForWindow(hWnd, SM_CXSIZEFRAME) 
-                    + GetSystemMetricsForWindow(hWnd, SM_CXPADDEDBORDER);
-
-                RECT rcWindow;
-                GetWindowRect(hWnd, &rcWindow);
-
-                int cxWindow = rcWindow.right - rcWindow.left;
-                int cyWindow = rcWindow.bottom - rcWindow.top;
-
-                // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
-                // our responsibility to clean.
-                HRGN hRgn = CreateRectRgn(
-                    0 + sizeBorders, 0 + sizeBorders,
-                    cxWindow - sizeBorders, cyWindow - sizeBorders
-                );
-
-                g_affectedWindows.push_back(hWnd);
-                SetWindowRgn(hWnd, hRgn, TRUE);
+                ApplyWindowMasking(hWnd);
             }
         }
-        else if (dwStyle & WS_CAPTION && !(dwStyle & WS_CHILD))
+        else
         {
-            std::vector<HWND>::iterator i;
-
-            BOOL canLock = TryEnterCriticalSection(&g_lockForAffectedWindows);
-
-            if (canLock)
-            {
-                if ((i = std::find(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd)) != g_affectedWindows.end())
-                {
-                    std::vector<HWND>::iterator newEnd = std::remove(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd);
-                    g_affectedWindows.erase(newEnd, g_affectedWindows.end());
-
-                    SetWindowRgn(hWnd, NULL, TRUE);
-                }
-
-                LeaveCriticalSection(&g_lockForAffectedWindows);
-            }
+            UndoWindowMasking(hWnd);
         }
     }
 }
@@ -251,6 +283,11 @@ void UninstallHooks()
             installedHooks--;
     }
 
+    for (HWND &it : g_affectedWindows)
+    {
+        UndoWindowMasking(it);
+    }
+
     if (installedHooks == 0)
     {
         Wh_Log(L"Successfully uninstalled all hooks.");
@@ -312,6 +349,8 @@ void Wh_ModUninit()
 
     UninstallHooks();
     CleanCriticalSections();
+
+    g_instanceHasInit = false;
 }
 
 /*
