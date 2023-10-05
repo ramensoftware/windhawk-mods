@@ -1,3 +1,6 @@
+## 1.2.1 ([Oct 5, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a6a0290dc5e9738ffeb512cbb69281dde7f7a74d/mods/classic-desktop-icons.wh.cpp))
+
+* Add option to force non-translucent selection rectangle
 ## 1.1.1 ([Sep 28, 2023](https://github.com/ramensoftware/windhawk-mods/blob/95e4d640b853ee587b9e6d391c2bb3c5f32e7f37/mods/classic-desktop-icons.wh.cpp))
 
 Fix conflict with Explorer in SysListView32 mode
