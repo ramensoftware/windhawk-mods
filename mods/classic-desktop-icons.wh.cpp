@@ -40,7 +40,7 @@ the desktop color on the items' labels.
   $description: Renders the desktop color on the labels' backgrounds, like Windows 2000.
 - noselect: false
   $name: Non-translucent selection rectangle
-  $description: Force the desktop to use a non-transparent selection rectangle, like Windows XP.
+  $description: Force the desktop to use a non-translucent selection rectangle, like Windows XP.
 */
 // ==/WindhawkModSettings==
 
