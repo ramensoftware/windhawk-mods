@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.2.0
+// @version         1.2.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -56,10 +56,6 @@ struct
 HWND hDesktop = NULL;
 BOOL bSubclassed = FALSE;
 
-#define LABELBG settings.background     \
-        ? GetSysColor(COLOR_BACKGROUND) \
-        : CLR_NONE
-
 /**
   * UpdateDesktop references DesktopSubclassProc
   * and vice-versa, so we need to define one before
@@ -92,7 +88,15 @@ void UpdateDesktop(void)
         SendMessageW(hDesktop, WM_THEMECHANGED, 0, 0);
 
         /* Apply the desktop background color */
-        SendMessageW(hDesktop, LVM_SETTEXTBKCOLOR, NULL, (LPARAM)LABELBG);
+        if (settings.background)
+        {
+            SendMessageW(
+                hDesktop,
+                LVM_SETTEXTBKCOLOR,
+                NULL,
+                GetSysColor(COLOR_BACKGROUND)
+            );
+        }
 
         /* Force non-translucent selection rectangle */
         if (settings.noselect)
@@ -216,13 +220,32 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModUninit(void)
 {
-    /**
-      * Theme the desktop icons again, and remove any text
-      * background that was set
-      * Also remove the subclass we set
-      */
+    /* Remove subclass*/
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc);
-    SendMessageW(hDesktop, LVM_SETTEXTBKCOLOR, NULL, CLR_NONE);
+
+    /* Remove desktop background color */
+    if (settings.background)
+    {
+        SendMessageW(
+            hDesktop,
+            LVM_SETTEXTBKCOLOR,
+            NULL,
+            CLR_NONE
+        );
+    }
+
+    /* Make selection rectangle translucent again */
+    if (settings.noselect)
+    {
+        SendMessageW(
+            hDesktop,
+            LVM_SETEXTENDEDLISTVIEWSTYLE,
+            LVS_EX_DOUBLEBUFFER,
+            TRUE
+        );
+    }
+
+    /* Retheme desktop */
     SetWindowTheme(hDesktop, L"Desktop", NULL);
     Wh_Log(L"Unloaded Classic Desktop Icons");
 }
