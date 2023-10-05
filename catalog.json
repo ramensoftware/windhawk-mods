@@ -100,7 +100,7 @@
                 "published": 1694245393000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1694245393000,
+                "updated": 1696487501000,
                 "users": 19
             },
             "metadata": {
@@ -111,14 +111,19 @@
                     "windhawk.exe",
                     "vscodium.exe",
                     "conhost.exe",
-                    "consent.exe"
+                    "consent.exe",
+                    "dwm.exe",
+                    "lsass.exe",
+                    "winlogon.exe",
+                    "logonui.exe",
+                    "ApplicationFrameHost.exe"
                 ],
                 "github": "https://github.com/ephemeralViolette",
                 "include": [
                     "*"
                 ],
                 "name": "Fix Classic Theme Maximized Windows",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "classic-taskbar-context-menu": {

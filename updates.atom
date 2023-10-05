@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-05T06:30:54.000Z</updated>
+    <updated>2023-10-05T06:31:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 1.1]]></title>
+        <id>https://windhawk.net/mods/classic-maximized-windows-fix#dd1d6601678911e85086109e88e21ca47785feb5</id>
+        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
+        <updated>2023-10-05T06:31:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed bugs with DWM injection by excluding the mod from injecting into system processes.</li>
+<li>Fixed bugs with switching maximised applications to fullscreen mode (i.e. YouTube videos in web browser).</li>
+<li>Improved mod uninit routine to remove the clip from all affected windows.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Desktop Icons 1.2.1]]></title>
         <id>https://windhawk.net/mods/classic-desktop-icons#a6a0290dc5e9738ffeb512cbb69281dde7f7a74d</id>
@@ -202,15 +213,6 @@ the desktop color on the items' labels.</p>
         <updated>2023-09-16T17:36:48.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a crash loop when some styles are used.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.1.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#c8bd45d3c8292364a173776354e9909934fb3817</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2023-09-15T17:20:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved parent control matching.</li>
 </ul>]]></content>
     </entry>
 </feed>
