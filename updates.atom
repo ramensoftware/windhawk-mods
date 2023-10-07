@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-07T05:09:52.000Z</updated>
+    <updated>2023-10-07T15:10:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-frame-classic#1ef16f7b9436c0941bc14d09893a815d1b59c7a5</id>
+        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
+        <updated>2023-10-07T15:10:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicexplorernavigationbar">Classic Explorer navigation bar</h1>
+<p>Restores the classic Explorer navigation bar to the version before the Windows
+11 "Moments 4" update. Among other things, that makes drag and drop work again.</p>
+<p><strong>Note</strong>: You may need to restart Explorer to apply the changes.</p>
+<p><strong>The new Windows "Moments 4" update version</strong>:</p>
+<p><img src="https://i.imgur.com/fOmI2Rs.png" alt="Moments 4 screenshot" /></p>
+<p><strong>After installing this mod, with the "Classic navigation bar" configuration</strong>:</p>
+<p><img src="https://i.imgur.com/Hnvjquv.png" alt="Classic navigation bar screenshot" /></p>
+<p><strong>After installing this mod, with the "Classic ribbon UI (no tabs)"
+configuration</strong>:</p>
+<p><img src="https://i.imgur.com/SCBbirW.png" alt="Classic ribbon UI (no tabs) screenshot" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 1.2]]></title>
         <id>https://windhawk.net/mods/classic-maximized-windows-fix#0c2abf98ba3649753230cc5067fe8833cecf0723</id>
@@ -195,22 +212,5 @@ Windows Vista look.</p>
 <li>Styles are applied automatically without having to hover over the clock, and are restored when the mod is disabled (Windows 11).</li>
 <li>Text spacing can now be customized on Windows 11, not only on Windows 10.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Desktop Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-desktop-icons#92fc89155a43c02efc33637807256301b5c7db97</id>
-        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
-        <updated>2023-09-17T07:51:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicdesktopicons">Classic Desktop Icons</h1>
-<p>This mod will enable classic theme on desktop icons when themes are enabled,
-and will optionally let you restore the Windows 2000 behavior of rendering
-the desktop color on the items' labels.</p>
-<h2 id="forlabelbackgroundstoshowyoumustdisabledesktopiconlabelshadows">For label backgrounds to show, you must DISABLE desktop icon label shadows.</h2>
-<h2 id="screenshots">Screenshots</h2>
-<p><strong>Windows XP style (shadows, no label backgrounds)</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-xp-style.png" alt="Windows XP style desktop icons" /></p>
-<p><strong>Windows 2000 style (no shadows, label backgrounds)</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-2k-style.png" alt="Windows 2000 style desktop icons" /></p>
-<p><em>Mod originally authored by Taniko Yamamoto.</em></p>]]></content>
     </entry>
 </feed>
