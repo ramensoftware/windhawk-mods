@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-05T06:31:41.000Z</updated>
+    <updated>2023-10-07T05:09:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 1.2]]></title>
+        <id>https://windhawk.net/mods/classic-maximized-windows-fix#0c2abf98ba3649753230cc5067fe8833cecf0723</id>
+        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
+        <updated>2023-10-07T05:09:52.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix non-fully maximized windows. Namely open/save dialogs, which maximize but do not fill screen.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 1.1]]></title>
         <id>https://windhawk.net/mods/classic-maximized-windows-fix#dd1d6601678911e85086109e88e21ca47785feb5</id>
@@ -205,14 +212,5 @@ the desktop color on the items' labels.</p>
 <p><strong>Windows 2000 style (no shadows, label backgrounds)</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-2k-style.png" alt="Windows 2000 style desktop icons" /></p>
 <p><em>Mod originally authored by Taniko Yamamoto.</em></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.1.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#3ab1f3e504481a1a704e331709a3508fe1980eec</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2023-09-16T17:36:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash loop when some styles are used.</li>
-</ul>]]></content>
     </entry>
 </feed>

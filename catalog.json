@@ -100,7 +100,7 @@
                 "published": 1694245393000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1696487501000,
+                "updated": 1696655392000,
                 "users": 21
             },
             "metadata": {
@@ -109,7 +109,6 @@
                 "description": "Fix maximized windows having borders that spill out onto additional displays when using the classic theme.",
                 "exclude": [
                     "windhawk.exe",
-                    "vscodium.exe",
                     "conhost.exe",
                     "consent.exe",
                     "dwm.exe",
@@ -123,7 +122,7 @@
                     "*"
                 ],
                 "name": "Fix Classic Theme Maximized Windows",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "classic-taskbar-context-menu": {

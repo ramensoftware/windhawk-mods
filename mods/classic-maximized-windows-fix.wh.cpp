@@ -2,13 +2,12 @@
 // @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
-// @version         1.1
+// @version         1.2
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         *
 
 // @exclude         windhawk.exe
-// @exclude         vscodium.exe
 
 // @exclude         conhost.exe
 // @exclude         consent.exe
@@ -147,10 +146,37 @@ void HandleMaxForWindow(HWND hWnd, UINT uMsg)
 {
     if (hWnd && (uMsg == WM_WINDOWPOSCHANGED))
     {
+        /* General window style stuff */
         DWORD dwStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
-
         if (dwStyle & WS_MAXIMIZE && dwStyle & WS_CAPTION && !(dwStyle & WS_CHILD))
         {
+            /* Check if window is truly maximized to the full size of the screen */
+            int sizeBorders =
+                GetSystemMetricsForWindow(hWnd, SM_CXSIZEFRAME) +
+                GetSystemMetricsForWindow(hWnd, SM_CXPADDEDBORDER);
+
+            /**
+            * Get the info for the monitor the window is on.
+            * This contains rcWork, which accounts for the taskbar.
+            */
+            HMONITOR hm = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi;
+            mi.cbSize = sizeof(MONITORINFO);
+            GetMonitorInfoW(hm, &mi);
+            
+            /* Add border size to rcWork */
+            InflateRect(&mi.rcWork, sizeBorders, sizeBorders);
+            
+            RECT rcWnd;
+            GetWindowRect(hWnd, &rcWnd);
+
+            /* Compare the sizes. */
+            if (rcWnd.right - rcWnd.left != mi.rcWork.right - mi.rcWork.left
+            ||  rcWnd.bottom - rcWnd.top != mi.rcWork.bottom - mi.rcWork.top)
+            {
+                return;
+            }
+
             if (std::find(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd) == g_affectedWindows.end())
             {
                 ApplyWindowMasking(hWnd);
