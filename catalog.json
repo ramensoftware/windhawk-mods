@@ -431,19 +431,20 @@
                 "published": 1696362574000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1696362574000,
+                "updated": 1696852054000,
                 "users": 3
             },
             "metadata": {
                 "author": "Mark Jansen",
-                "description": "Disables Wow64 filesystem redirection when loading a file in PPEE",
+                "description": "Disables Wow64 filesystem redirection when loading a file in PPEE or ResourceHacker",
                 "github": "https://github.com/learn-more",
                 "include": [
-                    "ppee.exe"
+                    "ppee.exe",
+                    "resourcehacker.exe"
                 ],
-                "name": "Fix PPEE Wow64 filesystem redirection",
+                "name": "Fix PPEE/ResourceHacker Wow64 filesystem redirection",
                 "twitter": "https://twitter.com/learn_more",
-                "version": "1.0"
+                "version": "1.2"
             }
         },
         "lm-regedit-multi-instance": {
