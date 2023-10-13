@@ -9,6 +9,16 @@
 // @compilerOptions -luxtheme -lgdi32
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+Fixes ListViews in dark mode, and outside of it
+
+Without: ![Without](https://i.imgur.com/8kmOShw.png)
+
+With: ![With](https://i.imgur.com/PorgfmI.png)
+*/
+// ==/WindhawkModReadme==
+
 #include <uxtheme.h>
 #include <commctrl.h>
 
@@ -98,31 +108,32 @@ HRESULT WINAPI SetWindowTheme_Hook(HWND hWnd, LPCWSTR pszSubAppName, LPCWSTR psz
     }
 }
 
+// TODO: Fix this
 
-BOOL CALLBACK FindListViewProc(HWND hWnd, LPARAM lParam)
-{
-    DWORD pId;
-    WCHAR lpClass[256];
+// BOOL CALLBACK FindListViewProc(HWND hWnd, LPARAM lParam)
+// {
+//     DWORD pId;
+//     WCHAR lpClass[256];
 
-    GetWindowThreadProcessId(hWnd, &pId);
-    GetClassNameW(hWnd, lpClass, 256);
+//     GetWindowThreadProcessId(hWnd, &pId);
+//     GetClassNameW(hWnd, lpClass, 256);
 
-    if (pId == (DWORD)lParam)
-    {
-        HWND hListView = FindWindowExW(hWnd, NULL, L"SysListView32", NULL);
-        ApplyTheme(hListView);
-        return FALSE;
-    }
+//     if (pId == (DWORD)lParam)
+//     {
+//         HWND hListView = FindWindowExW(hWnd, NULL, L"SysListView32", NULL);
+//         ApplyTheme(hListView);
+//         return FALSE;
+//     }
 
-    return TRUE;
-}
+//     return TRUE;
+// }
 
-BOOL FindListView(void)
-{
-    DWORD pId = GetCurrentProcessId();
-    EnumWindows(FindListViewProc, (LPARAM)pId);
-    return true;
-}
+// BOOL FindListView(void)
+// {
+//     DWORD pId = GetCurrentProcessId();
+//     EnumWindows(FindListViewProc, (LPARAM)pId);
+//     return true;
+// }
 
 
 BOOL Wh_ModInit(void)
@@ -146,7 +157,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    FindListView();
+    // FindListView();
 
     return true;
 }
