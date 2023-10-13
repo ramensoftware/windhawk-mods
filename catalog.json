@@ -768,7 +768,7 @@
                 "published": 1696232707000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1696340023000,
+                "updated": 1697199404000,
                 "users": 17
             },
             "metadata": {
@@ -781,7 +781,7 @@
                     "explorer.exe"
                 ],
                 "name": "Better Taskbar Autohide",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "taskbar-button-click": {

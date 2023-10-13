@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-09T11:47:34.000Z</updated>
+    <updated>2023-10-13T12:16:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Taskbar Autohide 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-autohide-better#f018f72f781314cde0282a37175c929de9a17bf3</id>
+        <link href="https://windhawk.net/mods/taskbar-autohide-better"/>
+        <updated>2023-10-13T12:16:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix: When closing a window with notifications before delay,
+the taskbar will not be hidden immediately</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix PPEE/ResourceHacker Wow64 filesystem redirection 1.2]]></title>
         <id>https://windhawk.net/mods/lm-ppee-wow64#8700ddafbee73c8c13480eaf2619347877d9b367</id>
@@ -197,15 +207,6 @@ Windows Vista look.</p>
         <updated>2023-09-21T06:55:04.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed mod not unloading when disabled.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Desktop Icons 1.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-desktop-icons#cb55aac7d78798c1fc39c1811093b6d62e7803c9</id>
-        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
-        <updated>2023-09-20T21:15:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix for initial Explorer launch</li>
 </ul>]]></content>
     </entry>
 </feed>
