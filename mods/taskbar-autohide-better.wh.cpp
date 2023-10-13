@@ -3,7 +3,7 @@
 // @name                Better Taskbar Autohide
 // @description         Allow taskbar autohide when inactive window notified
 // @description:zh-CN   非活动窗口有通知时，任务栏仍然可以自动隐藏
-// @version             1.1
+// @version             1.2
 // @author              Cirn09
 // @github              https://github.com/Cirn09
 // @homepage            https://blog.cirn09.xyz/
@@ -141,7 +141,7 @@ __thiscall BOOL PermitAutoHide_hook(void* pThis) {
         delayMile_g)
         return TRUE;
     else
-        return FALSE;
+        return PermitAutoHide_o(pThis);
 }
 
 BOOL Wh_ModInit() {
