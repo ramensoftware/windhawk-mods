@@ -273,6 +273,27 @@
                 "version": "1.0"
             }
         },
+        "fix-darkmode-listviews": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1697208051000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1697208051000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Reabstraction",
+                "compilerOptions": "-luxtheme -lgdi32",
+                "description": "Fixes ListViews in dark mode",
+                "github": "https://github.com/Reabstraction",
+                "include": [
+                    "*"
+                ],
+                "name": "Fix Darkmode ListViews",
+                "version": "1.0"
+            }
+        },
         "flight-simulator-focus-helper": {
             "details": {
                 "defaultSorting": 99,
