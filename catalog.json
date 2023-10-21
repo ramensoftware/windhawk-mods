@@ -73,6 +73,27 @@
                 "version": "1.0.3"
             }
         },
+        "classic-conhost": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1697883443000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1697883443000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-luser32 -ldwmapi -luxtheme",
+                "description": "Forces classic theme and optionally client edge on console windows",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Conhost",
+                "version": "1.0.0"
+            }
+        },
         "classic-desktop-icons": {
             "details": {
                 "defaultSorting": 423,

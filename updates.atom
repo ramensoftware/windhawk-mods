@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-13T14:40:51.000Z</updated>
+    <updated>2023-10-21T10:17:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Conhost 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-conhost#ed112acfab6183748181b4922267d7cda4c45a7b</id>
+        <link href="https://windhawk.net/mods/classic-conhost"/>
+        <updated>2023-10-21T10:17:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicconhost">Classic Conhost</h1>
+<p>This mod will apply classic theme and optionally client edge to console windows.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Darkmode ListViews 1.0]]></title>
         <id>https://windhawk.net/mods/fix-darkmode-listviews#5da8dd0cf14f45ff084df527dce909f993df84bb</id>
@@ -194,19 +206,5 @@ ListView. This mod restores that.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/themed-regedit-listview-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/themed-regedit-listview-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Taskbar Item Glow 1.0.0]]></title>
-        <id>https://windhawk.net/mods/no-taskbar-item-glow#8a12f776ea295d87ae83b2b6ac91c508ca3150dd</id>
-        <link href="https://windhawk.net/mods/no-taskbar-item-glow"/>
-        <updated>2023-09-24T18:35:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="notaskbaritemglow">No Taskbar Item Glow</h1>
-<p>This mod disables the glow effect that is shown when hovering taskbar items
-in Windows 7, 8, and 8.1. This is primarily useful if you're going for a
-Windows Vista look.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/no-taskbar-item-glow-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/no-taskbar-item-glow-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
