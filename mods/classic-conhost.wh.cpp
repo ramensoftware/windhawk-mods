@@ -1,17 +1,33 @@
 // ==WindhawkMod==
 // @id              classic-conhost
 // @name            Classic Conhost
-// @description     Forces classic theme and/or client edge on console windows
+// @description     Forces classic theme and optionally client edge on console windows
 // @version         1.0.0
 // @include         *
 // @compilerOptions -luser32 -ldwmapi -luxtheme
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# Classic Conhost
+
+This mod will apply classic theme and optionally client edge to console windows.
+
+**Before**:
+
+![Before](https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-before.png)
+
+**After**:
+
+![After](https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-after.png)
+*/
+// ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - classic: true
   $name: Classic theme
-  $description: Apply classic theme to console windows
+  $description: Apply classic theme to console windows. Disable this if you use classic theme system-wide.
 - clientedge: true
   $name: Client edge (Classic theme only)
   $description: Apply a client edge to console windows
