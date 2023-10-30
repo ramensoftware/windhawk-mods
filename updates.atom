@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-21T10:17:23.000Z</updated>
+    <updated>2023-10-30T05:58:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Notepad Clientedge 1.0.0]]></title>
+        <id>https://windhawk.net/mods/notepad-clientedge#b84239fc7a1c98e111d1b508541ffd5c32c8158b</id>
+        <link href="https://windhawk.net/mods/notepad-clientedge"/>
+        <updated>2023-10-30T05:58:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="notepadclientedge">Notepad Clientedge</h1>
+<p>In a Windows 10 update, the <code>WS_EX_CLIENTEDGE</code> style was removed from Notepad's
+edit control, resulting in an inaccurate appearance on classic theme or other
+themes of old Windows versions. This mod adds that back.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/notepad-clientedge-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/notepad-clientedge-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Conhost 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-conhost#ed112acfab6183748181b4922267d7cda4c45a7b</id>
@@ -193,18 +207,5 @@ This module allows the taskbar to be shown for a while and then re-hidden.
         <link href="https://windhawk.net/mods/classic-desktop-icons"/>
         <updated>2023-09-28T21:16:27.000Z</updated>
         <content type="html"><![CDATA[<p>Fix conflict with Explorer in SysListView32 mode</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Themed Regedit ListView 1.0.0]]></title>
-        <id>https://windhawk.net/mods/themed-regedit-listview#897fe1e616539213676bd2f7f835ce29b3976781</id>
-        <link href="https://windhawk.net/mods/themed-regedit-listview"/>
-        <updated>2023-09-24T23:24:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="themedregeditlistview">Themed Regedit ListView</h1>
-<p>For a brief time during Windows 10's life, the Registry Editor had a themed
-ListView. This mod restores that.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/themed-regedit-listview-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/themed-regedit-listview-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>

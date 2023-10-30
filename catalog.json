@@ -686,6 +686,26 @@
                 "version": "1.0.0"
             }
         },
+        "notepad-clientedge": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1698645495000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1698645495000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Applies client edge to newer versions of Notepad",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "notepad.exe"
+                ],
+                "name": "Notepad Clientedge",
+                "version": "1.0.0"
+            }
+        },
         "notepad-dark-mode": {
             "details": {
                 "defaultSorting": 14400,
