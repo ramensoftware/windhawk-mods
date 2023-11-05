@@ -97,6 +97,8 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModSettingsChanged(void)
 {
+    Wh_FreeStringSetting(g_szExe);
+    Wh_FreeStringSetting(g_szArgs);
     LoadSettings();
 }
 
