@@ -268,6 +268,36 @@
                 "version": "1.1"
             }
         },
+        "eradicate-immersive-menus": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1699155263000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1699155263000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-luser32",
+                "description": "Gets rid of immersive menus system-wide",
+                "exclude": [
+                    "windhawk.exe",
+                    "dwm.exe",
+                    "ShellExperienceHost.exe",
+                    "wlanext.exe",
+                    "svchost.exe",
+                    "SearchIndexer.exe",
+                    "consent.exe"
+                ],
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Eradicate Immersive Menus",
+                "version": "1.0.0"
+            }
+        },
         "explorer-32px-icons": {
             "details": {
                 "defaultSorting": 0,
