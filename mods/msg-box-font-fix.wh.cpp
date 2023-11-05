@@ -65,9 +65,9 @@ UINT (* WINAPI GetDpiForSystem)(void);
    See WM_PAINT on MsgBoxTextSubclassProc. */
 std::vector<HWND> subclassed;
 
-typedef HFONT (*GetMessageBoxFontForDpi_t)(UINT);
+typedef HFONT (__fastcall *GetMessageBoxFontForDpi_t)(UINT);
 GetMessageBoxFontForDpi_t GetMessageBoxFontForDpi_orig;
-HFONT GetMessageBoxFontForDpi_hook(
+HFONT __fastcall GetMessageBoxFontForDpi_hook(
     UINT nDpi
 )
 {
