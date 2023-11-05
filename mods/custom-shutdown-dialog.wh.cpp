@@ -33,7 +33,7 @@ which is invoked with `ALT`+`F4` with your own program.
 #include <windhawk_utils.h>
 #include <versionhelpers.h>
 
-LPCWSTR g_szExe, g_szArgs;
+WindhawkUtils::StringSetting g_szExe, g_szArgs;
 
 typedef __int64 (* _ShutdownDialogEx_t)(HWND, int, int, UINT);
 _ShutdownDialogEx_t _ShutdownDialogEx_orig;
@@ -57,8 +57,8 @@ __int64 _ShutdownDialogEx_hook(
 
 void LoadSettings(void)
 {
-    g_szExe = Wh_GetStringSetting(L"exe");
-    g_szArgs = Wh_GetStringSetting(L"args");
+    g_szExe = WindhawkUtils::StringSetting::make(L"exe");
+    g_szArgs = WindhawkUtils::StringSetting::make(L"args");
 }
 
 BOOL Wh_ModInit(void)
@@ -97,13 +97,5 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModSettingsChanged(void)
 {
-    Wh_FreeStringSetting(g_szExe);
-    Wh_FreeStringSetting(g_szArgs);
     LoadSettings();
-}
-
-void Wh_ModUninit(void)
-{
-    Wh_FreeStringSetting(g_szExe);
-    Wh_FreeStringSetting(g_szArgs);
 }
