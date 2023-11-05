@@ -15,7 +15,7 @@ Beginning with Windows Vista, the "Medium icons" view (previous just "Icons") us
 icons that are 48 pixels in size, instead of the previous 32 pixel size. This mod
 restores the 32 pixel size.
 
-## YOU MUST BE USING AT LEAST WINDHAWK 1.4, OR ELSE EVERY 32-BIT APP WILL CRASH!
+**This mod will only work on Windhawk v1.4 and greater.**
 
 # IMPORTANT
 You **must** be using Explorer with the SysListView32 view enabled for this mod to work.
@@ -122,8 +122,8 @@ BOOL Wh_ModInit(void)
                 SCALCON
                 L" CDefView::_SwitchToViewModeAndIconSize(enum FOLDERVIEWMODE,int)"
             },
-            (void **)&CDefView__SwitchToViewModeAndIconSize_orig,
-            (void *)CDefView__SwitchToViewModeAndIconSize_hook,
+            &CDefView__SwitchToViewModeAndIconSize_orig,
+            CDefView__SwitchToViewModeAndIconSize_hook,
             false
         },
         {
@@ -132,8 +132,8 @@ BOOL Wh_ModInit(void)
                 SCALCON
                 L" CListViewHost::_SwitchToViewModeAndIconSizeWorker(enum FOLDERVIEWMODE,enum FOLDERVIEWMODE,unsigned int)"
             },
-            (void **)&CListViewHost__SwitchToViewModeAndIconSizeWorker_orig,
-            (void *)CListViewHost__SwitchToViewModeAndIconSizeWorker_hook,
+            &CListViewHost__SwitchToViewModeAndIconSizeWorker_orig,
+            CListViewHost__SwitchToViewModeAndIconSizeWorker_hook,
             false
         },
         {
@@ -142,8 +142,8 @@ BOOL Wh_ModInit(void)
                 SCALCON
                 L" CDefView::GetMenuIDFromViewModeAndIconSize(unsigned int,unsigned int,int)"
             },
-            (void **)&CDefView_GetMenuIDFromViewModeAndIconSize_orig,
-            (void *)CDefView_GetMenuIDFromViewModeAndIconSize_hook,
+            &CDefView_GetMenuIDFromViewModeAndIconSize_orig,
+            CDefView_GetMenuIDFromViewModeAndIconSize_hook,
             false
         }
     };
