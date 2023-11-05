@@ -44,32 +44,6 @@ already up and running with many software open.
 
 If ever a certain process gets stuck on "Initializing...", and the "Mod tasks in progress" window does not go away,
 restart Windhawk. If that does not work, simply add it to the exclusion list in the Advanced tab of this mod.
-
-## Failed to download symbols:
-
-Sometimes, Windhawk may fail to download the symbols for certain system files. This doesn't necessarily mean that your version
-of Windows is incompatible, but it means that whatever application had the mod hooked cannot connect to the internet (which is how Windhawk
-attempts to download symbols).
-
-You can work around this issue by manually downloading the symbols and dropping them in the Windhawk symbols
-folder. In order to do this, use a tool such as [PDB Downloader](https://github.com/rajkumar-rangaraj/PDB-Downloader/releases)
-and download the symbols for any of the missing files from the following list.
-
-- `ExplorerFrame.dll` (x86)
-- `shell32.dll` (x86)
-- `pnidui.dll`
-- `SndVolSSO.dll`
-- `SecurityHealthSSO.dll`
-- `twinui.dll`
-- `twinui.pcshell.dll`
-
-The DLLs themselves are located in `%SystemRoot%\System32`. Of these DLLs, the ones with (x86) at the end have a 32-bit
-variant in `%SystemRoot%\SysWOW64`, for open/save dialogs in 32-bit applications, so you may need to download symbols for
-these as well.
-
-The standard (non-portable) version of Windhawk stores symbols in `C:\ProgramData\Windhawk\Engine\Symbols`.
-
-If you encounter this error, a message box will be displayed warning you of the failure.
 */
 // ==/WindhawkModReadme==
 
@@ -208,9 +182,7 @@ inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
     }
 
     Wh_Log(
-        L"Failed to hook ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu in %s. "
-        L"This may be a result of symbols failing to download. "
-        L"Please see the \"Details\" page of the mod for instructions on how to download the symbols manually.",
+        L"Failed to hook ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu in %s.",
         lpDll ? lpDll : L"explorer.exe"
     );
     return FALSE;
@@ -348,6 +320,5 @@ BOOL Wh_ModInit()
 BOOL Wh_ModSettingsChanged(BOOL *bReload)
 {
     *bReload = TRUE;
-    LoadSettings();
     return TRUE;
 }
