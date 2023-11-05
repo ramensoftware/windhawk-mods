@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-05T03:56:38.000Z</updated>
+    <updated>2023-11-05T04:42:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Shutdown Dialog 1.0.0]]></title>
+        <id>https://windhawk.net/mods/custom-shutdown-dialog#12155847ff2b01c1e5ec16e997b6f2189115cb35</id>
+        <link href="https://windhawk.net/mods/custom-shutdown-dialog"/>
+        <updated>2023-11-05T04:42:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="customshutdowndialog">Custom Shutdown Dialog</h1>
+<p>Override the classic shutdown dialog in Explorer
+which is invoked with <code>ALT</code>+<code>F4</code> with your own program.</p>
+<p><strong>This mod will only work on Windows 10 or greater and Windhawk v1.4 or greater.</strong></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Menus 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-menus#e6b01d3dce8e4890c8314ee0aa2146bde105a432</id>
@@ -225,16 +235,6 @@ This module allows the taskbar to be shown for a while and then re-hidden.
         <updated>2023-09-30T18:44:27.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Initial fixes for the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update). There are still known bugs, but it's mostly usable.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-scroll#eb081300de3950ca47306e7c7ebd73c18d1ee6cf</id>
-        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
-        <updated>2023-09-30T09:24:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved compatiblity with other mods such as: Cycle taskbar buttons with mouse wheel.</li>
-<li>Fixed command invoking multiple times on rapid scrolling, which could cause a window to be un-maximized when restored.</li>
 </ul>]]></content>
     </entry>
 </feed>

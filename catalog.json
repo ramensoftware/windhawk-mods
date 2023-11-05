@@ -188,6 +188,29 @@
                 "version": "1.0.3"
             }
         },
+        "custom-shutdown-dialog": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1699159361000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1699159361000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Override the classic shutdown dialog in Explorer with your own",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Custom Shutdown Dialog",
+                "version": "1.0.0"
+            }
+        },
         "disable-feedback-hub-hotkey": {
             "details": {
                 "defaultSorting": 3915,
