@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Fix
 // @description     Fixes the MessageBox font size and background
-// @version         1.4.5
+// @version         1.4.6
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -19,6 +19,8 @@ user-defined size.\* You cannot just set this size higher, as many applications 
 it, and will show up with bigger fonts.
 
 This mod fixes both of those things.
+
+**This mod will only work on Windhawk v1.4 and greater.**
 
 **Before:**
 
@@ -54,7 +56,13 @@ struct {
     BOOL background;
 } settings;
 
+/* Only available in Windows 10 version 1607 and greater. */
 UINT (* WINAPI GetDpiForSystem)(void);
+
+/* Message box text windows that have been
+   subclassed for background removal.
+   
+   See WM_PAINT on MsgBoxTextSubclassProc. */
 std::vector<HWND> subclassed;
 
 typedef HFONT (*GetMessageBoxFontForDpi_t)(UINT);
@@ -63,6 +71,13 @@ HFONT GetMessageBoxFontForDpi_hook(
     UINT nDpi
 )
 {
+    if (!settings.font)
+    {
+        return GetMessageBoxFontForDpi_orig(
+            nDpi
+        );
+    }
+
     NONCLIENTMETRICSW ncm;
     ncm.cbSize = sizeof(NONCLIENTMETRICSW);
 
@@ -76,30 +91,6 @@ HFONT GetMessageBoxFontForDpi_hook(
     return CreateFontIndirectW(&(ncm.lfMessageFont));
 }
 
-/**
-  * HACK: The function that easily gets a symbol also hooks it, so just
-  * direct it here if the user doesn't want their fonts fixed for whatever
-  * reason.
-  */
-HFONT GetMessageBoxFontForDpi_hook_none(
-    UINT nDpi
-)
-{
-    return GetMessageBoxFontForDpi_orig(nDpi);
-}
-
-BOOL CALLBACK EnumChildrenProc(HWND hWnd, LPARAM lParam)
-{
-    DWORD dwStyle = GetWindowLongW(hWnd, GWL_STYLE);
-    if ((dwStyle & SS_EDITCONTROL) == SS_EDITCONTROL)
-    {
-        *(HWND *)lParam = hWnd;
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 LRESULT CALLBACK MsgBoxTextSubclassProc(
     HWND      hWnd,
     UINT      uMsg,
@@ -108,70 +99,74 @@ LRESULT CALLBACK MsgBoxTextSubclassProc(
     DWORD_PTR dwRefData
 )
 {
-    switch (uMsg)
+    if (settings.background)
     {
-        case WM_PAINT:
+        switch (uMsg)
         {
-            PAINTSTRUCT ps;
-            HDC hDC = BeginPaint(hWnd, &ps);
-
-            RECT rcClient;
-            GetClientRect(hWnd, &rcClient);
-
-            int len = GetWindowTextLengthW(hWnd) + 1;
-            LPWSTR szText = (LPWSTR)malloc(sizeof(WCHAR) * len);
-            GetWindowTextW(hWnd, szText, len);
-
-            HFONT hfMsg;
-            if (settings.font || !GetDpiForSystem)
+            /* I literally could not find any style or anything that could
+               remove the background on this, so I just paint it myself.
+               Sorry. */
+            case WM_PAINT:
             {
-                hfMsg = GetMessageBoxFontForDpi_hook(
-                    GetDpiForSystem ? GetDpiForSystem() : 96
-                );
-            }
-            else
-            {
-                hfMsg = GetMessageBoxFontForDpi_orig(GetDpiForSystem());
-            }
-            HFONT hfOld = (HFONT)SelectObject(hDC, hfMsg);
+                PAINTSTRUCT ps;
+                HDC hDC = BeginPaint(hWnd, &ps);
 
-            SetBkMode(hDC, TRANSPARENT);
-            SetTextColor(hDC, GetSysColor(COLOR_BTNTEXT));
+                RECT rcClient;
+                GetClientRect(hWnd, &rcClient);
 
-            DRAWTEXTPARAMS dtp = { 0 };
-            dtp.cbSize = sizeof(DRAWTEXTPARAMS);
-            dtp.uiLengthDrawn = wcslen(szText);
+                int len = GetWindowTextLengthW(hWnd) + 1;
+                LPWSTR szText = (LPWSTR)malloc(sizeof(WCHAR) * len);
+                GetWindowTextW(hWnd, szText, len);
 
-            DrawTextExW(
-                hDC,
-                szText,
-                -1,
-                &rcClient,
-                DT_LEFT | DT_WORDBREAK | DT_EDITCONTROL,
-                &dtp
-            );
-
-            SelectObject(hDC, hfOld);
-            DeleteObject(hfMsg);
-            free(szText);
-            EndPaint(hWnd, &ps);
-            return 0;
-        }
-        case WM_DESTROY:
-            subclassed.erase(std::remove_if(
-                subclassed.begin(),
-                subclassed.end(),
-                [hWnd](HWND hw)
+                HFONT hfMsg;
+                if (settings.font || !GetDpiForSystem)
                 {
-                    return hw == hWnd;
+                    hfMsg = GetMessageBoxFontForDpi_hook(
+                        GetDpiForSystem ? GetDpiForSystem() : 96
+                    );
                 }
-            ));
-            break;
-        default:
-            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+                else
+                {
+                    hfMsg = GetMessageBoxFontForDpi_orig(GetDpiForSystem());
+                }
+                HFONT hfOld = (HFONT)SelectObject(hDC, hfMsg);
+
+                SetBkMode(hDC, TRANSPARENT);
+                SetTextColor(hDC, GetSysColor(COLOR_BTNTEXT));
+
+                DRAWTEXTPARAMS dtp = { 0 };
+                dtp.cbSize = sizeof(DRAWTEXTPARAMS);
+                dtp.uiLengthDrawn = wcslen(szText);
+
+                DrawTextExW(
+                    hDC,
+                    szText,
+                    -1,
+                    &rcClient,
+                    DT_LEFT | DT_WORDBREAK | DT_EDITCONTROL,
+                    &dtp
+                );
+
+                SelectObject(hDC, hfOld);
+                DeleteObject(hfMsg);
+                free(szText);
+                EndPaint(hWnd, &ps);
+                return 0;
+            }
+            case WM_DESTROY:
+                subclassed.erase(std::remove_if(
+                    subclassed.begin(),
+                    subclassed.end(),
+                    [hWnd](HWND hw)
+                    {
+                        return hw == hWnd;
+                    }
+                ));
+                return 0;
+        }
     }
 
-    return 0;
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 typedef INT_PTR (* WINAPI MB_DlgProc_t)(HWND, UINT, WPARAM, LPARAM);
@@ -183,33 +178,35 @@ INT_PTR WINAPI MB_DlgProc_hook(
     LPARAM lParam
 )
 {
-    switch (uMsg)
+    if (settings.background)
     {
-        case WM_CTLCOLORDLG:
-        case WM_CTLCOLORSTATIC:
-            return (INT_PTR)GetSysColorBrush(COLOR_3DFACE);
-        /* The static window for text itself must handle WM_CTLCOLORSTATIC */
-        case WM_INITDIALOG:
-        {                   
-            HWND hTxt = GetDlgItem(hWnd, 65535);
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hTxt, MsgBoxTextSubclassProc, NULL))
-            {
-                subclassed.push_back(hTxt);
-            }
-
-            return MB_DlgProc_orig(hWnd, uMsg, wParam, lParam);
-        }
-        case WM_PAINT:
+        switch (uMsg)
         {
-            PAINTSTRUCT ps;
-            HDC hDC = BeginPaint(hWnd, &ps);
-            EndPaint(hWnd, &ps);
+            case WM_CTLCOLORDLG:
+            case WM_CTLCOLORSTATIC:
+                return (INT_PTR)GetSysColorBrush(COLOR_3DFACE);
+            /* The static window for text itself must handle WM_CTLCOLORSTATIC */
+            case WM_INITDIALOG:
+            {                   
+                HWND hTxt = GetDlgItem(hWnd, 65535);
+                if (WindhawkUtils::SetWindowSubclassFromAnyThread(hTxt, MsgBoxTextSubclassProc, NULL))
+                {
+                    subclassed.push_back(hTxt);
+                }
+
+                return MB_DlgProc_orig(hWnd, uMsg, wParam, lParam);
+            }
+            case WM_PAINT:
+            {
+                PAINTSTRUCT ps;
+                BeginPaint(hWnd, &ps);
+                EndPaint(hWnd, &ps);
+                return TRUE;
+            }
         }
-        default:
-            return MB_DlgProc_orig(hWnd, uMsg, wParam, lParam);
     }
 
-    return TRUE;
+    return MB_DlgProc_orig(hWnd, uMsg, wParam, lParam);
 }
 
 void LoadSettings(void)
@@ -220,7 +217,6 @@ void LoadSettings(void)
 
 BOOL Wh_ModInit(void)
 {
-    Wh_Log(L"Initializing Message Box Font Fix");
     LoadSettings();
 
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
@@ -235,7 +231,7 @@ BOOL Wh_ModInit(void)
         MessageBoxW(
             NULL,
             L"Failed to load user32.dll. There is something seriously wrong with either your Windows install or Windhawk.",
-            L"Windhawk: Message Box Font Fix",
+            L"Windhawk: Message Box Fix",
             MB_ICONERROR
         );
         return FALSE;
@@ -243,30 +239,22 @@ BOOL Wh_ModInit(void)
 
     GetDpiForSystem = (UINT (* WINAPI)(void))GetProcAddress(hUser32, "GetDpiForSystem");
 
-    WindhawkUtils::SYMBOL_HOOK hooks[2];
-    int nHooks = 1;
-
-    hooks[0] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
-            L"struct HFONT__ * "
-            #ifdef _WIN64
-            L"__cdecl"
-            #else
-            L"__stdcall"
-            #endif
-            L" GetMessageBoxFontForDpi(unsigned int)"
+            {
+                L"struct HFONT__ * "
+                #ifdef _WIN64
+                L"__cdecl"
+                #else
+                L"__stdcall"
+                #endif
+                L" GetMessageBoxFontForDpi(unsigned int)"
+            },
+            &GetMessageBoxFontForDpi_orig,
+            GetMessageBoxFontForDpi_hook,
+            false
         },
-        (void **)&GetMessageBoxFontForDpi_orig,
-        settings.font
-        ? (void *)GetMessageBoxFontForDpi_hook
-        : (void *)GetMessageBoxFontForDpi_hook_none,
-        TRUE
-    };
-
-    if (settings.background)
-    {
-        nHooks++;
-        hooks[1] = {
+        {
             {
                 #ifdef _WIN64
                 L"__int64 __cdecl MB_DlgProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
@@ -274,19 +262,18 @@ BOOL Wh_ModInit(void)
                 L"int __stdcall MB_DlgProc(struct HWND__ *,unsigned int,unsigned int,long)"
                 #endif
             },
-            (void **)&MB_DlgProc_orig,
-            (void *)MB_DlgProc_hook,
-            TRUE
-        };
-    }
+            &MB_DlgProc_orig,
+            MB_DlgProc_hook,
+            false
+        }
+    };
 
-    if (!HookSymbols(hUser32, hooks, nHooks))
+    if (!HookSymbols(hUser32, hooks, ARRAYSIZE(hooks)))
     {
-        Wh_Log(L"Failed to hook GetMessageBoxFontForDpi or MB_DlgProc");
+        Wh_Log(L"Failed to hook one or more symbol functions");
         return FALSE;
     }
 
-    Wh_Log(L"Done initializing Message Box Fix");
     return TRUE;
 }
 
@@ -306,8 +293,7 @@ void Wh_ModUninit(void)
     }
 }
 
-BOOL Wh_ModSettingsChanged(BOOL *bReload)
+void Wh_ModSettingsChanged(void)
 {
-    *bReload = TRUE;
-    return TRUE;
+    LoadSettings();
 }
