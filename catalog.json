@@ -601,22 +601,19 @@
                 "published": 1693642476000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1693685540000,
+                "updated": 1699150793000,
                 "users": 115
             },
             "metadata": {
-                "architecture": [
-                    "x86-64"
-                ],
                 "author": "aubymori",
-                "compilerOptions": "-luser32 -lgdi32",
-                "description": "Fixes the MessageBox font size in 1709+",
+                "compilerOptions": "-luser32 -lgdi32 -lcomctl32",
+                "description": "Fixes the MessageBox font size and background",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
-                "name": "Message Box Font Fix",
-                "version": "1.2"
+                "name": "Message Box Fix",
+                "version": "1.4.6"
             }
         },
         "mspaint-dark": {
