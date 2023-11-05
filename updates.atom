@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-10-30T05:58:15.000Z</updated>
+    <updated>2023-11-05T01:45:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer 32px Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-32px-icons#8f396ffb61f5f2ee0efec072e93f9003800c8be3</id>
+        <link href="https://windhawk.net/mods/explorer-32px-icons"/>
+        <updated>2023-11-05T01:45:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorer32pxicons">Explorer 32px Icons</h1>
+<p>Beginning with Windows Vista, the "Medium icons" view (previous just "Icons") uses
+icons that are 48 pixels in size, instead of the previous 32 pixel size. This mod
+restores the 32 pixel size.</p>
+<p><strong>This mod will only work on Windhawk v1.4 and greater.</strong></p>
+<h1 id="important">IMPORTANT</h1>
+<p>You <strong>must</strong> be using Explorer with the SysListView32 view enabled for this mod to work.
+The default DirectUI view will not work.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/explorer-32px-icons-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/explorer-32px-icons-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Notepad Clientedge 1.0.0]]></title>
         <id>https://windhawk.net/mods/notepad-clientedge#b84239fc7a1c98e111d1b508541ffd5c32c8158b</id>
@@ -200,12 +218,5 @@ This module allows the taskbar to be shown for a while and then re-hidden.
         <content type="html"><![CDATA[<ul>
 <li>Fixed the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update).</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Desktop Icons 1.1.1]]></title>
-        <id>https://windhawk.net/mods/classic-desktop-icons#95e4d640b853ee587b9e6d391c2bb3c5f32e7f37</id>
-        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
-        <updated>2023-09-28T21:16:27.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix conflict with Explorer in SysListView32 mode</p>]]></content>
     </entry>
 </feed>

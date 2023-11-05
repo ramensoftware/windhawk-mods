@@ -268,6 +268,26 @@
                 "version": "1.1"
             }
         },
+        "explorer-32px-icons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1699148737000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1699148737000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Makes the \"Medium icons\" view in Explorer 32px again",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Explorer 32px Icons",
+                "version": "1.0.0"
+            }
+        },
         "explorer-frame-classic": {
             "details": {
                 "defaultSorting": 880,
