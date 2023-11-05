@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-05T04:42:41.000Z</updated>
+    <updated>2023-11-05T05:19:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No Run Icon 1.0.0]]></title>
+        <id>https://windhawk.net/mods/no-run-icon#fd365f94e745c7d206993a6c75a55eb2b2ac9c52</id>
+        <link href="https://windhawk.net/mods/no-run-icon"/>
+        <updated>2023-11-05T05:19:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="norunicon">No Run Icon</h1>
+<p>Removes the window icon from the Run dialog, like Windows XP and before.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/no-run-icon-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/no-run-icon-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Shutdown Dialog 1.0.0]]></title>
         <id>https://windhawk.net/mods/custom-shutdown-dialog#12155847ff2b01c1e5ec16e997b6f2189115cb35</id>
@@ -226,15 +238,6 @@ This module allows the taskbar to be shown for a while and then re-hidden.
         <updated>2023-10-01T20:34:42.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed clock with seconds precision issue for some Windows 11 versions.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#6a427c77a7a4c23efa5db4274c1c7ef5369b3eca</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2023-09-30T18:44:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Initial fixes for the incompatibility with Windows 11 22H2 update KB5030310 ("Moment 4" update). There are still known bugs, but it's mostly usable.</li>
 </ul>]]></content>
     </entry>
 </feed>

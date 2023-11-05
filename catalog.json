@@ -754,6 +754,26 @@
                 "version": "1.0.0"
             }
         },
+        "no-run-icon": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1699161562000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1699161562000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Removes the window icon from the Run dialog, like Windows XP and before.",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "No Run Icon",
+                "version": "1.0.0"
+            }
+        },
         "no-taskbar-item-glow": {
             "details": {
                 "defaultSorting": 126,
