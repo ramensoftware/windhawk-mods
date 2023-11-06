@@ -29,7 +29,7 @@ a news feed, and more.
 
 Only Windows 10 64-bit and Windows 11 are supported.
 
-**Note:** To customize the old taskbar on Windows 11 (if using Explorer Patcher
+**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.
 
 ![Screenshot](https://i.imgur.com/gM9kbH5.png)
@@ -270,7 +270,7 @@ styles, such as the font color and size.
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: For Windhawk versions older
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions older
     than 1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
