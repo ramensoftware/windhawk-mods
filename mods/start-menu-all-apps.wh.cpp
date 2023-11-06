@@ -2,7 +2,7 @@
 // @id              start-menu-all-apps
 // @name            Show all apps by default in start menu
 // @description     When the Windows 11 start menu is opened, show all apps right away
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,6 +11,14 @@
 // @architecture    x86-64
 // ==/WindhawkMod==
 
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
+
 // ==WindhawkModReadme==
 /*
 # Show all apps by default in start menu
@@ -18,12 +26,11 @@
 When the Windows 11 start menu is opened, show all apps right away without
 having to click on the "All apps" button.
 
-Note: Might not work on Windhawk 0.9 or older due to a bug. If the mod doesn't
-work, please update Windhawk.
+**Note:** Requires Windhawk 1.3 or newer.
 
-Note: Might not work with a portable version of Windhawk. The reason is that the
-StartMenuExperienceHost.exe process has limited access to files, and it might
-not be able to load the mod.
+**Note:** Might not work with a portable version of Windhawk. The reason is that
+the StartMenuExperienceHost.exe process has limited access to files, and it
+might not be able to load the mod.
 
 Before:
 
@@ -32,13 +39,10 @@ Before:
 After (when the start menu is opened):
 
 ![After screenshot](https://i.imgur.com/6UVVORa.png)
-
-Feedback and pull requests can be submitted
-[here](https://github.com/m417z/my-windhawk-mods).
 */
 // ==/WindhawkModReadme==
 
-#include <regex>
+#include <windhawk_utils.h>
 
 typedef void (WINAPI *ShowAllApps_t)(
     LPVOID pThis
@@ -87,12 +91,6 @@ LPVOID WINAPI StartInnerFrameConstructorHook(
     return ret;
 }
 
-struct SYMBOLHOOKS {
-    std::wregex symbolRegex;
-    void* hookFunction;
-    void** pOriginalFunction;
-};
-
 BOOL Wh_ModInit(void)
 {
     Wh_Log(L">");
@@ -140,53 +138,33 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    WH_FIND_SYMBOL symbol;
-    HANDLE findSymbol;
-
-    SYMBOLHOOKS taskbarHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
         {
-            std::wregex(LR"(public: (void )?__cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps\(void\)const __ptr64)"),
-            NULL,
-            (void**)&pOriginalShowAllApps
+            {
+                LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps(void)const )",
+                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps(void)const )",
+            },
+            (void**)&pOriginalShowAllApps,
         },
         {
-            std::wregex(LR"(public: (void )?__cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps\(void\)const __ptr64)"),
+            {
+                LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps(void)const )",
+                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps(void)const )",
+            },
+            (void**)&pOriginalHideAllApps,
             (void*)HideAllAppsHook,
-            (void**)&pOriginalHideAllApps
         },
         {
-            std::wregex(LR"(public: __cdecl winrt::StartMenu::implementation::StartInnerFrame::StartInnerFrame\(struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController const & __ptr64,struct winrt::Windows::Foundation::IInspectable const & __ptr64\) __ptr64)"),
+            {
+                LR"(public: __cdecl winrt::StartMenu::implementation::StartInnerFrame::StartInnerFrame(struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController const &,struct winrt::Windows::Foundation::IInspectable const &))",
+            },
+            (void**)&pOriginalStartInnerFrameConstructor,
             (void*)StartInnerFrameConstructorHook,
-            (void**)&pOriginalStartInnerFrameConstructor
         }
     };
 
-    findSymbol = Wh_FindFirstSymbol(module, NULL, &symbol);
-    if (findSymbol) {
-        do {
-            for (size_t i = 0; i < ARRAYSIZE(taskbarHooks); i++) {
-                if (!*taskbarHooks[i].pOriginalFunction && std::regex_match(symbol.symbol, taskbarHooks[i].symbolRegex)) {
-                    if (taskbarHooks[i].hookFunction) {
-                        Wh_SetFunctionHook(symbol.address, taskbarHooks[i].hookFunction, taskbarHooks[i].pOriginalFunction);
-                        Wh_Log(L"Hooked %p (%s)", symbol.address, symbol.symbol);
-                    }
-                    else {
-                        *taskbarHooks[i].pOriginalFunction = symbol.address;
-                        Wh_Log(L"Found %p (%s)", symbol.address, symbol.symbol);
-                    }
-                    break;
-                }
-            }
-        } while (Wh_FindNextSymbol(findSymbol, &symbol));
-
-        Wh_FindCloseSymbol(findSymbol);
-    }
-
-    for (size_t i = 0; i < ARRAYSIZE(taskbarHooks); i++) {
-        if (!*taskbarHooks[i].pOriginalFunction) {
-            Wh_Log(L"Missing symbol: %d", i);
-            return FALSE;
-        }
+    if (!HookSymbols(module, taskbarHooks, ARRAYSIZE(taskbarHooks))) {
+        return FALSE;
     }
 
     return TRUE;
