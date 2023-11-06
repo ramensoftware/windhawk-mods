@@ -916,7 +916,7 @@
                 "published": 1647604671000,
                 "rating": 9,
                 "ratingUsers": 5,
-                "updated": 1655511434000,
+                "updated": 1699302173000,
                 "users": 711
             },
             "metadata": {
@@ -932,7 +932,7 @@
                 ],
                 "name": "Show all apps by default in start menu",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-autohide-better": {
