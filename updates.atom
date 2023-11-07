@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-06T20:22:53.000Z</updated>
+    <updated>2023-11-07T20:29:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Task Dialog Fix 1.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-taskdlg-fix#bef171ba33bed8bcc3deeb2141a15520304c3fc8</id>
+        <link href="https://windhawk.net/mods/classic-taskdlg-fix"/>
+        <updated>2023-11-07T20:29:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classictaskdialogfix">Classic Task Dialog Fix</h1>
+<p>In Windows 10, the buttons in task dialogs (and some other DirectUI dialogs)
+are too small vertically. This mod fixes that, and makes them look how they did
+in Windows 8.1 and before.</p>
+<h3 id="thismodwillonlyworkonwindhawkv14andgreater">This mod will only work on Windhawk v1.4 and greater.</h3>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-taskdlg-fix-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-taskdlg-fix-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Show all apps by default in start menu 1.0.2]]></title>
         <id>https://windhawk.net/mods/start-menu-all-apps#493534f65cc0d79d076054fa4e4f3c9ac280fd28</id>
@@ -230,15 +245,5 @@ configuration</strong>:</p>
 <li>Support Windows 11</li>
 <li>Fix image URL in readme</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Taskbar Autohide 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-autohide-better#8494ed1331f06a1dd9d71d2866dadbb47b4a46d9</id>
-        <link href="https://windhawk.net/mods/taskbar-autohide-better"/>
-        <updated>2023-10-02T07:45:07.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bettertaskbarautohide">Better Taskbar Autohide</h1>
-<p>Windows taskbar is forced to show at the top when there are notifications for inactive windows and auto-hide enabled, which can cover something.
-This module allows the taskbar to be shown for a while and then re-hidden.
-<img src="https://imgur.com/BNyrMQc.gif" alt="" /></p>]]></content>
     </entry>
 </feed>

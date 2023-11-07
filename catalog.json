@@ -188,6 +188,26 @@
                 "version": "1.0.3"
             }
         },
+        "classic-taskdlg-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1699388969000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1699388969000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Fixes task dialog buttons in classic theme",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Task Dialog Fix",
+                "version": "1.1.0"
+            }
+        },
         "custom-shutdown-dialog": {
             "details": {
                 "defaultSorting": 45,
