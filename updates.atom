@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-07T20:29:29.000Z</updated>
+    <updated>2023-11-10T23:20:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#d28ad7f818078e99a4ccc492486bfcf534bf016e</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2023-11-10T23:20:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed displaced clock on secondary monitors.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Task Dialog Fix 1.1.0]]></title>
         <id>https://windhawk.net/mods/classic-taskdlg-fix#bef171ba33bed8bcc3deeb2141a15520304c3fc8</id>
@@ -235,15 +244,5 @@ configuration</strong>:</p>
 <p><img src="https://i.imgur.com/pJx8oPy.png" alt="before" /></p>
 <h2 id="after">After:</h2>
 <p><img src="https://i.imgur.com/DBmkYJe.png" alt="after" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Taskbar Autohide 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-autohide-better#dcffa1c7a41ec5d2bb914c455fc4f8c132373c0a</id>
-        <link href="https://windhawk.net/mods/taskbar-autohide-better"/>
-        <updated>2023-10-03T13:33:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Support Windows 11</li>
-<li>Fix image URL in readme</li>
-</ul>]]></content>
     </entry>
 </feed>

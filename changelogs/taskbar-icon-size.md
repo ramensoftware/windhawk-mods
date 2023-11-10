@@ -1,3 +1,6 @@
+## 1.2.1 ([Nov 10, 2023](https://github.com/ramensoftware/windhawk-mods/blob/d28ad7f818078e99a4ccc492486bfcf534bf016e/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed displaced clock on secondary monitors.
 ## 1.2 ([May 6, 2023](https://github.com/ramensoftware/windhawk-mods/blob/3c6652f30f4745c6ab50521fb879edd22ed2aba2/mods/taskbar-icon-size.wh.cpp))
 
 * Added an option to control the width of taskbar buttons.
