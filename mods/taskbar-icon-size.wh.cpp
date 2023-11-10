@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -98,6 +98,7 @@ std::atomic<bool> g_unloading = false;
 
 int g_originalTaskbarHeight;
 int g_taskbarHeight;
+bool g_inSystemTraySecondaryController_UpdateFrameSize;
 
 double* double_48_value_Original;
 
@@ -124,16 +125,15 @@ ResourceDictionary_Lookup_Hook(void* pThis,
         return ret;
     }
 
-    auto valueDouble =
-        ret->try_as<winrt::Windows::Foundation::IReference<double>>();
+    auto valueDouble = ret->try_as<double>();
     if (!valueDouble) {
         return ret;
     }
 
     double newValueDouble = g_settings.taskbarButtonWidth;
-    if (newValueDouble != valueDouble.Value()) {
-        Wh_Log(L"Overriding value %s: %f->%f", keyString->c_str(),
-               valueDouble.Value(), newValueDouble);
+    if (newValueDouble != *valueDouble) {
+        Wh_Log(L"Overriding value %s: %f->%f", keyString->c_str(), *valueDouble,
+               newValueDouble);
         *ret = winrt::box_value(newValueDouble);
     }
 
@@ -279,6 +279,34 @@ void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
     }
 
     return TaskbarFrame_Height_double_Original(pThis, value);
+}
+
+using SystemTraySecondaryController_UpdateFrameSize_t =
+    void(WINAPI*)(void* pThis);
+SystemTraySecondaryController_UpdateFrameSize_t
+    SystemTraySecondaryController_UpdateFrameSize_Original;
+void WINAPI SystemTraySecondaryController_UpdateFrameSize_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    g_inSystemTraySecondaryController_UpdateFrameSize = true;
+
+    SystemTraySecondaryController_UpdateFrameSize_Original(pThis);
+
+    g_inSystemTraySecondaryController_UpdateFrameSize = false;
+}
+
+using SystemTrayFrame_Height_t = void(WINAPI*)(void* pThis, double value);
+SystemTrayFrame_Height_t SystemTrayFrame_Height_Original;
+void WINAPI SystemTrayFrame_Height_Hook(void* pThis, double value) {
+    // Wh_Log(L">");
+
+    if (g_inSystemTraySecondaryController_UpdateFrameSize) {
+        // Set the secondary taskbar clock height to NaN, otherwise it may not
+        // match the custom taskbar height.
+        value = std::numeric_limits<double>::quiet_NaN();
+    }
+
+    SystemTrayFrame_Height_Original(pThis, value);
 }
 
 using SHAppBarMessage_t = decltype(&SHAppBarMessage);
@@ -732,6 +760,24 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&TaskbarFrame_Height_double_Original,
                 (void*)TaskbarFrame_Height_double_Hook,
+            },
+            {
+                {
+                    LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void))",
+                    LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void) __ptr64)",
+                },
+                (void**)&SystemTraySecondaryController_UpdateFrameSize_Original,
+                (void*)SystemTraySecondaryController_UpdateFrameSize_Hook,
+                true,
+            },
+            {
+                {
+                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const )",
+                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const __ptr64)",
+                },
+                (void**)&SystemTrayFrame_Height_Original,
+                (void*)SystemTrayFrame_Height_Hook,
+                true,
             },
         };
 
