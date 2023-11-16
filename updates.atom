@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-10T23:20:15.000Z</updated>
+    <updated>2023-11-16T08:57:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Basic Caption Text 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fix-basic-caption-text#892afcee9adb00be9920318e13313c7d8b20d885</id>
+        <link href="https://windhawk.net/mods/fix-basic-caption-text"/>
+        <updated>2023-11-16T08:57:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixbasiccaptiontext">Fix Basic Caption Text</h1>
+<p>Since Windows 10, the caption color has been hardcoded due to different accent
+colors needing dark or light text. For whatever reason, this also applies to basic
+frames, and as such, they don't pull caption color from the theme anymore. This
+results in incorrectly colored and possibly illegible caption text. This mod fixes that.</p>
+<p><strong>This mod requires Windhawk v1.4 or greater.</strong></p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/fix-basic-caption-text-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/fix-basic-caption-text-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#d28ad7f818078e99a4ccc492486bfcf534bf016e</id>
@@ -231,18 +247,5 @@ configuration</strong>:</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an overflow regression for a centered taskbar for Windows 11 22H2 before update KB5030310 ("Moment 4" update). The bug was introduced in version 1.1.4.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix PPEE Wow64 filesystem redirection 1.0]]></title>
-        <id>https://windhawk.net/mods/lm-ppee-wow64#94f657fd52c7d1972d33dc6f7139ce9898f732d7</id>
-        <link href="https://windhawk.net/mods/lm-ppee-wow64"/>
-        <updated>2023-10-03T19:49:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fixwow64filesystemredirectionforppee">Fix Wow64 filesystem redirection for PPEE</h1>
-<p>When loading a file from <code>C:\Windows\System32</code>, PPEE would automatically be redirected to <code>C:\Windows\SysWOW64</code>.</p>
-<p>This mod disables that redirection, so that the correct file is loaded.</p>
-<h2 id="before">Before:</h2>
-<p><img src="https://i.imgur.com/pJx8oPy.png" alt="before" /></p>
-<h2 id="after">After:</h2>
-<p><img src="https://i.imgur.com/DBmkYJe.png" alt="after" /></p>]]></content>
     </entry>
 </feed>

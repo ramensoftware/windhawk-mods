@@ -408,6 +408,27 @@
                 "version": "1.0"
             }
         },
+        "fix-basic-caption-text": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1700125078000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1700125078000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-luser32 -luxtheme",
+                "description": "Fixes non-DWM frames having hardcoded caption colors",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Fix Basic Caption Text",
+                "version": "1.0.0"
+            }
+        },
         "fix-darkmode-listviews": {
             "details": {
                 "defaultSorting": 1260,
