@@ -907,6 +907,28 @@
                 "version": "1.0"
             }
         },
+        "ribbon-caption-icon-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1700466353000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1700466353000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Taniko Yamamoto",
+                "description": "Fixes the position of the caption icon in UIRibbon.",
+                "github": "https://github.com/YukisCoffee",
+                "include": [
+                    "mspaint.exe",
+                    "explorer.exe",
+                    "wordpad.exe"
+                ],
+                "name": "UIRibbon Caption Icon Fix",
+                "version": "1.0"
+            }
+        },
         "shrink-address-bar-height": {
             "details": {
                 "defaultSorting": 5820,

@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-16T08:57:58.000Z</updated>
+    <updated>2023-11-20T07:45:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[UIRibbon Caption Icon Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/ribbon-caption-icon-fix#ab83165b035f899b9480a8edf43f8baeac7d479b</id>
+        <link href="https://windhawk.net/mods/ribbon-caption-icon-fix"/>
+        <updated>2023-11-20T07:45:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="uiribboncaptioniconfix">UIRibbon Caption Icon Fix</h1>
+<p>Fixes the position of the caption icon in UIRibbon, which is ordinarily broken since Windows 10, due to
+window frames becoming only 1 pixel wide. Whenever ribbons are displayed on a custom theme with wider
+borders, the icon will have extra indentation, which is not desirable.</p>
+<p><img src="https://raw.githubusercontent.com/YukisCoffee/images/main/uiribbon%20fix.png" alt="Preview" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Basic Caption Text 1.0.0]]></title>
         <id>https://windhawk.net/mods/fix-basic-caption-text#892afcee9adb00be9920318e13313c7d8b20d885</id>
@@ -237,15 +248,6 @@ configuration</strong>:</p>
         <updated>2023-10-05T06:30:54.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Add option to force non-translucent selection rectangle</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.1.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#4a1778822b1ce783729ec3fde550d59fdc7ce547</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2023-10-03T22:07:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an overflow regression for a centered taskbar for Windows 11 22H2 before update KB5030310 ("Moment 4" update). The bug was introduced in version 1.1.4.</li>
 </ul>]]></content>
     </entry>
 </feed>
