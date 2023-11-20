@@ -11,10 +11,22 @@
 // @include         wordpad.exe
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# UIRibbon Caption Icon Fix
+
+Fixes the position of the caption icon in UIRibbon, which is ordinarily broken since Windows 10, due to
+window frames becoming only 1 pixel wide. Whenever ribbons are displayed on a custom theme with wider
+borders, the icon will have extra indentation, which is not desirable.
+
+![Preview](https://raw.githubusercontent.com/YukisCoffee/images/main/uiribbon%20fix.png)
+*/
+// ==/WindhawkModReadme==
+
 #include <libloaderapi.h>
 
-int (*GetSystemMetrics_orig)(int);
-int GetSystemMetrics_hook(int nIndex)
+int (WINAPI *GetSystemMetrics_orig)(int);
+int WINAPI GetSystemMetrics_hook(int nIndex)
 {
     switch (nIndex)
     {
@@ -25,8 +37,8 @@ int GetSystemMetrics_hook(int nIndex)
     return GetSystemMetrics_orig(nIndex);
 }
 
-int (*GetSystemMetricsForDpi_orig)(int, int);
-int GetSystemMetricsForDpi_hook(int nIndex, int dpi)
+int (WINAPI *GetSystemMetricsForDpi_orig)(int, int);
+int WINAPI GetSystemMetricsForDpi_hook(int nIndex, int dpi)
 {
     switch (nIndex)
     {
