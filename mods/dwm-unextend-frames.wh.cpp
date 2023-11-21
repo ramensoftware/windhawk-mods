@@ -24,6 +24,8 @@ is not. This is useful for anyone doing a setup with non-DWM frames
 **After**:
 
 ![After](https://raw.githubusercontent.com/aubymori/images/main/dwm-unextend-frames-after.png)
+
+*Mod originally authored by Taniko Yamamoto.*
 */
 // ==/WindhawkModReadme==
 
