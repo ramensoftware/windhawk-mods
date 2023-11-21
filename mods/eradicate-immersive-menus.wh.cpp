@@ -2,7 +2,7 @@
 // @id              eradicate-immersive-menus
 // @name            Eradicate Immersive Menus
 // @description     Gets rid of immersive menus system-wide
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -208,7 +208,7 @@ BOOL Wh_ModInit()
 #ifdef _WIN64
     WCHAR szProcessPath[MAX_PATH];
     GetModuleFileNameW(NULL, szProcessPath, MAX_PATH);
-    BOOL bIsExplorer = (wcsicmp(szProcessPath, L"C:\\Windows\\explorer.exe") == 0);
+    BOOL bIsImmersiveProcess = (!wcsicmp(szProcessPath, L"C:\\Windows\\explorer.exe") || !wcsicmp(szProcessPath, L"C:\\Windows\\System32\\Narrator.exe"));
 
     if (settings.nosettingsicon)
     {
@@ -245,7 +245,7 @@ BOOL Wh_ModInit()
         
         /* Explorer itself is always 64-bit */
 #ifdef _WIN64
-        if (bIsExplorer)
+        if (bIsImmersiveProcess)
         {
             if (!HookICMH_CAODTM(
                 NULL,
@@ -276,7 +276,7 @@ BOOL Wh_ModInit()
 
     /* Tray icons are always 64-bit */
 #ifdef _WIN64
-    if (bIsExplorer)
+    if (bIsImmersiveProcess)
     {
         if (settings.sound)
         {

@@ -358,7 +358,7 @@
                 "published": 1699155263000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1699155263000,
+                "updated": 1700605007000,
                 "users": 105
             },
             "metadata": {
@@ -379,7 +379,7 @@
                     "*"
                 ],
                 "name": "Eradicate Immersive Menus",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "explorer-32px-icons": {
