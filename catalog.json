@@ -332,6 +332,26 @@
                 "version": "1.1"
             }
         },
+        "dwm-unextend-frames": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1700542256000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1700542256000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Makes applications think DWM is disabled",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "DWM Unextend Frames",
+                "version": "1.0.0"
+            }
+        },
         "eradicate-immersive-menus": {
             "details": {
                 "defaultSorting": 1050,
