@@ -579,6 +579,26 @@
                 "version": "1.0.0"
             }
         },
+        "legacy-search-bar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1700726411000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1700726411000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Restores the search box from before Windows 10, version 1909",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Legacy Search Bar",
+                "version": "1.0.0"
+            }
+        },
         "lm-close-windbg-file-changed": {
             "details": {
                 "defaultSorting": 240,

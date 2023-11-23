@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-21T22:16:47.000Z</updated>
+    <updated>2023-11-23T08:00:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy Search Bar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/legacy-search-bar#a71decd11c053c6bb0b8e75e7799d8e2bd7909e8</id>
+        <link href="https://windhawk.net/mods/legacy-search-bar"/>
+        <updated>2023-11-23T08:00:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="legacysearchbar">Legacy Search Bar</h1>
+<p>Since Windows 10, version 1909, the legacy search box, which was based on DirectUI,
+was replaced by one that uses EdgeHTML. As well, when enabling the DirectUI one,
+a bug occurs where the placeholder text disappars initially and on a resize. This mod
+re-enables the DirectUI search box and fixes the bug with the placeholder.</p>
+<p><strong>This mod requires Windhawk v1.4 or greater.</strong></p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/legacy-search-bar-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/legacy-search-bar-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Eradicate Immersive Menus 1.0.1]]></title>
         <id>https://windhawk.net/mods/eradicate-immersive-menus#a5027866c7b777a48063333529159778f35def19</id>
@@ -244,12 +260,5 @@ the taskbar will not be hidden immediately</li>
 <p><strong>After installing this mod, with the "Classic ribbon UI (no tabs)"
 configuration</strong>:</p>
 <p><img src="https://i.imgur.com/SCBbirW.png" alt="Classic ribbon UI (no tabs) screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 1.2]]></title>
-        <id>https://windhawk.net/mods/classic-maximized-windows-fix#0c2abf98ba3649753230cc5067fe8833cecf0723</id>
-        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
-        <updated>2023-10-07T05:09:52.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix non-fully maximized windows. Namely open/save dialogs, which maximize but do not fill screen.</p>]]></content>
     </entry>
 </feed>
