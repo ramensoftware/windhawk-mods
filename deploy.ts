@@ -162,13 +162,22 @@ function generateModChangelog(modId: string) {
         changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
 
         if (commit !== lastCommit) {
-            const message = gitExec([
+            let message = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]).replace(/^.* \(#\d+\)\n\n/, '');
-            changelog += `${message}\n`;
+            ]).trim();
+
+            if (message.includes('\n')) {
+                // Remove first line.
+                message = message.replace(/^.* \(#\d+\)\n\n/, '').trim();
+            } else {
+                // Only remove trailing PR number if it's the only line.
+                message = message.replace(/ \(#\d+\)$/, '').trim();
+            }
+
+            changelog += `${message}\n\n`;
         } else {
             changelog += 'Initial release.\n';
         }
@@ -311,10 +320,10 @@ async function main() {
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 
-    const srcPath = 'public';
-    for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {
-        fs.renameSync(path.join(srcPath, file.name), file.name);
-    }
+    // const srcPath = 'public';
+    // for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {
+    //     fs.renameSync(path.join(srcPath, file.name), file.name);
+    // }
 }
 
 main();
