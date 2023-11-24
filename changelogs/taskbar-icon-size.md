@@ -1,3 +1,7 @@
+## 1.2.2 ([Nov 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/d1b9a9260c59f7f721e3439496eee9d0dafc5c2b/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed displaced secondary taskbar when auto-hide is enabled.
+
 ## 1.2.1 ([Nov 10, 2023](https://github.com/ramensoftware/windhawk-mods/blob/d28ad7f818078e99a4ccc492486bfcf534bf016e/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed displaced clock on secondary monitors.
