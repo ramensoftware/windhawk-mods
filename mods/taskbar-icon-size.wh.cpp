@@ -2,14 +2,14 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0605 -lole32 -loleaut32
+// @compilerOptions -DWINVER=0x0605 -lole32 -loleaut32 -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -103,6 +103,16 @@ bool g_inSystemTraySecondaryController_UpdateFrameSize;
 double* double_48_value_Original;
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
+typedef enum MONITOR_DPI_TYPE {
+    MDT_EFFECTIVE_DPI = 0,
+    MDT_ANGULAR_DPI = 1,
+    MDT_RAW_DPI = 2,
+    MDT_DEFAULT = MDT_EFFECTIVE_DPI
+} MONITOR_DPI_TYPE;
+STDAPI GetDpiForMonitor(HMONITOR hmonitor,
+                        MONITOR_DPI_TYPE dpiType,
+                        UINT* dpiX,
+                        UINT* dpiY);
 
 using ResourceDictionary_Lookup_t = winrt::Windows::Foundation::IInspectable*(
     WINAPI*)(void* pThis,
@@ -165,6 +175,24 @@ bool WINAPI IconContainer_IsStorageRecreationRequired_Hook(void* pThis,
 
     return IconContainer_IsStorageRecreationRequired_Original(pThis, param1,
                                                               flags);
+}
+
+using TrayUI_GetMinSize_t = void(WINAPI*)(void* pThis,
+                                          HMONITOR monitor,
+                                          SIZE* size);
+TrayUI_GetMinSize_t TrayUI_GetMinSize_Original;
+void WINAPI TrayUI_GetMinSize_Hook(void* pThis, HMONITOR monitor, SIZE* size) {
+    TrayUI_GetMinSize_Original(pThis, monitor, size);
+
+    // Reassign min height to fix displaced secondary taskbar when auto-hide is
+    // enabled.
+    if (g_taskbarHeight) {
+        UINT dpiX = 0;
+        UINT dpiY = 0;
+        GetDpiForMonitor(monitor, MDT_DEFAULT, &dpiX, &dpiY);
+
+        size->cy = MulDiv(g_taskbarHeight, dpiY, 96);
+    }
 }
 
 using TaskListItemViewModel_GetIconHeight_t = int(WINAPI*)(void* pThis,
@@ -807,6 +835,15 @@ bool HookTaskbarDllSymbols() {
             },
             (void**)&IconContainer_IsStorageRecreationRequired_Original,
             (void*)IconContainer_IsStorageRecreationRequired_Hook,
+        },
+        {
+            {
+                LR"(public: virtual void __cdecl TrayUI::GetMinSize(struct HMONITOR__ *,struct tagSIZE *))",
+                LR"(public: virtual void __cdecl TrayUI::GetMinSize(struct HMONITOR__ * __ptr64,struct tagSIZE * __ptr64) __ptr64)",
+            },
+            (void**)&TrayUI_GetMinSize_Original,
+            (void*)TrayUI_GetMinSize_Hook,
+            true,
         },
     };
 
