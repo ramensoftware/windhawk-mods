@@ -1,3 +1,7 @@
+## 1.0.5 ([Nov 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/1f28d4e873e7790ddb44cf727fbf6d90c0a8167a/mods/taskbar-button-click.wh.cpp))
+
+* Added support for the new Windows 11 taskbar labels option.
+
 ## 1.0.4 ([Apr 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0ff37a61a6d89141553c7109ffd4170e5a0d5009/mods/taskbar-button-click.wh.cpp))
 
 * Improved compatibility with the taskbar-grouping mod. Previously, using both mods could lead to a middle click closing the wrong window.

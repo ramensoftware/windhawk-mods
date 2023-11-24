@@ -2,7 +2,7 @@
 // @id              taskbar-button-click
 // @name            Middle click to close on the taskbar
 // @description     Close programs with a middle click on the taskbar instead of creating a new instance
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -12,6 +12,14 @@
 // @compilerOptions -lversion
 // ==/WindhawkMod==
 
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
+
 // ==WindhawkModReadme==
 /*
 # Middle click to close on the taskbar
@@ -19,12 +27,11 @@
 Close programs with the middle click on the taskbar instead of creating a new
 instance.
 
-Only Windows 10 64-bit and Windows 11 are supported.
-For other Windows versions check out [7+ Taskbar
-Tweaker](https://tweaker.ramensoftware.com/).
+Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
+check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
-Note: To customize the old taskbar on Windows 11 (if using Explorer Patcher or a
-similar tool), enable the relevant option in the mod's settings.
+**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
+or a similar tool), enable the relevant option in the mod's settings.
 */
 // ==/WindhawkModReadme==
 
@@ -43,8 +50,8 @@ similar tool), enable the relevant option in the mod's settings.
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: Disable and re-enable the mod to
-    apply this option.
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
+    1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
 
@@ -61,6 +68,7 @@ enum {
 
 struct {
     int multipleItemsBehavior;
+    bool oldTaskbarOnWin11;
 } g_settings;
 
 enum class WinVersion {
@@ -207,7 +215,7 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
     }
 
     // Group types:
-    // 1 - Single item (or multiple uncombined items - Win10)
+    // 1 - Single item or multiple uncombined items
     // 2 - Pinned item
     // 3 - Multiple combined items
     int groupType =
@@ -238,7 +246,7 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
                 return 0;
             }
         }
-    } else if (g_winVersion <= WinVersion::Win10) {
+    } else {
         taskItemIndex = g_CTaskListWndTaskItemIndex;
     }
 
@@ -358,7 +366,7 @@ bool HookSymbols(PCWSTR cacheId,
     std::wstring newSystemCacheStr;
 
     auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
-                             cacheSep, &newSystemCacheStr,
+                             &newSystemCacheStr,
                              module](std::wstring_view symbol, void* address) {
         for (size_t i = 0; i < symbolHooksCount; i++) {
             if (symbolResolved[i]) {
@@ -434,7 +442,7 @@ bool HookSymbols(PCWSTR cacheId,
                 continue;
             }
 
-            int noAddressMatchCount = 0;
+            size_t noAddressMatchCount = 0;
             for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
                 auto symbol = cacheParts[j];
                 auto address = cacheParts[j + 1];
@@ -516,10 +524,14 @@ void LoadSettings() {
         g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_NONE;
     }
     Wh_FreeStringSetting(multipleItemsBehavior);
+
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    LoadSettings();
 
     g_winVersion = GetWindowsVersion();
     if (g_winVersion == WinVersion::Unsupported) {
@@ -527,12 +539,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (g_winVersion >= WinVersion::Win11 &&
-        Wh_GetIntSetting(L"oldTaskbarOnWin11")) {
+    if (g_winVersion >= WinVersion::Win11 && g_settings.oldTaskbarOnWin11) {
         g_winVersion = WinVersion::Win10;
     }
-
-    LoadSettings();
 
     SYMBOL_HOOK symbolHooks[] = {
         // Win11 only:
@@ -619,8 +628,22 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
+    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+
     LoadSettings();
+
+    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+
+    return TRUE;
+}
+
+// For pre-1.3 Windhawk compatibility.
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"> pre-1.3");
+
+    BOOL bReload = FALSE;
+    Wh_ModSettingsChanged(&bReload);
 }

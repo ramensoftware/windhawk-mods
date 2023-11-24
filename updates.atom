@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-24T19:08:24.000Z</updated>
+    <updated>2023-11-24T19:33:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-click#1f28d4e873e7790ddb44cf727fbf6d90c0a8167a</id>
+        <link href="https://windhawk.net/mods/taskbar-button-click"/>
+        <updated>2023-11-24T19:33:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the new Windows 11 taskbar labels option.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#d1b9a9260c59f7f721e3439496eee9d0dafc5c2b</id>
@@ -249,15 +258,5 @@ themes of old Windows versions. This mod adds that back.</p>
         <content type="html"><![CDATA[<p>Fixes ListViews in dark mode, and outside of it</p>
 <p>Without: <img src="https://i.imgur.com/8kmOShw.png" alt="Without" /></p>
 <p>With: <img src="https://i.imgur.com/PorgfmI.png" alt="With" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Taskbar Autohide 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-autohide-better#f018f72f781314cde0282a37175c929de9a17bf3</id>
-        <link href="https://windhawk.net/mods/taskbar-autohide-better"/>
-        <updated>2023-10-13T12:16:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix: When closing a window with notifications before delay,
-the taskbar will not be hidden immediately</li>
-</ul>]]></content>
     </entry>
 </feed>
