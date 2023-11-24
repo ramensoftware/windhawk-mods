@@ -320,10 +320,10 @@ async function main() {
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 
-    // const srcPath = 'public';
-    // for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {
-    //     fs.renameSync(path.join(srcPath, file.name), file.name);
-    // }
+    const srcPath = 'public';
+    for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {
+        fs.renameSync(path.join(srcPath, file.name), file.name);
+    }
 }
 
 main();
