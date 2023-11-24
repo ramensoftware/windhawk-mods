@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-23T08:00:11.000Z</updated>
+    <updated>2023-11-24T08:29:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Unlock Task Manager for Server 1.0.0]]></title>
+        <id>https://windhawk.net/mods/unlock-taskmgr-server#1899048c96271abe4624cf802d51e6fbc8629e1a</id>
+        <link href="https://windhawk.net/mods/unlock-taskmgr-server"/>
+        <updated>2023-11-24T08:29:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="unlocktaskmanagerforserver">Unlock Task Manager for Server</h1>
+<p>Some features in Task Manager, such as certain columns in the Processes tab and
+the Startup tab are completely disabled in Windows Server. This mod re-enables
+those features.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/unlock-taskmgr-server-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/unlock-taskmgr-server-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy Search Bar 1.0.0]]></title>
         <id>https://windhawk.net/mods/legacy-search-bar#a71decd11c053c6bb0b8e75e7799d8e2bd7909e8</id>
@@ -243,22 +257,5 @@ the taskbar will not be hidden immediately</li>
         <link href="https://windhawk.net/mods/lm-ppee-wow64"/>
         <updated>2023-10-09T11:47:34.000Z</updated>
         <content type="html"><![CDATA[<p>Update to be less brittle, and also work for ResourceHacker</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-frame-classic#1ef16f7b9436c0941bc14d09893a815d1b59c7a5</id>
-        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
-        <updated>2023-10-07T15:10:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicexplorernavigationbar">Classic Explorer navigation bar</h1>
-<p>Restores the classic Explorer navigation bar to the version before the Windows
-11 "Moments 4" update. Among other things, that makes drag and drop work again.</p>
-<p><strong>Note</strong>: You may need to restart Explorer to apply the changes.</p>
-<p><strong>The new Windows "Moments 4" update version</strong>:</p>
-<p><img src="https://i.imgur.com/fOmI2Rs.png" alt="Moments 4 screenshot" /></p>
-<p><strong>After installing this mod, with the "Classic navigation bar" configuration</strong>:</p>
-<p><img src="https://i.imgur.com/Hnvjquv.png" alt="Classic navigation bar screenshot" /></p>
-<p><strong>After installing this mod, with the "Classic ribbon UI (no tabs)"
-configuration</strong>:</p>
-<p><img src="https://i.imgur.com/SCBbirW.png" alt="Classic ribbon UI (no tabs) screenshot" /></p>]]></content>
     </entry>
 </feed>

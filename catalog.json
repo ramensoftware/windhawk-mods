@@ -1386,6 +1386,26 @@
                 "version": "1.0"
             }
         },
+        "unlock-taskmgr-server": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1700814558000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1700814558000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Re-enable features that are normally disabled in Task Manager on Windows Server",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "Taskmgr.exe"
+                ],
+                "name": "Unlock Task Manager for Server",
+                "version": "1.0.0"
+            }
+        },
         "virtual-desktop-taskbar-order": {
             "details": {
                 "defaultSorting": 3620,
