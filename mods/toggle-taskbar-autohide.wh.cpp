@@ -6,7 +6,7 @@
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
-// @compilerOptions -DWINVER=0x0602 -lcomctl32 -ldwmapi -lole32 -lversion
+// @compilerOptions -DWINVER=0x0602 -lcomctl32 -loleaut32 -ldwmapi -lole32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
