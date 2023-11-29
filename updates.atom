@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-24T19:33:54.000Z</updated>
+    <updated>2023-11-29T16:04:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#55cf8e1768150ba51f8b822a44f19de3cf0cc9fa</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-11-29T16:04:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>A new, more robust implementation for newer Windows 11 versions with a native taskbar labels implementation.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.5]]></title>
         <id>https://windhawk.net/mods/taskbar-button-click#1f28d4e873e7790ddb44cf727fbf6d90c0a8167a</id>
@@ -249,14 +258,5 @@ themes of old Windows versions. This mod adds that back.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Darkmode ListViews 1.0]]></title>
-        <id>https://windhawk.net/mods/fix-darkmode-listviews#5da8dd0cf14f45ff084df527dce909f993df84bb</id>
-        <link href="https://windhawk.net/mods/fix-darkmode-listviews"/>
-        <updated>2023-10-13T14:40:51.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixes ListViews in dark mode, and outside of it</p>
-<p>Without: <img src="https://i.imgur.com/8kmOShw.png" alt="Without" /></p>
-<p>With: <img src="https://i.imgur.com/PorgfmI.png" alt="With" /></p>]]></content>
     </entry>
 </feed>

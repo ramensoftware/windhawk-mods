@@ -1,3 +1,7 @@
+## 1.2 ([Nov 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/55cf8e1768150ba51f8b822a44f19de3cf0cc9fa/mods/taskbar-labels.wh.cpp))
+
+* A new, more robust implementation for newer Windows 11 versions with a native taskbar labels implementation.
+
 ## 1.1.5 ([Oct 3, 2023](https://github.com/ramensoftware/windhawk-mods/blob/4a1778822b1ce783729ec3fde550d59fdc7ce547/mods/taskbar-labels.wh.cpp))
 
 * Fixed an overflow regression for a centered taskbar for Windows 11 22H2 before update KB5030310 ("Moment 4" update). The bug was introduced in version 1.1.4.

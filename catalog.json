@@ -1199,7 +1199,7 @@
                 "published": 1661149953000,
                 "rating": 10,
                 "ratingUsers": 77,
-                "updated": 1696370827000,
+                "updated": 1701273893000,
                 "users": 4078
             },
             "featured": true,
@@ -1209,7 +1209,7 @@
                 ],
                 "author": "m417z",
                 "compilerOptions": "-DWINVER=0x0605 -loleaut32 -lole32 -lruntimeobject",
-                "description": "Show text labels for running programs on the taskbar (Windows 11 only)",
+                "description": "Show and customize text labels for running programs on the taskbar (Windows 11 only)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -1217,7 +1217,7 @@
                 ],
                 "name": "Taskbar Labels for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.5"
+                "version": "1.2"
             }
         },
         "taskbar-scroll-actions": {
