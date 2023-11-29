@@ -1,3 +1,12 @@
+## 1.2.1 ([Nov 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/b9c4fefe6754408557a92715d6f4e11465f8ae3a/mods/taskbar-labels.wh.cpp))
+
+* Added a new option: Minimum taskbar item width.
+* Fixed label texts and icons to refer to the window and not the app. The downside of the fix is that combining can no longer be enabled ("When taskbar is full" still works). This may be addressed in the future.
+* Fixed "Space between icon and label" calculation in some cases.
+* Fixed label disappearing when dragging.
+* Fixed settings applying in some cases.
+* Fixed for new builds with the labels feature turned off.
+
 ## 1.2 ([Nov 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/55cf8e1768150ba51f8b822a44f19de3cf0cc9fa/mods/taskbar-labels.wh.cpp))
 
 * A new, more robust implementation for newer Windows 11 versions with a native taskbar labels implementation.

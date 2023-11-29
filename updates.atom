@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-29T16:04:53.000Z</updated>
+    <updated>2023-11-29T22:18:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#b9c4fefe6754408557a92715d6f4e11465f8ae3a</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-11-29T22:18:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a new option: Minimum taskbar item width.</li>
+<li>Fixed label texts and icons to refer to the window and not the app. The downside of the fix is that combining can no longer be enabled ("When taskbar is full" still works). This may be addressed in the future.</li>
+<li>Fixed "Space between icon and label" calculation in some cases.</li>
+<li>Fixed label disappearing when dragging.</li>
+<li>Fixed settings applying in some cases.</li>
+<li>Fixed for new builds with the labels feature turned off.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#55cf8e1768150ba51f8b822a44f19de3cf0cc9fa</id>
@@ -246,17 +260,5 @@ themes of old Windows versions. This mod adds that back.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/notepad-clientedge-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/notepad-clientedge-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Conhost 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-conhost#ed112acfab6183748181b4922267d7cda4c45a7b</id>
-        <link href="https://windhawk.net/mods/classic-conhost"/>
-        <updated>2023-10-21T10:17:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicconhost">Classic Conhost</h1>
-<p>This mod will apply classic theme and optionally client edge to console windows.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-conhost-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
