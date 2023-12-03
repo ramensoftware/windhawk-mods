@@ -29,39 +29,8 @@ elemwnts on the taskbar), taskbar's autohide feature gets turned on or off.
 
 // ==WindhawkModSettings==
 /*
-- volumeIndicator: win11
-  $name: Volume control indicator
-  $options:
-  - win11: Windows 11
-  - modern: Windows 10
-  - classic: Windows 7
-  - none: None
-- scrollArea: taskbar
-  $name: Scroll area
-  $options:
-  - taskbar: The taskbar
-  - notification_area: The notification area
-- middleClickToMute: true
-  $name: Middle click to mute
-  $description: >-
-    With this option enabled, middle clicking the volume tray icon will
-    mute/unmute the system volume (Windows 11 version 22H2 or newer).
-- noAutomaticMuteToggle: false
-  $name: No automatic mute toggle
-  $description: >-
-    For the Windows 11 indicator, this option causes volume scrolling to be
-    disabled when the volume is muted. For the None control indicator: By
-    default, the output device is muted once the volume reaches zero, and is
-    unmuted on any change to a non-zero volume. Enabling this option turns off
-    this functionality, such that the device mute status is not changed.
-- volumeChangeStep: 2
-  $name: Volume change step
-  $description: >-
-    Allows to configure the volume change that will occur with each notch of
-    mouse wheel movement. This option has effect only for the Windows 11, None
-    control indicators. For the Windows 11 indicator, must be a multiple of 2.
 - oldTaskbarOnWin11: false
-  $name: Customize the old taskbar on Windows 11
+  $name: Use the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
     Explorer Patcher or a similar tool). Note: For Windhawk versions older
@@ -548,32 +517,19 @@ typedef class CUIAutomation CUIAutomation;
 // =====================================================================
 
 struct {
-    int volumeIndicator;
-    int scrollArea;
-    bool middleClickToMute;
-    bool noAutomaticMuteToggle;
-    int volumeChangeStep;
     bool oldTaskbarOnWin11;
 } g_settings;
 
-enum {
-    WIN_VERSION_UNSUPPORTED = 0,
-    WIN_VERSION_7,
-    WIN_VERSION_8,
-    WIN_VERSION_81,
-    WIN_VERSION_811,
-    WIN_VERSION_10_T1,       // 1507
-    WIN_VERSION_10_T2,       // 1511
-    WIN_VERSION_10_R1,       // 1607
-    WIN_VERSION_10_R2,       // 1703
-    WIN_VERSION_10_R3,       // 1709
-    WIN_VERSION_10_R4,       // 1803
-    WIN_VERSION_10_R5,       // 1809
-    WIN_VERSION_10_19H1,     // 1903, 1909
-    WIN_VERSION_10_20H1,     // 2004, 20H2, 21H1, 21H2, 22H2
-    WIN_VERSION_SERVER_2022, // Server 2022
-    WIN_VERSION_11_21H2,
-    WIN_VERSION_11_22H2,
+enum TaskBarVersion {
+    WIN_10_TASKBAR = 0,
+    WIN_11_TASKBAR,
+    UNKNOWN_TASKBAR
+};
+
+const char* TaskBarVersionStr[] = {
+    "WIN_10_TASKBAR",
+    "WIN_11_TASKBAR",
+    "UNKNOWN_TASKBAR"
 };
 
 struct SYMBOL_HOOK {
@@ -634,8 +590,7 @@ class UIAutomationWrapper {
     IUIAutomation *uiAutomationInstance;
 };
 
-static int g_nWinVersion;
-static int g_nExplorerVersion;
+static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 static HWND g_hTaskbarWnd;
 static DWORD g_dwTaskbarThreadId;
 static bool g_initialized = false;
@@ -758,7 +713,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     // catch middle mouse button on both main and secondary taskbars
     case WM_NCMBUTTONDOWN:
     case WM_MBUTTONDOWN:
-        if (g_nExplorerVersion < WIN_VERSION_11_21H2 && OnMouseClick(hWnd, wParam, lParam)) {
+        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam)) {
             result = 0;
         } else {
             result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -841,7 +796,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd) {
         SubclassTaskbarWindow(hSecondaryWnd);
     }
 
-    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked) {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
         if (hXamlIslandWnd) {
             HWND hInputSiteWnd = FindWindowEx(hXamlIslandWnd, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr);
@@ -860,7 +815,7 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd) {
     g_secondaryTaskbarWindows.insert(hWnd);
     SubclassTaskbarWindow(hWnd);
 
-    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked) {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
         if (hXamlIslandWnd) {
             HWND hInputSiteWnd = FindWindowEx(hXamlIslandWnd, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr);
@@ -943,7 +898,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 
     if (bTextualClassName && _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) {
         Wh_Log(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && !g_inputSiteProcHooked) {
+        if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked) {
             HandleIdentifiedInputSiteWindow(hWnd);
         }
     }
@@ -1203,8 +1158,6 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) {
 }
 
 BOOL WindowsVersionInit() {
-    g_nWinVersion = WIN_VERSION_UNSUPPORTED;
-
     VS_FIXEDFILEINFO *pFixedFileInfo = GetModuleVersionInfo(NULL, NULL);
     if (!pFixedFileInfo)
         return FALSE;
@@ -1213,67 +1166,25 @@ BOOL WindowsVersionInit() {
     WORD nMinor = LOWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nBuild = HIWORD(pFixedFileInfo->dwFileVersionLS);
     WORD nQFE = LOWORD(pFixedFileInfo->dwFileVersionLS);
-
     Wh_Log(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
 
-    switch (nMajor) {
-    case 6:
-        switch (nMinor) {
-        case 1:
-            g_nWinVersion = WIN_VERSION_7;
-            break;
-
-        case 2:
-            g_nWinVersion = WIN_VERSION_8;
-            break;
-
-        case 3:
-            if (nQFE < 17000)
-                g_nWinVersion = WIN_VERSION_81;
-            else
-                g_nWinVersion = WIN_VERSION_811;
-            break;
-
-        case 4:
-            g_nWinVersion = WIN_VERSION_10_T1;
-            break;
+    if(nMajor == 6) {
+        g_taskbarVersion = WIN_10_TASKBAR;
+    } else if (nMajor == 10) {
+        if (nBuild < 22000) {   // 21H2
+            g_taskbarVersion = WIN_10_TASKBAR;
+        } else {
+            g_taskbarVersion = WIN_11_TASKBAR;
         }
-        break;
-
-    case 10:
-        if (nBuild <= 10240)
-            g_nWinVersion = WIN_VERSION_10_T1;
-        else if (nBuild <= 10586)
-            g_nWinVersion = WIN_VERSION_10_T2;
-        else if (nBuild <= 14393)
-            g_nWinVersion = WIN_VERSION_10_R1;
-        else if (nBuild <= 15063)
-            g_nWinVersion = WIN_VERSION_10_R2;
-        else if (nBuild <= 16299)
-            g_nWinVersion = WIN_VERSION_10_R3;
-        else if (nBuild <= 17134)
-            g_nWinVersion = WIN_VERSION_10_R4;
-        else if (nBuild <= 17763)
-            g_nWinVersion = WIN_VERSION_10_R5;
-        else if (nBuild <= 18362)
-            g_nWinVersion = WIN_VERSION_10_19H1;
-        else if (nBuild <= 19045)
-            g_nWinVersion = WIN_VERSION_10_20H1;
-        else if (nBuild <= 20348)
-            g_nWinVersion = WIN_VERSION_SERVER_2022;
-        else if (nBuild <= 22000)
-            g_nWinVersion = WIN_VERSION_11_21H2;
-        else
-            g_nWinVersion = WIN_VERSION_11_22H2;
-        break;
+    } else {
+        g_taskbarVersion = UNKNOWN_TASKBAR;
     }
 
-    Wh_Log(L"Detected windows version: %d", g_nWinVersion);
-
-    if (g_nWinVersion == WIN_VERSION_UNSUPPORTED)
-        return FALSE;
-
     return TRUE;
+}
+
+void LoadSettings() {
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
 bool GetTaskbarAutohideState() {
@@ -1318,7 +1229,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     POINT pointerLocation{};
 
     // old Windows mouse handling of WM_MBUTTONDOWN message
-    if (g_nExplorerVersion < WIN_VERSION_11_21H2) {
+    if (g_taskbarVersion == WIN_10_TASKBAR) {
         // message carries mouse position relative to the client window so use GetCursorPos() instead
         if (!GetCursorPos(&pointerLocation)) {
             Wh_Log(L"Failed to get mouse position");
@@ -1355,7 +1266,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
 
     // old Windows 10 taskbar
     bool taskbarClicked = false;
-    if (g_nExplorerVersion < WIN_VERSION_11_21H2) {
+    if (g_taskbarVersion == WIN_10_TASKBAR) {
         BSTR className = NULL;
         hr = pWindowElement->get_CurrentClassName(&className);
         if (FAILED(hr) || (className == NULL)) { 
@@ -1397,15 +1308,16 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    if (!WindowsVersionInit()) {
+    LoadSettings();
+
+    if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN_TASKBAR)) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
     // treat Windows 11 taskbar as on older windows
-    g_nExplorerVersion = g_nWinVersion;
-    if (g_nExplorerVersion >= WIN_VERSION_11_21H2 && g_settings.oldTaskbarOnWin11) {
-        g_nExplorerVersion = WIN_VERSION_10_20H1;
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && g_settings.oldTaskbarOnWin11) {
+        g_taskbarVersion = WIN_10_TASKBAR;
     }
 
     Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original);
@@ -1431,6 +1343,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    return TRUE;
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    Wh_Log(L">");
+    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+    LoadSettings();
+    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
     return TRUE;
 }
 
