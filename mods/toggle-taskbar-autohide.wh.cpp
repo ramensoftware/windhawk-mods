@@ -6,7 +6,7 @@
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
-// @compilerOptions -DWINVER=0x0602 -lcomctl32 -loleaut32 -lole32 -lversion
+// @compilerOptions -DWINVER=0x0602 -D_WIN32_WINNT=0x0602 -lcomctl32 -loleaut32 -lole32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -45,6 +45,8 @@ In case you are using old Windows taskbar on Windows 11 (Explorer Patcher or a s
 */
 // ==/WindhawkModSettings==
 
+// Note: If intellisense is giving you a trouble, add -DWINVER=0x0602 -D_WIN32_WINNT=0x0602 flags to compile_flags.txt (Ctrl+E).
+
 #include <commctrl.h>
 #include <windhawk_api.h>
 #include <winerror.h>
@@ -64,10 +66,6 @@ In case you are using old Windows taskbar on Windows 11 (Explorer Patcher or a s
 #define WINAPI_LAMBDA_RETURN(return_t) WINAPI->return_t
 #else
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t
-#endif
-
-#ifndef WM_POINTERDOWN
-#define WM_POINTERDOWN 0x0246
 #endif
 
 // =====================================================================
