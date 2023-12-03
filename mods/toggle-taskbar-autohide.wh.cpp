@@ -21,9 +21,16 @@
 /*
 # Toggle taskbar autohide
 Toggle taskbar autohide feature with middle mouse click on the taskbar. Whenever you middle click on a free space on your taskbar (outside other UI
-elemwnts on the taskbar), taskbar's autohide feature gets turned on or off.
+elements on the taskbar), taskbar's autohide feature gets turned on or off.
 
-![Demonstration](https://i.imgur.com/B6mtUj9.gif)
+![Demonstration of Toggle taskbar autohide mod for Windhawk](https://i.imgur.com/BRQrVnX.gif)
+
+## Supported Windows versions are:
+- Windows 10 22H2 (prior versions are not tested, but should work as well)
+- Windows 11 21H2-latest 
+
+In case you are using old Windows taskbar on Windows 11 (Explorer Patcher or a similar tool), enable corresponding option on Settings menu.
+
 */
 // ==/WindhawkModReadme==
 
