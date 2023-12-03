@@ -6,13 +6,13 @@
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
-// @compilerOptions -DWINVER=0x0602 -lcomctl32 -loleaut32 -ldwmapi -lole32 -lversion
+// @compilerOptions -DWINVER=0x0602 -lcomctl32 -loleaut32 -lole32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
 //
 // For bug reports and feature requests, please open an issue here:
-// https://github.com/ramensoftware/windhawk-mods/issues
+// https://github.com/m1lhaus/windhawk-mods/issues
 //
 // For pull requests, development takes place here:
 // https://github.com/m1lhaus/windhawk-mods
@@ -46,20 +46,15 @@ In case you are using old Windows taskbar on Windows 11 (Explorer Patcher or a s
 // ==/WindhawkModSettings==
 
 #include <commctrl.h>
-#include <dwmapi.h>
-#include <endpointvolume.h>
-#include <mmdeviceapi.h>
-#include <objbase.h>
-#include <oleauto.h>
-#include <uiautomation.h>
 #include <windhawk_api.h>
-#include <windowsx.h>
 #include <winerror.h>
 #include <winuser.h>
 
-#include <algorithm>
+#include <UIAnimation.h>
+#include <UIAutomationClient.h>
+#include <UIAutomationCore.h>
+
 #include <string>
-#include <string_view>
 #include <unordered_set>
 #include <vector>
 
