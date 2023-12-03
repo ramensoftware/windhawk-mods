@@ -1226,9 +1226,8 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         return false;
     }
 
-    POINT pointerLocation{};
-
     // old Windows mouse handling of WM_MBUTTONDOWN message
+    POINT pointerLocation{};
     if (g_taskbarVersion == WIN_10_TASKBAR) {
         // message carries mouse position relative to the client window so use GetCursorPos() instead
         if (!GetCursorPos(&pointerLocation)) {
@@ -1248,8 +1247,12 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         }
         pointerLocation = pointerInfo.ptPixelLocation;
     }
-
     Wh_Log(L"Middle mouse clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
+
+    // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
+    // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
+    // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like 
+    // opened window, icon, start menu, etc. 
 
     IUIAutomation *pUIAutomation = g_UIAutomation.getInstance();
     if (pUIAutomation == NULL) {
