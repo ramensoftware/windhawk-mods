@@ -1264,36 +1264,20 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         return false;
     }
 
-    // old Windows 10 taskbar
-    bool taskbarClicked = false;
-    if (g_taskbarVersion == WIN_10_TASKBAR) {
-        BSTR className = NULL;
-        hr = pWindowElement->get_CurrentClassName(&className);
-        if (FAILED(hr) || (className == NULL)) { 
-            Wh_Log(L"Failed to retrieve the Name of the UI element clicked.");
-            pWindowElement->Release();
-            return false;
-        }
-        Wh_Log(L"Clicked UI element ClassName: %s", className);
-        taskbarClicked = (wcscmp(className, L"Shell_TrayWnd") == 0) || (wcscmp(className, L"Shell_SecondaryTrayWnd") == 0);
-        SysFreeString(className);
+    BSTR className = NULL;
+    hr = pWindowElement->get_CurrentClassName(&className);
+    if (FAILED(hr) || (className == NULL)) { 
+        Wh_Log(L"Failed to retrieve the Name of the UI element clicked.");
         pWindowElement->Release();
-
-    // new Windows 11 taskbar
-    } else {
-        BSTR automationId = NULL;
-        hr = pWindowElement->get_CurrentAutomationId(&automationId);     // lets hope automationID will stay the same in future
-        if (FAILED(hr) || (automationId == NULL)) {
-            Wh_Log(L"Failed to retrieve the AutomationID of the UI element clicked.");
-            pWindowElement->Release();
-            return false;
-        }
-
-        Wh_Log(L"Clicked UI element AutomationID: %s", automationId);
-        taskbarClicked = wcscmp(automationId, L"TaskbarFrame") == 0;
-        SysFreeString(automationId);
-        pWindowElement->Release();
+        return false;
     }
+    Wh_Log(L"Clicked UI element ClassName: %s", className);
+    const bool taskbarClicked = (wcscmp(className, L"Shell_TrayWnd") == 0) || // Windows 10 primary taskbar
+                                (wcscmp(className, L"Shell_SecondaryTrayWnd") == 0) ||   // Windows 10 secondary taskbar
+                                (wcscmp(className, L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||     // Windows 11 taskbar
+                                (wcscmp(className, L"Windows.UI.Input.InputSite.WindowClass") == 0);   // Windows 11 21H2 taskbar
+    SysFreeString(className);
+    pWindowElement->Release();
 
     if (taskbarClicked) {
         const bool isAutohideEnabled = ToggleTaskbarAutohide();
