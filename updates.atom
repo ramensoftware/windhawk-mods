@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-11-29T22:18:13.000Z</updated>
+    <updated>2023-12-08T18:18:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#098b5d81a22328110d49566ffbcd9ea1a3da4243</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2023-12-08T18:18:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to hide labels and still use the other customizations.</li>
+<li>Added logic to avoid crashing when a non-positive font size is set.</li>
+<li>Fixed left indicator style position with custom left and right padding size value.</li>
+<li>Fixed truncated labels for wide taskbar buttons.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#b9c4fefe6754408557a92715d6f4e11465f8ae3a</id>
@@ -246,19 +258,5 @@ The default DirectUI view will not work.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/explorer-32px-icons-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/explorer-32px-icons-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notepad Clientedge 1.0.0]]></title>
-        <id>https://windhawk.net/mods/notepad-clientedge#b84239fc7a1c98e111d1b508541ffd5c32c8158b</id>
-        <link href="https://windhawk.net/mods/notepad-clientedge"/>
-        <updated>2023-10-30T05:58:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="notepadclientedge">Notepad Clientedge</h1>
-<p>In a Windows 10 update, the <code>WS_EX_CLIENTEDGE</code> style was removed from Notepad's
-edit control, resulting in an inaccurate appearance on classic theme or other
-themes of old Windows versions. This mod adds that back.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/notepad-clientedge-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/notepad-clientedge-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>

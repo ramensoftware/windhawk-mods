@@ -1,3 +1,10 @@
+## 1.2.2 ([Dec 8, 2023](https://github.com/ramensoftware/windhawk-mods/blob/098b5d81a22328110d49566ffbcd9ea1a3da4243/mods/taskbar-labels.wh.cpp))
+
+* Added an option to hide labels and still use the other customizations.
+* Added logic to avoid crashing when a non-positive font size is set.
+* Fixed left indicator style position with custom left and right padding size value.
+* Fixed truncated labels for wide taskbar buttons.
+
 ## 1.2.1 ([Nov 29, 2023](https://github.com/ramensoftware/windhawk-mods/blob/b9c4fefe6754408557a92715d6f4e11465f8ae3a/mods/taskbar-labels.wh.cpp))
 
 * Added a new option: Minimum taskbar item width.
