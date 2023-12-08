@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show and customize text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -57,8 +57,8 @@ choose one of the following running indicator styles:
 - taskbarItemWidth: 160
   $name: Taskbar item width
   $description: >-
-    Set to 0 to use the Windows adaptive width, only for newer Windows versions
-    with the built-in taskbar labels implementation
+    Set to 0 to use the Windows adaptive width, set to -1 to hide labels, only
+    for newer Windows versions with the built-in taskbar labels implementation
 - minimumTaskbarItemWidth: 50
   $name: Minimum taskbar item width
   $description: >-
@@ -114,7 +114,6 @@ choose one of the following running indicator styles:
 #include <algorithm>
 #include <atomic>
 #include <limits>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -761,8 +760,8 @@ void UpdateTaskListButtonWithLabelStyle(
     }
 
     double taskListButtonWidth = taskListButtonElement.ActualWidth();
-
     double iconPanelWidth = iconPanelElement.ActualWidth();
+    double iconWidth = iconElement.ActualWidth();
 
     auto columnDefinitions =
         iconPanelElement.as<Controls::Grid>().ColumnDefinitions();
@@ -804,6 +803,8 @@ void UpdateTaskListButtonWithLabelStyle(
             labelControlElement.HorizontalAlignment(horizontalAlignment);
         }
 
+        labelControlElement.MaxWidth(std::numeric_limits<double>::infinity());
+
         auto textTrimming =
             g_unloading ? TextTrimming::Clip : TextTrimming::CharacterEllipsis;
         if (labelControlElement.TextTrimming() != textTrimming) {
@@ -813,9 +814,8 @@ void UpdateTaskListButtonWithLabelStyle(
         auto labelControlMargin = labelControlElement.Margin();
         labelControlMargin.Left =
             g_unloading ? 0
-                        : (iconElement.ActualWidth() - 24 +
-                           g_settings.leftAndRightPaddingSize - 8 +
-                           g_settings.spaceBetweenIconAndLabel - 8);
+                        : (iconWidth - 24 + g_settings.leftAndRightPaddingSize -
+                           8 + g_settings.spaceBetweenIconAndLabel - 8);
         labelControlMargin.Right =
             g_unloading ? 0 : (g_settings.leftAndRightPaddingSize - 10);
         labelControlElement.Margin(labelControlMargin);
@@ -883,9 +883,17 @@ void UpdateTaskListButtonWithLabelStyle(
         indicatorElement.MinWidth(minWidth);
 
         auto indicatorMargin = indicatorElement.Margin();
-        indicatorMargin.Left = 0;
-        indicatorMargin.Right =
-            indicatorStyle == IndicatorStyle::left ? 0 : overflowWidth;
+        if (indicatorStyle == IndicatorStyle::left) {
+            indicatorMargin.Left =
+                (g_unloading || !labelControlElement)
+                    ? 0
+                    : (iconWidth - 24 +
+                       (g_settings.leftAndRightPaddingSize - 8) * 2);
+            indicatorMargin.Right = 0;
+        } else {
+            indicatorMargin.Left = 0;
+            indicatorMargin.Right = overflowWidth;
+        }
         indicatorElement.Margin(indicatorMargin);
 
         if (isProgressIndicator) {
@@ -1198,8 +1206,11 @@ DWORD WINAPI TaskbarSettings_GroupingMode_Hook(void* pThis) {
     DWORD ret = TaskbarSettings_GroupingMode_Original(pThis);
 
     if (!g_unloading) {
-        // "Always" mode isn't supported, switch to "Never".
-        if (ret == 0) {
+        if (g_settings.taskbarItemWidth == -1) {
+            // Switch to "Always".
+            ret = 0;
+        } else if (ret == 0) {
+            // "Always" mode isn't supported, switch to "Never".
             ret = 2;
         }
     }
@@ -1272,6 +1283,10 @@ void LoadSettings() {
     Wh_FreeStringSetting(progressIndicatorStyle);
 
     g_settings.fontSize = Wh_GetIntSetting(L"fontSize");
+    if (g_settings.fontSize < 1) {
+        g_settings.fontSize = 1;
+    }
+
     g_settings.leftAndRightPaddingSize =
         Wh_GetIntSetting(L"leftAndRightPaddingSize");
     g_settings.spaceBetweenIconAndLabel =
