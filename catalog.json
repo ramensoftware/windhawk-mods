@@ -921,6 +921,30 @@
                 "version": "1.0"
             }
         },
+        "old-this-pc-commands": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1702159772000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1702159772000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lole32",
+                "description": "Makes \"Open Settings\", \"System properties\", etc. in This PC use Control Panel instead of Settings",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Old This PC Commands",
+                "version": "1.0.0"
+            }
+        },
         "pinned-items-double-click": {
             "details": {
                 "defaultSorting": 1470,

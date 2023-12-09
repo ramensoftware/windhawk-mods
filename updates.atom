@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-09T16:08:45.000Z</updated>
+    <updated>2023-12-09T22:09:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Old This PC Commands 1.0.0]]></title>
+        <id>https://windhawk.net/mods/old-this-pc-commands#90d6ccd363cb9764f081ea1981932b2b3dac68cf</id>
+        <link href="https://windhawk.net/mods/old-this-pc-commands"/>
+        <updated>2023-12-09T22:09:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="oldexplorercommands">Old Explorer Commands</h1>
+<p>This mod makes the following commands in This PC, which are normally hardcoded to open Settings, open Control Panel instead.</p>
+<ul>
+<li>Open Settings</li>
+<li>System properties</li>
+<li>Uninstall or change a program</li>
+</ul>
+<h1 id="important">!!IMPORTANT!!</h1>
+<p>Beginning with Iron (Windows Server 2022), a redirect from the System page to Settings is <strong>hardcoded</strong> into <code>ExplorerFrame.dll</code>.
+As such, this mod will not work on Windows Server 2022, Windows 11, or greater to restore the old System page unless a modification
+to <code>ExplorerFrame.dll</code> takes place to remove the redirect.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.0.4]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#8c545bf02a39e26c87fdc03214cd21db0a13fa09</id>
@@ -240,14 +257,5 @@ already up and running with many software open.</p>
 <h2 id="stuckoninitializing">Stuck on "Initializing…"</h2>
 <p>If ever a certain process gets stuck on "Initializing…", and the "Mod tasks in progress" window does not go away,
 restart Windhawk. If that does not work, simply add it to the exclusion list in the Advanced tab of this mod.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Message Box Fix 1.4.6]]></title>
-        <id>https://windhawk.net/mods/msg-box-font-fix#a08c60fdb07f810002787e4b6bf12dd0828973ce</id>
-        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
-        <updated>2023-11-05T02:19:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add option to fix background color for pre-Windows Vista classic theme look</li>
-</ul>]]></content>
     </entry>
 </feed>
