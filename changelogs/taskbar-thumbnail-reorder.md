@@ -1,3 +1,7 @@
+## 1.0.4 ([Dec 9, 2023](https://github.com/ramensoftware/windhawk-mods/blob/8c545bf02a39e26c87fdc03214cd21db0a13fa09/mods/taskbar-thumbnail-reorder.wh.cpp))
+
+* Fixed taskbar not updating after reordering thumbnails.
+
 ## 1.0.3 ([Dec 31, 2022](https://github.com/ramensoftware/windhawk-mods/blob/08074a6b13c905af38110bd45b60194f263b6bff/mods/taskbar-thumbnail-reorder.wh.cpp))
 
 * Fix mod applying before explorer starts running (e.g. on system startup).
