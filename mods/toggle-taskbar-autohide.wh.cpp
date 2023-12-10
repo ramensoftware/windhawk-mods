@@ -552,7 +552,7 @@ class UIAutomationWrapper {
         if (SUCCEEDED(result)) {
             isCOMInitialized = true;
         } else {
-            Wh_Log(L"CoInitializeEx failed\n");
+            Wh_Log(L"CoInitializeEx failed");
             return false;
         }
 
@@ -560,10 +560,10 @@ class UIAutomationWrapper {
         if (SUCCEEDED(result)) {
             isUIAutomationInitialized = true;
         } else {
-            Wh_Log(L"CoCreateInstance failed\n");
+            Wh_Log(L"CoCreateInstance failed");
             return false;
         }
-        Wh_Log(L"UIAutomationWrapper initilized\n");
+        Wh_Log(L"UIAutomationWrapper initilized");
         return true;
     }
 
@@ -1009,14 +1009,14 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
 
     IUIAutomation *pUIAutomation = g_UIAutomation.getInstance();
     if (pUIAutomation == NULL) {
-        Wh_Log(L"UIAutomationWrapper failed to get instance\n");
+        Wh_Log(L"UIAutomationWrapper failed to get instance");
         return false;
     }
 
     winrt::com_ptr<IUIAutomationElement> pWindowElement = NULL;
     HRESULT hr = pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put());
     if (FAILED(hr) || !pWindowElement) {
-        Wh_Log(L"Failed to retrieve UI element from mouse click\n");
+        Wh_Log(L"Failed to retrieve UI element from mouse click");
         return false;
     }
 
@@ -1059,7 +1059,7 @@ BOOL Wh_ModInit() {
 
     // init UIAutomation before hooks, otherwise subclass won't be unset and Explorer will crash if UIAutomation fails
     if (!g_UIAutomation.init()) {
-        Wh_Log(L"UIAutomationWrapper failed to initialize\n");
+        Wh_Log(L"UIAutomationWrapper failed to initialize");
         return FALSE;
     }
 
