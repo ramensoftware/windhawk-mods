@@ -57,6 +57,8 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
 #include <UIAnimation.h>
 #include <UIAutomationClient.h>
 #include <UIAutomationCore.h>
+#include <winrt/base.h>
+#include <comutil.h>
 
 #include <string>
 #include <unordered_set>
@@ -528,10 +530,10 @@ enum TaskBarVersion {
     UNKNOWN_TASKBAR
 };
 
-const char* TaskBarVersionStr[] = {
-    "WIN_10_TASKBAR",
-    "WIN_11_TASKBAR",
-    "UNKNOWN_TASKBAR"
+const wchar_t* TaskBarVersionStr[] = {
+    L"WIN_10_TASKBAR",
+    L"WIN_11_TASKBAR",
+    L"UNKNOWN_TASKBAR"
 };
 
 // wrapper around UIAutomation COM interface to be sure that it gets closed and released properly
@@ -1011,27 +1013,24 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         return false;
     }
 
-    IUIAutomationElement *pWindowElement = NULL;
-    HRESULT hr = pUIAutomation->ElementFromPoint(pointerLocation, &pWindowElement);
-    if (FAILED(hr) || (pWindowElement == NULL)) {
+    winrt::com_ptr<IUIAutomationElement> pWindowElement = NULL;
+    HRESULT hr = pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put());
+    if (FAILED(hr) || !pWindowElement) {
         Wh_Log(L"Failed to retrieve UI element from mouse click\n");
         return false;
     }
 
-    BSTR className = NULL;
-    hr = pWindowElement->get_CurrentClassName(&className);
-    if (FAILED(hr) || (className == NULL)) { 
+    _bstr_t className;
+    hr = pWindowElement->get_CurrentClassName(className.GetAddress());
+    if (FAILED(hr) || !className) { 
         Wh_Log(L"Failed to retrieve the Name of the UI element clicked.");
-        pWindowElement->Release();
         return false;
     }
-    Wh_Log(L"Clicked UI element ClassName: %s", className);
-    const bool taskbarClicked = (wcscmp(className, L"Shell_TrayWnd") == 0) || // Windows 10 primary taskbar
-                                (wcscmp(className, L"Shell_SecondaryTrayWnd") == 0) ||   // Windows 10 secondary taskbar
-                                (wcscmp(className, L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||     // Windows 11 taskbar
-                                (wcscmp(className, L"Windows.UI.Input.InputSite.WindowClass") == 0);   // Windows 11 21H2 taskbar
-    SysFreeString(className);
-    pWindowElement->Release();
+    Wh_Log(L"Clicked UI element ClassName: %s", className.GetBSTR());
+    const bool taskbarClicked = (wcscmp(className.GetBSTR(), L"Shell_TrayWnd") == 0) || // Windows 10 primary taskbar
+                                (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||   // Windows 10 secondary taskbar
+                                (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||     // Windows 11 taskbar
+                                (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0);   // Windows 11 21H2 taskbar
 
     if (taskbarClicked) {
         const bool isAutohideEnabled = ToggleTaskbarAutohide();
@@ -1052,12 +1051,17 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
-
     // treat Windows 11 taskbar as on older windows
     if ((g_taskbarVersion == WIN_11_TASKBAR) && g_settings.oldTaskbarOnWin11) {
         g_taskbarVersion = WIN_10_TASKBAR;
     }
     Wh_Log(L"Using taskbar version: %s", TaskBarVersionStr[g_taskbarVersion]);
+
+    // init UIAutomation before hooks, otherwise subclass won't be unset and Explorer will crash if UIAutomation fails
+    if (!g_UIAutomation.init()) {
+        Wh_Log(L"UIAutomationWrapper failed to initialize\n");
+        return FALSE;
+    }
 
     Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original);
 
@@ -1075,11 +1079,6 @@ BOOL Wh_ModInit() {
         if (hWnd) {
             HandleIdentifiedTaskbarWindow(hWnd);
         }
-    }
-
-    if (!g_UIAutomation.init()) {
-        Wh_Log(L"UIAutomationWrapper failed to initialize\n");
-        return FALSE;
     }
 
     return TRUE;
