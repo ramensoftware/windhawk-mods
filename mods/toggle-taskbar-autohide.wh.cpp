@@ -27,9 +27,11 @@ elements on the taskbar), taskbar's autohide feature gets turned on or off.
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
-- Windows 11 21H2-latest 
+- Windows 11 21H2 - latest major
 
-In case you are using old Windows taskbar on Windows 11 (Explorer Patcher or a similar tool), enable corresponding option on Settings menu.
+I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.  
+
+In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2). 
 
 */
 // ==/WindhawkModReadme==
