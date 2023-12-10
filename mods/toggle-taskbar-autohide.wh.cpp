@@ -534,13 +534,6 @@ const char* TaskBarVersionStr[] = {
     "UNKNOWN_TASKBAR"
 };
 
-struct SYMBOL_HOOK {
-    std::vector<std::wstring_view> symbols;
-    void **pOriginalFunction;
-    void *hookFunction = nullptr;
-    bool optional = false;
-};
-
 // wrapper around UIAutomation COM interface to be sure that it gets closed and released properly
 class UIAutomationWrapper {
   public:
@@ -614,7 +607,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
-UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_taskbar-volume-control");
+UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_toggle-taskbar-autohide");
 
 BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
@@ -674,65 +667,27 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 
     LRESULT result = 0;
     switch (uMsg) {
-    case WM_COPYDATA: {
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-
-        typedef struct _notifyiconidentifier_internal {
-            DWORD dwMagic;   // 0x34753423
-            DWORD dwRequest; // 1 for (x,y) | 2 for (w,h)
-            DWORD cbSize;    // 0x20
-            DWORD hWndHigh;
-            DWORD hWndLow;
-            UINT uID;
-            GUID guidItem;
-        } NOTIFYICONIDENTIFIER_INTERNAL;
-
-        COPYDATASTRUCT *p_copydata = (COPYDATASTRUCT *)lParam;
-
-        // Change Shell_NotifyIconGetRect handling result for the volume
-        // icon. In case it's not visible, or in Windows 11, it returns 0,
-        // which causes sndvol.exe to ignore the command line position.
-        if (result == 0 && p_copydata->dwData == 0x03 && p_copydata->cbData == sizeof(NOTIFYICONIDENTIFIER_INTERNAL)) {
-            NOTIFYICONIDENTIFIER_INTERNAL *p_icon_ident = (NOTIFYICONIDENTIFIER_INTERNAL *)p_copydata->lpData;
-            if (p_icon_ident->dwMagic == 0x34753423 && (p_icon_ident->dwRequest == 0x01 || p_icon_ident->dwRequest == 0x02) &&
-                p_icon_ident->cbSize == 0x20 &&
-                memcmp(&p_icon_ident->guidItem,
-                       "\x73\xAE\x20\x78\xE3\x23\x29\x42\x82\xC1\xE4"
-                       "\x1C\xB6\x7D\x5B\x9C",
-                       sizeof(GUID)) == 0) {
-                RECT rc;
-                GetWindowRect(hWnd, &rc);
-
-                if (p_icon_ident->dwRequest == 0x01)
-                    result = MAKEWORD(rc.left, rc.top);
-                else
-                    result = MAKEWORD(rc.right - rc.left, rc.bottom - rc.top);
+        // catch middle mouse button on both main and secondary taskbars
+        case WM_NCMBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+            if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam)) {
+                result = 0;
+            } else {
+                result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
-        }
-        break;
-    }
+            break;
 
-    // catch middle mouse button on both main and secondary taskbars
-    case WM_NCMBUTTONDOWN:
-    case WM_MBUTTONDOWN:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam)) {
-            result = 0;
-        } else {
+        case WM_NCDESTROY:
             result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        }
-        break;
 
-    case WM_NCDESTROY:
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (hWnd != g_hTaskbarWnd) {
+                g_secondaryTaskbarWindows.erase(hWnd);
+            }
+            break;
 
-        if (hWnd != g_hTaskbarWnd) {
-            g_secondaryTaskbarWindows.erase(hWnd);
-        }
-        break;
-
-    default:
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        break;
+        default:
+            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            break;
     }
 
     return result;
@@ -906,212 +861,6 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
     }
 
     return hWnd;
-}
-
-bool HookSymbols(HMODULE module, const SYMBOL_HOOK *symbolHooks, size_t symbolHooksCount) {
-    const WCHAR cacheVer = L'1';
-    const WCHAR cacheSep = L'#';
-    constexpr size_t cacheMaxSize = 10240;
-
-    WCHAR moduleFilePath[MAX_PATH];
-    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned an unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
-    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
-
-    std::wstring_view cacheBufferView(cacheBuffer);
-
-    // https://stackoverflow.com/a/46931770
-    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
-        size_t pos_start = 0, pos_end;
-        std::wstring_view token;
-        std::vector<std::wstring_view> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) != std::wstring_view::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + 1;
-            res.push_back(token);
-        }
-
-        res.push_back(s.substr(pos_start));
-        return res;
-    };
-
-    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
-
-    std::vector<bool> symbolResolved(symbolHooksCount, false);
-    std::wstring newSystemCacheStr;
-
-    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved, &newSystemCacheStr, module](std::wstring_view symbol, void *address) {
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i]) {
-                continue;
-            }
-
-            bool match = false;
-            for (auto hookSymbol : symbolHooks[i].symbols) {
-                if (hookSymbol == symbol) {
-                    match = true;
-                    break;
-                }
-            }
-
-            if (!match) {
-                continue;
-            }
-
-            if (symbolHooks[i].hookFunction) {
-                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction, symbolHooks[i].pOriginalFunction);
-                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(), symbol.data());
-            } else {
-                *symbolHooks[i].pOriginalFunction = address;
-                Wh_Log(L"Found %p: %.*s", address, symbol.length(), symbol.data());
-            }
-
-            symbolResolved[i] = true;
-
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += symbol;
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
-
-            break;
-        }
-    };
-
-    IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)module;
-    IMAGE_NT_HEADERS *header = (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    newSystemCacheStr += cacheVer;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += timeStamp;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += imageSize;
-
-    if (cacheParts.size() >= 3 && cacheParts[0] == std::wstring_view(&cacheVer, 1) && cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
-        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
-            auto symbol = cacheParts[i];
-            auto address = cacheParts[i + 1];
-            if (address.length() == 0) {
-                continue;
-            }
-
-            void *addressPtr = (void *)(std::stoull(std::wstring(address), nullptr, 10) + (ULONG_PTR)module);
-
-            onSymbolResolved(symbol, addressPtr);
-        }
-
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i] || !symbolHooks[i].optional) {
-                continue;
-            }
-
-            size_t noAddressMatchCount = 0;
-            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
-                auto symbol = cacheParts[j];
-                auto address = cacheParts[j + 1];
-                if (address.length() != 0) {
-                    continue;
-                }
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    if (hookSymbol == symbol) {
-                        noAddressMatchCount++;
-                        break;
-                    }
-                }
-            }
-
-            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
-                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
-                symbolResolved[i] = true;
-            }
-        }
-
-        if (std::all_of(symbolResolved.begin(), symbolResolved.end(), [](bool b) { return b; })) {
-            return true;
-        }
-    }
-
-    Wh_Log(L"Couldn't resolve all symbols from cache");
-
-    WH_FIND_SYMBOL findSymbol;
-    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
-    if (!findSymbolHandle) {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
-        return false;
-    }
-
-    do {
-        onSymbolResolved(findSymbol.symbol, findSymbol.address);
-    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
-
-    Wh_FindCloseSymbol(findSymbolHandle);
-
-    for (size_t i = 0; i < symbolHooksCount; i++) {
-        if (symbolResolved[i]) {
-            continue;
-        }
-
-        if (!symbolHooks[i].optional) {
-            Wh_Log(L"Unresolved symbol: %d", i);
-            return false;
-        }
-
-        Wh_Log(L"Optional symbol %d doesn't exist", i);
-
-        for (auto hookSymbol : symbolHooks[i].symbols) {
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += hookSymbol;
-            newSystemCacheStr += cacheSep;
-        }
-    }
-
-    if (newSystemCacheStr.length() <= cacheMaxSize) {
-        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
-    } else {
-        Wh_Log(L"Cache is too large (%Iu)", newSystemCacheStr.length());
-    }
-
-    return true;
-}
-
-bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
-    WCHAR szWindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return false;
-    }
-
-    // Windows 11 version 22H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(path, MAX_PATH, LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    // Windows 11 version 21H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(path, MAX_PATH, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    return false;
 }
 
 #pragma endregion // hook_magic
@@ -1308,6 +1057,7 @@ BOOL Wh_ModInit() {
     if ((g_taskbarVersion == WIN_11_TASKBAR) && g_settings.oldTaskbarOnWin11) {
         g_taskbarVersion = WIN_10_TASKBAR;
     }
+    Wh_Log(L"Using taskbar version: %s", TaskBarVersionStr[g_taskbarVersion]);
 
     Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original);
 
