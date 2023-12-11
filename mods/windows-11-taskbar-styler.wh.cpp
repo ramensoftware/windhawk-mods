@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.1.3
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -43,15 +43,32 @@ taskbar's control elements in real time, and experiment with various styles.
 
 ## Control styles
 
-Each entry has a target control and list of styles.
+Each entry has a target control and a list of styles.
 
 The target control is written as `Control` or `Control#Name`, i.e. the target
 control tag name, such as `taskbar:TaskListButton` or `Rectangle`, optionally
 followed by `#` and the target control's `x:Name` attribute. The target control
-can also include parent elements, separated by `>`, for example:
-`ParentControl#ParentName > Control#Name`.
+can also include:
+* Child control index, for example: `Control#Name[2]` will only match the
+  relevant control that's also the second child among all of its parent's child
+  controls.
+* Control properties, for example:
+  `Control#Name[Property1=Value1][Property2=Value2]`.
+* Parent controls, separated by `>`, for example: `ParentControl#ParentName >
+  Control#Name`.
+* Visual state group name, for example: `Control#Name@VisualStateGroupName`. It
+  can be specified for the target control or for a parent control, but can be
+  specified only once per target. The visual state group can be used in styles
+  as specified below.
 
-Each style is written as `Style=Value`, for example: `Height=5`.
+**Note**: The target is evaluated only once. If, for example, the index or the
+properties of a control change, the target conditions aren't evaluated again.
+
+Each style is written as `Style=Value`, for example: `Height=5`. The `:=` syntax
+can be used to use XAML syntax, for example: `Fill:=<SolidColorBrush
+Color="Red"/>`. In addition, a visual state can be specified as following:
+`Style@VisualState=Value`, in which case the style will only apply when the
+visual state group specified in the target matches the specified visual state.
 
 A couple of practical examples:
 
@@ -62,37 +79,44 @@ A couple of practical examples:
 * Target: `taskbar:TaskListButton`
 * Style: `CornerRadius=0`
 
-### Task list button background color
-
-![Screenshot](https://i.imgur.com/eP13uBu.png)
-
-* Target: `taskbar:TaskListButtonPanel > Border#BackgroundElement`
-* Style: `Background=gray`
-
 ### Running indicator size and color
 
-![Screenshot](https://i.imgur.com/enttdYJ.png)
+![Screenshot](https://i.imgur.com/mR5c3F5.png)
 
-* Target: `Rectangle#RunningIndicator`
-* Styles: `Fill=#FFED7014`, `Height=2`, `MinWidth=12`
+* Target: `taskbar:TaskListLabeledButtonPanel@RunningIndicatorStates >
+  Rectangle#RunningIndicator`
+* Styles:
+    * `Fill=#FFED7014`
+    * `Height=2`
+    * `Width=12`
+    * `Fill@ActiveRunningIndicator=Red`
+    * `Width@ActiveRunningIndicator=20`
 
-**Note:** Currently, it's not possible to set styles only for a specific visual
-state. In this example, the color and width apply for all states, including
-active and inactive buttons.
+### Task list button background gradient
 
-### Time font and color
+![Screenshot](https://i.imgur.com/LNPcw0G.png)
 
-![Screenshot](https://i.imgur.com/ZRM0drT.png)
+* Targets:
+    * `taskbar:TaskListButtonPanel > Border#BackgroundElement`
+    * `taskbar:TaskListLabeledButtonPanel > Border#BackgroundElement`
+* Style: `Background:=<LinearGradientBrush StartPoint="0.5,0"
+  EndPoint="0.5,1"><GradientStop Offset="0" Color="DodgerBlue"/><GradientStop
+  Offset="1" Color="Yellow"/></LinearGradientBrush>`
 
-* Target: `TextBlock#TimeInnerTextBlock`
-* Styles: `FontFamily=Comic Sans MS`, `FontSize=14`, `Foreground=Red`
+### Hide the start button
 
-### Hide date
+* Target:
+  `taskbar:ExperienceToggleButton#LaunchListButton[AutomationProperties.AutomationId=StartButton]`
+* Style: `Visibility=Collapsed`
 
-![Screenshot](https://i.imgur.com/9fGyL9W.png)
+### Hide the network notification icon
 
-* Target: `TextBlock#DateInnerTextBlock`
-* Styles: `Visibility=Collapsed`
+* Target: `systemtray:OmniButton#ControlCenterButton > Grid > ContentPresenter >
+  ItemsPresenter > StackPanel > ContentPresenter[1]`
+* Style: `Visibility=Collapsed`
+
+**Note**: To hide the volume notification icon instead, use `[2]` instead of
+`[1]`.
 
 ## Resource variables
 
@@ -132,33 +156,8 @@ relevant `#pragma region` regions in the code editor.
     - value: "0"
       $name: Value
   $name: Resource variables
-- promptForExplorerRestart: true
-  $name: Prompt for Explorer restart
-  $description: >-
-    Show a message prompting to restart Explorer on each style change
 */
 // ==/WindhawkModSettings==
-
-#include <atomic>
-
-#undef GetCurrentTime
-
-#include <winrt/Windows.UI.Xaml.h>
-
-std::atomic<DWORD> g_targetThreadId = 0;
-
-void ApplyCustomizations(winrt::Windows::UI::Xaml::FrameworkElement element);
-
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module)) {
-        return nullptr;
-    }
-
-    return module;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // clang-format off
@@ -299,11 +298,11 @@ extern "C"{
 
 #pragma region Application Family
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
-#pragma warning(push)
-#pragma warning(disable:4668) 
-#pragma warning(disable:4001) 
+// #pragma warning(push)
+// #pragma warning(disable:4668) 
+// #pragma warning(disable:4001) 
 // #pragma once
-#pragma warning(pop)
+// #pragma warning(pop)
 // Win32 API definitions
 #define E_NOTFOUND HRESULT_FROM_WIN32(ERROR_NOT_FOUND)
 #define E_UNKNOWNTYPE MAKE_HRESULT(SEVERITY_ERROR, FACILITY_XAML, 40L)
@@ -1044,6 +1043,35 @@ extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsou
 
 #pragma endregion  // windows_ui_xaml_hosting_desktopwindowxamlsource_h
 
+// clang-format on
+////////////////////////////////////////////////////////////////////////////////
+
+#include <atomic>
+
+#undef GetCurrentTime
+
+#include <winrt/Windows.UI.Xaml.h>
+
+std::atomic<DWORD> g_targetThreadId = 0;
+
+void ApplyCustomizations(InstanceHandle handle,
+                         winrt::Windows::UI::Xaml::FrameworkElement element);
+void CleanupCustomizations(InstanceHandle handle);
+
+HMODULE GetCurrentModuleHandle() {
+    HMODULE module;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           L"", &module)) {
+        return nullptr;
+    }
+
+    return module;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// clang-format off
+
 #pragma region visualtreewatcher_hpp
 
 #include <winrt/Windows.UI.Xaml.h>
@@ -1129,23 +1157,26 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement
 
     Wh_Log(L"Element type: %s", element.Type);
 
-    const auto inspectable = FromHandle<wf::IInspectable>(element.Handle);
-
-    auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
-    if (!frameworkElement)
+    if (mutationType == Add)
     {
-        const auto desktopXamlSource = FromHandle<wuxh::DesktopWindowXamlSource>(element.Handle);
-        frameworkElement = desktopXamlSource.Content().try_as<wux::FrameworkElement>();
+        const auto inspectable = FromHandle<wf::IInspectable>(element.Handle);
+
+        auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
+        if (!frameworkElement)
+        {
+            const auto desktopXamlSource = FromHandle<wuxh::DesktopWindowXamlSource>(element.Handle);
+            frameworkElement = desktopXamlSource.Content().try_as<wux::FrameworkElement>();
+        }
+
+        if (frameworkElement)
+        {
+            Wh_Log(L"FrameworkElement name: %s", frameworkElement.Name().c_str());
+            ApplyCustomizations(element.Handle, frameworkElement);
+        }
     }
-
-    if (frameworkElement)
+    else if (mutationType == Remove)
     {
-        Wh_Log(L"FrameworkElement name: %s", frameworkElement.Name().c_str());
-    }
-
-    if (frameworkElement && mutationType == Add)
-    {
-        ApplyCustomizations(frameworkElement);
+        CleanupCustomizations(element.Handle);
     }
 
     return S_OK;
@@ -1345,9 +1376,11 @@ HRESULT InjectWindhawkTAP() noexcept
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <commctrl.h>
@@ -1373,29 +1406,75 @@ struct deleter_from_fn {
 using string_setting_unique_ptr =
     std::unique_ptr<const WCHAR[], deleter_from_fn<Wh_FreeStringSetting>>;
 
-HANDLE g_restartExplorerPromptThread;
-std::atomic<HWND> g_restartExplorerPromptWindow;
-
 using PropertyKeyValue =
     std::pair<DependencyProperty, winrt::Windows::Foundation::IInspectable>;
 
 struct ElementMatcher {
     std::wstring type;
     std::wstring name;
-};
-
-struct ElementPropertyOverrides {
-    ElementMatcher elementMatcher;
-    std::vector<ElementMatcher> parentElementMatchers;
+    std::wstring visualStateGroup;
+    int oneBasedIndex = 0;
+    std::vector<std::pair<std::wstring, std::wstring>> propertyValuesStr;
     std::vector<PropertyKeyValue> propertyValues;
 };
 
-bool g_propertyOverridesLoaded;
-std::vector<ElementPropertyOverrides> g_propertyOverrides;
-DWORD g_propertyOverridesUpdateCount = 0;
+struct StyleRule {
+    std::wstring name;
+    std::wstring visualState;
+    std::wstring value;
+    bool isXamlValue = false;
+};
+
+// Property -> visual state -> value.
+using PropertyOverrides = std::unordered_map<
+    DependencyProperty,
+    std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>>;
+
+struct ElementCustomizationRules {
+    ElementMatcher elementMatcher;
+    std::vector<ElementMatcher> parentElementMatchers;
+    PropertyOverrides propertyOverrides;
+};
+
+bool g_elementsCustomizationRulesLoaded;
+std::vector<ElementCustomizationRules> g_elementsCustomizationRules;
+
+struct ElementPropertyCustomizationState {
+    std::optional<winrt::Windows::Foundation::IInspectable> originalValue;
+    std::optional<winrt::Windows::Foundation::IInspectable> customValue;
+    int64_t propertyChangedToken = 0;
+};
+
+struct ElementCustomizationState {
+    winrt::weak_ref<FrameworkElement> element;
+    std::unordered_map<DependencyProperty, ElementPropertyCustomizationState>
+        propertyCustomizationStates;
+    winrt::weak_ref<VisualStateGroup> visualStateGroup;
+    winrt::event_token visualStateGroupCurrentStateChangedToken;
+};
+
+std::unordered_map<InstanceHandle, ElementCustomizationState>
+    g_elementsCustomizationState;
+
+bool g_elementPropertyModifying;
+
+// https://stackoverflow.com/a/12835139
+VisualStateGroup GetVisualStateGroup(FrameworkElement element,
+                                     std::wstring_view stateGroupName) {
+    auto list = VisualStateManager::GetVisualStateGroups(element);
+
+    for (const auto& v : list) {
+        if (v.Name() == stateGroupName) {
+            return v;
+        }
+    }
+
+    return nullptr;
+}
 
 bool TestElementMatcher(FrameworkElement element,
-                        const ElementMatcher& matcher) {
+                        const ElementMatcher& matcher,
+                        VisualStateGroup* visualStateGroup) {
     if (!matcher.type.empty() &&
         matcher.type != winrt::get_class_name(element)) {
         return false;
@@ -1405,13 +1484,78 @@ bool TestElementMatcher(FrameworkElement element,
         return false;
     }
 
+    if (matcher.oneBasedIndex) {
+        auto parent = Media::VisualTreeHelper::GetParent(element);
+        if (!parent) {
+            return false;
+        }
+
+        int index = matcher.oneBasedIndex - 1;
+        if (index < 0 ||
+            index >= Media::VisualTreeHelper::GetChildrenCount(parent) ||
+            Media::VisualTreeHelper::GetChild(parent, index) != element) {
+            return false;
+        }
+    }
+
+    auto elementDo = element.as<DependencyObject>();
+
+    for (const auto& propertyValue : matcher.propertyValues) {
+        const auto value = elementDo.ReadLocalValue(propertyValue.first);
+        const auto className = winrt::get_class_name(value);
+        const auto expectedClassName =
+            winrt::get_class_name(propertyValue.second);
+        if (className != expectedClassName) {
+            Wh_Log(L"Different property class: %s vs. %s", className.c_str(),
+                   expectedClassName.c_str());
+            return false;
+        }
+
+        if (className == L"Windows.Foundation.IReference`1<String>") {
+            if (winrt::unbox_value<winrt::hstring>(propertyValue.second) ==
+                winrt::unbox_value<winrt::hstring>(value)) {
+                continue;
+            }
+
+            return false;
+        }
+
+        if (className == L"Windows.Foundation.IReference`1<Double>") {
+            if (winrt::unbox_value<double>(propertyValue.second) ==
+                winrt::unbox_value<double>(value)) {
+                continue;
+            }
+
+            return false;
+        }
+
+        if (className == L"Windows.Foundation.IReference`1<Boolean>") {
+            if (winrt::unbox_value<bool>(propertyValue.second) ==
+                winrt::unbox_value<bool>(value)) {
+                continue;
+            }
+
+            return false;
+        }
+
+        Wh_Log(L"Unsupported property class: %s", className.c_str());
+        return false;
+    }
+
+    if (!matcher.visualStateGroup.empty() && visualStateGroup) {
+        *visualStateGroup =
+            GetVisualStateGroup(element, matcher.visualStateGroup);
+    }
+
     return true;
 }
 
-const std::vector<PropertyKeyValue>* FindElementPropertyOverrides(
-    FrameworkElement element) {
-    for (const auto& override : g_propertyOverrides) {
-        if (!TestElementMatcher(element, override.elementMatcher)) {
+const ElementCustomizationRules* FindElementCustomizationRules(
+    FrameworkElement element,
+    VisualStateGroup* visualStateGroup) {
+    for (const auto& override : g_elementsCustomizationRules) {
+        if (!TestElementMatcher(element, override.elementMatcher,
+                                visualStateGroup)) {
             continue;
         }
 
@@ -1428,14 +1572,15 @@ const std::vector<PropertyKeyValue>* FindElementPropertyOverrides(
                 break;
             }
 
-            if (!TestElementMatcher(parentElementIter, matcher)) {
+            if (!TestElementMatcher(parentElementIter, matcher,
+                                    visualStateGroup)) {
                 parentElementMatchFailed = true;
                 break;
             }
         }
 
         if (!parentElementMatchFailed) {
-            return &override.propertyValues;
+            return &override;
         }
     }
 
@@ -1445,42 +1590,213 @@ const std::vector<PropertyKeyValue>* FindElementPropertyOverrides(
 void ProcessAllStylesFromSettings();
 void ProcessResourceVariablesFromSettings();
 
-void ApplyCustomizations(FrameworkElement element) {
-    if (!g_propertyOverridesLoaded) {
+void ApplyCustomizations(InstanceHandle handle, FrameworkElement element) {
+    if (!g_elementsCustomizationRulesLoaded) {
         ProcessAllStylesFromSettings();
         ProcessResourceVariablesFromSettings();
-        g_propertyOverridesLoaded = true;
+        g_elementsCustomizationRulesLoaded = true;
     }
 
-    auto propertyValues = FindElementPropertyOverrides(element);
-    if (!propertyValues) {
+    VisualStateGroup visualStateGroup;
+    auto rules = FindElementCustomizationRules(element, &visualStateGroup);
+    if (!rules) {
         return;
     }
 
-    Wh_Log(L"Applying %zu styles", propertyValues->size());
+    Wh_Log(L"Applying styles");
+
+    auto& elementCustomizationState = g_elementsCustomizationState[handle];
+
+    {
+        auto oldElement = elementCustomizationState.element.get();
+        if (oldElement) {
+            auto oldElementDo = oldElement.as<DependencyObject>();
+            for (const auto& [property, state] :
+                 elementCustomizationState.propertyCustomizationStates) {
+                oldElementDo.UnregisterPropertyChangedCallback(
+                    property, state.propertyChangedToken);
+
+                if (state.originalValue) {
+                    oldElement.SetValue(property, *state.originalValue);
+                }
+            }
+        }
+
+        auto oldVisualStateGroup =
+            elementCustomizationState.visualStateGroup.get();
+        if (oldVisualStateGroup) {
+            oldVisualStateGroup.CurrentStateChanged(
+                elementCustomizationState
+                    .visualStateGroupCurrentStateChangedToken);
+        }
+    }
+
+    elementCustomizationState = {
+        .element = element,
+    };
 
     auto elementDo = element.as<DependencyObject>();
 
-    for (const auto& [property, value] : *propertyValues) {
-        element.SetValue(property, value);
-        elementDo.RegisterPropertyChangedCallback(
-            property,
-            [value = value,
-             propertyOverridesUpdateCount = g_propertyOverridesUpdateCount](
-                DependencyObject sender, DependencyProperty property) {
-                if (propertyOverridesUpdateCount !=
-                    g_propertyOverridesUpdateCount) {
-                    return;
-                }
+    VisualState currentVisualState(
+        visualStateGroup ? visualStateGroup.CurrentState() : nullptr);
 
-                auto element = sender.try_as<FrameworkElement>();
-                if (element) {
+    std::wstring currentVisualStateName(
+        currentVisualState ? currentVisualState.Name() : L"");
+
+    for (auto& [property, valuesPerVisualState] : rules->propertyOverrides) {
+        const auto [propertyCustomizationStatesIt, inserted] =
+            elementCustomizationState.propertyCustomizationStates.insert(
+                {property, {}});
+        if (!inserted) {
+            continue;
+        }
+
+        auto& propertyCustomizationState =
+            propertyCustomizationStatesIt->second;
+
+        auto it = valuesPerVisualState.find(currentVisualStateName);
+        if (it == valuesPerVisualState.end() &&
+            !currentVisualStateName.empty()) {
+            it = valuesPerVisualState.find(L"");
+        }
+
+        if (it != valuesPerVisualState.end()) {
+            propertyCustomizationState.originalValue =
+                element.ReadLocalValue(property);
+            propertyCustomizationState.customValue = it->second;
+            element.SetValue(property, it->second);
+        }
+
+        propertyCustomizationState.propertyChangedToken =
+            elementDo.RegisterPropertyChangedCallback(
+                property,
+                [&propertyCustomizationState](DependencyObject sender,
+                                              DependencyProperty property) {
+                    if (g_elementPropertyModifying) {
+                        return;
+                    }
+
+                    auto element = sender.try_as<FrameworkElement>();
+                    if (!element) {
+                        return;
+                    }
+
+                    if (!propertyCustomizationState.customValue) {
+                        return;
+                    }
+
                     Wh_Log(L"Re-applying style for %s",
                            winrt::get_class_name(element).c_str());
-                    element.SetValue(property, value);
-                }
-            });
+
+                    auto localValue = element.ReadLocalValue(property);
+
+                    if (*propertyCustomizationState.customValue != localValue) {
+                        propertyCustomizationState.originalValue = localValue;
+                    }
+
+                    g_elementPropertyModifying = true;
+                    element.SetValue(property,
+                                     *propertyCustomizationState.customValue);
+                    g_elementPropertyModifying = false;
+                });
     }
+
+    if (visualStateGroup) {
+        elementCustomizationState.visualStateGroup = visualStateGroup;
+
+        elementCustomizationState.visualStateGroupCurrentStateChangedToken =
+            visualStateGroup.CurrentStateChanged(
+                [rules, &elementCustomizationState](
+                    winrt::Windows::Foundation::IInspectable const& sender,
+                    VisualStateChangedEventArgs const& e) {
+                    auto element = elementCustomizationState.element.get();
+
+                    Wh_Log(L"Re-applying all styles for %s",
+                           winrt::get_class_name(element).c_str());
+
+                    g_elementPropertyModifying = true;
+
+                    auto& propertyCustomizationStates =
+                        elementCustomizationState.propertyCustomizationStates;
+
+                    for (auto& [property, valuesPerVisualState] :
+                         rules->propertyOverrides) {
+                        auto& propertyCustomizationState =
+                            propertyCustomizationStates.at(property);
+
+                        auto newState = e.NewState();
+                        auto newStateName =
+                            std::wstring{newState ? newState.Name() : L""};
+                        auto it = valuesPerVisualState.find(newStateName);
+                        if (it == valuesPerVisualState.end()) {
+                            it = valuesPerVisualState.find(L"");
+                            if (it != valuesPerVisualState.end()) {
+                                auto oldState = e.OldState();
+                                auto oldStateName = std::wstring{
+                                    oldState ? oldState.Name() : L""};
+                                if (!valuesPerVisualState.contains(
+                                        oldStateName)) {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if (it != valuesPerVisualState.end()) {
+                            if (!propertyCustomizationState.originalValue) {
+                                propertyCustomizationState.originalValue =
+                                    element.ReadLocalValue(property);
+                            }
+
+                            propertyCustomizationState.customValue = it->second;
+                            element.SetValue(property, it->second);
+                        } else {
+                            if (propertyCustomizationState.originalValue) {
+                                if (*propertyCustomizationState.originalValue ==
+                                    DependencyProperty::UnsetValue()) {
+                                    element.ClearValue(property);
+                                } else {
+                                    element.SetValue(property,
+                                                     *propertyCustomizationState
+                                                          .originalValue);
+                                }
+
+                                propertyCustomizationState.originalValue
+                                    .reset();
+                            }
+
+                            propertyCustomizationState.customValue.reset();
+                        }
+                    }
+
+                    g_elementPropertyModifying = false;
+                });
+    }
+}
+
+void CleanupCustomizations(InstanceHandle handle) {
+    auto it = g_elementsCustomizationState.find(handle);
+    if (it == g_elementsCustomizationState.end()) {
+        return;
+    }
+
+    auto& [k, v] = *it;
+
+    auto oldElement = v.element.get();
+    if (oldElement) {
+        auto oldElementDo = oldElement.as<DependencyObject>();
+        for (const auto& [property, state] : v.propertyCustomizationStates) {
+            oldElementDo.UnregisterPropertyChangedCallback(
+                property, state.propertyChangedToken);
+        }
+    }
+
+    auto oldVisualStateGroup = v.visualStateGroup.get();
+    if (oldVisualStateGroup) {
+        oldVisualStateGroup.CurrentStateChanged(
+            v.visualStateGroupCurrentStateChangedToken);
+    }
+
+    g_elementsCustomizationState.erase(it);
 }
 
 // https://stackoverflow.com/a/5665377
@@ -1539,14 +1855,28 @@ std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
     return res;
 }
 
-struct ResolveTypeAndStylesResult {
-    std::wstring type;
-    std::vector<PropertyKeyValue> propertyValues;
-};
+std::wstring AdjustTypeName(std::wstring_view type) {
+    static const std::vector<std::pair<std::wstring_view, std::wstring_view>>
+        adjustments = {
+            {L"Taskbar.", L"taskbar:"},
+            {L"SystemTray.", L"systemtray:"},
+            {L"Microsoft.UI.Xaml.Control.", L"muxc:"},
+        };
 
-ResolveTypeAndStylesResult ResolveTypeAndStyles(
-    std::wstring_view targetType,
-    std::vector<std::pair<std::wstring, std::wstring>> styles) {
+    for (const auto& adjustment : adjustments) {
+        if (type.starts_with(adjustment.first)) {
+            auto result = std::wstring{adjustment.second};
+            result += type.substr(adjustment.first.size());
+            return result;
+        }
+    }
+
+    return std::wstring{type};
+}
+
+void ResolveTypeAndStyles(ElementMatcher* elementMatcher,
+                          std::vector<StyleRule> styleRules = {},
+                          PropertyOverrides* propertyOverrides = nullptr) {
     std::wstring xaml =
         LR"(<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -1560,15 +1890,35 @@ ResolveTypeAndStylesResult ResolveTypeAndStyles(
     <Style)";
 
     xaml += L" TargetType=\"";
-    xaml += EscapeXmlAttribute(targetType);
+    xaml += EscapeXmlAttribute(AdjustTypeName(elementMatcher->type));
     xaml += L"\">\n";
 
-    for (const auto& [property, value] : styles) {
+    for (const auto& [property, value] : elementMatcher->propertyValuesStr) {
         xaml += L"        <Setter Property=\"";
         xaml += EscapeXmlAttribute(property);
         xaml += L"\" Value=\"";
         xaml += EscapeXmlAttribute(value);
         xaml += L"\" />\n";
+    }
+
+    for (const auto& rule : styleRules) {
+        xaml += L"        <Setter Property=\"";
+        xaml += EscapeXmlAttribute(rule.name);
+        xaml += L"\"";
+        if (!rule.isXamlValue) {
+            xaml += L" Value=\"";
+            xaml += EscapeXmlAttribute(rule.value);
+            xaml += L"\" />\n";
+        } else {
+            xaml +=
+                L">\n"
+                L"            <Setter.Value>\n";
+            xaml += rule.value;
+            xaml +=
+                L"\n"
+                L"            </Setter.Value>\n"
+                L"        </Setter>\n";
+        }
     }
 
     xaml +=
@@ -1588,75 +1938,205 @@ ResolveTypeAndStylesResult ResolveTypeAndStyles(
 
     auto [styleKey, styleInspectable] = resourceDictionary.First().Current();
     auto style = styleInspectable.as<Style>();
+    size_t styleIndex = 0;
 
-    std::vector<PropertyKeyValue> propertyValues;
+    elementMatcher->type = style.TargetType().Name;
+    elementMatcher->propertyValues.clear();
 
-    for (const auto& setterBase : style.Setters()) {
-        const auto setter = setterBase.as<Setter>();
-        propertyValues.push_back({
+    for (size_t i = 0; i < elementMatcher->propertyValuesStr.size(); i++) {
+        const auto setter = style.Setters().GetAt(styleIndex++).as<Setter>();
+        elementMatcher->propertyValues.push_back({
             setter.Property(),
             setter.Value(),
         });
     }
 
-    Wh_Log(L"%s: %zu styles", style.TargetType().Name.c_str(),
-           propertyValues.size());
+    Wh_Log(L"%s: %zu matcher styles", elementMatcher->type.c_str(),
+           elementMatcher->propertyValues.size());
 
-    return {
-        .type = std::wstring(style.TargetType().Name),
-        .propertyValues = std::move(propertyValues),
-    };
+    if (propertyOverrides) {
+        propertyOverrides->clear();
+
+        for (size_t i = 0; i < styleRules.size(); i++) {
+            const auto setter =
+                style.Setters().GetAt(styleIndex++).as<Setter>();
+
+            (*propertyOverrides)[setter.Property()][styleRules[i].visualState] =
+                setter.Value();
+        }
+
+        Wh_Log(L"%s: %zu styles", elementMatcher->type.c_str(),
+               styleRules.size());
+    }
 }
 
-void AddStylesToOverrides(
-    std::wstring_view target,
-    std::vector<std::pair<std::wstring, std::wstring>> styles) {
-    ElementMatcher elementMatcher;
-    std::vector<ElementMatcher> parentElementMatchers;
-    std::vector<PropertyKeyValue> propertyValues;
+ElementMatcher ElementMatcherFromString(std::wstring_view str) {
+    ElementMatcher result;
+
+    auto i = str.find_first_of(L"#@[");
+    result.type = TrimStringView(str.substr(0, i));
+    if (result.type.empty()) {
+        throw std::runtime_error("Bad target syntax, empty type");
+    }
+
+    while (i != str.npos) {
+        auto iNext = str.find_first_of(L"#@[", i + 1);
+        auto nextPart =
+            str.substr(i + 1, iNext == str.npos ? str.npos : iNext - (i + 1));
+
+        switch (str[i]) {
+            case L'#':
+                if (!result.name.empty()) {
+                    throw std::runtime_error(
+                        "Bad target syntax, more than one name");
+                }
+
+                result.name = TrimStringView(nextPart);
+                if (result.name.empty()) {
+                    throw std::runtime_error("Bad target syntax, empty name");
+                }
+                break;
+
+            case L'@':
+                if (!result.visualStateGroup.empty()) {
+                    throw std::runtime_error(
+                        "Bad target syntax, more than one visual state group");
+                }
+
+                result.visualStateGroup = TrimStringView(nextPart);
+                if (result.visualStateGroup.empty()) {
+                    throw std::runtime_error(
+                        "Bad target syntax, empty visual state group");
+                }
+                break;
+
+            case L'[': {
+                auto rule = TrimStringView(nextPart);
+                if (rule.length() == 0 || rule.back() != L']') {
+                    throw std::runtime_error("Bad target syntax, missing ']'");
+                }
+
+                rule = TrimStringView(rule.substr(0, rule.length() - 1));
+                if (rule.length() == 0) {
+                    throw std::runtime_error(
+                        "Bad target syntax, empty property");
+                }
+
+                if (rule.find_first_not_of(L"0123456789") == rule.npos) {
+                    result.oneBasedIndex = std::stoi(std::wstring(rule));
+                    break;
+                }
+
+                auto ruleEqPos = rule.find(L'=');
+                if (ruleEqPos == rule.npos) {
+                    throw std::runtime_error(
+                        "Bad target syntax, missing '=' in property");
+                }
+
+                auto ruleKey = TrimStringView(rule.substr(0, ruleEqPos));
+                auto ruleVal = TrimStringView(rule.substr(ruleEqPos + 1));
+
+                if (ruleKey.length() == 0) {
+                    throw std::runtime_error(
+                        "Bad target syntax, empty property name");
+                }
+
+                result.propertyValuesStr.push_back(
+                    {std::wstring(ruleKey), std::wstring(ruleVal)});
+                break;
+            }
+
+            default:
+                throw std::runtime_error("Bad target syntax");
+        }
+
+        i = iNext;
+    }
+
+    return result;
+}
+
+StyleRule StyleRuleFromString(std::wstring_view str) {
+    StyleRule result;
+
+    auto eqPos = str.find(L'=');
+    if (eqPos == str.npos) {
+        throw std::runtime_error("Bad style syntax, '=' is missing");
+    }
+
+    auto name = str.substr(0, eqPos);
+    auto value = str.substr(eqPos + 1);
+
+    result.value = TrimStringView(value);
+    if (result.value.empty()) {
+        throw std::runtime_error("Bad style syntax, empty value");
+    }
+
+    if (name.size() > 0 && name.back() == L':') {
+        result.isXamlValue = true;
+        name = name.substr(0, name.size() - 1);
+    }
+
+    auto atPos = name.find(L'@');
+    if (atPos != name.npos) {
+        result.visualState = TrimStringView(name.substr(atPos + 1));
+        if (result.visualState.empty()) {
+            throw std::runtime_error("Bad style syntax, empty visual state");
+        }
+
+        name = name.substr(0, atPos);
+    }
+
+    result.name = TrimStringView(name);
+    if (result.name.empty()) {
+        throw std::runtime_error("Bad style syntax, empty name");
+    }
+
+    return result;
+}
+
+void AddElementCustomizationRules(std::wstring_view target,
+                                  std::vector<std::wstring> styles) {
+    ElementCustomizationRules elementCustomizationRules;
 
     auto targetParts = SplitStringView(target, L" > ");
 
     bool first = true;
+    bool hasVisualStateGroup = false;
     for (auto i = targetParts.rbegin(); i != targetParts.rend(); ++i) {
         const auto& targetPart = *i;
 
-        std::wstring_view name;
-        std::wstring_view targetType;
-        if (auto pos = targetPart.find(L'#'); pos != targetPart.npos) {
-            targetType = TrimStringView(targetPart.substr(0, pos));
-            name = TrimStringView(targetPart.substr(pos + 1));
-        } else {
-            targetType = TrimStringView(targetPart);
-        }
+        auto matcher = ElementMatcherFromString(targetPart);
 
-        if (targetType.empty()) {
-            Wh_Log(L"TargetType must not be empty, skipping styles");
-            return;
-        }
+        if (!matcher.visualStateGroup.empty()) {
+            if (hasVisualStateGroup) {
+                throw std::runtime_error(
+                    "Element type can't have more than one visual state group");
+            }
 
-        auto resolved = ResolveTypeAndStyles(targetType, std::move(styles));
-        styles.clear();
+            hasVisualStateGroup = true;
+        }
 
         if (first) {
-            elementMatcher.type = std::move(resolved.type);
-            elementMatcher.name = std::wstring(name);
-            propertyValues = std::move(resolved.propertyValues);
+            std::vector<StyleRule> styleRules;
+            for (const auto& style : styles) {
+                styleRules.push_back(StyleRuleFromString(style));
+            }
+
+            ResolveTypeAndStyles(&matcher, std::move(styleRules),
+                                 &elementCustomizationRules.propertyOverrides);
+            elementCustomizationRules.elementMatcher = std::move(matcher);
         } else {
-            parentElementMatchers.push_back({
-                .type = std::move(resolved.type),
-                .name = std::wstring(name),
-            });
+            ResolveTypeAndStyles(&matcher);
+            elementCustomizationRules.parentElementMatchers.push_back(
+                std::move(matcher));
         }
 
         first = false;
     }
 
-    g_propertyOverrides.push_back(ElementPropertyOverrides{
-        .elementMatcher = std::move(elementMatcher),
-        .parentElementMatchers = std::move(parentElementMatchers),
-        .propertyValues = std::move(propertyValues),
-    });
+    g_elementsCustomizationRules.push_back(
+        std::move(elementCustomizationRules));
 }
 
 bool ProcessSingleTargetStylesFromSettings(int index) {
@@ -1668,7 +2148,7 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
 
     Wh_Log(L"Processing styles for %s", targetStringSetting.get());
 
-    std::vector<std::pair<std::wstring, std::wstring>> styles;
+    std::vector<std::wstring> styles;
 
     for (int styleIndex = 0;; styleIndex++) {
         string_setting_unique_ptr styleSetting(Wh_GetStringSetting(
@@ -1677,21 +2157,12 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
             break;
         }
 
-        std::wstring_view style = styleSetting.get();
-
-        if (auto pos = style.find(L'='); pos != style.npos) {
-            styles.push_back({
-                std::wstring(TrimStringView(style.substr(0, pos))),
-                std::wstring(TrimStringView(style.substr(pos + 1))),
-            });
-        } else {
-            Wh_Log(L"Style has no '=' symbol, skipping: %s",
-                   styleSetting.get());
-        }
+        styles.push_back(styleSetting.get());
     }
 
     if (styles.size() > 0) {
-        AddStylesToOverrides(targetStringSetting.get(), std::move(styles));
+        AddElementCustomizationRules(targetStringSetting.get(),
+                                     std::move(styles));
     }
 
     return true;
@@ -1705,6 +2176,8 @@ void ProcessAllStylesFromSettings() {
             }
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X", ex.code());
+        } catch (std::exception const& ex) {
+            Wh_Log(L"Error: %S", ex.what());
         }
     }
 }
@@ -1756,16 +2229,50 @@ void ProcessResourceVariablesFromSettings() {
             }
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X", ex.code());
+        } catch (std::exception const& ex) {
+            Wh_Log(L"Error: %S", ex.what());
         }
     }
 }
 
-void InitializeSettingsAndTap() {
-    g_targetThreadId = GetCurrentThreadId();
+void UninitializeSettingsAndTap() {
+    for (auto& [k, v] : g_elementsCustomizationState) {
+        auto oldElement = v.element.get();
+        if (oldElement) {
+            auto oldElementDo = oldElement.as<DependencyObject>();
+            for (const auto& [property, state] :
+                 v.propertyCustomizationStates) {
+                oldElementDo.UnregisterPropertyChangedCallback(
+                    property, state.propertyChangedToken);
 
-    g_propertyOverridesLoaded = false;
-    g_propertyOverrides.clear();
-    g_propertyOverridesUpdateCount++;
+                if (state.originalValue) {
+                    if (*state.originalValue ==
+                        DependencyProperty::UnsetValue()) {
+                        oldElement.ClearValue(property);
+                    } else {
+                        oldElement.SetValue(property, *state.originalValue);
+                    }
+                }
+            }
+        }
+
+        auto oldVisualStateGroup = v.visualStateGroup.get();
+        if (oldVisualStateGroup) {
+            oldVisualStateGroup.CurrentStateChanged(
+                v.visualStateGroupCurrentStateChangedToken);
+        }
+    }
+
+    g_elementsCustomizationState.clear();
+
+    g_elementsCustomizationRulesLoaded = false;
+    g_elementsCustomizationRules.clear();
+}
+
+void InitializeSettingsAndTap() {
+    UninitializeSettingsAndTap();
+
+    g_targetThreadId = GetCurrentThreadId();
 
     HRESULT hr = InjectWindhawkTAP();
     if (FAILED(hr)) {
@@ -1806,74 +2313,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     }
 
     return hWnd;
-}
-
-void PromptForExplorerRestart() {
-    if (!Wh_GetIntSetting(L"promptForExplorerRestart")) {
-        return;
-    }
-
-    if (g_restartExplorerPromptThread) {
-        if (WaitForSingleObject(g_restartExplorerPromptThread, 0) !=
-            WAIT_OBJECT_0) {
-            return;
-        }
-
-        CloseHandle(g_restartExplorerPromptThread);
-    }
-
-    g_restartExplorerPromptThread = CreateThread(
-        nullptr, 0,
-        [](LPVOID lpParameter) WINAPI -> DWORD {
-            TASKDIALOGCONFIG taskDialogConfig{
-                .cbSize = sizeof(taskDialogConfig),
-                .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
-                .dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON,
-                .pszWindowTitle = L"Windows 11 Taskbar Styler",
-                .pszMainIcon = TD_INFORMATION_ICON,
-                .pszContent =
-                    L"Explorer might need to be restarted to apply the new "
-                    L"styles. Restart now?",
-                .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam,
-                                 LPARAM lParam, LONG_PTR lpRefData)
-                                  WINAPI -> HRESULT {
-                    switch (msg) {
-                        case TDN_CREATED:
-                            g_restartExplorerPromptWindow = hwnd;
-                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                         SWP_NOMOVE | SWP_NOSIZE);
-                            break;
-
-                        case TDN_DESTROYED:
-                            g_restartExplorerPromptWindow = nullptr;
-                            break;
-                    }
-
-                    return S_OK;
-                },
-            };
-
-            int button;
-            if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button,
-                                             nullptr, nullptr)) &&
-                button == IDYES) {
-                WCHAR commandLine[] =
-                    L"cmd.exe /c "
-                    L"\"taskkill /F /IM explorer.exe & start explorer\"";
-                STARTUPINFO si = {
-                    .cb = sizeof(si),
-                };
-                PROCESS_INFORMATION pi{};
-                if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE,
-                                  0, nullptr, nullptr, &si, &pi)) {
-                    CloseHandle(pi.hThread);
-                    CloseHandle(pi.hProcess);
-                }
-            }
-
-            return 0;
-        },
-        nullptr, 0, nullptr);
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
@@ -1972,22 +2411,17 @@ void Wh_ModUninit() {
         g_visualTreeWatcher = nullptr;
     }
 
-    HWND restartExplorerPromptWindow = g_restartExplorerPromptWindow;
-    if (restartExplorerPromptWindow) {
-        PostMessage(restartExplorerPromptWindow, WM_CLOSE, 0, 0);
-    }
-
-    if (g_restartExplorerPromptThread) {
-        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
-        CloseHandle(g_restartExplorerPromptThread);
-        g_restartExplorerPromptThread = nullptr;
+    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
+    if (hTaskbarUiWnd) {
+        Wh_Log(L"Uninitializing - Found DesktopWindowContentBridge window");
+        RunFromWindowThread(
+            hTaskbarUiWnd, [](PVOID) WINAPI { UninitializeSettingsAndTap(); },
+            nullptr);
     }
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
-
-    PromptForExplorerRestart();
 
     HWND hTaskbarUiWnd = GetTaskbarUiWnd();
     if (hTaskbarUiWnd) {

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-09T22:09:32.000Z</updated>
+    <updated>2023-12-11T14:00:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#23129dc99634ad8037cd80cd3f01a7e79b63bcfc</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2023-12-11T14:00:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Index, properties and a visual state can now be specified for a target. Refer to the mod description for more information and examples.</li>
+<li>Styles can now be specified per visual state.</li>
+<li>Styles can now be specified in XAML form.</li>
+<li>Customized styles are now restored on mod unload.</li>
+<li>Fixed a possible crash on mod unload.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old This PC Commands 1.0.0]]></title>
         <id>https://windhawk.net/mods/old-this-pc-commands#90d6ccd363cb9764f081ea1981932b2b3dac68cf</id>
@@ -235,27 +248,5 @@ that functionality.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-menus-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-menus-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Eradicate Immersive Menus 1.0.0]]></title>
-        <id>https://windhawk.net/mods/eradicate-immersive-menus#82350656b3dbbf5fa854211ea160290e676aeed8</id>
-        <link href="https://windhawk.net/mods/eradicate-immersive-menus"/>
-        <updated>2023-11-05T03:34:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="eradicateimmersivemenus">Eradicate Immersive Menus</h1>
-<p>Gets rid of immersive menus system-wide. This mod should work on every Windows 10 version, from 1507
-all the way up to 22H2. However, <strong>this mod will only work on Windhawk v1.4 and greater.</strong></p>
-<h2 id="preview">Preview</h2>
-<p><em>From left to right: Explorer, Taskbar, Explorer (classic), Taskbar (classic)</em></p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/eradicate-immersive-menus-before.png" alt="Before" /></p>
-<p><strong>After</strong>:
-<img src="https://raw.githubusercontent.com/aubymori/images/main/eradicate-immersive-menus-after.png" alt="After" /></p>
-<h1 id="commonproblems">Common problems</h1>
-<h2 id="freezing">Freezing</h2>
-<p>This mod will take <strong>a while</strong> to load on the first run, and if you disable and then enable it while your system is all
-already up and running with many software open.</p>
-<h2 id="stuckoninitializing">Stuck on "Initializing…"</h2>
-<p>If ever a certain process gets stuck on "Initializing…", and the "Mod tasks in progress" window does not go away,
-restart Windhawk. If that does not work, simply add it to the exclusion list in the Advanced tab of this mod.</p>]]></content>
     </entry>
 </feed>
