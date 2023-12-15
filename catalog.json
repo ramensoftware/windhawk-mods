@@ -797,6 +797,28 @@
                 "version": "1.0.1"
             }
         },
+        "no-flash-window": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1702607629000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1702607629000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "Prevent programs from flashing their windows on the taskbar",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "NoFlashWindow",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "no-focus-rectangle": {
             "details": {
                 "defaultSorting": 6020,

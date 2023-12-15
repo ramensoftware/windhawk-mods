@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-11T14:00:58.000Z</updated>
+    <updated>2023-12-15T02:33:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[NoFlashWindow 1.0]]></title>
+        <id>https://windhawk.net/mods/no-flash-window#ea71e5592606973297a2a0492f4f374e6d9d9175</id>
+        <link href="https://windhawk.net/mods/no-flash-window"/>
+        <updated>2023-12-15T02:33:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="noflashwindow">NoFlashWindow</h1>
+<p>Prevent programs from flashing their windows on the taskbar.</p>
+<p>Inspired by <a href="https://github.com/mrexodia/NoFlashWindow">NoFlashWindow</a> by Duncan
+Ogilvie.</p>
+<p><strong>Note</strong>: Windows 11 seems to have <a href="https://www.elevenforum.com/t/enable-or-disable-show-flashing-on-taskbar-apps-in-windows-11.9968/">a native option for
+this</a>.</p>
+<p><img src="https://i.imgur.com/nVmyZrM.png" alt="Screenshot" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#23129dc99634ad8037cd80cd3f01a7e79b63bcfc</id>
@@ -234,19 +247,5 @@ in Windows 8.1 and before.</p>
 <p>Override the classic shutdown dialog in Explorer
 which is invoked with <code>ALT</code>+<code>F4</code> with your own program.</p>
 <p><strong>This mod will only work on Windows 10 or greater and Windhawk v1.4 or greater.</strong></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Menus 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-menus#e6b01d3dce8e4890c8314ee0aa2146bde105a432</id>
-        <link href="https://windhawk.net/mods/classic-menus"/>
-        <updated>2023-11-05T03:56:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicmenus">Classic Menus</h1>
-<p>In Windows XP, menus remained unthemed even with themes enabled. This mod replicates
-that functionality.</p>
-<p><strong>This mod will only work on Windhawk v1.4 and greater.</strong></p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-menus-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-menus-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
