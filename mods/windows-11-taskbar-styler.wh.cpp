@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -40,6 +40,10 @@ SystemTrayResources.xbf](https://gist.github.com/m417z/ad0ab39351aca905f1d186b1f
 
 The [UWPSpy](https://ramensoftware.com/uwpspy) tool can be used to inspect the
 taskbar's control elements in real time, and experiment with various styles.
+
+For a collection of commonly requested taskbar styling customizations, check out
+[The Windows 11 taskbar styling
+guide](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/README.md).
 
 ## Control styles
 
@@ -112,7 +116,8 @@ A couple of practical examples:
 ### Hide the network notification icon
 
 * Target: `systemtray:OmniButton#ControlCenterButton > Grid > ContentPresenter >
-  ItemsPresenter > StackPanel > ContentPresenter[1]`
+  ItemsPresenter > StackPanel > ContentPresenter[1] > systemtray:IconView > Grid
+  > Grid`
 * Style: `Visibility=Collapsed`
 
 **Note**: To hide the volume notification icon instead, use `[2]` instead of
@@ -2236,7 +2241,7 @@ void ProcessResourceVariablesFromSettings() {
 }
 
 void UninitializeSettingsAndTap() {
-    for (auto& [k, v] : g_elementsCustomizationState) {
+    for (const auto& [k, v] : g_elementsCustomizationState) {
         auto oldElement = v.element.get();
         if (oldElement) {
             auto oldElementDo = oldElement.as<DependencyObject>();
@@ -2267,12 +2272,16 @@ void UninitializeSettingsAndTap() {
 
     g_elementsCustomizationRulesLoaded = false;
     g_elementsCustomizationRules.clear();
+
+    g_targetThreadId = 0;
 }
 
 void InitializeSettingsAndTap() {
-    UninitializeSettingsAndTap();
-
-    g_targetThreadId = GetCurrentThreadId();
+    DWORD kNoThreadId = 0;
+    if (!g_targetThreadId.compare_exchange_strong(kNoThreadId,
+                                                  GetCurrentThreadId())) {
+        return;
+    }
 
     HRESULT hr = InjectWindhawkTAP();
     if (FAILED(hr)) {
@@ -2423,11 +2432,20 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
+    if (g_visualTreeWatcher) {
+        g_visualTreeWatcher->UnadviseVisualTreeChange();
+        g_visualTreeWatcher = nullptr;
+    }
+
     HWND hTaskbarUiWnd = GetTaskbarUiWnd();
     if (hTaskbarUiWnd) {
-        Wh_Log(L"Initializing - Found DesktopWindowContentBridge window");
+        Wh_Log(L"Reinitializing - Found DesktopWindowContentBridge window");
         RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
+            hTaskbarUiWnd,
+            [](PVOID) WINAPI {
+                UninitializeSettingsAndTap();
+                InitializeSettingsAndTap();
+            },
             nullptr);
     }
 }
