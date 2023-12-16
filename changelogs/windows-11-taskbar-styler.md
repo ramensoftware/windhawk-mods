@@ -1,3 +1,8 @@
+## 1.2.1 ([Dec 16, 2023](https://github.com/ramensoftware/windhawk-mods/blob/881a5daee8bdcf6cdc0e8f6a7ca99ebbeab1f569/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Fixed a possible crash and style applying bugs when settings are changed.
+* Added link to the Windows 11 taskbar styling guide.
+
 ## 1.2 ([Dec 11, 2023](https://github.com/ramensoftware/windhawk-mods/blob/23129dc99634ad8037cd80cd3f01a7e79b63bcfc/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Index, properties and a visual state can now be specified for a target. Refer to the mod description for more information and examples.

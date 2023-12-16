@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-15T02:33:49.000Z</updated>
+    <updated>2023-12-16T10:04:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#881a5daee8bdcf6cdc0e8f6a7ca99ebbeab1f569</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2023-12-16T10:04:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a possible crash and style applying bugs when settings are changed.</li>
+<li>Added link to the Windows 11 taskbar styling guide.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[NoFlashWindow 1.0]]></title>
         <id>https://windhawk.net/mods/no-flash-window#ea71e5592606973297a2a0492f4f374e6d9d9175</id>
@@ -237,15 +247,5 @@ in Windows 8.1 and before.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/no-run-icon-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/no-run-icon-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Shutdown Dialog 1.0.0]]></title>
-        <id>https://windhawk.net/mods/custom-shutdown-dialog#12155847ff2b01c1e5ec16e997b6f2189115cb35</id>
-        <link href="https://windhawk.net/mods/custom-shutdown-dialog"/>
-        <updated>2023-11-05T04:42:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="customshutdowndialog">Custom Shutdown Dialog</h1>
-<p>Override the classic shutdown dialog in Explorer
-which is invoked with <code>ALT</code>+<code>F4</code> with your own program.</p>
-<p><strong>This mod will only work on Windows 10 or greater and Windhawk v1.4 or greater.</strong></p>]]></content>
     </entry>
 </feed>
