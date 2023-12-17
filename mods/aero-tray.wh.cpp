@@ -237,6 +237,11 @@ void CTrayOverflow__PositionWindow_hook(
     }
 }
 
+/* To get item count */
+__int64 (* CTrayItemManager__GetItemCountHelper)(void *pThis, int i1, int i2);
+
+#define CTrayOverflow_CTrayItemManager(pThis) (void *)*((__int64 *)pThis + 5)
+
 /* Add space for link area and add margin to icon area */
 bool (* CTrayOverflow_SizeWindows_orig)(void *);
 bool CTrayOverflow_SizeWindows_hook(
@@ -273,37 +278,42 @@ bool CTrayOverflow_SizeWindows_hook(
           * 3 items per row again.
           */
     
-        /* Subtract by 1, because this reports 1 more than however many icons there are. */
-        int nItems = SendMessageW(hToolbar, TB_BUTTONCOUNT, NULL, NULL) - 1;
-        if (nItems == 3 || nItems == 4)
+        void *ptim = CTrayOverflow_CTrayItemManager(pThis);
+        if (ptim)
         {
-            int nLinkAreaHeight = MulDiv(LINK_AREA_HEIGHT, GetDeviceCaps(hDC, LOGPIXELSY), 96);
-            int nItemSize = MulDiv(16 + ICON_PADDING, GetDeviceCaps(hDC, LOGPIXELSY), 96);
-
-            RECT rcToolbar = { 0 };
-            switch (nItems)
-            {
-                case 3:
-                    rcToolbar.right = nItemSize * 3;
-                    rcToolbar.bottom = nItemSize;
-                    break;
-                case 4:
-                    rcToolbar.right = nItemSize * 3;
-                    rcToolbar.bottom = nItemSize * 2;
-                    break;
-            }
-
-            SetWindowPos(
-                hToolbar, NULL,
-                0, 0,
-                RECTWIDTH(rcToolbar),
-                RECTHEIGHT(rcToolbar),
-                SWP_NOMOVE | SWP_NOZORDER
+            __int64 nItems = CTrayItemManager__GetItemCountHelper(
+                ptim, 3, 0
             );
+            if (nItems == 3 || nItems == 4)
+            {
+                int nLinkAreaHeight = MulDiv(LINK_AREA_HEIGHT, GetDeviceCaps(hDC, LOGPIXELSY), 96);
+                int nItemSize = MulDiv(16 + ICON_PADDING, GetDeviceCaps(hDC, LOGPIXELSY), 96);
 
-            SetRectEmpty(&rc);
-            rc.right = (nMargin * 2) + RECTWIDTH(rcToolbar);
-            rc.bottom = (nMargin * 2) + RECTHEIGHT(rcToolbar) + nLinkAreaHeight;
+                RECT rcToolbar = { 0 };
+                switch (nItems)
+                {
+                    case 3:
+                        rcToolbar.right = nItemSize * 3;
+                        rcToolbar.bottom = nItemSize;
+                        break;
+                    case 4:
+                        rcToolbar.right = nItemSize * 3;
+                        rcToolbar.bottom = nItemSize * 2;
+                        break;
+                }
+
+                SetWindowPos(
+                    hToolbar, NULL,
+                    0, 0,
+                    RECTWIDTH(rcToolbar),
+                    RECTHEIGHT(rcToolbar),
+                    SWP_NOMOVE | SWP_NOZORDER
+                );
+
+                SetRectEmpty(&rc);
+                rc.right = (nMargin * 2) + RECTWIDTH(rcToolbar);
+                rc.bottom = (nMargin * 2) + RECTHEIGHT(rcToolbar) + nLinkAreaHeight;
+            }
         }
     }
 
@@ -865,6 +875,14 @@ const WindhawkUtils::SYMBOL_HOOK hooks[] = {
         },
         &CTrayOverflow__PositionWindow_orig,
         CTrayOverflow__PositionWindow_hook,
+        false
+    },
+    {
+        {
+            L"private: __int64 __cdecl CTrayItemManager::_GetItemCountHelper(int,int)const "
+        },
+        &CTrayItemManager__GetItemCountHelper,
+        nullptr,
         false
     },
     /* Add space for link area and add margin to icon area */
