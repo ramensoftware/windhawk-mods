@@ -627,6 +627,10 @@ LRESULT CALLBACK CustomizeLinkSubclassProc(
             );
             break;
         }
+        case WM_CAPTURECHANGED:
+            g_bCustomizeCapturing = FALSE;
+            g_bCustomizeHovered = FALSE;
+            return 0;
         case WM_NCDESTROY:
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, CustomizeLinkSubclassProc
