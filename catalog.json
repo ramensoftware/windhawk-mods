@@ -311,6 +311,31 @@
                 "version": "1.0.0"
             }
         },
+        "disable-rounded-corners": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1702842224000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1702842224000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "description": "A simple mod to disable window rounded corners in Windows 11",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "dwm.exe"
+                ],
+                "name": "Disable rounded corners in Windows 11",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "dwm-ghost-mods": {
             "details": {
                 "defaultSorting": 520,
