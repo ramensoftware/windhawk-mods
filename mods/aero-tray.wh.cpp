@@ -950,15 +950,6 @@ LPCWSTR SIB_PATH = L"%PROGRAMFILES(X86)%\\StartIsBack\\StartIsBack64.dll";
 
 BOOL Wh_ModInit(void)
 {
-    WCHAR szPath[MAX_PATH];
-    GetModuleFileNameW(GetModuleHandleW(NULL), szPath, MAX_PATH);
-    LPWSTR pszBackslash = wcsrchr(szPath, L'\\');
-    if (0 != wcsicmp(pszBackslash + 1, L"explorer.exe"))
-    {
-        Wh_Log(L"Not Explorer");
-        return FALSE;
-    }
-
     LoadSettings();
 
     WCHAR szSIBPath[MAX_PATH];
