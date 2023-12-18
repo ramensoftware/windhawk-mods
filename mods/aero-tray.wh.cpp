@@ -65,7 +65,6 @@ It is highly recommended you restart Explorer after making changes to the settin
 #include <uxtheme.h>
 #include <windowsx.h>
 #include <windhawk_utils.h>
-#include <winerror.h>
 
 const UINT LINK_AREA_HEIGHT = 43;
 const UINT LINK_AREA_PADDING = 16;
