@@ -2,7 +2,7 @@
 // @id              aero-tray
 // @name            Aero Tray
 // @description     Restores Windows 7/8 tray overflow
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -15,6 +15,11 @@
 # Aero Tray
 This mod restores the tray overflow from Windows 7 and 8, including the "Customize..." link,
 drawing tray icons with the system theme, and the general appearance.
+
+# IMPORTANT: READ!
+Windhawk needs to hook into `winlogon.exe` to successfully capture Explorer starting. Please
+navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
+`winlogon.exe` is in the Process inclusion list.
 
 ## Notice
 It is highly recommended you restart Explorer after making changes to the settings.
@@ -59,7 +64,6 @@ It is highly recommended you restart Explorer after making changes to the settin
 #include <uxtheme.h>
 #include <windowsx.h>
 #include <windhawk_utils.h>
-#include <winerror.h>
 
 const UINT LINK_AREA_HEIGHT = 43;
 const UINT LINK_AREA_PADDING = 16;
@@ -948,10 +952,10 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    WCHAR szPath[MAX_PATH];
-    ExpandEnvironmentStringsW(SIB_PATH, szPath, MAX_PATH);
+    WCHAR szSIBPath[MAX_PATH];
+    ExpandEnvironmentStringsW(SIB_PATH, szSIBPath, MAX_PATH);
 
-    HMODULE hSib = LoadLibraryW(szPath);
+    HMODULE hSib = LoadLibraryW(szSIBPath);
     if (hSib)
     {
         PatchStartIsBack(hSib);
