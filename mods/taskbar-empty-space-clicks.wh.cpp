@@ -38,6 +38,26 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
 
 // ==WindhawkModSettings==
 /*
+- doubleClickAction: nothing
+  $name: Double click on empty space
+  $options:
+  - ACTION_NOTHING: Nothing (default)
+  - ACTION_SHOW_DESKTOP: Show desktop
+  - ACTION_ALT_TAB: Ctrl+Alt+Tab
+  - ACTION_TASK_MANAGER: Task Manager
+  - ACTION_MUTE: Toggle mute system volume
+  - ACTION_TASKBAR_AUTOHIDE: Toggle taskbar auto-hide
+  - ACTION_WIN_TAB: Win+Tab / Ctrl+Win+Tab
+- middleClickAction: nothing
+  $name: Middle click on empty space
+  $options:
+  - ACTION_NOTHING: Nothing (default)
+  - ACTION_SHOW_DESKTOP: Show desktop
+  - ACTION_ALT_TAB: Ctrl+Alt+Tab
+  - ACTION_TASK_MANAGER: Task Manager
+  - ACTION_MUTE: Toggle mute system volume
+  - ACTION_TASKBAR_AUTOHIDE: Toggle taskbar auto-hide
+  - ACTION_WIN_TAB: Win+Tab / Ctrl+Win+Tab
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
@@ -523,13 +543,23 @@ typedef class CUIAutomation CUIAutomation;
 
 // =====================================================================
 
-struct {
-    bool oldTaskbarOnWin11;
-} g_settings;
-
 enum TaskBarVersion { WIN_10_TASKBAR = 0, WIN_11_TASKBAR, UNKNOWN_TASKBAR };
 
-const wchar_t *TaskBarVersionStr[] = {L"WIN_10_TASKBAR", L"WIN_11_TASKBAR", L"UNKNOWN_TASKBAR"};
+enum TaskBarAction {
+    ACTION_NOTHING = 0,
+    ACTION_SHOW_DESKTOP,
+    ACTION_ALT_TAB,
+    ACTION_TASK_MANAGER,
+    ACTION_MUTE,
+    ACTION_TASKBAR_AUTOHIDE,
+    ACTION_WIN_TAB
+};
+
+static struct {
+    bool oldTaskbarOnWin11;
+    TaskBarAction doubleClickTaskbarAction;
+    TaskBarAction middleClickTaskbarAction;
+} g_settings;
 
 // wrapper around UIAutomation COM interface to be sure that it gets closed and released properly
 class UIAutomationWrapper {
@@ -593,7 +623,6 @@ static bool g_inputSiteProcHooked = false;
 static IMMDeviceEnumerator *g_pDeviceEnumerator;
 
 static HWND g_hTaskbarWnd;
-static LONG_PTR lpTaskbarLongPtr;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 static UIAutomationWrapper g_UIAutomation;
 
@@ -605,7 +634,7 @@ BOOL WindowsVersionInit();
 bool GetTaskbarAutohideState();
 void SetTaskbarAutohide(bool enabled);
 bool ToggleTaskbarAutohide();
-bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam);
+bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction);
 
 // =====================================================================
 
@@ -676,7 +705,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     // catch middle mouse button on both main and secondary taskbars
     case WM_NCMBUTTONDOWN:
     case WM_MBUTTONDOWN:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam)) {
+        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.middleClickTaskbarAction)) {
             result = 0;
         } else {
             result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -706,7 +735,8 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
     switch (uMsg) {
     case WM_POINTERDOWN:
-        if (HWND hRootWnd = GetAncestor(hWnd, GA_ROOT); IsTaskbarWindow(hRootWnd) && OnMouseClick(hRootWnd, wParam, lParam)) {
+        HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+        if (IsTaskbarWindow(hRootWnd) && OnMouseClick(hRootWnd, wParam, lParam, g_settings.middleClickTaskbarAction)) {
             return 0;
         }
         break;
@@ -1204,7 +1234,39 @@ void SndVolUninit() {
     }
 }
 
-void LoadSettings() { g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11"); }
+TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
+    const auto value = Wh_GetStringSetting(option);
+    const auto equals = [](const wchar_t *str1, const wchar_t *str2) { return wcscmp(str1, str2) == 0; };
+
+    TaskBarAction action = ACTION_NOTHING;
+    if (equals(value, L"ACTION_NOTHING")) {
+        action = ACTION_NOTHING;
+    } else if (equals(value, L"ACTION_SHOW_DESKTOP")) {
+        action = ACTION_SHOW_DESKTOP;
+    } else if (equals(value, L"ACTION_ALT_TAB")) {
+        action = ACTION_ALT_TAB;
+    } else if (equals(value, L"ACTION_TASK_MANAGER")) {
+        action = ACTION_TASK_MANAGER;
+    } else if (equals(value, L"ACTION_MUTE")) {
+        action = ACTION_MUTE;
+    } else if (equals(value, L"ACTION_TASKBAR_AUTOHIDE")) {
+        action = ACTION_TASKBAR_AUTOHIDE;
+    } else if (equals(value, L"ACTION_WIN_TAB")) {
+        action = ACTION_WIN_TAB;
+    } else {
+        Wh_Log(L"Error: unknown action '%s' for option '%s'!", value, option);
+        action = ACTION_NOTHING;
+    }
+    Wh_Log(L"Selected '%s' option %d", option, action);
+
+    return action;
+}
+
+void LoadSettings() {
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+    g_settings.doubleClickTaskbarAction = ParseMouseActionSetting(L"doubleClickAction");
+    g_settings.middleClickTaskbarAction = ParseMouseActionSetting(L"middleClickAction");
+}
 
 bool GetTaskbarAutohideState() {
     if (g_hTaskbarWnd == NULL) {
@@ -1233,33 +1295,43 @@ void SetTaskbarAutohide(bool enabled) {
 
 bool ToggleTaskbarAutohide() {
     const bool isEnabled = GetTaskbarAutohideState();
+    Wh_Log(L"Setting taskbar autohide state to %s", !isEnabled ? L"enabled" : L"disabled");
     SetTaskbarAutohide(!isEnabled);
     return !isEnabled;
 }
 
-void ShowDesktop(HWND taskbarhWnd) { SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0); }
+void ShowDesktop(HWND taskbarhWnd) {
+    Wh_Log(L"Sending ShowDesktop message");
+    SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0);
+}
 
 void SendAltTab() {
     HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
     if (hImmersiveWorkerWnd) {
         WPARAM wHotkeyIdentifier = DO9(0, , , , 47, , , , 45);
+        Wh_Log(L"Sending AltTab message");
         PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, wHotkeyIdentifier, MAKELPARAM(MOD_ALT | MOD_CONTROL, VK_TAB));
     }
 }
 
 void SendWinTab() {
     HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
-    if (hImmersiveWorkerWnd)
+    if (hImmersiveWorkerWnd) {
+        Wh_Log(L"Sending WinTab message");
         PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, 11, MAKELPARAM(MOD_WIN, VK_TAB));
+    }
 }
 
-void OpenTaskManager(HWND taskbarhWnd) { SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0); }
+void OpenTaskManager(HWND taskbarhWnd) {
+    Wh_Log(L"Sending OpenTaskManager message");
+    SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0);
+}
 
 BOOL ToggleVolMuted() {
     IMMDevice *defaultDevice = NULL;
     IAudioEndpointVolume *endpointVolume = NULL;
     HRESULT hr;
-    BOOL bMuted;
+    BOOL bMuted = FALSE;
     BOOL bSuccess = FALSE;
 
     const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
@@ -1270,13 +1342,13 @@ BOOL ToggleVolMuted() {
             hr = defaultDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (LPVOID *)&endpointVolume);
             if (SUCCEEDED(hr)) {
                 if (SUCCEEDED(endpointVolume->GetMute(&bMuted))) {
-                    if (SUCCEEDED(endpointVolume->SetMute(!bMuted, NULL)))
+                    Wh_Log(L"Toggling volume mute");
+                    if (SUCCEEDED(endpointVolume->SetMute(!bMuted, NULL))) {
                         bSuccess = TRUE;
+                    }
                 }
-
                 endpointVolume->Release();
             }
-
             defaultDevice->Release();
         }
     }
@@ -1289,8 +1361,8 @@ BOOL ToggleVolMuted() {
 // =====================================================================
 
 // main body of the mod called every time a taskbar is clicked
-bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
-    if (GetCapture() != NULL) {
+bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction) {
+    if ((GetCapture() != NULL) || (taskbarAction == ACTION_NOTHING)) {
         return false;
     }
 
@@ -1315,7 +1387,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         }
         pointerLocation = pointerInfo.ptPixelLocation;
     }
-    Wh_Log(L"Middle mouse clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
+    Wh_Log(L"Mouse clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
 
     // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
     // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
@@ -1346,10 +1418,24 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam) {
                                 (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
                                 (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
                                 (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
+    if (!taskbarClicked) {
+        return false;
+    }
 
-    if (taskbarClicked) {
-        const bool isAutohideEnabled = ToggleTaskbarAutohide();
-        Wh_Log(L"Setting taskbar autohide state to %s", isAutohideEnabled ? L"enabled" : L"disabled");
+    if (taskbarAction == ACTION_SHOW_DESKTOP) {
+        ShowDesktop(hWnd);
+    } else if (taskbarAction == ACTION_ALT_TAB) {
+        SendAltTab();
+    } else if (taskbarAction == ACTION_TASK_MANAGER) {
+        OpenTaskManager(hWnd);
+    } else if (taskbarAction == ACTION_MUTE) {
+        ToggleVolMuted();
+    } else if (taskbarAction == ACTION_TASKBAR_AUTOHIDE) {
+        (void)ToggleTaskbarAutohide();
+    } else if (taskbarAction == ACTION_WIN_TAB) {
+        SendWinTab();
+    } else {
+        Wh_Log(L"Error: Unknown taskbar action '%d'", taskbarAction);
     }
 
     return false;
@@ -1370,7 +1456,7 @@ BOOL Wh_ModInit() {
     if ((g_taskbarVersion == WIN_11_TASKBAR) && g_settings.oldTaskbarOnWin11) {
         g_taskbarVersion = WIN_10_TASKBAR;
     }
-    Wh_Log(L"Using taskbar version: %s", TaskBarVersionStr[g_taskbarVersion]);
+    Wh_Log(L"Using taskbar version: %d");
 
     // init UIAutomation before hooks, otherwise subclass won't be unset and Explorer will crash if UIAutomation fails
     if (!g_UIAutomation.init()) {
