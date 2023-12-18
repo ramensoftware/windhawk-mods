@@ -2,10 +2,11 @@
 // @id              aero-tray
 // @name            Aero Tray
 // @description     Restores Windows 7/8 tray overflow
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
+// @include         winlogon.exe
 // @architecture    x86-64
 // @compilerOptions -lpsapi -lgdi32 -luxtheme -lshell32 -lcomctl32
 // ==/WindhawkMod==
@@ -15,6 +16,11 @@
 # Aero Tray
 This mod restores the tray overflow from Windows 7 and 8, including the "Customize..." link,
 drawing tray icons with the system theme, and the general appearance.
+
+# IMPORTANT: READ!
+This mod needs to hook into `winlogon.exe` to successfully capture Explorer starting. Please
+navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
+`winlogon.exe` is in the Process inclusion list.
 
 ## Notice
 It is highly recommended you restart Explorer after making changes to the settings.
@@ -946,12 +952,21 @@ LPCWSTR SIB_PATH = L"%PROGRAMFILES(X86)%\\StartIsBack\\StartIsBack64.dll";
 
 BOOL Wh_ModInit(void)
 {
+    WCHAR szPath[MAX_PATH];
+    GetModuleFileNameW(GetModuleHandleW(NULL), szPath, MAX_PATH);
+    LPWSTR pszBackslash = wcsrchr(szPath, L'\\');
+    if (0 != wcsicmp(pszBackslash + 1, L"explorer.exe"))
+    {
+        Wh_Log(L"Not Explorer");
+        return FALSE;
+    }
+
     LoadSettings();
 
-    WCHAR szPath[MAX_PATH];
-    ExpandEnvironmentStringsW(SIB_PATH, szPath, MAX_PATH);
+    WCHAR szSIBPath[MAX_PATH];
+    ExpandEnvironmentStringsW(SIB_PATH, szSIBPath, MAX_PATH);
 
-    HMODULE hSib = LoadLibraryW(szPath);
+    HMODULE hSib = LoadLibraryW(szSIBPath);
     if (hSib)
     {
         PatchStartIsBack(hSib);
