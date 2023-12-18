@@ -32,7 +32,7 @@
                 "published": 1702929559000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1702929559000,
+                "updated": 1702935895000,
                 "users": 0
             },
             "metadata": {
@@ -47,7 +47,7 @@
                     "explorer.exe"
                 ],
                 "name": "Aero Tray",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "center-titlebar": {

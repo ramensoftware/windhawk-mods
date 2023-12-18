@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-18T19:59:19.000Z</updated>
+    <updated>2023-12-18T21:44:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Tray 1.0.1]]></title>
+        <id>https://windhawk.net/mods/aero-tray#9a60743720756d07af281757c4077a2ccb887964</id>
+        <link href="https://windhawk.net/mods/aero-tray"/>
+        <updated>2023-12-18T21:44:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Clarify injection stuff</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aero Tray 1.0.0]]></title>
         <id>https://windhawk.net/mods/aero-tray#4978c5bea9e9fd35b5176a8531ce8b4c56afac05</id>
@@ -246,20 +255,5 @@ results in incorrectly colored and possibly illegible caption text. This mod fix
         <content type="html"><![CDATA[<ul>
 <li>Fixed displaced clock on secondary monitors.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Task Dialog Fix 1.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-taskdlg-fix#bef171ba33bed8bcc3deeb2141a15520304c3fc8</id>
-        <link href="https://windhawk.net/mods/classic-taskdlg-fix"/>
-        <updated>2023-11-07T20:29:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classictaskdialogfix">Classic Task Dialog Fix</h1>
-<p>In Windows 10, the buttons in task dialogs (and some other DirectUI dialogs)
-are too small vertically. This mod fixes that, and makes them look how they did
-in Windows 8.1 and before.</p>
-<h3 id="thismodwillonlyworkonwindhawkv14andgreater">This mod will only work on Windhawk v1.4 and greater.</h3>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-taskdlg-fix-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-taskdlg-fix-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
