@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-17T19:43:44.000Z</updated>
+    <updated>2023-12-18T19:59:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Tray 1.0.0]]></title>
+        <id>https://windhawk.net/mods/aero-tray#4978c5bea9e9fd35b5176a8531ce8b4c56afac05</id>
+        <link href="https://windhawk.net/mods/aero-tray"/>
+        <updated>2023-12-18T19:59:19.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="aerotray">Aero Tray</h1>
+<p>This mod restores the tray overflow from Windows 7 and 8, including the "Customize…" link,
+drawing tray icons with the system theme, and the general appearance.</p>
+<h2 id="notice">Notice</h2>
+<p>It is highly recommended you restart Explorer after making changes to the settings.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-tray-before.png" alt="Before" /></p>
+<p><strong>After (Aero)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-tray-after-aero.png" alt="After (Aero)" /></p>
+<p><strong>After (Aero Basic)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-tray-after-basic.png" alt="After (Aero Basic)" /></p>
+<p><strong>After (Windows Classic)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-tray-after-classic.png" alt="After (Windows Classic)" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable rounded corners in Windows 11 1.0]]></title>
         <id>https://windhawk.net/mods/disable-rounded-corners#12c4797cfd133ea48912915fd62e7aabc3e655fc</id>
@@ -242,15 +261,5 @@ in Windows 8.1 and before.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-taskdlg-fix-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/classic-taskdlg-fix-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Show all apps by default in start menu 1.0.2]]></title>
-        <id>https://windhawk.net/mods/start-menu-all-apps#493534f65cc0d79d076054fa4e4f3c9ac280fd28</id>
-        <link href="https://windhawk.net/mods/start-menu-all-apps"/>
-        <updated>2023-11-06T20:22:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with Windhawk v1.4.</li>
-<li>Improved loading speed by caching symbols.</li>
-</ul>]]></content>
     </entry>
 </feed>
