@@ -91,6 +91,7 @@ HTHEME  g_hTheme              =  NULL;
 HWND    g_hCustomizeLink      =  NULL;
 HWND    g_hCustomizeTooltip   =  NULL;
 BOOL    g_bCustomizeHovered   = FALSE;
+BOOL    g_bCustomizeDown      = FALSE;
 BOOL    g_bCustomizeCapturing = FALSE;
 HCURSOR g_hcArrow             =  NULL;
 HCURSOR g_hcHand              =  NULL;
@@ -287,7 +288,7 @@ bool CTrayOverflow_SizeWindows_hook(
             if (nItems == 3 || nItems == 4)
             {
                 int nLinkAreaHeight = MulDiv(LINK_AREA_HEIGHT, GetDeviceCaps(hDC, LOGPIXELSY), 96);
-                int nItemSize = MulDiv(16 + ICON_PADDING, GetDeviceCaps(hDC, LOGPIXELSY), 96);
+                int nItemSize = LOWORD(SendMessageW(hToolbar, TB_GETBUTTONSIZE, NULL, NULL));
 
                 RECT rcToolbar = { 0 };
                 switch (nItems)
@@ -549,8 +550,6 @@ LRESULT PaintCustomizeLink(
     return 0;
 }
 
-#define CTrayOverflow_CTrayNotify(pThis) (void *)*((__int64 *)pThis - 55)
-
 LRESULT CALLBACK CustomizeLinkSubclassProc(
     HWND      hWnd,
     UINT      uMsg,
@@ -599,6 +598,7 @@ LRESULT CALLBACK CustomizeLinkSubclassProc(
                     g_bCustomizeCapturing = FALSE;
                 }
                 g_bCustomizeHovered = FALSE;
+                g_bCustomizeDown = FALSE;
             }
 
             if (g_bCustomizeHovered != bHovered)
@@ -619,24 +619,29 @@ LRESULT CALLBACK CustomizeLinkSubclassProc(
                 }
             }
             return 0;
+        case WM_LBUTTONDOWN:
+            g_bCustomizeDown = TRUE;
+            break;
         /* Hide tray overflow and open Notification Area Icons CPL */
         case WM_LBUTTONUP:
-        {
-            HWND hChevron = GetTrayChevron();
-            if (hChevron)
+            if (g_bCustomizeDown)
             {
-                SendMessageW(hChevron, WM_LBUTTONUP, NULL, NULL);
+                g_bCustomizeDown = FALSE;
+                HWND hChevron = GetTrayChevron();
+                if (hChevron)
+                {
+                    SendMessageW(hChevron, WM_LBUTTONUP, NULL, NULL);
+                }
+                ShellExecuteW(
+                    NULL,
+                    L"open",
+                    L"explorer.exe",
+                    L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{05D7B0F4-2121-4EFF-BF6B-ED3F69B894D9}",
+                    NULL,
+                    SW_SHOWNORMAL
+                );
             }
-            ShellExecuteW(
-                NULL,
-                L"open",
-                L"explorer.exe",
-                L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{05D7B0F4-2121-4EFF-BF6B-ED3F69B894D9}",
-                NULL,
-                SW_SHOWNORMAL
-            );
             break;
-        }
         case WM_CAPTURECHANGED:
             g_bCustomizeCapturing = FALSE;
             g_bCustomizeHovered = FALSE;
