@@ -17,7 +17,7 @@ This mod restores the tray overflow from Windows 7 and 8, including the "Customi
 drawing tray icons with the system theme, and the general appearance.
 
 # IMPORTANT: READ!
-This mod needs to hook into `winlogon.exe` to successfully capture Explorer starting. Please
+Windhawk needs to hook into `winlogon.exe` to successfully capture Explorer starting. Please
 navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
 `winlogon.exe` is in the Process inclusion list.
 
