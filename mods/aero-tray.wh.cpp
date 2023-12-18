@@ -6,7 +6,6 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
-// @include         winlogon.exe
 // @architecture    x86-64
 // @compilerOptions -lpsapi -lgdi32 -luxtheme -lshell32 -lcomctl32
 // ==/WindhawkMod==
