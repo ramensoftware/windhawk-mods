@@ -67,7 +67,7 @@ const UINT LINK_AREA_PADDING = 16;
 const UINT ICON_AREA_PADDING = 7;
 const UINT ICON_PADDING = 18;
 
-const UINT COMPOSITED_TASKBAR_SPACING = 8;
+const UINT FLYOUT_OFFSET = 8;
 
 #define RECTWIDTH(rect)  ((rect).right - (rect).left)
 #define RECTHEIGHT(rect) ((rect).bottom - (rect).top)
@@ -189,6 +189,43 @@ void CTrayOverflow__EnsureBorder_hook(
     SetWindowLongPtrW(hWnd, GWL_STYLE, dwStyle);
 }
 
+/* Adjust a window's position to be pushed away from the taskbar */
+POINT AdjustWindowPosForTaskbar(HWND hWnd)
+{
+    HMONITOR hm = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    HDC hDC = GetDC(hWnd);
+    int offset = MulDiv(FLYOUT_OFFSET, GetDeviceCaps(hDC, LOGPIXELSY), 96);
+
+    RECT rc;
+    GetWindowRect(hWnd, &rc);
+
+    MONITORINFO mi = { sizeof(MONITORINFO) };
+    GetMonitorInfoW(hm, &mi);
+
+    int dx = 0, dy = 0;
+    PLONG plrc = (PLONG)&rc;
+    PLONG plwrc = (PLONG)&mi.rcWork;
+    for (int i = 0; i < 4; i++)
+    {
+        int curOffset = plwrc[i] - plrc[i];
+        curOffset = (curOffset < 0) ? -curOffset : curOffset;
+
+        if (curOffset < offset)
+        {
+            int *set = (i % 2 == 0) ? &dx : &dy;
+            if (i > 1)
+            {
+                *set -= offset - curOffset;
+            }
+            else
+            {
+                *set += offset - curOffset;
+            }
+        }
+    }
+    return { rc.left + dx, rc.top + dy };
+}
+
 /* Add space between taskbar and tray overflow for Aero */
 void (* CTrayOverflow__PositionWindow_orig)(void *);
 void CTrayOverflow__PositionWindow_hook(
@@ -200,38 +237,10 @@ void CTrayOverflow__PositionWindow_hook(
     HWND hWnd = CTrayOverflow_Window(pThis);
     if (hWnd && UseComposition())
     {
-        HDC hDC = GetDC(hWnd);
-        int nOffset = MulDiv(COMPOSITED_TASKBAR_SPACING, GetDeviceCaps(hDC, LOGPIXELSY), 96);
-        ReleaseDC(hWnd, hDC);
-
-        APPBARDATA abd = { sizeof(APPBARDATA) };
-        SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
-
-        RECT rc = { 0 };
-        GetWindowRect(hWnd, &rc);
-
-        int dx = 0;
-        int dy = 0;
-        switch (abd.uEdge)
-        {
-            case ABE_LEFT:
-                dx = nOffset;
-                break;
-            case ABE_TOP:
-                dy = nOffset;
-                break;
-            case ABE_RIGHT:
-                dx = -nOffset;
-                break;
-            case ABE_BOTTOM:
-                dy = -nOffset;
-                break;
-        }
-        OffsetRect(&rc, dx, dy);
-
+        POINT pt = AdjustWindowPosForTaskbar(hWnd);
         SetWindowPos(
             hWnd, NULL,
-            rc.left, rc.top,
+            pt.x, pt.y,
             0, 0,
             SWP_NOSIZE | SWP_NOZORDER
         );
@@ -646,10 +655,6 @@ LRESULT CALLBACK CustomizeLinkSubclassProc(
             g_bCustomizeCapturing = FALSE;
             g_bCustomizeHovered = FALSE;
             return 0;
-        case WM_NCDESTROY:
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-                hWnd, CustomizeLinkSubclassProc
-            );
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
