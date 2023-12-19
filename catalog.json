@@ -1644,6 +1644,32 @@
                 "version": "1.0.0"
             }
         },
+        "windows-11-start-menu-styler": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1703013948000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1703013948000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+                "description": "An advanced mod to override style attributes of the start menu control elements",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "StartMenuExperienceHost.exe"
+                ],
+                "name": "Windows 11 Start Menu Styler",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "windows-11-taskbar-styler": {
             "details": {
                 "defaultSorting": 5418,

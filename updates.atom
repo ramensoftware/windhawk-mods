@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-19T10:40:59.000Z</updated>
+    <updated>2023-12-19T19:25:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.0]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#af135759094c6dc9558b926435bb1a9f597bf30f</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2023-12-19T19:25:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11startmenustyler">Windows 11 Start Menu Styler</h1>
+<p>An advanced mod to override style attributes of the start menu control elements.</p>
+<p><strong>Note</strong>: This mod requires Windhawk v1.4 or later.</p>
+<p>Also check out the <strong>Windows 11 Taskbar Styler</strong> mod.</p>
+<p>The settings have two sections: control styles and resource variables. Control
+styles allow to override styles, such as size and color, for the target
+elements. Resource variables allow to override predefined variables. For a more
+detailed explanation and examples, refer to the sections below.</p>
+<p>The start menu's XAML resources can help find out which elements and resource
+variables can be customized. To the best of my knowledge, there are no public
+tools that are able to decode the resource files of recent Windows versions, but
+here are XAML resources which were obtained via other means for your
+convenience:
+<a href="https://gist.github.com/m417z/a7e4e2c7b451ee79c62c51ca2dba7349">StartResources.xbf</a>.</p>
+<p>The <a href="https://ramensoftware.com/uwpspy">UWPSpy</a> tool can be used to inspect the
+start menu control elements in real time, and experiment with various styles.</p>
+<h2 id="controlstyles">Control styles</h2>
+<p>Each entry has a target control and a list of styles.</p>
+<p>The target control is written as <code>Control</code> or <code>Control#Name</code>, i.e. the target
+control tag name, such as <code>StartMenu:StartInnerFrame</code> or <code>Rectangle</code>, optionally
+followed by <code>#</code> and the target control's <code>x:Name</code> attribute. The target control
+can also include:</p>
+<ul>
+<li>Child control index, for example: <code>Control#Name[2]</code> will only match the
+relevant control that's also the second child among all of its parent's child
+controls.</li>
+<li>Control properties, for example:
+<code>Control#Name[Property1=Value1][Property2=Value2]</code>.</li>
+<li>Parent controls, separated by <code>&gt;</code>, for example: <code>ParentControl#ParentName &gt;
+Control#Name</code>.</li>
+<li>Visual state group name, for example: <code>Control#Name@VisualStateGroupName</code>. It
+can be specified for the target control or for a parent control, but can be
+specified only once per target. The visual state group can be used in styles
+as specified below.</li>
+</ul>
+<p><strong>Note</strong>: The target is evaluated only once. If, for example, the index or the
+properties of a control change, the target conditions aren't evaluated again.</p>
+<p>Each style is written as <code>Style=Value</code>, for example: <code>Height=5</code>. The <code>:=</code> syntax
+can be used to use XAML syntax, for example: <code>Fill:=&lt;SolidColorBrush
+Color="Red"/&gt;</code>. In addition, a visual state can be specified as following:
+<code>Style@VisualState=Value</code>, in which case the style will only apply when the
+visual state group specified in the target matches the specified visual state.</p>
+<h2 id="resourcevariables">Resource variables</h2>
+<p>Some variables, such as size and padding for various controls, are defined as
+resource variables.</p>
+<h2 id="implementationnotes">Implementation notes</h2>
+<p>The VisualTreeWatcher implementation is based on the
+<a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
+code from the <strong>TranslucentTB</strong> project.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aero Flyout Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/aero-flyout-fix#696884ca39bcc3f2ad514536fecda4be7f4a1d3d</id>
@@ -244,21 +299,5 @@ is not. This is useful for anyone doing a setup with non-DWM frames
 window frames becoming only 1 pixel wide. Whenever ribbons are displayed on a custom theme with wider
 borders, the icon will have extra indentation, which is not desirable.</p>
 <p><img src="https://raw.githubusercontent.com/YukisCoffee/images/main/uiribbon%20fix.png" alt="Preview" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Basic Caption Text 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fix-basic-caption-text#892afcee9adb00be9920318e13313c7d8b20d885</id>
-        <link href="https://windhawk.net/mods/fix-basic-caption-text"/>
-        <updated>2023-11-16T08:57:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fixbasiccaptiontext">Fix Basic Caption Text</h1>
-<p>Since Windows 10, the caption color has been hardcoded due to different accent
-colors needing dark or light text. For whatever reason, this also applies to basic
-frames, and as such, they don't pull caption color from the theme anymore. This
-results in incorrectly colored and possibly illegible caption text. This mod fixes that.</p>
-<p><strong>This mod requires Windhawk v1.4 or greater.</strong></p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/fix-basic-caption-text-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/fix-basic-caption-text-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
