@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-18T21:44:55.000Z</updated>
+    <updated>2023-12-19T10:40:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Flyout Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/aero-flyout-fix#696884ca39bcc3f2ad514536fecda4be7f4a1d3d</id>
+        <link href="https://windhawk.net/mods/aero-flyout-fix"/>
+        <updated>2023-12-19T10:40:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="aeroflyoutfix">Aero Flyout Fix</h1>
+<p>Since Windows 10, many of the legacy tray flyouts either don't have thick borders or don't
+float away from the taskbar. This mod adds back thick borders and makes flyouts float where
+applicable.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-flyout-fix-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-flyout-fix-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aero Tray 1.0.1]]></title>
         <id>https://windhawk.net/mods/aero-tray#9a60743720756d07af281757c4077a2ccb887964</id>
@@ -246,14 +260,5 @@ results in incorrectly colored and possibly illegible caption text. This mod fix
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/fix-basic-caption-text-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/fix-basic-caption-text-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#d28ad7f818078e99a4ccc492486bfcf534bf016e</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2023-11-10T23:20:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed displaced clock on secondary monitors.</li>
-</ul>]]></content>
     </entry>
 </feed>
