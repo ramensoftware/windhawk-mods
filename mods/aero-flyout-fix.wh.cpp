@@ -18,11 +18,6 @@ Since Windows 10, many of the legacy tray flyouts either don't have thick border
 float away from the taskbar. This mod adds back thick borders and makes flyouts float where
 applicable.
 
-# IMPORTANT: READ!
-Windhawk needs to hook into `winlogon.exe` to successfully capture Explorer starting. Please
-navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
-`winlogon.exe` is in the Process inclusion list.
-
 **Before**:
 
 ![Before](https://raw.githubusercontent.com/aubymori/images/main/aero-flyout-fix-before.png)
@@ -78,9 +73,9 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
     return { rc.left + dx, rc.top + dy };
 }
 
-/* == EXPLORER.EXE HOOKS == */
+#pragma region "Explorer hooks"
 
-/* == TIMEDATE.CPL HOOKS == */
+#pragma region "timedate.cpl hooks"
 
 #define CTrayClock_Window(pThis) *((HWND *)pThis + 2)
 
@@ -169,8 +164,9 @@ const WindhawkUtils::SYMBOL_HOOK timedateHooks[] = {
         false
     }
 };
+#pragma endregion // "timedate.cpl hooks"
 
-/* == USER32.DLL HOOKS == */
+#pragma region "user32.dll hooks"
 
 HWND g_hWndFlyout = NULL;
 
@@ -221,7 +217,9 @@ HWND WINAPI CreateWindowInBand_hook(
     return hWnd;
 }
 
-/* == STOBJECT.DLL HOOKS == */
+#pragma endregion // "user32.dll hooks"
+
+#pragma region "stobject.dll hooks"
 
 void (* UpdateFlyoutUI_orig)(void);
 void UpdateFlyoutUI_hook(void)
@@ -248,8 +246,9 @@ const WindhawkUtils::SYMBOL_HOOK stobjectHooks[] = {
         false
     }
 };
+#pragma endregion // "stobject.dll hooks"
 
-/* == ACTIONCENTER.DLL HOOKS == */
+#pragma region "ActionCenter.dll hooks"
 
 WNDPROC CHCFlyoutWindow_CHCFlyoutSTAThread_s_WndProc_orig;
 LRESULT CALLBACK CHCFlyoutWindow_CHCFlyoutSTAThread_s_WndProc_hook(
@@ -295,6 +294,8 @@ const WindhawkUtils::SYMBOL_HOOK actioncenterHooks[] = {
         false
     }
 };
+
+#pragma endregion // "ActionCenter.dll hooks"
 
 BOOL Wh_ModInit_Explorer(void)
 {
@@ -372,7 +373,9 @@ BOOL Wh_ModInit_Explorer(void)
     return TRUE;
 }
 
-/* == SNDVOL.EXE HOOKS == */
+#pragma endregion // "Explorer hooks"
+
+#pragma region "SndVol.exe hooks"
 
 #define CDlgSimpleVolumeHost_Window(pThis) *(HWND *)((char *)pThis + 8)
 
@@ -424,6 +427,8 @@ BOOL Wh_ModInit_SndVol(void)
     
     return TRUE;
 }
+
+#pragma endregion // "SndVol.exe hooks"
 
 BOOL Wh_ModInit(void)
 {
