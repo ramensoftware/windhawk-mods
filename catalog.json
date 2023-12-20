@@ -366,7 +366,7 @@
                 "published": 1702842224000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1702842224000,
+                "updated": 1703085867000,
                 "users": 7
             },
             "metadata": {
@@ -382,7 +382,7 @@
                 ],
                 "name": "Disable rounded corners in Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "dwm-ghost-mods": {

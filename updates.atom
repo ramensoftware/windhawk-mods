@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-20T05:38:29.000Z</updated>
+    <updated>2023-12-20T15:24:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable rounded corners in Windows 11 1.0.1]]></title>
+        <id>https://windhawk.net/mods/disable-rounded-corners#1c369113ba4582b572663e7bde2999bd70c7a1f1</id>
+        <link href="https://windhawk.net/mods/disable-rounded-corners"/>
+        <updated>2023-12-20T15:24:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed usage notes to specify the correct process name to add to the process inclusion list.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Clock Spacing 1.0.0]]></title>
         <id>https://windhawk.net/mods/windows-7-clock-spacing#4ae7862cd49a3c5eca65b27b59ad9eca6e86dbc8</id>
@@ -288,21 +297,5 @@ re-enables the DirectUI search box and fixes the bug with the placeholder.</p>
         <id>https://windhawk.net/mods/eradicate-immersive-menus#a5027866c7b777a48063333529159778f35def19</id>
         <link href="https://windhawk.net/mods/eradicate-immersive-menus"/>
         <updated>2023-11-21T22:16:47.000Z</updated>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DWM Unextend Frames 1.0.0]]></title>
-        <id>https://windhawk.net/mods/dwm-unextend-frames#73631efe39f232421878841a4fe1b543e674bbe0</id>
-        <link href="https://windhawk.net/mods/dwm-unextend-frames"/>
-        <updated>2023-11-21T04:50:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dwmunextendframes">DWM Unextend Frames</h1>
-<p>This mod makes applications think DWM is disabled when in reality it
-is not. This is useful for anyone doing a setup with non-DWM frames
-(Classic, XP, Vista/7 Basic).</p>
-<p><strong>This mod requires Windhawk v1.4 or greater.</strong></p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/dwm-unextend-frames-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/dwm-unextend-frames-after.png" alt="After" /></p>
-<p><em>Mod originally authored by Taniko Yamamoto.</em></p>]]></content>
     </entry>
 </feed>
