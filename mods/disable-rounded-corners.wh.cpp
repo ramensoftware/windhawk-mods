@@ -2,7 +2,7 @@
 // @id              disable-rounded-corners
 // @name            Disable rounded corners in Windows 11
 // @description     A simple mod to disable window rounded corners in Windows 11
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -33,11 +33,11 @@ project by Valentin Radu.
 
 ## ⚠ Important usage note ⚠
 
-In order to use this mod, you must allow Windhawk to inject into the **uwp.exe**
+In order to use this mod, you must allow Windhawk to inject into the **dwm.exe**
 system process. To do so, add it to the process inclusion list in the advanced
 settings. If you do not do this, it will silently fail to inject.
 
-![Advanced settings screenshot](https://i.imgur.com/gZJPgej.png)
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
 // ==/WindhawkModReadme==
 
