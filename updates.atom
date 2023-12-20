@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-19T19:25:48.000Z</updated>
+    <updated>2023-12-20T05:38:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Clock Spacing 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-7-clock-spacing#4ae7862cd49a3c5eca65b27b59ad9eca6e86dbc8</id>
+        <link href="https://windhawk.net/mods/windows-7-clock-spacing"/>
+        <updated>2023-12-20T05:38:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7clockspacing">Windows 7 Clock Spacing</h1>
+<p>Makes the taskbar clock in Windows 10 use Windows 7 sizing/spacing.</p>
+<h1 id="importantread">IMPORTANT: READ!</h1>
+<p>Windhawk needs to hook into <code>winlogon.exe</code> to successfully capture Explorer starting. Please
+navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
+<code>winlogon.exe</code> is in the Process inclusion list.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/windows-7-clock-spacing-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/windows-7-clock-spacing-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.0]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#af135759094c6dc9558b926435bb1a9f597bf30f</id>
@@ -288,16 +304,5 @@ is not. This is useful for anyone doing a setup with non-DWM frames
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/dwm-unextend-frames-after.png" alt="After" /></p>
 <p><em>Mod originally authored by Taniko Yamamoto.</em></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UIRibbon Caption Icon Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/ribbon-caption-icon-fix#ab83165b035f899b9480a8edf43f8baeac7d479b</id>
-        <link href="https://windhawk.net/mods/ribbon-caption-icon-fix"/>
-        <updated>2023-11-20T07:45:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="uiribboncaptioniconfix">UIRibbon Caption Icon Fix</h1>
-<p>Fixes the position of the caption icon in UIRibbon, which is ordinarily broken since Windows 10, due to
-window frames becoming only 1 pixel wide. Whenever ribbons are displayed on a custom theme with wider
-borders, the icon will have extra indentation, which is not desirable.</p>
-<p><img src="https://raw.githubusercontent.com/YukisCoffee/images/main/uiribbon%20fix.png" alt="Preview" /></p>]]></content>
     </entry>
 </feed>

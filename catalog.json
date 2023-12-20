@@ -1695,6 +1695,30 @@
                 "twitter": "https://twitter.com/m417z",
                 "version": "1.2.1"
             }
+        },
+        "windows-7-clock-spacing": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1703050709000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1703050709000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -lshell32 -lcomctl32",
+                "description": "Makes the taskbar clock in Windows 10 use the spacing from Windows 7",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Windows 7 Clock Spacing",
+                "version": "1.0.0"
+            }
         }
     }
 }
