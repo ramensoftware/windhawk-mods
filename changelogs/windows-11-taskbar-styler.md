@@ -1,3 +1,7 @@
+## 1.2.2 ([Dec 21, 2023](https://github.com/ramensoftware/windhawk-mods/blob/955ecfce747cec506a89bdee69c706aea050487a/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added a workaround for a crash on startup if a custom background is set.
+
 ## 1.2.1 ([Dec 16, 2023](https://github.com/ramensoftware/windhawk-mods/blob/881a5daee8bdcf6cdc0e8f6a7ca99ebbeab1f569/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Fixed a possible crash and style applying bugs when settings are changed.

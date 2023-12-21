@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -25,6 +25,8 @@
 # Windows 11 Taskbar Styler
 
 An advanced mod to override style attributes of the taskbar control elements.
+
+Also check out the **Windows 11 Start Menu Styler** mod.
 
 The settings have two sections: control styles and resource variables. Control
 styles allow to override styles, such as size and color, for the target
@@ -175,8 +177,6 @@ relevant `#pragma region` regions in the code editor.
 
 // forward declare namespaces we alias
 namespace winrt {
-    namespace Microsoft::UI::Xaml::Controls {}
-    namespace TranslucentTB::Xaml::Models::Primitives {}
     namespace Windows {
         namespace Foundation::Collections {}
         namespace UI::Xaml {
@@ -187,9 +187,6 @@ namespace winrt {
 }
 
 // alias some long namespaces for convenience
-// namespace mux = winrt::Microsoft::UI::Xaml;
-// namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
-// namespace txmp = winrt::TranslucentTB::Xaml::Models::Primitives;
 namespace wf = winrt::Windows::Foundation;
 // namespace wfc = wf::Collections;
 namespace wux = winrt::Windows::UI::Xaml;
@@ -1381,6 +1378,8 @@ HRESULT InjectWindhawkTAP() noexcept
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <windhawk_utils.h>
+
 #include <optional>
 #include <sstream>
 #include <string>
@@ -1462,6 +1461,8 @@ std::unordered_map<InstanceHandle, ElementCustomizationState>
     g_elementsCustomizationState;
 
 bool g_elementPropertyModifying;
+
+bool g_inTaskbarBackground_OnApplyTemplate;
 
 // https://stackoverflow.com/a/12835139
 VisualStateGroup GetVisualStateGroup(FrameworkElement element,
@@ -2391,8 +2392,106 @@ HWND GetTaskbarUiWnd() {
                         nullptr);
 }
 
+using TaskbarBackground_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
+TaskbarBackground_OnApplyTemplate_t TaskbarBackground_OnApplyTemplate_Original;
+void WINAPI TaskbarBackground_OnApplyTemplate_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    g_inTaskbarBackground_OnApplyTemplate = true;
+
+    TaskbarBackground_OnApplyTemplate_Original(pThis);
+
+    g_inTaskbarBackground_OnApplyTemplate = false;
+}
+
+using Foundation_operator_eq_t = bool(WINAPI*)(void** p1, void** p2);
+Foundation_operator_eq_t Foundation_operator_eq_Original;
+bool WINAPI Foundation_operator_eq_Hook(void** p1, void** p2) {
+    if (g_inTaskbarBackground_OnApplyTemplate) {
+        Wh_Log(L">");
+
+        // The code inside TaskbarBackground::OnApplyTemplate throws an
+        // exception if operator== returns true in some cases, and that happens
+        // if the background is customized, in which case two null pointers are
+        // compared. It can be trigerred with the following example:
+        // * Target: Rectangle#BackgroundFill
+        // * Style: Fill=Red
+        if (p1 && p2 && !*p1 && !*p2) {
+            return false;
+        }
+    }
+
+    return Foundation_operator_eq_Original(p1, p2);
+}
+
+bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
+    WCHAR szWindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectory(szWindowsDirectory,
+                             ARRAYSIZE(szWindowsDirectory))) {
+        Wh_Log(L"GetWindowsDirectory failed");
+        return false;
+    }
+
+    // Windows 11 version 22H2.
+    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
+    wcscat_s(
+        path, MAX_PATH,
+        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
+    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
+        return true;
+    }
+
+    // Windows 11 version 21H2.
+    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
+    wcscat_s(
+        path, MAX_PATH,
+        LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
+    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
+        return true;
+    }
+
+    return false;
+}
+
+bool HookTaskbarViewDllSymbols() {
+    WCHAR dllPath[MAX_PATH];
+    if (!GetTaskbarViewDllPath(dllPath)) {
+        Wh_Log(L"Taskbar view module not found");
+        return false;
+    }
+
+    HMODULE module =
+        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!module) {
+        Wh_Log(L"Taskbar view module couldn't be loaded");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarBackground::OnApplyTemplate(void))"},
+            (void**)&TaskbarBackground_OnApplyTemplate_Original,
+            (void*)TaskbarBackground_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {LR"(bool __cdecl winrt::Windows::Foundation::operator==(struct winrt::Windows::Foundation::IUnknown const &,struct winrt::Windows::Foundation::IUnknown const &))"},
+            (void**)&Foundation_operator_eq_Original,
+            (void*)Foundation_operator_eq_Hook,
+            true,
+        },
+    };
+
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    if (!HookTaskbarViewDllSymbols()) {
+        // Can continue without the hooks.
+        // return FALSE;
+    }
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
