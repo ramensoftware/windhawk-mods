@@ -34,7 +34,7 @@ This mod fixes both of those things.
 
 *\*Microsoft changed the way the font size was calculator for Per-Monitor V2 DPI awareness. It ALWAYS gets
 1pt below the font size, even when on a higher DPI. This is because Microsoft decided to do some weird math
-instead of just using `SystemParametersInfoW` like a normal person.*
+instead of just using `SystemParametersInfoForDpi` like a normal person.*
 */
 // ==/WindhawkModReadme==
 
@@ -42,7 +42,7 @@ instead of just using `SystemParametersInfoW` like a normal person.*
 /*
 - font: true
   $name: Fix font size
-  $description: Fix font rendering
+  $description: Fix the message box font being too small
 - background: false
   $name: Remove "Window" background
   $description: Remove the "Window" color from the background, much like XP and before
@@ -67,7 +67,7 @@ SystemParametersInfoForDpi_t SystemParametersInfoForDpi;
    subclassed for background removal.
    
    See WM_PAINT on MsgBoxTextSubclassProc. */
-std::vector<HWND> subclassed;
+std::vector<HWND> g_subclassed;
 
 typedef HFONT (__fastcall *GetMessageBoxFontForDpi_t)(UINT);
 GetMessageBoxFontForDpi_t GetMessageBoxFontForDpi_orig;
@@ -85,9 +85,10 @@ HFONT __fastcall GetMessageBoxFontForDpi_hook(
     NONCLIENTMETRICSW ncm;
     ncm.cbSize = sizeof(NONCLIENTMETRICSW);
 
+    BOOL bResult;
     if (SystemParametersInfoForDpi)
     {
-        SystemParametersInfoForDpi(
+        bResult = SystemParametersInfoForDpi(
             SPI_GETNONCLIENTMETRICS,
             sizeof(NONCLIENTMETRICSW),
             &ncm,
@@ -97,7 +98,7 @@ HFONT __fastcall GetMessageBoxFontForDpi_hook(
     }
     else
     {
-        SystemParametersInfoW(
+        bResult = SystemParametersInfoW(
             SPI_GETNONCLIENTMETRICS,
             sizeof(NONCLIENTMETRICSW),
             &ncm,
@@ -105,7 +106,11 @@ HFONT __fastcall GetMessageBoxFontForDpi_hook(
         );
     }
 
-    return CreateFontIndirectW(&(ncm.lfMessageFont));
+    if (bResult)
+    {
+        return CreateFontIndirectW(&ncm.lfMessageFont);
+    }
+    return NULL;
 }
 
 LRESULT CALLBACK MsgBoxTextSubclassProc(
@@ -132,7 +137,7 @@ LRESULT CALLBACK MsgBoxTextSubclassProc(
                 GetClientRect(hWnd, &rcClient);
 
                 int len = GetWindowTextLengthW(hWnd) + 1;
-                LPWSTR szText = (LPWSTR)malloc(sizeof(WCHAR) * len);
+                LPWSTR szText = new WCHAR[len];
                 GetWindowTextW(hWnd, szText, len);
 
                 HFONT hfMsg;
@@ -151,8 +156,7 @@ LRESULT CALLBACK MsgBoxTextSubclassProc(
                 SetBkMode(hDC, TRANSPARENT);
                 SetTextColor(hDC, GetSysColor(COLOR_BTNTEXT));
 
-                DRAWTEXTPARAMS dtp = { 0 };
-                dtp.cbSize = sizeof(DRAWTEXTPARAMS);
+                DRAWTEXTPARAMS dtp = { sizeof(DRAWTEXTPARAMS) };
                 dtp.uiLengthDrawn = wcslen(szText);
 
                 DrawTextExW(
@@ -166,14 +170,14 @@ LRESULT CALLBACK MsgBoxTextSubclassProc(
 
                 SelectObject(hDC, hfOld);
                 DeleteObject(hfMsg);
-                free(szText);
+                delete[] szText;
                 EndPaint(hWnd, &ps);
                 return 0;
             }
             case WM_DESTROY:
-                subclassed.erase(std::remove_if(
-                    subclassed.begin(),
-                    subclassed.end(),
+                g_subclassed.erase(std::remove_if(
+                    g_subclassed.begin(),
+                    g_subclassed.end(),
                     [hWnd](HWND hw)
                     {
                         return hw == hWnd;
@@ -202,13 +206,14 @@ INT_PTR CALLBACK MB_DlgProc_hook(
             case WM_CTLCOLORDLG:
             case WM_CTLCOLORSTATIC:
                 return (INT_PTR)GetSysColorBrush(COLOR_3DFACE);
-            /* The static window for text itself must handle WM_CTLCOLORSTATIC */
+            /* The static window used for the text must be subclassed
+               to completely override painting */
             case WM_INITDIALOG:
             {                   
-                HWND hTxt = GetDlgItem(hWnd, 65535);
+                HWND hTxt = GetDlgItem(hWnd, 0xFFFF);
                 if (WindhawkUtils::SetWindowSubclassFromAnyThread(hTxt, MsgBoxTextSubclassProc, NULL))
                 {
-                    subclassed.push_back(hTxt);
+                    g_subclassed.push_back(hTxt);
                 }
 
                 return MB_DlgProc_orig(hWnd, uMsg, wParam, lParam);
@@ -226,23 +231,19 @@ INT_PTR CALLBACK MB_DlgProc_hook(
     return MB_DlgProc_orig(hWnd, uMsg, wParam, lParam);
 }
 
+#define LoadIntSetting(NAME) settings.NAME = Wh_GetIntSetting(L ## #NAME)
+
 void LoadSettings(void)
 {
-    settings.font = Wh_GetIntSetting(L"font");
-    settings.background = Wh_GetIntSetting(L"background");
+    LoadIntSetting(font);
+    LoadIntSetting(background);
 }
 
 BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-
-    if (!hUser32)
-    {
-        hUser32 = LoadLibraryW(L"user32.dll");
-    }
-
+    HMODULE hUser32 = LoadLibraryW(L"user32.dll");
     if (!hUser32)
     {
         MessageBoxW(
@@ -286,7 +287,11 @@ BOOL Wh_ModInit(void)
         }
     };
 
-    if (!HookSymbols(hUser32, hooks, ARRAYSIZE(hooks)))
+    if (!WindhawkUtils::HookSymbols(
+        hUser32,
+        hooks,
+        ARRAYSIZE(hooks)
+    ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions");
         return FALSE;
@@ -301,11 +306,11 @@ BOOL Wh_ModInit(void)
   */
 void Wh_ModUninit(void)
 {
-    size_t len = subclassed.size();
+    size_t len = g_subclassed.size();
     for (size_t i = 0; i < len; i++)
     {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            subclassed[i],
+            g_subclassed[i],
             MsgBoxTextSubclassProc
         );
     }
