@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-21T15:17:29.000Z</updated>
+    <updated>2023-12-22T11:48:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Fix 1.5.0]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#dd8ab1339fb2b5208222b38f325f8bfc378da558</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2023-12-22T11:48:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>DPI support improvements</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2.2]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#955ecfce747cec506a89bdee69c706aea050487a</id>
@@ -284,21 +293,5 @@ those features.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/unlock-taskmgr-server-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/unlock-taskmgr-server-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Legacy Search Bar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/legacy-search-bar#a71decd11c053c6bb0b8e75e7799d8e2bd7909e8</id>
-        <link href="https://windhawk.net/mods/legacy-search-bar"/>
-        <updated>2023-11-23T08:00:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="legacysearchbar">Legacy Search Bar</h1>
-<p>Since Windows 10, version 1909, the legacy search box, which was based on DirectUI,
-was replaced by one that uses EdgeHTML. As well, when enabling the DirectUI one,
-a bug occurs where the placeholder text disappars initially and on a resize. This mod
-re-enables the DirectUI search box and fixes the bug with the placeholder.</p>
-<p><strong>This mod requires Windhawk v1.4 or greater.</strong></p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/legacy-search-bar-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/legacy-search-bar-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>

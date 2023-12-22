@@ -830,7 +830,7 @@
                 "published": 1693642476000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1699150793000,
+                "updated": 1703245739000,
                 "users": 206
             },
             "metadata": {
@@ -842,7 +842,7 @@
                     "*"
                 ],
                 "name": "Message Box Fix",
-                "version": "1.4.6"
+                "version": "1.5.0"
             }
         },
         "mspaint-dark": {

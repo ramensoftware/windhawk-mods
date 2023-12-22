@@ -1,3 +1,7 @@
+## 1.5.0 ([Dec 22, 2023](https://github.com/ramensoftware/windhawk-mods/blob/dd8ab1339fb2b5208222b38f325f8bfc378da558/mods/msg-box-font-fix.wh.cpp))
+
+* DPI support improvements
+
 ## 1.4.6 ([Nov 5, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a08c60fdb07f810002787e4b6bf12dd0828973ce/mods/msg-box-font-fix.wh.cpp))
 
 * Add option to fix background color for pre-Windows Vista classic theme look
