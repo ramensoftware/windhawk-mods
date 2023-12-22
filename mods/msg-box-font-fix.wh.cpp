@@ -57,10 +57,10 @@ struct {
 } settings;
 
 /* Only available in Windows 10 version 1607 and greater. */
-typedef UINT (* WINAPI GetDpiForWindow_t)(HWND);
+typedef UINT (*WINAPI GetDpiForWindow_t)(HWND);
 GetDpiForWindow_t GetDpiForWindow;
 
-typedef BOOL (* WINAPI SystemParametersInfoForDpi_t)(UINT, UINT, PVOID, UINT, UINT);
+typedef BOOL (*WINAPI SystemParametersInfoForDpi_t)(UINT, UINT, PVOID, UINT, UINT);
 SystemParametersInfoForDpi_t SystemParametersInfoForDpi;
 
 /* Message box text windows that have been
