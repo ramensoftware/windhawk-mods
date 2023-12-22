@@ -186,9 +186,9 @@ LRESULT CALLBACK MsgBoxTextSubclassProc(
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-typedef INT_PTR (* WINAPI MB_DlgProc_t)(HWND, UINT, WPARAM, LPARAM);
+typedef INT_PTR (CALLBACK *MB_DlgProc_t)(HWND, UINT, WPARAM, LPARAM);
 MB_DlgProc_t MB_DlgProc_orig;
-INT_PTR WINAPI MB_DlgProc_hook(
+INT_PTR CALLBACK MB_DlgProc_hook(
     HWND   hWnd,
     UINT   uMsg,
     WPARAM wParam,
