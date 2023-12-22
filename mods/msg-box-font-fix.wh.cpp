@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Fix
 // @description     Fixes the MessageBox font size and background
-// @version         1.4.6
+// @version         1.5.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -57,7 +57,11 @@ struct {
 } settings;
 
 /* Only available in Windows 10 version 1607 and greater. */
-UINT (* WINAPI GetDpiForSystem)(void);
+typedef UINT (* WINAPI GetDpiForWindow_t)(HWND);
+GetDpiForWindow_t GetDpiForWindow;
+
+typedef BOOL (* WINAPI SystemParametersInfoForDpi_t)(UINT, UINT, PVOID, UINT, UINT);
+SystemParametersInfoForDpi_t SystemParametersInfoForDpi;
 
 /* Message box text windows that have been
    subclassed for background removal.
@@ -81,12 +85,25 @@ HFONT __fastcall GetMessageBoxFontForDpi_hook(
     NONCLIENTMETRICSW ncm;
     ncm.cbSize = sizeof(NONCLIENTMETRICSW);
 
-    SystemParametersInfoW(
-        SPI_GETNONCLIENTMETRICS,
-        sizeof(NONCLIENTMETRICSW),
-        &ncm,
-        0
-    );
+    if (SystemParametersInfoForDpi)
+    {
+        SystemParametersInfoForDpi(
+            SPI_GETNONCLIENTMETRICS,
+            sizeof(NONCLIENTMETRICSW),
+            &ncm,
+            0,
+            nDpi
+        );
+    }
+    else
+    {
+        SystemParametersInfoW(
+            SPI_GETNONCLIENTMETRICS,
+            sizeof(NONCLIENTMETRICSW),
+            &ncm,
+            0
+        );
+    }
 
     return CreateFontIndirectW(&(ncm.lfMessageFont));
 }
@@ -119,15 +136,15 @@ LRESULT CALLBACK MsgBoxTextSubclassProc(
                 GetWindowTextW(hWnd, szText, len);
 
                 HFONT hfMsg;
-                if (settings.font || !GetDpiForSystem)
+                if (settings.font || !GetDpiForWindow)
                 {
                     hfMsg = GetMessageBoxFontForDpi_hook(
-                        GetDpiForSystem ? GetDpiForSystem() : 96
+                        GetDpiForWindow ? GetDpiForWindow(hWnd) : 96
                     );
                 }
                 else
                 {
-                    hfMsg = GetMessageBoxFontForDpi_orig(GetDpiForSystem());
+                    hfMsg = GetMessageBoxFontForDpi_orig(GetDpiForWindow(hWnd));
                 }
                 HFONT hfOld = (HFONT)SelectObject(hDC, hfMsg);
 
@@ -237,7 +254,8 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    GetDpiForSystem = (UINT (* WINAPI)(void))GetProcAddress(hUser32, "GetDpiForSystem");
+    GetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
+    SystemParametersInfoForDpi = (SystemParametersInfoForDpi_t)GetProcAddress(hUser32, "SystemParametersInfoForDpi");
 
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
