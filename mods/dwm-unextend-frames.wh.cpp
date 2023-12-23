@@ -2,10 +2,11 @@
 // @id              dwm-unextend-frames
 // @name            DWM Unextend Frames
 // @description     Makes applications think DWM is disabled
-// @version         1.0.0
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
+// @exclude         vmware-vmx.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -14,6 +15,12 @@
 This mod makes applications think DWM is disabled when in reality it
 is not. This is useful for anyone doing a setup with non-DWM frames
 (Classic, XP, Vista/7 Basic).
+
+# IMPORTANT: READ!
+This mod works a bit *too* well. With it enabled, DWM window frames
+will be entirely unable to be interacted with. You'll need a basic
+themer like [BasicThemer5](https://github.com/arukateru/BasicThemer5)
+to use this mod properly.
 
 **This mod requires Windhawk v1.4 or greater.**
 
@@ -125,6 +132,13 @@ BOOL WINAPI SetWindowCompositionAttribute_hook(
     return TRUE;
 }
 
+typedef BOOL (WINAPI *IsThreadDesktopComposited_t)(void);
+IsThreadDesktopComposited_t IsThreadDesktopComposited_orig;
+BOOL WINAPI IsThreadDesktopComposited_hook(void)
+{
+    return FALSE;
+}
+
 #define MODULE_VARNAME(NAME) hMod_ ## NAME
 #define WSTR(VALUE) L ## #VALUE
 
@@ -160,6 +174,7 @@ BOOL Wh_ModInit(void)
 
     LOAD_MODULE(user32)
     HOOK_FUNCTION(user32, SetWindowCompositionAttribute)
+    HOOK_FUNCTION(user32, IsThreadDesktopComposited)
 
     return TRUE;
 }
