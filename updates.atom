@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-22T11:48:59.000Z</updated>
+    <updated>2023-12-23T07:57:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[DWM Unextend Frames 1.1.0]]></title>
+        <id>https://windhawk.net/mods/dwm-unextend-frames#6f9ba7f4499d1e16ede82d0a2c44cdd8ad6295a5</id>
+        <link href="https://windhawk.net/mods/dwm-unextend-frames"/>
+        <updated>2023-12-23T07:57:11.000Z</updated>
+        <content type="html"><![CDATA[<p>Hook IsThreadDesktopComposited. This mainly fixes Aero wizards.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Fix 1.5.0]]></title>
         <id>https://windhawk.net/mods/msg-box-font-fix#dd8ab1339fb2b5208222b38f325f8bfc378da558</id>
@@ -279,19 +286,5 @@ to <code>ExplorerFrame.dll</code> takes place to remove the redirect.</p>]]></co
         <content type="html"><![CDATA[<ul>
 <li>Fixed displaced secondary taskbar when auto-hide is enabled.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Unlock Task Manager for Server 1.0.0]]></title>
-        <id>https://windhawk.net/mods/unlock-taskmgr-server#1899048c96271abe4624cf802d51e6fbc8629e1a</id>
-        <link href="https://windhawk.net/mods/unlock-taskmgr-server"/>
-        <updated>2023-11-24T08:29:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="unlocktaskmanagerforserver">Unlock Task Manager for Server</h1>
-<p>Some features in Task Manager, such as certain columns in the Processes tab and
-the Startup tab are completely disabled in Windows Server. This mod re-enables
-those features.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/unlock-taskmgr-server-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/unlock-taskmgr-server-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
