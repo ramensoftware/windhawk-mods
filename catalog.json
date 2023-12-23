@@ -1577,6 +1577,31 @@
                 "version": "1.0.2"
             }
         },
+        "vmware-disable-upgrade-dialog": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1703322554000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1703322554000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86"
+                ],
+                "author": "m417z",
+                "description": "Disable the VMware Workstation \"old encryption algorithm\" upgrade dialog",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "vmware.exe"
+                ],
+                "name": "Disable VMware upgrade dialog",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "vscode-tweaker": {
             "details": {
                 "defaultSorting": 630,

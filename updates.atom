@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-23T07:57:11.000Z</updated>
+    <updated>2023-12-23T09:09:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable VMware upgrade dialog 1.0]]></title>
+        <id>https://windhawk.net/mods/vmware-disable-upgrade-dialog#11e3d1e5eb7e386be23646f0ba93fabcb2a80cc3</id>
+        <link href="https://windhawk.net/mods/vmware-disable-upgrade-dialog"/>
+        <updated>2023-12-23T09:09:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablevmwareupgradedialog">Disable VMware upgrade dialog</h1>
+<p>Disable the VMware Workstation "old encryption algorithm" upgrade dialog.</p>
+<p>When the dialog is displayed, the mod automatically selects the action of
+choice.</p>
+<p><img src="https://i.imgur.com/vu6z164.png" alt="Screenshot" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DWM Unextend Frames 1.1.0]]></title>
         <id>https://windhawk.net/mods/dwm-unextend-frames#6f9ba7f4499d1e16ede82d0a2c44cdd8ad6295a5</id>
@@ -276,15 +287,6 @@ to <code>ExplorerFrame.dll</code> takes place to remove the redirect.</p>]]></co
         <updated>2023-11-24T19:33:54.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added support for the new Windows 11 taskbar labels option.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#d1b9a9260c59f7f721e3439496eee9d0dafc5c2b</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2023-11-24T19:08:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed displaced secondary taskbar when auto-hide is enabled.</li>
 </ul>]]></content>
     </entry>
 </feed>
