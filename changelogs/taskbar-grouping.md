@@ -1,3 +1,10 @@
+## 1.3 ([Dec 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f80c31b2a02a858d585c01b85fb3d5d5f1789555/mods/taskbar-grouping.wh.cpp))
+
+* Added a new mode: Pinned items remain in place, group running instances.
+* Added an option to only disable grouping for listed programs.
+* Custom groups and excluded programs can now be specified with an application ID.
+* Fixed some cases of taskbar item recreation.
+
 ## 1.2.2 ([May 8, 2023](https://github.com/ramensoftware/windhawk-mods/blob/fe7c3b4be6113f48dcdd876ed401e5ce104335da/mods/taskbar-grouping.wh.cpp))
 
 * Fixed a rare crash.
