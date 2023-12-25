@@ -28,7 +28,10 @@ Based on the ExplorerPatcher implementation.
 
 #include <initguid.h>
 #include <windhawk_utils.h>
-#include <winerror.h>
+#include <winnt.h>
+
+typedef NTSTATUS (NTAPI *RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
+RtlGetVersion_t RtlGetVersion;
 
 DEFINE_GUID(GUID_Win32Clock,
     0x0A323554A,
@@ -133,8 +136,40 @@ const WindhawkUtils::SYMBOL_HOOK hooks[] = {
 
 BOOL Wh_ModInit(void)
 {
+    HMODULE hNtDll = LoadLibraryW(L"ntdll.dll");
+    if (!hNtDll)
+    {
+        Wh_Log(L"Failed to load ntdll.dll");
+        return FALSE;
+    }
+
+    RtlGetVersion = (RtlGetVersion_t)GetProcAddress(hNtDll, "RtlGetVersion");
+    if (!RtlGetVersion)
+    {
+        Wh_Log(L"Failed to load RtlGetVersion from ntdll.dll");
+        return FALSE;
+    }
+
+    HMODULE hTaskbar = NULL;
+    RTL_OSVERSIONINFOW osv = { sizeof(RTL_OSVERSIONINFOW) };
+    if (STATUS_SUCCESS == RtlGetVersion(&osv))
+    {
+        hTaskbar = (osv.dwBuildNumber >= 22000) ? LoadLibraryW(L"Taskbar.dll") : GetModuleHandleW(NULL);
+    }
+    else
+    {
+        Wh_Log(L"RtlGetVersion failed");
+        return FALSE;
+    }
+
+    if (!hTaskbar)
+    {
+        Wh_Log(L"Failed to load Taskbar.dll");
+        return FALSE;
+    }
+    
     if (!WindhawkUtils::HookSymbols(
-        GetModuleHandleW(NULL),
+        hTaskbar,
         hooks,
         ARRAYSIZE(hooks)
     ))
