@@ -1,3 +1,8 @@
+## 2.0 ([Dec 25, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a7051cb16cec7d50699a66aa4c47ab939c48f28c/mods/classic-maximized-windows-fix.wh.cpp))
+
+- Moved global window procedure hooking to leverage the availability of the theme engine (uxtheme), rather than using SetWindowsHookEx.
+- Improved compatibility with many apps, such as pre-Windows 8 versions of Task Manager.
+
 ## 1.2 ([Oct 7, 2023](https://github.com/ramensoftware/windhawk-mods/blob/0c2abf98ba3649753230cc5067fe8833cecf0723/mods/classic-maximized-windows-fix.wh.cpp))
 
 Fix non-fully maximized windows. Namely open/save dialogs, which maximize but do not fill screen.

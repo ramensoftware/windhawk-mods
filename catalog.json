@@ -170,7 +170,7 @@
                 "published": 1694245393000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1696655392000,
+                "updated": 1703491191000,
                 "users": 25
             },
             "metadata": {
@@ -185,14 +185,16 @@
                     "lsass.exe",
                     "winlogon.exe",
                     "logonui.exe",
-                    "ApplicationFrameHost.exe"
+                    "ApplicationFrameHost.exe",
+                    "gameinputsvc.exe",
+                    "svchost.exe"
                 ],
                 "github": "https://github.com/ephemeralViolette",
                 "include": [
                     "*"
                 ],
                 "name": "Fix Classic Theme Maximized Windows",
-                "version": "1.2"
+                "version": "2.0"
             }
         },
         "classic-menus": {

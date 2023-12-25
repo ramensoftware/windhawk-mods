@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-24T16:20:23.000Z</updated>
+    <updated>2023-12-25T07:59:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 2.0]]></title>
+        <id>https://windhawk.net/mods/classic-maximized-windows-fix#a7051cb16cec7d50699a66aa4c47ab939c48f28c</id>
+        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
+        <updated>2023-12-25T07:59:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Moved global window procedure hooking to leverage the availability of the theme engine (uxtheme), rather than using SetWindowsHookEx.</li>
+<li>Improved compatibility with many apps, such as pre-Windows 8 versions of Task Manager.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.3]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#f80c31b2a02a858d585c01b85fb3d5d5f1789555</id>
@@ -281,15 +291,6 @@ to <code>ExplorerFrame.dll</code> takes place to remove the redirect.</p>]]></co
 <li>Fixed label disappearing when dragging.</li>
 <li>Fixed settings applying in some cases.</li>
 <li>Fixed for new builds with the labels feature turned off.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#55cf8e1768150ba51f8b822a44f19de3cf0cc9fa</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2023-11-29T16:04:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>A new, more robust implementation for newer Windows 11 versions with a native taskbar labels implementation.</li>
 </ul>]]></content>
     </entry>
 </feed>
