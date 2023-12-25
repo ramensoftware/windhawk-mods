@@ -30,6 +30,8 @@ Based on the ExplorerPatcher implementation.
 #include <windhawk_utils.h>
 #include <winnt.h>
 
+#define STATUS_SUCCESS 0x00000000
+
 typedef NTSTATUS (NTAPI *RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
 RtlGetVersion_t RtlGetVersion;
 
