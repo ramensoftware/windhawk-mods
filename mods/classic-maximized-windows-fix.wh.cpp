@@ -262,6 +262,11 @@ struct CMWF_SYMBOL_HOOK {
 /*
  * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
  *                  module's shared memory for faster access.
+ *
+ * TODO: This is good for the current application, which hooks only one symbol, but it will
+ *       be less efficient to use for multiple symbol hooks at the moment because it requeries
+ *       each time. Please keep this in mind if you're looking to use this code for your own
+ *       purposes.
  */
 bool CmwfHookSymbols(
         HMODULE module,
