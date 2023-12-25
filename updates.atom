@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-25T07:59:51.000Z</updated>
+    <updated>2023-12-25T08:51:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win32 Tray Clock Experience 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win32-tray-clock-experience#a3656031855478a6669e7b3fa3fd9895b808a386</id>
+        <link href="https://windhawk.net/mods/win32-tray-clock-experience"/>
+        <updated>2023-12-25T08:51:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="win32trayclockexperience">Win32 Tray Clock Experience</h1>
+<p>This mod makes the clock button on the Windows 10 taskbar open the
+Win32 tray clock from Windows 8.1 and before instead of the XAML one
+from Windows 10 and up. This <em>should</em> work on Windows 11 with the legacy
+taskbar, but I have not tested it.</p>
+<p>Based on the ExplorerPatcher implementation.</p>
+<p><strong>Preview</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/win32-tray-clock-experience.png" alt="Preview" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 2.0]]></title>
         <id>https://windhawk.net/mods/classic-maximized-windows-fix#a7051cb16cec7d50699a66aa4c47ab939c48f28c</id>
@@ -277,20 +291,6 @@ to <code>ExplorerFrame.dll</code> takes place to remove the redirect.</p>]]></co
 <li>Added logic to avoid crashing when a non-positive font size is set.</li>
 <li>Fixed left indicator style position with custom left and right padding size value.</li>
 <li>Fixed truncated labels for wide taskbar buttons.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#b9c4fefe6754408557a92715d6f4e11465f8ae3a</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2023-11-29T22:18:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a new option: Minimum taskbar item width.</li>
-<li>Fixed label texts and icons to refer to the window and not the app. The downside of the fix is that combining can no longer be enabled ("When taskbar is full" still works). This may be addressed in the future.</li>
-<li>Fixed "Space between icon and label" calculation in some cases.</li>
-<li>Fixed label disappearing when dragging.</li>
-<li>Fixed settings applying in some cases.</li>
-<li>Fixed for new builds with the labels feature turned off.</li>
 </ul>]]></content>
     </entry>
 </feed>

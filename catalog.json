@@ -1627,6 +1627,30 @@
                 "version": "1.0.1"
             }
         },
+        "win32-tray-clock-experience": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1703494264000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1703494264000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lole32",
+                "description": "Use the Win32 clock flyout instead of the XAML one",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Win32 Tray Clock Experience",
+                "version": "1.0.0"
+            }
+        },
         "win7-alttab-loader": {
             "details": {
                 "defaultSorting": 684,
