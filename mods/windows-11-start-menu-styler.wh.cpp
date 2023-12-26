@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     An advanced mod to override style attributes of the start menu control elements
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -44,6 +44,10 @@ convenience:
 
 The [UWPSpy](https://ramensoftware.com/uwpspy) tool can be used to inspect the
 start menu control elements in real time, and experiment with various styles.
+
+For a collection of commonly requested taskbar styling customizations, check out
+[The Windows 11 start menu styling
+guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md).
 
 ## Control styles
 
@@ -141,8 +145,6 @@ HMODULE GetCurrentModuleHandle() {
 
 // forward declare namespaces we alias
 namespace winrt {
-    namespace Microsoft::UI::Xaml::Controls {}
-    namespace TranslucentTB::Xaml::Models::Primitives {}
     namespace Windows {
         namespace Foundation::Collections {}
         namespace UI::Xaml {
@@ -153,9 +155,6 @@ namespace winrt {
 }
 
 // alias some long namespaces for convenience
-// namespace mux = winrt::Microsoft::UI::Xaml;
-// namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
-// namespace txmp = winrt::TranslucentTB::Xaml::Models::Primitives;
 namespace wf = winrt::Windows::Foundation;
 // namespace wfc = wf::Collections;
 namespace wux = winrt::Windows::UI::Xaml;
@@ -504,7 +503,7 @@ using PropertyKeyValue =
 struct ElementMatcher {
     std::wstring type;
     std::wstring name;
-    std::wstring visualStateGroup;
+    std::optional<std::wstring> visualStateGroupName;
     int oneBasedIndex = 0;
     std::vector<std::pair<std::wstring, std::wstring>> propertyValuesStr;
     std::vector<PropertyKeyValue> propertyValues;
@@ -552,11 +551,11 @@ bool g_elementPropertyModifying;
 
 // https://stackoverflow.com/a/12835139
 VisualStateGroup GetVisualStateGroup(FrameworkElement element,
-                                     std::wstring_view stateGroupName) {
+                                     std::wstring_view visualStateGroupName) {
     auto list = VisualStateManager::GetVisualStateGroups(element);
 
     for (const auto& v : list) {
-        if (v.Name() == stateGroupName) {
+        if (v.Name() == visualStateGroupName) {
             return v;
         }
     }
@@ -634,9 +633,9 @@ bool TestElementMatcher(FrameworkElement element,
         return false;
     }
 
-    if (!matcher.visualStateGroup.empty() && visualStateGroup) {
+    if (matcher.visualStateGroupName && visualStateGroup) {
         *visualStateGroup =
-            GetVisualStateGroup(element, matcher.visualStateGroup);
+            GetVisualStateGroup(element, *matcher.visualStateGroupName);
     }
 
     return true;
@@ -947,24 +946,6 @@ std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
     return res;
 }
 
-std::wstring AdjustTypeName(std::wstring_view type) {
-    static const std::vector<std::pair<std::wstring_view, std::wstring_view>>
-        adjustments = {
-            {L"StartMenu.", L"StartMenu:"},
-            {L"Microsoft.UI.Xaml.Control.", L"muxc:"},
-        };
-
-    for (const auto& adjustment : adjustments) {
-        if (type.starts_with(adjustment.first)) {
-            auto result = std::wstring{adjustment.second};
-            result += type.substr(adjustment.first.size());
-            return result;
-        }
-    }
-
-    return std::wstring{type};
-}
-
 void ResolveTypeAndStyles(ElementMatcher* elementMatcher,
                           std::vector<StyleRule> styleRules = {},
                           PropertyOverrides* propertyOverrides = nullptr) {
@@ -975,12 +956,28 @@ void ResolveTypeAndStyles(ElementMatcher* elementMatcher,
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
-    xmlns:StartMenu="using:StartMenu">
-    <Style)";
+    xmlns:StartMenu="using:StartMenu")";
 
-    xaml += L" TargetType=\"";
-    xaml += EscapeXmlAttribute(AdjustTypeName(elementMatcher->type));
-    xaml += L"\">\n";
+    if (auto pos = elementMatcher->type.rfind('.');
+        pos != elementMatcher->type.npos) {
+        auto typeNamespace =
+            std::wstring_view(elementMatcher->type).substr(0, pos);
+        auto typeName = std::wstring_view(elementMatcher->type).substr(pos + 1);
+
+        xaml += L"\n    xmlns:windhawkstyler=\"using:";
+        xaml += EscapeXmlAttribute(typeNamespace);
+        xaml +=
+            L"\">\n"
+            L"    <Style TargetType=\"windhawkstyler:";
+        xaml += EscapeXmlAttribute(typeName);
+        xaml += L"\">\n";
+    } else {
+        xaml +=
+            L">\n"
+            L"    <Style TargetType=\"";
+        xaml += EscapeXmlAttribute(elementMatcher->type);
+        xaml += L"\">\n";
+    }
 
     for (const auto& [property, value] : elementMatcher->propertyValuesStr) {
         xaml += L"        <Setter Property=\"";
@@ -1011,8 +1008,8 @@ void ResolveTypeAndStyles(ElementMatcher* elementMatcher,
     }
 
     xaml +=
-        LR"(    </Style>
-</ResourceDictionary>)";
+        L"    </Style>\n"
+        L"</ResourceDictionary>";
 
     Wh_Log(L"======================================== XAML:");
     std::wstringstream ss(xaml);
@@ -1087,16 +1084,12 @@ ElementMatcher ElementMatcherFromString(std::wstring_view str) {
                 break;
 
             case L'@':
-                if (!result.visualStateGroup.empty()) {
+                if (result.visualStateGroupName) {
                     throw std::runtime_error(
                         "Bad target syntax, more than one visual state group");
                 }
 
-                result.visualStateGroup = TrimStringView(nextPart);
-                if (result.visualStateGroup.empty()) {
-                    throw std::runtime_error(
-                        "Bad target syntax, empty visual state group");
-                }
+                result.visualStateGroupName = TrimStringView(nextPart);
                 break;
 
             case L'[': {
@@ -1197,7 +1190,7 @@ void AddElementCustomizationRules(std::wstring_view target,
 
         auto matcher = ElementMatcherFromString(targetPart);
 
-        if (!matcher.visualStateGroup.empty()) {
+        if (matcher.visualStateGroupName) {
             if (hasVisualStateGroup) {
                 throw std::runtime_error(
                     "Element type can't have more than one visual state group");
