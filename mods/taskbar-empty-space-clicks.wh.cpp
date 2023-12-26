@@ -76,6 +76,7 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
 #include <windhawk_api.h>
 #include <winerror.h>
 #include <winuser.h>
+#include <windowsx.h>
 
 #include <UIAnimation.h>
 #include <UIAutomationClient.h>
@@ -629,6 +630,7 @@ static UIAutomationWrapper g_UIAutomation;
 // TODO update me
 
 bool IsTaskbarWindow(HWND hWnd);
+bool isMouseDoubleClick(LPARAM lParam);
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen);
 BOOL WindowsVersionInit();
 bool GetTaskbarAutohideState();
@@ -712,6 +714,15 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         }
         break;
 
+    case WM_LBUTTONDBLCLK:
+    case WM_NCLBUTTONDBLCLK:
+        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.doubleClickTaskbarAction)) {
+            result = 0;
+        } else {
+            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
+        break;
+
     case WM_NCDESTROY:
         result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
@@ -736,8 +747,18 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     switch (uMsg) {
     case WM_POINTERDOWN:
         HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-        if (IsTaskbarWindow(hRootWnd) && OnMouseClick(hRootWnd, wParam, lParam, g_settings.middleClickTaskbarAction)) {
-            return 0;
+        if (IsTaskbarWindow(hRootWnd)) {
+            TaskBarAction action;
+            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam)) {
+                action = g_settings.middleClickTaskbarAction;
+            } else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam)) {
+                action = g_settings.doubleClickTaskbarAction;
+            } else {
+                action = ACTION_NOTHING;
+            }
+            if(OnMouseClick(hRootWnd, wParam, lParam, action)) {
+                return 0;
+            }
         }
         break;
     }
@@ -1082,6 +1103,38 @@ bool IsTaskbarWindow(HWND hWnd) {
     return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
 }
 
+bool isMouseDoubleClick(LPARAM lParam) {
+    static DWORD lastPointerDownTime = 0;
+    static POINT lastPointerDownLocation = {0, 0};
+
+    DWORD currentTime = GetTickCount();
+    POINT currentLocation;
+    currentLocation.x = GET_X_LPARAM(lParam);
+    currentLocation.y = GET_Y_LPARAM(lParam);
+
+    // Check if the current event is within the double-click time and distance
+    bool result = false;
+    if (abs(currentLocation.x - lastPointerDownLocation.x) <= GetSystemMetrics(SM_CXDOUBLECLK) &&
+        abs(currentLocation.y - lastPointerDownLocation.y) <= GetSystemMetrics(SM_CYDOUBLECLK) &&
+        ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
+    {
+        result = true;
+    }
+
+    // Wh_Log(L"Mouse click: [%d, %d], diff [%d, %d, %d], isDoubleClick: %d", 
+    //     currentLocation.x, currentLocation.y, 
+    //     abs(currentLocation.x - lastPointerDownLocation.x), 
+    //     abs(currentLocation.y - lastPointerDownLocation.y), 
+    //     currentTime - lastPointerDownTime,
+    //     result);
+
+    // Update the time and location of the last WM_POINTERDOWN event
+    lastPointerDownTime = currentTime;
+    lastPointerDownLocation = currentLocation;
+
+    return result;
+}
+
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) {
     HRSRC hResource;
     HGLOBAL hGlobal;
@@ -1377,15 +1430,8 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
 
         // new Windows sends different message - WM_POINTERDOWN
     } else {
-        if (IS_POINTER_THIRDBUTTON_WPARAM(wParam) == 0) {
-            return false;
-        }
-        POINTER_INFO pointerInfo{};
-        BOOL success = GetPointerInfo(GET_POINTERID_WPARAM(wParam), &pointerInfo);
-        if (!success) {
-            return false;
-        }
-        pointerLocation = pointerInfo.ptPixelLocation;
+        pointerLocation.x = GET_X_LPARAM(lParam);
+        pointerLocation.y = GET_Y_LPARAM(lParam);
     }
     Wh_Log(L"Mouse clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
 
