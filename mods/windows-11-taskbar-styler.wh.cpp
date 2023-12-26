@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.2.2
+// @version         1.2.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1416,7 +1416,7 @@ using PropertyKeyValue =
 struct ElementMatcher {
     std::wstring type;
     std::wstring name;
-    std::wstring visualStateGroup;
+    std::optional<std::wstring> visualStateGroupName;
     int oneBasedIndex = 0;
     std::vector<std::pair<std::wstring, std::wstring>> propertyValuesStr;
     std::vector<PropertyKeyValue> propertyValues;
@@ -1466,11 +1466,11 @@ bool g_inTaskbarBackground_OnApplyTemplate;
 
 // https://stackoverflow.com/a/12835139
 VisualStateGroup GetVisualStateGroup(FrameworkElement element,
-                                     std::wstring_view stateGroupName) {
+                                     std::wstring_view visualStateGroupName) {
     auto list = VisualStateManager::GetVisualStateGroups(element);
 
     for (const auto& v : list) {
-        if (v.Name() == stateGroupName) {
+        if (v.Name() == visualStateGroupName) {
             return v;
         }
     }
@@ -1548,9 +1548,9 @@ bool TestElementMatcher(FrameworkElement element,
         return false;
     }
 
-    if (!matcher.visualStateGroup.empty() && visualStateGroup) {
+    if (matcher.visualStateGroupName && visualStateGroup) {
         *visualStateGroup =
-            GetVisualStateGroup(element, matcher.visualStateGroup);
+            GetVisualStateGroup(element, *matcher.visualStateGroupName);
     }
 
     return true;
@@ -1861,25 +1861,6 @@ std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
     return res;
 }
 
-std::wstring AdjustTypeName(std::wstring_view type) {
-    static const std::vector<std::pair<std::wstring_view, std::wstring_view>>
-        adjustments = {
-            {L"Taskbar.", L"taskbar:"},
-            {L"SystemTray.", L"systemtray:"},
-            {L"Microsoft.UI.Xaml.Control.", L"muxc:"},
-        };
-
-    for (const auto& adjustment : adjustments) {
-        if (type.starts_with(adjustment.first)) {
-            auto result = std::wstring{adjustment.second};
-            result += type.substr(adjustment.first.size());
-            return result;
-        }
-    }
-
-    return std::wstring{type};
-}
-
 void ResolveTypeAndStyles(ElementMatcher* elementMatcher,
                           std::vector<StyleRule> styleRules = {},
                           PropertyOverrides* propertyOverrides = nullptr) {
@@ -1892,12 +1873,28 @@ void ResolveTypeAndStyles(ElementMatcher* elementMatcher,
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:taskbar="using:Taskbar"
     xmlns:udk="using:WindowsUdk.UI.Shell"
-    xmlns:systemtray="using:SystemTray">
-    <Style)";
+    xmlns:systemtray="using:SystemTray")";
 
-    xaml += L" TargetType=\"";
-    xaml += EscapeXmlAttribute(AdjustTypeName(elementMatcher->type));
-    xaml += L"\">\n";
+    if (auto pos = elementMatcher->type.rfind('.');
+        pos != elementMatcher->type.npos) {
+        auto typeNamespace =
+            std::wstring_view(elementMatcher->type).substr(0, pos);
+        auto typeName = std::wstring_view(elementMatcher->type).substr(pos + 1);
+
+        xaml += L"\n    xmlns:windhawkstyler=\"using:";
+        xaml += EscapeXmlAttribute(typeNamespace);
+        xaml +=
+            L"\">\n"
+            L"    <Style TargetType=\"windhawkstyler:";
+        xaml += EscapeXmlAttribute(typeName);
+        xaml += L"\">\n";
+    } else {
+        xaml +=
+            L">\n"
+            L"    <Style TargetType=\"";
+        xaml += EscapeXmlAttribute(elementMatcher->type);
+        xaml += L"\">\n";
+    }
 
     for (const auto& [property, value] : elementMatcher->propertyValuesStr) {
         xaml += L"        <Setter Property=\"";
@@ -1928,8 +1925,8 @@ void ResolveTypeAndStyles(ElementMatcher* elementMatcher,
     }
 
     xaml +=
-        LR"(    </Style>
-</ResourceDictionary>)";
+        L"    </Style>\n"
+        L"</ResourceDictionary>";
 
     Wh_Log(L"======================================== XAML:");
     std::wstringstream ss(xaml);
@@ -2004,16 +2001,12 @@ ElementMatcher ElementMatcherFromString(std::wstring_view str) {
                 break;
 
             case L'@':
-                if (!result.visualStateGroup.empty()) {
+                if (result.visualStateGroupName) {
                     throw std::runtime_error(
                         "Bad target syntax, more than one visual state group");
                 }
 
-                result.visualStateGroup = TrimStringView(nextPart);
-                if (result.visualStateGroup.empty()) {
-                    throw std::runtime_error(
-                        "Bad target syntax, empty visual state group");
-                }
+                result.visualStateGroupName = TrimStringView(nextPart);
                 break;
 
             case L'[': {
@@ -2114,7 +2107,7 @@ void AddElementCustomizationRules(std::wstring_view target,
 
         auto matcher = ElementMatcherFromString(targetPart);
 
-        if (!matcher.visualStateGroup.empty()) {
+        if (matcher.visualStateGroupName) {
             if (hasVisualStateGroup) {
                 throw std::runtime_error(
                     "Element type can't have more than one visual state group");
