@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              classic-maximized-windows-fix
+// @id              classic-maximized-windows-fix-2
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
 // @version         2.1
@@ -55,8 +55,9 @@ so rarely they may be affected. For consistency, I manually excluded `conhost.ex
 #define SHARED_SECTION __attribute__((section(".shared")))
 asm(".section .shared,\"dws\"\n");
 
-CRITICAL_SECTION g_lockForAffectedWindows;
+CRITICAL_SECTION g_criticalSection;
 std::vector<HWND> g_affectedWindows;
+std::vector<HWND> g_fakeUndoWindows;
 
 void *g_pfnThemePostWndProc SHARED_SECTION = NULL;
 
@@ -64,18 +65,6 @@ void *g_pfnThemePostWndProc SHARED_SECTION = NULL;
 // These are only available in Windows 10, version 1607 and newer.
 unsigned int (WINAPI *g_pGetDpiForWindow)(HWND);
 int (WINAPI *g_pGetSystemMetricsForDpi)(int, unsigned int);
-
-/*
- * SetWindowRgnEx: An internal, DWM-only version of SetWindowRgn.
- *
- * From what I can tell, this goes with a different approach altogether which doesn't
- * mess with the window's positioning. It only calls the regular SetWindowRgn procedure
- * if it fails two other different approaches.
- *
- * This was implemented here to improve compatibility with Aero Snap, which the old
- * official function breaks a little bit.
- */
-int (WINAPI *SetWindowRgnEx)(HWND hWnd, HRGN hRgn, WINBOOL bRedraw);
 
 /*
  * GetSystemMetricsForWindow: Get the system metrics for a given window.
@@ -101,27 +90,83 @@ int GetSystemMetricsForWindow(HWND hWnd, int nIndex)
  */
 LRESULT ApplyWindowMasking(HWND hWnd)
 {
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
     int sizeBorders =
         GetSystemMetricsForWindow(hWnd, SM_CXSIZEFRAME) +
         GetSystemMetricsForWindow(hWnd, SM_CXPADDEDBORDER);
-
     RECT rcWindow;
-    GetWindowRect(hWnd, &rcWindow);
+    HRGN hRgn = NULL;
 
-    int cxWindow = rcWindow.right - rcWindow.left;
-    int cyWindow = rcWindow.bottom - rcWindow.top;
-
-    // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
-    // our responsibility to clean.
-    HRGN hRgn = CreateRectRgn(
-        0 + sizeBorders, 0 + sizeBorders,
-        cxWindow - sizeBorders, cyWindow - sizeBorders
-    );
-
-    g_affectedWindows.push_back(hWnd);
-
-    if (SetWindowRgnEx(hWnd, hRgn, TRUE))
+    if (canLock)
     {
+        GetWindowRect(hWnd, &rcWindow);
+
+        int cxWindow = rcWindow.right - rcWindow.left;
+        int cyWindow = rcWindow.bottom - rcWindow.top;
+
+        // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
+        // our responsibility to clean.
+        hRgn = CreateRectRgn(
+            0 + sizeBorders, 0 + sizeBorders,
+            cxWindow - sizeBorders, cyWindow - sizeBorders
+        );
+
+        g_affectedWindows.push_back(hWnd);
+    
+        // If the window is marked as "fake undo", then remove that flag.
+        std::vector<HWND>::iterator i;
+        if ((i = std::find(g_fakeUndoWindows.begin(), g_fakeUndoWindows.end(), hWnd)) != g_fakeUndoWindows.end())
+        {
+            std::vector<HWND>::iterator newEnd = std::remove(g_fakeUndoWindows.begin(), g_fakeUndoWindows.end(), hWnd);
+            g_fakeUndoWindows.erase(newEnd, g_fakeUndoWindows.end());
+        }
+            
+        LeaveCriticalSection(&g_criticalSection);
+    }
+
+    if (hRgn != NULL && SetWindowRgn(hWnd, hRgn, TRUE))
+    {
+        return S_OK;
+    }
+
+    return E_FAIL;
+}
+
+/*
+ * FakeUndoWindowMasking: Fakes removing the window mask by applying a massive one
+ *                        over the window.
+ *
+ * This is required in order to fix a small bug with Aero Snap, where removing the
+ * mask properly breaks the snap positioning for the first time the window is snapped
+ * after maximising (unless the window is resized).
+ *
+ * TODO: Find a better solution. Needless to say, this is pretty ugly and it would be
+ * preferable that a mask isn't leftover at all.
+ */
+LRESULT FakeUndoWindowMasking(HWND hWnd)
+{
+    std::vector<HWND>::iterator i;
+
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
+
+    if (canLock)
+    {
+        if ((i = std::find(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd)) != g_affectedWindows.end())
+        {
+            std::vector<HWND>::iterator newEnd = std::remove(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd);
+            g_affectedWindows.erase(newEnd, g_affectedWindows.end());
+            g_fakeUndoWindows.push_back(hWnd);
+
+            HRGN hRgn = CreateRectRgn(
+                0, 0,
+                99999, 99999
+            );
+
+            SetWindowRgn(hWnd, hRgn, TRUE);
+        }
+
+        LeaveCriticalSection(&g_criticalSection);
+
         return S_OK;
     }
 
@@ -135,7 +180,7 @@ LRESULT UndoWindowMasking(HWND hWnd)
 {
     std::vector<HWND>::iterator i;
 
-    BOOL canLock = TryEnterCriticalSection(&g_lockForAffectedWindows);
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
 
     if (canLock)
     {
@@ -144,10 +189,10 @@ LRESULT UndoWindowMasking(HWND hWnd)
             std::vector<HWND>::iterator newEnd = std::remove(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd);
             g_affectedWindows.erase(newEnd, g_affectedWindows.end());
 
-            SetWindowRgnEx(hWnd, NULL, TRUE);
+            SetWindowRgn(hWnd, NULL, TRUE);
         }
 
-        LeaveCriticalSection(&g_lockForAffectedWindows);
+        LeaveCriticalSection(&g_criticalSection);
 
         return S_OK;
     }
@@ -200,7 +245,7 @@ void HandleMaxForWindow(HWND hWnd, UINT uMsg)
         }
         else
         {
-            UndoWindowMasking(hWnd);
+            FakeUndoWindowMasking(hWnd);
         }
     }
 }
@@ -228,25 +273,6 @@ LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 }
 
 /*
- * InitCriticalSections: Setup data-access locks.
- */
-bool InitCriticalSections()
-{
-    if (!InitializeCriticalSectionAndSpinCount(&g_lockForAffectedWindows, 0x400))
-        return false;
-
-    return true;
-}
-
-/*
- * CleanCriticalSections: Clean up data-access locks.
- */
-void CleanCriticalSections()
-{
-    DeleteCriticalSection(&g_lockForAffectedWindows);
-}
-
-/*
  * ThemePostWndProc_hook: Leverage theme hooks being available to hook window procedures globally.
  *
  * Since the theme engine is available for most applications, even for the majority of classic theme
@@ -265,6 +291,25 @@ BOOL CALLBACK ThemePostWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
     HandleMaxForWindow(hWnd, uMsg);
 
     return result;
+}
+
+/*
+ * InitCriticalSections: Setup data-access locks.
+ */
+bool InitCriticalSections()
+{
+    if (!InitializeCriticalSectionAndSpinCount(&g_criticalSection, 0x400))
+        return false;
+
+    return true;
+}
+
+/*
+ * CleanCriticalSections: Clean up data-access locks.
+ */
+void CleanCriticalSections()
+{
+    DeleteCriticalSection(&g_criticalSection);
 }
 
 struct CMWF_SYMBOL_HOOK {
@@ -372,16 +417,6 @@ BOOL Wh_ModInit()
     // Init DPI helpers:
     *(FARPROC *)&g_pGetDpiForWindow = GetProcAddress(user32, "GetDpiForWindow");
     *(FARPROC *)&g_pGetSystemMetricsForDpi = GetProcAddress(user32, "GetSystemMetricsForDpi");
-
-    *(FARPROC *)&SetWindowRgnEx = GetProcAddress(user32, "SetWindowRgnEx");
-
-    if (!SetWindowRgnEx)
-    {
-        // Since the signatures are the same, there's no problem with doing this
-        // as a fallback just in case.
-        Wh_Log(L"SetWindowRgnEx unavailable, falling back to SetWindowRgn.");
-        SetWindowRgnEx = SetWindowRgn;
-    }
 
     FARPROC pDefWindowProcW = GetProcAddress(user32, "DefWindowProcW");
 
