@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              taskbar-empty-space-clicks
-// @name            Mouseclick empty taskbar space
+// @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked.
 // @version         0.1
 // @author          m1lhaus
@@ -19,9 +19,23 @@
 
 // ==WindhawkModReadme==
 /*
-# Toggle taskbar autohide
-Toggle taskbar autohide feature with middle mouse click on the taskbar. Whenever you middle click on a free space on your taskbar (outside other UI
-elements on the taskbar), taskbar's autohide feature gets turned on or off.
+# Click on empty taskbar space
+
+This mod lets you assign an action to a mouse click on Windows taskbar. Double-click and middle-click actions are supported. This mod only modifies behaviour when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Both primary and secondary taskbars are supported.
+
+## Supported actions:
+
+1. **Show desktop** - Toggle show/hide desktop
+2. **Ctrl+Alt+Tab** - Opens Ctrl+Alt+Tab dialog
+3. **Task Manager** - Opens Windows default task manager
+4. **Mute system volume** - Toggle mute of system volume (all sound)
+5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature 
+6. **Win+Tab** - Opens Win+Tab dialog
+7. **Hide desktop icons** - Toggle show/hide of all desktop icons
+
+## Example
+
+Following animation shows **Taskbar auto-hide** feature. Feature gets toggled whenever user double-clicks the empty space on a taskbar.
 
 ![Demonstration of Toggle taskbar autohide mod for Windhawk](https://i.imgur.com/BRQrVnX.gif)
 
@@ -45,9 +59,10 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
   - ACTION_SHOW_DESKTOP: Show desktop
   - ACTION_ALT_TAB: Ctrl+Alt+Tab
   - ACTION_TASK_MANAGER: Task Manager
-  - ACTION_MUTE: Toggle mute system volume
-  - ACTION_TASKBAR_AUTOHIDE: Toggle taskbar auto-hide
-  - ACTION_WIN_TAB: Win+Tab / Ctrl+Win+Tab
+  - ACTION_MUTE: Mute system volume
+  - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
+  - ACTION_WIN_TAB: Win+Tab
+  - ACTION_HIDE_ICONS: Hide desktop icons 
 - middleClickAction: nothing
   $name: Middle click on empty space
   $options:
@@ -55,9 +70,10 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
   - ACTION_SHOW_DESKTOP: Show desktop
   - ACTION_ALT_TAB: Ctrl+Alt+Tab
   - ACTION_TASK_MANAGER: Task Manager
-  - ACTION_MUTE: Toggle mute system volume
-  - ACTION_TASKBAR_AUTOHIDE: Toggle taskbar auto-hide
-  - ACTION_WIN_TAB: Win+Tab / Ctrl+Win+Tab
+  - ACTION_MUTE: Mute system volume
+  - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
+  - ACTION_WIN_TAB: Win+Tab
+  - ACTION_HIDE_ICONS: Hide desktop icons 
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
@@ -553,7 +569,8 @@ enum TaskBarAction {
     ACTION_TASK_MANAGER,
     ACTION_MUTE,
     ACTION_TASKBAR_AUTOHIDE,
-    ACTION_WIN_TAB
+    ACTION_WIN_TAB,
+    ACTION_HIDE_ICONS
 };
 
 static struct {
@@ -626,6 +643,7 @@ static IMMDeviceEnumerator *g_pDeviceEnumerator;
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 static UIAutomationWrapper g_UIAutomation;
+static HWND g_hDesktopWnd;
 
 // TODO update me
 
@@ -1306,6 +1324,8 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
         action = ACTION_TASKBAR_AUTOHIDE;
     } else if (equals(value, L"ACTION_WIN_TAB")) {
         action = ACTION_WIN_TAB;
+    } else if (equals(value, L"ACTION_HIDE_ICONS")) {
+        action = ACTION_HIDE_ICONS;
     } else {
         Wh_Log(L"Error: unknown action '%s' for option '%s'!", value, option);
         action = ACTION_NOTHING;
@@ -1343,6 +1363,49 @@ void SetTaskbarAutohide(bool enabled) {
     msgData.lParam = enabled ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
     SHAppBarMessage(ABM_SETSTATE, &msgData);
 }
+
+BOOL CALLBACK DesktopWndEnumProc(HWND hWnd, LPARAM lParam)
+{
+	WCHAR szClassName[16];
+	if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
+		return TRUE;
+
+	if (lstrcmp(szClassName, L"WorkerW") != 0)
+		return TRUE;
+
+	HWND hChildWnd = FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
+	if (!hChildWnd)
+		return TRUE;
+
+	*(HWND *)lParam = hChildWnd;
+	return FALSE;
+}
+
+bool FindDesktopWindow() {
+    HWND hParentWnd = FindWindow(L"Progman", NULL);     // Program Manager window
+	if (!hParentWnd) {
+        Wh_Log(L"Failed to find Progman window");
+        return false;
+    }
+
+	HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL);     // parent window of the desktop
+	if (!hChildWnd)
+	{
+		DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
+		EnumThreadWindows(dwThreadId, DesktopWndEnumProc, (LPARAM)&hChildWnd);
+	}
+
+	if (!hChildWnd) {
+        Wh_Log(L"Failed to find SHELLDLL_DefView window");
+        return false;
+    }
+    g_hDesktopWnd = hChildWnd;
+    return true;
+}
+
+#pragma endregion
+
+#pragma region features
 
 // taskbar features
 
@@ -1407,6 +1470,12 @@ BOOL ToggleVolMuted() {
     }
 
     return bSuccess;
+}
+
+void HideIcons() {
+    if (g_hDesktopWnd != NULL) {
+        PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0);
+    } 
 }
 
 #pragma endregion // functions
@@ -1480,6 +1549,8 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
         (void)ToggleTaskbarAutohide();
     } else if (taskbarAction == ACTION_WIN_TAB) {
         SendWinTab();
+    } else if (taskbarAction == ACTION_HIDE_ICONS) {
+        HideIcons();
     } else {
         Wh_Log(L"Error: Unknown taskbar action '%d'", taskbarAction);
     }
@@ -1511,6 +1582,9 @@ BOOL Wh_ModInit() {
     }
 
     SndVolInit();
+    if (!FindDesktopWindow()) {
+        Wh_Log(L"Failed to find Desktop window. Hide icons feature will not be available!");
+    }
 
     Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original);
 
