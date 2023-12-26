@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-26T06:26:18.000Z</updated>
+    <updated>2023-12-26T07:38:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2.3]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#dd6a77e99fd98816a7800be14a834ad988a6cd58</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2023-12-26T07:38:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for unnamed visual state groups.</li>
+<li>Implemented generic handling for any target namespace.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DWM Unextend Frames 1.2.0]]></title>
         <id>https://windhawk.net/mods/dwm-unextend-frames#b47219234aced7b977db2e1833aa5bc0006f79e0</id>
@@ -271,22 +281,5 @@ this</a>.</p>
 <li>Customized styles are now restored on mod unload.</li>
 <li>Fixed a possible crash on mod unload.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Old This PC Commands 1.0.0]]></title>
-        <id>https://windhawk.net/mods/old-this-pc-commands#90d6ccd363cb9764f081ea1981932b2b3dac68cf</id>
-        <link href="https://windhawk.net/mods/old-this-pc-commands"/>
-        <updated>2023-12-09T22:09:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="oldexplorercommands">Old Explorer Commands</h1>
-<p>This mod makes the following commands in This PC, which are normally hardcoded to open Settings, open Control Panel instead.</p>
-<ul>
-<li>Open Settings</li>
-<li>System properties</li>
-<li>Uninstall or change a program</li>
-</ul>
-<h1 id="important">!!IMPORTANT!!</h1>
-<p>Beginning with Iron (Windows Server 2022), a redirect from the System page to Settings is <strong>hardcoded</strong> into <code>ExplorerFrame.dll</code>.
-As such, this mod will not work on Windows Server 2022, Windows 11, or greater to restore the old System page unless a modification
-to <code>ExplorerFrame.dll</code> takes place to remove the redirect.</p>]]></content>
     </entry>
 </feed>

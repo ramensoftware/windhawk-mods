@@ -1,3 +1,8 @@
+## 1.2.3 ([Dec 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/dd6a77e99fd98816a7800be14a834ad988a6cd58/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added support for unnamed visual state groups.
+* Implemented generic handling for any target namespace.
+
 ## 1.2.2 ([Dec 21, 2023](https://github.com/ramensoftware/windhawk-mods/blob/955ecfce747cec506a89bdee69c706aea050487a/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added a workaround for a crash on startup if a custom background is set.
