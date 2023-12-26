@@ -2,11 +2,12 @@
 // @id              dwm-ghost-mods
 // @name            DWM Ghost Mods
 // @description     Allows you to use basic or classic theme with your DWM ghost windows and more!
-// @version         1.1
+// @version         1.2
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         dwm.exe
 // @compilerOptions -ldwmapi -luxtheme
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -127,99 +128,10 @@ FrostPolicyType  g_prefFrostPolicy;
 //==============================================================================================================================
 // Setup, external things:
 //
+#include <windhawk_utils.h>
 #include <VersionHelpers.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
-
-#include <initializer_list>
-namespace YukisCoffee::WindhawkUtils
-{
-    struct SymbolHooks
-    {
-        PCWSTR symbolName;
-        void *hookFunction;
-        void **pOriginalFunction;
-    };
-
-    bool hookWithSymbols(HMODULE module, std::initializer_list<SymbolHooks> hooks, PCWSTR server = NULL)
-    {
-        WH_FIND_SYMBOL symbol;
-        HANDLE findSymbol;
-
-        if (!module)
-        {
-            Wh_Log(L"Loaded invalid module");
-            return false;
-        }
-
-        // These functions are terribly named, which is why I wrote this wrapper
-        // in the first place.
-        findSymbol = Wh_FindFirstSymbol(module, server, &symbol);
-
-        if (findSymbol)
-        {
-            do
-            {
-                for (SymbolHooks hook : hooks)
-                {
-                    // If the symbol is unknown, then learn it.
-                    if (!*hook.pOriginalFunction && 0 == wcscmp(symbol.symbol, hook.symbolName))
-                    {
-                        if (hook.hookFunction)
-                        {
-                            // This is unsafe if you make any typo at all.
-                            Wh_SetFunctionHook(
-                                symbol.address,
-                                hook.hookFunction,
-                                hook.pOriginalFunction
-                            );
-
-                            Wh_Log(
-                                L"Installed hook for symbol %s at %p.", 
-                                hook.symbolName,
-                                symbol.address
-                            );
-                        }
-                        else
-                        {
-                            *hook.pOriginalFunction = symbol.address;
-
-                            Wh_Log(
-                                L"Found symbol %s for %p.", 
-                                hook.symbolName,
-                                symbol.address
-                            );
-                        }
-                    }
-                }
-            }
-            while (Wh_FindNextSymbol(findSymbol, &symbol));
-
-            Wh_FindCloseSymbol(findSymbol);
-        }
-        else
-        {
-            Wh_Log(L"Unable to find symbols for module.");
-            return false;
-        }
-
-        // If a requested symbol is not found at all, then error as such.
-        for (SymbolHooks hook : hooks)
-        {
-            if (!*hook.pOriginalFunction)
-            {
-                Wh_Log(
-                    L"Original function for symbol hook %s not found.",
-                    hook.symbolName
-                );
-
-                return false;
-            }
-        }
-
-        return true;
-    }
-}
 
 //==============================================================================================================================
 // Main implementation:
@@ -290,7 +202,7 @@ void ApplyDesiredWindowTheme(HWND hWnd)
 
 typedef HWND (*CGhostWindow__CreateGhostWindow_t)(void *);
 CGhostWindow__CreateGhostWindow_t CGhostWindow__CreateGhostWindow_orig;
-HWND CGhostWindow__CreateGhostWindow_Hook(void *pThis)
+HWND CGhostWindow__CreateGhostWindow_hook(void *pThis)
 {
     HWND hWnd = CGhostWindow__CreateGhostWindow_orig(pThis);
 
@@ -301,7 +213,7 @@ HWND CGhostWindow__CreateGhostWindow_Hook(void *pThis)
 
 typedef __int64 (*CGhostWindow__s_GhostWndProc_t)(HWND, int, __int64, __int64);
 CGhostWindow__s_GhostWndProc_t CGhostWindow__s_GhostWndProc_orig;
-__int64 CGhostWindow__s_GhostWndProc_Hook(HWND hWnd, int a, __int64 b, __int64 c)
+__int64 CGhostWindow__s_GhostWndProc_hook(HWND hWnd, int a, __int64 b, __int64 c)
 {
     __int64 result = CGhostWindow__s_GhostWndProc_orig(hWnd, a, b, c);
 
@@ -315,7 +227,7 @@ __int64 CGhostWindow__s_GhostWndProc_Hook(HWND hWnd, int a, __int64 b, __int64 c
  */
 typedef BOOL (*DwmUpdateThumbnailProperties_t)(HTHUMBNAIL, DWM_THUMBNAIL_PROPERTIES *);
 DwmUpdateThumbnailProperties_t DwmUpdateThumbnailProperties_orig;
-BOOL DwmUpdateThumbnailProperties_Hook(HTHUMBNAIL hThumbnail, DWM_THUMBNAIL_PROPERTIES *pProperties)
+BOOL DwmUpdateThumbnailProperties_hook(HTHUMBNAIL hThumbnail, DWM_THUMBNAIL_PROPERTIES *pProperties)
 {
     // If DWM frames are used, then the position of the thumbnail needs to be moved or it will
     // render at { 0, 0 } inside the window frames.
@@ -393,6 +305,25 @@ void LoadSettings()
     }
 }
 
+const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    {
+        {
+            L"public: int __cdecl CGhostWindow::CreateGhostWindow(void)"
+        },
+        &CGhostWindow__CreateGhostWindow_orig,
+        CGhostWindow__CreateGhostWindow_hook,
+        false
+    },
+    {
+        {
+            L"public: static __int64 __cdecl CGhostWindow::s_GhostWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
+        },
+        &CGhostWindow__s_GhostWndProc_orig,
+        CGhostWindow__s_GhostWndProc_hook,
+        false
+    }
+};
+
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit()
@@ -402,16 +333,16 @@ BOOL Wh_ModInit()
     LoadSettings();
 
     HMODULE dwmghost;
-    HMODULE dwmapi = LoadLibrary(L"dwmapi.dll");
+    HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
 
     // Prior to Windows 10, ghosting is implemented directly into dwm.exe.
     if (IsWindows10OrGreater())
     {
-        dwmghost = LoadLibrary(L"dwmghost.dll");
+        dwmghost = LoadLibraryW(L"dwmghost.dll");
     }
     else
     {
-        dwmghost = GetModuleHandle(NULL);
+        dwmghost = GetModuleHandleW(NULL);
     }
 
     if (!dwmghost && !dwmapi)
@@ -440,18 +371,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    bool hookSuccess = YukisCoffee::WindhawkUtils::hookWithSymbols(dwmghost, {
-        {
-            L"public: int __cdecl CGhostWindow::CreateGhostWindow(void)",
-            (void *)CGhostWindow__CreateGhostWindow_Hook,
-            (void **)&CGhostWindow__CreateGhostWindow_orig
-        },
-        {
-            L"public: static __int64 __cdecl CGhostWindow::s_GhostWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
-            (void *)CGhostWindow__s_GhostWndProc_Hook,
-            (void **)&CGhostWindow__s_GhostWndProc_orig
-        }
-    });
+    bool hookSuccess = WindhawkUtils::HookSymbols(dwmghost, hooks, ARRAYSIZE(hooks));
 
     if (!hookSuccess)
     {
@@ -464,10 +384,10 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    Wh_SetFunctionHook(
-        (void *)GetProcAddress(dwmapi, "DwmUpdateThumbnailProperties"),
-        (void *)DwmUpdateThumbnailProperties_Hook,
-        (void **)&DwmUpdateThumbnailProperties_orig
+    WindhawkUtils::Wh_SetFunctionHookT(
+        (DwmUpdateThumbnailProperties_t)GetProcAddress(dwmapi, "DwmUpdateThumbnailProperties"),
+        DwmUpdateThumbnailProperties_hook,
+        &DwmUpdateThumbnailProperties_orig
     );
 
     return TRUE;
