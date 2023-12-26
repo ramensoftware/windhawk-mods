@@ -2,7 +2,7 @@
 // @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
-// @version         2.0
+// @version         2.1
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         *
@@ -66,6 +66,18 @@ unsigned int (WINAPI *g_pGetDpiForWindow)(HWND);
 int (WINAPI *g_pGetSystemMetricsForDpi)(int, unsigned int);
 
 /*
+ * SetWindowRgnEx: An internal, DWM-only version of SetWindowRgn.
+ *
+ * From what I can tell, this goes with a different approach altogether which doesn't
+ * mess with the window's positioning. It only calls the regular SetWindowRgn procedure
+ * if it fails two other different approaches.
+ *
+ * This was implemented here to improve compatibility with Aero Snap, which the old
+ * official function breaks a little bit.
+ */
+int (WINAPI *SetWindowRgnEx)(HWND hWnd, HRGN hRgn, WINBOOL bRedraw);
+
+/*
  * GetSystemMetricsForWindow: Get the system metrics for a given window.
  *
  * This function is per-monitor DPI aware when available.
@@ -108,7 +120,7 @@ LRESULT ApplyWindowMasking(HWND hWnd)
 
     g_affectedWindows.push_back(hWnd);
 
-    if (SetWindowRgn(hWnd, hRgn, TRUE))
+    if (SetWindowRgnEx(hWnd, hRgn, TRUE))
     {
         return S_OK;
     }
@@ -132,7 +144,7 @@ LRESULT UndoWindowMasking(HWND hWnd)
             std::vector<HWND>::iterator newEnd = std::remove(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd);
             g_affectedWindows.erase(newEnd, g_affectedWindows.end());
 
-            SetWindowRgn(hWnd, NULL, TRUE);
+            SetWindowRgnEx(hWnd, NULL, TRUE);
         }
 
         LeaveCriticalSection(&g_lockForAffectedWindows);
@@ -197,18 +209,22 @@ typedef LRESULT (WINAPI *DefWindowProcA_t)(HWND, UINT, WPARAM, LPARAM);
 DefWindowProcA_t DefWindowProcA_orig;
 LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    LRESULT result = DefWindowProcA_orig(hWnd, uMsg, wParam, lParam);
+
     HandleMaxForWindow(hWnd, uMsg);
 
-    return DefWindowProcA_orig(hWnd, uMsg, wParam, lParam);
+    return result;
 }
 
 typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND, UINT, WPARAM, LPARAM);
 DefWindowProcW_t DefWindowProcW_orig;
 LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    LRESULT result = DefWindowProcW_orig(hWnd, uMsg, wParam, lParam);
+
     HandleMaxForWindow(hWnd, uMsg);
 
-    return DefWindowProcW_orig(hWnd, uMsg, wParam, lParam);
+    return result;
 }
 
 /*
@@ -262,11 +278,6 @@ struct CMWF_SYMBOL_HOOK {
 /*
  * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
  *                  module's shared memory for faster access.
- *
- * TODO: This is good for the current application, which hooks only one symbol, but it will
- *       be less efficient to use for multiple symbol hooks at the moment because it requeries
- *       each time. Please keep this in mind if you're looking to use this code for your own
- *       purposes.
  */
 bool CmwfHookSymbols(
         HMODULE module,
@@ -274,6 +285,10 @@ bool CmwfHookSymbols(
         size_t symbolHooksCount
 )
 {
+    bool anyUncachedHooks = false;
+    std::vector<void **> proxyAddresses(symbolHooksCount);
+    std::vector<WindhawkUtils::SYMBOL_HOOK> proxyHooks;
+    
     for (size_t i = 0; i < symbolHooksCount; i++)
     {
         void *address = nullptr;
@@ -285,42 +300,58 @@ bool CmwfHookSymbols(
                 symbolHooks[i].symbols[0].length(),
                 symbolHooks[i].symbols[0].data()
             );
-        }
-        else
-        {
-            address = nullptr;
-            WindhawkUtils::SYMBOL_HOOK proxyHook = {
-                symbolHooks[i].symbols,
-                &address,
-                NULL,
-                symbolHooks[i].optional
-            };
-
-            if (!WindhawkUtils::HookSymbols(module, &proxyHook, 1))
-            {
-                return false;
-            }
-
-            if (address)
-            {
-                if (symbolHooks[i].pSharedMemoryCache && *(symbolHooks[i].pSharedMemoryCache) == NULL)
-                {
-                    *(symbolHooks[i].pSharedMemoryCache) = address;
-                }
-            }
-            else
-            {
-                return false;
-            }
-        }
-
-        if (address != NULL)
-        {
             Wh_SetFunctionHook(
                 address,
                 symbolHooks[i].hookFunction,
                 symbolHooks[i].pOriginalFunction
             );
+        }
+        else
+        {
+            address = nullptr;
+            anyUncachedHooks = true;
+
+            WindhawkUtils::SYMBOL_HOOK hook = {
+                symbolHooks[i].symbols,
+                &proxyAddresses[i],
+                NULL,
+                symbolHooks[i].optional
+            };
+
+            proxyHooks.push_back(hook);
+        }
+    }
+
+    if (anyUncachedHooks)
+    {
+        if (!WindhawkUtils::HookSymbols(module, proxyHooks.data(), proxyHooks.size()))
+        {
+            return false;
+        }
+
+        int curProxyHook = 0;
+        for (void *address : proxyAddresses)
+        {
+            if (address == NULL)
+            {
+                continue;
+            }
+
+            if (
+                symbolHooks[curProxyHook].pSharedMemoryCache && 
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) == NULL
+            )
+            {
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) = address;
+            }
+
+            Wh_SetFunctionHook(
+                address,
+                symbolHooks[curProxyHook].hookFunction,
+                symbolHooks[curProxyHook].pOriginalFunction
+            );
+
+            curProxyHook++;
         }
     }
 
@@ -341,6 +372,16 @@ BOOL Wh_ModInit()
     // Init DPI helpers:
     *(FARPROC *)&g_pGetDpiForWindow = GetProcAddress(user32, "GetDpiForWindow");
     *(FARPROC *)&g_pGetSystemMetricsForDpi = GetProcAddress(user32, "GetSystemMetricsForDpi");
+
+    *(FARPROC *)&SetWindowRgnEx = GetProcAddress(user32, "SetWindowRgnEx");
+
+    if (!SetWindowRgnEx)
+    {
+        // Since the signatures are the same, there's no problem with doing this
+        // as a fallback just in case.
+        Wh_Log(L"SetWindowRgnEx unavailable, falling back to SetWindowRgn.");
+        SetWindowRgnEx = SetWindowRgn;
+    }
 
     FARPROC pDefWindowProcW = GetProcAddress(user32, "DefWindowProcW");
 
