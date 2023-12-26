@@ -393,10 +393,13 @@
                 "published": 1690150313000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1690150313000,
+                "updated": 1703564688000,
                 "users": 61
             },
             "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
                 "author": "ephemeralViolette",
                 "compilerOptions": "-ldwmapi -luxtheme",
                 "description": "Allows you to use basic or classic theme with your DWM ghost windows and more!",
@@ -405,7 +408,7 @@
                     "dwm.exe"
                 ],
                 "name": "DWM Ghost Mods",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "dwm-unextend-frames": {
