@@ -2,7 +2,7 @@
 // @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
-// @version         2.0
+// @version         2.1
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         *
@@ -55,8 +55,9 @@ so rarely they may be affected. For consistency, I manually excluded `conhost.ex
 #define SHARED_SECTION __attribute__((section(".shared")))
 asm(".section .shared,\"dws\"\n");
 
-CRITICAL_SECTION g_lockForAffectedWindows;
+CRITICAL_SECTION g_criticalSection;
 std::vector<HWND> g_affectedWindows;
+std::vector<HWND> g_fakeUndoWindows;
 
 void *g_pfnThemePostWndProc SHARED_SECTION = NULL;
 
@@ -89,27 +90,83 @@ int GetSystemMetricsForWindow(HWND hWnd, int nIndex)
  */
 LRESULT ApplyWindowMasking(HWND hWnd)
 {
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
     int sizeBorders =
         GetSystemMetricsForWindow(hWnd, SM_CXSIZEFRAME) +
         GetSystemMetricsForWindow(hWnd, SM_CXPADDEDBORDER);
-
     RECT rcWindow;
-    GetWindowRect(hWnd, &rcWindow);
+    HRGN hRgn = NULL;
 
-    int cxWindow = rcWindow.right - rcWindow.left;
-    int cyWindow = rcWindow.bottom - rcWindow.top;
-
-    // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
-    // our responsibility to clean.
-    HRGN hRgn = CreateRectRgn(
-        0 + sizeBorders, 0 + sizeBorders,
-        cxWindow - sizeBorders, cyWindow - sizeBorders
-    );
-
-    g_affectedWindows.push_back(hWnd);
-
-    if (SetWindowRgn(hWnd, hRgn, TRUE))
+    if (canLock)
     {
+        GetWindowRect(hWnd, &rcWindow);
+
+        int cxWindow = rcWindow.right - rcWindow.left;
+        int cyWindow = rcWindow.bottom - rcWindow.top;
+
+        // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
+        // our responsibility to clean.
+        hRgn = CreateRectRgn(
+            0 + sizeBorders, 0 + sizeBorders,
+            cxWindow - sizeBorders, cyWindow - sizeBorders
+        );
+
+        g_affectedWindows.push_back(hWnd);
+    
+        // If the window is marked as "fake undo", then remove that flag.
+        std::vector<HWND>::iterator i;
+        if ((i = std::find(g_fakeUndoWindows.begin(), g_fakeUndoWindows.end(), hWnd)) != g_fakeUndoWindows.end())
+        {
+            std::vector<HWND>::iterator newEnd = std::remove(g_fakeUndoWindows.begin(), g_fakeUndoWindows.end(), hWnd);
+            g_fakeUndoWindows.erase(newEnd, g_fakeUndoWindows.end());
+        }
+            
+        LeaveCriticalSection(&g_criticalSection);
+    }
+
+    if (hRgn != NULL && SetWindowRgn(hWnd, hRgn, TRUE))
+    {
+        return S_OK;
+    }
+
+    return E_FAIL;
+}
+
+/*
+ * FakeUndoWindowMasking: Fakes removing the window mask by applying a massive one
+ *                        over the window.
+ *
+ * This is required in order to fix a small bug with Aero Snap, where removing the
+ * mask properly breaks the snap positioning for the first time the window is snapped
+ * after maximising (unless the window is resized).
+ *
+ * TODO: Find a better solution. Needless to say, this is pretty ugly and it would be
+ * preferable that a mask isn't leftover at all.
+ */
+LRESULT FakeUndoWindowMasking(HWND hWnd)
+{
+    std::vector<HWND>::iterator i;
+
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
+
+    if (canLock)
+    {
+        if ((i = std::find(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd)) != g_affectedWindows.end())
+        {
+            std::vector<HWND>::iterator newEnd = std::remove(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd);
+            g_affectedWindows.erase(newEnd, g_affectedWindows.end());
+            g_fakeUndoWindows.push_back(hWnd);
+
+            HRGN hRgn = CreateRectRgn(
+                0, 0,
+                99999, 99999
+            );
+
+            SetWindowRgn(hWnd, hRgn, TRUE);
+        }
+
+        LeaveCriticalSection(&g_criticalSection);
+
         return S_OK;
     }
 
@@ -123,7 +180,7 @@ LRESULT UndoWindowMasking(HWND hWnd)
 {
     std::vector<HWND>::iterator i;
 
-    BOOL canLock = TryEnterCriticalSection(&g_lockForAffectedWindows);
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
 
     if (canLock)
     {
@@ -135,7 +192,7 @@ LRESULT UndoWindowMasking(HWND hWnd)
             SetWindowRgn(hWnd, NULL, TRUE);
         }
 
-        LeaveCriticalSection(&g_lockForAffectedWindows);
+        LeaveCriticalSection(&g_criticalSection);
 
         return S_OK;
     }
@@ -188,7 +245,7 @@ void HandleMaxForWindow(HWND hWnd, UINT uMsg)
         }
         else
         {
-            UndoWindowMasking(hWnd);
+            FakeUndoWindowMasking(hWnd);
         }
     }
 }
@@ -197,37 +254,22 @@ typedef LRESULT (WINAPI *DefWindowProcA_t)(HWND, UINT, WPARAM, LPARAM);
 DefWindowProcA_t DefWindowProcA_orig;
 LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    LRESULT result = DefWindowProcA_orig(hWnd, uMsg, wParam, lParam);
+
     HandleMaxForWindow(hWnd, uMsg);
 
-    return DefWindowProcA_orig(hWnd, uMsg, wParam, lParam);
+    return result;
 }
 
 typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND, UINT, WPARAM, LPARAM);
 DefWindowProcW_t DefWindowProcW_orig;
 LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    LRESULT result = DefWindowProcW_orig(hWnd, uMsg, wParam, lParam);
+
     HandleMaxForWindow(hWnd, uMsg);
 
-    return DefWindowProcW_orig(hWnd, uMsg, wParam, lParam);
-}
-
-/*
- * InitCriticalSections: Setup data-access locks.
- */
-bool InitCriticalSections()
-{
-    if (!InitializeCriticalSectionAndSpinCount(&g_lockForAffectedWindows, 0x400))
-        return false;
-
-    return true;
-}
-
-/*
- * CleanCriticalSections: Clean up data-access locks.
- */
-void CleanCriticalSections()
-{
-    DeleteCriticalSection(&g_lockForAffectedWindows);
+    return result;
 }
 
 /*
@@ -251,6 +293,25 @@ BOOL CALLBACK ThemePostWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
     return result;
 }
 
+/*
+ * InitCriticalSections: Setup data-access locks.
+ */
+bool InitCriticalSections()
+{
+    if (!InitializeCriticalSectionAndSpinCount(&g_criticalSection, 0x400))
+        return false;
+
+    return true;
+}
+
+/*
+ * CleanCriticalSections: Clean up data-access locks.
+ */
+void CleanCriticalSections()
+{
+    DeleteCriticalSection(&g_criticalSection);
+}
+
 struct CMWF_SYMBOL_HOOK {
     std::vector<std::wstring> symbols;
     void** pOriginalFunction;
@@ -262,11 +323,6 @@ struct CMWF_SYMBOL_HOOK {
 /*
  * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
  *                  module's shared memory for faster access.
- *
- * TODO: This is good for the current application, which hooks only one symbol, but it will
- *       be less efficient to use for multiple symbol hooks at the moment because it requeries
- *       each time. Please keep this in mind if you're looking to use this code for your own
- *       purposes.
  */
 bool CmwfHookSymbols(
         HMODULE module,
@@ -274,6 +330,10 @@ bool CmwfHookSymbols(
         size_t symbolHooksCount
 )
 {
+    bool anyUncachedHooks = false;
+    std::vector<void **> proxyAddresses(symbolHooksCount);
+    std::vector<WindhawkUtils::SYMBOL_HOOK> proxyHooks;
+    
     for (size_t i = 0; i < symbolHooksCount; i++)
     {
         void *address = nullptr;
@@ -285,42 +345,58 @@ bool CmwfHookSymbols(
                 symbolHooks[i].symbols[0].length(),
                 symbolHooks[i].symbols[0].data()
             );
-        }
-        else
-        {
-            address = nullptr;
-            WindhawkUtils::SYMBOL_HOOK proxyHook = {
-                symbolHooks[i].symbols,
-                &address,
-                NULL,
-                symbolHooks[i].optional
-            };
-
-            if (!WindhawkUtils::HookSymbols(module, &proxyHook, 1))
-            {
-                return false;
-            }
-
-            if (address)
-            {
-                if (symbolHooks[i].pSharedMemoryCache && *(symbolHooks[i].pSharedMemoryCache) == NULL)
-                {
-                    *(symbolHooks[i].pSharedMemoryCache) = address;
-                }
-            }
-            else
-            {
-                return false;
-            }
-        }
-
-        if (address != NULL)
-        {
             Wh_SetFunctionHook(
                 address,
                 symbolHooks[i].hookFunction,
                 symbolHooks[i].pOriginalFunction
             );
+        }
+        else
+        {
+            address = nullptr;
+            anyUncachedHooks = true;
+
+            WindhawkUtils::SYMBOL_HOOK hook = {
+                symbolHooks[i].symbols,
+                &proxyAddresses[i],
+                NULL,
+                symbolHooks[i].optional
+            };
+
+            proxyHooks.push_back(hook);
+        }
+    }
+
+    if (anyUncachedHooks)
+    {
+        if (!WindhawkUtils::HookSymbols(module, proxyHooks.data(), proxyHooks.size()))
+        {
+            return false;
+        }
+
+        int curProxyHook = 0;
+        for (void *address : proxyAddresses)
+        {
+            if (address == NULL)
+            {
+                continue;
+            }
+
+            if (
+                symbolHooks[curProxyHook].pSharedMemoryCache && 
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) == NULL
+            )
+            {
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) = address;
+            }
+
+            Wh_SetFunctionHook(
+                address,
+                symbolHooks[curProxyHook].hookFunction,
+                symbolHooks[curProxyHook].pOriginalFunction
+            );
+
+            curProxyHook++;
         }
     }
 

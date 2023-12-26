@@ -1,3 +1,8 @@
+## 2.1 ([Dec 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/71368b0ce9133d13dbe076d0a045cfbfc1762401/mods/classic-maximized-windows-fix.wh.cpp))
+
+- Improved compatibility with Aero Snap. This was done by migrating to the undocumented `SetWindowRgnEx` function rather than the older public function.
+- Rewrote the symbol hook wrapper CmwfHookSymbols for initial load with multiple symbol hooks.
+
 ## 2.0 ([Dec 25, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a7051cb16cec7d50699a66aa4c47ab939c48f28c/mods/classic-maximized-windows-fix.wh.cpp))
 
 - Moved global window procedure hooking to leverage the availability of the theme engine (uxtheme), rather than using SetWindowsHookEx.

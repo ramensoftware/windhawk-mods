@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-26T07:41:07.000Z</updated>
+    <updated>2023-12-26T08:03:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 2.1]]></title>
+        <id>https://windhawk.net/mods/classic-maximized-windows-fix#71368b0ce9133d13dbe076d0a045cfbfc1762401</id>
+        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
+        <updated>2023-12-26T08:03:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved compatibility with Aero Snap. This was done by migrating to the undocumented <code>SetWindowRgnEx</code> function rather than the older public function.</li>
+<li>Rewrote the symbol hook wrapper CmwfHookSymbols for initial load with multiple symbol hooks.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.0.1]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#a962cd86b636e62652f9a903d0a064190d638cdf</id>
@@ -265,18 +275,5 @@ settings. If you do not do this, it will silently fail to inject.</p>
 <li>Fixed a possible crash and style applying bugs when settings are changed.</li>
 <li>Added link to the Windows 11 taskbar styling guide.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[NoFlashWindow 1.0]]></title>
-        <id>https://windhawk.net/mods/no-flash-window#ea71e5592606973297a2a0492f4f374e6d9d9175</id>
-        <link href="https://windhawk.net/mods/no-flash-window"/>
-        <updated>2023-12-15T02:33:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="noflashwindow">NoFlashWindow</h1>
-<p>Prevent programs from flashing their windows on the taskbar.</p>
-<p>Inspired by <a href="https://github.com/mrexodia/NoFlashWindow">NoFlashWindow</a> by Duncan
-Ogilvie.</p>
-<p><strong>Note</strong>: Windows 11 seems to have <a href="https://www.elevenforum.com/t/enable-or-disable-show-flashing-on-taskbar-apps-in-windows-11.9968/">a native option for
-this</a>.</p>
-<p><img src="https://i.imgur.com/nVmyZrM.png" alt="Screenshot" /></p>]]></content>
     </entry>
 </feed>
