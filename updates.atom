@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-26T07:38:10.000Z</updated>
+    <updated>2023-12-26T07:41:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.0.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#a962cd86b636e62652f9a903d0a064190d638cdf</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2023-12-26T07:41:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for unnamed visual state groups.</li>
+<li>Implemented generic handling for any target namespace.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2.3]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#dd6a77e99fd98816a7800be14a834ad988a6cd58</id>
@@ -268,18 +278,5 @@ Ogilvie.</p>
 <p><strong>Note</strong>: Windows 11 seems to have <a href="https://www.elevenforum.com/t/enable-or-disable-show-flashing-on-taskbar-apps-in-windows-11.9968/">a native option for
 this</a>.</p>
 <p><img src="https://i.imgur.com/nVmyZrM.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#23129dc99634ad8037cd80cd3f01a7e79b63bcfc</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2023-12-11T14:00:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Index, properties and a visual state can now be specified for a target. Refer to the mod description for more information and examples.</li>
-<li>Styles can now be specified per visual state.</li>
-<li>Styles can now be specified in XAML form.</li>
-<li>Customized styles are now restored on mod unload.</li>
-<li>Fixed a possible crash on mod unload.</li>
-</ul>]]></content>
     </entry>
 </feed>
