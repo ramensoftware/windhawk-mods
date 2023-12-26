@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              classic-maximized-windows-fix-2
+// @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
 // @version         2.1
