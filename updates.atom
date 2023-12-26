@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2023-12-26T04:24:48.000Z</updated>
+    <updated>2023-12-26T06:26:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[DWM Unextend Frames 1.2.0]]></title>
+        <id>https://windhawk.net/mods/dwm-unextend-frames#b47219234aced7b977db2e1833aa5bc0006f79e0</id>
+        <link href="https://windhawk.net/mods/dwm-unextend-frames"/>
+        <updated>2023-12-26T06:26:18.000Z</updated>
+        <content type="html"><![CDATA[<p>Remove <code>IsThreadDesktopComposited</code> hook, add comctl32 hook for Aero wizards. As it turns out, <code>IsThreadDesktopComposited</code> is a REALLY low-level function and will break a lot of applications if hooked.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[DWM Ghost Mods 1.2]]></title>
         <id>https://windhawk.net/mods/dwm-ghost-mods#c585ec545ddb0f85ddcbfe80c14361c7fb6b4793</id>
@@ -281,14 +288,5 @@ this</a>.</p>
 <p>Beginning with Iron (Windows Server 2022), a redirect from the System page to Settings is <strong>hardcoded</strong> into <code>ExplorerFrame.dll</code>.
 As such, this mod will not work on Windows Server 2022, Windows 11, or greater to restore the old System page unless a modification
 to <code>ExplorerFrame.dll</code> takes place to remove the redirect.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.0.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#8c545bf02a39e26c87fdc03214cd21db0a13fa09</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
-        <updated>2023-12-09T16:08:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed taskbar not updating after reordering thumbnails.</li>
-</ul>]]></content>
     </entry>
 </feed>

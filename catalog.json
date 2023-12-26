@@ -417,21 +417,18 @@
                 "published": 1700542256000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1703318231000,
+                "updated": 1703571978000,
                 "users": 29
             },
             "metadata": {
                 "author": "aubymori",
                 "description": "Makes applications think DWM is disabled",
-                "exclude": [
-                    "vmware-vmx.exe"
-                ],
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
                 "name": "DWM Unextend Frames",
-                "version": "1.1.0"
+                "version": "1.2.0"
             }
         },
         "eradicate-immersive-menus": {

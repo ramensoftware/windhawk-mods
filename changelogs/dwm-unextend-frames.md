@@ -1,3 +1,7 @@
+## 1.2.0 ([Dec 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/b47219234aced7b977db2e1833aa5bc0006f79e0/mods/dwm-unextend-frames.wh.cpp))
+
+Remove `IsThreadDesktopComposited` hook, add comctl32 hook for Aero wizards. As it turns out, `IsThreadDesktopComposited` is a REALLY low-level function and will break a lot of applications if hooked.
+
 ## 1.1.0 ([Dec 23, 2023](https://github.com/ramensoftware/windhawk-mods/blob/6f9ba7f4499d1e16ede82d0a2c44cdd8ad6295a5/mods/dwm-unextend-frames.wh.cpp))
 
 Hook IsThreadDesktopComposited. This mainly fixes Aero wizards.
