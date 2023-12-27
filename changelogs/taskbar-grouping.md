@@ -1,3 +1,7 @@
+## 1.3.1 ([Dec 27, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a378597db91ccbf3a5bdbfbee7f3c3dd437010d7/mods/taskbar-grouping.wh.cpp))
+
+* Fixed a regression which caused pinned items to be separated when they shouldn't be (introduced in v1.3).
+
 ## 1.3 ([Dec 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f80c31b2a02a858d585c01b85fb3d5d5f1789555/mods/taskbar-grouping.wh.cpp))
 
 * Added a new mode: Pinned items remain in place, group running instances.

@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -169,7 +169,6 @@ constexpr size_t kCustomGroupPrefixLen = ARRAYSIZE(kCustomGroupPrefix) - 1;
 
 WinVersion g_winVersion;
 
-bool g_processedResolvedWindow;
 bool g_inTaskBandLaunch;
 bool g_inUpdateItemIcon;
 bool g_inTaskBtnGroupGetIcon;
@@ -365,8 +364,8 @@ void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
         winrt::com_ptr<IUnknown> taskItemMatched;
         HRESULT hr = CTaskBand__MatchWindow_Original(
             pThis, resolvedWindow->hButtonWnd, resolvedWindow->pAppItemIdList,
-            resolvedWindow->szAppIdStr, 1, (void**)taskGroupMatched.put(),
-            (void**)taskItemMatched.put());
+            resolvedWindow->szAppIdStr, 1, taskGroupMatched.put_void(),
+            taskItemMatched.put_void());
         if (FAILED(hr)) {
             // Nothing to group with, resolve normally.
             return;
@@ -423,34 +422,37 @@ CTaskBand__HandleWindowResolved_Hook(PVOID pThis,
                                      RESOLVEDWINDOW* resolvedWindow) {
     Wh_Log(L">");
 
-    if (!g_processedResolvedWindow) {
-        ProcessResolvedWindow(pThis, resolvedWindow);
-        g_processedResolvedWindow = true;
-        CTaskBand__HandleWindowResolved_Original(pThis, resolvedWindow);
-        g_processedResolvedWindow = false;
-        return;
-    }
+    g_compareStringOrdinalHookThreadId = GetCurrentThreadId();
+    g_compareStringOrdinalIgnoreSuffix = true;
 
     CTaskBand__HandleWindowResolved_Original(pThis, resolvedWindow);
+
+    g_compareStringOrdinalHookThreadId = 0;
+    g_compareStringOrdinalIgnoreSuffix = false;
 }
 
-using CTaskBand__AddAppTaskItem_t =
-    void(WINAPI*)(PVOID pThis, PVOID pTaskItem, RESOLVEDWINDOW* resolvedWindow);
-CTaskBand__AddAppTaskItem_t CTaskBand__AddAppTaskItem_Original;
-void WINAPI CTaskBand__AddAppTaskItem_Hook(PVOID pThis,
-                                           PVOID pTaskItem,
-                                           RESOLVEDWINDOW* resolvedWindow) {
+using CTaskBand__HandleItemResolved_t =
+    void(WINAPI*)(PVOID pThis,
+                  RESOLVEDWINDOW* resolvedWindow,
+                  PVOID taskListUI,
+                  PVOID taskGroup,
+                  PVOID taskItem);
+CTaskBand__HandleItemResolved_t CTaskBand__HandleItemResolved_Original;
+void WINAPI CTaskBand__HandleItemResolved_Hook(PVOID pThis,
+                                               RESOLVEDWINDOW* resolvedWindow,
+                                               PVOID taskListUI,
+                                               PVOID taskGroup,
+                                               PVOID taskItem) {
     Wh_Log(L">");
 
-    if (!g_processedResolvedWindow) {
-        ProcessResolvedWindow(pThis, resolvedWindow);
-        g_processedResolvedWindow = true;
-        CTaskBand__AddAppTaskItem_Original(pThis, pTaskItem, resolvedWindow);
-        g_processedResolvedWindow = false;
-        return;
-    }
+    // Reset flags set by CTaskBand__HandleWindowResolved_Hook.
+    g_compareStringOrdinalHookThreadId = 0;
+    g_compareStringOrdinalIgnoreSuffix = false;
 
-    CTaskBand__AddAppTaskItem_Original(pThis, pTaskItem, resolvedWindow);
+    ProcessResolvedWindow(pThis, resolvedWindow);
+
+    CTaskBand__HandleItemResolved_Original(pThis, resolvedWindow, taskListUI,
+                                           taskGroup, taskItem);
 }
 
 using CTaskBand__Launch_t = HRESULT(WINAPI*)(PVOID pThis);
@@ -542,7 +544,7 @@ winrt::com_ptr<IUnknown> GetTaskGroupWithoutSuffix(
     winrt::com_ptr<IUnknown> taskItemMatched;
     HRESULT hr = CTaskBand__MatchWindow_Original(
         taskBand, nullptr, nullptr, appIdOriginal, 1,
-        (void**)taskGroupMatched.put(), (void**)taskItemMatched.put());
+        taskGroupMatched.put_void(), taskItemMatched.put_void());
     if (FAILED(hr)) {
         return nullptr;
     }
@@ -815,7 +817,7 @@ HRESULT WINAPI ITaskBtnGroup_InsertPtr_Hook(PVOID pThis,
         winrt::com_ptr<IUnknown> taskItemMatched;
         HRESULT hr = CTaskGroup_DoesWindowMatch_Original(
             taskGroupIter, nullptr, idList, appId, &windowMatchConfidence,
-            (void**)taskItemMatched.put());
+            taskItemMatched.put_void());
         if (SUCCEEDED(hr)) {
             lastMatchIndex = i;
         }
@@ -914,7 +916,7 @@ void SwapTaskGroupIdsWithUnsuffixedInstance(PVOID taskGroup) {
     winrt::com_ptr<IUnknown> taskItemMatched;
     HRESULT hr = CTaskBand__MatchWindow_Original(
         taskBand, nullptr, nullptr, appIdWithSuffix, 1,
-        (void**)taskGroupMatched.put(), (void**)taskItemMatched.put());
+        taskGroupMatched.put_void(), taskItemMatched.put_void());
 
     g_compareStringOrdinalHookThreadId = 0;
     g_compareStringOrdinalAnySuffixEqual = false;
@@ -1301,11 +1303,11 @@ bool HookTaskbarSymbols() {
             },
             {
                 {
-                    LR"(protected: void __cdecl CTaskBand::_AddAppTaskItem(struct ITaskItem *,struct RESOLVEDWINDOW *))",
-                    LR"(protected: void __cdecl CTaskBand::_AddAppTaskItem(struct ITaskItem * __ptr64,struct RESOLVEDWINDOW * __ptr64) __ptr64)",
+                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW *,struct ITaskListUI *,struct ITaskGroup *,struct ITaskItem *))",
+                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW * __ptr64,struct ITaskListUI * __ptr64,struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
                 },
-                (void**)&CTaskBand__AddAppTaskItem_Original,
-                (void*)CTaskBand__AddAppTaskItem_Hook,
+                (void**)&CTaskBand__HandleItemResolved_Original,
+                (void*)CTaskBand__HandleItemResolved_Hook,
             },
             {
                 {
