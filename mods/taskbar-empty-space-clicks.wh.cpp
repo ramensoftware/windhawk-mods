@@ -112,6 +112,10 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t
 #endif
 
+// get the naming of smart ptrs somehow consistent since winapi naming is wild
+using winrt::com_ptr;
+using bstr_ptr = _bstr_t;
+
 // =====================================================================
 
 // following include are taken from Qt project since builtin compiler is missing those definitions
@@ -560,7 +564,11 @@ typedef class CUIAutomation CUIAutomation;
 
 // =====================================================================
 
-enum TaskBarVersion { WIN_10_TASKBAR = 0, WIN_11_TASKBAR, UNKNOWN_TASKBAR };
+enum TaskBarVersion { 
+    WIN_10_TASKBAR = 0, 
+    WIN_11_TASKBAR, 
+    UNKNOWN_TASKBAR 
+};
 
 enum TaskBarAction {
     ACTION_NOTHING = 0,
@@ -579,81 +587,23 @@ static struct {
     TaskBarAction middleClickTaskbarAction;
 } g_settings;
 
-// wrapper around UIAutomation COM interface to be sure that it gets closed and released properly
-class UIAutomationWrapper {
-  public:
-    UIAutomationWrapper() : isCOMInitialized(false), isUIAutomationInitialized(false), uiAutomationInstance(NULL) {}
-
-    ~UIAutomationWrapper() { deinit(); }
-
-    bool isInitialized() const { return isUIAutomationInitialized && isCOMInitialized; }
-
-    IUIAutomation *getInstance() const { return uiAutomationInstance; }
-
-    bool init() {
-        HRESULT result = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-        if (SUCCEEDED(result)) {
-            isCOMInitialized = true;
-        } else {
-            Wh_Log(L"CoInitializeEx failed");
-            return false;
-        }
-
-        result = CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void **)&uiAutomationInstance);
-        if (SUCCEEDED(result)) {
-            isUIAutomationInitialized = true;
-        } else {
-            Wh_Log(L"CoCreateInstance failed");
-            return false;
-        }
-        Wh_Log(L"UIAutomationWrapper initilized");
-        return true;
-    }
-
-    void deinit() {
-        if (isUIAutomationInitialized) {
-            uiAutomationInstance->Release();
-            uiAutomationInstance = NULL;
-            isUIAutomationInitialized = false;
-        }
-
-        if (isCOMInitialized) {
-            CoUninitialize();
-            isCOMInitialized = false;
-        }
-    }
-
-  private:
-    bool isCOMInitialized;
-    bool isUIAutomationInitialized;
-
-    IUIAutomation *uiAutomationInstance;
-};
-
 static int nWinVersion;
-static WORD nExplorerBuild;
-static WORD nExplorerQFE;
-
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
+
 static DWORD g_dwTaskbarThreadId;
 static bool g_initialized = false;
 static bool g_inputSiteProcHooked = false;
-static IMMDeviceEnumerator *g_pDeviceEnumerator;
 
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
-static UIAutomationWrapper g_UIAutomation;
 static HWND g_hDesktopWnd;
 
-// TODO update me
+static com_ptr<IUIAutomation> g_pUIAutomation;
+static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
 
+// since the mod can't be split to multiple files, the definition order becomes somehow complicated
 bool IsTaskbarWindow(HWND hWnd);
 bool isMouseDoubleClick(LPARAM lParam);
-VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen);
-BOOL WindowsVersionInit();
-bool GetTaskbarAutohideState();
-void SetTaskbarAutohide(bool enabled);
-bool ToggleTaskbarAutohide();
 bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction);
 
 // =====================================================================
@@ -711,9 +661,9 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
     return param.result;
 }
 
-// proc handler for older Windows (Windows 11 21H1 and older) versions
-LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ UINT_PTR uIdSubclass,
-                                           _In_ DWORD_PTR dwRefData) {
+// proc handler for older Windows (nonXAML taskbar) versions
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, 
+                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData) {
     if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
         RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
     }
@@ -784,11 +734,14 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
 }
 
-void SubclassTaskbarWindow(HWND hWnd) { SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0); }
+void SubclassTaskbarWindow(HWND hWnd) { 
+    SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0); 
+}
 
-void UnsubclassTaskbarWindow(HWND hWnd) { SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0); }
+void UnsubclassTaskbarWindow(HWND hWnd) { 
+    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0); 
+}
 
-// hook to modern taskbar event processing
 void HandleIdentifiedInputSiteWindow(HWND hWnd) {
     if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId) {
         return;
@@ -962,151 +915,159 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 #define WIN_VERSION_11_22H2 15
 
 // helper macros
-#define FIRST_NONEMPTY_ARG_2(a, b) ((sizeof(#a) > sizeof("")) ? (a + 0) : (b))
-#define FIRST_NONEMPTY_ARG_3(a, b, c) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_2(b, c))
-#define FIRST_NONEMPTY_ARG_4(a, b, c, d) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_3(b, c, d))
-#define FIRST_NONEMPTY_ARG_5(a, b, c, d, e) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_4(b, c, d, e))
-#define FIRST_NONEMPTY_ARG_6(a, b, c, d, e, f) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_5(b, c, d, e, f))
-#define FIRST_NONEMPTY_ARG_7(a, b, c, d, e, f, g) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_6(b, c, d, e, f, g))
-#define FIRST_NONEMPTY_ARG_8(a, b, c, d, e, f, g, h) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_7(b, c, d, e, f, g, h))
-#define FIRST_NONEMPTY_ARG_9(a, b, c, d, e, f, g, h, i) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_8(b, c, d, e, f, g, h, i))
-#define FIRST_NONEMPTY_ARG_10(a, b, c, d, e, f, g, h, i, j) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_9(b, c, d, e, f, g, h, i, j))
-#define FIRST_NONEMPTY_ARG_11(a, b, c, d, e, f, g, h, i, j, k) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_10(b, c, d, e, f, g, h, i, j, k))
-#define FIRST_NONEMPTY_ARG_12(a, b, c, d, e, f, g, h, i, j, k, l) FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_11(b, c, d, e, f, g, h, i, j, k, l))
-#define FIRST_NONEMPTY_ARG_13(a, b, c, d, e, f, g, h, i, j, k, l, m)                                                                                 \
-    FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_12(b, c, d, e, f, g, h, i, j, k, l, m))
-#define FIRST_NONEMPTY_ARG_14(a, b, c, d, e, f, g, h, i, j, k, l, m, n)                                                                              \
-    FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_13(b, c, d, e, f, g, h, i, j, k, l, m, n))
-#define FIRST_NONEMPTY_ARG_15(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o)                                                                           \
-    FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_14(b, c, d, e, f, g, h, i, j, k, l, m, n, o))
-#define FIRST_NONEMPTY_ARG_16(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)                                                                        \
-    FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_15(b, c, d, e, f, g, h, i, j, k, l, m, n, o, p))
-#define FIRST_NONEMPTY_ARG_17(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q)                                                                     \
-    FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_16(b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q))
+#define FIRST_NONEMPTY_ARG_2(a, b) \
+                                   ( (sizeof(#a) > sizeof("")) ? (a+0) : (b) )
+#define FIRST_NONEMPTY_ARG_3(a, b, c) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_2(b, c))
+#define FIRST_NONEMPTY_ARG_4(a, b, c, d) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_3(b, c, d))
+#define FIRST_NONEMPTY_ARG_5(a, b, c, d, e) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_4(b, c, d, e))
+#define FIRST_NONEMPTY_ARG_6(a, b, c, d, e, f) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_5(b, c, d, e, f))
+#define FIRST_NONEMPTY_ARG_7(a, b, c, d, e, f, g) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_6(b, c, d, e, f, g))
+#define FIRST_NONEMPTY_ARG_8(a, b, c, d, e, f, g, h) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_7(b, c, d, e, f, g, h))
+#define FIRST_NONEMPTY_ARG_9(a, b, c, d, e, f, g, h, i) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_8(b, c, d, e, f, g, h, i))
+#define FIRST_NONEMPTY_ARG_10(a, b, c, d, e, f, g, h, i, j) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_9(b, c, d, e, f, g, h, i, j))
+#define FIRST_NONEMPTY_ARG_11(a, b, c, d, e, f, g, h, i, j, k) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_10(b, c, d, e, f, g,  h, i, j, k))
+#define FIRST_NONEMPTY_ARG_12(a, b, c, d, e, f, g, h, i, j, k, l) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_11(b, c, d, e, f, g, h, i, j, k, l))
+#define FIRST_NONEMPTY_ARG_13(a, b, c, d, e, f, g, h, i, j, k, l, m) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_12(b, c, d, e, f, g, h, i, j, k, l, m))
+#define FIRST_NONEMPTY_ARG_14(a, b, c, d, e, f, g, h, i, j, k, l, m, n) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_13(b, c, d, e, f, g, h, i, j, k, l, m, n))
+#define FIRST_NONEMPTY_ARG_15(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_14(b, c, d, e, f, g, h, i, j, k, l, m, n, o))
+#define FIRST_NONEMPTY_ARG_16(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_15(b, c, d, e, f, g, h, i, j, k, l, m, n, o, p))
+#define FIRST_NONEMPTY_ARG_17(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q) \
+                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_16(b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q))
 
-#define DO2(d7, dx) ((nWinVersion > WIN_VERSION_7) ? FIRST_NONEMPTY_ARG_2(dx, d7) : (d7))
-#define DO3(d7, d8, dx) ((nWinVersion > WIN_VERSION_8) ? FIRST_NONEMPTY_ARG_3(dx, d8, d7) : DO2(d7, d8))
-#define DO4(d7, d8, d81, dx) ((nWinVersion > WIN_VERSION_81) ? FIRST_NONEMPTY_ARG_4(dx, d81, d8, d7) : DO3(d7, d8, d81))
-#define DO5(d7, d8, d81, d811, dx) ((nWinVersion > WIN_VERSION_811) ? FIRST_NONEMPTY_ARG_5(dx, d811, d81, d8, d7) : DO4(d7, d8, d81, d811))
-#define DO6(d7, d8, d81, d811, d10_t1, dx)                                                                                                           \
-    ((nWinVersion > WIN_VERSION_10_T1) ? FIRST_NONEMPTY_ARG_6(dx, d10_t1, d811, d81, d8, d7) : DO5(d7, d8, d81, d811, d10_t1))
-#define DO7(d7, d8, d81, d811, d10_t1, d10_t2, dx)                                                                                                   \
-    ((nWinVersion > WIN_VERSION_10_T2) ? FIRST_NONEMPTY_ARG_7(dx, d10_t2, d10_t1, d811, d81, d8, d7) : DO6(d7, d8, d81, d811, d10_t1, d10_t2))
-#define DO8(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, dx)                                                                                           \
-    ((nWinVersion > WIN_VERSION_10_R1) ? FIRST_NONEMPTY_ARG_8(dx, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)                                         \
-                                       : DO7(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1))
-#define DO9(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, dx)                                                                                   \
-    ((nWinVersion > WIN_VERSION_10_R2) ? FIRST_NONEMPTY_ARG_9(dx, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)                                 \
-                                       : DO8(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2))
-#define DO10(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, dx)                                                                          \
-    ((nWinVersion > WIN_VERSION_10_R3) ? FIRST_NONEMPTY_ARG_10(dx, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)                        \
-                                       : DO9(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3))
-#define DO11(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, dx)                                                                  \
-    ((nWinVersion > WIN_VERSION_10_R4) ? FIRST_NONEMPTY_ARG_11(dx, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)                \
-                                       : DO10(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4))
-#define DO12(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, dx)                                                          \
-    ((nWinVersion > WIN_VERSION_10_R5) ? FIRST_NONEMPTY_ARG_12(dx, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)        \
-                                       : DO11(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5))
-#define DO13(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, dx)                                                \
-    ((nWinVersion > WIN_VERSION_10_19H1)                                                                                                             \
-         ? FIRST_NONEMPTY_ARG_13(dx, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)                            \
-         : DO12(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1))
-#define DO14(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, dx)                                      \
-    ((nWinVersion > WIN_VERSION_10_20H1)                                                                                                             \
-         ? FIRST_NONEMPTY_ARG_14(dx, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)                  \
-         : DO13(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1))
-#define DO15(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, dx)                             \
-    ((nWinVersion > WIN_VERSION_SERVER_2022)                                                                                                         \
-         ? FIRST_NONEMPTY_ARG_15(dx, ds_2022, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7)         \
-         : DO14(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022))
-#define DO16(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2, dx)                   \
-    ((nWinVersion > WIN_VERSION_11_21H2)                                                                                                             \
-         ? FIRST_NONEMPTY_ARG_16(dx, d11_21h2, ds_2022, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8,   \
-                                 d7)                                                                                                                 \
-         : DO15(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2))
+#define DO2(d7, dx)                ( (nWinVersion > WIN_VERSION_7) ? FIRST_NONEMPTY_ARG_2(dx, d7) : (d7) )
+#define DO3(d7, d8, dx)            ( (nWinVersion > WIN_VERSION_8) ? FIRST_NONEMPTY_ARG_3(dx, d8, d7) : DO2(d7, d8) )
+#define DO4(d7, d8, d81, dx)       ( (nWinVersion > WIN_VERSION_81) ? FIRST_NONEMPTY_ARG_4(dx, d81, d8, d7) : DO3(d7, d8, d81) )
+#define DO5(d7, d8, d81, d811, dx) ( (nWinVersion > WIN_VERSION_811) ? FIRST_NONEMPTY_ARG_5(dx, d811, d81, d8, d7) : DO4(d7, d8, d81, d811) )
+#define DO6(d7, d8, d81, d811, d10_t1, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_T1) ? \
+                                     FIRST_NONEMPTY_ARG_6(dx, d10_t1, d811, d81, d8, d7) : \
+                                     DO5(d7, d8, d81, d811, d10_t1) )
+#define DO7(d7, d8, d81, d811, d10_t1, d10_t2, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_T2) ? \
+                                     FIRST_NONEMPTY_ARG_7(dx, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO6(d7, d8, d81, d811, d10_t1, d10_t2) )
+#define DO8(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_R1) ? \
+                                     FIRST_NONEMPTY_ARG_8(dx, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO7(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1) )
+#define DO9(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_R2) ? \
+                                     FIRST_NONEMPTY_ARG_9(dx, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO8(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2) )
+#define DO10(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_R3) ? \
+                                     FIRST_NONEMPTY_ARG_10(dx, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO9(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3) )
+#define DO11(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_R4) ? \
+                                     FIRST_NONEMPTY_ARG_11(dx, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO10(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4) )
+#define DO12(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_R5) ? \
+                                     FIRST_NONEMPTY_ARG_12(dx, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO11(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5) )
+#define DO13(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_19H1) ? \
+                                     FIRST_NONEMPTY_ARG_13(dx, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO12(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1) )
+#define DO14(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, dx) \
+                                   ( (nWinVersion > WIN_VERSION_10_20H1) ? \
+                                     FIRST_NONEMPTY_ARG_14(dx, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO13(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1) )
+#define DO15(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, dx) \
+                                   ( (nWinVersion > WIN_VERSION_SERVER_2022) ? \
+                                     FIRST_NONEMPTY_ARG_15(dx, ds_2022, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO14(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022) )
+#define DO16(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2, dx) \
+                                   ( (nWinVersion > WIN_VERSION_11_21H2) ? \
+                                     FIRST_NONEMPTY_ARG_16(dx, d11_21h2, ds_2022, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
+                                     DO15(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2) )
+#define DO17(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2, d11_22h2, dx) \
+                                   DO16(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2, d11_22h2)
 
 #ifdef _WIN64
-#define DEF3264(d32, d64) (d64)
+#define DEF3264(d32, d64)          (d64)
 #else
-#define DEF3264(d32, d64) (d32)
+#define DEF3264(d32, d64)          (d32)
 #endif
 
-#define DO2_3264(d7_32, d7_64, dx_32, dx_64) DEF3264(DO2(d7_32, dx_32), DO2(d7_64, dx_64))
+#define DO2_3264(d7_32, d7_64, dx_32, dx_64) \
+                                   DEF3264(DO2(d7_32, dx_32), \
+                                           DO2(d7_64, dx_64))
 
-#define DO3_3264(d7_32, d7_64, d8_32, d8_64, dx_32, dx_64) DEF3264(DO3(d7_32, d8_32, dx_32), DO3(d7_64, d8_64, dx_64))
+#define DO3_3264(d7_32, d7_64, d8_32, d8_64, dx_32, dx_64) \
+                                   DEF3264(DO3(d7_32, d8_32, dx_32), \
+                                           DO3(d7_64, d8_64, dx_64))
 
-#define DO4_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, dx_32, dx_64) DEF3264(DO4(d7_32, d8_32, d81_32, dx_32), DO4(d7_64, d8_64, d81_64, dx_64))
+#define DO4_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, dx_32, dx_64) \
+                                   DEF3264(DO4(d7_32, d8_32, d81_32, dx_32), \
+                                           DO4(d7_64, d8_64, d81_64, dx_64))
 
-#define DO5_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, dx_32, dx_64)                                                         \
-    DEF3264(DO5(d7_32, d8_32, d81_32, d811_32, dx_32), DO5(d7_64, d8_64, d81_64, d811_64, dx_64))
+#define DO5_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, dx_32, dx_64) \
+                                   DEF3264(DO5(d7_32, d8_32, d81_32, d811_32, dx_32), \
+                                           DO5(d7_64, d8_64, d81_64, d811_64, dx_64))
 
-#define DO6_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, dx_32, dx_64)                                   \
-    DEF3264(DO6(d7_32, d8_32, d81_32, d811_32, d10_t1_32, dx_32), DO6(d7_64, d8_64, d81_64, d811_64, d10_t1_64, dx_64))
+#define DO6_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, dx_32, dx_64) \
+                                   DEF3264(DO6(d7_32, d8_32, d81_32, d811_32, d10_t1_32, dx_32), \
+                                           DO6(d7_64, d8_64, d81_64, d811_64, d10_t1_64, dx_64))
 
-#define DO7_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, dx_32, dx_64)             \
-    DEF3264(DO7(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, dx_32), DO7(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, dx_64))
+#define DO7_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, dx_32, dx_64) \
+                                   DEF3264(DO7(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, dx_32), \
+                                           DO7(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, dx_64))
 
-#define DO8_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,     \
-                 dx_32, dx_64)                                                                                                                       \
-    DEF3264(DO8(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, dx_32),                                                              \
-            DO8(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, dx_64))
+#define DO8_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, dx_32, dx_64) \
+                                   DEF3264(DO8(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, dx_32), \
+                                           DO8(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, dx_64))
 
-#define DO9_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,     \
-                 d10_r2_32, d10_r2_64, dx_32, dx_64)                                                                                                 \
-    DEF3264(DO9(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, dx_32),                                                   \
-            DO9(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, dx_64))
+#define DO9_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, dx_32, dx_64) \
+                                   DEF3264(DO9(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, dx_32), \
+                                           DO9(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, dx_64))
 
-#define DO10_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, dx_32, dx_64)                                                                          \
-    DEF3264(DO10(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, dx_32),                                       \
-            DO10(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, dx_64))
+#define DO10_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, dx_32, dx_64) \
+                                   DEF3264(DO10(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, dx_32), \
+                                           DO10(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, dx_64))
 
-#define DO11_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, dx_32, dx_64)                                                    \
-    DEF3264(DO11(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, dx_32),                            \
-            DO11(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, dx_64))
+#define DO11_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, dx_32, dx_64) \
+                                   DEF3264(DO11(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, dx_32), \
+                                           DO11(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, dx_64))
 
-#define DO12_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, dx_32, dx_64)                              \
-    DEF3264(DO12(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, dx_32),                 \
-            DO12(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, dx_64))
+#define DO12_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, dx_32, dx_64) \
+                                   DEF3264(DO12(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, dx_32), \
+                                           DO12(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, dx_64))
 
-#define DO13_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, dx_32, dx_64)    \
-    DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, dx_32),    \
-            DO13(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, dx_64))
+#define DO13_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, dx_32, dx_64) \
+                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, dx_32), \
+                                           DO13(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, dx_64))
 
-#define DO14_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32,     \
-                  d10_20h1_64, dx_32, dx_64)                                                                                                         \
-    DEF3264(DO14(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32,            \
-                 d10_20h1_32, dx_32),                                                                                                                \
-            DO14(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64,            \
-                 d10_20h1_64, dx_64))
+#define DO14_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, dx_64) \
+                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
+                                           DO14(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, dx_64))
 
-#define DO15_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32,     \
-                  d10_20h1_64, ds_2022_32, ds_2022_64, dx_32, dx_64)                                                                                 \
-    DEF3264(DO15(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32,            \
-                 d10_20h1_32, ds_2022_32, dx_32),                                                                                                    \
-            DO15(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64,            \
-                 d10_20h1_64, ds_2022_64, dx_64))
+#define DO15_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, ds_2022_64, dx_64) \
+                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
+                                           DO15(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, ds_2022_64, dx_64))
 
-#define DO16_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32,     \
-                  d10_20h1_64, ds_2022_32, ds_2022_64, d11_21h2_32, d11_21h2_64, dx_32, dx_64)                                                       \
-    DEF3264(DO16(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32,            \
-                 d10_20h1_32, ds_2022_32, d11_21h2_32, dx_32),                                                                                       \
-            DO16(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64,            \
-                 d10_20h1_64, ds_2022_64, d11_21h2_64, dx_64))
+#define DO16_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, ds_2022_64, d11_21h2_64, dx_64) \
+                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
+                                           DO16(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, ds_2022_64, d11_21h2_64, dx_64))
 
-#define DO17_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64,    \
-                  d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32,     \
-                  d10_20h1_64, ds_2022_32, ds_2022_64, d11_21h2_32, d11_21h2_64, d11_22h2_32, d11_22h2_64, dx_32, dx_64)                             \
-    DEF3264(DO17(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32,            \
-                 d10_20h1_32, ds_2022_32, d11_21h2_32, d11_22h2_32, dx_32),                                                                          \
-            DO17(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64,            \
-                 d10_20h1_64, ds_2022_64, d11_21h2_64, d11_22h2_64, dx_64))
+#define DO17_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, ds_2022_64, d11_21h2_64, d11_22h2_64, dx_64) \
+                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
+                                           DO17(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, ds_2022_64, d11_21h2_64, d11_22h2_64, dx_64))
 
 #pragma endregion
 
@@ -1138,13 +1099,6 @@ bool isMouseDoubleClick(LPARAM lParam) {
     {
         result = true;
     }
-
-    // Wh_Log(L"Mouse click: [%d, %d], diff [%d, %d, %d], isDoubleClick: %d", 
-    //     currentLocation.x, currentLocation.y, 
-    //     abs(currentLocation.x - lastPointerDownLocation.x), 
-    //     abs(currentLocation.y - lastPointerDownLocation.y), 
-    //     currentTime - lastPointerDownTime,
-    //     result);
 
     // Update the time and location of the last WM_POINTERDOWN event
     lastPointerDownTime = currentTime;
@@ -1196,6 +1150,7 @@ BOOL WindowsVersionInit() {
     WORD nQFE = LOWORD(pFixedFileInfo->dwFileVersionLS);
     Wh_Log(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
 
+    // windows version needed for macros and functions ported from 7+Taskbar to work 
     switch (nMajor) {
     case 6:
         switch (nMinor) {
@@ -1249,9 +1204,6 @@ BOOL WindowsVersionInit() {
         break;
     }
 
-    nExplorerBuild = nBuild;
-    nExplorerQFE = nQFE;
-
     if (nMajor == 6) {
         g_taskbarVersion = WIN_10_TASKBAR;
     } else if (nMajor == 10) {
@@ -1287,22 +1239,6 @@ HWND GetWindows10ImmersiveWorkerWindow(void) {
         return NULL;
 
     return *(HWND *)(lpImmersiveWindowMessageService + DO10_3264(0, 0, , , , , , , 0x4C, 0x80, , , 0x50, 0x88, , , 0x58, 0x98, 0x54, 0x90));
-}
-
-void SndVolInit() {
-    const GUID XIID_IMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
-    const GUID XIID_MMDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-
-    HRESULT hr = CoCreateInstance(XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, XIID_IMMDeviceEnumerator, (LPVOID *)&g_pDeviceEnumerator);
-    if (FAILED(hr))
-        g_pDeviceEnumerator = NULL;
-}
-
-void SndVolUninit() {
-    if (g_pDeviceEnumerator) {
-        g_pDeviceEnumerator->Release();
-        g_pDeviceEnumerator = NULL;
-    }
 }
 
 TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
@@ -1364,23 +1300,6 @@ void SetTaskbarAutohide(bool enabled) {
     SHAppBarMessage(ABM_SETSTATE, &msgData);
 }
 
-BOOL CALLBACK DesktopWndEnumProc(HWND hWnd, LPARAM lParam)
-{
-	WCHAR szClassName[16];
-	if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
-		return TRUE;
-
-	if (lstrcmp(szClassName, L"WorkerW") != 0)
-		return TRUE;
-
-	HWND hChildWnd = FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
-	if (!hChildWnd)
-		return TRUE;
-
-	*(HWND *)lParam = hChildWnd;
-	return FALSE;
-}
-
 bool FindDesktopWindow() {
     HWND hParentWnd = FindWindow(L"Progman", NULL);     // Program Manager window
 	if (!hParentWnd) {
@@ -1392,7 +1311,21 @@ bool FindDesktopWindow() {
 	if (!hChildWnd)
 	{
 		DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
-		EnumThreadWindows(dwThreadId, DesktopWndEnumProc, (LPARAM)&hChildWnd);
+		EnumThreadWindows(dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL) {
+            WCHAR szClassName[16];
+            if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
+                return TRUE;
+
+            if (lstrcmp(szClassName, L"WorkerW") != 0)
+                return TRUE;
+
+            HWND hChildWnd = FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
+            if (!hChildWnd)
+                return TRUE;
+
+            *(HWND *)lParam = hChildWnd;
+            return FALSE;
+        }, (LPARAM)&hChildWnd);
 	}
 
 	if (!hChildWnd) {
@@ -1406,8 +1339,6 @@ bool FindDesktopWindow() {
 #pragma endregion
 
 #pragma region features
-
-// taskbar features
 
 bool ToggleTaskbarAutohide() {
     const bool isEnabled = GetTaskbarAutohideState();
@@ -1452,21 +1383,19 @@ BOOL ToggleVolMuted() {
 
     const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
-    if (g_pDeviceEnumerator) {
-        hr = g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &defaultDevice);
+    hr = g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &defaultDevice);
+    if (SUCCEEDED(hr)) {
+        hr = defaultDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (LPVOID *)&endpointVolume);
         if (SUCCEEDED(hr)) {
-            hr = defaultDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (LPVOID *)&endpointVolume);
-            if (SUCCEEDED(hr)) {
-                if (SUCCEEDED(endpointVolume->GetMute(&bMuted))) {
-                    Wh_Log(L"Toggling volume mute");
-                    if (SUCCEEDED(endpointVolume->SetMute(!bMuted, NULL))) {
-                        bSuccess = TRUE;
-                    }
+            if (SUCCEEDED(endpointVolume->GetMute(&bMuted))) {
+                Wh_Log(L"Toggling volume mute");
+                if (SUCCEEDED(endpointVolume->SetMute(!bMuted, NULL))) {
+                    bSuccess = TRUE;
                 }
-                endpointVolume->Release();
             }
-            defaultDevice->Release();
+            endpointVolume->Release();
         }
+        defaultDevice->Release();
     }
 
     return bSuccess;
@@ -1474,6 +1403,7 @@ BOOL ToggleVolMuted() {
 
 void HideIcons() {
     if (g_hDesktopWnd != NULL) {
+        Wh_Log(L"Sending hide icons message");
         PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0);
     } 
 }
@@ -1509,20 +1439,14 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
     // opened window, icon, start menu, etc.
 
-    IUIAutomation *pUIAutomation = g_UIAutomation.getInstance();
-    if (pUIAutomation == NULL) {
-        Wh_Log(L"UIAutomationWrapper failed to get instance");
-        return false;
-    }
-
-    winrt::com_ptr<IUIAutomationElement> pWindowElement = NULL;
-    HRESULT hr = pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put());
+    com_ptr<IUIAutomationElement> pWindowElement = NULL;
+    HRESULT hr = g_pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put());
     if (FAILED(hr) || !pWindowElement) {
         Wh_Log(L"Failed to retrieve UI element from mouse click");
         return false;
     }
 
-    _bstr_t className;
+    bstr_ptr className;
     hr = pWindowElement->get_CurrentClassName(className.GetAddress());
     if (FAILED(hr) || !className) {
         Wh_Log(L"Failed to retrieve the Name of the UI element clicked.");
@@ -1566,7 +1490,7 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN_TASKBAR)) {
-        Wh_Log(L"Unsupported Windows version");
+        Wh_Log(L"Unsupported Windows version, ModInit failed");
         return FALSE;
     }
     // treat Windows 11 taskbar as on older windows
@@ -1575,19 +1499,39 @@ BOOL Wh_ModInit() {
     }
     Wh_Log(L"Using taskbar version: %d");
 
-    // init UIAutomation before hooks, otherwise subclass won't be unset and Explorer will crash if UIAutomation fails
-    if (!g_UIAutomation.init()) {
-        Wh_Log(L"UIAutomationWrapper failed to initialize");
+    // init COM for UIAutomation and Volume control
+    if (FAILED(CoInitializeEx(NULL, COINIT_MULTITHREADED))) {
+        Wh_Log(L"COM initialization failed, ModInit failed");
         return FALSE;
+    } else {
+        Wh_Log(L"COM initilized");
     }
 
-    SndVolInit();
+    // init COM interface for UIAutomation
+    if (FAILED(CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), g_pUIAutomation.put_void())) || !g_pUIAutomation) {
+        Wh_Log(L"Failed to create UIAutomation COM instance, ModInit failed");
+        return FALSE;
+    } else {
+        Wh_Log(L"UIAutomation COM initilized");
+    }
+
+    // init COM interface for Volume control
+    const GUID XIID_IMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
+    const GUID XIID_MMDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
+    if (FAILED(CoCreateInstance(XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, XIID_IMMDeviceEnumerator, g_pDeviceEnumerator.put_void())) || !g_pDeviceEnumerator) {
+        Wh_Log(L"Failed to create DeviceEnumerator COM instance, ModInit failed");
+        return FALSE;
+    } else {
+        Wh_Log(L"DeviceEnumerator COM initilized");
+    }
+
+    // optional feature, not critical for the mod
     if (!FindDesktopWindow()) {
         Wh_Log(L"Failed to find Desktop window. Hide icons feature will not be available!");
     }
 
+    // hook magic
     Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original);
-
     HMODULE user32Module = LoadLibrary(L"user32.dll");
     if (user32Module) {
         void *pCreateWindowInBand = (void *)GetProcAddress(user32Module, "CreateWindowInBand");
@@ -1595,7 +1539,6 @@ BOOL Wh_ModInit() {
             Wh_SetFunctionHook(pCreateWindowInBand, (void *)CreateWindowInBand_Hook, (void **)&CreateWindowInBand_Original);
         }
     }
-
     WNDCLASS wndclass;
     if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) {
         HWND hWnd = FindCurrentProcessTaskbarWindows(&g_secondaryTaskbarWindows);
@@ -1625,6 +1568,5 @@ void Wh_ModUninit() {
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
-    SndVolUninit();
-    g_UIAutomation.deinit();
+    CoUninitialize();
 }
