@@ -128,7 +128,7 @@
                 "published": 1697883443000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1697883443000,
+                "updated": 1703924336000,
                 "users": 61
             },
             "metadata": {
@@ -140,7 +140,7 @@
                     "*"
                 ],
                 "name": "Classic Conhost",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "classic-desktop-icons": {
