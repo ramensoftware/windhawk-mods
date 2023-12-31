@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
-// @description     Trigger custom action when empty space on a taskbar is double/middle clicked.
+// @description     Trigger custom action when empty space on a taskbar is double/middle clicked
 // @version         1.0
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
@@ -45,14 +45,14 @@ Following animation shows **Taskbar auto-hide** feature. Feature gets toggled wh
 
 I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.  
 
-In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2). 
+In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2). 
 
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- doubleClickAction: nothing
+- doubleClickAction: ACTION_NOTHING
   $name: Double click on empty space
   $options:
   - ACTION_NOTHING: Nothing (default)
@@ -63,7 +63,7 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
   - ACTION_WIN_TAB: Win+Tab
   - ACTION_HIDE_ICONS: Hide desktop icons 
-- middleClickAction: nothing
+- middleClickAction: ACTION_NOTHING
   $name: Middle click on empty space
   $options:
   - ACTION_NOTHING: Nothing (default)
@@ -78,7 +78,7 @@ In case you are using old Windows taskbar on Windows 11 (**Explorer Patcher** or
   $name: Use the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: For Windhawk versions older
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions older
     than 1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
@@ -587,6 +587,36 @@ static struct {
     TaskBarAction middleClickTaskbarAction;
 } g_settings;
 
+// wrapper to always call COM de-initialization
+class COMInitializer {
+  public:
+    COMInitializer() : initialized(false) {}
+
+    bool Init() {
+        if (!initialized) {
+            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_MULTITHREADED));
+        }
+        return initialized;
+    }
+
+    void Uninit() {
+        if (initialized) {
+            CoUninitialize();
+            initialized = false;
+            Wh_Log(L"COM de-initialized");
+        }
+    }
+
+    ~COMInitializer() {
+        Uninit();
+    }
+
+    bool IsInitialized() { return initialized; }
+
+protected:
+    bool initialized;
+} g_comInitializer;
+
 static int nWinVersion;
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
@@ -600,6 +630,7 @@ static HWND g_hDesktopWnd;
 
 static com_ptr<IUIAutomation> g_pUIAutomation;
 static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
+
 
 // since the mod can't be split to multiple files, the definition order becomes somehow complicated
 bool IsTaskbarWindow(HWND hWnd);
@@ -1266,6 +1297,7 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
         Wh_Log(L"Error: unknown action '%s' for option '%s'!", value, option);
         action = ACTION_NOTHING;
     }
+    Wh_FreeStringSetting(value);
     Wh_Log(L"Selected '%s' option %d", option, action);
 
     return action;
@@ -1302,16 +1334,16 @@ void SetTaskbarAutohide(bool enabled) {
 
 bool FindDesktopWindow() {
     HWND hParentWnd = FindWindow(L"Progman", NULL);     // Program Manager window
-	if (!hParentWnd) {
+    if (!hParentWnd) {
         Wh_Log(L"Failed to find Progman window");
         return false;
     }
 
-	HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL);     // parent window of the desktop
-	if (!hChildWnd)
-	{
-		DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
-		EnumThreadWindows(dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL) {
+    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL);     // parent window of the desktop
+    if (!hChildWnd)
+    {
+        DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
+        EnumThreadWindows(dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL) {
             WCHAR szClassName[16];
             if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
                 return TRUE;
@@ -1326,9 +1358,9 @@ bool FindDesktopWindow() {
             *(HWND *)lParam = hChildWnd;
             return FALSE;
         }, (LPARAM)&hChildWnd);
-	}
+    }
 
-	if (!hChildWnd) {
+    if (!hChildWnd) {
         Wh_Log(L"Failed to find SHELLDLL_DefView window");
         return false;
     }
@@ -1500,7 +1532,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Using taskbar version: %d");
 
     // init COM for UIAutomation and Volume control
-    if (FAILED(CoInitializeEx(NULL, COINIT_MULTITHREADED))) {
+    if (!g_comInitializer.Init()) {
         Wh_Log(L"COM initialization failed, ModInit failed");
         return FALSE;
     } else {
@@ -1568,5 +1600,5 @@ void Wh_ModUninit() {
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
-    CoUninitialize();
+    g_comInitializer.Uninit();
 }
