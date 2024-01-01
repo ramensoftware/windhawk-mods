@@ -1265,6 +1265,27 @@
                 "version": "1.3.2"
             }
         },
+        "taskbar-empty-space-clicks": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1704123810000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1704123810000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m1lhaus",
+                "compilerOptions": "-DWINVER=0x0602 -D_WIN32_WINNT=0x0602 -lcomctl32 -loleaut32 -lole32 -lversion",
+                "description": "Trigger custom action when empty space on a taskbar is double/middle clicked",
+                "github": "https://github.com/m1lhaus",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Click on empty taskbar space",
+                "version": "1.0"
+            }
+        },
         "taskbar-grouping": {
             "details": {
                 "defaultSorting": 48300,
