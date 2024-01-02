@@ -2,10 +2,11 @@
 // @id              classic-conhost
 // @name            Classic Conhost
 // @description     Forces classic theme and optionally client edge on console windows
-// @version         1.0.1
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
+// @include         conhost.exe
 // @compilerOptions -luser32 -ldwmapi -luxtheme
 // ==/WindhawkMod==
 
