@@ -128,7 +128,7 @@
                 "published": 1697883443000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1703924336000,
+                "updated": 1704232475000,
                 "users": 59
             },
             "metadata": {
@@ -137,10 +137,11 @@
                 "description": "Forces classic theme and optionally client edge on console windows",
                 "github": "https://github.com/aubymori",
                 "include": [
-                    "*"
+                    "*",
+                    "conhost.exe"
                 ],
                 "name": "Classic Conhost",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "classic-desktop-icons": {

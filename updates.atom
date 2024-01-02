@@ -2,12 +2,18 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-01-01T15:43:30.000Z</updated>
+    <updated>2024-01-02T21:54:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Conhost 1.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-conhost#3364f7cc26dee600d37e78786dad9cad23c76e62</id>
+        <link href="https://windhawk.net/mods/classic-conhost"/>
+        <updated>2024-01-02T21:54:35.000Z</updated>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#46472b5d13df20650591a0456fd464daab9552a2</id>
@@ -263,14 +269,5 @@ applicable.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-flyout-fix-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/aero-flyout-fix-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aero Tray 1.0.1]]></title>
-        <id>https://windhawk.net/mods/aero-tray#9a60743720756d07af281757c4077a2ccb887964</id>
-        <link href="https://windhawk.net/mods/aero-tray"/>
-        <updated>2023-12-18T21:44:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Clarify injection stuff</li>
-</ul>]]></content>
     </entry>
 </feed>
