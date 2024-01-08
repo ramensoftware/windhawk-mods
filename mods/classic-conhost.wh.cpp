@@ -2,10 +2,11 @@
 // @id              classic-conhost
 // @name            Classic Conhost
 // @description     Forces classic theme and optionally client edge on console windows
-// @version         1.0.0
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
+// @include         conhost.exe
 // @compilerOptions -luser32 -ldwmapi -luxtheme
 // ==/WindhawkMod==
 
@@ -14,6 +15,11 @@
 # Classic Conhost
 
 This mod will apply classic theme and optionally client edge to console windows.
+
+# IMPORTANT: READ!
+Windhawk and this mod need to inject into `conhost.exe` for this mod to work properly.
+Please navigate to Windhawk's Settings, Advanced settings, More advanced settings, and
+make sure that `conhost.exe` is in the Process inclusion list.
 
 **Before**:
 
