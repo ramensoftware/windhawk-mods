@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.0
+// @version         1.01
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -63,6 +63,7 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
   - ACTION_WIN_TAB: Win+Tab
   - ACTION_HIDE_ICONS: Hide desktop icons 
+  - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
 - middleClickAction: ACTION_NOTHING
   $name: Middle click on empty space
   $options:
@@ -74,12 +75,26 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
   - ACTION_WIN_TAB: Win+Tab
   - ACTION_HIDE_ICONS: Hide desktop icons 
+  - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
     ExplorerPatcher or a similar tool). Note: For Windhawk versions older
     than 1.3, you have to disable and re-enable the mod to apply this option.
+- CombineTaskbarButtons:
+  - State1: COMBINE_ALWAYS
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+  - State2: COMBINE_ALWAYS
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+  $name: Combine Taskbar Buttons toggle
+  $description: When toggle activated, switch between following states
 */
 // ==/WindhawkModSettings==
 
@@ -578,13 +593,22 @@ enum TaskBarAction {
     ACTION_MUTE,
     ACTION_TASKBAR_AUTOHIDE,
     ACTION_WIN_TAB,
-    ACTION_HIDE_ICONS
+    ACTION_HIDE_ICONS,
+    ACTION_COMBINE_TASKBAR_BUTTONS
+};
+
+enum TaskBarButtonsState {
+    COMBINE_ALWAYS = 0,
+    COMBINE_WHEN_FULL,
+    COMBINE_NEVER,
 };
 
 static struct {
     bool oldTaskbarOnWin11;
     TaskBarAction doubleClickTaskbarAction;
     TaskBarAction middleClickTaskbarAction;
+    TaskBarButtonsState taskBarButtonsState1;
+    TaskBarButtonsState taskBarButtonsState2;
 } g_settings;
 
 // wrapper to always call COM de-initialization
@@ -1293,6 +1317,8 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
         action = ACTION_WIN_TAB;
     } else if (equals(value, L"ACTION_HIDE_ICONS")) {
         action = ACTION_HIDE_ICONS;
+    } else if (equals(value, L"ACTION_COMBINE_TASKBAR_BUTTONS")) {
+        action = ACTION_COMBINE_TASKBAR_BUTTONS;
     } else {
         Wh_Log(L"Error: unknown action '%s' for option '%s'!", value, option);
         action = ACTION_NOTHING;
@@ -1303,10 +1329,33 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
     return action;
 }
 
+TaskBarButtonsState ParseTaskBarButtonsState(const wchar_t *option) {
+    const auto value = Wh_GetStringSetting(option);
+    const auto equals = [](const wchar_t *str1, const wchar_t *str2) { return wcscmp(str1, str2) == 0; };
+
+    TaskBarButtonsState state = COMBINE_ALWAYS;
+    if (equals(value, L"COMBINE_ALWAYS")) {
+        state = COMBINE_ALWAYS;
+    } else if (equals(value, L"COMBINE_WHEN_FULL")) {
+        state = COMBINE_WHEN_FULL;
+    } else if (equals(value, L"COMBINE_NEVER")) {
+        state = COMBINE_NEVER;
+    } else {
+        Wh_Log(L"Error: unknown state '%s' for option '%s'!", value, option);
+        state = COMBINE_ALWAYS;
+    }
+    Wh_Log(L"Selected '%s' button state %d", option, state);
+    Wh_FreeStringSetting(value);
+
+    return state;
+}
+
 void LoadSettings() {
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
     g_settings.doubleClickTaskbarAction = ParseMouseActionSetting(L"doubleClickAction");
     g_settings.middleClickTaskbarAction = ParseMouseActionSetting(L"middleClickAction");
+    g_settings.taskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State1");
+    g_settings.taskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State2");
 }
 
 bool GetTaskbarAutohideState() {
@@ -1440,6 +1489,23 @@ void HideIcons() {
     } 
 }
 
+void CombineTaskbarButtons(unsigned int option)
+{
+    if (option <= 2) {  // 0 = Always, 1 = When taskbar is full, 2 = Never
+        HKEY hKey = NULL;
+        LONG result = RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"), 0, KEY_SET_VALUE, &hKey);
+        if (result == ERROR_SUCCESS)
+        {
+            DWORD dwValue = option; 
+            RegSetValueEx(hKey, TEXT("TaskbarGlomLevel"), 0, REG_DWORD, (BYTE*)&dwValue, sizeof(dwValue));
+            RegCloseKey(hKey);
+
+            // Notify all applications of the change
+            SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+        }
+    }
+}
+
 #pragma endregion // functions
 
 // =====================================================================
@@ -1507,6 +1573,10 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
         SendWinTab();
     } else if (taskbarAction == ACTION_HIDE_ICONS) {
         HideIcons();
+    } else if (taskbarAction == ACTION_COMBINE_TASKBAR_BUTTONS) {
+        static bool zigzag;
+        zigzag = !zigzag;
+        CombineTaskbarButtons(zigzag ? g_settings.taskBarButtonsState1 : g_settings.taskBarButtonsState2);
     } else {
         Wh_Log(L"Error: Unknown taskbar action '%d'", taskbarAction);
     }
