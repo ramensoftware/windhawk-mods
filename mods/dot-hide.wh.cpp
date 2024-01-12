@@ -97,7 +97,7 @@ typedef NTSTATUS (NTAPI* NtQueryDirectoryFile_t)(
 
 NtQueryDirectoryFile_t NtQueryDirectoryFile_Original;
 
-NTSTATUS WINAPI NtQueryDirectoryFile_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
+NTSTATUS NTAPI NtQueryDirectoryFile_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
                                           LPVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, LPVOID FileInformation,
                                           ULONG Length, FILE_INFORMATION_CLASS FileInformationClass,
                                           BOOLEAN ReturnSingleEntry, PUNICODE_STRING FileName, BOOLEAN RestartScan) {
@@ -126,9 +126,9 @@ typedef NTSTATUS (NTAPI* NtQueryDirectoryFileEx_t)(
     PUNICODE_STRING FileName
 );
 
-NtQueryDirectoryFileEx_t WINAPI NtQueryDirectoryFileEx_Original;
+NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
 
-NTSTATUS WINAPI NtQueryDirectoryFileEx_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
+NTSTATUS NTAPI NtQueryDirectoryFileEx_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
                                             PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
                                             ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, ULONG QueryFlags,
                                             PUNICODE_STRING FileName) {
@@ -153,15 +153,15 @@ BOOL Wh_ModInit() {
 
     NtQueryDirectoryFile_t NtQueryDirectoryFile = (NtQueryDirectoryFile_t)GetProcAddress(
         ntdllModule, "NtQueryDirectoryFile");
-    WindhawkUtils::Wh_SetFunctionHookT((void *)NtQueryDirectoryFile, 
-                                       (void *)NtQueryDirectoryFile_Hook,
-                                       (void **)&NtQueryDirectoryFile_Original);
+    WindhawkUtils::Wh_SetFunctionHookT(NtQueryDirectoryFile, 
+                                       NtQueryDirectoryFile_Hook,
+                                       &NtQueryDirectoryFile_Original);
 
     NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx = (NtQueryDirectoryFileEx_t)GetProcAddress(
         ntdllModule, "NtQueryDirectoryFileEx");
-    WindhawkUtils::Wh_SetFunctionHookT((void *)NtQueryDirectoryFileEx, 
-                                       (void *)NtQueryDirectoryFileEx_Hook,
-                                       (void **)&NtQueryDirectoryFileEx_Original);
+    WindhawkUtils::Wh_SetFunctionHookT(NtQueryDirectoryFileEx, 
+                                       NtQueryDirectoryFileEx_Hook,
+                                       &NtQueryDirectoryFileEx_Original);
 
     return TRUE;
 }
