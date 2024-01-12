@@ -388,6 +388,28 @@
                 "version": "1.0.1"
             }
         },
+        "dot-hide": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1705055192000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1705055192000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Tomer Zait (realgam3)",
+                "description": "Keep dot files and directories out of sight, Because it wouldn't happen in Linux...",
+                "github": "https://github.com/realgam3",
+                "homepage": "https://realgam3.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Dot Hide",
+                "twitter": "https://twitter.com/realgam3",
+                "version": "1.0.0"
+            }
+        },
         "dwm-ghost-mods": {
             "details": {
                 "defaultSorting": 630,
