@@ -1504,39 +1504,17 @@ void LoadSettings()
     g_settings.taskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State2");
 }
 
-bool GetTaskbarAutohideState()
-{
-    if (g_hTaskbarWnd == NULL)
-    {
-        return false;
-    }
-    APPBARDATA msgData{};
-    msgData.cbSize = sizeof(msgData);
-    msgData.hWnd = g_hTaskbarWnd;
-    LPARAM state = SHAppBarMessage(ABM_GETSTATE, &msgData);
-    return state & ABS_AUTOHIDE;
-}
-
-void SetTaskbarAutohide(bool enabled)
-{
-    if (g_hTaskbarWnd == NULL)
-    {
-        return;
-    }
-
-    APPBARDATA msgData{};
-    msgData.cbSize = sizeof(msgData);
-    msgData.hWnd = g_hTaskbarWnd;
-    msgData.lParam = enabled ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
-    SHAppBarMessage(ABM_SETSTATE, &msgData);
-}
-
+/**
+ * @brief Finds the desktop window. Desktop window handle is used to send messages to the desktop (show/hide icons).
+ *
+ * @return true if the desktop window is found, false otherwise.
+ */
 bool FindDesktopWindow()
 {
     HWND hParentWnd = FindWindow(L"Progman", NULL); // Program Manager window
     if (!hParentWnd)
     {
-        Wh_Log(L"Failed to find Progman window");
+        Wh_Log(L"ERROR: Failed to find Progman window");
         return false;
     }
 
@@ -1565,33 +1543,57 @@ bool FindDesktopWindow()
 
     if (!hChildWnd)
     {
-        Wh_Log(L"Failed to find SHELLDLL_DefView window");
+        Wh_Log(L"ERROR: Failed to find SHELLDLL_DefView window");
         return false;
     }
     g_hDesktopWnd = hChildWnd;
     return true;
 }
 
-#pragma endregion
+bool GetTaskbarAutohideState()
+{
+    if (g_hTaskbarWnd == NULL)
+    {
+        return false;
+    }
+    APPBARDATA msgData{};
+    msgData.cbSize = sizeof(msgData);
+    msgData.hWnd = g_hTaskbarWnd;
+    LPARAM state = SHAppBarMessage(ABM_GETSTATE, &msgData);
+    return state & ABS_AUTOHIDE;
+}
 
-#pragma region features
+void SetTaskbarAutohide(bool enabled)
+{
+    if (g_hTaskbarWnd == NULL)
+    {
+        return;
+    }
 
-bool ToggleTaskbarAutohide()
+    APPBARDATA msgData{};
+    msgData.cbSize = sizeof(msgData);
+    msgData.hWnd = g_hTaskbarWnd;
+    msgData.lParam = enabled ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
+    SHAppBarMessage(ABM_SETSTATE, &msgData);
+}
+
+void ToggleTaskbarAutohide()
 {
     const bool isEnabled = GetTaskbarAutohideState();
     Wh_Log(L"Setting taskbar autohide state to %s", !isEnabled ? L"enabled" : L"disabled");
     SetTaskbarAutohide(!isEnabled);
-    return !isEnabled;
 }
 
 void ShowDesktop(HWND taskbarhWnd)
 {
     Wh_Log(L"Sending ShowDesktop message");
+    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0);
 }
 
 void SendAltTab()
 {
+    // TODO: consider replacing that by keyboard input simulation
     HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
     if (hImmersiveWorkerWnd)
     {
@@ -1599,27 +1601,34 @@ void SendAltTab()
         Wh_Log(L"Sending AltTab message");
         PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, wHotkeyIdentifier, MAKELPARAM(MOD_ALT | MOD_CONTROL, VK_TAB));
     }
+    else
+    {
+        Wh_Log(L"ERROR: Failed to find ImmersiveWorker window");
+    }
 }
 
 void SendWinTab()
 {
+    // TODO: consider replacing that by keyboard input simulation
     HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
     if (hImmersiveWorkerWnd)
     {
         Wh_Log(L"Sending WinTab message");
         PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, 11, MAKELPARAM(MOD_WIN, VK_TAB));
     }
+    else
+    {
+        Wh_Log(L"ERROR: Failed to find ImmersiveWorker window");
+    }
 }
 
 void OpenTaskManager(HWND taskbarhWnd)
 {
     Wh_Log(L"Sending OpenTaskManager message");
+    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0);
 }
 
-/**
- * Toggles the volume mute state via Windows Core Audio API through COM interface.
- */
 void ToggleVolMuted()
 {
     Wh_Log(L"Toggling volume mute");
@@ -1646,9 +1655,6 @@ void ToggleVolMuted()
     }
 }
 
-/**
- * Toggles show/hide of the Desktop icons by sending a message to the Desktop window.
- */
 void HideIcons()
 {
     if (g_hDesktopWnd != NULL)
@@ -1813,7 +1819,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     }
     else if (taskbarAction == ACTION_TASKBAR_AUTOHIDE)
     {
-        (void)ToggleTaskbarAutohide();
+        ToggleTaskbarAutohide();
     }
     else if (taskbarAction == ACTION_WIN_TAB)
     {
