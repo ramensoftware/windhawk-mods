@@ -32,6 +32,8 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Double-c
 5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature
 6. **Win+Tab** - Opens Win+Tab dialog
 7. **Hide desktop icons** - Toggle show/hide of all desktop icons
+7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu
+7. **Open Start menu** - Sends Win key press to open Start menu
 
 ## Example
 
@@ -64,6 +66,7 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   - ACTION_WIN_TAB: Win+Tab
   - ACTION_HIDE_ICONS: Hide desktop icons
   - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+  - ACTION_OPEN_START_MENU: Open Start menu
 - middleClickAction: ACTION_NOTHING
   $name: Middle click on empty space
   $options:
@@ -76,6 +79,7 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   - ACTION_WIN_TAB: Win+Tab
   - ACTION_HIDE_ICONS: Hide desktop icons
   - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+  - ACTION_OPEN_START_MENU: Open Start menu
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
@@ -643,7 +647,8 @@ enum TaskBarAction
     ACTION_TASKBAR_AUTOHIDE,
     ACTION_WIN_TAB,
     ACTION_HIDE_ICONS,
-    ACTION_COMBINE_TASKBAR_BUTTONS
+    ACTION_COMBINE_TASKBAR_BUTTONS,
+    ACTION_OPEN_START_MENU
 };
 
 enum TaskBarButtonsState
@@ -1454,6 +1459,10 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option)
     {
         action = ACTION_COMBINE_TASKBAR_BUTTONS;
     }
+    else if (equals(value, L"ACTION_OPEN_START_MENU"))
+    {
+        action = ACTION_OPEN_START_MENU;
+    }
     else
     {
         Wh_Log(L"Error: unknown action '%s' for option '%s'!", value, option);
@@ -1619,6 +1628,31 @@ void SendWinTab()
     else
     {
         Wh_Log(L"ERROR: Failed to find ImmersiveWorker window");
+    }
+}
+
+void SendWinKeypress()
+{
+    Wh_Log(L"Sending Win keypress");
+
+    INPUT input[2] = {0};
+    input[0].type = INPUT_KEYBOARD;
+    input[0].ki.wScan = 0;
+    input[0].ki.time = 0;
+    input[0].ki.dwExtraInfo = 0;
+    input[0].ki.wVk = VK_LWIN;
+    input[0].ki.dwFlags = 0;    // KEYDOWN
+
+    input[1].type = INPUT_KEYBOARD;
+    input[1].ki.wScan = 0;
+    input[1].ki.time = 0;
+    input[1].ki.dwExtraInfo = 0;
+    input[1].ki.wVk = VK_LWIN;
+    input[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    if (SendInput(2, reinterpret_cast<LPINPUT>(input), sizeof(input[0])) != 2)
+    {
+        Wh_Log(L"ERROR: Failed to send Win key input");
     }
 }
 
@@ -1835,6 +1869,10 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
         static bool zigzag = (GetCombineTaskbarButtons() == g_settings.taskBarButtonsState1);
         zigzag = !zigzag;
         SetCombineTaskbarButtons(zigzag ? g_settings.taskBarButtonsState1 : g_settings.taskBarButtonsState2);
+    }
+    else if (taskbarAction == ACTION_OPEN_START_MENU)
+    {
+        SendWinKeypress();
     }
     else
     {
