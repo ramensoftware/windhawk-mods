@@ -59,7 +59,7 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
-  - ACTION_ALT_TAB: Ctrl+Alt+Tab
+  - ACTION_CTRL_ALT_TAB: Ctrl+Alt+Tab
   - ACTION_TASK_MANAGER: Task Manager
   - ACTION_MUTE: Mute system volume
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
@@ -72,7 +72,7 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
-  - ACTION_ALT_TAB: Ctrl+Alt+Tab
+  - ACTION_CTRL_ALT_TAB: Ctrl+Alt+Tab
   - ACTION_TASK_MANAGER: Task Manager
   - ACTION_MUTE: Mute system volume
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
@@ -641,7 +641,7 @@ enum TaskBarAction
 {
     ACTION_NOTHING = 0,
     ACTION_SHOW_DESKTOP,
-    ACTION_ALT_TAB,
+    ACTION_CTRL_ALT_TAB,
     ACTION_TASK_MANAGER,
     ACTION_MUTE,
     ACTION_TASKBAR_AUTOHIDE,
@@ -1393,29 +1393,6 @@ BOOL WindowsVersionInit()
     return TRUE;
 }
 
-HWND GetWindows10ImmersiveWorkerWindow(void)
-{
-    HWND hApplicationManagerDesktopShellWindow = FindWindow(L"ApplicationManager_DesktopShellWindow", NULL);
-    if (!hApplicationManagerDesktopShellWindow)
-        return NULL;
-
-    LONG_PTR lpApplicationManagerDesktopShellWindow = GetWindowLongPtr(hApplicationManagerDesktopShellWindow, 0);
-    if (!lpApplicationManagerDesktopShellWindow)
-        return NULL;
-
-    LONG_PTR lpImmersiveShellHookService =
-        *(LONG_PTR *)(lpApplicationManagerDesktopShellWindow + DO9_3264(0, 0, , , , , , , 0x10, 0x20, , , , , , , 0x14, 0x28));
-    if (!lpImmersiveShellHookService)
-        return NULL;
-
-    LONG_PTR lpImmersiveWindowMessageService =
-        *(LONG_PTR *)(lpImmersiveShellHookService + DO10_3264(0, 0, , , , , , , 0x88, 0xE0, , , , , , , 0xA0, 0x108, 0x98, 0x100));
-    if (!lpImmersiveWindowMessageService)
-        return NULL;
-
-    return *(HWND *)(lpImmersiveWindowMessageService + DO10_3264(0, 0, , , , , , , 0x4C, 0x80, , , 0x50, 0x88, , , 0x58, 0x98, 0x54, 0x90));
-}
-
 TaskBarAction ParseMouseActionSetting(const wchar_t *option)
 {
     const auto value = Wh_GetStringSetting(option);
@@ -1431,9 +1408,9 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option)
     {
         action = ACTION_SHOW_DESKTOP;
     }
-    else if (equals(value, L"ACTION_ALT_TAB"))
+    else if (equals(value, L"ACTION_CTRL_ALT_TAB"))
     {
-        action = ACTION_ALT_TAB;
+        action = ACTION_CTRL_ALT_TAB;
     }
     else if (equals(value, L"ACTION_TASK_MANAGER"))
     {
@@ -1600,60 +1577,55 @@ void ShowDesktop(HWND taskbarhWnd)
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0);
 }
 
-void SendAltTab()
+void SendKeypress(std::vector<int> keys)
 {
-    // TODO: consider replacing that by keyboard input simulation
-    HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
-    if (hImmersiveWorkerWnd)
+    const int NUM_KEYS = keys.size();
+    Wh_Log(L"Sending %d keypresses", NUM_KEYS);
+
+    std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
+
+    for (int i = 0; i < NUM_KEYS; i++)
     {
-        WPARAM wHotkeyIdentifier = DO9(0, , , , 47, , , , 45);
-        Wh_Log(L"Sending AltTab message");
-        PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, wHotkeyIdentifier, MAKELPARAM(MOD_ALT | MOD_CONTROL, VK_TAB));
+        input[i].type = INPUT_KEYBOARD;
+        input[i].ki.wScan = 0;
+        input[i].ki.time = 0;
+        input[i].ki.dwExtraInfo = 0;
+        input[i].ki.wVk = keys[i];
+        input[i].ki.dwFlags = 0; // KEYDOWN
     }
-    else
+
+    for (int i = 0; i < NUM_KEYS; i++)
     {
-        Wh_Log(L"ERROR: Failed to find ImmersiveWorker window");
+        input[NUM_KEYS + i].type = INPUT_KEYBOARD;
+        input[NUM_KEYS + i].ki.wScan = 0;
+        input[NUM_KEYS + i].ki.time = 0;
+        input[NUM_KEYS + i].ki.dwExtraInfo = 0;
+        input[NUM_KEYS + i].ki.wVk = keys[i];
+        input[NUM_KEYS + i].ki.dwFlags = KEYEVENTF_KEYUP;
+    }
+
+    if (SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0])) != (NUM_KEYS * 2))
+    {
+        Wh_Log(L"ERROR: Failed to send key input");
     }
 }
 
-void SendWinTab()
+void SendCtrlAltTabKeypress()
 {
-    // TODO: consider replacing that by keyboard input simulation
-    HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
-    if (hImmersiveWorkerWnd)
-    {
-        Wh_Log(L"Sending WinTab message");
-        PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, 11, MAKELPARAM(MOD_WIN, VK_TAB));
-    }
-    else
-    {
-        Wh_Log(L"ERROR: Failed to find ImmersiveWorker window");
-    }
+    Wh_Log(L"Sending Ctrl+Alt+Tab kepress");
+    SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
+}
+
+void SendWinTabKeypress()
+{
+    Wh_Log(L"Sending Win+Tab keypress");
+    SendKeypress({VK_LWIN, VK_TAB});
 }
 
 void SendWinKeypress()
 {
     Wh_Log(L"Sending Win keypress");
-
-    INPUT input[2] = {0};
-    input[0].type = INPUT_KEYBOARD;
-    input[0].ki.wScan = 0;
-    input[0].ki.time = 0;
-    input[0].ki.dwExtraInfo = 0;
-    input[0].ki.wVk = VK_LWIN;
-    input[0].ki.dwFlags = 0;    // KEYDOWN
-
-    input[1].type = INPUT_KEYBOARD;
-    input[1].ki.wScan = 0;
-    input[1].ki.time = 0;
-    input[1].ki.dwExtraInfo = 0;
-    input[1].ki.wVk = VK_LWIN;
-    input[1].ki.dwFlags = KEYEVENTF_KEYUP;
-
-    if (SendInput(2, reinterpret_cast<LPINPUT>(input), sizeof(input[0])) != 2)
-    {
-        Wh_Log(L"ERROR: Failed to send Win key input");
-    }
+    SendKeypress({VK_LWIN});
 }
 
 void OpenTaskManager(HWND taskbarhWnd)
@@ -1839,9 +1811,9 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     {
         ShowDesktop(hWnd);
     }
-    else if (taskbarAction == ACTION_ALT_TAB)
+    else if (taskbarAction == ACTION_CTRL_ALT_TAB)
     {
-        SendAltTab();
+        SendCtrlAltTabKeypress();
     }
     else if (taskbarAction == ACTION_TASK_MANAGER)
     {
@@ -1857,7 +1829,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     }
     else if (taskbarAction == ACTION_WIN_TAB)
     {
-        SendWinTab();
+        SendWinTabKeypress();
     }
     else if (taskbarAction == ACTION_HIDE_ICONS)
     {
