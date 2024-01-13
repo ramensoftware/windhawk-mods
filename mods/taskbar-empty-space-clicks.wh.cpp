@@ -1658,21 +1658,72 @@ void HideIcons()
     }
 }
 
+/**
+ * Retrieves the current setting for combining taskbar buttons. This setting is used as initial value for the toggle
+ * so that the toggle actually does the toggling for the forst time it is activated.
+ *
+ * @return The current value of the taskbar button combining setting. (0 = Always, 1 = When taskbar is full, 2 = Never)
+ */
+DWORD GetCombineTaskbarButtons()
+{
+    HKEY hKey = NULL;
+    DWORD dwValue = 0;
+    DWORD dwBufferSize = sizeof(DWORD);
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        if (RegQueryValueEx(hKey, TEXT("TaskbarGlomLevel"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) == ERROR_SUCCESS)
+        {
+            RegCloseKey(hKey);
+        }
+        else
+        {
+            Wh_Log(L"Failed to read registry key TaskbarGlomLevel!");
+        }
+    }
+    else
+    {
+        Wh_Log(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+    }
+    return dwValue;
+}
+
+/**
+ * @brief Sets the option for combining taskbar buttons.
+ *
+ * This function allows you to set the option for combining taskbar buttons.
+ * The option parameter specifies the desired behavior for combining taskbar buttons.
+ *
+ * @param option The option for combining taskbar buttons.
+ *               Possible values:
+ *               - 0: Do not combine taskbar buttons.
+ *               - 1: Combine taskbar buttons when the taskbar is full.
+ *               - 2: Always combine taskbar buttons.
+ */
 void SetCombineTaskbarButtons(unsigned int option)
 {
     if (option <= 2)
-    { // 0 = Always, 1 = When taskbar is full, 2 = Never
+    {
         HKEY hKey = NULL;
-        LONG result = RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
-                                   0, KEY_SET_VALUE, &hKey);
-        if (result == ERROR_SUCCESS)
+        if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                         0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
         {
             DWORD dwValue = option;
-            RegSetValueEx(hKey, TEXT("TaskbarGlomLevel"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue));
-            RegCloseKey(hKey);
+            if (RegSetValueEx(hKey, TEXT("TaskbarGlomLevel"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
+            {
+                RegCloseKey(hKey);
 
-            // Notify all applications of the change
-            SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+                // Notify all applications of the change
+                SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+            }
+            else
+            {
+                Wh_Log(L"Failed to set registry key TaskbarGlomLevel!");
+            }
+        }
+        else
+        {
+            Wh_Log(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
         }
     }
 }
@@ -1769,7 +1820,8 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     }
     else if (taskbarAction == ACTION_COMBINE_TASKBAR_BUTTONS)
     {
-        static bool zigzag;
+        // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
+        static bool zigzag = (GetCombineTaskbarButtons() == g_settings.taskBarButtonsState1);
         zigzag = !zigzag;
         SetCombineTaskbarButtons(zigzag ? g_settings.taskBarButtonsState1 : g_settings.taskBarButtonsState2);
     }
