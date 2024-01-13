@@ -1104,11 +1104,17 @@ bool isMouseDoubleClick(LPARAM lParam)
         ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
     {
         result = true;
-    }
 
-    // Update the time and location of the last WM_POINTERDOWN event
-    lastPointerDownTime = currentTime;
-    lastPointerDownLocation = currentLocation;
+        // Update the time and location to defaults, otherwise a triple-click will be detected as two double-clicks
+        lastPointerDownTime = 0;
+        lastPointerDownLocation = {0, 0};
+    }
+    else
+    {
+        // Update the time and location of the last WM_POINTERDOWN event
+        lastPointerDownTime = currentTime;
+        lastPointerDownLocation = currentLocation;
+    }
 
     return result;
 }
