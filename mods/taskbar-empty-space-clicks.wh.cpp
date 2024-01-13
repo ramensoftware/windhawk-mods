@@ -32,7 +32,7 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Double-c
 5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature
 6. **Win+Tab** - Opens Win+Tab dialog
 7. **Hide desktop icons** - Toggle show/hide of all desktop icons
-7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu
+7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
 7. **Open Start menu** - Sends Win key press to open Start menu
 
 ## Example
@@ -98,7 +98,7 @@ If you have request for new functions, suggestions or you are experiencing some 
     - COMBINE_ALWAYS: Always combine
     - COMBINE_WHEN_FULL: Combine when taskbar is full
     - COMBINE_NEVER: Never combine
-  - State2: COMBINE_ALWAYS
+  - State2: COMBINE_NEVER
     $options:
     - COMBINE_ALWAYS: Always combine
     - COMBINE_WHEN_FULL: Combine when taskbar is full
