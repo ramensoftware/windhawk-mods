@@ -1617,44 +1617,47 @@ void OpenTaskManager(HWND taskbarhWnd)
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0);
 }
 
-BOOL ToggleVolMuted()
+/**
+ * Toggles the volume mute state via Windows Core Audio API through COM interface.
+ */
+void ToggleVolMuted()
 {
-    IMMDevice *defaultDevice = NULL;
-    IAudioEndpointVolume *endpointVolume = NULL;
-    HRESULT hr;
-    BOOL bMuted = FALSE;
-    BOOL bSuccess = FALSE;
+    Wh_Log(L"Toggling volume mute");
+    BOOL success = FALSE;
 
-    const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
-
-    hr = g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &defaultDevice);
-    if (SUCCEEDED(hr))
+    com_ptr<IMMDevice> defaultAudioDevice;
+    if (SUCCEEDED(g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
     {
-        hr = defaultDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (LPVOID *)&endpointVolume);
-        if (SUCCEEDED(hr))
+        // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
+        const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+
+        // get handle to the audio endpoint volume control
+        com_ptr<IAudioEndpointVolume> endpointVolume;
+        if (SUCCEEDED(defaultAudioDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
         {
-            if (SUCCEEDED(endpointVolume->GetMute(&bMuted)))
-            {
-                Wh_Log(L"Toggling volume mute");
-                if (SUCCEEDED(endpointVolume->SetMute(!bMuted, NULL)))
-                {
-                    bSuccess = TRUE;
-                }
-            }
-            endpointVolume->Release();
+            BOOL isMuted = FALSE;
+            success = SUCCEEDED(endpointVolume->GetMute(&isMuted)) && SUCCEEDED(endpointVolume->SetMute(!isMuted, NULL));
         }
-        defaultDevice->Release();
     }
 
-    return bSuccess;
+    if (success == FALSE)
+    {
+        Wh_Log(L"ERROR: Failed to toggle volume mute!");
+    }
 }
 
+/**
+ * Toggles show/hide of the Desktop icons by sending a message to the Desktop window.
+ */
 void HideIcons()
 {
     if (g_hDesktopWnd != NULL)
     {
-        Wh_Log(L"Sending hide icons message");
-        PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0);
+        Wh_Log(L"Sending show/hide icons message");
+        if (!PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0))
+        {
+            Wh_Log(L"ERROR: Failed to send show/hide icons message");
+        }
     }
 }
 
@@ -1678,12 +1681,12 @@ DWORD GetCombineTaskbarButtons()
         }
         else
         {
-            Wh_Log(L"Failed to read registry key TaskbarGlomLevel!");
+            Wh_Log(L"ERROR: Failed to read registry key TaskbarGlomLevel!");
         }
     }
     else
     {
-        Wh_Log(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+        Wh_Log(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
     }
     return dwValue;
 }
@@ -1702,6 +1705,8 @@ DWORD GetCombineTaskbarButtons()
  */
 void SetCombineTaskbarButtons(unsigned int option)
 {
+    Wh_Log(L"Setting taskbar button combining to %d", option);
+
     if (option <= 2)
     {
         HKEY hKey = NULL;
@@ -1718,12 +1723,12 @@ void SetCombineTaskbarButtons(unsigned int option)
             }
             else
             {
-                Wh_Log(L"Failed to set registry key TaskbarGlomLevel!");
+                Wh_Log(L"ERROR: Failed to set registry key TaskbarGlomLevel!");
             }
         }
         else
         {
-            Wh_Log(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+            Wh_Log(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
         }
     }
 }
