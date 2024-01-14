@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-01-14T06:36:08.000Z</updated>
+    <updated>2024-01-14T07:49:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#cc8981928018153636f20dfdef7ac8dacf5571e5</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2024-01-14T07:49:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>code reformatted by clang formatter - Visual Studio style (it makes the diff a pain in the ass I know and I am sorry for that - I will stick to this format from now on)</li>
+<li>removed 7+TT code used for Ctrl+Alt+Tab and Win+Tab (replaced by virtual keypress)</li>
+<li>implemented Open Start menu feature (sends Win keypress)</li>
+<li>implemented "Combine taskbar butons toggle" (works only on Windows 10 and newer Windows 11 versions) - closes #463</li>
+<li>prevent multiple double-clicks when tripple-clicking</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.0.6]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#e22e86f90ca733f06854d2f671ac7e57bea3f3fa</id>
@@ -206,15 +219,6 @@ choice.</p>
         <updated>2023-12-21T15:17:29.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added a workaround for a crash on startup if a custom background is set.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable rounded corners in Windows 11 1.0.1]]></title>
-        <id>https://windhawk.net/mods/disable-rounded-corners#1c369113ba4582b572663e7bde2999bd70c7a1f1</id>
-        <link href="https://windhawk.net/mods/disable-rounded-corners"/>
-        <updated>2023-12-20T15:24:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed usage notes to specify the correct process name to add to the process inclusion list.</li>
 </ul>]]></content>
     </entry>
 </feed>

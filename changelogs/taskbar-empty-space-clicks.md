@@ -1,3 +1,11 @@
+## 1.1 ([Jan 14, 2024](https://github.com/ramensoftware/windhawk-mods/blob/cc8981928018153636f20dfdef7ac8dacf5571e5/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- code reformatted by clang formatter - Visual Studio style (it makes the diff a pain in the ass I know and I am sorry for that - I will stick to this format from now on)
+- removed 7+TT code used for Ctrl+Alt+Tab and Win+Tab (replaced by virtual keypress)
+- implemented Open Start menu feature (sends Win keypress)
+- implemented "Combine taskbar butons toggle" (works only on Windows 10 and newer Windows 11 versions) - closes #463
+- prevent multiple double-clicks when tripple-clicking
+
 ## 1.0 ([Jan 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/46472b5d13df20650591a0456fd464daab9552a2/mods/taskbar-empty-space-clicks.wh.cpp))
 
 Initial release.

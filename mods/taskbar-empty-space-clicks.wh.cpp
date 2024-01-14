@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.0
+// @version         1.1
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -29,9 +29,11 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Double-c
 2. **Ctrl+Alt+Tab** - Opens Ctrl+Alt+Tab dialog
 3. **Task Manager** - Opens Windows default task manager
 4. **Mute system volume** - Toggle mute of system volume (all sound)
-5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature 
+5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature
 6. **Win+Tab** - Opens Win+Tab dialog
 7. **Hide desktop icons** - Toggle show/hide of all desktop icons
+7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
+7. **Open Start menu** - Sends Win key press to open Start menu
 
 ## Example
 
@@ -43,9 +45,15 @@ Following animation shows **Taskbar auto-hide** feature. Feature gets toggled wh
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
 - Windows 11 21H2 - latest major
 
-I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.  
+I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
 
-In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2). 
+## Classic taskbar on Windows 11
+
+In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2).
+
+## Suggestions and new features
+
+If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues).
 
 */
 // ==/WindhawkModReadme==
@@ -62,7 +70,9 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   - ACTION_MUTE: Mute system volume
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
   - ACTION_WIN_TAB: Win+Tab
-  - ACTION_HIDE_ICONS: Hide desktop icons 
+  - ACTION_HIDE_ICONS: Hide desktop icons
+  - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+  - ACTION_OPEN_START_MENU: Open Start menu
 - middleClickAction: ACTION_NOTHING
   $name: Middle click on empty space
   $options:
@@ -73,13 +83,28 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
   - ACTION_MUTE: Mute system volume
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
   - ACTION_WIN_TAB: Win+Tab
-  - ACTION_HIDE_ICONS: Hide desktop icons 
+  - ACTION_HIDE_ICONS: Hide desktop icons
+  - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+  - ACTION_OPEN_START_MENU: Open Start menu
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
     ExplorerPatcher or a similar tool). Note: For Windhawk versions older
     than 1.3, you have to disable and re-enable the mod to apply this option.
+- CombineTaskbarButtons:
+  - State1: COMBINE_ALWAYS
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+  - State2: COMBINE_NEVER
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+  $name: Combine Taskbar Buttons toggle
+  $description: When toggle activated, switch between following states
 */
 // ==/WindhawkModSettings==
 
@@ -175,9 +200,15 @@ typedef void *UIA_HWND;
 //     ProviderOptions_UseClientCoordinates    = 0x100
 // };
 
-enum SupportedTextSelection { SupportedTextSelection_None = 0, SupportedTextSelection_Single = 1, SupportedTextSelection_Multiple = 2 };
+enum SupportedTextSelection
+{
+    SupportedTextSelection_None = 0,
+    SupportedTextSelection_Single = 1,
+    SupportedTextSelection_Multiple = 2
+};
 
-enum TextUnit {
+enum TextUnit
+{
     TextUnit_Character = 0,
     TextUnit_Format = 1,
     TextUnit_Word = 2,
@@ -187,9 +218,14 @@ enum TextUnit {
     TextUnit_Document = 6
 };
 
-enum TextPatternRangeEndpoint { TextPatternRangeEndpoint_Start = 0, TextPatternRangeEndpoint_End = 1 };
+enum TextPatternRangeEndpoint
+{
+    TextPatternRangeEndpoint_Start = 0,
+    TextPatternRangeEndpoint_End = 1
+};
 
-enum TextDecorationLineStyle {
+enum TextDecorationLineStyle
+{
     TextDecorationLineStyle_None = 0,
     TextDecorationLineStyle_Single = 1,
     TextDecorationLineStyle_WordsOnly = 2,
@@ -211,13 +247,29 @@ enum TextDecorationLineStyle {
     TextDecorationLineStyle_Other = -1
 };
 
-enum CaretPosition { CaretPosition_Unknown = 0, CaretPosition_EndOfLine = 1, CaretPosition_BeginningOfLine = 2 };
+enum CaretPosition
+{
+    CaretPosition_Unknown = 0,
+    CaretPosition_EndOfLine = 1,
+    CaretPosition_BeginningOfLine = 2
+};
 
-enum ToggleState { ToggleState_Off = 0, ToggleState_On = 1, ToggleState_Indeterminate = 2 };
+enum ToggleState
+{
+    ToggleState_Off = 0,
+    ToggleState_On = 1,
+    ToggleState_Indeterminate = 2
+};
 
-enum RowOrColumnMajor { RowOrColumnMajor_RowMajor = 0, RowOrColumnMajor_ColumnMajor = 1, RowOrColumnMajor_Indeterminate = 2 };
+enum RowOrColumnMajor
+{
+    RowOrColumnMajor_RowMajor = 0,
+    RowOrColumnMajor_ColumnMajor = 1,
+    RowOrColumnMajor_Indeterminate = 2
+};
 
-enum TreeScope {
+enum TreeScope
+{
     TreeScope_None = 0,
     TreeScope_Element = 0x1,
     TreeScope_Children = 0x2,
@@ -227,13 +279,28 @@ enum TreeScope {
     TreeScope_Subtree = TreeScope_Element | TreeScope_Children | TreeScope_Descendants
 };
 
-enum OrientationType { OrientationType_None = 0, OrientationType_Horizontal = 1, OrientationType_Vertical = 2 };
+enum OrientationType
+{
+    OrientationType_None = 0,
+    OrientationType_Horizontal = 1,
+    OrientationType_Vertical = 2
+};
 
-enum PropertyConditionFlags { PropertyConditionFlags_None = 0, PropertyConditionFlags_IgnoreCase = 1 };
+enum PropertyConditionFlags
+{
+    PropertyConditionFlags_None = 0,
+    PropertyConditionFlags_IgnoreCase = 1
+};
 
-enum WindowVisualState { WindowVisualState_Normal = 0, WindowVisualState_Maximized = 1, WindowVisualState_Minimized = 2 };
+enum WindowVisualState
+{
+    WindowVisualState_Normal = 0,
+    WindowVisualState_Maximized = 1,
+    WindowVisualState_Minimized = 2
+};
 
-enum WindowInteractionState {
+enum WindowInteractionState
+{
     WindowInteractionState_Running = 0,
     WindowInteractionState_Closing = 1,
     WindowInteractionState_ReadyForUserInteraction = 2,
@@ -241,7 +308,8 @@ enum WindowInteractionState {
     WindowInteractionState_NotResponding = 4
 };
 
-enum ExpandCollapseState {
+enum ExpandCollapseState
+{
     ExpandCollapseState_Collapsed = 0,
     ExpandCollapseState_Expanded = 1,
     ExpandCollapseState_PartiallyExpanded = 2,
@@ -255,7 +323,8 @@ enum ExpandCollapseState {
 //     double height;
 // };
 
-struct UiaPoint {
+struct UiaPoint
+{
     double x;
     double y;
 };
@@ -303,8 +372,9 @@ struct IAccessible;
 #define __IUIAutomationElement_INTERFACE_DEFINED__
 DEFINE_GUID(IID_IUIAutomationElement, 0xd22108aa, 0x8ac5, 0x49a5, 0x83, 0x7b, 0x37, 0xbb, 0xb3, 0xd7, 0x59, 0x1e);
 MIDL_INTERFACE("d22108aa-8ac5-49a5-837b-37bbb3d7591e")
-IUIAutomationElement : public IUnknown {
-  public:
+IUIAutomationElement : public IUnknown
+{
+public:
     virtual HRESULT STDMETHODCALLTYPE SetFocus() = 0;
     virtual HRESULT STDMETHODCALLTYPE GetRuntimeId(__RPC__deref_out_opt SAFEARRAY * *runtimeId) = 0;
     virtual HRESULT STDMETHODCALLTYPE FindFirst(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition * condition,
@@ -404,8 +474,9 @@ __CRT_UUID_DECL(IUIAutomationElement, 0xd22108aa, 0x8ac5, 0x49a5, 0x83, 0x7b, 0x
 #define __IUIAutomation_INTERFACE_DEFINED__
 DEFINE_GUID(IID_IUIAutomation, 0x30cbe57d, 0xd9d0, 0x452a, 0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee);
 MIDL_INTERFACE("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee")
-IUIAutomation : public IUnknown {
-  public:
+IUIAutomation : public IUnknown
+{
+public:
     virtual HRESULT STDMETHODCALLTYPE CompareElements(__RPC__in_opt IUIAutomationElement * el1, __RPC__in_opt IUIAutomationElement * el2,
                                                       __RPC__out BOOL * areSame) = 0;
     virtual HRESULT STDMETHODCALLTYPE CompareRuntimeIds(__RPC__in SAFEARRAY * runtimeId1, __RPC__in SAFEARRAY * runtimeId2,
@@ -515,8 +586,9 @@ __CRT_UUID_DECL(IUIAutomation, 0x30cbe57d, 0xd9d0, 0x452a, 0xab, 0x13, 0x7a, 0xc
 #define __IUIAutomationTreeWalker_INTERFACE_DEFINED__
 DEFINE_GUID(IID_IUIAutomationTreeWalker, 0x4042c624, 0x389c, 0x4afc, 0xa6, 0x30, 0x9d, 0xf8, 0x54, 0xa5, 0x41, 0xfc);
 MIDL_INTERFACE("4042c624-389c-4afc-a630-9df854a541fc")
-IUIAutomationTreeWalker : public IUnknown {
-  public:
+IUIAutomationTreeWalker : public IUnknown
+{
+public:
     virtual HRESULT STDMETHODCALLTYPE GetParentElement(__RPC__in_opt IUIAutomationElement * element,
                                                        __RPC__deref_out_opt IUIAutomationElement * *parent) = 0;
     virtual HRESULT STDMETHODCALLTYPE GetFirstChildElement(__RPC__in_opt IUIAutomationElement * element,
@@ -564,50 +636,70 @@ typedef class CUIAutomation CUIAutomation;
 
 // =====================================================================
 
-enum TaskBarVersion { 
-    WIN_10_TASKBAR = 0, 
-    WIN_11_TASKBAR, 
-    UNKNOWN_TASKBAR 
+enum TaskBarVersion
+{
+    WIN_10_TASKBAR = 0,
+    WIN_11_TASKBAR,
+    UNKNOWN_TASKBAR
 };
 
-enum TaskBarAction {
+enum TaskBarAction
+{
     ACTION_NOTHING = 0,
     ACTION_SHOW_DESKTOP,
-    ACTION_ALT_TAB,
+    ACTION_CTRL_ALT_TAB,
     ACTION_TASK_MANAGER,
     ACTION_MUTE,
     ACTION_TASKBAR_AUTOHIDE,
     ACTION_WIN_TAB,
-    ACTION_HIDE_ICONS
+    ACTION_HIDE_ICONS,
+    ACTION_COMBINE_TASKBAR_BUTTONS,
+    ACTION_OPEN_START_MENU
 };
 
-static struct {
+enum TaskBarButtonsState
+{
+    COMBINE_ALWAYS = 0,
+    COMBINE_WHEN_FULL,
+    COMBINE_NEVER,
+};
+
+static struct
+{
     bool oldTaskbarOnWin11;
     TaskBarAction doubleClickTaskbarAction;
     TaskBarAction middleClickTaskbarAction;
+    TaskBarButtonsState taskBarButtonsState1;
+    TaskBarButtonsState taskBarButtonsState2;
 } g_settings;
 
 // wrapper to always call COM de-initialization
-class COMInitializer {
-  public:
+class COMInitializer
+{
+public:
     COMInitializer() : initialized(false) {}
 
-    bool Init() {
-        if (!initialized) {
+    bool Init()
+    {
+        if (!initialized)
+        {
             initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_MULTITHREADED));
         }
         return initialized;
     }
 
-    void Uninit() {
-        if (initialized) {
+    void Uninit()
+    {
+        if (initialized)
+        {
             CoUninitialize();
             initialized = false;
             Wh_Log(L"COM de-initialized");
         }
     }
 
-    ~COMInitializer() {
+    ~COMInitializer()
+    {
         Uninit();
     }
 
@@ -617,7 +709,6 @@ protected:
     bool initialized;
 } g_comInitializer;
 
-static int nWinVersion;
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
 static DWORD g_dwTaskbarThreadId;
@@ -631,7 +722,6 @@ static HWND g_hDesktopWnd;
 static com_ptr<IUIAutomation> g_pUIAutomation;
 static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
 
-
 // since the mod can't be split to multiple files, the definition order becomes somehow complicated
 bool IsTaskbarWindow(HWND hWnd);
 bool isMouseDoubleClick(LPARAM lParam);
@@ -643,10 +733,12 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
-UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_toggle-taskbar-autohide");
+UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_empty-space-clicks");
 
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
+BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM
+    {
         SUBCLASSPROC pfnSubclass;
         UINT_PTR uIdSubclass;
         DWORD_PTR dwRefData;
@@ -654,20 +746,25 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
     };
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
+    if (dwThreadId == 0)
+    {
         return FALSE;
     }
 
-    if (dwThreadId == GetCurrentThreadId()) {
+    if (dwThreadId == GetCurrentThreadId())
+    {
         return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
     }
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI_LAMBDA_RETURN(LRESULT) {
-            if (nCode == HC_ACTION) {
+        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI_LAMBDA_RETURN(LRESULT)
+        {
+            if (nCode == HC_ACTION)
+            {
                 const CWPSTRUCT *cwp = (const CWPSTRUCT *)lParam;
-                if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
+                if (cwp->message == g_subclassRegisteredMsg && cwp->wParam)
+                {
                     SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *param = (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *)cwp->lParam;
                     param->result = SetWindowSubclass(cwp->hwnd, param->pfnSubclass, param->uIdSubclass, param->dwRefData);
                 }
@@ -676,7 +773,8 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
         },
         nullptr, dwThreadId);
-    if (!hook) {
+    if (!hook)
+    {
         return FALSE;
     }
 
@@ -693,31 +791,40 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
 }
 
 // proc handler for older Windows (nonXAML taskbar) versions
-LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, 
-                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData) {
-    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
+                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam))
+    {
         RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
     }
 
     // Wh_Log(L"Message: 0x%x", uMsg);
 
     LRESULT result = 0;
-    switch (uMsg) {
+    switch (uMsg)
+    {
     // catch middle mouse button on both main and secondary taskbars
     case WM_NCMBUTTONDOWN:
     case WM_MBUTTONDOWN:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.middleClickTaskbarAction)) {
+        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.middleClickTaskbarAction))
+        {
             result = 0;
-        } else {
+        }
+        else
+        {
             result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
         break;
 
     case WM_LBUTTONDBLCLK:
     case WM_NCLBUTTONDBLCLK:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.doubleClickTaskbarAction)) {
+        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.doubleClickTaskbarAction))
+        {
             result = 0;
-        } else {
+        }
+        else
+        {
             result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
         break;
@@ -725,7 +832,8 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     case WM_NCDESTROY:
         result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-        if (hWnd != g_hTaskbarWnd) {
+        if (hWnd != g_hTaskbarWnd)
+        {
             g_secondaryTaskbarWindows.erase(hWnd);
         }
         break;
@@ -740,22 +848,31 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 
 // proc handler for newer Windows versions (Windows 11 21H2 and newer)
 WNDPROC InputSiteWindowProc_Original;
-LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
     // Wh_Log(L"Message: 0x%x", uMsg);
 
-    switch (uMsg) {
+    switch (uMsg)
+    {
     case WM_POINTERDOWN:
         HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-        if (IsTaskbarWindow(hRootWnd)) {
+        if (IsTaskbarWindow(hRootWnd))
+        {
             TaskBarAction action;
-            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam)) {
+            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
+            {
                 action = g_settings.middleClickTaskbarAction;
-            } else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam)) {
+            }
+            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam))
+            {
                 action = g_settings.doubleClickTaskbarAction;
-            } else {
+            }
+            else
+            {
                 action = ACTION_NOTHING;
             }
-            if(OnMouseClick(hRootWnd, wParam, lParam, action)) {
+            if (OnMouseClick(hRootWnd, wParam, lParam, action))
+            {
                 return 0;
             }
         }
@@ -765,28 +882,34 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
 }
 
-void SubclassTaskbarWindow(HWND hWnd) { 
-    SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0); 
+void SubclassTaskbarWindow(HWND hWnd)
+{
+    SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0);
 }
 
-void UnsubclassTaskbarWindow(HWND hWnd) { 
-    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0); 
+void UnsubclassTaskbarWindow(HWND hWnd)
+{
+    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
 }
 
-void HandleIdentifiedInputSiteWindow(HWND hWnd) {
-    if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId) {
+void HandleIdentifiedInputSiteWindow(HWND hWnd)
+{
+    if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId)
+    {
         return;
     }
 
     HWND hParentWnd = GetParent(hWnd);
     WCHAR szClassName[64];
     if (!hParentWnd || !GetClassName(hParentWnd, szClassName, ARRAYSIZE(szClassName)) ||
-        _wcsicmp(szClassName, L"Windows.UI.Composition.DesktopWindowContentBridge") != 0) {
+        _wcsicmp(szClassName, L"Windows.UI.Composition.DesktopWindowContentBridge") != 0)
+    {
         return;
     }
 
     hParentWnd = GetParent(hParentWnd);
-    if (!hParentWnd || !IsTaskbarWindow(hParentWnd)) {
+    if (!hParentWnd || !IsTaskbarWindow(hParentWnd))
+    {
         return;
     }
 
@@ -796,7 +919,8 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd) {
     void *wndProc = (void *)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
     Wh_SetFunctionHook(wndProc, (void *)InputSiteWindowProc_Hook, (void **)&InputSiteWindowProc_Original);
 
-    if (g_initialized) {
+    if (g_initialized)
+    {
         Wh_ApplyHookOperations();
     }
 
@@ -804,38 +928,48 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd) {
     g_inputSiteProcHooked = true;
 }
 
-void HandleIdentifiedTaskbarWindow(HWND hWnd) {
+void HandleIdentifiedTaskbarWindow(HWND hWnd)
+{
     g_hTaskbarWnd = hWnd;
     g_dwTaskbarThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     SubclassTaskbarWindow(hWnd);
-    for (HWND hSecondaryWnd : g_secondaryTaskbarWindows) {
+    for (HWND hSecondaryWnd : g_secondaryTaskbarWindows)
+    {
         SubclassTaskbarWindow(hSecondaryWnd);
     }
 
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked) {
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked)
+    {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
-        if (hXamlIslandWnd) {
+        if (hXamlIslandWnd)
+        {
             HWND hInputSiteWnd = FindWindowEx(hXamlIslandWnd, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr);
-            if (hInputSiteWnd) {
+            if (hInputSiteWnd)
+            {
                 HandleIdentifiedInputSiteWindow(hInputSiteWnd);
             }
         }
     }
 }
 
-void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd) {
-    if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId) {
+void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
+{
+    if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId)
+    {
         return;
     }
 
     g_secondaryTaskbarWindows.insert(hWnd);
     SubclassTaskbarWindow(hWnd);
 
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked) {
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked)
+    {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
-        if (hXamlIslandWnd) {
+        if (hXamlIslandWnd)
+        {
             HWND hInputSiteWnd = FindWindowEx(hXamlIslandWnd, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr);
-            if (hInputSiteWnd) {
+            if (hInputSiteWnd)
+            {
                 HandleIdentifiedInputSiteWindow(hInputSiteWnd);
             }
         }
@@ -845,8 +979,10 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd) {
 // finds main task bar and returns its hWnd,
 // optinally it finds also secondary taskbars and fills them to the set
 // secondaryTaskbarWindows
-HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbarWindows) {
-    struct ENUM_WINDOWS_PARAM {
+HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbarWindows)
+{
+    struct ENUM_WINDOWS_PARAM
+    {
         HWND *hWnd;
         std::unordered_set<HWND> *secondaryTaskbarWindows;
     };
@@ -854,7 +990,8 @@ HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbar
     HWND hWnd = nullptr;
     ENUM_WINDOWS_PARAM param = {&hWnd, secondaryTaskbarWindows};
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL) {
+        [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
+        {
             ENUM_WINDOWS_PARAM &param = *(ENUM_WINDOWS_PARAM *)lParam;
 
             DWORD dwProcessId = 0;
@@ -865,9 +1002,12 @@ HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbar
             if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
                 return TRUE;
 
-            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0)
+            {
                 *param.hWnd = hWnd;
-            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+            }
+            else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0)
+            {
                 param.secondaryTaskbarWindows->insert(hWnd);
             }
 
@@ -880,19 +1020,24 @@ HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbar
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-                                 HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y,
+                                 int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
+{
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent,
+                                         hMenu, hInstance, lpParam);
 
     if (!hWnd)
         return hWnd;
 
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
 
-    if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
+    if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0)
+    {
         Wh_Log(L"Taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedTaskbarWindow(hWnd);
-    } else if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0) {
+    }
+    else if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0)
+    {
         Wh_Log(L"Secondary taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedSecondaryTaskbarWindow(hWnd);
     }
@@ -900,21 +1045,26 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     return hWnd;
 }
 
-using CreateWindowInBand_t = HWND(WINAPI *)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth,
-                                            int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam, DWORD dwBand);
+using CreateWindowInBand_t = HWND(WINAPI *)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
+                                            int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
+                                            HINSTANCE hInstance, LPVOID lpParam, DWORD dwBand);
 CreateWindowInBand_t CreateWindowInBand_Original;
-HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-                                    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam, DWORD dwBand) {
-    HWND hWnd = CreateWindowInBand_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance,
-                                            lpParam, dwBand);
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y,
+                                    int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance,
+                                    LPVOID lpParam, DWORD dwBand)
+{
+    HWND hWnd = CreateWindowInBand_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent,
+                                            hMenu, hInstance, lpParam, dwBand);
     if (!hWnd)
         return hWnd;
 
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
 
-    if (bTextualClassName && _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) {
+    if (bTextualClassName && _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0)
+    {
         Wh_Log(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked) {
+        if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked)
+        {
             HandleIdentifiedInputSiteWindow(hWnd);
         }
     }
@@ -924,196 +1074,21 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 
 #pragma endregion // hook_magic
 
-#pragma region helper_defines
-// taken from https://github.com/m417z/7-Taskbar-Tweaker/blob/6d529922a8609b68d6d4492d91dcc704c0dfbe4d/dll/functions.h
-
-#define WIN_VERSION_UNSUPPORTED (-1)
-#define WIN_VERSION_7 0
-#define WIN_VERSION_8 1
-#define WIN_VERSION_81 2
-#define WIN_VERSION_811 3
-#define WIN_VERSION_10_T1 4        // 1507
-#define WIN_VERSION_10_T2 5        // 1511
-#define WIN_VERSION_10_R1 6        // 1607
-#define WIN_VERSION_10_R2 7        // 1703
-#define WIN_VERSION_10_R3 8        // 1709
-#define WIN_VERSION_10_R4 9        // 1803
-#define WIN_VERSION_10_R5 10       // 1809
-#define WIN_VERSION_10_19H1 11     // 1903, 1909
-#define WIN_VERSION_10_20H1 12     // 2004, 20H2, 21H1, 21H2, 22H2
-#define WIN_VERSION_SERVER_2022 13 // Server 2022
-#define WIN_VERSION_11_21H2 14
-#define WIN_VERSION_11_22H2 15
-
-// helper macros
-#define FIRST_NONEMPTY_ARG_2(a, b) \
-                                   ( (sizeof(#a) > sizeof("")) ? (a+0) : (b) )
-#define FIRST_NONEMPTY_ARG_3(a, b, c) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_2(b, c))
-#define FIRST_NONEMPTY_ARG_4(a, b, c, d) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_3(b, c, d))
-#define FIRST_NONEMPTY_ARG_5(a, b, c, d, e) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_4(b, c, d, e))
-#define FIRST_NONEMPTY_ARG_6(a, b, c, d, e, f) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_5(b, c, d, e, f))
-#define FIRST_NONEMPTY_ARG_7(a, b, c, d, e, f, g) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_6(b, c, d, e, f, g))
-#define FIRST_NONEMPTY_ARG_8(a, b, c, d, e, f, g, h) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_7(b, c, d, e, f, g, h))
-#define FIRST_NONEMPTY_ARG_9(a, b, c, d, e, f, g, h, i) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_8(b, c, d, e, f, g, h, i))
-#define FIRST_NONEMPTY_ARG_10(a, b, c, d, e, f, g, h, i, j) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_9(b, c, d, e, f, g, h, i, j))
-#define FIRST_NONEMPTY_ARG_11(a, b, c, d, e, f, g, h, i, j, k) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_10(b, c, d, e, f, g,  h, i, j, k))
-#define FIRST_NONEMPTY_ARG_12(a, b, c, d, e, f, g, h, i, j, k, l) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_11(b, c, d, e, f, g, h, i, j, k, l))
-#define FIRST_NONEMPTY_ARG_13(a, b, c, d, e, f, g, h, i, j, k, l, m) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_12(b, c, d, e, f, g, h, i, j, k, l, m))
-#define FIRST_NONEMPTY_ARG_14(a, b, c, d, e, f, g, h, i, j, k, l, m, n) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_13(b, c, d, e, f, g, h, i, j, k, l, m, n))
-#define FIRST_NONEMPTY_ARG_15(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_14(b, c, d, e, f, g, h, i, j, k, l, m, n, o))
-#define FIRST_NONEMPTY_ARG_16(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_15(b, c, d, e, f, g, h, i, j, k, l, m, n, o, p))
-#define FIRST_NONEMPTY_ARG_17(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q) \
-                                   FIRST_NONEMPTY_ARG_2(a, FIRST_NONEMPTY_ARG_16(b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q))
-
-#define DO2(d7, dx)                ( (nWinVersion > WIN_VERSION_7) ? FIRST_NONEMPTY_ARG_2(dx, d7) : (d7) )
-#define DO3(d7, d8, dx)            ( (nWinVersion > WIN_VERSION_8) ? FIRST_NONEMPTY_ARG_3(dx, d8, d7) : DO2(d7, d8) )
-#define DO4(d7, d8, d81, dx)       ( (nWinVersion > WIN_VERSION_81) ? FIRST_NONEMPTY_ARG_4(dx, d81, d8, d7) : DO3(d7, d8, d81) )
-#define DO5(d7, d8, d81, d811, dx) ( (nWinVersion > WIN_VERSION_811) ? FIRST_NONEMPTY_ARG_5(dx, d811, d81, d8, d7) : DO4(d7, d8, d81, d811) )
-#define DO6(d7, d8, d81, d811, d10_t1, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_T1) ? \
-                                     FIRST_NONEMPTY_ARG_6(dx, d10_t1, d811, d81, d8, d7) : \
-                                     DO5(d7, d8, d81, d811, d10_t1) )
-#define DO7(d7, d8, d81, d811, d10_t1, d10_t2, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_T2) ? \
-                                     FIRST_NONEMPTY_ARG_7(dx, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO6(d7, d8, d81, d811, d10_t1, d10_t2) )
-#define DO8(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_R1) ? \
-                                     FIRST_NONEMPTY_ARG_8(dx, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO7(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1) )
-#define DO9(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_R2) ? \
-                                     FIRST_NONEMPTY_ARG_9(dx, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO8(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2) )
-#define DO10(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_R3) ? \
-                                     FIRST_NONEMPTY_ARG_10(dx, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO9(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3) )
-#define DO11(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_R4) ? \
-                                     FIRST_NONEMPTY_ARG_11(dx, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO10(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4) )
-#define DO12(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_R5) ? \
-                                     FIRST_NONEMPTY_ARG_12(dx, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO11(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5) )
-#define DO13(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_19H1) ? \
-                                     FIRST_NONEMPTY_ARG_13(dx, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO12(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1) )
-#define DO14(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, dx) \
-                                   ( (nWinVersion > WIN_VERSION_10_20H1) ? \
-                                     FIRST_NONEMPTY_ARG_14(dx, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO13(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1) )
-#define DO15(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, dx) \
-                                   ( (nWinVersion > WIN_VERSION_SERVER_2022) ? \
-                                     FIRST_NONEMPTY_ARG_15(dx, ds_2022, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO14(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022) )
-#define DO16(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2, dx) \
-                                   ( (nWinVersion > WIN_VERSION_11_21H2) ? \
-                                     FIRST_NONEMPTY_ARG_16(dx, d11_21h2, ds_2022, d10_20h1, d10_19h1, d10_r5, d10_r4, d10_r3, d10_r2, d10_r1, d10_t2, d10_t1, d811, d81, d8, d7) : \
-                                     DO15(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2) )
-#define DO17(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2, d11_22h2, dx) \
-                                   DO16(d7, d8, d81, d811, d10_t1, d10_t2, d10_r1, d10_r2, d10_r3, d10_r4, d10_r5, d10_19h1, d10_20h1, ds_2022, d11_21h2, d11_22h2)
-
-#ifdef _WIN64
-#define DEF3264(d32, d64)          (d64)
-#else
-#define DEF3264(d32, d64)          (d32)
-#endif
-
-#define DO2_3264(d7_32, d7_64, dx_32, dx_64) \
-                                   DEF3264(DO2(d7_32, dx_32), \
-                                           DO2(d7_64, dx_64))
-
-#define DO3_3264(d7_32, d7_64, d8_32, d8_64, dx_32, dx_64) \
-                                   DEF3264(DO3(d7_32, d8_32, dx_32), \
-                                           DO3(d7_64, d8_64, dx_64))
-
-#define DO4_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, dx_32, dx_64) \
-                                   DEF3264(DO4(d7_32, d8_32, d81_32, dx_32), \
-                                           DO4(d7_64, d8_64, d81_64, dx_64))
-
-#define DO5_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, dx_32, dx_64) \
-                                   DEF3264(DO5(d7_32, d8_32, d81_32, d811_32, dx_32), \
-                                           DO5(d7_64, d8_64, d81_64, d811_64, dx_64))
-
-#define DO6_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, dx_32, dx_64) \
-                                   DEF3264(DO6(d7_32, d8_32, d81_32, d811_32, d10_t1_32, dx_32), \
-                                           DO6(d7_64, d8_64, d81_64, d811_64, d10_t1_64, dx_64))
-
-#define DO7_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, dx_32, dx_64) \
-                                   DEF3264(DO7(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, dx_32), \
-                                           DO7(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, dx_64))
-
-#define DO8_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, dx_32, dx_64) \
-                                   DEF3264(DO8(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, dx_32), \
-                                           DO8(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, dx_64))
-
-#define DO9_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, dx_32, dx_64) \
-                                   DEF3264(DO9(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, dx_32), \
-                                           DO9(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, dx_64))
-
-#define DO10_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, dx_32, dx_64) \
-                                   DEF3264(DO10(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, dx_32), \
-                                           DO10(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, dx_64))
-
-#define DO11_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, dx_32, dx_64) \
-                                   DEF3264(DO11(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, dx_32), \
-                                           DO11(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, dx_64))
-
-#define DO12_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, dx_32, dx_64) \
-                                   DEF3264(DO12(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, dx_32), \
-                                           DO12(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, dx_64))
-
-#define DO13_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, dx_32, dx_64) \
-                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, dx_32), \
-                                           DO13(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, dx_64))
-
-#define DO14_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, dx_64) \
-                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
-                                           DO14(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, dx_64))
-
-#define DO15_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, ds_2022_64, dx_64) \
-                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
-                                           DO15(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, ds_2022_64, dx_64))
-
-#define DO16_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, ds_2022_64, d11_21h2_64, dx_64) \
-                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
-                                           DO16(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, ds_2022_64, d11_21h2_64, dx_64))
-
-#define DO17_3264(d7_32, d7_64, d8_32, d8_64, d81_32, d81_64, d811_32, d811_64, d10_t1_32, d10_t1_64, d10_t2_32, d10_t2_64, d10_r1_32, d10_r1_64, d10_r2_32, d10_r2_64, d10_r3_32, d10_r3_64, d10_r4_32, d10_r4_64, d10_r5_32, d10_r5_64, d10_19h1_32, d10_19h1_64, d10_20h1_32, d10_20h1_64, ds_2022_64, d11_21h2_64, d11_22h2_64, dx_64) \
-                                   DEF3264(DO13(d7_32, d8_32, d81_32, d811_32, d10_t1_32, d10_t2_32, d10_r1_32, d10_r2_32, d10_r3_32, d10_r4_32, d10_r5_32, d10_19h1_32, d10_20h1_32), \
-                                           DO17(d7_64, d8_64, d81_64, d811_64, d10_t1_64, d10_t2_64, d10_r1_64, d10_r2_64, d10_r3_64, d10_r4_64, d10_r5_64, d10_19h1_64, d10_20h1_64, ds_2022_64, d11_21h2_64, d11_22h2_64, dx_64))
-
-#pragma endregion
-
 #pragma region functions
 
-bool IsTaskbarWindow(HWND hWnd) {
+bool IsTaskbarWindow(HWND hWnd)
+{
     WCHAR szClassName[32];
-    if (!GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
+    if (!GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
+    {
         return false;
     }
 
     return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
 }
 
-bool isMouseDoubleClick(LPARAM lParam) {
+bool isMouseDoubleClick(LPARAM lParam)
+{
     static DWORD lastPointerDownTime = 0;
     static POINT lastPointerDownLocation = {0, 0};
 
@@ -1129,16 +1104,23 @@ bool isMouseDoubleClick(LPARAM lParam) {
         ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
     {
         result = true;
-    }
 
-    // Update the time and location of the last WM_POINTERDOWN event
-    lastPointerDownTime = currentTime;
-    lastPointerDownLocation = currentLocation;
+        // Update the time and location to defaults, otherwise a triple-click will be detected as two double-clicks
+        lastPointerDownTime = 0;
+        lastPointerDownLocation = {0, 0};
+    }
+    else
+    {
+        // Update the time and location of the last WM_POINTERDOWN event
+        lastPointerDownTime = currentTime;
+        lastPointerDownLocation = currentLocation;
+    }
 
     return result;
 }
 
-VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) {
+VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
+{
     HRSRC hResource;
     HGLOBAL hGlobal;
     void *pData;
@@ -1149,12 +1131,16 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) {
     uPtrLen = 0;
 
     hResource = FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
-    if (hResource != NULL) {
+    if (hResource != NULL)
+    {
         hGlobal = LoadResource(hModule, hResource);
-        if (hGlobal != NULL) {
+        if (hGlobal != NULL)
+        {
             pData = LockResource(hGlobal);
-            if (pData != NULL) {
-                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) || uPtrLen == 0) {
+            if (pData != NULL)
+            {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) || uPtrLen == 0)
+                {
                     pFixedFileInfo = NULL;
                     uPtrLen = 0;
                 }
@@ -1168,9 +1154,8 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) {
     return (VS_FIXEDFILEINFO *)pFixedFileInfo;
 }
 
-BOOL WindowsVersionInit() {
-    nWinVersion = WIN_VERSION_UNSUPPORTED;
-
+BOOL WindowsVersionInit()
+{
     VS_FIXEDFILEINFO *pFixedFileInfo = GetModuleVersionInfo(NULL, NULL);
     if (!pFixedFileInfo)
         return FALSE;
@@ -1181,119 +1166,78 @@ BOOL WindowsVersionInit() {
     WORD nQFE = LOWORD(pFixedFileInfo->dwFileVersionLS);
     Wh_Log(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
 
-    // windows version needed for macros and functions ported from 7+Taskbar to work 
-    switch (nMajor) {
-    case 6:
-        switch (nMinor) {
-        case 1:
-            nWinVersion = WIN_VERSION_7;
-            break;
-
-        case 2:
-            nWinVersion = WIN_VERSION_8;
-            break;
-
-        case 3:
-            if (nQFE < 17000)
-                nWinVersion = WIN_VERSION_81;
-            else
-                nWinVersion = WIN_VERSION_811;
-            break;
-
-        case 4:
-            nWinVersion = WIN_VERSION_10_T1;
-            break;
-        }
-        break;
-
-    case 10:
-        if (nBuild <= 10240)
-            nWinVersion = WIN_VERSION_10_T1;
-        else if (nBuild <= 10586)
-            nWinVersion = WIN_VERSION_10_T2;
-        else if (nBuild <= 14393)
-            nWinVersion = WIN_VERSION_10_R1;
-        else if (nBuild <= 15063)
-            nWinVersion = WIN_VERSION_10_R2;
-        else if (nBuild <= 16299)
-            nWinVersion = WIN_VERSION_10_R3;
-        else if (nBuild <= 17134)
-            nWinVersion = WIN_VERSION_10_R4;
-        else if (nBuild <= 17763)
-            nWinVersion = WIN_VERSION_10_R5;
-        else if (nBuild <= 18362)
-            nWinVersion = WIN_VERSION_10_19H1;
-        else if (nBuild <= 19041)
-            nWinVersion = WIN_VERSION_10_20H1;
-        else if (nBuild <= 20348)
-            nWinVersion = WIN_VERSION_SERVER_2022;
-        else if (nBuild <= 22000)
-            nWinVersion = WIN_VERSION_11_21H2;
-        else {
-            nWinVersion = WIN_VERSION_11_22H2;
-        }
-        break;
-    }
-
-    if (nMajor == 6) {
+    if (nMajor == 6)
+    {
         g_taskbarVersion = WIN_10_TASKBAR;
-    } else if (nMajor == 10) {
-        if (nBuild < 22000) { // 21H2
+    }
+    else if (nMajor == 10)
+    {
+        if (nBuild < 22000)
+        { // 21H2
             g_taskbarVersion = WIN_10_TASKBAR;
-        } else {
+        }
+        else
+        {
             g_taskbarVersion = WIN_11_TASKBAR;
         }
-    } else {
+    }
+    else
+    {
         g_taskbarVersion = UNKNOWN_TASKBAR;
     }
 
     return TRUE;
 }
 
-HWND GetWindows10ImmersiveWorkerWindow(void) {
-    HWND hApplicationManagerDesktopShellWindow = FindWindow(L"ApplicationManager_DesktopShellWindow", NULL);
-    if (!hApplicationManagerDesktopShellWindow)
-        return NULL;
-
-    LONG_PTR lpApplicationManagerDesktopShellWindow = GetWindowLongPtr(hApplicationManagerDesktopShellWindow, 0);
-    if (!lpApplicationManagerDesktopShellWindow)
-        return NULL;
-
-    LONG_PTR lpImmersiveShellHookService =
-        *(LONG_PTR *)(lpApplicationManagerDesktopShellWindow + DO9_3264(0, 0, , , , , , , 0x10, 0x20, , , , , , , 0x14, 0x28));
-    if (!lpImmersiveShellHookService)
-        return NULL;
-
-    LONG_PTR lpImmersiveWindowMessageService =
-        *(LONG_PTR *)(lpImmersiveShellHookService + DO10_3264(0, 0, , , , , , , 0x88, 0xE0, , , , , , , 0xA0, 0x108, 0x98, 0x100));
-    if (!lpImmersiveWindowMessageService)
-        return NULL;
-
-    return *(HWND *)(lpImmersiveWindowMessageService + DO10_3264(0, 0, , , , , , , 0x4C, 0x80, , , 0x50, 0x88, , , 0x58, 0x98, 0x54, 0x90));
-}
-
-TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
+TaskBarAction ParseMouseActionSetting(const wchar_t *option)
+{
     const auto value = Wh_GetStringSetting(option);
-    const auto equals = [](const wchar_t *str1, const wchar_t *str2) { return wcscmp(str1, str2) == 0; };
+    const auto equals = [](const wchar_t *str1, const wchar_t *str2)
+    { return wcscmp(str1, str2) == 0; };
 
     TaskBarAction action = ACTION_NOTHING;
-    if (equals(value, L"ACTION_NOTHING")) {
+    if (equals(value, L"ACTION_NOTHING"))
+    {
         action = ACTION_NOTHING;
-    } else if (equals(value, L"ACTION_SHOW_DESKTOP")) {
+    }
+    else if (equals(value, L"ACTION_SHOW_DESKTOP"))
+    {
         action = ACTION_SHOW_DESKTOP;
-    } else if (equals(value, L"ACTION_ALT_TAB")) {
-        action = ACTION_ALT_TAB;
-    } else if (equals(value, L"ACTION_TASK_MANAGER")) {
+    }
+    else if (equals(value, L"ACTION_ALT_TAB")) // do not brreak user settings with renaming the option
+    {
+        action = ACTION_CTRL_ALT_TAB;
+    }
+    else if (equals(value, L"ACTION_TASK_MANAGER"))
+    {
         action = ACTION_TASK_MANAGER;
-    } else if (equals(value, L"ACTION_MUTE")) {
+    }
+    else if (equals(value, L"ACTION_MUTE"))
+    {
         action = ACTION_MUTE;
-    } else if (equals(value, L"ACTION_TASKBAR_AUTOHIDE")) {
+    }
+    else if (equals(value, L"ACTION_TASKBAR_AUTOHIDE"))
+    {
         action = ACTION_TASKBAR_AUTOHIDE;
-    } else if (equals(value, L"ACTION_WIN_TAB")) {
+    }
+    else if (equals(value, L"ACTION_WIN_TAB"))
+    {
         action = ACTION_WIN_TAB;
-    } else if (equals(value, L"ACTION_HIDE_ICONS")) {
+    }
+    else if (equals(value, L"ACTION_HIDE_ICONS"))
+    {
         action = ACTION_HIDE_ICONS;
-    } else {
+    }
+    else if (equals(value, L"ACTION_COMBINE_TASKBAR_BUTTONS"))
+    {
+        action = ACTION_COMBINE_TASKBAR_BUTTONS;
+    }
+    else if (equals(value, L"ACTION_OPEN_START_MENU"))
+    {
+        action = ACTION_OPEN_START_MENU;
+    }
+    else
+    {
         Wh_Log(L"Error: unknown action '%s' for option '%s'!", value, option);
         action = ACTION_NOTHING;
     }
@@ -1303,47 +1247,66 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option) {
     return action;
 }
 
-void LoadSettings() {
+TaskBarButtonsState ParseTaskBarButtonsState(const wchar_t *option)
+{
+    const auto value = Wh_GetStringSetting(option);
+    const auto equals = [](const wchar_t *str1, const wchar_t *str2)
+    { return wcscmp(str1, str2) == 0; };
+
+    TaskBarButtonsState state = COMBINE_ALWAYS;
+    if (equals(value, L"COMBINE_ALWAYS"))
+    {
+        state = COMBINE_ALWAYS;
+    }
+    else if (equals(value, L"COMBINE_WHEN_FULL"))
+    {
+        state = COMBINE_WHEN_FULL;
+    }
+    else if (equals(value, L"COMBINE_NEVER"))
+    {
+        state = COMBINE_NEVER;
+    }
+    else
+    {
+        Wh_Log(L"Error: unknown state '%s' for option '%s'!", value, option);
+        state = COMBINE_ALWAYS;
+    }
+    Wh_Log(L"Selected '%s' button state %d", option, state);
+    Wh_FreeStringSetting(value);
+
+    return state;
+}
+
+void LoadSettings()
+{
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
     g_settings.doubleClickTaskbarAction = ParseMouseActionSetting(L"doubleClickAction");
     g_settings.middleClickTaskbarAction = ParseMouseActionSetting(L"middleClickAction");
+    g_settings.taskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State1");
+    g_settings.taskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State2");
 }
 
-bool GetTaskbarAutohideState() {
-    if (g_hTaskbarWnd == NULL) {
-        return false;
-    }
-    APPBARDATA msgData{};
-    msgData.cbSize = sizeof(msgData);
-    msgData.hWnd = g_hTaskbarWnd;
-    LPARAM state = SHAppBarMessage(ABM_GETSTATE, &msgData);
-    return state & ABS_AUTOHIDE;
-}
-
-void SetTaskbarAutohide(bool enabled) {
-    if (g_hTaskbarWnd == NULL) {
-        return;
-    }
-
-    APPBARDATA msgData{};
-    msgData.cbSize = sizeof(msgData);
-    msgData.hWnd = g_hTaskbarWnd;
-    msgData.lParam = enabled ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
-    SHAppBarMessage(ABM_SETSTATE, &msgData);
-}
-
-bool FindDesktopWindow() {
-    HWND hParentWnd = FindWindow(L"Progman", NULL);     // Program Manager window
-    if (!hParentWnd) {
-        Wh_Log(L"Failed to find Progman window");
+/**
+ * @brief Finds the desktop window. Desktop window handle is used to send messages to the desktop (show/hide icons).
+ *
+ * @return true if the desktop window is found, false otherwise.
+ */
+bool FindDesktopWindow()
+{
+    HWND hParentWnd = FindWindow(L"Progman", NULL); // Program Manager window
+    if (!hParentWnd)
+    {
+        Wh_Log(L"ERROR: Failed to find Progman window");
         return false;
     }
 
-    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL);     // parent window of the desktop
+    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL); // parent window of the desktop
     if (!hChildWnd)
     {
         DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
-        EnumThreadWindows(dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL) {
+        EnumThreadWindows(
+            dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
+            {
             WCHAR szClassName[16];
             if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
                 return TRUE;
@@ -1356,88 +1319,222 @@ bool FindDesktopWindow() {
                 return TRUE;
 
             *(HWND *)lParam = hChildWnd;
-            return FALSE;
-        }, (LPARAM)&hChildWnd);
+            return FALSE; },
+            (LPARAM)&hChildWnd);
     }
 
-    if (!hChildWnd) {
-        Wh_Log(L"Failed to find SHELLDLL_DefView window");
+    if (!hChildWnd)
+    {
+        Wh_Log(L"ERROR: Failed to find SHELLDLL_DefView window");
         return false;
     }
     g_hDesktopWnd = hChildWnd;
     return true;
 }
 
-#pragma endregion
+bool GetTaskbarAutohideState()
+{
+    if (g_hTaskbarWnd == NULL)
+    {
+        return false;
+    }
+    APPBARDATA msgData{};
+    msgData.cbSize = sizeof(msgData);
+    msgData.hWnd = g_hTaskbarWnd;
+    LPARAM state = SHAppBarMessage(ABM_GETSTATE, &msgData);
+    return state & ABS_AUTOHIDE;
+}
 
-#pragma region features
+void SetTaskbarAutohide(bool enabled)
+{
+    if (g_hTaskbarWnd == NULL)
+    {
+        return;
+    }
 
-bool ToggleTaskbarAutohide() {
+    APPBARDATA msgData{};
+    msgData.cbSize = sizeof(msgData);
+    msgData.hWnd = g_hTaskbarWnd;
+    msgData.lParam = enabled ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
+    SHAppBarMessage(ABM_SETSTATE, &msgData);
+}
+
+void ToggleTaskbarAutohide()
+{
     const bool isEnabled = GetTaskbarAutohideState();
     Wh_Log(L"Setting taskbar autohide state to %s", !isEnabled ? L"enabled" : L"disabled");
     SetTaskbarAutohide(!isEnabled);
-    return !isEnabled;
 }
 
-void ShowDesktop(HWND taskbarhWnd) {
+void ShowDesktop(HWND taskbarhWnd)
+{
     Wh_Log(L"Sending ShowDesktop message");
+    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0);
 }
 
-void SendAltTab() {
-    HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
-    if (hImmersiveWorkerWnd) {
-        WPARAM wHotkeyIdentifier = DO9(0, , , , 47, , , , 45);
-        Wh_Log(L"Sending AltTab message");
-        PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, wHotkeyIdentifier, MAKELPARAM(MOD_ALT | MOD_CONTROL, VK_TAB));
+void SendKeypress(std::vector<int> keys)
+{
+    const int NUM_KEYS = keys.size();
+    Wh_Log(L"Sending %d keypresses", NUM_KEYS);
+
+    std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
+
+    for (int i = 0; i < NUM_KEYS; i++)
+    {
+        input[i].type = INPUT_KEYBOARD;
+        input[i].ki.wScan = 0;
+        input[i].ki.time = 0;
+        input[i].ki.dwExtraInfo = 0;
+        input[i].ki.wVk = keys[i];
+        input[i].ki.dwFlags = 0; // KEYDOWN
+    }
+
+    for (int i = 0; i < NUM_KEYS; i++)
+    {
+        input[NUM_KEYS + i].type = INPUT_KEYBOARD;
+        input[NUM_KEYS + i].ki.wScan = 0;
+        input[NUM_KEYS + i].ki.time = 0;
+        input[NUM_KEYS + i].ki.dwExtraInfo = 0;
+        input[NUM_KEYS + i].ki.wVk = keys[i];
+        input[NUM_KEYS + i].ki.dwFlags = KEYEVENTF_KEYUP;
+    }
+
+    if (SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0])) != (NUM_KEYS * 2))
+    {
+        Wh_Log(L"ERROR: Failed to send key input");
     }
 }
 
-void SendWinTab() {
-    HWND hImmersiveWorkerWnd = GetWindows10ImmersiveWorkerWindow();
-    if (hImmersiveWorkerWnd) {
-        Wh_Log(L"Sending WinTab message");
-        PostMessage(hImmersiveWorkerWnd, WM_HOTKEY, 11, MAKELPARAM(MOD_WIN, VK_TAB));
-    }
+void SendCtrlAltTabKeypress()
+{
+    Wh_Log(L"Sending Ctrl+Alt+Tab keypress");
+    SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
 }
 
-void OpenTaskManager(HWND taskbarhWnd) {
+void SendWinTabKeypress()
+{
+    Wh_Log(L"Sending Win+Tab keypress");
+    SendKeypress({VK_LWIN, VK_TAB});
+}
+
+void SendWinKeypress()
+{
+    Wh_Log(L"Sending Win keypress");
+    SendKeypress({VK_LWIN});
+}
+
+void OpenTaskManager(HWND taskbarhWnd)
+{
     Wh_Log(L"Sending OpenTaskManager message");
+    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0);
 }
 
-BOOL ToggleVolMuted() {
-    IMMDevice *defaultDevice = NULL;
-    IAudioEndpointVolume *endpointVolume = NULL;
-    HRESULT hr;
-    BOOL bMuted = FALSE;
-    BOOL bSuccess = FALSE;
+void ToggleVolMuted()
+{
+    Wh_Log(L"Toggling volume mute");
+    BOOL success = FALSE;
 
-    const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+    com_ptr<IMMDevice> defaultAudioDevice;
+    if (SUCCEEDED(g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
+    {
+        // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
+        const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
-    hr = g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &defaultDevice);
-    if (SUCCEEDED(hr)) {
-        hr = defaultDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (LPVOID *)&endpointVolume);
-        if (SUCCEEDED(hr)) {
-            if (SUCCEEDED(endpointVolume->GetMute(&bMuted))) {
-                Wh_Log(L"Toggling volume mute");
-                if (SUCCEEDED(endpointVolume->SetMute(!bMuted, NULL))) {
-                    bSuccess = TRUE;
-                }
-            }
-            endpointVolume->Release();
+        // get handle to the audio endpoint volume control
+        com_ptr<IAudioEndpointVolume> endpointVolume;
+        if (SUCCEEDED(defaultAudioDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
+        {
+            BOOL isMuted = FALSE;
+            success = SUCCEEDED(endpointVolume->GetMute(&isMuted)) && SUCCEEDED(endpointVolume->SetMute(!isMuted, NULL));
         }
-        defaultDevice->Release();
     }
 
-    return bSuccess;
+    if (success == FALSE)
+    {
+        Wh_Log(L"ERROR: Failed to toggle volume mute!");
+    }
 }
 
-void HideIcons() {
-    if (g_hDesktopWnd != NULL) {
-        Wh_Log(L"Sending hide icons message");
-        PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0);
-    } 
+void HideIcons()
+{
+    if (g_hDesktopWnd != NULL)
+    {
+        Wh_Log(L"Sending show/hide icons message");
+        if (!PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0))
+        {
+            Wh_Log(L"ERROR: Failed to send show/hide icons message");
+        }
+    }
+}
+
+/**
+ * Retrieves the current setting for combining taskbar buttons. This setting is used as initial value for the toggle
+ * so that the toggle actually does the toggling for the forst time it is activated.
+ *
+ * @return The current value of the taskbar button combining setting. (0 = Always, 1 = When taskbar is full, 2 = Never)
+ */
+DWORD GetCombineTaskbarButtons()
+{
+    HKEY hKey = NULL;
+    DWORD dwValue = 0;
+    DWORD dwBufferSize = sizeof(DWORD);
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        if (RegQueryValueEx(hKey, TEXT("TaskbarGlomLevel"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) != ERROR_SUCCESS)
+        {
+            Wh_Log(L"ERROR: Failed to read registry key TaskbarGlomLevel!");
+        }
+        RegCloseKey(hKey);
+    }
+    else
+    {
+        Wh_Log(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+    }
+    return dwValue;
+}
+
+/**
+ * @brief Sets the option for combining taskbar buttons.
+ *
+ * This function allows you to set the option for combining taskbar buttons.
+ * The option parameter specifies the desired behavior for combining taskbar buttons.
+ *
+ * @param option The option for combining taskbar buttons.
+ *               Possible values:
+ *               - 0: Do not combine taskbar buttons.
+ *               - 1: Combine taskbar buttons when the taskbar is full.
+ *               - 2: Always combine taskbar buttons.
+ */
+void SetCombineTaskbarButtons(unsigned int option)
+{
+    Wh_Log(L"Setting taskbar button combining to %d", option);
+
+    if (option <= 2)
+    {
+        HKEY hKey = NULL;
+        if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                         0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+        {
+            DWORD dwValue = option;
+            if (RegSetValueEx(hKey, TEXT("TaskbarGlomLevel"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
+            {
+                // Notify all applications of the change
+                SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+            }
+            else
+            {
+                Wh_Log(L"ERROR: Failed to set registry key TaskbarGlomLevel!");
+            }
+            RegCloseKey(hKey);
+        }
+        else
+        {
+            Wh_Log(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+        }
+    }
 }
 
 #pragma endregion // functions
@@ -1445,22 +1542,28 @@ void HideIcons() {
 // =====================================================================
 
 // main body of the mod called every time a taskbar is clicked
-bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction) {
-    if ((GetCapture() != NULL) || (taskbarAction == ACTION_NOTHING)) {
+bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction)
+{
+    if ((GetCapture() != NULL) || (taskbarAction == ACTION_NOTHING))
+    {
         return false;
     }
 
     // old Windows mouse handling of WM_MBUTTONDOWN message
     POINT pointerLocation{};
-    if (g_taskbarVersion == WIN_10_TASKBAR) {
+    if (g_taskbarVersion == WIN_10_TASKBAR)
+    {
         // message carries mouse position relative to the client window so use GetCursorPos() instead
-        if (!GetCursorPos(&pointerLocation)) {
+        if (!GetCursorPos(&pointerLocation))
+        {
             Wh_Log(L"Failed to get mouse position");
             return false;
         }
 
         // new Windows sends different message - WM_POINTERDOWN
-    } else {
+    }
+    else
+    {
         pointerLocation.x = GET_X_LPARAM(lParam);
         pointerLocation.y = GET_Y_LPARAM(lParam);
     }
@@ -1473,14 +1576,16 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
 
     com_ptr<IUIAutomationElement> pWindowElement = NULL;
     HRESULT hr = g_pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put());
-    if (FAILED(hr) || !pWindowElement) {
+    if (FAILED(hr) || !pWindowElement)
+    {
         Wh_Log(L"Failed to retrieve UI element from mouse click");
         return false;
     }
 
     bstr_ptr className;
     hr = pWindowElement->get_CurrentClassName(className.GetAddress());
-    if (FAILED(hr) || !className) {
+    if (FAILED(hr) || !className)
+    {
         Wh_Log(L"Failed to retrieve the Name of the UI element clicked.");
         return false;
     }
@@ -1489,25 +1594,52 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
                                 (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
                                 (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
                                 (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
-    if (!taskbarClicked) {
+    if (!taskbarClicked)
+    {
         return false;
     }
 
-    if (taskbarAction == ACTION_SHOW_DESKTOP) {
+    if (taskbarAction == ACTION_SHOW_DESKTOP)
+    {
         ShowDesktop(hWnd);
-    } else if (taskbarAction == ACTION_ALT_TAB) {
-        SendAltTab();
-    } else if (taskbarAction == ACTION_TASK_MANAGER) {
+    }
+    else if (taskbarAction == ACTION_CTRL_ALT_TAB)
+    {
+        SendCtrlAltTabKeypress();
+    }
+    else if (taskbarAction == ACTION_TASK_MANAGER)
+    {
         OpenTaskManager(hWnd);
-    } else if (taskbarAction == ACTION_MUTE) {
+    }
+    else if (taskbarAction == ACTION_MUTE)
+    {
         ToggleVolMuted();
-    } else if (taskbarAction == ACTION_TASKBAR_AUTOHIDE) {
-        (void)ToggleTaskbarAutohide();
-    } else if (taskbarAction == ACTION_WIN_TAB) {
-        SendWinTab();
-    } else if (taskbarAction == ACTION_HIDE_ICONS) {
+    }
+    else if (taskbarAction == ACTION_TASKBAR_AUTOHIDE)
+    {
+        ToggleTaskbarAutohide();
+    }
+    else if (taskbarAction == ACTION_WIN_TAB)
+    {
+        SendWinTabKeypress();
+    }
+    else if (taskbarAction == ACTION_HIDE_ICONS)
+    {
         HideIcons();
-    } else {
+    }
+    else if (taskbarAction == ACTION_COMBINE_TASKBAR_BUTTONS)
+    {
+        // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
+        static bool zigzag = (GetCombineTaskbarButtons() == g_settings.taskBarButtonsState1);
+        zigzag = !zigzag;
+        SetCombineTaskbarButtons(zigzag ? g_settings.taskBarButtonsState1 : g_settings.taskBarButtonsState2);
+    }
+    else if (taskbarAction == ACTION_OPEN_START_MENU)
+    {
+        SendWinKeypress();
+    }
+    else
+    {
         Wh_Log(L"Error: Unknown taskbar action '%d'", taskbarAction);
     }
 
@@ -1516,65 +1648,86 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
 
 ////////////////////////////////////////////////////////////
 
-BOOL Wh_ModInit() {
+BOOL Wh_ModInit()
+{
     Wh_Log(L">");
 
     LoadSettings();
 
-    if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN_TASKBAR)) {
+    if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN_TASKBAR))
+    {
         Wh_Log(L"Unsupported Windows version, ModInit failed");
         return FALSE;
     }
     // treat Windows 11 taskbar as on older windows
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && g_settings.oldTaskbarOnWin11) {
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && g_settings.oldTaskbarOnWin11)
+    {
         g_taskbarVersion = WIN_10_TASKBAR;
     }
     Wh_Log(L"Using taskbar version: %d");
 
     // init COM for UIAutomation and Volume control
-    if (!g_comInitializer.Init()) {
+    if (!g_comInitializer.Init())
+    {
         Wh_Log(L"COM initialization failed, ModInit failed");
         return FALSE;
-    } else {
+    }
+    else
+    {
         Wh_Log(L"COM initilized");
     }
 
     // init COM interface for UIAutomation
-    if (FAILED(CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), g_pUIAutomation.put_void())) || !g_pUIAutomation) {
+    if (FAILED(CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
+                                g_pUIAutomation.put_void())) ||
+        !g_pUIAutomation)
+    {
         Wh_Log(L"Failed to create UIAutomation COM instance, ModInit failed");
         return FALSE;
-    } else {
+    }
+    else
+    {
         Wh_Log(L"UIAutomation COM initilized");
     }
 
     // init COM interface for Volume control
     const GUID XIID_IMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
     const GUID XIID_MMDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-    if (FAILED(CoCreateInstance(XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, XIID_IMMDeviceEnumerator, g_pDeviceEnumerator.put_void())) || !g_pDeviceEnumerator) {
+    if (FAILED(CoCreateInstance(XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, XIID_IMMDeviceEnumerator,
+                                g_pDeviceEnumerator.put_void())) ||
+        !g_pDeviceEnumerator)
+    {
         Wh_Log(L"Failed to create DeviceEnumerator COM instance, ModInit failed");
         return FALSE;
-    } else {
+    }
+    else
+    {
         Wh_Log(L"DeviceEnumerator COM initilized");
     }
 
     // optional feature, not critical for the mod
-    if (!FindDesktopWindow()) {
+    if (!FindDesktopWindow())
+    {
         Wh_Log(L"Failed to find Desktop window. Hide icons feature will not be available!");
     }
 
     // hook magic
     Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original);
     HMODULE user32Module = LoadLibrary(L"user32.dll");
-    if (user32Module) {
+    if (user32Module)
+    {
         void *pCreateWindowInBand = (void *)GetProcAddress(user32Module, "CreateWindowInBand");
-        if (pCreateWindowInBand) {
+        if (pCreateWindowInBand)
+        {
             Wh_SetFunctionHook(pCreateWindowInBand, (void *)CreateWindowInBand_Hook, (void **)&CreateWindowInBand_Original);
         }
     }
     WNDCLASS wndclass;
-    if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) {
+    if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass))
+    {
         HWND hWnd = FindCurrentProcessTaskbarWindows(&g_secondaryTaskbarWindows);
-        if (hWnd) {
+        if (hWnd)
+        {
             HandleIdentifiedTaskbarWindow(hWnd);
         }
     }
@@ -1582,7 +1735,8 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-BOOL Wh_ModSettingsChanged(BOOL *bReload) {
+BOOL Wh_ModSettingsChanged(BOOL *bReload)
+{
     Wh_Log(L">");
     bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
     LoadSettings();
@@ -1590,13 +1744,16 @@ BOOL Wh_ModSettingsChanged(BOOL *bReload) {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void Wh_ModUninit()
+{
     Wh_Log(L">");
 
-    if (g_hTaskbarWnd) {
+    if (g_hTaskbarWnd)
+    {
         UnsubclassTaskbarWindow(g_hTaskbarWnd);
 
-        for (HWND hSecondaryWnd : g_secondaryTaskbarWindows) {
+        for (HWND hSecondaryWnd : g_secondaryTaskbarWindows)
+        {
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
