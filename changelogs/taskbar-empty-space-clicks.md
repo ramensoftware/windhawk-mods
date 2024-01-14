@@ -1,3 +1,7 @@
+## 1.2 ([Jan 14, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a61b96c8ecb6a86ce4c3af434ab3bade823b67a2/mods/taskbar-empty-space-clicks.wh.cpp))
+
+* Fixed issue when mod was not hooked after Windows startup.
+
 ## 1.1 ([Jan 14, 2024](https://github.com/ramensoftware/windhawk-mods/blob/cc8981928018153636f20dfdef7ac8dacf5571e5/mods/taskbar-empty-space-clicks.wh.cpp))
 
 - code reformatted by clang formatter - Visual Studio style (it makes the diff a pain in the ass I know and I am sorry for that - I will stick to this format from now on)

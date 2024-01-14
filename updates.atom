@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-01-14T07:49:19.000Z</updated>
+    <updated>2024-01-14T18:51:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#a61b96c8ecb6a86ce4c3af434ab3bade823b67a2</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2024-01-14T18:51:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed issue when mod was not hooked after Windows startup.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#cc8981928018153636f20dfdef7ac8dacf5571e5</id>
@@ -210,15 +219,6 @@ choice.</p>
         <updated>2023-12-22T11:48:59.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>DPI support improvements</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.2.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#955ecfce747cec506a89bdee69c706aea050487a</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2023-12-21T15:17:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a workaround for a crash on startup if a custom background is set.</li>
 </ul>]]></content>
     </entry>
 </feed>
