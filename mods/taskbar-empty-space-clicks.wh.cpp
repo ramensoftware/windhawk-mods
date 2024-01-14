@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.1
+// @version         1.2
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -1731,6 +1731,8 @@ BOOL Wh_ModInit()
             HandleIdentifiedTaskbarWindow(hWnd);
         }
     }
+
+    g_initialized = true; // if not set the hook operations will not be applied after Windows startup
 
     return TRUE;
 }
