@@ -65,7 +65,7 @@ If you have request for new functions, suggestions or you are experiencing some 
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
-  - ACTION_CTRL_ALT_TAB: Ctrl+Alt+Tab
+  - ACTION_ALT_TAB: Ctrl+Alt+Tab
   - ACTION_TASK_MANAGER: Task Manager
   - ACTION_MUTE: Mute system volume
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
@@ -78,7 +78,7 @@ If you have request for new functions, suggestions or you are experiencing some 
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
-  - ACTION_CTRL_ALT_TAB: Ctrl+Alt+Tab
+  - ACTION_ALT_TAB: Ctrl+Alt+Tab
   - ACTION_TASK_MANAGER: Task Manager
   - ACTION_MUTE: Mute system volume
   - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
@@ -1204,7 +1204,7 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option)
     {
         action = ACTION_SHOW_DESKTOP;
     }
-    else if (equals(value, L"ACTION_CTRL_ALT_TAB"))
+    else if (equals(value, L"ACTION_ALT_TAB")) // do not brreak user settings with renaming the option
     {
         action = ACTION_CTRL_ALT_TAB;
     }
@@ -1408,7 +1408,7 @@ void SendKeypress(std::vector<int> keys)
 
 void SendCtrlAltTabKeypress()
 {
-    Wh_Log(L"Sending Ctrl+Alt+Tab kepress");
+    Wh_Log(L"Sending Ctrl+Alt+Tab keypress");
     SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
 }
 
@@ -1483,14 +1483,11 @@ DWORD GetCombineTaskbarButtons()
     if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
                      0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
     {
-        if (RegQueryValueEx(hKey, TEXT("TaskbarGlomLevel"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) == ERROR_SUCCESS)
-        {
-            RegCloseKey(hKey);
-        }
-        else
+        if (RegQueryValueEx(hKey, TEXT("TaskbarGlomLevel"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) != ERROR_SUCCESS)
         {
             Wh_Log(L"ERROR: Failed to read registry key TaskbarGlomLevel!");
         }
+        RegCloseKey(hKey);
     }
     else
     {
@@ -1524,8 +1521,6 @@ void SetCombineTaskbarButtons(unsigned int option)
             DWORD dwValue = option;
             if (RegSetValueEx(hKey, TEXT("TaskbarGlomLevel"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
             {
-                RegCloseKey(hKey);
-
                 // Notify all applications of the change
                 SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
             }
@@ -1533,6 +1528,7 @@ void SetCombineTaskbarButtons(unsigned int option)
             {
                 Wh_Log(L"ERROR: Failed to set registry key TaskbarGlomLevel!");
             }
+            RegCloseKey(hKey);
         }
         else
         {
