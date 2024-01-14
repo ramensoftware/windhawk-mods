@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.0.4
+// @version         1.0.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -651,6 +651,9 @@ bool InitOffsets() {
         41:57                     | push r15
         48:83EC 60                | sub rsp,60
         4C:8D71 48                | lea r14,qword ptr ds:[rcx+48]
+
+        Last command can also be:
+        4C:8D79 50                | lea r15,qword ptr ds:[rcx+50]
     */
     p = (const BYTE*)CTaskListThumbnailWnd_SetSite;
     while (p[0] == 0x48 && p[1] == 0x89 &&
@@ -669,12 +672,13 @@ bool InitOffsets() {
         p += 7;
     }
 
-    if (p[0] == 0x4c && p[1] == 0x8d && p[2] == 0x71) {
+    if (p[0] == 0x4c && p[1] == 0x8d && (p[2] == 0x71 || p[2] == 0x79)) {
         g_thumbnailOffsets.taskListPtr = p[3];
     } else {
         Wh_Log(L"Unexpected SetSite implementation");
         // Try last known offset.
-        g_thumbnailOffsets.taskListPtr = 0x48;
+        g_thumbnailOffsets.taskListPtr =
+            g_explorerVersion <= WinVersion::Win10 ? 0x50 : 0x48;
     }
 
     /*
@@ -1013,7 +1017,7 @@ BOOL Wh_ModInit() {
         },
         {
             {
-                LR"(public: virtual struct HWND__ * __cdecl CTaskListThumbnailWnd::GetHwnd(void) __ptr64)",
+                LR"(public: virtual struct HWND__ * __ptr64 __cdecl CTaskListThumbnailWnd::GetHwnd(void) __ptr64)",
                 LR"(public: virtual struct HWND__ * __cdecl CTaskListThumbnailWnd::GetHwnd(void))",
             },
             (void**)&CTaskListThumbnailWnd_GetHwnd,
