@@ -637,13 +637,16 @@ typedef class CUIAutomation CUIAutomation;
 
 // =====================================================================
 
-// enable this to log to a file stored on the Desktop
-// #define ENABLE_FILE_LOGGER
+#define ENABLE_LOG_INFO  // info messages will be enabled
+#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+#define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
+
+#define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
 // =====================================================================
 
 #ifdef ENABLE_FILE_LOGGER
-
+// file logger works as simple Tee to log to both console and file
 class FileLogger
 {
 public:
@@ -704,8 +707,49 @@ private:
         Wh_Log(format __VA_OPT__(, ) __VA_ARGS__);             \
         g_fileLogger.write(format __VA_OPT__(, ) __VA_ARGS__); \
     } while (0)
+
 #else
 #define LOG Wh_Log
+#endif
+
+#ifdef ENABLE_LOG_TRACE
+// to make printf debugging easier, logging tracer records function entry its name and line number
+class TraceLogger
+{
+public:
+    TraceLogger(const int line, const std::string function)
+    {
+        m_function = std::wstring(function.begin(), function.end()); // function is just ascii line number
+        m_line = line;
+        LOG(L"TRACE: Entering %s (%d)", m_function.c_str(), line);
+    }
+
+    ~TraceLogger()
+    {
+        LOG(L"TRACE: Leaving %s (%d)", m_function.c_str(), m_line);
+    }
+
+private:
+    std::wstring m_function;
+    int m_line;
+};
+#endif
+
+#define LOG_ERROR(format, ...) LOG(L"ERROR: " format, __VA_ARGS__)
+#ifdef ENABLE_LOG_INFO
+#define LOG_INFO(format, ...) LOG(L"INFO: " format, __VA_ARGS__)
+#else
+#define LOG_INFO(format, ...)
+#endif
+#ifdef ENABLE_LOG_DEBUG
+#define LOG_DEBUG(format, ...) LOG(L"DEBUG: " format, __VA_ARGS__)
+#else
+#define LOG_DEBUG(format, ...)
+#endif
+#ifdef ENABLE_LOG_TRACE
+#define LOG_TRACE() TraceLogger traceLogger(__LINE__, __FUNCTION__)
+#else
+#define LOG_TRACE()
 #endif
 
 enum TaskBarVersion
@@ -714,6 +758,7 @@ enum TaskBarVersion
     WIN_11_TASKBAR,
     UNKNOWN_TASKBAR
 };
+const wchar_t *TaskBarVersionNames[] = {L"WIN_10_TASKBAR", L"WIN_11_TASKBAR", L"UNKNOWN_TASKBAR"};
 
 enum TaskBarAction
 {
@@ -1397,6 +1442,7 @@ bool FindDesktopWindow()
 
     if (!hChildWnd)
     {
+        g_hDesktopWnd = NULL;
         LOG(L"ERROR: Failed to find SHELLDLL_DefView window");
         return false;
     }
@@ -1509,7 +1555,7 @@ void ToggleVolMuted()
     BOOL success = FALSE;
 
     com_ptr<IMMDevice> defaultAudioDevice;
-    if (SUCCEEDED(g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
+    if (g_pDeviceEnumerator && SUCCEEDED(g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
     {
         // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
         const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
@@ -1722,13 +1768,13 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
 
 BOOL Wh_ModInit()
 {
-    LOG(L">");
+    LOG_TRACE();
 
     LoadSettings();
 
     if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN_TASKBAR))
     {
-        LOG(L"Unsupported Windows version, ModInit failed");
+        LOG_ERROR(L"Unsupported Windows version, ModInit failed");
         return FALSE;
     }
     // treat Windows 11 taskbar as on older windows
@@ -1736,17 +1782,17 @@ BOOL Wh_ModInit()
     {
         g_taskbarVersion = WIN_10_TASKBAR;
     }
-    LOG(L"Using taskbar version: %d");
+    LOG_INFO(L"Using taskbar version: %s", TaskBarVersionNames[g_taskbarVersion]);
 
     // init COM for UIAutomation and Volume control
     if (!g_comInitializer.Init())
     {
-        LOG(L"COM initialization failed, ModInit failed");
+        LOG_ERROR(L"COM initialization failed, ModInit failed");
         return FALSE;
     }
     else
     {
-        LOG(L"COM initilized");
+        LOG_INFO(L"COM initilized");
     }
 
     // init COM interface for UIAutomation
@@ -1754,12 +1800,12 @@ BOOL Wh_ModInit()
                                 g_pUIAutomation.put_void())) ||
         !g_pUIAutomation)
     {
-        LOG(L"Failed to create UIAutomation COM instance, ModInit failed");
-        return FALSE;
+        LOG_ERROR(L"Failed to create UIAutomation COM instance, ModInit failed");
+        return FALSE; // UIAutomation is mandatory to find where the mouse clicked
     }
     else
     {
-        LOG(L"UIAutomation COM initilized");
+        LOG_INFO(L"UIAutomation COM initilized");
     }
 
     // init COM interface for Volume control
@@ -1769,39 +1815,68 @@ BOOL Wh_ModInit()
                                 g_pDeviceEnumerator.put_void())) ||
         !g_pDeviceEnumerator)
     {
-        LOG(L"Failed to create DeviceEnumerator COM instance, ModInit failed");
-        return FALSE;
+        // this is not mandatory, if failed the volume mute feature will not be available
+        LOG_ERROR(L"Failed to create DeviceEnumerator COM instance. Volume mute feature will not be available!");
     }
     else
     {
-        LOG(L"DeviceEnumerator COM initilized");
+        LOG_INFO(L"DeviceEnumerator COM initilized");
     }
 
-    // optional feature, not critical for the mod
-    if (!FindDesktopWindow())
+    // sometimes directly after boot the desktop window is not found, so try to search for it few times
+    bool desktopWindowFound = false;
+    for (int i = 0; i < 10; i++)
     {
-        LOG(L"Failed to find Desktop window. Hide icons feature will not be available!");
-    }
-
-    // hook magic
-    Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original);
-    HMODULE user32Module = LoadLibrary(L"user32.dll");
-    if (user32Module)
-    {
-        void *pCreateWindowInBand = (void *)GetProcAddress(user32Module, "CreateWindowInBand");
-        if (pCreateWindowInBand)
+        if (FindDesktopWindow())
         {
-            Wh_SetFunctionHook(pCreateWindowInBand, (void *)CreateWindowInBand_Hook, (void **)&CreateWindowInBand_Original);
+            desktopWindowFound = true;
+            break;
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+    if (!desktopWindowFound)
+    {
+        // this is not mandatory, if failed the hide icons feature will not be available
+        LOG_ERROR(L"Failed to find Desktop window. Hide icons feature will not be available!");
+    }
+
+    // hook CreateWindowExW to be able to identify taskbar windows on re-creation
+    if (!Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original))
+    {
+        LOG_ERROR(L"Failed to hook CreateWindowExW, ModInit failed");
+        return FALSE;
+    }
+    // hook CreateWindowInBand to be able to identify taskbar windows on re-creation
+    HMODULE user32Module = LoadLibrary(L"user32.dll");
+    if (!user32Module)
+    {
+        LOG_ERROR(L"Failed to load user32.dll, ModInit failed");
+        return FALSE;
+    }
+    void *pCreateWindowInBand = (void *)GetProcAddress(user32Module, "CreateWindowInBand");
+    if (!pCreateWindowInBand)
+    {
+        LOG_ERROR(L"Failed to get CreateWindowInBand address, ModInit failed");
+        return FALSE;
+    }
+    if (!Wh_SetFunctionHook(pCreateWindowInBand, (void *)CreateWindowInBand_Hook, (void **)&CreateWindowInBand_Original))
+    {
+        LOG_ERROR(L"Failed to hook CreateWindowInBand, ModInit failed");
+        return FALSE;
+    }
+    // indentify taskbar windows so that message processing can be hooked
     WNDCLASS wndclass;
-    if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass))
+    if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) // if Shell_TrayWnd class is defined
     {
         HWND hWnd = FindCurrentProcessTaskbarWindows(&g_secondaryTaskbarWindows);
         if (hWnd)
         {
-            HandleIdentifiedTaskbarWindow(hWnd);
+            HandleIdentifiedTaskbarWindow(hWnd); // hook
         }
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to find Shell_TrayWnd class. Something changed under the hood! Taskbar might not get hooked properly!");
     }
 
     g_initialized = true; // if not set the hook operations will not be applied after Windows startup
