@@ -128,6 +128,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <fstream>
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -636,6 +637,77 @@ typedef class CUIAutomation CUIAutomation;
 
 // =====================================================================
 
+// enable this to log to a file stored on the Desktop
+// #define ENABLE_FILE_LOGGER
+
+// =====================================================================
+
+#ifdef ENABLE_FILE_LOGGER
+
+class FileLogger
+{
+public:
+    FileLogger()
+    {
+        const char *filename = "empty_space_clicks_log.txt";
+        std::string filepath;
+
+        // get the path to the desktop
+        const char *homeDir = std::getenv("USERPROFILE");
+        if (homeDir)
+        {
+            std::string path(homeDir);
+            path += "\\Desktop\\";
+            path += filename;
+            filepath = path;
+        }
+        else
+        {
+            filepath = filename;
+        }
+        m_file.open(filepath, std::ios_base::out);
+    }
+
+    ~FileLogger()
+    {
+        m_file.close();
+    }
+
+    void write(const wchar_t *format, ...)
+    {
+        if (m_file.is_open())
+        {
+            va_list args;
+            va_start(args, format);
+            size_t size = std::vswprintf(nullptr, 0, format, args) + 1; // +1 for '\0'
+            va_end(args);
+
+            std::unique_ptr<wchar_t[]> buf(new wchar_t[size]);
+
+            va_start(args, format);
+            std::vswprintf(buf.get(), size, format, args);
+            va_end(args);
+
+            auto str = std::wstring(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
+            m_file << str << '\n';
+            m_file.flush();
+        }
+    }
+
+private:
+    std::wofstream m_file;
+} g_fileLogger;
+
+#define LOG(format, ...)                                       \
+    do                                                         \
+    {                                                          \
+        Wh_Log(format __VA_OPT__(, ) __VA_ARGS__);             \
+        g_fileLogger.write(format __VA_OPT__(, ) __VA_ARGS__); \
+    } while (0)
+#else
+#define LOG Wh_Log
+#endif
+
 enum TaskBarVersion
 {
     WIN_10_TASKBAR = 0,
@@ -694,7 +766,7 @@ public:
         {
             CoUninitialize();
             initialized = false;
-            Wh_Log(L"COM de-initialized");
+            LOG(L"COM de-initialized");
         }
     }
 
@@ -799,7 +871,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
     }
 
-    // Wh_Log(L"Message: 0x%x", uMsg);
+    // LOG(L"Message: 0x%x", uMsg);
 
     LRESULT result = 0;
     switch (uMsg)
@@ -850,7 +922,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 WNDPROC InputSiteWindowProc_Original;
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    // Wh_Log(L"Message: 0x%x", uMsg);
+    // LOG(L"Message: 0x%x", uMsg);
 
     switch (uMsg)
     {
@@ -924,7 +996,7 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd)
         Wh_ApplyHookOperations();
     }
 
-    Wh_Log(L"Hooked InputSite wndproc %p", wndProc);
+    LOG(L"Hooked InputSite wndproc %p", wndProc);
     g_inputSiteProcHooked = true;
 }
 
@@ -1033,12 +1105,12 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 
     if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0)
     {
-        Wh_Log(L"Taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        LOG(L"Taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedTaskbarWindow(hWnd);
     }
     else if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0)
     {
-        Wh_Log(L"Secondary taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        LOG(L"Secondary taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedSecondaryTaskbarWindow(hWnd);
     }
 
@@ -1062,7 +1134,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 
     if (bTextualClassName && _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0)
     {
-        Wh_Log(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        LOG(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
         if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked)
         {
             HandleIdentifiedInputSiteWindow(hWnd);
@@ -1164,7 +1236,7 @@ BOOL WindowsVersionInit()
     WORD nMinor = LOWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nBuild = HIWORD(pFixedFileInfo->dwFileVersionLS);
     WORD nQFE = LOWORD(pFixedFileInfo->dwFileVersionLS);
-    Wh_Log(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
+    LOG(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
 
     if (nMajor == 6)
     {
@@ -1238,11 +1310,11 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option)
     }
     else
     {
-        Wh_Log(L"Error: unknown action '%s' for option '%s'!", value, option);
+        LOG(L"Error: unknown action '%s' for option '%s'!", value, option);
         action = ACTION_NOTHING;
     }
     Wh_FreeStringSetting(value);
-    Wh_Log(L"Selected '%s' option %d", option, action);
+    LOG(L"Selected '%s' option %d", option, action);
 
     return action;
 }
@@ -1268,10 +1340,10 @@ TaskBarButtonsState ParseTaskBarButtonsState(const wchar_t *option)
     }
     else
     {
-        Wh_Log(L"Error: unknown state '%s' for option '%s'!", value, option);
+        LOG(L"Error: unknown state '%s' for option '%s'!", value, option);
         state = COMBINE_ALWAYS;
     }
-    Wh_Log(L"Selected '%s' button state %d", option, state);
+    LOG(L"Selected '%s' button state %d", option, state);
     Wh_FreeStringSetting(value);
 
     return state;
@@ -1296,7 +1368,7 @@ bool FindDesktopWindow()
     HWND hParentWnd = FindWindow(L"Progman", NULL); // Program Manager window
     if (!hParentWnd)
     {
-        Wh_Log(L"ERROR: Failed to find Progman window");
+        LOG(L"ERROR: Failed to find Progman window");
         return false;
     }
 
@@ -1325,7 +1397,7 @@ bool FindDesktopWindow()
 
     if (!hChildWnd)
     {
-        Wh_Log(L"ERROR: Failed to find SHELLDLL_DefView window");
+        LOG(L"ERROR: Failed to find SHELLDLL_DefView window");
         return false;
     }
     g_hDesktopWnd = hChildWnd;
@@ -1362,13 +1434,13 @@ void SetTaskbarAutohide(bool enabled)
 void ToggleTaskbarAutohide()
 {
     const bool isEnabled = GetTaskbarAutohideState();
-    Wh_Log(L"Setting taskbar autohide state to %s", !isEnabled ? L"enabled" : L"disabled");
+    LOG(L"Setting taskbar autohide state to %s", !isEnabled ? L"enabled" : L"disabled");
     SetTaskbarAutohide(!isEnabled);
 }
 
 void ShowDesktop(HWND taskbarhWnd)
 {
-    Wh_Log(L"Sending ShowDesktop message");
+    LOG(L"Sending ShowDesktop message");
     // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0);
 }
@@ -1376,7 +1448,7 @@ void ShowDesktop(HWND taskbarhWnd)
 void SendKeypress(std::vector<int> keys)
 {
     const int NUM_KEYS = keys.size();
-    Wh_Log(L"Sending %d keypresses", NUM_KEYS);
+    LOG(L"Sending %d keypresses", NUM_KEYS);
 
     std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
 
@@ -1402,38 +1474,38 @@ void SendKeypress(std::vector<int> keys)
 
     if (SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0])) != (NUM_KEYS * 2))
     {
-        Wh_Log(L"ERROR: Failed to send key input");
+        LOG(L"ERROR: Failed to send key input");
     }
 }
 
 void SendCtrlAltTabKeypress()
 {
-    Wh_Log(L"Sending Ctrl+Alt+Tab keypress");
+    LOG(L"Sending Ctrl+Alt+Tab keypress");
     SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
 }
 
 void SendWinTabKeypress()
 {
-    Wh_Log(L"Sending Win+Tab keypress");
+    LOG(L"Sending Win+Tab keypress");
     SendKeypress({VK_LWIN, VK_TAB});
 }
 
 void SendWinKeypress()
 {
-    Wh_Log(L"Sending Win keypress");
+    LOG(L"Sending Win keypress");
     SendKeypress({VK_LWIN});
 }
 
 void OpenTaskManager(HWND taskbarhWnd)
 {
-    Wh_Log(L"Sending OpenTaskManager message");
+    LOG(L"Sending OpenTaskManager message");
     // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
     SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0);
 }
 
 void ToggleVolMuted()
 {
-    Wh_Log(L"Toggling volume mute");
+    LOG(L"Toggling volume mute");
     BOOL success = FALSE;
 
     com_ptr<IMMDevice> defaultAudioDevice;
@@ -1453,7 +1525,7 @@ void ToggleVolMuted()
 
     if (success == FALSE)
     {
-        Wh_Log(L"ERROR: Failed to toggle volume mute!");
+        LOG(L"ERROR: Failed to toggle volume mute!");
     }
 }
 
@@ -1461,10 +1533,10 @@ void HideIcons()
 {
     if (g_hDesktopWnd != NULL)
     {
-        Wh_Log(L"Sending show/hide icons message");
+        LOG(L"Sending show/hide icons message");
         if (!PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0))
         {
-            Wh_Log(L"ERROR: Failed to send show/hide icons message");
+            LOG(L"ERROR: Failed to send show/hide icons message");
         }
     }
 }
@@ -1485,13 +1557,13 @@ DWORD GetCombineTaskbarButtons()
     {
         if (RegQueryValueEx(hKey, TEXT("TaskbarGlomLevel"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) != ERROR_SUCCESS)
         {
-            Wh_Log(L"ERROR: Failed to read registry key TaskbarGlomLevel!");
+            LOG(L"ERROR: Failed to read registry key TaskbarGlomLevel!");
         }
         RegCloseKey(hKey);
     }
     else
     {
-        Wh_Log(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+        LOG(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
     }
     return dwValue;
 }
@@ -1510,7 +1582,7 @@ DWORD GetCombineTaskbarButtons()
  */
 void SetCombineTaskbarButtons(unsigned int option)
 {
-    Wh_Log(L"Setting taskbar button combining to %d", option);
+    LOG(L"Setting taskbar button combining to %d", option);
 
     if (option <= 2)
     {
@@ -1526,13 +1598,13 @@ void SetCombineTaskbarButtons(unsigned int option)
             }
             else
             {
-                Wh_Log(L"ERROR: Failed to set registry key TaskbarGlomLevel!");
+                LOG(L"ERROR: Failed to set registry key TaskbarGlomLevel!");
             }
             RegCloseKey(hKey);
         }
         else
         {
-            Wh_Log(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+            LOG(L"ERROR: Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
         }
     }
 }
@@ -1556,7 +1628,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
         // message carries mouse position relative to the client window so use GetCursorPos() instead
         if (!GetCursorPos(&pointerLocation))
         {
-            Wh_Log(L"Failed to get mouse position");
+            LOG(L"Failed to get mouse position");
             return false;
         }
 
@@ -1567,7 +1639,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
         pointerLocation.x = GET_X_LPARAM(lParam);
         pointerLocation.y = GET_Y_LPARAM(lParam);
     }
-    Wh_Log(L"Mouse clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
+    LOG(L"Mouse clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
 
     // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
     // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
@@ -1578,7 +1650,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     HRESULT hr = g_pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put());
     if (FAILED(hr) || !pWindowElement)
     {
-        Wh_Log(L"Failed to retrieve UI element from mouse click");
+        LOG(L"Failed to retrieve UI element from mouse click");
         return false;
     }
 
@@ -1586,10 +1658,10 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     hr = pWindowElement->get_CurrentClassName(className.GetAddress());
     if (FAILED(hr) || !className)
     {
-        Wh_Log(L"Failed to retrieve the Name of the UI element clicked.");
+        LOG(L"Failed to retrieve the Name of the UI element clicked.");
         return false;
     }
-    Wh_Log(L"Clicked UI element ClassName: %s", className.GetBSTR());
+    LOG(L"Clicked UI element ClassName: %s", className.GetBSTR());
     const bool taskbarClicked = (wcscmp(className.GetBSTR(), L"Shell_TrayWnd") == 0) ||                        // Windows 10 primary taskbar
                                 (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
                                 (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
@@ -1640,7 +1712,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     }
     else
     {
-        Wh_Log(L"Error: Unknown taskbar action '%d'", taskbarAction);
+        LOG(L"Error: Unknown taskbar action '%d'", taskbarAction);
     }
 
     return false;
@@ -1650,13 +1722,13 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
 
 BOOL Wh_ModInit()
 {
-    Wh_Log(L">");
+    LOG(L">");
 
     LoadSettings();
 
     if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN_TASKBAR))
     {
-        Wh_Log(L"Unsupported Windows version, ModInit failed");
+        LOG(L"Unsupported Windows version, ModInit failed");
         return FALSE;
     }
     // treat Windows 11 taskbar as on older windows
@@ -1664,17 +1736,17 @@ BOOL Wh_ModInit()
     {
         g_taskbarVersion = WIN_10_TASKBAR;
     }
-    Wh_Log(L"Using taskbar version: %d");
+    LOG(L"Using taskbar version: %d");
 
     // init COM for UIAutomation and Volume control
     if (!g_comInitializer.Init())
     {
-        Wh_Log(L"COM initialization failed, ModInit failed");
+        LOG(L"COM initialization failed, ModInit failed");
         return FALSE;
     }
     else
     {
-        Wh_Log(L"COM initilized");
+        LOG(L"COM initilized");
     }
 
     // init COM interface for UIAutomation
@@ -1682,12 +1754,12 @@ BOOL Wh_ModInit()
                                 g_pUIAutomation.put_void())) ||
         !g_pUIAutomation)
     {
-        Wh_Log(L"Failed to create UIAutomation COM instance, ModInit failed");
+        LOG(L"Failed to create UIAutomation COM instance, ModInit failed");
         return FALSE;
     }
     else
     {
-        Wh_Log(L"UIAutomation COM initilized");
+        LOG(L"UIAutomation COM initilized");
     }
 
     // init COM interface for Volume control
@@ -1697,18 +1769,18 @@ BOOL Wh_ModInit()
                                 g_pDeviceEnumerator.put_void())) ||
         !g_pDeviceEnumerator)
     {
-        Wh_Log(L"Failed to create DeviceEnumerator COM instance, ModInit failed");
+        LOG(L"Failed to create DeviceEnumerator COM instance, ModInit failed");
         return FALSE;
     }
     else
     {
-        Wh_Log(L"DeviceEnumerator COM initilized");
+        LOG(L"DeviceEnumerator COM initilized");
     }
 
     // optional feature, not critical for the mod
     if (!FindDesktopWindow())
     {
-        Wh_Log(L"Failed to find Desktop window. Hide icons feature will not be available!");
+        LOG(L"Failed to find Desktop window. Hide icons feature will not be available!");
     }
 
     // hook magic
@@ -1739,7 +1811,7 @@ BOOL Wh_ModInit()
 
 BOOL Wh_ModSettingsChanged(BOOL *bReload)
 {
-    Wh_Log(L">");
+    LOG(L">");
     bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
     LoadSettings();
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
@@ -1748,7 +1820,7 @@ BOOL Wh_ModSettingsChanged(BOOL *bReload)
 
 void Wh_ModUninit()
 {
-    Wh_Log(L">");
+    LOG(L">");
 
     if (g_hTaskbarWnd)
     {
