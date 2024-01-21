@@ -668,7 +668,16 @@ public:
         {
             filepath = filename;
         }
-        m_file.open(filepath, std::ios_base::out);
+        m_file.open(filepath, std::ios_base::out | std::ios_base::app);
+        if (m_file.is_open())
+        {
+            std::time_t t = std::time(nullptr);
+            std::tm* tm = std::localtime(&t);
+            char buffer[80];
+            std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", tm);
+            m_file << "===========================" << std::endl;
+            m_file << "Log started at " << buffer << std::endl;
+        }
     }
 
     ~FileLogger()
