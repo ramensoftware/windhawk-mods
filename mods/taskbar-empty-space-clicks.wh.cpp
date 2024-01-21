@@ -1765,10 +1765,7 @@ void SetCombineTaskbarButtons(unsigned int option)
             if (RegSetValueEx(hKey, TEXT("TaskbarGlomLevel"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
             {
                 // Notify all applications of the change
-                if (SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings")) != 0)
-                {
-                    LOG_ERROR(L"Failed to broadcast WM_SETTINGCHANGE message!");
-                }
+                SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
             }
             else
             {
