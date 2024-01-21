@@ -638,10 +638,10 @@ typedef class CUIAutomation CUIAutomation;
 // =====================================================================
 
 #define ENABLE_LOG_INFO  // info messages will be enabled
-#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
-#define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
+// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+// #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 
-#define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
+// #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
 // =====================================================================
 
@@ -718,7 +718,7 @@ private:
     } while (0)
 
 #else
-#define LOG Wh_Log
+#define LOG(format, ...) Wh_Log(format __VA_OPT__(, ) __VA_ARGS__)
 #endif
 
 #ifdef ENABLE_LOG_TRACE
