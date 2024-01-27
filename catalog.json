@@ -510,7 +510,7 @@
                 "published": 1696691422000,
                 "rating": 10,
                 "ratingUsers": 7,
-                "updated": 1696691422000,
+                "updated": 1706347467000,
                 "users": 417
             },
             "metadata": {
@@ -527,7 +527,7 @@
                 ],
                 "name": "Classic Explorer navigation bar",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "fix-basic-caption-text": {
