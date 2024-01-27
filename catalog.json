@@ -1389,6 +1389,32 @@
                 "version": "1.2.2"
             }
         },
+        "taskbar-notification-icon-spacing": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1706376839000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1706376839000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32",
+                "description": "Reduce or increase the spacing between notification (tray) icons on the taskbar (Windows 11 only)",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar notification icon spacing",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-scroll-actions": {
             "details": {
                 "defaultSorting": 630,
