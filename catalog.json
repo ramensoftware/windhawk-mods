@@ -260,6 +260,27 @@
                 "version": "1.1.0"
             }
         },
+        "classic-theme-enable": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1706702888000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1706702888000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lntdll",
+                "description": "Disables theming by closing the handle",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "winlogon.exe"
+                ],
+                "name": "Enable Classic Theme by handle method",
+                "version": "1.0"
+            }
+        },
         "custom-shutdown-dialog": {
             "details": {
                 "defaultSorting": 380,

@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-01-31T08:19:59.000Z</updated>
+    <updated>2024-01-31T12:08:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enable Classic Theme by handle method 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#0b1ccc0fffe836d1711816b6124c21f761501298</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2024-01-31T12:08:08.000Z</updated>
+        <content type="html"><![CDATA[<p>Disables visual styles, effectively enabling the Windows Classic theme.
+This mod uses the method of closing access to the memory area where
+the theme is located. It is one of the multiple methods of enabling
+Windows Classic theme.</p>
+<p>The mod injects only in the process Winlogon.exe, and exits once
+the handle of the memory area is closed. It does not hook
+any functions. </p>
+<p>Make sure that the option allowing injecting into critical system processes
+is enabled in Windhawk options.</p>
+<p>The mod affects only windows that are shown after enabling the mod.</p>
+<p>Windows Classic theme is not compatible with Windows 10 Task Manager.
+Before enabling the mode, install the classic task manager:
+https://winaero.com/get-classic-old-task-manager-in-windows-10/</p>
+<p>Enabling the mod will make UWP apps unfunctional. Install a mod that fixes
+this, for instance, this one: 
+https://winclassic.boards.net/thread/2058/classic-uwp-fix</p>
+<p>Windows Classic theme is not compatible with Windows 11 and Windows 10 taskbars
+out of the box. It is recommended to use Explorer Patcher 
+(https://github.com/valinet/ExplorerPatcher) utility, which
+includes the necessary fixes.</p>
+<p><img src="https://i.imgur.com/gB7mwpp.png" alt="Windows Classic" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enable SyslistView32 1.0]]></title>
         <id>https://windhawk.net/mods/syslistview32-enabler#f0915f5e540e362d2e4c64fcd86b77ccf78ec897</id>
@@ -216,18 +243,6 @@ taskbar, but I have not tested it.</p>
         <content type="html"><![CDATA[<ul>
 <li>Moved global window procedure hooking to leverage the availability of the theme engine (uxtheme), rather than using SetWindowsHookEx.</li>
 <li>Improved compatibility with many apps, such as pre-Windows 8 versions of Task Manager.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-grouping#f80c31b2a02a858d585c01b85fb3d5d5f1789555</id>
-        <link href="https://windhawk.net/mods/taskbar-grouping"/>
-        <updated>2023-12-24T16:20:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a new mode: Pinned items remain in place, group running instances.</li>
-<li>Added an option to only disable grouping for listed programs.</li>
-<li>Custom groups and excluded programs can now be specified with an application ID.</li>
-<li>Fixed some cases of taskbar item recreation.</li>
 </ul>]]></content>
     </entry>
 </feed>
