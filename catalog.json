@@ -1186,6 +1186,26 @@
                 "version": "1.0.2"
             }
         },
+        "syslistview32-enabler": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1706689199000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1706689199000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "anixx",
+                "description": "Enables SysListView32 folder layout in Explorer",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Enable SyslistView32",
+                "version": "1.0"
+            }
+        },
         "taskbar-autohide-better": {
             "details": {
                 "defaultSorting": 1690,

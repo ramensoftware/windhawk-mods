@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-01-27T17:33:59.000Z</updated>
+    <updated>2024-01-31T08:19:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enable SyslistView32 1.0]]></title>
+        <id>https://windhawk.net/mods/syslistview32-enabler#f0915f5e540e362d2e4c64fcd86b77ccf78ec897</id>
+        <link href="https://windhawk.net/mods/syslistview32-enabler"/>
+        <updated>2024-01-31T08:19:59.000Z</updated>
+        <content type="html"><![CDATA[<p>Enables the SysListView32 control in File Explorer folder windows.
+This makes the view more compact and allows icon rearrangement.
+SysListView32 control has been used by default before Windows 7.</p>
+<p><img src="https://i.imgur.com/rPpiFEU.png" alt="Default view" /></p>
+<p><img src="https://i.imgur.com/oqYf1YW.png" alt="SysListView32 mode" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar notification icon spacing 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#b28a5640bba7bda6c118eae262c1234f884797ae</id>
@@ -218,16 +229,5 @@ taskbar, but I have not tested it.</p>
 <li>Custom groups and excluded programs can now be specified with an application ID.</li>
 <li>Fixed some cases of taskbar item recreation.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable VMware upgrade dialog 1.0]]></title>
-        <id>https://windhawk.net/mods/vmware-disable-upgrade-dialog#11e3d1e5eb7e386be23646f0ba93fabcb2a80cc3</id>
-        <link href="https://windhawk.net/mods/vmware-disable-upgrade-dialog"/>
-        <updated>2023-12-23T09:09:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablevmwareupgradedialog">Disable VMware upgrade dialog</h1>
-<p>Disable the VMware Workstation "old encryption algorithm" upgrade dialog.</p>
-<p>When the dialog is displayed, the mod automatically selects the action of
-choice.</p>
-<p><img src="https://i.imgur.com/vu6z164.png" alt="Screenshot" /></p>]]></content>
     </entry>
 </feed>
