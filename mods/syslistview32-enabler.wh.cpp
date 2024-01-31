@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              syslistview32-enabler
-// @name            Enable Syslistview32
+// @name            Enable SyslistView32
 // @description     Enables SysListView32 folder layout in Explorer
 // @version         1.0
 // @author          anixx
@@ -11,6 +11,13 @@
 // ==WindhawkModReadme==
 /*
 Enables the SysListView32 control in File Explorer folder windows.
+This makes the view more compact and allows icon rearrangement.
+SysListView32 control has been used by default before Windows 7.
+
+![Default view](https://i.imgur.com/rPpiFEU.png)
+
+![SysListView32 mode](https://i.imgur.com/oqYf1YW.png)
+
 */
 // ==/WindhawkModReadme==
 
