@@ -122,6 +122,30 @@
                 "version": "1.0.3"
             }
         },
+        "classic-browser-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1706897392000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1706897392000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-luxtheme",
+                "description": "Forces the border from Aero Light theme to fix glitched border in Classic theme",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "msedge.exe",
+                    "chrome.exe",
+                    "chromium.exe",
+                    "steam.exe"
+                ],
+                "name": "Fix browsers for Windows Classic theme",
+                "version": "1.0"
+            }
+        },
         "classic-conhost": {
             "details": {
                 "defaultSorting": 690,
