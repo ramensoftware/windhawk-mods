@@ -7,6 +7,7 @@
 // @github          https://github.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         ApplicationFrameHost.exe
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -22,9 +23,9 @@ This works by hardcoding the splash fade animation values instead of fetching th
 
 #include <windhawk_utils.h>
 
-typedef INT64 (* AnimationHelpers__LoadThemeTransform_t)(void *, UINT, INT64 *, struct TA_TRANSFORM *, INT64 *, struct TA_TIMINGFUNCTION *);
+typedef INT64 (* WINAPI AnimationHelpers__LoadThemeTransform_t)(void *, UINT, INT64 *, struct TA_TRANSFORM *, INT64 *, struct TA_TIMINGFUNCTION *);
 AnimationHelpers__LoadThemeTransform_t AnimationHelpers__LoadThemeTransform_orig;
-INT64 __fastcall AnimationHelpers__LoadThemeTransform_hook(
+INT64 WINAPI AnimationHelpers__LoadThemeTransform_hook(
     void *pThis,
     UINT a2,
     INT64 *out,
