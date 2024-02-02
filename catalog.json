@@ -281,6 +281,30 @@
                 "version": "1.0"
             }
         },
+        "classic-uwp-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1706895197000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1706895197000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Ingan121",
+                "description": "Fix for UWPs breaking with Classic theme",
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "ApplicationFrameHost.exe"
+                ],
+                "name": "Classic UWP Fix",
+                "version": "0.2"
+            }
+        },
         "custom-shutdown-dialog": {
             "details": {
                 "defaultSorting": 400,
