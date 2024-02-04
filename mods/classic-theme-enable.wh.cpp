@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Enable Classic Theme by handle method
 // @description     Disables theming by closing the handle
-// @version         1.0
+// @version         1.0.1
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
