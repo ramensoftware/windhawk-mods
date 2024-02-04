@@ -24,20 +24,18 @@ any functions.
 Make sure that the option allowing injecting into critical system processes
 is enabled in Windhawk options.
 
-The mod affects only windows that are shown after enabling the mod.
+The mod affects only windows that are created after enabling the mod.
 
 Windows Classic theme is not compatible with Windows 10 Task Manager.
-Before enabling the mode, install the classic task manager:
-https://winaero.com/get-classic-old-task-manager-in-windows-10/
+Before enabling the mode, install the [classic task manager](https://winaero.com/get-classic-old-task-manager-in-windows-10/).
 
 Enabling the mod will make UWP apps unfunctional. Install a mod that fixes
-this, for instance, this one: 
-https://winclassic.boards.net/thread/2058/classic-uwp-fix
+this, for instance, [this one](https://winclassic.boards.net/thread/2058/classic-uwp-fix)
 
 Windows Classic theme is not compatible with Windows 11 and Windows 10 taskbars
-out of the box. It is recommended to use Explorer Patcher 
-(https://github.com/valinet/ExplorerPatcher) utility, which
-includes the necessary fixes.
+out of the box. It is recommended to use [Explorer Patcher](https://github.com/valinet/ExplorerPatcher) 
+utility, which includes the necessary fixes. A complete guide on setting up Windows Classic
+theme isalso [available](https://github.com/valinet/ExplorerPatcher/discussions/167).
 
 ![Windows Classic](https://i.imgur.com/gB7mwpp.png)
 
