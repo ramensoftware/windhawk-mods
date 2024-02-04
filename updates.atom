@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-02T18:09:52.000Z</updated>
+    <updated>2024-02-04T12:51:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enable Classic Theme by handle method 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#f4c0426865f3264e8049d6ae134b193bab84f350</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2024-02-04T12:51:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix links</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.0]]></title>
         <id>https://windhawk.net/mods/classic-browser-fix#c595c0153e125628f1285d307113c0d994da23c2</id>
@@ -229,15 +236,5 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
         <link href="https://windhawk.net/mods/dwm-unextend-frames"/>
         <updated>2023-12-26T06:26:18.000Z</updated>
         <content type="html"><![CDATA[<p>Remove <code>IsThreadDesktopComposited</code> hook, add comctl32 hook for Aero wizards. As it turns out, <code>IsThreadDesktopComposited</code> is a REALLY low-level function and will break a lot of applications if hooked.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DWM Ghost Mods 1.2]]></title>
-        <id>https://windhawk.net/mods/dwm-ghost-mods#c585ec545ddb0f85ddcbfe80c14361c7fb6b4793</id>
-        <link href="https://windhawk.net/mods/dwm-ghost-mods"/>
-        <updated>2023-12-26T04:24:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated function hooks to use WindhawkUtils.</li>
-</ul>
-<p>Thanks to aubymori for this patch.</p>]]></content>
     </entry>
 </feed>
