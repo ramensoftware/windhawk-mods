@@ -35,7 +35,7 @@ this, for instance, [this one](https://winclassic.boards.net/thread/2058/classic
 Windows Classic theme is not compatible with Windows 11 and Windows 10 taskbars
 out of the box. It is recommended to use [Explorer Patcher](https://github.com/valinet/ExplorerPatcher) 
 utility, which includes the necessary fixes. A complete guide on setting up Windows Classic
-theme isalso [available](https://github.com/valinet/ExplorerPatcher/discussions/167).
+theme is also [available](https://github.com/valinet/ExplorerPatcher/discussions/167).
 
 ![Windows Classic](https://i.imgur.com/gB7mwpp.png)
 
