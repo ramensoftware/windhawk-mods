@@ -98,11 +98,25 @@ If you have request for new functions, suggestions or you are experiencing some 
     - COMBINE_ALWAYS: Always combine
     - COMBINE_WHEN_FULL: Combine when taskbar is full
     - COMBINE_NEVER: Never combine
+    $name: Main taskbar state 1
   - State2: COMBINE_NEVER
     $options:
     - COMBINE_ALWAYS: Always combine
     - COMBINE_WHEN_FULL: Combine when taskbar is full
     - COMBINE_NEVER: Never combine
+    $name: Main taskbar state 2
+  - StateSecondary1: COMBINE_ALWAYS
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+    $name: Secondary taskbar state 1
+  - StateSecondary2: COMBINE_NEVER
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+    $name: Secondary taskbar state 2
   $name: Combine Taskbar Buttons toggle
   $description: When toggle activated, switch between following states
 */
@@ -637,7 +651,7 @@ typedef class CUIAutomation CUIAutomation;
 
 // =====================================================================
 
-#define ENABLE_LOG_INFO  // info messages will be enabled
+#define ENABLE_LOG_INFO // info messages will be enabled
 // #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 
@@ -672,7 +686,7 @@ public:
         if (m_file.is_open())
         {
             std::time_t t = std::time(nullptr);
-            std::tm* tm = std::localtime(&t);
+            std::tm *tm = std::localtime(&t);
             char buffer[80];
             std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", tm);
             m_file << "===========================" << std::endl;
@@ -795,8 +809,10 @@ static struct
     bool oldTaskbarOnWin11;
     TaskBarAction doubleClickTaskbarAction;
     TaskBarAction middleClickTaskbarAction;
-    TaskBarButtonsState taskBarButtonsState1;
-    TaskBarButtonsState taskBarButtonsState2;
+    TaskBarButtonsState primaryTaskBarButtonsState1;
+    TaskBarButtonsState primaryTaskBarButtonsState2;
+    TaskBarButtonsState secondaryTaskBarButtonsState1;
+    TaskBarButtonsState secondaryTaskBarButtonsState2;
 } g_settings;
 
 // wrapper to always call COM de-initialization
@@ -864,7 +880,7 @@ UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclas
 BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
     LOG_TRACE();
-    
+
     struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM
     {
         SUBCLASSPROC pfnSubclass;
@@ -1062,7 +1078,7 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd)
 void HandleIdentifiedTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
-    
+
     g_hTaskbarWnd = hWnd;
     g_dwTaskbarThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (SubclassTaskbarWindow(hWnd))
@@ -1094,7 +1110,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
 void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
-    
+
     if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId)
     {
         return;
@@ -1448,8 +1464,10 @@ void LoadSettings()
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
     g_settings.doubleClickTaskbarAction = ParseMouseActionSetting(L"doubleClickAction");
     g_settings.middleClickTaskbarAction = ParseMouseActionSetting(L"middleClickAction");
-    g_settings.taskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State1");
-    g_settings.taskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State2");
+    g_settings.primaryTaskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State1");
+    g_settings.primaryTaskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State2");
+    g_settings.secondaryTaskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary1");
+    g_settings.secondaryTaskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary2");
 }
 
 /**
@@ -1715,7 +1733,7 @@ void HideIcons()
  *
  * @return The current value of the taskbar button combining setting. (0 = Always, 1 = When taskbar is full, 2 = Never)
  */
-DWORD GetCombineTaskbarButtons()
+DWORD GetCombineTaskbarButtons(const wchar_t *optionName)
 {
     LOG_TRACE();
 
@@ -1725,9 +1743,9 @@ DWORD GetCombineTaskbarButtons()
     if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
                      0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
     {
-        if (RegQueryValueEx(hKey, TEXT("TaskbarGlomLevel"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) != ERROR_SUCCESS)
+        if (RegQueryValueEx(hKey, optionName, NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to read registry key TaskbarGlomLevel!");
+            LOG_ERROR(L"Failed to read registry key %s!", optionName);
         }
         RegCloseKey(hKey);
     }
@@ -1744,13 +1762,14 @@ DWORD GetCombineTaskbarButtons()
  * This function allows you to set the option for combining taskbar buttons.
  * The option parameter specifies the desired behavior for combining taskbar buttons.
  *
+ * @param optionName The name of the registry key to set.
  * @param option The option for combining taskbar buttons.
  *               Possible values:
  *               - 0: Do not combine taskbar buttons.
  *               - 1: Combine taskbar buttons when the taskbar is full.
  *               - 2: Always combine taskbar buttons.
  */
-void SetCombineTaskbarButtons(unsigned int option)
+void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
 {
     LOG_TRACE();
 
@@ -1762,14 +1781,14 @@ void SetCombineTaskbarButtons(unsigned int option)
                          0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
         {
             DWORD dwValue = option;
-            if (RegSetValueEx(hKey, TEXT("TaskbarGlomLevel"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
+            if (RegSetValueEx(hKey, optionName, 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
             {
                 // Notify all applications of the change
                 SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
             }
             else
             {
-                LOG_ERROR(L"Failed to set registry key TaskbarGlomLevel!");
+                LOG_ERROR(L"Failed to set registry key %s!", optionName);
             }
             RegCloseKey(hKey);
         }
@@ -1865,9 +1884,14 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     else if (taskbarAction == ACTION_COMBINE_TASKBAR_BUTTONS)
     {
         // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
-        static bool zigzag = (GetCombineTaskbarButtons() == g_settings.taskBarButtonsState1);
-        zigzag = !zigzag;
-        SetCombineTaskbarButtons(zigzag ? g_settings.taskBarButtonsState1 : g_settings.taskBarButtonsState2);
+        static bool zigzagPrimary = (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == g_settings.primaryTaskBarButtonsState1);
+        zigzagPrimary = !zigzagPrimary;
+        SetCombineTaskbarButtons(L"TaskbarGlomLevel",
+                                 zigzagPrimary ? g_settings.primaryTaskBarButtonsState1 : g_settings.primaryTaskBarButtonsState2);
+        static bool zigzagSecondary = (GetCombineTaskbarButtons(L"MMTaskbarGlomLevel") == g_settings.secondaryTaskBarButtonsState1);
+        zigzagSecondary = !zigzagSecondary;
+        SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
+                                 zigzagSecondary ? g_settings.secondaryTaskBarButtonsState1 : g_settings.secondaryTaskBarButtonsState2);
     }
     else if (taskbarAction == ACTION_OPEN_START_MENU)
     {
