@@ -2,7 +2,7 @@
 // @id              syslistview32-enabler
 // @name            Enable SyslistView32
 // @description     Enables SysListView32 folder layout in Explorer
-// @version         1.0
+// @version         1.0.1
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -14,8 +14,10 @@ Enables the SysListView32 control in File Explorer folder windows.
 This makes the view more compact and allows icon rearrangement.
 SysListView32 control has been used by default before Windows 7.
 
+Before:
 ![Default view](https://i.imgur.com/rPpiFEU.png)
 
+After:
 ![SysListView32 mode](https://i.imgur.com/oqYf1YW.png)
 
 */
