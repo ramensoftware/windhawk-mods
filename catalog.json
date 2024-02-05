@@ -1261,7 +1261,7 @@
                 "published": 1706689199000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1707120281000,
+                "updated": 1707130904000,
                 "users": 13
             },
             "metadata": {
@@ -1272,7 +1272,7 @@
                     "explorer.exe"
                 ],
                 "name": "Enable SyslistView32",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-autohide-better": {
