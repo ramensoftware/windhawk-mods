@@ -119,6 +119,10 @@ If you have request for new functions, suggestions or you are experiencing some 
     $name: Secondary taskbar state 2
   $name: Combine Taskbar Buttons toggle
   $description: When toggle activated, switch between following states
+- VirtualKeyPress: ["0xA4", "0x4C"]
+  $name: Virtual key press
+  $description: >-
+    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0xA4 + 0x4C) corresponds to  (Win + L) shortcut that locks the screen. If your key combination has no effect, check out log for more information.
 */
 // ==/WindhawkModSettings==
 
@@ -132,6 +136,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 #include <winerror.h>
 #include <winuser.h>
 #include <windowsx.h>
+#include <windhawk_utils.h>
 
 #include <UIAnimation.h>
 #include <UIAutomationClient.h>
@@ -813,6 +818,7 @@ static struct
     TaskBarButtonsState primaryTaskBarButtonsState2;
     TaskBarButtonsState secondaryTaskBarButtonsState1;
     TaskBarButtonsState secondaryTaskBarButtonsState2;
+    std::vector<unsigned int> virtualKeypress;
 } g_settings;
 
 // wrapper to always call COM de-initialization
@@ -1457,6 +1463,62 @@ TaskBarButtonsState ParseTaskBarButtonsState(const wchar_t *option)
     return state;
 }
 
+unsigned int ParseVirtualKey(const wchar_t *value)
+{
+    LOG_TRACE();
+
+    const auto base = (wcsncmp(value, L"0x", 2) == 0) ? 16 : 10; // 0x prefix means hex
+    const auto number = std::wcstol(value, nullptr, base);
+
+    unsigned int keyCode = 0;
+    if ((number > 0) && (number < 0xFF)) // expected valid key code range
+    {
+        keyCode = static_cast<unsigned int>(number);
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to parse virtual key code from string '%s'", value);
+    }
+    return keyCode;
+}
+
+void ParseVirtualKeypressSetting(const wchar_t *option, std::vector<unsigned int> &keys)
+{
+    LOG_TRACE();
+
+    keys.clear();
+    for (size_t i = 0; i < 10U; i++)    // avoid infinite loop
+    {
+        const auto keyCodeStr = WindhawkUtils::StringSetting::make(L"VirtualKeyPress[%d]", i);
+        if (!keyCodeStr.get() || (keyCodeStr.get()[0] == L'\0'))
+        {
+            LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = NULL", i);
+            break; // no more keys
+        }
+
+        // sanity check of user input
+        if (std::wcslen(keyCodeStr) > 5)
+        {
+            LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from suspiciously long string!", i);
+            keys.clear();
+            return;
+        }
+
+        const auto keyCode = ParseVirtualKey(keyCodeStr);
+        if (keyCode)
+        {
+            LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = %d", i, keyCode);
+            keys.push_back(keyCode);
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from string '%s'", i, keyCodeStr.get());
+            keys.clear();
+            return;
+        }
+    }
+}
+
 void LoadSettings()
 {
     LOG_TRACE();
@@ -1468,6 +1530,7 @@ void LoadSettings()
     g_settings.primaryTaskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State2");
     g_settings.secondaryTaskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary1");
     g_settings.secondaryTaskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary2");
+    ParseVirtualKeypressSetting(L"VirtualKeyPress", g_settings.virtualKeypress);
 }
 
 /**
