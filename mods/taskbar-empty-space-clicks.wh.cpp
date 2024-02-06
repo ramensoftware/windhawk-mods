@@ -34,6 +34,8 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Double-c
 7. **Hide desktop icons** - Toggle show/hide of all desktop icons
 7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
 7. **Open Start menu** - Sends Win key press to open Start menu
+8. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
+9. **Start application** - Starts arbitrary application or runs a command 
 
 ## Example
 
@@ -46,6 +48,8 @@ Following animation shows **Taskbar auto-hide** feature. Feature gets toggled wh
 - Windows 11 21H2 - latest major
 
 I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
+
+⚠️ **Caution!** Avoid using option "Get the latest updates as soon as they're available" in Windows Update. Microsoft releases symbols for new Windows versions with a delay. This can render Windhawk mods unusable until the symbols are released (usually few days).
 
 ## Classic taskbar on Windows 11
 
@@ -73,7 +77,8 @@ If you have request for new functions, suggestions or you are experiencing some 
   - ACTION_HIDE_ICONS: Hide desktop icons
   - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
   - ACTION_OPEN_START_MENU: Open Start menu
-  - ACTION_SEND_KEYPRESS: Send arbitrary key press
+  - ACTION_SEND_KEYPRESS: Virtual key press
+  - ACTION_START_PROCESS: Start application
 - middleClickAction: ACTION_NOTHING
   $name: Middle click on empty space
   $options:
@@ -87,7 +92,8 @@ If you have request for new functions, suggestions or you are experiencing some 
   - ACTION_HIDE_ICONS: Hide desktop icons
   - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
   - ACTION_OPEN_START_MENU: Open Start menu
-  - ACTION_SEND_KEYPRESS: Send arbitrary key press
+  - ACTION_SEND_KEYPRESS: Virtual key press
+  - ACTION_START_PROCESS: Start application
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
@@ -125,6 +131,10 @@ If you have request for new functions, suggestions or you are experiencing some 
   $name: Virtual key press
   $description: >-
     Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface. 
+- StartProcess: "C:\\Windows\\System32\\notepad.exe"
+  $name: Start an application
+  $description: >-
+    Start arbitrary application or run a command. Use the executable name if it is in PATH. Otherwise use the full path to the application. Example: "C:\Windows\System32\notepad.exe". In case you want to execute shell command, use corresponding flag. Example: "cmd.exe /c echo Hello & pause".
 */
 // ==/WindhawkModSettings==
 
@@ -802,7 +812,8 @@ enum TaskBarAction
     ACTION_HIDE_ICONS,
     ACTION_COMBINE_TASKBAR_BUTTONS,
     ACTION_OPEN_START_MENU,
-    ACTION_SEND_KEYPRESS
+    ACTION_SEND_KEYPRESS,
+    ACTION_START_PROCESS
 };
 
 enum TaskBarButtonsState
@@ -822,6 +833,7 @@ static struct
     TaskBarButtonsState secondaryTaskBarButtonsState1;
     TaskBarButtonsState secondaryTaskBarButtonsState2;
     std::vector<int> virtualKeypress;
+    std::wstring processToStart;
 } g_settings;
 
 // wrapper to always call COM de-initialization
@@ -1427,6 +1439,10 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option)
     {
         action = ACTION_SEND_KEYPRESS;
     }
+    else if (equals(value, L"ACTION_START_PROCESS"))
+    {
+        action = ACTION_START_PROCESS;
+    }
     else
     {
         LOG_ERROR(L"Unknown action '%s' for option '%s'!", value, option);
@@ -1538,6 +1554,7 @@ void LoadSettings()
     g_settings.secondaryTaskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary1");
     g_settings.secondaryTaskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary2");
     ParseVirtualKeypressSetting(L"VirtualKeyPress", g_settings.virtualKeypress);
+    g_settings.processToStart = WindhawkUtils::StringSetting::make(L"StartProcess");
 }
 
 /**
@@ -1878,6 +1895,32 @@ void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
     }
 }
 
+void StartProcess(const std::wstring &command) 
+{
+    LOG_TRACE();
+    if (command.empty())
+    {
+        LOG_DEBUG(L"Command is empty, nothing to start");
+        return;
+    }
+
+    LOG_INFO(L"Starting process: %s", command.c_str());
+
+    STARTUPINFO si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+
+    if (!CreateProcess(NULL, (LPWSTR)command.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+    {
+        LOG_ERROR(L"Failed to start process - CreateProcess failed!");
+    }
+    else
+    {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
 #pragma endregion // functions
 
 // =====================================================================
@@ -1976,6 +2019,10 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     {
         LOG_INFO(L"Sending arbitrary keypress");
         SendKeypress(g_settings.virtualKeypress);
+    }
+    else if (taskbarAction == ACTION_START_PROCESS)
+    {
+        StartProcess(g_settings.processToStart);
     }
     else
     {
