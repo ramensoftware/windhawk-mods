@@ -73,6 +73,7 @@ If you have request for new functions, suggestions or you are experiencing some 
   - ACTION_HIDE_ICONS: Hide desktop icons
   - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
   - ACTION_OPEN_START_MENU: Open Start menu
+  - ACTION_SEND_KEYPRESS: Send arbitrary key press
 - middleClickAction: ACTION_NOTHING
   $name: Middle click on empty space
   $options:
@@ -86,6 +87,7 @@ If you have request for new functions, suggestions or you are experiencing some 
   - ACTION_HIDE_ICONS: Hide desktop icons
   - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
   - ACTION_OPEN_START_MENU: Open Start menu
+  - ACTION_SEND_KEYPRESS: Send arbitrary key press
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
@@ -119,10 +121,10 @@ If you have request for new functions, suggestions or you are experiencing some 
     $name: Secondary taskbar state 2
   $name: Combine Taskbar Buttons toggle
   $description: When toggle activated, switch between following states
-- VirtualKeyPress: ["0xA4", "0x4C"]
+- VirtualKeyPress: ["0x5B", "0x45"]
   $name: Virtual key press
   $description: >-
-    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0xA4 + 0x4C) corresponds to  (Win + L) shortcut that locks the screen. If your key combination has no effect, check out log for more information.
+    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface. 
 */
 // ==/WindhawkModSettings==
 
@@ -657,7 +659,7 @@ typedef class CUIAutomation CUIAutomation;
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
-// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
@@ -799,7 +801,8 @@ enum TaskBarAction
     ACTION_WIN_TAB,
     ACTION_HIDE_ICONS,
     ACTION_COMBINE_TASKBAR_BUTTONS,
-    ACTION_OPEN_START_MENU
+    ACTION_OPEN_START_MENU,
+    ACTION_SEND_KEYPRESS
 };
 
 enum TaskBarButtonsState
@@ -818,7 +821,7 @@ static struct
     TaskBarButtonsState primaryTaskBarButtonsState2;
     TaskBarButtonsState secondaryTaskBarButtonsState1;
     TaskBarButtonsState secondaryTaskBarButtonsState2;
-    std::vector<unsigned int> virtualKeypress;
+    std::vector<int> virtualKeypress;
 } g_settings;
 
 // wrapper to always call COM de-initialization
@@ -1420,6 +1423,10 @@ TaskBarAction ParseMouseActionSetting(const wchar_t *option)
     {
         action = ACTION_OPEN_START_MENU;
     }
+    else if (equals(value, L"ACTION_SEND_KEYPRESS"))
+    {
+        action = ACTION_SEND_KEYPRESS;
+    }
     else
     {
         LOG_ERROR(L"Unknown action '%s' for option '%s'!", value, option);
@@ -1482,7 +1489,7 @@ unsigned int ParseVirtualKey(const wchar_t *value)
     return keyCode;
 }
 
-void ParseVirtualKeypressSetting(const wchar_t *option, std::vector<unsigned int> &keys)
+void ParseVirtualKeypressSetting(const wchar_t *option, std::vector<int> &keys)
 {
     LOG_TRACE();
 
@@ -1667,6 +1674,11 @@ void ShowDesktop(HWND taskbarhWnd)
 void SendKeypress(std::vector<int> keys)
 {
     LOG_TRACE();
+    if (keys.empty())
+    {
+        LOG_DEBUG(L"No virtual key codes to send");
+        return;
+    }
 
     const int NUM_KEYS = keys.size();
     LOG_DEBUG(L"Sending %d keypresses", NUM_KEYS);
@@ -1959,6 +1971,11 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     else if (taskbarAction == ACTION_OPEN_START_MENU)
     {
         SendWinKeypress();
+    }
+    else if (taskbarAction == ACTION_SEND_KEYPRESS)
+    {
+        LOG_INFO(L"Sending arbitrary keypress");
+        SendKeypress(g_settings.virtualKeypress);
     }
     else
     {
