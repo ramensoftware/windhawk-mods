@@ -669,7 +669,7 @@ typedef class CUIAutomation CUIAutomation;
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
-#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
