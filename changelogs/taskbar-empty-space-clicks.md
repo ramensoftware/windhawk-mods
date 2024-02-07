@@ -1,3 +1,15 @@
+## 1.3 ([Feb 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7cf96eb29f7166f2587624eac5241b4eeb4a0016/mods/taskbar-empty-space-clicks.wh.cpp))
+
+Features:
+- added option to control "Combine Taskbar buttons" feature on secondary taskbars
+- added feature to send custom key press
+- added feature to run arbitrary command/process
+
+**Dev:**
+- implemented file logger in order to capture log after fresh Windows start (and debug hook) or to capture crashes
+- implemented trace logger to log method entry/exit to debug execution order  
+- implemented logging levels to make stuff really verbose if needed
+
 ## 1.2 ([Jan 14, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a61b96c8ecb6a86ce4c3af434ab3bade823b67a2/mods/taskbar-empty-space-clicks.wh.cpp))
 
 * Fixed issue when mod was not hooked after Windows startup.

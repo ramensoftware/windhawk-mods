@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-05T11:01:44.000Z</updated>
+    <updated>2024-02-07T19:40:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#7cf96eb29f7166f2587624eac5241b4eeb4a0016</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2024-02-07T19:40:08.000Z</updated>
+        <content type="html"><![CDATA[<p>Features:</p>
+<ul>
+<li>added option to control "Combine Taskbar buttons" feature on secondary taskbars</li>
+<li>added feature to send custom key press</li>
+<li>added feature to run arbitrary command/process</li>
+</ul>
+<p><strong>Dev:</strong></p>
+<ul>
+<li>implemented file logger in order to capture log after fresh Windows start (and debug hook) or to capture crashes</li>
+<li>implemented trace logger to log method entry/exit to debug execution order  </li>
+<li>implemented logging levels to make stuff really verbose if needed</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enable SyslistView32 1.0.2]]></title>
         <id>https://windhawk.net/mods/syslistview32-enabler#44f281f64356e6439c23a39e04a7e70d174e2288</id>
@@ -222,16 +240,6 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
         <content type="html"><![CDATA[<ul>
 <li>Improved compatibility with Aero Snap. This was done by migrating to the undocumented <code>SetWindowRgnEx</code> function rather than the older public function.</li>
 <li>Rewrote the symbol hook wrapper CmwfHookSymbols for initial load with multiple symbol hooks.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.0.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#a962cd86b636e62652f9a903d0a064190d638cdf</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2023-12-26T07:41:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for unnamed visual state groups.</li>
-<li>Implemented generic handling for any target namespace.</li>
 </ul>]]></content>
     </entry>
 </feed>
