@@ -305,6 +305,27 @@
                 "version": "1.0.1"
             }
         },
+        "classic-theme-explorer-lite": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1707344115000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1707344115000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-luxtheme -lgdi32",
+                "description": "Classic Theme mitigations for Explorer ported from Explorer Patcher",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Theme Explorer Lite",
+                "version": "1.0"
+            }
+        },
         "classic-uwp-fix": {
             "details": {
                 "defaultSorting": 135,

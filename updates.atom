@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-07T19:40:08.000Z</updated>
+    <updated>2024-02-07T22:15:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-explorer-lite#c52bd77cb562f15e2f3a0b639aa2df961103fb41</id>
+        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
+        <updated>2024-02-07T22:15:15.000Z</updated>
+        <content type="html"><![CDATA[<p>Classic theme fixes for Windows 10 taskbar (when running on either Windows 10 or Windows 11)</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 1.3]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#7cf96eb29f7166f2587624eac5241b4eeb4a0016</id>
@@ -230,16 +237,6 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
         <updated>2023-12-27T13:31:50.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a regression which caused pinned items to be separated when they shouldn't be (introduced in v1.3).</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 2.1]]></title>
-        <id>https://windhawk.net/mods/classic-maximized-windows-fix#71368b0ce9133d13dbe076d0a045cfbfc1762401</id>
-        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
-        <updated>2023-12-26T08:03:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved compatibility with Aero Snap. This was done by migrating to the undocumented <code>SetWindowRgnEx</code> function rather than the older public function.</li>
-<li>Rewrote the symbol hook wrapper CmwfHookSymbols for initial load with multiple symbol hooks.</li>
 </ul>]]></content>
     </entry>
 </feed>
