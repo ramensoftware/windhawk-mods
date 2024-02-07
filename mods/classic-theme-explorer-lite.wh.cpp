@@ -301,13 +301,6 @@ HRESULT DrawThemeBackgroundHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateI
     return pOriginalDrawThemeBackground(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 }
 
-struct WINCOMPATTRDATA
-{
-    DWORD attribute;
-    PVOID pData;
-    ULONG dataSize;
-};
-
 BOOL Wh_ModInit() {
 
     HMODULE hUxtheme = GetModuleHandle(L"uxtheme.dll");
