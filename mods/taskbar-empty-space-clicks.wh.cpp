@@ -35,7 +35,7 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Double-c
 7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
 7. **Open Start menu** - Sends Win key press to open Start menu
 8. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
-9. **Start application** - Starts arbitrary application or runs a command 
+9. **Start application** - Starts arbitrary application or runs a command
 
 ## Example
 
@@ -130,7 +130,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 - VirtualKeyPress: ["0x5B", "0x45"]
   $name: Virtual key press
   $description: >-
-    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface. 
+    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
 - StartProcess: "C:\\Windows\\System32\\notepad.exe"
   $name: Start an application
   $description: >-
@@ -880,7 +880,6 @@ static bool g_inputSiteProcHooked = false;
 
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
-static HWND g_hDesktopWnd;
 
 static com_ptr<IUIAutomation> g_pUIAutomation;
 static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
@@ -1510,7 +1509,7 @@ void ParseVirtualKeypressSetting(const wchar_t *option, std::vector<int> &keys)
     LOG_TRACE();
 
     keys.clear();
-    for (size_t i = 0; i < 10U; i++)    // avoid infinite loop
+    for (size_t i = 0; i < 10U; i++) // avoid infinite loop
     {
         const auto keyCodeStr = WindhawkUtils::StringSetting::make(L"VirtualKeyPress[%d]", i);
         if (!keyCodeStr.get() || (keyCodeStr.get()[0] == L'\0'))
@@ -1560,9 +1559,9 @@ void LoadSettings()
 /**
  * @brief Finds the desktop window. Desktop window handle is used to send messages to the desktop (show/hide icons).
  *
- * @return true if the desktop window is found, false otherwise.
+ * @return HWND Desktop window handle
  */
-bool FindDesktopWindow()
+HWND FindDesktopWindow()
 {
     LOG_TRACE();
 
@@ -1570,7 +1569,7 @@ bool FindDesktopWindow()
     if (!hParentWnd)
     {
         LOG_ERROR(L"Failed to find Progman window");
-        return false;
+        return NULL;
     }
 
     HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL); // parent window of the desktop
@@ -1598,12 +1597,10 @@ bool FindDesktopWindow()
 
     if (!hChildWnd)
     {
-        g_hDesktopWnd = NULL;
         LOG_ERROR(L"Failed to find SHELLDLL_DefView window");
-        return false;
+        return NULL;
     }
-    g_hDesktopWnd = hChildWnd;
-    return true;
+    return hChildWnd;
 }
 
 bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation)
@@ -1805,10 +1802,11 @@ void HideIcons()
 {
     LOG_TRACE();
 
-    if (g_hDesktopWnd != NULL)
+    HWND hDesktopWnd = FindDesktopWindow();
+    if (hDesktopWnd != NULL)
     {
         LOG_INFO(L"Sending show/hide icons message");
-        if (!PostMessage(g_hDesktopWnd, WM_COMMAND, 0x7402, 0))
+        if (!PostMessage(hDesktopWnd, WM_COMMAND, 0x7402, 0))
         {
             LOG_ERROR(L"Failed to send show/hide icons message");
         }
@@ -1895,7 +1893,7 @@ void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
     }
 }
 
-void StartProcess(const std::wstring &command) 
+void StartProcess(const std::wstring &command)
 {
     LOG_TRACE();
     if (command.empty())
@@ -2089,23 +2087,6 @@ BOOL Wh_ModInit()
     else
     {
         LOG_INFO(L"DeviceEnumerator COM initilized");
-    }
-
-    // sometimes directly after boot the desktop window is not found, so try to search for it few times
-    bool desktopWindowFound = false;
-    for (int i = 0; i < 10; i++)
-    {
-        if (FindDesktopWindow())
-        {
-            desktopWindowFound = true;
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    if (!desktopWindowFound)
-    {
-        // this is not mandatory, if failed the hide icons feature will not be available
-        LOG_ERROR(L"Failed to find Desktop window. Hide icons feature will not be available!");
     }
 
     // hook CreateWindowExW to be able to identify taskbar windows on re-creation
