@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-08T07:16:58.000Z</updated>
+    <updated>2024-02-08T08:19:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-theme-explorer-lite#a396776d1e1bc2f25c8b898e7d092817ca3e9c74</id>
+        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
+        <updated>2024-02-08T08:19:58.000Z</updated>
+        <content type="html"><![CDATA[<p>More compact and remove intermediate variables</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme Explorer Lite 1.0.1]]></title>
         <id>https://windhawk.net/mods/classic-theme-explorer-lite#16ec4fb987cbc4f878aa13cdda25244e670373c2</id>
@@ -230,11 +237,5 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
 </ul>
 <p>I will not supporting Insider preview or other minor versions of Windows. However, feel free to <a href="https://github.com/m1lhaus/windhawk-mods/issues">report any issues</a> related to those versions. I'll appreciate the heads-up in advance.  </p>
 <p>In case you are using old Windows taskbar on Windows 11 (<strong>ExplorerPatcher</strong> or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2).</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Conhost 1.0.1]]></title>
-        <id>https://windhawk.net/mods/classic-conhost#05d71eae2f79d53e7bf44a53dcac01d3872821e9</id>
-        <link href="https://windhawk.net/mods/classic-conhost"/>
-        <updated>2023-12-30T08:18:56.000Z</updated>
     </entry>
 </feed>
