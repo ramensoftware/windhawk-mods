@@ -2,7 +2,7 @@
 // @id              classic-theme-explorer-lite
 // @name            Classic Theme Explorer Lite
 // @description     Classic Theme mitigations for Explorer ported from Explorer Patcher
-// @version         1.0.1
+// @version         1.0.2
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -12,6 +12,7 @@
 // ==WindhawkModReadme==
 /*
 Classic theme fixes for Windows 10 taskbar (when running on either Windows 10 or Windows 11)
+Includes ClientEdge 3D border for folders if you use SysListView32.
 */
 // ==/WindhawkModReadme==
 
@@ -305,20 +306,15 @@ BOOL Wh_ModInit() {
 
     HMODULE hUxtheme = GetModuleHandle(L"uxtheme.dll");
 
-    void* origOTDFD = (void*)GetProcAddress(hUxtheme, "OpenThemeDataForDpi");
-    Wh_SetFunctionHook(origOTDFD, (void*)OpenThemeDataForDpiHook, (void**)&pOriginalOpenThemeDataForDpi);
+    Wh_SetFunctionHook((void*)GetProcAddress(hUxtheme, "OpenThemeDataForDpi"), (void*)OpenThemeDataForDpiHook, (void**)&pOriginalOpenThemeDataForDpi);
     
-    void* origGTMe = (void*)GetProcAddress(hUxtheme, "GetThemeMetric");
-    Wh_SetFunctionHook(origGTMe, (void*)GetThemeMetricHook, (void**)&pOriginalGetThemeMetric);
+    Wh_SetFunctionHook((void*)GetProcAddress(hUxtheme, "GetThemeMetric"), (void*)GetThemeMetricHook, (void**)&pOriginalGetThemeMetric);
     
-    void* origGTMa = (void*)GetProcAddress(hUxtheme, "GetThemeMargins");
-    Wh_SetFunctionHook(origGTMa, (void*)GetThemeMarginsHook, (void**)&pOriginalGetThemeMargins);
+    Wh_SetFunctionHook((void*)GetProcAddress(hUxtheme, "GetThemeMargins"), (void*)GetThemeMarginsHook, (void**)&pOriginalGetThemeMargins);
 
-    void* origDTTE = (void*)GetProcAddress(hUxtheme, "DrawThemeTextEx");
-    Wh_SetFunctionHook(origDTTE, (void*)DrawThemeTextExHook, (void**)&pOriginalDrawThemeTextEx);
+    Wh_SetFunctionHook((void*)GetProcAddress(hUxtheme, "DrawThemeTextEx"), (void*)DrawThemeTextExHook, (void**)&pOriginalDrawThemeTextEx);
 
-    void* origDTB = (void*)GetProcAddress(hUxtheme, "DrawThemeBackground");
-    Wh_SetFunctionHook(origDTB, (void*)DrawThemeBackgroundHook, (void**)&pOriginalDrawThemeBackground);
+    Wh_SetFunctionHook((void*)GetProcAddress(hUxtheme, "DrawThemeBackground"), (void*)DrawThemeBackgroundHook, (void**)&pOriginalDrawThemeBackground);
 
     Wh_SetFunctionHook((void*)CreateWindowExW,
                        (void*)CreateWindowExW_Hook,
