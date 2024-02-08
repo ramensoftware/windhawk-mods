@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-08T08:19:58.000Z</updated>
+    <updated>2024-02-08T10:26:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.1]]></title>
+        <id>https://windhawk.net/mods/classic-theme-explorer-lite#330018f93318cc849d5ebb26006a21aad2ed8a18</id>
+        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
+        <updated>2024-02-08T10:26:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixes https://github.com/ramensoftware/windhawk-mods/issues/510</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme Explorer Lite 1.0.2]]></title>
         <id>https://windhawk.net/mods/classic-theme-explorer-lite#a396776d1e1bc2f25c8b898e7d092817ca3e9c74</id>
@@ -209,33 +216,5 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
         <id>https://windhawk.net/mods/classic-conhost#3364f7cc26dee600d37e78786dad9cad23c76e62</id>
         <link href="https://windhawk.net/mods/classic-conhost"/>
         <updated>2024-01-02T21:54:35.000Z</updated>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#46472b5d13df20650591a0456fd464daab9552a2</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2024-01-01T15:43:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="clickonemptytaskbarspace">Click on empty taskbar space</h1>
-<p>This mod lets you assign an action to a mouse click on Windows taskbar. Double-click and middle-click actions are supported. This mod only modifies behaviour when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Both primary and secondary taskbars are supported.</p>
-<h2 id="supportedactions">Supported actions:</h2>
-<ol>
-<li><strong>Show desktop</strong> - Toggle show/hide desktop</li>
-<li><strong>Ctrl+Alt+Tab</strong> - Opens Ctrl+Alt+Tab dialog</li>
-<li><strong>Task Manager</strong> - Opens Windows default task manager</li>
-<li><strong>Mute system volume</strong> - Toggle mute of system volume (all sound)</li>
-<li><strong>Taskbar auto-hide</strong> - Toggle Windows taskbar auto-hide feature </li>
-<li><strong>Win+Tab</strong> - Opens Win+Tab dialog</li>
-<li><strong>Hide desktop icons</strong> - Toggle show/hide of all desktop icons</li>
-</ol>
-<h2 id="example">Example</h2>
-<p>Following animation shows <strong>Taskbar auto-hide</strong> feature. Feature gets toggled whenever user double-clicks the empty space on a taskbar.</p>
-<p><img src="https://i.imgur.com/BRQrVnX.gif" alt="Demonstration of Toggle taskbar autohide mod for Windhawk" /></p>
-<h2 id="supportedwindowsversionsare">Supported Windows versions are:</h2>
-<ul>
-<li>Windows 10 22H2 (prior versions are not tested, but should work as well)</li>
-<li>Windows 11 21H2 - latest major</li>
-</ul>
-<p>I will not supporting Insider preview or other minor versions of Windows. However, feel free to <a href="https://github.com/m1lhaus/windhawk-mods/issues">report any issues</a> related to those versions. I'll appreciate the heads-up in advance.  </p>
-<p>In case you are using old Windows taskbar on Windows 11 (<strong>ExplorerPatcher</strong> or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2).</p>]]></content>
     </entry>
 </feed>

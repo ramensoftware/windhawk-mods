@@ -1,3 +1,7 @@
+## 1.1 ([Feb 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/330018f93318cc849d5ebb26006a21aad2ed8a18/mods/classic-theme-explorer-lite.wh.cpp))
+
+Fixes https://github.com/ramensoftware/windhawk-mods/issues/510
+
 ## 1.0.2 ([Feb 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a396776d1e1bc2f25c8b898e7d092817ca3e9c74/mods/classic-theme-explorer-lite.wh.cpp))
 
 More compact and remove intermediate variables
