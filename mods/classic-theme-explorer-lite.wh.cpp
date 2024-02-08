@@ -220,26 +220,15 @@ HRESULT DrawThemeTextExHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateId, L
     SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICSW), &ncm, 0);
 
     HFONT hFont = NULL;
-    if (bIsActiveUnhovered)
+    if (bIsActiveUnhovered || bIsActiveHovered)
     {
-        hFont = CreateFontIndirectW(&(ncm.lfCaptionFont));
-    }
-    else if (bIsInactiveUnhovered)
-    {
-        hFont = CreateFontIndirectW(&(ncm.lfMenuFont));
-    }
-    else if (bIsActiveHovered)
-    {
-        hFont = CreateFontIndirectW(&(ncm.lfCaptionFont));
-    }
-    else if (bIsInactiveHovered)
-    {
-        hFont = CreateFontIndirectW(&(ncm.lfMenuFont));
+        ncm.lfCaptionFont.lfWeight = FW_BOLD;
     }
     else
     {
-        hFont = CreateFontIndirectW(&(ncm.lfMenuFont));
+        ncm.lfCaptionFont.lfWeight = FW_NORMAL;
     }
+    hFont = CreateFontIndirectW(&(ncm.lfCaptionFont));
 
     if (iPartId == 5 && iStateId == 0) // clock
     {
