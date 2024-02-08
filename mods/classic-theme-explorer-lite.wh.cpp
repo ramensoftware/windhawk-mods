@@ -2,7 +2,7 @@
 // @id              classic-theme-explorer-lite
 // @name            Classic Theme Explorer Lite
 // @description     Classic Theme mitigations for Explorer ported from Explorer Patcher
-// @version         1.0.2
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
