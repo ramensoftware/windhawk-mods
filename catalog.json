@@ -311,7 +311,7 @@
                 "published": 1707344115000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1707344115000,
+                "updated": 1707376618000,
                 "users": 1
             },
             "metadata": {
@@ -323,7 +323,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Theme Explorer Lite",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "classic-uwp-fix": {

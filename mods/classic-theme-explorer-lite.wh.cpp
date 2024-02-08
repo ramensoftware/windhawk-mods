@@ -2,7 +2,7 @@
 // @id              classic-theme-explorer-lite
 // @name            Classic Theme Explorer Lite
 // @description     Classic Theme mitigations for Explorer ported from Explorer Patcher
-// @version         1.0
+// @version         1.0.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -300,13 +300,6 @@ HRESULT DrawThemeBackgroundHook(HTHEME hTheme, HDC hdc, int iPartId, int iStateI
 
     return pOriginalDrawThemeBackground(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 }
-
-struct WINCOMPATTRDATA
-{
-    DWORD attribute;
-    PVOID pData;
-    ULONG dataSize;
-};
 
 BOOL Wh_ModInit() {
 
