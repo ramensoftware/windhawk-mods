@@ -2,7 +2,7 @@
 // @id              w11-dwm-fix
 // @name            Bring Back the Borders!
 // @description     Restores borders and corners
-// @version         1.0.0
+// @version         1.1.0
 // @author          teknixstuff
 // @github          https://github.com/teknixstuff
 // @twitter         https://twitter.com/teknixstuff
@@ -40,6 +40,8 @@ settings. If you do not do this, it will silently fail to inject.
 
 #include <windhawk_utils.h>
 
+bool HighContrastNow = true;
+
 int (*WINAPI GetEffectiveCornerStyle_Original)();
 int WINAPI GetEffectiveCornerStyle_Hook() {
     return 0;
@@ -47,7 +49,7 @@ int WINAPI GetEffectiveCornerStyle_Hook() {
 
 bool (*WINAPI IsHighContrastMode_Original)();
 bool WINAPI IsHighContrastMode_Hook() {
-    return true;
+    return HighContrastNow;
 }
 
 bool (*WINAPI SystemParametersInfoW_Original)(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni);
@@ -58,6 +60,14 @@ bool WINAPI SystemParametersInfoW_Hook(UINT uiAction, UINT uiParam, PVOID pvPara
         contrast = (HIGHCONTRASTW*)pvParam;
         contrast->dwFlags |= HCF_HIGHCONTRASTON;
     }
+    return retval;
+}
+
+void* (*WINAPI GetBorderRect_Original)(bool);
+void* WINAPI GetBorderRect_Hook(bool p) {
+    HighContrastNow = false;
+    void* retval = GetBorderRect_Original(p);
+    HighContrastNow = true;
     return retval;
 }
 
@@ -95,6 +105,11 @@ BOOL Wh_ModInit() {
             {LR"(public: static bool __cdecl CDesktopManager::IsHighContrastMode(void))"},
             (void**)&IsHighContrastMode_Original,
             (void*)IsHighContrastMode_Hook,
+        },
+        {
+            {LR"(public: struct tagRECT __cdecl CTopLevelWindow::GetBorderRect(bool)const )"},
+            (void**)&GetBorderRect_Original,
+            (void*)GetBorderRect_Hook,
         },
     };
 
