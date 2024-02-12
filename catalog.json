@@ -620,6 +620,31 @@
                 "version": "1.0.1"
             }
         },
+        "fake-high-contrast": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1707753405000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1707753405000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Ingan121",
+                "description": "Fake High Contrast status for apps",
+                "exclude": [
+                    "explorer.exe",
+                    "dwm.exe"
+                ],
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Fake High Contrast",
+                "version": "1.0.0"
+            }
+        },
         "fix-basic-caption-text": {
             "details": {
                 "defaultSorting": 980,

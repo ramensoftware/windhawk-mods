@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-10T19:18:31.000Z</updated>
+    <updated>2024-02-12T15:56:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fake High Contrast 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fake-high-contrast#61d49768adb42b39aa7a9b600839dce066160cb9</id>
+        <link href="https://windhawk.net/mods/fake-high-contrast"/>
+        <updated>2024-02-12T15:56:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fakehighcontrast">Fake High Contrast</h1>
+<ul>
+<li>Makes applications think as if high contrast mode is enabled (disabled), even if it's not.</li>
+<li>Useful if you want more applications to follow your Win32 msstyles / classic schemes. Even UWP apps!</li>
+</ul>
+<h2 id="knownissues">Known issues</h2>
+<ul>
+<li>UIRibbon is not affected at all.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Bring Back the Borders! 1.1.0]]></title>
         <id>https://windhawk.net/mods/w11-dwm-fix#c267265e0049c3f7feb015e3ec2e6f5d6b7bc483</id>
@@ -220,14 +235,5 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
 <p><img src="https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/before.png" alt="Before" /></p>
 <h2 id="after">After</h2>
 <p><img src="https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.0.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#cd7439a77b1eb06ee07d456f6e4bca736cc0ebd6</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
-        <updated>2024-01-11T18:26:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with some Windows 10 versions.</li>
-</ul>]]></content>
     </entry>
 </feed>
