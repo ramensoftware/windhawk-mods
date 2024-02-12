@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-12T15:56:45.000Z</updated>
+    <updated>2024-02-12T21:01:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.0.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#6f22a17e1b26a3a7ee513c0589dc40cd555d61fb</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2024-02-12T21:01:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed styles not applying on system startup.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fake High Contrast 1.0.0]]></title>
         <id>https://windhawk.net/mods/fake-high-contrast#61d49768adb42b39aa7a9b600839dce066160cb9</id>
@@ -221,19 +230,5 @@ versions check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweak
         <content type="html"><![CDATA[<ul>
 <li>Fixed mod not working if installed with an old Windhawk version.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dot Hide 1.0.0]]></title>
-        <id>https://windhawk.net/mods/dot-hide#3d38cbfa6b1095206cca01f4c2aa10fe54348205</id>
-        <link href="https://windhawk.net/mods/dot-hide"/>
-        <updated>2024-01-12T10:26:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dothide">Dot Hide</h1>
-<p>Dot Hide is a handy mod designed to bring the Linux-style hiding of dot files and directories to Windows.<br />
-In Linux, files and directories starting with a dot ('.') are hidden by default, but this isn't the case in Windows.<br />
-Dot Hide tackles this by automatically hiding these files and directories, creating a more streamlined and organized workspace.   </p>
-<h2 id="before">Before</h2>
-<p><img src="https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/before.png" alt="Before" /></p>
-<h2 id="after">After</h2>
-<p><img src="https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
