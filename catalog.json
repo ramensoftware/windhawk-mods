@@ -1530,7 +1530,7 @@
                 "published": 1706376839000,
                 "rating": 10,
                 "ratingUsers": 4,
-                "updated": 1706376839000,
+                "updated": 1707808364000,
                 "users": 181
             },
             "metadata": {
@@ -1547,7 +1547,7 @@
                 ],
                 "name": "Taskbar notification icon spacing",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-scroll-actions": {
