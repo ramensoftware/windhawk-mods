@@ -93,9 +93,9 @@ BOOL Wh_ModInit(void)
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
-                L"private: void" 
+                L"private: void " 
                 SCALCON 
-                L"CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
+                L" CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
             },
             (void **)&CTaskBtnGroup__DrawBar_orig,
             (void *)CTaskBtnGroup__DrawBar_hook,
