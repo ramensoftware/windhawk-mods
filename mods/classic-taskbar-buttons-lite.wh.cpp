@@ -4,6 +4,7 @@
 // @description     Lightweight mod, restoring the 3D buttons in classic theme
 // @version         1.2
 // @author          Anixx
+// @github          https://github.com/Anixx
 // @include         explorer.exe
 // @compilerOptions -lgdi32
 // ==/WindhawkMod==
