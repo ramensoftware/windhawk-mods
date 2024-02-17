@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Classic Taskbar 3D buttons
+# Classic Taskbar Fix
 Lightweight mod which restores 3D buttons on taskbar when using Windows Classic theme. 
 The idea is based on the mod by Aubymori (https://github.com/aubymori).
 
@@ -28,6 +28,13 @@ After:
 
 #include <windhawk_utils.h>
 
+#ifdef _WIN64
+#define CALCON __cdecl
+#define SCALCON L"__cdecl"
+#else
+#define CALCON __thiscall
+#define SCALCON L"__thiscall"
+#endif
 
 typedef struct tagBUTTONRENDERINFOSTATES {
     char data[12];
@@ -36,7 +43,7 @@ typedef struct tagBUTTONRENDERINFOSTATES {
 /* Draw taskbar item */
 typedef void (* CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, void *);
 CTaskBtnGroup__DrawBar_t CTaskBtnGroup__DrawBar_orig;
-void __cdecl CTaskBtnGroup__DrawBar_hook(
+void CALCON CTaskBtnGroup__DrawBar_hook(
     void *pThis,
     HDC   hDC,
     void *pRenderInfo,
@@ -86,7 +93,9 @@ BOOL Wh_ModInit(void)
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
-                L"private: void __cdecl CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
+                L"private: void" 
+                SCALCON 
+                L"CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
             },
             (void **)&CTaskBtnGroup__DrawBar_orig,
             (void *)CTaskBtnGroup__DrawBar_hook,
