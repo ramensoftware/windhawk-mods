@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Classic Taskbar Fix
+# Classic Taskbar 3D buttons
 Lightweight mod which restores 3D buttons on taskbar when using Windows Classic theme. 
 The idea is based on the mod by Aubymori (https://github.com/aubymori).
 
