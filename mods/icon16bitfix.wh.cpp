@@ -10,8 +10,11 @@
 
 // ==WindhawkModReadme==
 /*
-Adds support for icons of 16-bit (Win16) executables in File Explorer (such as Civilization I).
+Adds support for icons of 16-bit (Win16) executables in File Explorer (such as Civilization I or Castle of the Winds).
 The mod is adapted from [Icon16bitFix utility](https://github.com/otya128/Icon16bitFix).
+
+![Foler view](https://i.imgur.com/g4epNjk.png)
+
 */
 // ==/WindhawkModReadme==
 
