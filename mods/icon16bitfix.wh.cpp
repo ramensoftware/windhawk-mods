@@ -10,7 +10,7 @@
 
 // ==WindhawkModReadme==
 /*
-Adds support for incons of 16-bit (Win16) executables in File Explorer (such as Civilization I).
+Adds support for icons of 16-bit (Win16) executables in File Explorer (such as Civilization I).
 The mod is adapted from [Icon16bitFix utility](https://github.com/otya128/Icon16bitFix).
 */
 // ==/WindhawkModReadme==
