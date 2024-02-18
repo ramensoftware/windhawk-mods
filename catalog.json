@@ -781,7 +781,7 @@
                 "published": 1708239950000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1708239950000,
+                "updated": 1708280471000,
                 "users": 0
             },
             "metadata": {
@@ -792,7 +792,7 @@
                     "explorer.exe"
                 ],
                 "name": "Icons of Win16 apps in Explorer",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "ignore-focus-loss": {

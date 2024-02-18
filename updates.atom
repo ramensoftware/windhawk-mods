@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-18T07:05:50.000Z</updated>
+    <updated>2024-02-18T18:21:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icons of Win16 apps in Explorer 1.0.1]]></title>
+        <id>https://windhawk.net/mods/icon16bitfix#b17e11f2083385c341a4b85a2709a22c073a7cec</id>
+        <link href="https://windhawk.net/mods/icon16bitfix"/>
+        <updated>2024-02-18T18:21:11.000Z</updated>
+        <content type="html"><![CDATA[<p>Add screenshot</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Icons of Win16 apps in Explorer 1.0]]></title>
         <id>https://windhawk.net/mods/icon16bitfix#a1e17b97b643e975382eca63e76c83e15ee77977</id>
@@ -220,14 +227,5 @@ versions check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweak
 <em>Notification icon width: 24</em></p>
 <p><img src="https://i.imgur.com/cErw24I.png" alt="Notification icon width: 18" /><br />
 <em>Notification icon width: 18</em></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.1]]></title>
-        <id>https://windhawk.net/mods/explorer-frame-classic#d1478bb7745b51495415ae8f71c66a1163e28d8c</id>
-        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
-        <updated>2024-01-27T09:24:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Reimplemented the Classic ribbon UI (no tabs) option to work with the new KB5034204 update.</li>
-</ul>]]></content>
     </entry>
 </feed>
