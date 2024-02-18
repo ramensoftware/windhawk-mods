@@ -2,7 +2,7 @@
 // @id              icon16bitfix
 // @name            Icons of Win16 apps in Explorer
 // @description     Adds support for icons of 16-bit (Win16) applications in File Explorer
-// @version         1.0
+// @version         1.0.1
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -10,8 +10,11 @@
 
 // ==WindhawkModReadme==
 /*
-Adds support for icons of 16-bit (Win16) executables in File Explorer (such as Civilization I).
+Adds support for icons of 16-bit (Win16) executables in File Explorer (such as Civilization I or Castle of the Winds).
 The mod is adapted from [Icon16bitFix utility](https://github.com/otya128/Icon16bitFix).
+
+![Foler view](https://i.imgur.com/g4epNjk.png)
+
 */
 // ==/WindhawkModReadme==
 
