@@ -775,6 +775,26 @@
                 "version": "1.0.2"
             }
         },
+        "icon16bitfix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1708239950000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1708239950000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "anixx",
+                "description": "Adds support for icons of 16-bit (Win16) applications in File Explorer",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Icons of Win16 apps in Explorer",
+                "version": "1.0"
+            }
+        },
         "ignore-focus-loss": {
             "details": {
                 "defaultSorting": 1368,
