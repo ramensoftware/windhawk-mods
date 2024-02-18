@@ -243,6 +243,27 @@
                 "version": "1.0.0"
             }
         },
+        "classic-taskbar-buttons-lite": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1708239757000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1708239757000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lgdi32",
+                "description": "Lightweight mod, restoring the 3D buttons in classic theme",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Taskbar 3D buttons Lite",
+                "version": "1.2"
+            }
+        },
         "classic-taskbar-context-menu": {
             "details": {
                 "defaultSorting": 2330,
