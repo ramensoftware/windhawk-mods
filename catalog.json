@@ -189,6 +189,27 @@
                 "version": "1.2.1"
             }
         },
+        "classic-explorer-treeview": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1708354597000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1708354597000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Waldemar",
+                "compilerOptions": "-lcomctl32 -lgdi32 -loleaut32 -lole32",
+                "description": "Modifies Folder Treeview in file explorer so as to make it look more classic.",
+                "github": "https://github.com/CyprinusCarpio",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Explorer Treeview",
+                "version": "1.0"
+            }
+        },
         "classic-maximized-windows-fix": {
             "details": {
                 "defaultSorting": 370,
