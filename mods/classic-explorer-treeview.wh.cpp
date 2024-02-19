@@ -112,6 +112,14 @@ are enabled.
 #define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 
+#ifdef _WIN64
+#define CALCON __cdecl
+#define SCALCON L"__cdecl"
+#else
+#define CALCON __thiscall
+#define SCALCON L"__thiscall"
+#endif
+
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
@@ -846,9 +854,9 @@ LRESULT CALLBACK TreeViewSubclassProc(_In_ HWND hWnd,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-typedef HWND (*NSCCreateTreeview_t)(void*, HWND);
+typedef HWND (*CALCON NSCCreateTreeview_t)(void*, HWND);
 NSCCreateTreeview_t NSCCreateTreeviewOriginal;
-HWND NSCCreateTreeviewHook(void* pThis, HWND hWnd)
+HWND CALCON NSCCreateTreeviewHook(void* pThis, HWND hWnd)
 {
     // Get the original member function to create the treeview so that it can be modified
     HWND treeview = NSCCreateTreeviewOriginal(pThis, hWnd);
@@ -890,17 +898,17 @@ HWND NSCCreateTreeviewHook(void* pThis, HWND hWnd)
 }
 
 // Remove pin icons
-typedef HRESULT (*NSCSetStateImageList_t)(struct _IMAGELIST*);
+typedef HRESULT (*CALCON NSCSetStateImageList_t)(struct _IMAGELIST*);
 NSCSetStateImageList_t NSCASetStateImageListOriginal;
-HRESULT NSCSetStateImageListHook(struct _IMAGELIST* himagelist)
+HRESULT CALCON NSCSetStateImageListHook(struct _IMAGELIST* himagelist)
 {
     return S_OK;
 }
 
 // Remove the top margin
-typedef HRESULT (*NSCApplyTopMargin_t)(void);
+typedef HRESULT (*CALCON NSCApplyTopMargin_t)(void);
 NSCApplyTopMargin_t NSCApplyTopMarginOriginal;
-HRESULT NSCApplyTopMarginHook()
+HRESULT CALCON NSCApplyTopMarginHook()
 {
     return S_OK;
 }
@@ -921,19 +929,19 @@ BOOL Wh_ModInit()
     WindhawkUtils::SYMBOL_HOOK hooks[] =
     {
         {   {
-                L"private: struct HWND__ * __cdecl CNscTree::_CreateTreeview(struct HWND__ *)"
+                L"private: struct HWND__ * " SCALCON " CNscTree::_CreateTreeview(struct HWND__ *)"
             },
             (void**)&NSCCreateTreeviewOriginal,
             (void*)NSCCreateTreeviewHook,
             FALSE
         },
-        {   {L"private: long __cdecl CNscTree::ApplyTopMargin(void)"},
+        {   {L"private: long " SCALCON " CNscTree::ApplyTopMargin(void)"},
             (void**)&NSCApplyTopMarginOriginal,
             (void*)NSCApplyTopMarginHook,
             FALSE
         },
         {   {
-                L"public: virtual long __cdecl CNscTree::SetStateImageList(struct _IMAGELIST *)"
+                L"public: virtual long " SCALCON " CNscTree::SetStateImageList(struct _IMAGELIST *)"
             },
             (void**)&NSCASetStateImageListOriginal,
             (void*)NSCSetStateImageListHook,
