@@ -1,3 +1,10 @@
+## 1.0.1 ([Feb 22, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ff8816646bb3f5789c6e2564149b2c632ce341d6/mods/classic-explorer-treeview.wh.cpp))
+
+- More accurate treeview item spacing
+- Mod no longer requires different settings on Win10 and Win11
+- Added a preview image to the description
+- Added settings to set the X, Y offsets of the close button
+
 ## 1.0 ([Feb 19, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2c5b476b3040ead1e8dae818aa0a5717ef1a2e9e/mods/classic-explorer-treeview.wh.cpp))
 
 Initial release.

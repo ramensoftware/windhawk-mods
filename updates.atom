@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-19T14:56:37.000Z</updated>
+    <updated>2024-02-22T12:24:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Treeview 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-treeview#ff8816646bb3f5789c6e2564149b2c632ce341d6</id>
+        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
+        <updated>2024-02-22T12:24:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>More accurate treeview item spacing</li>
+<li>Mod no longer requires different settings on Win10 and Win11</li>
+<li>Added a preview image to the description</li>
+<li>Added settings to set the X, Y offsets of the close button</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Treeview 1.0]]></title>
         <id>https://windhawk.net/mods/classic-explorer-treeview#2c5b476b3040ead1e8dae818aa0a5717ef1a2e9e</id>
@@ -280,16 +292,5 @@ out of the box. It is recommended to use Explorer Patcher
 (https://github.com/valinet/ExplorerPatcher) utility, which
 includes the necessary fixes.</p>
 <p><img src="https://i.imgur.com/gB7mwpp.png" alt="Windows Classic" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable SyslistView32 1.0]]></title>
-        <id>https://windhawk.net/mods/syslistview32-enabler#f0915f5e540e362d2e4c64fcd86b77ccf78ec897</id>
-        <link href="https://windhawk.net/mods/syslistview32-enabler"/>
-        <updated>2024-01-31T08:19:59.000Z</updated>
-        <content type="html"><![CDATA[<p>Enables the SysListView32 control in File Explorer folder windows.
-This makes the view more compact and allows icon rearrangement.
-SysListView32 control has been used by default before Windows 7.</p>
-<p><img src="https://i.imgur.com/rPpiFEU.png" alt="Default view" /></p>
-<p><img src="https://i.imgur.com/oqYf1YW.png" alt="SysListView32 mode" /></p>]]></content>
     </entry>
 </feed>

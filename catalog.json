@@ -195,7 +195,7 @@
                 "published": 1708354597000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1708354597000,
+                "updated": 1708604649000,
                 "users": 13
             },
             "metadata": {
@@ -207,7 +207,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Explorer Treeview",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "classic-maximized-windows-fix": {
