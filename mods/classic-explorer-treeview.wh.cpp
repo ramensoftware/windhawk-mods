@@ -2,7 +2,7 @@
 // @id              classic-explorer-treeview
 // @name            Classic Explorer Treeview
 // @description     Modifies Folder Treeview in file explorer so as to make it look more classic.
-// @version         1.0
+// @version         1.0.1
 // @author          Waldemar
 // @github          https://github.com/CyprinusCarpio
 // @include         explorer.exe
@@ -30,6 +30,10 @@
     - False: Use default color.
     - True: Use alternate color.
     - Automatic: Use alternate color if the default color's contrast is too low.
+- CloseButtonXOffset: 0
+  $name: Horizontal close button offset
+- CloseButtonYOffset: 0
+  $name: Vertical close button offset
 */
 // ==/WindhawkModSettings==
 
@@ -40,20 +44,18 @@
 This mod changes the Explorer Treeview (otherwise known as Folder Pane or
 Navigation Pane) to look more classic. It draws it's own Folder Band with a
 functional X button. If you are using OpenShell, then you need to set the
-correct settings for Classic Explorer in the Navigation Pane tab: Vista style,
-Tree item spacing -2, Full size offset for sub-folders. If you are using Windows
-11 23H2, then set the tree item spacing to -6, and enable compact spacing in the
-Explorer folder settings. For proper function and accurate look, the Organize
-bar has to be removed. To accomplish this, use Resource Hacker and modify
-shellstyle.dll by adding the the following line:
+correct settings for Classic Explorer in the Navigation Pane tab: Vista style
+and Tree item spacing 0.
 
-'<Element padding="rect(0rp,0rp,0rp,-32rp)"/>'
-
-below the line:
-
-'<style resid="FolderBandStyle">'
+![BeforeAndAfter](https://i.imgur.com/H6rnRE7.png)
 
 # Changelog:
+## 1.0.1
+- More accurate treeview item spacing
+- Mod no longer requires different settings on Win10 and Win11
+- Added a preview image to the description
+- Added settings to set the X, Y offsets of the close button
+
 ## 1.0
 - Fixed explorer.exe instability
 - Removed redundant linker arguments
@@ -165,6 +167,8 @@ bool g_settingLinesAtRoot = false;
 bool g_settingDrawButtons = true;
 WindhawkUtils::StringSetting g_settingLineColorOption;
 WindhawkUtils::StringSetting g_settingFoldersPaneText;
+int g_settingCloseButtonXOffset = 0;
+int g_settingCloseButtonYOffset = 0;
 
 //Used to keep track of NSTC window handles and some extra data associated with them
 std::vector<NSCTExtra> g_subclassedNSTCs;
@@ -260,7 +264,7 @@ void DrawDottedLinesAndButtons(HWND hTree, HDC hdc)
                 // If there's no next sibling, draw a line to the middle of expando button
                 else
                 {
-                    LineTo(hdc, rect.left + 4, rect.bottom - 7);
+                    LineTo(hdc, rect.left + 4, rect.bottom - 5);
                 }
             }
         
@@ -368,6 +372,14 @@ int GetThemedBandOffset()  // extremely retarded and only semi-accurate
     return size;
 }
 
+void SetCloseButtonRect(RECT &rect)
+{
+    rect.left = rect.right - 24 + g_settingCloseButtonXOffset;
+    rect.right -= 4 - g_settingCloseButtonXOffset;
+    rect.bottom = rect.top + 19 + g_settingCloseButtonYOffset;
+    rect.top += 2 + g_settingCloseButtonYOffset;
+}
+
 LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
                                  _In_ UINT uMsg,
                                  _In_ WPARAM wParam,
@@ -461,8 +473,8 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
 
         // draw the close button
         // ##    ##
-        rect.top = origTop + 7;
-        rect.left = origRight - 18;
+        rect.top = origTop + 7 + g_settingCloseButtonYOffset;
+        rect.left = origRight - 18 + g_settingCloseButtonXOffset;
         rect.bottom = rect.top + 1;
         rect.right = rect.left + 2;
         if (eFlags & MOUSE_OVER_BUTTON && eFlags & MOUSE_PRESSED)
@@ -505,8 +517,8 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
 
         // reset and draw last three lines in reverse cause easier math
         // ##    ##
-        rect.top = origTop + 13;
-        rect.left = origRight - 18;
+        rect.top = origTop + 13 + g_settingCloseButtonYOffset;
+        rect.left = origRight - 18 + g_settingCloseButtonXOffset;
         rect.bottom = rect.top + 1;
         rect.right = rect.left + 2;
         if (eFlags & MOUSE_OVER_BUTTON && eFlags & MOUSE_PRESSED)
@@ -558,10 +570,7 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
         {
             RECT buttonFrame;
             GetClientRect(hWnd, &buttonFrame);
-            buttonFrame.left = buttonFrame.right - 24;
-            buttonFrame.right = buttonFrame.right - 4;
-            buttonFrame.bottom = buttonFrame.top + 19;
-            buttonFrame.top = buttonFrame.top + 2;
+            SetCloseButtonRect(buttonFrame);
             DrawEdge(
                 hdc, &buttonFrame,
                 eFlags & MOUSE_PRESSED ? BDR_SUNKENOUTER : BDR_RAISEDINNER,
@@ -615,10 +624,7 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
         GetClientRect(hWnd, &rect);
     
         // Set the rect to the X button bounds
-        rect.left = rect.right - 24;
-        rect.right -= 4;
-        rect.bottom = rect.top + 19;
-        rect.top += 2;
+        SetCloseButtonRect(rect);
     
         // Check if the mouse is inside the rectangle
         bool mouseInside = false;
@@ -671,10 +677,7 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
             {
                 RECT rect;
                 GetClientRect(hWnd, &rect);
-                rect.left = rect.right - 24;
-                rect.right -= 4;
-                rect.bottom = rect.top + 19;
-                rect.top += 2;
+                SetCloseButtonRect(rect);
                 InvalidateRect(hWnd, &rect, FALSE);
                 g_subclassedNSTCs[i].eFlags |= MOUSE_PRESSED;
                 break;
@@ -691,10 +694,7 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
             {
                 RECT rect;
                 GetClientRect(hWnd, &rect);
-                rect.left = rect.right - 24;
-                rect.right -= 4;
-                rect.bottom = rect.top + 19;
-                rect.top += 2;
+                SetCloseButtonRect(rect);
                 g_subclassedNSTCs[i].eFlags &= ~MOUSE_PRESSED;
                 g_subclassedNSTCs[i].eFlags &= ~MOUSE_TRACING;
                 g_subclassedNSTCs[i].eFlags &= ~MOUSE_OVER_BUTTON;
@@ -723,10 +723,7 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
         int yPos = GET_Y_LPARAM(lParam);
         RECT rect;
         GetClientRect(hWnd, &rect);
-        rect.left = rect.right - 23;
-        rect.right -= 4;
-        rect.bottom = rect.top + 20;
-        rect.top += 2;
+        SetCloseButtonRect(rect);
 
         // Check if the mouse click is within the button rectangle
         if (xPos >= rect.left && xPos <= rect.right && yPos >= rect.top && yPos <= rect.bottom)
@@ -838,20 +835,47 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-LRESULT CALLBACK TreeViewSubclassProc(_In_ HWND hWnd,
-                                      _In_ UINT uMsg,
-                                      _In_ WPARAM wParam,
-                                      _In_ LPARAM lParam,
-                                      _In_ DWORD_PTR dwRefData)
+SUBCLASSPROC NSCSubClassTreeWndProcOriginal;
+LRESULT CALLBACK NSCSubClassTreeWndProcHook(
+    HWND      hWnd, 
+    UINT      uMsg,
+    WPARAM    wParam,
+    LPARAM    lParam,
+    UINT_PTR  uIdSubclass,
+    DWORD_PTR dwRefData
+)
 {
-    //Set the cursor to the default arrow, so as to prevent the hand cursor being displayed on item hover
-    if (uMsg == WM_SETCURSOR)
+    // Apply the modifications only if the treeview is created in file explorer window proper
+    wchar_t root[20];
+    GetClassName(GetParent(GetParent(GetParent(GetParent(GetParent(hWnd))))), root, 20);
+    if (lstrcmpW(root, L"ShellTabWindowClass") == 0)
     {
-        SetCursor(LoadCursor(NULL, IDC_ARROW));
-        return TRUE;
+        if (uMsg == WM_SETCURSOR)
+        {
+            SetCursor(LoadCursor(NULL, IDC_ARROW)); //Remove hand cursor
+            return S_OK;
+        }
+        else if(uMsg == TV_FIRST+74) //Remove top margin
+        {
+            wParam = 0;
+        }
+        else if(uMsg == TVM_SETINDENT) //Set full indent
+        {
+            wParam = 19;
+        }
+        else if(uMsg == TVM_SETITEMHEIGHT) //Set item height to the accurate value
+        {
+            wParam = 16;
+        }
+        else if (uMsg == TVM_INSERTITEM)
+        {
+            //Ensure that iIntegral is set to 1 for every item to achieve accurate item height
+            LPTVINSERTSTRUCT lpis = (LPTVINSERTSTRUCT)lParam;
+            lpis->itemex.iIntegral = 1;
+        }
     }
 
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    return NSCSubClassTreeWndProcOriginal(hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData);
 }
 
 typedef HWND (*CALCON NSCCreateTreeview_t)(void*, HWND);
@@ -888,9 +912,6 @@ HWND CALCON NSCCreateTreeviewHook(void* pThis, HWND hWnd)
             DWORD exStyle = TreeView_GetExtendedStyle(treeview);
             exStyle &= ~TVS_EX_RICHTOOLTIP;
             TreeView_SetExtendedStyle(treeview, exStyle, TVS_EX_RICHTOOLTIP);
-
-            WindhawkUtils::SetWindowSubclassFromAnyThread(
-                treeview, TreeViewSubclassProc, NULL);
         }
     }
 
@@ -901,14 +922,6 @@ HWND CALCON NSCCreateTreeviewHook(void* pThis, HWND hWnd)
 typedef HRESULT (*CALCON NSCSetStateImageList_t)(struct _IMAGELIST*);
 NSCSetStateImageList_t NSCASetStateImageListOriginal;
 HRESULT CALCON NSCSetStateImageListHook(struct _IMAGELIST* himagelist)
-{
-    return S_OK;
-}
-
-// Remove the top margin
-typedef HRESULT (*CALCON NSCApplyTopMargin_t)(void);
-NSCApplyTopMargin_t NSCApplyTopMarginOriginal;
-HRESULT CALCON NSCApplyTopMarginHook()
 {
     return S_OK;
 }
@@ -925,7 +938,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    // Define the symbol hooks for required member functions
+    // Define the symbol hooks for required member functions 
     WindhawkUtils::SYMBOL_HOOK hooks[] =
     {
         {   {
@@ -935,9 +948,14 @@ BOOL Wh_ModInit()
             (void*)NSCCreateTreeviewHook,
             FALSE
         },
-        {   {L"private: long " SCALCON " CNscTree::ApplyTopMargin(void)"},
-            (void**)&NSCApplyTopMarginOriginal,
-            (void*)NSCApplyTopMarginHook,
+        {   
+#ifdef _WIN64
+                {L"private: static __int64 __cdecl CNscTree::s_SubClassTreeWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,unsigned __int64,unsigned __int64)"},
+#else
+                {L"private: static long __stdcall CNscTree::s_SubClassTreeWndProc(struct HWND__ *,unsigned int,unsigned int,long,unsigned int,unsigned long)"},
+#endif
+            (void**)&NSCSubClassTreeWndProcOriginal,
+            (void*)NSCSubClassTreeWndProcHook,
             FALSE
         },
         {   {
@@ -963,6 +981,8 @@ BOOL Wh_ModInit()
         WindhawkUtils::StringSetting::make(L"AlternateLineColor");
     g_settingFoldersPaneText =
         WindhawkUtils::StringSetting::make(L"FoldersText");
+    g_settingCloseButtonXOffset = Wh_GetIntSetting(L"CloseButtonXOffset");
+    g_settingCloseButtonYOffset = Wh_GetIntSetting(L"CloseButtonYOffset");
 
     // Set the line color option based on the string setting
     g_lineColorOptionInt = 0;
@@ -1016,11 +1036,6 @@ void Wh_ModUninit()
     {
         // Remove subclass from the CNSCTree control
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_subclassedNSTCs[i].hWnd, NSCSubclassProc);
-
-        // Find the child treeview and remove the subclass
-        HWND child = FindWindowEx(g_subclassedNSTCs[i].hWnd, NULL, L"SysTreeView32", NULL);
-        if (child != NULL) // Remove the subclass from the treeview only if it's found
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread( child, TreeViewSubclassProc);
     }
     Wh_Log(L"Classic Explorer Treeview uninit completed successfully.");
 }
@@ -1034,6 +1049,8 @@ void Wh_ModSettingsChanged()
         WindhawkUtils::StringSetting::make(L"AlternateLineColor");
     g_settingFoldersPaneText =
         WindhawkUtils::StringSetting::make(L"FoldersText");
+    g_settingCloseButtonXOffset = Wh_GetIntSetting(L"CloseButtonXOffset");
+    g_settingCloseButtonYOffset = Wh_GetIntSetting(L"CloseButtonYOffset");
     
     // Set the line color option based on the string setting
     g_lineColorOptionInt = 0;
