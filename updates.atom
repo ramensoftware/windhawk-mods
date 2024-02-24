@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-22T12:24:09.000Z</updated>
+    <updated>2024-02-24T17:23:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Treeview 1.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-treeview#1cd6db586b784a7f60cd854d8c18e726b6e42626</id>
+        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
+        <updated>2024-02-24T17:23:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Accurate dotted lines</li>
+<li>Fixed a bug with quick access item being too big</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Treeview 1.0.1]]></title>
         <id>https://windhawk.net/mods/classic-explorer-treeview#ff8816646bb3f5789c6e2564149b2c632ce341d6</id>
@@ -265,32 +275,5 @@ which fixes their glitches when using Windows Classic theme.</p>
 <p>This mod fixes UWP apps getting stuck at the splash screen when using the Classic theme.</p>
 <p>No more need to run ApplicationFrameHost before enabling Classic!</p>
 <p>This works by hardcoding the splash fade animation values instead of fetching them from msstyles.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable Classic Theme by handle method 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#0b1ccc0fffe836d1711816b6124c21f761501298</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2024-01-31T12:08:08.000Z</updated>
-        <content type="html"><![CDATA[<p>Disables visual styles, effectively enabling the Windows Classic theme.
-This mod uses the method of closing access to the memory area where
-the theme is located. It is one of the multiple methods of enabling
-Windows Classic theme.</p>
-<p>The mod injects only in the process Winlogon.exe, and exits once
-the handle of the memory area is closed. It does not hook
-any functions. </p>
-<p>Make sure that the option allowing injecting into critical system processes
-is enabled in Windhawk options.</p>
-<p>The mod affects only windows that are shown after enabling the mod.</p>
-<p>Windows Classic theme is not compatible with Windows 10 Task Manager.
-Before enabling the mode, install the classic task manager:
-https://winaero.com/get-classic-old-task-manager-in-windows-10/</p>
-<p>Enabling the mod will make UWP apps unfunctional. Install a mod that fixes
-this, for instance, this one: 
-https://winclassic.boards.net/thread/2058/classic-uwp-fix</p>
-<p>Windows Classic theme is not compatible with Windows 11 and Windows 10 taskbars
-out of the box. It is recommended to use Explorer Patcher 
-(https://github.com/valinet/ExplorerPatcher) utility, which
-includes the necessary fixes.</p>
-<p><img src="https://i.imgur.com/gB7mwpp.png" alt="Windows Classic" /></p>]]></content>
     </entry>
 </feed>

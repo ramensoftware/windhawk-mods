@@ -1,3 +1,8 @@
+## 1.0.2 ([Feb 24, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1cd6db586b784a7f60cd854d8c18e726b6e42626/mods/classic-explorer-treeview.wh.cpp))
+
+- Accurate dotted lines
+- Fixed a bug with quick access item being too big
+
 ## 1.0.1 ([Feb 22, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ff8816646bb3f5789c6e2564149b2c632ce341d6/mods/classic-explorer-treeview.wh.cpp))
 
 - More accurate treeview item spacing
