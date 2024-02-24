@@ -2,7 +2,7 @@
 // @id              classic-explorer-treeview
 // @name            Classic Explorer Treeview
 // @description     Modifies Folder Treeview in file explorer so as to make it look more classic.
-// @version         1.0.1
+// @version         1.0.2
 // @author          Waldemar
 // @github          https://github.com/CyprinusCarpio
 // @include         explorer.exe
@@ -22,7 +22,7 @@
   $description: Use TVS_LINESATROOT style.
 - DrawButtons: true
   $name: Draw +/- Buttons
-  $description: Should the mod draw it's own +/- buttons.
+  $description: Should the mod draw it's own +/- buttons. Disable only if not using Classic theme.
 - AlternateLineColor: Automatic
   $name: Alternate line color
   $description: Use highlight color instead of shadow color for drawing lines. May produce better results on some dark themes.
@@ -49,7 +49,14 @@ and Tree item spacing 0.
 
 ![BeforeAndAfter](https://i.imgur.com/H6rnRE7.png)
 
+For issue reports, contact Waldemar#3194 on Discord, or file a report at my [github repository](https://github.com/CyprinusCarpio/windhawk-mods).
+
+
 # Changelog:
+## 1.0.2
+- Accurate dotted lines
+- Fixed a bug with quick access item being too big
+
 ## 1.0.1
 - More accurate treeview item spacing
 - Mod no longer requires different settings on Win10 and Win11
@@ -127,6 +134,7 @@ are enabled.
 
 #include <wingdi.h>
 #include <winrt/base.h>
+
 
 static GUID SID_FrameManager =
 {
@@ -221,12 +229,26 @@ void DrawDottedLinesAndButtons(HWND hTree, HDC hdc)
         }
     }
 
+
     while (hItem != NULL)
     {
         // Get the bounding rectangle of the specified tree view item
-        TreeView_GetItemRect(hTree, hItem, &rect, TRUE); 
-        rect.left -= 33; 
-        rect.top += 6; 
+        TreeView_GetItemRect(hTree, hItem, &rect, TRUE);
+
+        // Even though the item height should be 16, I'm accomodating some more heights
+        UINT itemHeight = TreeView_GetItemHeight(hTree);
+        switch(itemHeight)
+        {
+        default:
+        case 16:
+            rect.left -= 34; 
+            rect.top += 4;
+            break;
+        case 18:
+            rect.left -= 33; 
+            rect.top += 6;
+            break;
+        }
         
         // Define a TVITEM struct to retrieve the number of children for the specified item
         TVITEM tvi;
@@ -236,45 +258,6 @@ void DrawDottedLinesAndButtons(HWND hTree, HDC hdc)
         // Check if the item is at the top level by comparing the left position of the rectangle
         // to either 10 or -10 based on the value of g_settingLinesAtRoot
         bool isTopLevel = rect.left <= (g_settingLinesAtRoot ? 10 : -10);
-
-        // Check if we should draw dotted lines
-        if (g_settingDrawDottedLines)
-        {
-            // Create a logical brush
-            LOGBRUSH LogBrush;
-            LogBrush.lbColor = useHighlight ? highlightColor : shadowColor;
-            LogBrush.lbStyle = PS_SOLID;
-            // Create a cosmetic pen with alternating dashes and specify the brush
-            HPEN hPen = ExtCreatePen(PS_COSMETIC | PS_ALTERNATE, 1, &LogBrush, 0, NULL);
-        
-            // Select the new pen and save the old pen
-            HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
-
-            if (!isTopLevel)
-            {
-                // Get the next sibling a draw a vertical line to it
-                HTREEITEM nextItem = TreeView_GetNextSibling(hTree, hItem);
-                MoveToEx(hdc, rect.left + 4, isTopLevel ? rect.top + 4 : rect.top - 4, NULL);
-                if (nextItem != NULL)
-                {
-                    RECT nextItemRect;
-                    TreeView_GetItemRect(hTree, nextItem, &nextItemRect, TRUE);
-                    LineTo(hdc, rect.left + 4, nextItemRect.top + 5);
-                }
-                // If there's no next sibling, draw a line to the middle of expando button
-                else
-                {
-                    LineTo(hdc, rect.left + 4, rect.bottom - 5);
-                }
-            }
-        
-            // Draw a horizontal line
-            MoveToEx(hdc, rect.left + 6, rect.top + 4, NULL);
-            LineTo(hdc, rect.left + 14, rect.top + 4);
-            // Restore the old pen and delete the new pen
-            SelectObject(hdc, hOldPen);
-            DeleteObject(hPen);
-        }
 
         // Check if the setting to draw buttons is enabled and the node is not a top-level node when lines at root is disabled
         // and the node has one or more children
@@ -312,7 +295,7 @@ void DrawDottedLinesAndButtons(HWND hTree, HDC hdc)
             HPEN hPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_BTNTEXT));
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
         
-            // Draw a line in the item's rectangle based on its expanded state
+            // Draw a +/- symbol in the item's button based on its expanded state
             if (state & TVIS_EXPANDED)
             {
                 MoveToEx(hdc, rect.left + 2, rect.top + 4, NULL);
@@ -873,6 +856,27 @@ LRESULT CALLBACK NSCSubClassTreeWndProcHook(
             LPTVINSERTSTRUCT lpis = (LPTVINSERTSTRUCT)lParam;
             lpis->itemex.iIntegral = 1;
         }
+        else if (uMsg == TVM_SETITEM) // Quick access item workaround
+        {
+            LPTVITEMEXW lptvi = (LPTVITEMEXW)lParam;
+            if (lptvi->mask & TVIF_INTEGRAL)
+            {
+                lptvi->iIntegral = 1;
+            }
+        }
+        else if(uMsg == WM_SYSCOLORCHANGE && g_lineColorOptionInt == 2)
+        {
+            //If the automatic line color setting is enabled, new best color needs to be set
+            DWORD windowColor = GetSysColor(COLOR_WINDOW);
+            DWORD shadowColor = GetSysColor(COLOR_3DSHADOW);
+            DWORD highlightColor = GetSysColor(COLOR_3DHIGHLIGHT);
+            
+            // Calculate the color distances
+            double distanceShadow = ColorDistance(windowColor, shadowColor);
+            double distanceHighlight = ColorDistance(windowColor, highlightColor);
+
+            TreeView_SetLineColor(hWnd, distanceHighlight > distanceShadow ? highlightColor : shadowColor);
+        }
     }
 
     return NSCSubClassTreeWndProcOriginal(hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData);
@@ -898,16 +902,34 @@ HWND CALCON NSCCreateTreeviewHook(void* pThis, HWND hWnd)
             // Set the style of the treeview
             DWORD dwStyle = TVS_HASBUTTONS | TVS_EDITLABELS |
                             TVS_SHOWSELALWAYS | WS_TABSTOP | WS_CLIPCHILDREN |
-                            WS_CLIPSIBLINGS | WS_VISIBLE | WS_CHILD |
-                            TVS_NONEVENHEIGHT;
+                            WS_CLIPSIBLINGS | WS_VISIBLE | WS_CHILD;
             if (g_settingLinesAtRoot)
                 dwStyle |= TVS_LINESATROOT;
+            if(g_settingDrawDottedLines)
+                dwStyle |= TVS_HASLINES;
 
             SetWindowLongPtrW(treeview, GWL_STYLE, dwStyle);
 
             TreeView_SetIndent(treeview, 20);
             TreeView_SetItemHeight(treeview, 16);
 
+            // Set dotted line color. Shadow color is default
+            DWORD highlightColor = GetSysColor(COLOR_3DHIGHLIGHT);
+            if(g_lineColorOptionInt == 1) //highlight color
+            {
+                TreeView_SetLineColor(treeview, highlightColor);
+            }
+            else if(g_lineColorOptionInt == 2) //automatic color
+            {
+                DWORD windowColor = GetSysColor(COLOR_WINDOW);
+                DWORD shadowColor = GetSysColor(COLOR_3DSHADOW);
+                
+                // Calculate the color distances
+                double distanceShadow = ColorDistance(windowColor, shadowColor);
+                double distanceHighlight = ColorDistance(windowColor, highlightColor);
+
+                TreeView_SetLineColor(treeview, distanceHighlight > distanceShadow ? highlightColor : shadowColor);
+            }
             // Set the extended style to bring back the classic tooltip
             DWORD exStyle = TreeView_GetExtendedStyle(treeview);
             exStyle &= ~TVS_EX_RICHTOOLTIP;
