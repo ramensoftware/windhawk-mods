@@ -392,6 +392,26 @@
                 "version": "0.2"
             }
         },
+        "clientedge-in-apps": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1708969659000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1708969659000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "anixx",
+                "description": "Adds WS_EX_CLIENTEDGE style to some apps to look better in Classic theme.",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "*"
+                ],
+                "name": "Clientedge (3D border) in choosen apps",
+                "version": "1.0.0"
+            }
+        },
         "custom-shutdown-dialog": {
             "details": {
                 "defaultSorting": 420,
