@@ -33,7 +33,7 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
 
     // Explorer and XP-like File Picker
 
-    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"SysListView32")) {
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysListView32")) {
         GetClassNameW(hWndParent, wszClassName, 256);
         if (!wcscmp(wszClassName, L"SHELLDLL_DefView")) {
             GetClassNameW(GetParent(hWndParent), wszClassName, 256);
@@ -45,7 +45,7 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
 
     // Classic Notepad
 
-    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"Edit")) {
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"Edit")) {
         GetClassNameW(hWndParent, wszClassName, 256);
         if (!wcscmp(wszClassName, L"Notepad")) {
             dwExStyle |= WS_EX_CLIENTEDGE;
@@ -54,7 +54,7 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
 
     // Wolfram Mathematica
 
-    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"NotebookContent")) {
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"NotebookContent")) {
         GetClassNameW(hWndParent, wszClassName, 256);
         if (!wcscmp(wszClassName, L"NotebookFrame")) {
             dwExStyle |= WS_EX_CLIENTEDGE;
