@@ -54,8 +54,11 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
 
     // Wolfram Mathematica
 
-    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"NotebookFrame")) {
-        dwExStyle |= WS_EX_CLIENTEDGE;
+    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"NotebookContent")) {
+        GetClassNameW(hWndParent, wszClassName, 256);
+        if (!wcscmp(wszClassName, L"NotebookFrame")) {
+            dwExStyle |= WS_EX_CLIENTEDGE;
+        }
     }
 
     return CreateWindowExW_Orig(dwExStyle,lpClassName,lpWindowName,dwStyle,X,Y,nWidth,nHeight,hWndParent,hMenu,hInstance,lpParam);
