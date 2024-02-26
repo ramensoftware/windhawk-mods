@@ -2,7 +2,7 @@
 // @id              classic-theme-explorer-lite
 // @name            Classic Theme Explorer Lite
 // @description     Classic Theme mitigations for Explorer ported from Explorer Patcher
-// @version         1.1
+// @version         1.1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -23,17 +23,17 @@ CreateWindowExW_t CreateWindowExW_Orig;
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,LPCWSTR lpClassName,LPCWSTR lpWindowName,DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HINSTANCE hInstance,LPVOID lpParam) {
     wchar_t wszClassName[200];
     ZeroMemory(wszClassName, 200);
-    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"TrayNotifyWnd"))
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"TrayNotifyWnd"))
     {
         dwExStyle |= WS_EX_STATICEDGE;
     }
-    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"NotifyIconOverflowWindow"))
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"NotifyIconOverflowWindow"))
     {
         dwExStyle |= WS_EX_STATICEDGE;
     }
 
 //  Disable this block if you don't want 3D borders in folders
-    if ((*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"SysListView32"))
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysListView32"))
     {
         GetClassNameW(GetParent(hWndParent), wszClassName, 200);
         if (wcscmp(wszClassName, L"Progman"))
@@ -42,7 +42,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,LPCWSTR lpClassName,LPCWSTR lpW
         }
     }
 
-    if ( (*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"ReBarWindow32"))
+    if ( (((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"ReBarWindow32"))
     {
         GetClassNameW(hWndParent, wszClassName, 200);
         if (!wcscmp(wszClassName, L"Shell_TrayWnd"))
@@ -63,14 +63,14 @@ LONG_PTR SetWindowLongPtrW_Hook(HWND hWnd, int nIndex, LONG_PTR dwNewLong) {
     GetClassNameW(hWnd, lpClassName, 200);
     HWND hWndParent = GetParent(hWnd);
 
-    if ( (*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"TrayNotifyWnd"))
+    if ( (((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"TrayNotifyWnd"))
     {
         if (nIndex == GWL_EXSTYLE)
         {
             dwNewLong |= WS_EX_STATICEDGE;
         }
     }
-    if ( (*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"NotifyIconOverflowWindow"))
+    if ( (((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"NotifyIconOverflowWindow"))
     {
         if (nIndex == GWL_EXSTYLE)
         {
@@ -78,7 +78,7 @@ LONG_PTR SetWindowLongPtrW_Hook(HWND hWnd, int nIndex, LONG_PTR dwNewLong) {
         }
     }
 
-    if ( (*((WORD*)&(lpClassName)+1)) && !wcscmp(lpClassName, L"ReBarWindow32"))
+    if ( (((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"ReBarWindow32"))
     {
         wchar_t wszClassName[200];
         ZeroMemory(wszClassName, 200);
