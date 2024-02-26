@@ -1,3 +1,7 @@
+## 1.1.1 ([Feb 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/18d5efea01fa89ff790e60cfaa923698a2374ee8/mods/classic-theme-explorer-lite.wh.cpp))
+
+Fix pointer verification
+
 ## 1.1 ([Feb 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/330018f93318cc849d5ebb26006a21aad2ed8a18/mods/classic-theme-explorer-lite.wh.cpp))
 
 Fixes https://github.com/ramensoftware/windhawk-mods/issues/510

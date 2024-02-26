@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-24T17:23:45.000Z</updated>
+    <updated>2024-02-26T17:47:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.1.1]]></title>
+        <id>https://windhawk.net/mods/classic-theme-explorer-lite#18d5efea01fa89ff790e60cfaa923698a2374ee8</id>
+        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
+        <updated>2024-02-26T17:47:10.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix pointer verification</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Treeview 1.0.2]]></title>
         <id>https://windhawk.net/mods/classic-explorer-treeview#1cd6db586b784a7f60cd854d8c18e726b6e42626</id>
@@ -265,15 +272,5 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <content type="html"><![CDATA[<p>This mod forces Aero Lite window borders on browsers MS Edge, Chrome, Chromium and Steam app,
 which fixes their glitches when using Windows Classic theme.</p>
 <p><img src="https://i.imgur.com/5enqSD8.png" alt="Aero Lite" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic UWP Fix 0.2]]></title>
-        <id>https://windhawk.net/mods/classic-uwp-fix#d29135d8365b71afaeb4fce0ca06d793bf133e2a</id>
-        <link href="https://windhawk.net/mods/classic-uwp-fix"/>
-        <updated>2024-02-02T17:33:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicuwpfix">Classic UWP Fix</h1>
-<p>This mod fixes UWP apps getting stuck at the splash screen when using the Classic theme.</p>
-<p>No more need to run ApplicationFrameHost before enabling Classic!</p>
-<p>This works by hardcoding the splash fade animation values instead of fetching them from msstyles.</p>]]></content>
     </entry>
 </feed>
