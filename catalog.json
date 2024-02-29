@@ -374,7 +374,7 @@
                 "published": 1706895197000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1706895197000,
+                "updated": 1709191248000,
                 "users": 46
             },
             "metadata": {
@@ -386,10 +386,13 @@
                 "github": "https://github.com/Ingan121",
                 "homepage": "https://www.ingan121.com/",
                 "include": [
-                    "ApplicationFrameHost.exe"
+                    "ApplicationFrameHost.exe",
+                    "explorer.exe",
+                    "ShellAppRuntime.exe",
+                    "CustomShellHost.exe"
                 ],
                 "name": "Classic UWP Fix",
-                "version": "0.2"
+                "version": "0.3"
             }
         },
         "clientedge-in-apps": {
