@@ -2,11 +2,14 @@
 // @id              classic-uwp-fix
 // @name            Classic UWP Fix
 // @description     Fix for UWPs breaking with Classic theme
-// @version         0.2
+// @version         0.3
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         ApplicationFrameHost.exe
+// @include         explorer.exe
+// @include         ShellAppRuntime.exe
+// @include         CustomShellHost.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
 
@@ -23,23 +26,27 @@ This works by hardcoding the splash fade animation values instead of fetching th
 
 #include <windhawk_utils.h>
 
-typedef INT64 (* WINAPI AnimationHelpers__LoadThemeTransform_t)(void *, UINT, INT64 *, struct TA_TRANSFORM *, INT64 *, struct TA_TIMINGFUNCTION *);
+typedef INT64 (* WINAPI AnimationHelpers__LoadThemeTransform_t)(void *, UINT, INT64 *, int, INT64 *, struct TA_TIMINGFUNCTION *);
 AnimationHelpers__LoadThemeTransform_t AnimationHelpers__LoadThemeTransform_orig;
 INT64 WINAPI AnimationHelpers__LoadThemeTransform_hook(
     void *pThis,
     UINT a2,
     INT64 *out,
-    struct TA_TRANSFORM *a4,
+    int type,
     INT64 *a5,
     struct TA_TIMINGFUNCTION *a6
 ){
-    out[0] = 2;
-    out[1] = 0;
-    out[2] = 2;
-    out[3] = 1065353216;
-    out[4] = 1;
-    out[5] = 0;
-    out[6] = 1065353216;
+    if (type == 28) {
+        out[0] = 2;
+        out[1] = 0;
+        out[2] = 2;
+        out[3] = 1.0f;
+        out[4] = 1;
+        out[5] = 0;
+        out[6] = 1.0f;
+    } else {
+        AnimationHelpers__LoadThemeTransform_orig(pThis, a2, out, type, a5, a6);
+    }
     return 0;
 }
 
