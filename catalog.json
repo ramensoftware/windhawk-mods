@@ -210,6 +210,26 @@
                 "version": "1.0.2"
             }
         },
+        "classic-file-picker-dialog": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1709574778000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1709574778000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "description": "Redirect the Windows Vista+ file picker to the Windows XP one",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic File Picker dialog",
+                "version": "1.0"
+            }
+        },
         "classic-maximized-windows-fix": {
             "details": {
                 "defaultSorting": 370,

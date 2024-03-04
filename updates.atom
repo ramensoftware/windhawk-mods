@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-02-29T07:20:48.000Z</updated>
+    <updated>2024-03-04T17:52:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic File Picker dialog 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-file-picker-dialog#74fc53071eee5acd488a5ca6c946da9a64dd7044</id>
+        <link href="https://windhawk.net/mods/classic-file-picker-dialog"/>
+        <updated>2024-03-04T17:52:58.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod replaces the default file picker (open/save dialog) with the legacy one,
+which was used in Windows XP and Windws 2000.</p>
+<p>For 3D border in the dialog, install the mod "ClientEdge in choosen apps"</p>
+<p>The mod is based on the idea by xdmg01.</p>
+<p><img src="https://i.imgur.com/g2NVokJ.png" alt="File Picker" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic UWP Fix 0.3]]></title>
         <id>https://windhawk.net/mods/classic-uwp-fix#596131805828a3dccd291548eadf7cd1f2b1a13c</id>
@@ -269,12 +280,5 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <link href="https://windhawk.net/mods/syslistview32-enabler"/>
         <updated>2024-02-05T11:01:44.000Z</updated>
         <content type="html"><![CDATA[<p>descriptions should be on separate lines</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable SyslistView32 1.0.1]]></title>
-        <id>https://windhawk.net/mods/syslistview32-enabler#0e9490999aba83eefc62b1f508819c94e2dcc1ae</id>
-        <link href="https://windhawk.net/mods/syslistview32-enabler"/>
-        <updated>2024-02-05T08:04:41.000Z</updated>
-        <content type="html"><![CDATA[<p>Add descriptions to images</p>]]></content>
     </entry>
 </feed>
