@@ -28,8 +28,8 @@ The mod is based on the idea by xdmg01.
 #define CALCON __cdecl
 #define SCALCON L" __cdecl "
 #else
-#define CALCON __thiscall
-#define SCALCON L" __thiscall "
+#define CALCON __stdcall
+#define SCALCON L" __stdcall "
 #endif
 
 typedef int (CALCON *IsCommonItemDialogAvailable)(void);
