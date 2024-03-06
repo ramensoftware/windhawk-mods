@@ -2,7 +2,7 @@
 // @id              classic-explorer-treeview
 // @name            Classic Explorer Treeview
 // @description     Modifies Folder Treeview in file explorer so as to make it look more classic.
-// @version         1.0.2
+// @version         1.0.3
 // @author          Waldemar
 // @github          https://github.com/CyprinusCarpio
 // @include         explorer.exe
@@ -49,10 +49,14 @@ and Tree item spacing 0.
 
 ![BeforeAndAfter](https://i.imgur.com/H6rnRE7.png)
 
-For issue reports, contact Waldemar#3194 on Discord, or file a report at my [github repository](https://github.com/CyprinusCarpio/windhawk-mods).
+For issue reports, contact waldemar3194 on Discord, or file a report at my [github repository](https://github.com/CyprinusCarpio/windhawk-mods).
 
 
 # Changelog:
+## 1.0.3
+- Optimized expando button drawing
+- Mod will now explicitly load the required dll module
+
 ## 1.0.2
 - Accurate dotted lines
 - Fixed a bug with quick access item being too big
@@ -198,13 +202,11 @@ double ColorDistance(DWORD color1, DWORD color2)
                      std::pow(b2 - b1, 2));
 }
 
-void DrawDottedLinesAndButtons(HWND hTree, HDC hdc)
+void DrawExpandoButton(HWND hTree, HDC hdc, HTREEITEM hItem)
 {
-    // Get the handle of the root item in the tree view
-    HTREEITEM hItem = TreeView_GetRoot(hTree);
-
     RECT rect;
-    
+    TreeView_GetItemRect(hTree, hItem, &rect, TRUE);
+
     // Get system colors
     bool useHighlight = false;
     DWORD windowColor = GetSysColor(COLOR_WINDOW);
@@ -229,112 +231,83 @@ void DrawDottedLinesAndButtons(HWND hTree, HDC hdc)
         }
     }
 
-
-    while (hItem != NULL)
+    // Even though the item height should be 16, I'm accomodating some more heights
+    UINT itemHeight = TreeView_GetItemHeight(hTree);
+    switch(itemHeight)
     {
-        // Get the bounding rectangle of the specified tree view item
-        TreeView_GetItemRect(hTree, hItem, &rect, TRUE);
+    default:
+    case 16:
+        rect.left -= 34; 
+        rect.top += 4;
+        break;
+    case 18:
+        rect.left -= 33; 
+        rect.top += 6;
+        break;
+    }
 
-        // Even though the item height should be 16, I'm accomodating some more heights
-        UINT itemHeight = TreeView_GetItemHeight(hTree);
-        switch(itemHeight)
-        {
-        default:
-        case 16:
-            rect.left -= 34; 
-            rect.top += 4;
-            break;
-        case 18:
-            rect.left -= 33; 
-            rect.top += 6;
-            break;
-        }
+    // Define a TVITEM struct to retrieve the number of children for the specified item
+    TVITEM tvi;
+    tvi.mask = TVIF_CHILDREN; // Specify that we are interested in the number of children
+    tvi.hItem = hItem; // Set the handle of the tree view item
         
-        // Define a TVITEM struct to retrieve the number of children for the specified item
-        TVITEM tvi;
-        tvi.mask = TVIF_CHILDREN; // Specify that we are interested in the number of children
-        tvi.hItem = hItem; // Set the handle of the tree view item
-        
-        // Check if the item is at the top level by comparing the left position of the rectangle
-        // to either 10 or -10 based on the value of g_settingLinesAtRoot
-        bool isTopLevel = rect.left <= (g_settingLinesAtRoot ? 10 : -10);
+    // Check if the item is at the top level by comparing the left position of the rectangle
+    // to either 10 or -10 based on the value of g_settingLinesAtRoot
+    bool isTopLevel = rect.left <= (g_settingLinesAtRoot ? 10 : -10);
 
-        // Check if the setting to draw buttons is enabled and the node is not a top-level node when lines at root is disabled
-        // and the node has one or more children
-        if (g_settingDrawButtons && !(isTopLevel && !g_settingLinesAtRoot) && TreeView_GetItem(hTree, &tvi) && tvi.cChildren > 0)
+    // Check if the setting to draw buttons is enabled and the node is not a top-level node when lines at root is disabled
+    // and the node has one or more children
+    if (!(isTopLevel && !g_settingLinesAtRoot) && TreeView_GetItem(hTree, &tvi) && tvi.cChildren > 0)
+    {
+        // Get the state of the item
+        UINT state = TreeView_GetItemState(hTree, hItem, TVIS_EXPANDED);
+        
+        // Create a solid brush with the window color and select it into the device context
+        HBRUSH brush = CreateSolidBrush(windowColor);
+        HBRUSH original = (HBRUSH)SelectObject(hdc, brush);
+        
+        // Define the rectangle for the button
+        RECT buttonRect;
+        buttonRect.left = rect.left;
+        buttonRect.top = rect.top;
+        buttonRect.right = rect.left + 9;
+        buttonRect.bottom = rect.top + 9;
+        
+        // Fill the rectangle with the brush color and delete the brush
+        FillRect(hdc, &buttonRect, brush);
+        DeleteObject(brush);
+        
+        // Create a new brush with the highlight color if useHighlight is true, otherwise shadowColor
+        brush = CreateSolidBrush(useHighlight ? highlightColor : shadowColor);
+        
+        // Draw a frame around the button rectangle with the new brush and delete the brush
+        FrameRect(hdc, &buttonRect, brush);
+        DeleteObject(brush);
+        
+        // Restore the original brush to the device context
+        SelectObject(hdc, original);
+        
+        // Create a pen with a solid style and the button text color, and select it into the device context
+        HPEN hPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_BTNTEXT));
+        HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+        
+        // Draw a +/- symbol in the item's button based on its expanded state
+        if (state & TVIS_EXPANDED)
         {
-            // Get the state of the item
-            UINT state = TreeView_GetItemState(hTree, hItem, TVIS_EXPANDED);
-        
-            // Create a solid brush with the window color and select it into the device context
-            HBRUSH brush = CreateSolidBrush(windowColor);
-            HBRUSH original = (HBRUSH)SelectObject(hdc, brush);
-        
-            // Define the rectangle for the button
-            RECT buttonRect;
-            buttonRect.left = rect.left;
-            buttonRect.top = rect.top;
-            buttonRect.right = rect.left + 9;
-            buttonRect.bottom = rect.top + 9;
-        
-            // Fill the rectangle with the brush color and delete the brush
-            FillRect(hdc, &buttonRect, brush);
-            DeleteObject(brush);
-        
-            // Create a new brush with the highlight color if useHighlight is true, otherwise shadowColor
-            brush = CreateSolidBrush(useHighlight ? highlightColor : shadowColor);
-        
-            // Draw a frame around the button rectangle with the new brush and delete the brush
-            FrameRect(hdc, &buttonRect, brush);
-            DeleteObject(brush);
-        
-            // Restore the original brush to the device context
-            SelectObject(hdc, original);
-        
-            // Create a pen with a solid style and the button text color, and select it into the device context
-            HPEN hPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_BTNTEXT));
-            HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
-        
-            // Draw a +/- symbol in the item's button based on its expanded state
-            if (state & TVIS_EXPANDED)
-            {
-                MoveToEx(hdc, rect.left + 2, rect.top + 4, NULL);
-                LineTo(hdc, rect.left + 7, rect.top + 4);
-            }
-            else
-            {
-                MoveToEx(hdc, rect.left + 2, rect.top + 4, NULL);
-                LineTo(hdc, rect.left + 7, rect.top + 4);
-                MoveToEx(hdc, rect.left + 4, rect.top + 2, NULL);
-                LineTo(hdc, rect.left + 4, rect.top + 7);
-            }
-        
-            // Restore the original pen to the device context and delete the pen
-            SelectObject(hdc, hOldPen);
-            DeleteObject(hPen);
+            MoveToEx(hdc, rect.left + 2, rect.top + 4, NULL);
+            LineTo(hdc, rect.left + 7, rect.top + 4);
         }
-
-        // Traverse the treeview control to find the next visible item
-        
-        // Get the first child of the current item
-        HTREEITEM child = TreeView_GetChild(hTree, hItem);
-        if (child != NULL)
+        else
         {
-            hItem = child; // Set the current item to the child
-            continue;
+            MoveToEx(hdc, rect.left + 2, rect.top + 4, NULL);
+            LineTo(hdc, rect.left + 7, rect.top + 4);
+            MoveToEx(hdc, rect.left + 4, rect.top + 2, NULL);
+            LineTo(hdc, rect.left + 4, rect.top + 7);
         }
         
-        // If no child, get the next sibling of the current item
-        HTREEITEM sibling = TreeView_GetNextSibling(hTree, hItem);
-        if (sibling != NULL)
-        {
-            hItem = sibling; // Set the current item to the sibling
-            continue;
-        }
-        
-        // If no sibling, get the next visible item
-        hItem = TreeView_GetNextVisible(hTree, hItem);
-        // If hItem is still NULL, the loop ends.
+        // Restore the original pen to the device context and delete the pen
+        SelectObject(hdc, hOldPen);
+        DeleteObject(hPen);
     }
 }
 
@@ -373,6 +346,9 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
     {
     case WM_NOTIFY:
     {
+        if(!g_settingDrawButtons)
+            break;
+        
         LPNMHDR lpnmh = (LPNMHDR)lParam;
         switch (lpnmh->code)
         {
@@ -380,16 +356,19 @@ LRESULT CALLBACK NSCSubclassProc(_In_ HWND hWnd,
         {
             HWND hTree = FindWindowEx(hWnd, NULL, L"SysTreeView32", NULL); // Find the treeview control
             LPNMTVCUSTOMDRAW pCustomDraw = (LPNMTVCUSTOMDRAW)lParam;
-            switch (pCustomDraw->nmcd.dwDrawStage)
+            if(pCustomDraw->nmcd.dwDrawStage == CDDS_PREPAINT)
             {
-            case CDDS_PREPAINT:
-                return CDRF_NOTIFYPOSTPAINT; // Notify after the painting cycle
-            case CDDS_POSTPAINT:
-                DrawDottedLinesAndButtons(hTree, pCustomDraw->nmcd.hdc);
+                return CDRF_NOTIFYITEMDRAW;
+            }
+            if(pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT)
+            {
+                return CDRF_NOTIFYPOSTPAINT;
+            }
+            if(pCustomDraw->nmcd.dwDrawStage == CDDS_ITEMPOSTPAINT)
+            {
+                HTREEITEM hItem = reinterpret_cast<HTREEITEM>(pCustomDraw->nmcd.dwItemSpec);
+                DrawExpandoButton(hTree, pCustomDraw->nmcd.hdc, hItem);
                 return S_OK;
-                break;
-            default:
-                break;
             }
         }
         break;
@@ -952,7 +931,7 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L"Classic Explorer Treeview Init");
 
-    HMODULE hExplorerFrame = GetModuleHandleW(L"explorerframe.dll");
+    HMODULE hExplorerFrame = LoadLibraryW(L"explorerframe.dll");
 
     if (!hExplorerFrame)
     {
