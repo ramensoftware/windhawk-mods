@@ -216,7 +216,7 @@
                 "published": 1709574778000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1709574778000,
+                "updated": 1709713642000,
                 "users": 3
             },
             "metadata": {
@@ -227,7 +227,7 @@
                     "*"
                 ],
                 "name": "Classic File Picker dialog",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "classic-maximized-windows-fix": {
