@@ -2,7 +2,7 @@
 // @id              classic-file-picker-dialog
 // @name            Classic File Picker dialog
 // @description     Redirect the Windows Vista+ file picker to the Windows XP one
-// @version         1.0
+// @version         1.1
 // @author 	        Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -28,7 +28,7 @@ The mod is based on the idea by xdmg01.
 #define CALCON __cdecl
 #define SCALCON L" __cdecl "
 #else
-#define CALCON __stdcall
+#define CALCON __thiscall
 #define SCALCON L" __stdcall "
 #endif
 
