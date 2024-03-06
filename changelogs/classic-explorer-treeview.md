@@ -1,3 +1,8 @@
+## 1.0.3 ([Mar 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dc4d3bb0033b5b8473ea10c63e50853c2bfc05d4/mods/classic-explorer-treeview.wh.cpp))
+
+- Optimized expando button drawing
+- Mod will now explicitly load the required dll module
+
 ## 1.0.2 ([Feb 24, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1cd6db586b784a7f60cd854d8c18e726b6e42626/mods/classic-explorer-treeview.wh.cpp))
 
 - Accurate dotted lines
