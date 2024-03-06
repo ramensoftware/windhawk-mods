@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-03-06T15:55:54.000Z</updated>
+    <updated>2024-03-06T19:50:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#ccfedcb3f0ad1013cb821d360c6375c5cb5e3626</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-03-06T19:50:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed taskbar height not affecting maximized windows in some cases.</li>
+<li>Improved applying settings, hopefully fixing bugs where not all of the taskbar elements are updated.</li>
+<li>The weather widget icon size is now adjusted as well. In previous versions, the weather icon's size wasn't affected by the mod.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Treeview 1.0.3]]></title>
         <id>https://windhawk.net/mods/classic-explorer-treeview#dc4d3bb0033b5b8473ea10c63e50853c2bfc05d4</id>
@@ -265,12 +276,5 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
         <updated>2024-02-08T07:16:58.000Z</updated>
         <content type="html"><![CDATA[<p>Remove unneeded code</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-explorer-lite#c52bd77cb562f15e2f3a0b639aa2df961103fb41</id>
-        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
-        <updated>2024-02-07T22:15:15.000Z</updated>
-        <content type="html"><![CDATA[<p>Classic theme fixes for Windows 10 taskbar (when running on either Windows 10 or Windows 11)</p>]]></content>
     </entry>
 </feed>

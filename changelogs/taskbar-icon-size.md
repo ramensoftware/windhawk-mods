@@ -1,3 +1,9 @@
+## 1.2.3 ([Mar 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ccfedcb3f0ad1013cb821d360c6375c5cb5e3626/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed taskbar height not affecting maximized windows in some cases.
+* Improved applying settings, hopefully fixing bugs where not all of the taskbar elements are updated.
+* The weather widget icon size is now adjusted as well. In previous versions, the weather icon's size wasn't affected by the mod.
+
 ## 1.2.2 ([Nov 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/d1b9a9260c59f7f721e3439496eee9d0dafc5c2b/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed displaced secondary taskbar when auto-hide is enabled.
