@@ -9,7 +9,13 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+This mod replaces the default file picker (open/save dialog) with the legacy one,
+which was used in Windows XP and Windws 2000.
+For 3D border in the dialog, install the mod "ClientEdge in choosen apps"
+The mod is based on the idea by xdmg01.
+![File Picker](https://i.imgur.com/g2NVokJ.png)
+*/
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
