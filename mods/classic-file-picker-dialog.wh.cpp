@@ -1,25 +1,15 @@
 // ==WindhawkMod==
-// @id              classic-file-picker-dialog
-// @name            Classic File Picker dialog
+// @id              classic-file-picker-dialog-fork
+// @name            Classic File Picker dialog - Fork
 // @description     Redirect the Windows Vista+ file picker to the Windows XP one
-// @version         1.0
+// @version         1.1
 // @author 	        Anixx
 // @github          https://github.com/Anixx
 // @include         *
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*
-This mod replaces the default file picker (open/save dialog) with the legacy one,
-which was used in Windows XP and Windws 2000.
-
-For 3D border in the dialog, install the mod "ClientEdge in choosen apps"
-
-The mod is based on the idea by xdmg01.
-
-![File Picker](https://i.imgur.com/g2NVokJ.png)
-
-*/
+/*...*/
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
@@ -28,7 +18,7 @@ The mod is based on the idea by xdmg01.
 #define CALCON __cdecl
 #define SCALCON L" __cdecl "
 #else
-#define CALCON __stdcall
+#define CALCON __thiscall
 #define SCALCON L" __stdcall "
 #endif
 
