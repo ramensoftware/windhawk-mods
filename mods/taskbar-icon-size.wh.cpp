@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.3
+// @version         1.2.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -525,7 +525,7 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
                 double maxValue = 24;
 
                 if (!g_unloading) {
-                    maxValue = std::numeric_limits<double>::infinity();
+                    maxValue = 40;
                 }
 
                 Wh_Log(L"Setting MaxWidth, MaxHeight for badge");
