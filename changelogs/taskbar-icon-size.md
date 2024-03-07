@@ -1,3 +1,7 @@
+## 1.2.4 ([Mar 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/23514c6d6153a7fe6a79382b37c9b2c3fbf4003c/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed a possible crash caused by the weather icon resizing code.
+
 ## 1.2.3 ([Mar 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ccfedcb3f0ad1013cb821d360c6375c5cb5e3626/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed taskbar height not affecting maximized windows in some cases.

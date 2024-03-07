@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-03-06T19:50:44.000Z</updated>
+    <updated>2024-03-07T20:10:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#23514c6d6153a7fe6a79382b37c9b2c3fbf4003c</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-03-07T20:10:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a possible crash caused by the weather icon resizing code.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.3]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#ccfedcb3f0ad1013cb821d360c6375c5cb5e3626</id>
@@ -269,12 +278,5 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
         <updated>2024-02-08T08:19:58.000Z</updated>
         <content type="html"><![CDATA[<p>More compact and remove intermediate variables</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.0.1]]></title>
-        <id>https://windhawk.net/mods/classic-theme-explorer-lite#16ec4fb987cbc4f878aa13cdda25244e670373c2</id>
-        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
-        <updated>2024-02-08T07:16:58.000Z</updated>
-        <content type="html"><![CDATA[<p>Remove unneeded code</p>]]></content>
     </entry>
 </feed>
