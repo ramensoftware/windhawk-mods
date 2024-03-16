@@ -22,8 +22,8 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
 
 	HWND hWnd = CreateWindowExW_Orig(dwExStyle,lpClassName,lpWindowName,dwStyle,X,Y,nWidth,nHeight,hWndParent,hMenu,hInstance,lpParam);
 	if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"ControlCenterButton"))
-    {   BYTE* lpDisplayCCButton = NULL;
-        lpDisplayCCButton = (BYTE*)(GetWindowLongPtrW(hWnd, 0) + 120);
+    {   
+        BYTE* lpDisplayCCButton = (BYTE*)(GetWindowLongPtrW(hWnd, 0) + 120);
         *lpDisplayCCButton = FALSE;
     }
     return hWnd;
