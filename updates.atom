@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-03-07T20:10:41.000Z</updated>
+    <updated>2024-03-16T09:00:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Action Center icon 1.0.0]]></title>
+        <id>https://windhawk.net/mods/hide-action-center-icon#0853937711e280c45c964d64f35c3819e2021376</id>
+        <link href="https://windhawk.net/mods/hide-action-center-icon"/>
+        <updated>2024-03-16T09:00:06.000Z</updated>
+        <content type="html"><![CDATA[<p>Removes the Action Center icon (cogwheel) from Win10 taskbar. After application of the mod,
+File Explorer should be restarted.
+The code is based on the corresponding code from Explorer Patcher and can stop working in the future.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.4]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#23514c6d6153a7fe6a79382b37c9b2c3fbf4003c</id>
@@ -271,12 +280,5 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
         <updated>2024-02-08T10:26:25.000Z</updated>
         <content type="html"><![CDATA[<p>Fixes https://github.com/ramensoftware/windhawk-mods/issues/510</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.0.2]]></title>
-        <id>https://windhawk.net/mods/classic-theme-explorer-lite#a396776d1e1bc2f25c8b898e7d092817ca3e9c74</id>
-        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
-        <updated>2024-02-08T08:19:58.000Z</updated>
-        <content type="html"><![CDATA[<p>More compact and remove intermediate variables</p>]]></content>
     </entry>
 </feed>
