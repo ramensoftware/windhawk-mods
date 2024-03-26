@@ -8,6 +8,7 @@
 // @include         *
 // @include         dllhost.exe
 // @exclude         wmplayer.exe
+// @exclude         zotero.exe
 
 // ==/WindhawkMod==
 
