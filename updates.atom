@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-03-17T06:45:10.000Z</updated>
+    <updated>2024-03-26T07:24:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic theme transparency fix 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-transparency-fix#822ed51dfe9ad2cf9b4c88f7ed4e7a172c9efe3e</id>
+        <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
+        <updated>2024-03-26T07:24:35.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod includes a subset of functionality of the mod "DWM Unextend frames", but only
+includes fixes needed for Classic theme. It hooks less functions, is more lightweight, does not
+use pointer arithmetic and the code is more compact.
+It also injects dllhost.exe by default, which is needed for Windows Photo Viewer
+and some dialogs.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic List Group Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-list-group-fix#9f13ec63f3423f6210960e7915e98a57b21bf5b7</id>
@@ -263,24 +274,5 @@ The idea is based on the mod by Aubymori (https://github.com/aubymori).</p>
 <ul>
 <li>UIRibbon is not affected at all.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bring Back the Borders! 1.1.0]]></title>
-        <id>https://windhawk.net/mods/w11-dwm-fix#c267265e0049c3f7feb015e3ec2e6f5d6b7bc483</id>
-        <link href="https://windhawk.net/mods/w11-dwm-fix"/>
-        <updated>2024-02-10T19:18:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bringbacktheborders">Bring back the borders!</h1>
-<p>A simple mod to restore borders and corners in Windows 11.</p>
-<p>Based on the
-<a href="https://windhawk.net/mods/disable-rounded-corners">Disable rounded corners in Windows 11</a>
-project by m417z.</p>
-<p>Based on the
-<a href="https://github.com/valinet/Win11DisableRoundedCorners">Win11DisableRoundedCorners</a>
-project by Valentin Radu.</p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>In order to use this mod, you must allow Windhawk to inject into the <strong>dwm.exe</strong>
-system process. To do so, add it to the process inclusion list in the advanced
-settings. If you do not do this, it will silently fail to inject.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>]]></content>
     </entry>
 </feed>
