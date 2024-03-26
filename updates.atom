@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-03-26T07:24:35.000Z</updated>
+    <updated>2024-03-26T13:35:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enable Classic Theme by handle method 1.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#a78ff5da6c13e3c61c90009cc50b1ba6df17a118</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2024-03-26T13:35:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Update readme</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic theme transparency fix 1.0]]></title>
         <id>https://windhawk.net/mods/classic-theme-transparency-fix#822ed51dfe9ad2cf9b4c88f7ed4e7a172c9efe3e</id>
@@ -258,21 +265,6 @@ The idea is based on the mod by Aubymori (https://github.com/aubymori).</p>
         <updated>2024-02-12T21:01:03.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed styles not applying on system startup.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fake High Contrast 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fake-high-contrast#61d49768adb42b39aa7a9b600839dce066160cb9</id>
-        <link href="https://windhawk.net/mods/fake-high-contrast"/>
-        <updated>2024-02-12T15:56:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fakehighcontrast">Fake High Contrast</h1>
-<ul>
-<li>Makes applications think as if high contrast mode is enabled (disabled), even if it's not.</li>
-<li>Useful if you want more applications to follow your Win32 msstyles / classic schemes. Even UWP apps!</li>
-</ul>
-<h2 id="knownissues">Known issues</h2>
-<ul>
-<li>UIRibbon is not affected at all.</li>
 </ul>]]></content>
     </entry>
 </feed>
