@@ -22,13 +22,13 @@ and some dialogs.
 
 #include <windhawk_utils.h>
 
-typedef HRESULT (*DwmIsCompositionEnabled_t)(OUT BOOL *pfEnabled);
+typedef HRESULT (WINAPI *DwmIsCompositionEnabled_t)(BOOL *);
 DwmIsCompositionEnabled_t DwmIsCompositionEnabled_orig;
-HRESULT DwmIsCompositionEnabled_hook(BOOL *pfEnabled)
+HRESULT WINAPI DwmIsCompositionEnabled_hook(BOOL *pfEnabled)
 {
     *pfEnabled = FALSE;
     return S_OK;
-} 
+}
 
 typedef BOOL (WINAPI *IsCompositionActive_t)(void);
 IsCompositionActive_t IsCompositionActive_orig;
