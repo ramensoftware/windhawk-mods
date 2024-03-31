@@ -373,7 +373,7 @@
                 "published": 1706702888000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1711460125000,
+                "updated": 1711878979000,
                 "users": 45
             },
             "metadata": {
@@ -385,7 +385,7 @@
                     "winlogon.exe"
                 ],
                 "name": "Enable Classic Theme by handle method",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "classic-theme-explorer-lite": {
