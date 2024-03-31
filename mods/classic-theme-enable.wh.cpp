@@ -2,13 +2,12 @@
 // @id              classic-theme-enable
 // @name            Enable Classic Theme by handle method
 // @description     Disables theming by closing the handle
-// @version         1.0.2
+// @version         1.0.3
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
 // @compilerOptions -lntdll
 // ==/WindhawkMod==
-
 
 // ==WindhawkModReadme==
 /*
@@ -35,6 +34,29 @@ Windows Classic theme is not compatible with Windows 11 and Windows 10 taskbars
 out of the box. It is recommended to use [Explorer Patcher](https://github.com/valinet/ExplorerPatcher) 
 utility, which includes the necessary fixes. A complete guide on setting up Windows Classic
 theme is also [available](https://github.com/valinet/ExplorerPatcher/discussions/167).
+
+Alternatively, if you are on Windows 10 or enabled the Windows 10 taskbar on Windows 11 via registry,
+you can fix the taskbar compatibility using the *Classic Theme Explorer Lite* mod. 
+
+You also would need to get rid of the immersive context menus in Explorer, which appear empty in Classic theme.
+You can do it by installing the *Eradicate Immersive Menus* mod.
+
+If you want the 3D borders in menus, import the following reg file:
+```
+Windows Registry Editor Version 5.00
+[HKEY_CURRENT_USER\Control Panel\Desktop]
+"UserPreferencesMask"=hex:9E,1E,05,80,12,01,00,00
+```
+Delete or rename this registry key:
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\DefaultColors
+to prevent color scheme change after pressing Ctrl+Alt+Del or going to the logon screen and back.
+
+To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
+utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
+it will require UAC authorization).
+
+You may consider installing other mods from Windhawk repository to make the look of the system
+more classic, particularly, the *Enable SysListView32* mod and *Classic Taskbar 3D buttons Lite*.
 
 ![Windows Classic](https://i.imgur.com/gB7mwpp.png)
 
