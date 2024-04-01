@@ -22,6 +22,13 @@ Known issue : Under the classic theme, icons have no space between them. It is p
 #include <uxtheme.h>
 #include <tmschema.h>
 
+#ifdef _WIN64
+#define CALCON __cdecl
+#define SCALCON L"__cdecl"
+#else
+#define CALCON __thiscall
+#define SCALCON L"__thiscall"
+#endif
 
 typedef struct tagBUTTONRENDERINFOSTATES {
     char data[12];
@@ -30,7 +37,7 @@ typedef struct tagBUTTONRENDERINFOSTATES {
 /* Remove clock hover effect */
 typedef void (* GDIHelpers_FillRectARGB_t)(HDC, LPCRECT, BYTE, DWORD, bool);
 GDIHelpers_FillRectARGB_t GDIHelpers_FillRectARGB_orig;
-void __cdecl GDIHelpers_FillRectARGB_hook(
+void CALCON GDIHelpers_FillRectARGB_hook(
     HDC     hDC,
     LPCRECT lprc,
     BYTE    btUnknown,
@@ -44,7 +51,7 @@ void __cdecl GDIHelpers_FillRectARGB_hook(
 /* Draw taskbar item */
 typedef void (* CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, void *);
 CTaskBtnGroup__DrawBar_t CTaskBtnGroup__DrawBar_orig;
-void __cdecl CTaskBtnGroup__DrawBar_hook(
+void CALCON CTaskBtnGroup__DrawBar_hook(
     void *pThis,
     HDC   hDC,
     void *pRenderInfo,
@@ -114,7 +121,9 @@ BOOL Wh_ModInit(void)
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {
-                L"void __cdecl GDIHelpers::FillRectARGB(struct HDC__ *,struct tagRECT const *,unsigned char,unsigned long,bool)"
+                L"void "
+                SCALCON
+                L" GDIHelpers::FillRectARGB(struct HDC__ *,struct tagRECT const *,unsigned char,unsigned long,bool)"
             },
             (void **)&GDIHelpers_FillRectARGB_orig,
             (void *)GDIHelpers_FillRectARGB_hook,
@@ -122,7 +131,9 @@ BOOL Wh_ModInit(void)
         },
         {
             {
-                L"private: void __cdecl CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
+                L"private: void "
+                SCALCON
+                L" CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
             },
             (void **)&CTaskBtnGroup__DrawBar_orig,
             (void *)CTaskBtnGroup__DrawBar_hook,
