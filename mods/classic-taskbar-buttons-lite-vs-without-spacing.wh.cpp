@@ -20,7 +20,7 @@ Known issue : Under the classic theme, icons have no space between them. It is p
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <uxtheme.h>
-#include <tmschema.h>
+#include <vssym32.h>
 
 #ifdef _WIN64
 #define CALCON __cdecl
