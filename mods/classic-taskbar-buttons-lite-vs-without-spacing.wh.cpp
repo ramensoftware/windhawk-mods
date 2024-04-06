@@ -41,7 +41,7 @@ void __cdecl GDIHelpers_FillRectARGB_hook(
 }
 
 /* Draw taskbar item */
-typedef void (*__cdecl CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, void *);
+typedef void (*__cdecl CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, PBUTTONRENDERINFOSTATES);
 CTaskBtnGroup__DrawBar_t CTaskBtnGroup__DrawBar_orig;
 void __cdecl CTaskBtnGroup__DrawBar_hook(
     void *pThis,
@@ -123,8 +123,8 @@ BOOL Wh_ModInit(void)
             {
                 L"private: void __cdecl CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
             },
-            (void **)&CTaskBtnGroup__DrawBar_orig,
-            (void *)CTaskBtnGroup__DrawBar_hook,
+            &CTaskBtnGroup__DrawBar_orig,
+            CTaskBtnGroup__DrawBar_hook,
             FALSE
         }
     };
