@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-03-31T09:56:19.000Z</updated>
+    <updated>2024-04-06T15:32:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar 3D buttons with extended compatibility 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-buttons-lite-vs-without-spacing#292dd17e7165c9e71af3b7ab223931221aa7f68b</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-buttons-lite-vs-without-spacing"/>
+        <updated>2024-04-06T15:32:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classictaskbarfix">Classic Taskbar Fix</h1>
+<p>Restores 3D buttons on taskbar when using Windows Classic theme or Windows Visual Style. Based on mod by Anixx (https://github.com/anixx), itself founded from a mod by Aubymori (https://github.com/aubymori).
+Known issue : Under the classic theme, icons have no space between them. It is possible to add space, but this prevents the taskbar from functioning correctly if the labels are hidden.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enable Classic Theme by handle method 1.0.3]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#8d78250517634d099e98c576b2608dd105d986b4</id>
@@ -255,14 +264,5 @@ The idea is based on the mod by Aubymori (https://github.com/aubymori).</p>
 <p><img src="https://i.imgur.com/jupSjfl.png" alt="Before" /></p>
 <p>After:</p>
 <p><img src="https://i.imgur.com/Jz4EkRQ.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar notification icon spacing 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#73cb6093701be43644e40cc0b8506ad54f1354ca</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
-        <updated>2024-02-13T07:12:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a possible crash on explorer start.</li>
-</ul>]]></content>
     </entry>
 </feed>

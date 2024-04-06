@@ -326,6 +326,27 @@
                 "version": "1.2"
             }
         },
+        "classic-taskbar-buttons-lite-vs-without-spacing": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1712417550000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1712417550000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "OrthodoxWin32",
+                "compilerOptions": "-lgdi32 -lUxTheme",
+                "description": "Restoring the 3D taskbar buttons with support for visual styles and the taskbar without labels",
+                "github": "https://github.com/OrthodoxWindows",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Taskbar 3D buttons with extended compatibility",
+                "version": "1.0"
+            }
+        },
         "classic-taskbar-context-menu": {
             "details": {
                 "defaultSorting": 2550,
