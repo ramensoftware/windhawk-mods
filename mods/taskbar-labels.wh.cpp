@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show and customize text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.2.2
+// @version         1.2.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -781,7 +781,11 @@ void UpdateTaskListButtonWithLabelStyle(
         }
     }
 
-    if (secondColumnWidthPixels > 0) {
+    auto labelControlElement =
+        FindChildByName(iconPanelElement, L"LabelControl")
+            .as<Controls::TextBlock>();
+
+    if (secondColumnWidthPixels > 0 && labelControlElement) {
         columnDefinitions.GetAt(1).Width(GridLength({
             .Value = secondColumnWidthPixels,
             .GridUnitType = GridUnitType::Pixel,
@@ -793,9 +797,6 @@ void UpdateTaskListButtonWithLabelStyle(
         }));
     }
 
-    auto labelControlElement =
-        FindChildByName(iconPanelElement, L"LabelControl")
-            .as<Controls::TextBlock>();
     if (labelControlElement) {
         auto horizontalAlignment = g_unloading ? HorizontalAlignment::Center
                                                : HorizontalAlignment::Left;
