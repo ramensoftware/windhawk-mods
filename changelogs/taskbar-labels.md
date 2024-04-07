@@ -1,3 +1,7 @@
+## 1.2.3 ([Apr 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/37d87af5cad91032a99660648134df05b1201b2c/mods/taskbar-labels.wh.cpp))
+
+* Fixed width of pinned items with recent Windows 11 updates.
+
 ## 1.2.2 ([Dec 8, 2023](https://github.com/ramensoftware/windhawk-mods/blob/098b5d81a22328110d49566ffbcd9ea1a3da4243/mods/taskbar-labels.wh.cpp))
 
 * Added an option to hide labels and still use the other customizations.

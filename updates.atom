@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-06T15:32:30.000Z</updated>
+    <updated>2024-04-07T07:14:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#37d87af5cad91032a99660648134df05b1201b2c</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2024-04-07T07:14:05.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed width of pinned items with recent Windows 11 updates.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Taskbar 3D buttons with extended compatibility 1.0]]></title>
         <id>https://windhawk.net/mods/classic-taskbar-buttons-lite-vs-without-spacing#292dd17e7165c9e71af3b7ab223931221aa7f68b</id>
@@ -251,18 +260,5 @@ are enabled.</li>
         <updated>2024-02-18T07:05:50.000Z</updated>
         <content type="html"><![CDATA[<p>Adds support for icons of 16-bit (Win16) executables in File Explorer (such as Civilization I).
 The mod is adapted from <a href="https://github.com/otya128/Icon16bitFix">Icon16bitFix utility</a>.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Taskbar 3D buttons Lite 1.2]]></title>
-        <id>https://windhawk.net/mods/classic-taskbar-buttons-lite#7f6cd5f17ad6b2daf80aa3d30ec27c20fbf82930</id>
-        <link href="https://windhawk.net/mods/classic-taskbar-buttons-lite"/>
-        <updated>2024-02-18T07:02:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classictaskbar3dbuttons">Classic Taskbar 3D buttons</h1>
-<p>Lightweight mod which restores 3D buttons on taskbar when using Windows Classic theme. 
-The idea is based on the mod by Aubymori (https://github.com/aubymori).</p>
-<p>Before:</p>
-<p><img src="https://i.imgur.com/jupSjfl.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://i.imgur.com/Jz4EkRQ.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
