@@ -2,7 +2,7 @@
 // @id              classic-taskbar-buttons-lite-vs-without-spacing
 // @name            Classic Taskbar 3D buttons with extended compatibility
 // @description     Restoring the 3D taskbar buttons with support for visual styles and the taskbar without labels
-// @version         1.0
+// @version         1.0.1
 // @author          OrthodoxWin32
 // @github          https://github.com/OrthodoxWindows
 // @include         explorer.exe
@@ -13,7 +13,7 @@
 /*
 # Classic Taskbar Fix
 Restores 3D buttons on taskbar when using Windows Classic theme or Windows Visual Style. Based on mod by Anixx (https://github.com/anixx), itself founded from a mod by Aubymori (https://github.com/aubymori).
-Known issue : Under the classic theme, icons have no space between them. It is possible to add space, but this prevents the taskbar from functioning correctly if the labels are hidden.
+Known issue : Under the classic theme, buttons have no space between them. It is possible to add space, but this prevents the taskbar from functioning correctly if the labels are hidden.
 */
 // ==/WindhawkModReadme==
 
