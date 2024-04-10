@@ -1,3 +1,7 @@
+## 1.2.4 ([Apr 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/52fb2fdb8d52bcee8b05e4e7f89ac3027f633954/mods/taskbar-labels.wh.cpp))
+
+* Added an option to set the maximum taskbar item width (only used for the Windows adaptive width).
+
 ## 1.2.3 ([Apr 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/37d87af5cad91032a99660648134df05b1201b2c/mods/taskbar-labels.wh.cpp))
 
 * Fixed width of pinned items with recent Windows 11 updates.
