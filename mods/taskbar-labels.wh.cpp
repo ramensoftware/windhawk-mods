@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show and customize text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.2.3
+// @version         1.2.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -64,6 +64,13 @@ choose one of the following running indicator styles:
   $description: >-
     The minimum width before the taskbar overflows, only for newer Windows
     versions with the built-in taskbar labels implementation
+
+    Values larger than the Windows minimum width are unsupported and have no
+    effect
+- maximumTaskbarItemWidth: 176
+  $name: Maximum taskbar item width
+  $description: >-
+    The maximum width, only used for the Windows adaptive width
 - runningIndicatorStyle: centerFixed
   $name: Running indicator style
   $options:
@@ -142,6 +149,7 @@ enum class IndicatorStyle {
 struct {
     int taskbarItemWidth;
     int minimumTaskbarItemWidth;
+    int maximumTaskbarItemWidth;
     IndicatorStyle runningIndicatorStyle;
     IndicatorStyle progressIndicatorStyle;
     int fontSize;
@@ -804,7 +812,14 @@ void UpdateTaskListButtonWithLabelStyle(
             labelControlElement.HorizontalAlignment(horizontalAlignment);
         }
 
-        labelControlElement.MaxWidth(std::numeric_limits<double>::infinity());
+        if (g_settings.taskbarItemWidth == 0) {
+            labelControlElement.MaxWidth(std::max(
+                0.0,
+                g_settings.maximumTaskbarItemWidth - firstColumnWidthPixels));
+        } else {
+            labelControlElement.MaxWidth(
+                std::numeric_limits<double>::infinity());
+        }
 
         auto textTrimming =
             g_unloading ? TextTrimming::Clip : TextTrimming::CharacterEllipsis;
@@ -1260,6 +1275,8 @@ void LoadSettings() {
     g_settings.taskbarItemWidth = Wh_GetIntSetting(L"taskbarItemWidth");
     g_settings.minimumTaskbarItemWidth =
         Wh_GetIntSetting(L"minimumTaskbarItemWidth");
+    g_settings.maximumTaskbarItemWidth =
+        Wh_GetIntSetting(L"maximumTaskbarItemWidth");
 
     PCWSTR runningIndicatorStyle =
         Wh_GetStringSetting(L"runningIndicatorStyle");
