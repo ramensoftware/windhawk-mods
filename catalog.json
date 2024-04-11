@@ -768,6 +768,29 @@
                 "version": "1.0.1"
             }
         },
+        "explorer-name-windows": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1712874444000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1712874444000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lgdi32",
+                "description": "Assign custom names to explorer windows, just like in Chrome",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Name explorer windows",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "fake-high-contrast": {
             "details": {
                 "defaultSorting": 50,
