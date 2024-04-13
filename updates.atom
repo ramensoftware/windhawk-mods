@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-11T22:27:24.000Z</updated>
+    <updated>2024-04-13T10:54:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icon Resource Redirect 1.0]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#f2f6321492b1d47ac920e45cacd533f14484a59c</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-04-13T10:54:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="iconresourceredirect">Icon Resource Redirect</h1>
+<p>Define alternative resource files for loading icons (e.g. instead of
+imageres.dll) for simple theming without having to modify system files.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Name explorer windows 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-name-windows#bc440b43084dec4bf6a839f7e72947bda179995c</id>
@@ -182,86 +191,6 @@ File Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathema
 <li>Mod no longer requires different settings on Win10 and Win11</li>
 <li>Added a preview image to the description</li>
 <li>Added settings to set the X, Y offsets of the close button</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Treeview 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-treeview#2c5b476b3040ead1e8dae818aa0a5717ef1a2e9e</id>
-        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
-        <updated>2024-02-19T14:56:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicexplorertreeview">Classic Explorer Treeview</h1>
-<p>This mod changes the Explorer Treeview (otherwise known as Folder Pane or
-Navigation Pane) to look more classic. It draws it's own Folder Band with a
-functional X button. If you are using OpenShell, then you need to set the
-correct settings for Classic Explorer in the Navigation Pane tab: Vista style,
-Tree item spacing -2, Full size offset for sub-folders. If you are using Windows
-11 23H2, then set the tree item spacing to -6, and enable compact spacing in the
-Explorer folder settings. For proper function and accurate look, the Organize
-bar has to be removed. To accomplish this, use Resource Hacker and modify
-shellstyle.dll by adding the the following line:</p>
-<p>'<Element padding="rect(0rp,0rp,0rp,-32rp)"/>'</p>
-<p>below the line:</p>
-<p>'<style resid="FolderBandStyle">'</p>
-<h1 id="changelog">Changelog:</h1>
-<h2 id="10">1.0</h2>
-<ul>
-<li>Fixed explorer.exe instability</li>
-<li>Removed redundant linker arguments</li>
-<li>Removed redundant includes</li>
-<li>Added a option to use a default, system localized text for the folder band</li>
-<li>Moving the treeview on the Y axis will no longer be attempted</li>
-<li>Fixed the tooltips displayed when hovering over a item that doesn't fit in the treeview window</li>
-<li>Added many comments to the code</li>
-</ul>
-<h2 id="051">0.5.1</h2>
-<ul>
-<li>Hotfix: fixed a graphical bug that led to spurious expando buttons being drawn</li>
-</ul>
-<h2 id="05">0.5</h2>
-<ul>
-<li>Changed the Folders band text font to be the same as in a real InfoBand</li>
-<li>Folders band is now scaled semi-accurately when a non-standard sized theme is
-applied</li>
-<li>Fixed the gaps to the sides of the folder band</li>
-<li>Fixed some memory leaks</li>
-<li>Fixed scrollbar buttons not appearing pressed in</li>
-</ul>
-<h2 id="04">0.4</h2>
-<ul>
-<li>Changed raw COM pointers to winrt::com_ptr</li>
-<li>Changed the way Folders band text is stored in the mod</li>
-<li>Added a option to automatically set the line color based on the currently used
-theme</li>
-<li>Changed the mod to only subclass CNscTree controls that are part of file
-explorer windows, disregarding others that may be created in the explorer.exe
-process</li>
-<li>Accurate mouse pointer will be displayed when hovering over tree view items</li>
-</ul>
-<h2 id="03">0.3</h2>
-<ul>
-<li>More accurate positioning and sizing of the folder band (Cynosphere)</li>
-<li>Proper close button "glyph" (Cynosphere)</li>
-<li>Close button glyph will now appear pressed in like a proper button label</li>
-<li>Fixed a bug with close button appearing pressed in on mouse hover after it was
-pressed, but the mouse pointer left the window area before the mouse button was
-released</li>
-<li>Fixed a bug with incorrect cursor being sometimes displayed when hovering over
-the folder band</li>
-<li>Draw bottom rebar line on the folder band (Cynosphere)</li>
-<li>Add option to use highlight color for drawing lines for better visibility on
-dark themes (Cynosphere)</li>
-</ul>
-<h2 id="02">0.2</h2>
-<ul>
-<li>Fixed a bug with drawing lines when LinesAtRoot is enabled.</li>
-<li>Added a 3D border to the X button when mouse is hovering over it.</li>
-<li>Added a option not to draw +/- buttons so that the mod can be used when themes
-are enabled.</li>
-<li>Fixed the treeview being drawn over in certain circumstances.</li>
-</ul>
-<h2 id="01">0.1</h2>
-<ul>
-<li>Initial release.</li>
 </ul>]]></content>
     </entry>
 </feed>

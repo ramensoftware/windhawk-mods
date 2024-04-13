@@ -945,6 +945,28 @@
                 "version": "1.0.2"
             }
         },
+        "icon-resource-redirect": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1713005692000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1713005692000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "Define alternative resource files for loading icons (e.g. instead of imageres.dll) for simple theming without having to modify system files",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Icon Resource Redirect",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "icon16bitfix": {
             "details": {
                 "defaultSorting": 970,
