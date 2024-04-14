@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-13T10:54:52.000Z</updated>
+    <updated>2024-04-14T06:49:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icon Resource Redirect 1.0.1]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#fd5c9631d7d4d73369b9b492edc8990c1cbfd32c</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-04-14T06:49:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hook the LoadIconWithScaleDown function to have more icons replaced.</li>
+<li>If an icon doesn't exist in the custom resource file, the original icon is used.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Icon Resource Redirect 1.0]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#f2f6321492b1d47ac920e45cacd533f14484a59c</id>
@@ -179,18 +189,6 @@ File Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathema
         <content type="html"><![CDATA[<ul>
 <li>Accurate dotted lines</li>
 <li>Fixed a bug with quick access item being too big</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Treeview 1.0.1]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-treeview#ff8816646bb3f5789c6e2564149b2c632ce341d6</id>
-        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
-        <updated>2024-02-22T12:24:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>More accurate treeview item spacing</li>
-<li>Mod no longer requires different settings on Win10 and Win11</li>
-<li>Added a preview image to the description</li>
-<li>Added settings to set the X, Y offsets of the close button</li>
 </ul>]]></content>
     </entry>
 </feed>
