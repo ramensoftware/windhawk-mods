@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-15T19:01:49.000Z</updated>
+    <updated>2024-04-15T19:55:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.5.9]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#3d664dac19baf626c8d0c4f2c87d6622135680de</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2024-04-15T19:55:20.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix sub-build collection</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.5.8]]></title>
         <id>https://windhawk.net/mods/aerexplorer#da930af2ef8190e1b68734fb88e1334b0df12b50</id>
@@ -213,17 +220,5 @@ which was used in Windows XP and Windws 2000.</p>
         <updated>2024-02-29T07:20:48.000Z</updated>
         <content type="html"><![CDATA[<p>Added support for the UWP MSA sign-in window, hosted by explorer.exe (or ShellAppRuntime or CustomShellHost).
 To get the Explorer hooking working without crashing, I had to add checks to ensure that the program requested the UWP splash fade animation. Explorer uses the same function on startup to fetch a different animation.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Clientedge (3D border) in choosen apps 1.0.0]]></title>
-        <id>https://windhawk.net/mods/clientedge-in-apps#40248fb85257b882550e3836bfd26d5a1a2692cf</id>
-        <link href="https://windhawk.net/mods/clientedge-in-apps"/>
-        <updated>2024-02-26T17:47:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Adds WS<em>EX</em>CLIENTEDGE (3D border) to some apps to look better in Classic theme. Includes SysListView32 control in 
-File Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathematica.</p>
-<p>Before:</p>
-<p><img src="https://i.imgur.com/dJBOnvP.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://i.imgur.com/42jJDs6.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
