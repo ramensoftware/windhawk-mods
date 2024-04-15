@@ -66,10 +66,6 @@ restart Windhawk. If that does not work, simply add it to the exclusion list in 
 */
 // ==/WindhawkModSettings==
 
-// Defines data shared by all instances of the library, even across processes.
-#define SHARED_SECTION __attribute__((section(".shared")))
-asm(".section .shared,\"dws\"\n");
-
 #include <windhawk_utils.h>
 
 struct {
@@ -87,9 +83,8 @@ struct {
 /* ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu */
 typedef bool (__fastcall *ICMH_CAODTM_t)(HMENU, HWND);
 
-#define ORIG(MODULE)                                               \
-ICMH_CAODTM_t ICMH_CAODTM_orig_ ## MODULE = nullptr;               \
-ICMH_CAODTM_t ICMH_CAODTM_addr_ ## MODULE SHARED_SECTION = nullptr;
+#define ORIG(MODULE) \
+ICMH_CAODTM_t ICMH_CAODTM_orig_ ## MODULE = nullptr;
 
 ORIG(shell32)
 ORIG(ExplorerFrame)
@@ -142,131 +137,11 @@ BOOL SetMenuItemInfoW_hook(
 }
 #endif
 
-struct CMWF_SYMBOL_HOOK {
-    std::vector<std::wstring> symbols;
-    void** pOriginalFunction;
-    void* hookFunction = nullptr;
-    bool optional = false;
-    void **pSharedMemoryCache = nullptr;
-
-    template <typename Prototype>
-    CMWF_SYMBOL_HOOK(
-            std::vector<std::wstring> symbols,
-            Prototype **originalFunction,
-            std::type_identity_t<Prototype *> hookFunction = nullptr,
-            bool optional = false,
-            void *pSharedMemoryCache = nullptr
-    ) : symbols(std::move(symbols)),
-        pOriginalFunction((void **)originalFunction),
-        hookFunction((void *)hookFunction),
-        optional(optional),
-        pSharedMemoryCache((void **)pSharedMemoryCache) {}
-
-    CMWF_SYMBOL_HOOK() = default;
-};
-
-/*
- * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
- *                  module's shared memory for faster access.
- */
-bool CmwfHookSymbols(
-        HMODULE module,
-        const CMWF_SYMBOL_HOOK *symbolHooks,
-        size_t symbolHooksCount
-)
-{
-    bool anyUncachedHooks = false;
-    std::vector<void **> proxyAddresses(symbolHooksCount);
-    std::vector<WindhawkUtils::SYMBOL_HOOK> proxyHooks;
-    
-    for (size_t i = 0; i < symbolHooksCount; i++)
-    {
-        // Just gotta ensure the memory is initialized as null :P
-        proxyAddresses[i] = nullptr;
-
-        void *address = nullptr;
-        if (symbolHooks[i].pSharedMemoryCache && *(symbolHooks[i].pSharedMemoryCache) != NULL)
-        {
-            address = *(symbolHooks[i].pSharedMemoryCache);
-            if (address == nullptr)
-            {
-                continue;
-            }
-            Wh_Log(
-                L"CmwfHookSymbols: Hooking symbol %.*s from in-memory cache.",
-                symbolHooks[i].symbols[0].length(),
-                symbolHooks[i].symbols[0].data()
-            );
-            Wh_SetFunctionHook(
-                address,
-                symbolHooks[i].hookFunction,
-                symbolHooks[i].pOriginalFunction
-            );
-        }
-        else
-        {
-            address = nullptr;
-            anyUncachedHooks = true;
-
-            WindhawkUtils::SYMBOL_HOOK hook = {
-                symbolHooks[i].symbols,
-                &proxyAddresses[i],
-                NULL,
-                symbolHooks[i].optional
-            };
-
-            proxyHooks.push_back(hook);
-        }
-    }
-
-    if (anyUncachedHooks)
-    {
-        if (!WindhawkUtils::HookSymbols(module, proxyHooks.data(), proxyHooks.size()))
-        {
-            return false;
-        }
-
-        int curProxyHook = 0;
-        for (void *address : proxyAddresses)
-        {
-            if (address == NULL)
-            {
-                // WARNING: You must increment this value before every next
-                // iteration, or else it will crash.
-                curProxyHook++;
-                continue;
-            }
-
-            if (
-                symbolHooks[curProxyHook].pSharedMemoryCache && 
-                *(symbolHooks[curProxyHook].pSharedMemoryCache) == NULL
-            )
-            {
-                *(symbolHooks[curProxyHook].pSharedMemoryCache) = address;
-            }
-
-            if (symbolHooks[curProxyHook].hookFunction && symbolHooks[curProxyHook].pOriginalFunction)
-            {
-                Wh_SetFunctionHook(
-                    address,
-                    symbolHooks[curProxyHook].hookFunction,
-                    symbolHooks[curProxyHook].pOriginalFunction
-                );
-            }
-
-            // Make sure to increment before the next iteration.
-            curProxyHook++;
-        }
-    }
-
-    return true;
-}
-
 /**
   * Hooks ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu for a given DLL.
   * There are many DLLs that have this function, so each one needs to be accounted for.
   */
-inline bool HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig, ICMH_CAODTM_t *pAddr)
+inline bool HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
 {
     HMODULE hModule;
 
@@ -286,7 +161,7 @@ inline bool HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig, ICMH_CAODTM_t *
         return false;
     }
 
-    CMWF_SYMBOL_HOOK hook = {
+    WindhawkUtils::SYMBOL_HOOK hook = {
         {
             L"bool "
 #ifdef _WIN64
@@ -298,11 +173,10 @@ inline bool HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig, ICMH_CAODTM_t *
         },
         pOrig,
         ICMH_CAODTM_hook,
-        true,
-        pAddr
+        true
     };
 
-    bool bHookSuccess = CmwfHookSymbols(
+    bool bHookSuccess = WindhawkUtils::HookSymbols(
         hModule,
         &hook,
         1
@@ -337,13 +211,13 @@ void LoadSettings()
 }
 
 #define HOOK(MODULE) \
-HookICMH_CAODTM(L ## #MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE, &ICMH_CAODTM_addr_ ## MODULE)
+HookICMH_CAODTM(L ## #MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE)
 
 #define HOOK_SAFE(MODULE, MODULE_SAFE) \
-HookICMH_CAODTM(L ## MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE_SAFE, &ICMH_CAODTM_addr_ ## MODULE_SAFE)
+HookICMH_CAODTM(L ## MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE_SAFE)
 
 #define HOOK_SELF(NAME) \
-HookICMH_CAODTM(NULL, &ICMH_CAODTM_orig_ ## NAME, &ICMH_CAODTM_addr_ ## NAME)
+HookICMH_CAODTM(NULL, &ICMH_CAODTM_orig_ ## NAME)
 
 BOOL Wh_ModInit()
 {
