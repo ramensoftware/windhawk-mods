@@ -2,7 +2,7 @@
 // @id              eradicate-immersive-menus
 // @name            Eradicate Immersive Menus
 // @description     Gets rid of immersive menus system-wide
-// @version         1.0.1
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -61,36 +61,47 @@ restart Windhawk. If that does not work, simply add it to the exclusion list in 
   $name: Apply to Network tray icon
 - defender: true
   $name: Apply to Windows Security
+- narrator: true
+  $name: Apply to Narrator
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_api.h>
+// Defines data shared by all instances of the library, even across processes.
+#define SHARED_SECTION __attribute__((section(".shared")))
+asm(".section .shared,\"dws\"\n");
+
 #include <windhawk_utils.h>
 
 struct {
     BOOL explorer;
     /* Tray icons are always 64-bit */
-    #ifdef _WIN64
+#ifdef _WIN64
     BOOL sound;
     BOOL network;
     BOOL defender;
     BOOL nosettingsicon;
-    #endif
+    BOOL narrator;
+#endif
 } settings;
 
 /* ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu */
 typedef bool (__fastcall *ICMH_CAODTM_t)(HMENU, HWND);
 
-ICMH_CAODTM_t ICMH_CAODTM_orig_shell32;
-ICMH_CAODTM_t ICMH_CAODTM_orig_ExplorerFrame;
+#define ORIG(MODULE)                                               \
+ICMH_CAODTM_t ICMH_CAODTM_orig_ ## MODULE = nullptr;               \
+ICMH_CAODTM_t ICMH_CAODTM_addr_ ## MODULE SHARED_SECTION = nullptr;
+
+ORIG(shell32)
+ORIG(ExplorerFrame)
 /* Explorer and tray icons are always 64-bit */
 #ifdef _WIN64
-ICMH_CAODTM_t ICMH_CAODTM_orig_explorer;
-ICMH_CAODTM_t ICMH_CAODTM_orig_twinui;
-ICMH_CAODTM_t ICMH_CAODTM_orig_twinui_pcshell;
-ICMH_CAODTM_t ICMH_CAODTM_orig_SndVolSSO;
-ICMH_CAODTM_t ICMH_CAODTM_orig_pnidui;
-ICMH_CAODTM_t ICMH_CAODTM_orig_SecurityHealthSSO;
+ORIG(explorer)
+ORIG(twinui)
+ORIG(twinui_pcshell)
+ORIG(SndVolSSO)
+ORIG(pnidui)
+ORIG(SecurityHealthSSO)
+ORIG(Narrator)
 #endif
 
 /** 
@@ -131,11 +142,131 @@ BOOL SetMenuItemInfoW_hook(
 }
 #endif
 
+struct CMWF_SYMBOL_HOOK {
+    std::vector<std::wstring> symbols;
+    void** pOriginalFunction;
+    void* hookFunction = nullptr;
+    bool optional = false;
+    void **pSharedMemoryCache = nullptr;
+
+    template <typename Prototype>
+    CMWF_SYMBOL_HOOK(
+            std::vector<std::wstring> symbols,
+            Prototype **originalFunction,
+            std::type_identity_t<Prototype *> hookFunction = nullptr,
+            bool optional = false,
+            void *pSharedMemoryCache = nullptr
+    ) : symbols(std::move(symbols)),
+        pOriginalFunction((void **)originalFunction),
+        hookFunction((void *)hookFunction),
+        optional(optional),
+        pSharedMemoryCache((void **)pSharedMemoryCache) {}
+
+    CMWF_SYMBOL_HOOK() = default;
+};
+
+/*
+ * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
+ *                  module's shared memory for faster access.
+ */
+bool CmwfHookSymbols(
+        HMODULE module,
+        const CMWF_SYMBOL_HOOK *symbolHooks,
+        size_t symbolHooksCount
+)
+{
+    bool anyUncachedHooks = false;
+    std::vector<void **> proxyAddresses(symbolHooksCount);
+    std::vector<WindhawkUtils::SYMBOL_HOOK> proxyHooks;
+    
+    for (size_t i = 0; i < symbolHooksCount; i++)
+    {
+        // Just gotta ensure the memory is initialized as null :P
+        proxyAddresses[i] = nullptr;
+
+        void *address = nullptr;
+        if (symbolHooks[i].pSharedMemoryCache && *(symbolHooks[i].pSharedMemoryCache) != NULL)
+        {
+            address = *(symbolHooks[i].pSharedMemoryCache);
+            if (address == nullptr)
+            {
+                continue;
+            }
+            Wh_Log(
+                L"CmwfHookSymbols: Hooking symbol %.*s from in-memory cache.",
+                symbolHooks[i].symbols[0].length(),
+                symbolHooks[i].symbols[0].data()
+            );
+            Wh_SetFunctionHook(
+                address,
+                symbolHooks[i].hookFunction,
+                symbolHooks[i].pOriginalFunction
+            );
+        }
+        else
+        {
+            address = nullptr;
+            anyUncachedHooks = true;
+
+            WindhawkUtils::SYMBOL_HOOK hook = {
+                symbolHooks[i].symbols,
+                &proxyAddresses[i],
+                NULL,
+                symbolHooks[i].optional
+            };
+
+            proxyHooks.push_back(hook);
+        }
+    }
+
+    if (anyUncachedHooks)
+    {
+        if (!WindhawkUtils::HookSymbols(module, proxyHooks.data(), proxyHooks.size()))
+        {
+            return false;
+        }
+
+        int curProxyHook = 0;
+        for (void *address : proxyAddresses)
+        {
+            if (address == NULL)
+            {
+                // WARNING: You must increment this value before every next
+                // iteration, or else it will crash.
+                curProxyHook++;
+                continue;
+            }
+
+            if (
+                symbolHooks[curProxyHook].pSharedMemoryCache && 
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) == NULL
+            )
+            {
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) = address;
+            }
+
+            if (symbolHooks[curProxyHook].hookFunction && symbolHooks[curProxyHook].pOriginalFunction)
+            {
+                Wh_SetFunctionHook(
+                    address,
+                    symbolHooks[curProxyHook].hookFunction,
+                    symbolHooks[curProxyHook].pOriginalFunction
+                );
+            }
+
+            // Make sure to increment before the next iteration.
+            curProxyHook++;
+        }
+    }
+
+    return true;
+}
+
 /**
   * Hooks ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu for a given DLL.
   * There are many DLLs that have this function, so each one needs to be accounted for.
   */
-inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
+inline bool HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig, ICMH_CAODTM_t *pAddr)
 {
     HMODULE hModule;
 
@@ -152,10 +283,10 @@ inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
     if (!hModule)
     {
         Wh_Log(L"Failed to load %s", lpDll);
-        return FALSE;
+        return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hook = {
+    CMWF_SYMBOL_HOOK hook = {
         {
             L"bool "
 #ifdef _WIN64
@@ -167,10 +298,11 @@ inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
         },
         pOrig,
         ICMH_CAODTM_hook,
-        true
+        true,
+        pAddr
     };
 
-    bool bHookSuccess = WindhawkUtils::HookSymbols(
+    bool bHookSuccess = CmwfHookSymbols(
         hModule,
         &hook,
         1
@@ -178,27 +310,40 @@ inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
 
     if (bHookSuccess)
     {
-        return TRUE;
+        return true;
     }
 
     Wh_Log(
         L"Failed to hook ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu in %s.",
         lpDll ? lpDll : L"explorer.exe"
     );
-    return FALSE;
+    return false;
 }
+
+#define LoadIntSetting(NAME) \
+settings.NAME = Wh_GetIntSetting(L ## #NAME)
 
 void LoadSettings()
 {
-    settings.explorer = Wh_GetIntSetting(L"explorer", TRUE);
+    LoadIntSetting(explorer);
     /* Tray icons are always 64-bit */
 #ifdef _WIN64
-    settings.sound          = Wh_GetIntSetting(L"sound",          TRUE);
-    settings.network        = Wh_GetIntSetting(L"network",        TRUE);
-    settings.defender       = Wh_GetIntSetting(L"defender",       TRUE);
-    settings.nosettingsicon = Wh_GetIntSetting(L"nosettingsicon", TRUE);
+    LoadIntSetting(sound);
+    LoadIntSetting(network);
+    LoadIntSetting(defender);
+    LoadIntSetting(nosettingsicon);
+    LoadIntSetting(narrator);
 #endif
 }
+
+#define HOOK(MODULE) \
+HookICMH_CAODTM(L ## #MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE, &ICMH_CAODTM_addr_ ## MODULE)
+
+#define HOOK_SAFE(MODULE, MODULE_SAFE) \
+HookICMH_CAODTM(L ## MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE_SAFE, &ICMH_CAODTM_addr_ ## MODULE_SAFE)
+
+#define HOOK_SELF(NAME) \
+HookICMH_CAODTM(NULL, &ICMH_CAODTM_orig_ ## NAME, &ICMH_CAODTM_addr_ ## NAME)
 
 BOOL Wh_ModInit()
 {
@@ -208,9 +353,9 @@ BOOL Wh_ModInit()
 #ifdef _WIN64
     WCHAR szProcessPath[MAX_PATH];
     GetModuleFileNameW(NULL, szProcessPath, MAX_PATH);
-    BOOL bIsImmersiveProcess = (!wcsicmp(szProcessPath, L"C:\\Windows\\explorer.exe") || !wcsicmp(szProcessPath, L"C:\\Windows\\System32\\Narrator.exe"));
+    bool bIsExplorer = (0 == wcsicmp(szProcessPath, L"C:\\Windows\\explorer.exe"));
 
-    if (settings.nosettingsicon)
+    if (settings.nosettingsicon && bIsExplorer)
     {
         Wh_SetFunctionHook(
             (void *)SetMenuItemInfoW,
@@ -222,95 +367,49 @@ BOOL Wh_ModInit()
 
     if (settings.explorer
 #ifdef _WIN64
-    && wcsicmp(szProcessPath, L"C:\\Windows\\System32\\SecurityHealthSystray.exe")
+    && 0 != wcsicmp(szProcessPath, L"C:\\Windows\\System32\\SecurityHealthSystray.exe")
 #endif
     )
     {
-        if (!HookICMH_CAODTM(
-            L"shell32.dll",
-            &ICMH_CAODTM_orig_shell32
-        ))
-        {
-            return FALSE;
-        }
-        
-        
-        if (!HookICMH_CAODTM(
-            L"ExplorerFrame.dll",
-            &ICMH_CAODTM_orig_ExplorerFrame
-        ))
-        {
-            return FALSE;
-        }
+        HOOK(shell32);
+        HOOK(ExplorerFrame);
         
         /* Explorer itself is always 64-bit */
 #ifdef _WIN64
-        if (bIsImmersiveProcess)
+        if (bIsExplorer)
         {
-            if (!HookICMH_CAODTM(
-                NULL,
-                &ICMH_CAODTM_orig_explorer
-            ))
-            {
-                return FALSE;
-            }
-
-            if (!HookICMH_CAODTM(
-                L"twinui.dll",
-                &ICMH_CAODTM_orig_twinui
-            ))
-            {
-                return FALSE;
-            }
-
-            if (!HookICMH_CAODTM(
-                L"twinui.pcshell.dll",
-                &ICMH_CAODTM_orig_twinui_pcshell
-            ))
-            {
-                return FALSE;
-            }
+            HOOK_SELF(explorer);
+            HOOK(twinui);
+            HOOK_SAFE("twinui.pcshell", twinui_pcshell);
         }
 #endif
     }
 
     /* Tray icons are always 64-bit */
 #ifdef _WIN64
-    if (bIsImmersiveProcess)
+    if (bIsExplorer)
     {
         if (settings.sound)
         {
-            if (!HookICMH_CAODTM(
-                L"SndVolSSO.dll",
-                &ICMH_CAODTM_orig_SndVolSSO
-            ))
-            {
-                return FALSE;
-            }
+            HOOK(SndVolSSO);
         }
 
         if (settings.network)
         {
-            if (!HookICMH_CAODTM(
-                L"pnidui.dll",
-                &ICMH_CAODTM_orig_pnidui
-            ))
-            {
-                return FALSE;
-            }
+            HOOK(pnidui);
         }
     }
 
     if (settings.defender
-    &&  0 == wcscmp(wcslwr(szProcessPath), L"c:\\windows\\system32\\securityhealthsystray.exe"))
+    &&  0 == wcsicmp(szProcessPath, L"C:\\Windows\\System32\\SecurityHealthSystray.exe"))
     {
-        if (!HookICMH_CAODTM(
-            L"SecurityHealthSSO.dll",
-            &ICMH_CAODTM_orig_SecurityHealthSSO
-        ))
-        {
-            return FALSE;
-        }
+        HOOK(SecurityHealthSSO);
+    }
+
+    if (settings.narrator
+    &&  0 == wcsicmp(szProcessPath, L"C:\\Windows\\System32\\Narrator.exe"))
+    {
+        HOOK_SELF(Narrator);
     }
 #endif
 
