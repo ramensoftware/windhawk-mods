@@ -179,8 +179,8 @@ function generateModChangelog(modId: string) {
                 '--pretty=format:%B',
                 commit,
             ]);
-            const changelogText = getChangelogTextFromCommitMessage(message);
-            changelog += `${changelogText}\n\n`;
+            const changelogItem = getChangelogTextFromCommitMessage(message);
+            changelog += `${changelogItem}\n\n`;
         } else {
             changelog += 'Initial release.\n';
         }
@@ -264,8 +264,7 @@ function generateRssFeed() {
                 '--pretty=format:%B',
                 commit,
             ]);
-            const changelogText = getChangelogTextFromCommitMessage(message);
-            content = `${changelogText}\n\n`;
+            content = getChangelogTextFromCommitMessage(message);
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }
