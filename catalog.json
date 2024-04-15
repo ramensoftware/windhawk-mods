@@ -26,6 +26,27 @@
                 "version": "1.1.0"
             }
         },
+        "aerexplorer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1713177639000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1713177639000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi",
+                "description": "Various tweaks for Windows Explorer to make it more like older versions.",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Aerexplorer",
+                "version": "1.5.7"
+            }
+        },
         "aero-flyout-fix": {
             "details": {
                 "defaultSorting": 4660,
