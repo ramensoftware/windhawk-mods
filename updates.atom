@@ -13,6 +13,7 @@
         <id>https://windhawk.net/mods/aerexplorer#da930af2ef8190e1b68734fb88e1334b0df12b50</id>
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2024-04-15T19:01:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix <code>ModernSearchFeatureEnabled</code> default case</p>]]></content>
     </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.5.7]]></title>
