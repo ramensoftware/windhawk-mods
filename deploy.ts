@@ -126,6 +126,17 @@ async function generateModCatalog() {
     return await enrichCatalog(catalog);
 }
 
+function getChangelogTextFromCommitMessage(message: string) {
+    let messageTrimmed = message.trim();
+    if (messageTrimmed.includes('\n')) {
+        // Remove first line.
+        return messageTrimmed.replace(/^.* \(#\d+\)\n\n/, '').trim();
+    } else {
+        // Only remove trailing PR number if it's the only line.
+        return messageTrimmed.replace(/ \(#\d+\)$/, '').trim();
+    }
+}
+
 function generateModChangelog(modId: string) {
     let changelog = '';
 
@@ -162,22 +173,14 @@ function generateModChangelog(modId: string) {
         changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
 
         if (commit !== lastCommit) {
-            let message = gitExec([
+            const message = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]).trim();
-
-            if (message.includes('\n')) {
-                // Remove first line.
-                message = message.replace(/^.* \(#\d+\)\n\n/, '').trim();
-            } else {
-                // Only remove trailing PR number if it's the only line.
-                message = message.replace(/ \(#\d+\)$/, '').trim();
-            }
-
-            changelog += `${message}\n\n`;
+            ]);
+            const changelogText = getChangelogTextFromCommitMessage(message);
+            changelog += `${changelogText}\n\n`;
         } else {
             changelog += 'Initial release.\n';
         }
@@ -255,12 +258,14 @@ function generateRssFeed() {
 
         let content = '';
         if (changeType === 'M') {
-            content = gitExec([
+            const message = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]).replace(/^.* \(#\d+\)\n\n/, '');
+            ]);
+            const changelogText = getChangelogTextFromCommitMessage(message);
+            content = `${changelogText}\n\n`;
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }
