@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.5.8
+// @version         1.5.9
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -952,8 +952,9 @@ DWORD g_dwSubBuild SHARED_SECTION = 0;
 bool ModernSearchFeatureEnabled(void)
 {
     /* Collect sub-build if it hasn't been selected */
-    if (!g_dwSubBuild)
+    if (g_dwSubBuild == 0)
     {
+        DWORD dwSize = sizeof(DWORD);
         RegGetValueW(
             HKEY_LOCAL_MACHINE,
             L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
@@ -961,7 +962,7 @@ bool ModernSearchFeatureEnabled(void)
             RRF_RT_DWORD,
             NULL,
             &g_dwSubBuild,
-            NULL
+            &dwSize
         );
     }
 
