@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.5.7
+// @version         1.5.8
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -976,11 +976,11 @@ bool ModernSearchFeatureEnabled(void)
             case FEATURE_ENABLED_STATE_ENABLED:
                 return true;
             case FEATURE_ENABLED_STATE_DEFAULT:
-                return (g_dwSubBuild >= 3754);
+                return (g_dwSubBuild < 3754);
         }
     }
     
-    return (g_dwSubBuild >= 3754);
+    return (g_dwSubBuild < 3754);
 }
 
 void *CAddressBand__AddressBandWndProc_addr SHARED_SECTION = nullptr;
