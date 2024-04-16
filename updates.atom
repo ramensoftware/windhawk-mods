@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-15T19:55:20.000Z</updated>
+    <updated>2024-04-16T04:58:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Eradicate Immersive Menus 1.1.0]]></title>
+        <id>https://windhawk.net/mods/eradicate-immersive-menus#5e2bb70ab60874ee4c6adb0c2c30837080f6d634</id>
+        <link href="https://windhawk.net/mods/eradicate-immersive-menus"/>
+        <updated>2024-04-16T04:58:22.000Z</updated>
+        <content type="html"><![CDATA[<p>Apply to Narrator</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.5.9]]></title>
         <id>https://windhawk.net/mods/aerexplorer#3d664dac19baf626c8d0c4f2c87d6622135680de</id>
@@ -212,13 +219,5 @@ which was used in Windows XP and Windws 2000.</p>
 <p>For 3D border in the dialog, install the mod "ClientEdge in choosen apps"</p>
 <p>The mod is based on the idea by xdmg01.</p>
 <p><img src="https://i.imgur.com/g2NVokJ.png" alt="File Picker" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic UWP Fix 0.3]]></title>
-        <id>https://windhawk.net/mods/classic-uwp-fix#596131805828a3dccd291548eadf7cd1f2b1a13c</id>
-        <link href="https://windhawk.net/mods/classic-uwp-fix"/>
-        <updated>2024-02-29T07:20:48.000Z</updated>
-        <content type="html"><![CDATA[<p>Added support for the UWP MSA sign-in window, hosted by explorer.exe (or ShellAppRuntime or CustomShellHost).
-To get the Explorer hooking working without crashing, I had to add checks to ensure that the program requested the UWP splash fade animation. Explorer uses the same function on startup to fetch a different animation.</p>]]></content>
     </entry>
 </feed>
