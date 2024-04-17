@@ -12,6 +12,7 @@
 /*
 # Remove Command Bar
 This mod removes the Vista or 7 Command Bar from file explorer windows without having to patch shellstyle.dll using external tools.
+This is meant to enable accurate looks on various pre-Vista file explorer mods.
 If your shellstyle.dll is already patched, restore it using the following command in a elevated command prompt:
 
     sfc /scanfile=c:\windows\system32\shellstyle.dll
@@ -19,10 +20,20 @@ If your shellstyle.dll is already patched, restore it using the following comman
 and reboot your system. If this is not done, the patch from the dll will take precedence over this mod.
 After the mod is enabled, kill the explorer.exe process and restart it for the changes to take place.
 
+The mod works by interjecting the request for a textual description of the file explorer window layout, and injecting a offset token into it.
+The default offset is -40, but you may want to change this in the mod settings.
+
 For issue reports, contact waldemar3194 on Discord, or file a report at my [github repository](https://github.com/CyprinusCarpio/windhawk-mods).
 
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- Offset: -40
+  $name: Command Bar offset
+*/
+// ==/WindhawkModSettings==
 
 #include <string>
 #include <windhawk_utils.h>
@@ -36,7 +47,8 @@ For issue reports, contact waldemar3194 on Discord, or file a report at my [gith
 #endif
 
 const std::wstring toLookFor = L"<style resid=\"FolderBandStyle\">";
-const std::wstring toAdd = L"\n<Element padding=\"rect(0rp,0rp,0rp,-40rp)\"/>\n";
+
+int g_offsetSetting;
 
 typedef HRESULT(* CALCON DUILoadUIFileFromResources_t)(HINSTANCE, unsigned int, LPWSTR*);
 DUILoadUIFileFromResources_t DUILoadUIFileFromResourcesOriginal;
@@ -55,6 +67,7 @@ HRESULT CALCON DUILoadUIFileFromResourcesHook(HINSTANCE hInstance, unsigned int 
         {
             return hRes;
         }
+        std::wstring toAdd = L"\n<Element padding=\"rect(0rp,0rp,0rp," + std::to_wstring(g_offsetSetting) + L"rp)\"/>\n";
         
         uifile.insert(pos + toLookFor.length(), toAdd);
         *pszOut = (LPWSTR)LocalAlloc(LPTR, (uifile.length() + 1) * sizeof(WCHAR));
@@ -93,6 +106,8 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to hook the member function.");
         return FALSE;
     }
+
+    g_offsetSetting = Wh_GetIntSetting(L"Offset");
 
     return TRUE;
 }
