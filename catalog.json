@@ -1464,6 +1464,26 @@
                 "version": "1.0"
             }
         },
+        "remove-command-bar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1713423953000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1713423953000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Waldemar",
+                "description": "Removes the Command Bar from file explorer.",
+                "github": "https://github.com/CyprinusCarpio",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Remove Command Bar",
+                "version": "1.0"
+            }
+        },
         "ribbon-caption-icon-fix": {
             "details": {
                 "defaultSorting": 1810,

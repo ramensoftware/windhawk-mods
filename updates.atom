@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-16T04:58:22.000Z</updated>
+    <updated>2024-04-18T07:05:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Command Bar 1.0]]></title>
+        <id>https://windhawk.net/mods/remove-command-bar#7f9f18d539b9f251ed36b3d5940c26bb3f33f8de</id>
+        <link href="https://windhawk.net/mods/remove-command-bar"/>
+        <updated>2024-04-18T07:05:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="removecommandbar">Remove Command Bar</h1>
+<p>This mod removes the Vista or 7 Command Bar from file explorer windows without having to patch shellstyle.dll using external tools.
+This is meant to enable accurate looks on various pre-Vista file explorer mods.
+If your shellstyle.dll is already patched, restore it using the following command in a elevated command prompt:</p>
+<pre><code>sfc /scanfile=c:\windows\system32\shellstyle.dll
+</code></pre>
+<p>and reboot your system. If this is not done, the patch from the dll will take precedence over this mod.
+After the mod is enabled, kill the explorer.exe process and restart it for the changes to take place.</p>
+<p>The mod works by interjecting the request for a textual description of the file explorer window layout, and injecting a offset token into it.
+The default offset is -40, but you may want to change this in the mod settings.</p>
+<p>For issue reports, contact waldemar3194 on Discord, or file a report at my <a href="https://github.com/CyprinusCarpio/windhawk-mods">github repository</a>.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Eradicate Immersive Menus 1.1.0]]></title>
         <id>https://windhawk.net/mods/eradicate-immersive-menus#5e2bb70ab60874ee4c6adb0c2c30837080f6d634</id>
@@ -208,16 +225,5 @@ The code is based on the corresponding code from Explorer Patcher and can stop w
         <link href="https://windhawk.net/mods/classic-file-picker-dialog"/>
         <updated>2024-03-06T08:27:22.000Z</updated>
         <content type="html"><![CDATA[<p>Fix work in 32-bit apps. Previous version did not.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic File Picker dialog 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-file-picker-dialog#74fc53071eee5acd488a5ca6c946da9a64dd7044</id>
-        <link href="https://windhawk.net/mods/classic-file-picker-dialog"/>
-        <updated>2024-03-04T17:52:58.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod replaces the default file picker (open/save dialog) with the legacy one,
-which was used in Windows XP and Windws 2000.</p>
-<p>For 3D border in the dialog, install the mod "ClientEdge in choosen apps"</p>
-<p>The mod is based on the idea by xdmg01.</p>
-<p><img src="https://i.imgur.com/g2NVokJ.png" alt="File Picker" /></p>]]></content>
     </entry>
 </feed>
