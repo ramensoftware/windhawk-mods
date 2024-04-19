@@ -1,3 +1,10 @@
+## 1.1 ([Apr 19, 2024](https://github.com/ramensoftware/windhawk-mods/blob/92c875fd5462637a9cd1da3b218bd839ba819dc4/mods/classic-explorer-treeview.wh.cpp))
+
+- Enabling the folders pane will now hide real InfoBands and vice versa
+- Fixed a hidden bug where clicking the X button many times would hang Explorer
+- Added a working entry in the Explorer Bars submenu
+- Removed 32bit "support"
+
 ## 1.0.3 ([Mar 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dc4d3bb0033b5b8473ea10c63e50853c2bfc05d4/mods/classic-explorer-treeview.wh.cpp))
 
 - Optimized expando button drawing

@@ -216,19 +216,22 @@
                 "published": 1708354597000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1709740554000,
+                "updated": 1713541782000,
                 "users": 103
             },
             "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
                 "author": "Waldemar",
-                "compilerOptions": "-lcomctl32 -lgdi32 -loleaut32 -lole32",
+                "compilerOptions": "-lcomctl32 -lgdi32 -loleaut32 -lole32 -lshlwapi",
                 "description": "Modifies Folder Treeview in file explorer so as to make it look more classic.",
                 "github": "https://github.com/CyprinusCarpio",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Classic Explorer Treeview",
-                "version": "1.0.3"
+                "version": "1.1"
             }
         },
         "classic-file-picker-dialog": {
