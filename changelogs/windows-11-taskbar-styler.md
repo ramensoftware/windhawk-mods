@@ -1,3 +1,9 @@
+## 1.3 ([Apr 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/085a17c3ddc3084feb9f607b971d4873076d6fb7/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added themes! Currently, only the sample WinXP theme is integrated into the mod and can be selected in the settings.
+* Added support for customizing some elements which weren't customizable before.
+* Fixed: Only parse styles when the target element is available. Previously styling some elements could cause a crash on startup.
+
 ## 1.2.3 ([Dec 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/dd6a77e99fd98816a7800be14a834ad988a6cd58/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added support for unnamed visual state groups.
