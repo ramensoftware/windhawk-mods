@@ -1,3 +1,7 @@
+## 1.1.1 ([Apr 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ea404918c73f63626fee81883879365498d2cdd9/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Fixed incorrect class name replacements.
+
 ## 1.1 ([Apr 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/088c43ae0fea274c39f5aab12168e9a3e792c579/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added themes! Currently, four themes are integrated into the mod and can be selected in the settings.

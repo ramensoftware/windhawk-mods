@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     An advanced mod to override style attributes of the start menu control elements
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -134,9 +134,9 @@ code from the **TranslucentTB** project.
   - SideBySide2: SideBySide2
   - SideBySideMinimal: SideBySideMinimal
 - controlStyles:
-  - - target: Border#AcrylicBorder
+  - - target: ""
       $name: Target
-    - styles: [CornerRadius=0]
+    - styles: [""]
       $name: Styles
   $name: Control styles
 - resourceVariables:
@@ -1468,14 +1468,14 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
 }
 
 std::wstring AdjustTypeName(std::wstring_view type) {
-    if (auto i = type.find_first_of(L".:"); i == type.npos) {
-        return L"Microsoft.UI.Xaml.Control." + std::wstring{type};
+    if (type.find_first_of(L".:") == type.npos) {
+        return L"Windows.UI.Xaml.Controls." + std::wstring{type};
     }
 
     static const std::vector<std::pair<std::wstring_view, std::wstring_view>>
         adjustments = {
             {L"StartMenu:", L"StartMenu."},
-            {L"muxc:", L"Microsoft.UI.Xaml.Control."},
+            {L"muxc:", L"Microsoft.UI.Xaml.Controls."},
         };
 
     for (const auto& adjustment : adjustments) {
@@ -1673,11 +1673,19 @@ void UninitializeSettingsAndTap() {
                     property, state.propertyChangedToken);
 
                 if (state.originalValue) {
-                    if (*state.originalValue ==
-                        DependencyProperty::UnsetValue()) {
-                        oldElement.ClearValue(property);
-                    } else {
-                        oldElement.SetValue(property, *state.originalValue);
+                    try {
+                        // Sometimes this fails with error 80004002: No such
+                        // interface supported. Can be reproduced by setting
+                        // "CornerRadius=0" for the "Border" target.
+                        if (*state.originalValue ==
+                            DependencyProperty::UnsetValue()) {
+                            oldElement.ClearValue(property);
+                        } else {
+                            oldElement.SetValue(property, *state.originalValue);
+                        }
+                    } catch (winrt::hresult_error const& ex) {
+                        Wh_Log(L"Error %08X: %s", ex.code(),
+                               ex.message().c_str());
                     }
                 }
             }
