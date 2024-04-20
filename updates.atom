@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-19T15:49:42.000Z</updated>
+    <updated>2024-04-20T14:38:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#088c43ae0fea274c39f5aab12168e9a3e792c579</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2024-04-20T14:38:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added themes! Currently, four themes are integrated into the mod and can be selected in the settings.</li>
+<li>Added support for customizing some elements which weren't customizable before.</li>
+<li>Fixed: Only parse styles when the target element is available. Previously styling some elements could cause a crash on startup.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Treeview 1.1]]></title>
         <id>https://windhawk.net/mods/classic-explorer-treeview#92c875fd5462637a9cd1da3b218bd839ba819dc4</id>
@@ -219,16 +230,6 @@ The code is based on the corresponding code from Explorer Patcher and can stop w
 <li>Fixed taskbar height not affecting maximized windows in some cases.</li>
 <li>Improved applying settings, hopefully fixing bugs where not all of the taskbar elements are updated.</li>
 <li>The weather widget icon size is now adjusted as well. In previous versions, the weather icon's size wasn't affected by the mod.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Treeview 1.0.3]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-treeview#dc4d3bb0033b5b8473ea10c63e50853c2bfc05d4</id>
-        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
-        <updated>2024-03-06T15:55:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Optimized expando button drawing</li>
-<li>Mod will now explicitly load the required dll module</li>
 </ul>]]></content>
     </entry>
 </feed>
