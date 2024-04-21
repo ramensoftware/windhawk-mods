@@ -1,13 +1,13 @@
 // ==WindhawkMod==
-// @id              windows-11-taskbar-styler
-// @name            Windows 11 Taskbar Styler
-// @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.3
+// @id              windows-11-start-menu-styler
+// @name            Windows 11 Start Menu Styler
+// @description     An advanced mod to override style attributes of the start menu control elements
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
-// @include         explorer.exe
+// @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
 // ==/WindhawkMod==
@@ -22,24 +22,38 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 11 Taskbar Styler
+# Windows 11 Start Menu Styler
 
-An advanced mod to override style attributes of the taskbar control elements.
+An advanced mod to override style attributes of the start menu control elements.
 
-Also check out the **Windows 11 Start Menu Styler** mod.
+**Note**: This mod requires Windhawk v1.4 or later.
+
+Also check out the **Windows 11 Taskbar Styler** mod.
 
 ## Themes
 
 Themes are collections of styles. The following themes are integrated into the
 mod and can be selected in the settings:
 
-![WinXP](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/WinXP/screenshot-small.png)
+![NoRecommendedSection](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/NoRecommendedSection/screenshot-small.png)
 \
-[WinXP](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/WinXP/README.md)
+[NoRecommendedSection](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/NoRecommendedSection/README.md)
 
-More themes can be found in the **Themes** section of [The Windows 11 taskbar
+![SideBySide](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/SideBySide/screenshot-small.png)
+\
+[SideBySide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/SideBySide/README.md)
+
+![SideBySide2](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/SideBySide2/screenshot-small.png)
+\
+[SideBySide2](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/SideBySide2/README.md)
+
+![SideBySideMinimal](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/SideBySideMinimal/screenshot-small.png)
+\
+[SideBySideMinimal](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/SideBySideMinimal/README.md)
+
+More themes can be found in the **Themes** section of [The Windows 11 start menu
 styling
-guide](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/README.md#themes).
+guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md#themes).
 Contributions of new themes are welcome!
 
 ## Advanced styling
@@ -49,19 +63,19 @@ variables. Control styles allow to override styles, such as size and color, for
 the target elements. Resource variables allow to override predefined variables.
 For a more detailed explanation and examples, refer to the sections below.
 
-The taskbar's XAML resources can help find out which elements and resource
+The start menu's XAML resources can help find out which elements and resource
 variables can be customized. To the best of my knowledge, there are no public
 tools that are able to decode the resource files of recent Windows versions, but
 here are XAML resources which were obtained via other means for your
-convenience: [TaskbarResources.xbf and
-SystemTrayResources.xbf](https://gist.github.com/m417z/ad0ab39351aca905f1d186b1f1c3d8c7).
+convenience:
+[StartResources.xbf](https://gist.github.com/m417z/a7e4e2c7b451ee79c62c51ca2dba7349).
 
 The [UWPSpy](https://ramensoftware.com/uwpspy) tool can be used to inspect the
-taskbar's control elements in real time, and experiment with various styles.
+start menu control elements in real time, and experiment with various styles.
 
 For a collection of commonly requested taskbar styling customizations, check out
-[The Windows 11 taskbar styling
-guide](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/README.md).
+[The Windows 11 start menu styling
+guide](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/README.md).
 
 ### Control styles
 
@@ -69,7 +83,7 @@ Each entry has a target control and a list of styles.
 
 The target control is written as `Class` or `Class#Name`, i.e. the target
 control class name (the tag name in XAML resource files), such as
-`Taskbar.TaskListButton` or `Rectangle`, optionally followed by `#` and the
+`StartMenu.StartInnerFrame` or `Rectangle`, optionally followed by `#` and the
 target control's name (`x:Name` attribute in XAML resource files). The target
 control can also include:
 * Child control index, for example: `Class#Name[2]` will only match the relevant
@@ -92,76 +106,16 @@ Color="Red"/>`. In addition, a visual state can be specified as following:
 `Style@VisualState=Value`, in which case the style will only apply when the
 visual state group specified in the target matches the specified visual state.
 
-A couple of practical examples:
-
-#### Task list button corner radius
-
-![Screenshot](https://i.imgur.com/zDATi9K.png)
-
-* Target: `Taskbar.TaskListButton`
-* Style: `CornerRadius=0`
-
-#### Running indicator size and color
-
-![Screenshot](https://i.imgur.com/mR5c3F5.png)
-
-* Target: `Taskbar.TaskListLabeledButtonPanel@RunningIndicatorStates >
-  Rectangle#RunningIndicator`
-* Styles:
-    * `Fill=#FFED7014`
-    * `Height=2`
-    * `Width=12`
-    * `Fill@ActiveRunningIndicator=Red`
-    * `Width@ActiveRunningIndicator=20`
-
-#### Task list button background gradient
-
-![Screenshot](https://i.imgur.com/LNPcw0G.png)
-
-* Targets:
-    * `Taskbar.TaskListButtonPanel > Border#BackgroundElement`
-    * `Taskbar.TaskListLabeledButtonPanel > Border#BackgroundElement`
-* Style: `Background:=<LinearGradientBrush StartPoint="0.5,0"
-  EndPoint="0.5,1"><GradientStop Offset="0" Color="DodgerBlue"/><GradientStop
-  Offset="1" Color="Yellow"/></LinearGradientBrush>`
-
-#### Hide the start button
-
-* Target:
-  `Taskbar.ExperienceToggleButton#LaunchListButton[AutomationProperties.AutomationId=StartButton]`
-* Style: `Visibility=Collapsed`
-
-#### Hide the network notification icon
-
-* Target: `SystemTray.OmniButton#ControlCenterButton > Grid > ContentPresenter >
-  ItemsPresenter > StackPanel > ContentPresenter[1] > SystemTray.IconView >
-  Grid > Grid`
-* Style: `Visibility=Collapsed`
-
-**Note**: To hide the volume notification icon instead, use `[2]` instead of
-`[1]`.
-
 ### Resource variables
 
 Some variables, such as size and padding for various controls, are defined as
-resource variables. Here are several examples:
-
-* `TaskbarContextMenuMargin`: The margin between the taskbar and the start
-  button context menu.
-
-* `ContextMenuMargin`: The margin between the taskbar and the notification area
-  context menu.
-
-* `MediumTaskbarButtonExtent`: The width of the taskbar buttons.
+resource variables.
 
 ## Implementation notes
 
 The VisualTreeWatcher implementation is based on the
 [ExplorerTAP](https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP)
 code from the **TranslucentTB** project.
-
-Some code is borrowed from MSVC generated headers. To reduce the noise, hide the
-relevant `#pragma region` regions in the code editor.
 */
 // ==/WindhawkModReadme==
 
@@ -175,903 +129,27 @@ relevant `#pragma region` regions in the code editor.
     in the mod details.
   $options:
   - "": None
-  - WinXP: WinXP
+  - NoRecommendedSection: NoRecommendedSection
+  - SideBySide: SideBySide
+  - SideBySide2: SideBySide2
+  - SideBySideMinimal: SideBySideMinimal
 - controlStyles:
-  - - target: Taskbar.TaskListButton
+  - - target: ""
       $name: Target
-    - styles: [CornerRadius=0]
+    - styles: [""]
       $name: Styles
   $name: Control styles
 - resourceVariables:
-  - - variableKey: TaskbarContextMenuMargin
+  - - variableKey: ""
       $name: Variable key
-    - value: "0"
+    - value: ""
       $name: Value
   $name: Resource variables
 */
 // ==/WindhawkModSettings==
 
-////////////////////////////////////////////////////////////////////////////////
-// clang-format off
-
-#pragma region winrt_hpp
-
-#include <guiddef.h>
-#include <Unknwn.h>
-#include <winrt/base.h>
-
-// forward declare namespaces we alias
-namespace winrt {
-    namespace Windows {
-        namespace Foundation::Collections {}
-        namespace UI::Xaml {
-            namespace Controls {}
-            namespace Hosting {}
-        }
-    }
-}
-
-// alias some long namespaces for convenience
-namespace wf = winrt::Windows::Foundation;
-// namespace wfc = wf::Collections;
-namespace wux = winrt::Windows::UI::Xaml;
-// namespace wuxc = wux::Controls;
-namespace wuxh = wux::Hosting;
-
-#pragma endregion  // winrt_hpp
-
-#pragma region xamlOM_h
-
-/* this ALWAYS GENERATED file contains the definitions for the interfaces */
-
-
- /* File created by MIDL compiler version 8.01.0622 */
-/* @@MIDL_FILE_HEADING(  ) */
-
-
-
-/* verify that the <rpcndr.h> version is high enough to compile this file*/
-#ifndef __REQUIRED_RPCNDR_H_VERSION__
-#define __REQUIRED_RPCNDR_H_VERSION__ 500
-#endif
-
-/* verify that the <rpcsal.h> version is high enough to compile this file*/
-#ifndef __REQUIRED_RPCSAL_H_VERSION__
-#define __REQUIRED_RPCSAL_H_VERSION__ 100
-#endif
-
-#include <rpc.h>
-#include <rpcndr.h>
-
-#ifndef __RPCNDR_H_VERSION__
-#error this stub requires an updated version of <rpcndr.h>
-#endif /* __RPCNDR_H_VERSION__ */
-
-#ifndef COM_NO_WINDOWS_H
-#include <windows.h>
-#include <ole2.h>
-#endif /*COM_NO_WINDOWS_H*/
-
-#ifndef __xamlom_h__
-#define __xamlom_h__
-
-#if defined(_MSC_VER) && (_MSC_VER >= 1020)
-// #pragma once
-#endif
-
-/* Forward Declarations */ 
-
-#ifndef __IVisualTreeServiceCallback_FWD_DEFINED__
-#define __IVisualTreeServiceCallback_FWD_DEFINED__
-typedef interface IVisualTreeServiceCallback IVisualTreeServiceCallback;
-
-#endif 	/* __IVisualTreeServiceCallback_FWD_DEFINED__ */
-
-
-#ifndef __IVisualTreeServiceCallback2_FWD_DEFINED__
-#define __IVisualTreeServiceCallback2_FWD_DEFINED__
-typedef interface IVisualTreeServiceCallback2 IVisualTreeServiceCallback2;
-
-#endif 	/* __IVisualTreeServiceCallback2_FWD_DEFINED__ */
-
-
-#ifndef __IVisualTreeService_FWD_DEFINED__
-#define __IVisualTreeService_FWD_DEFINED__
-typedef interface IVisualTreeService IVisualTreeService;
-
-#endif 	/* __IVisualTreeService_FWD_DEFINED__ */
-
-
-#ifndef __IXamlDiagnostics_FWD_DEFINED__
-#define __IXamlDiagnostics_FWD_DEFINED__
-typedef interface IXamlDiagnostics IXamlDiagnostics;
-
-#endif 	/* __IXamlDiagnostics_FWD_DEFINED__ */
-
-
-#ifndef __IBitmapData_FWD_DEFINED__
-#define __IBitmapData_FWD_DEFINED__
-typedef interface IBitmapData IBitmapData;
-
-#endif 	/* __IBitmapData_FWD_DEFINED__ */
-
-
-#ifndef __IVisualTreeService2_FWD_DEFINED__
-#define __IVisualTreeService2_FWD_DEFINED__
-typedef interface IVisualTreeService2 IVisualTreeService2;
-
-#endif 	/* __IVisualTreeService2_FWD_DEFINED__ */
-
-
-#ifndef __IVisualTreeService3_FWD_DEFINED__
-#define __IVisualTreeService3_FWD_DEFINED__
-typedef interface IVisualTreeService3 IVisualTreeService3;
-
-#endif 	/* __IVisualTreeService3_FWD_DEFINED__ */
-
-/* header files for imported files */
-#include <oaidl.h>
-#include <ocidl.h>
-#include <inspectable.h>
-#include <dxgi1_2.h>
-
-#ifdef __cplusplus
-extern "C"{
-#endif 
-
-
-/* interface __MIDL_itf_xamlom_0000_0000 */
-/* [local] */ 
-
-#pragma region Application Family
-#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
-// #pragma warning(push)
-// #pragma warning(disable:4668) 
-// #pragma warning(disable:4001) 
-// #pragma once
-// #pragma warning(pop)
-// Win32 API definitions
-#define E_NOTFOUND HRESULT_FROM_WIN32(ERROR_NOT_FOUND)
-#define E_UNKNOWNTYPE MAKE_HRESULT(SEVERITY_ERROR, FACILITY_XAML, 40L)
-_Check_return_ HRESULT InitializeXamlDiagnostic(_In_ LPCWSTR endPointName, _In_ DWORD pid, _In_ LPCWSTR wszDllXamlDiagnostics, _In_ LPCWSTR wszTAPDllName,  _In_ CLSID tapClsid);
-_Check_return_ HRESULT InitializeXamlDiagnosticsEx(_In_ LPCWSTR endPointName, _In_ DWORD pid, _In_ LPCWSTR wszDllXamlDiagnostics, _In_ LPCWSTR wszTAPDllName, _In_ CLSID tapClsid, _In_ LPCWSTR wszInitializationData);
-typedef MIDL_uhyper InstanceHandle;
-
-typedef 
-enum VisualMutationType
-    {
-        Add	= 0,
-        Remove	= ( Add + 1 ) 
-    } 	VisualMutationType;
-
-typedef 
-enum BaseValueSource
-    {
-        BaseValueSourceUnknown	= 0,
-        BaseValueSourceDefault	= ( BaseValueSourceUnknown + 1 ) ,
-        BaseValueSourceBuiltInStyle	= ( BaseValueSourceDefault + 1 ) ,
-        BaseValueSourceStyle	= ( BaseValueSourceBuiltInStyle + 1 ) ,
-        BaseValueSourceLocal	= ( BaseValueSourceStyle + 1 ) ,
-        Inherited	= ( BaseValueSourceLocal + 1 ) ,
-        DefaultStyleTrigger	= ( Inherited + 1 ) ,
-        TemplateTrigger	= ( DefaultStyleTrigger + 1 ) ,
-        StyleTrigger	= ( TemplateTrigger + 1 ) ,
-        ImplicitStyleReference	= ( StyleTrigger + 1 ) ,
-        ParentTemplate	= ( ImplicitStyleReference + 1 ) ,
-        ParentTemplateTrigger	= ( ParentTemplate + 1 ) ,
-        Animation	= ( ParentTemplateTrigger + 1 ) ,
-        Coercion	= ( Animation + 1 ) ,
-        BaseValueSourceVisualState	= ( Coercion + 1 ) 
-    } 	BaseValueSource;
-
-typedef struct SourceInfo
-    {
-    BSTR FileName;
-    unsigned int LineNumber;
-    unsigned int ColumnNumber;
-    unsigned int CharPosition;
-    BSTR Hash;
-    } 	SourceInfo;
-
-typedef struct ParentChildRelation
-    {
-    InstanceHandle Parent;
-    InstanceHandle Child;
-    unsigned int ChildIndex;
-    } 	ParentChildRelation;
-
-typedef struct VisualElement
-    {
-    InstanceHandle Handle;
-    SourceInfo SrcInfo;
-    BSTR Type;
-    BSTR Name;
-    unsigned int NumChildren;
-    } 	VisualElement;
-
-typedef struct PropertyChainSource
-    {
-    InstanceHandle Handle;
-    BSTR TargetType;
-    BSTR Name;
-    BaseValueSource Source;
-    SourceInfo SrcInfo;
-    } 	PropertyChainSource;
-
-typedef 
-enum MetadataBit
-    {
-        None	= 0,
-        IsValueHandle	= 0x1,
-        IsPropertyReadOnly	= 0x2,
-        IsValueCollection	= 0x4,
-        IsValueCollectionReadOnly	= 0x8,
-        IsValueBindingExpression	= 0x10,
-        IsValueNull	= 0x20,
-        IsValueHandleAndEvaluatedValue	= 0x40
-    } 	MetadataBit;
-
-typedef struct PropertyChainValue
-    {
-    unsigned int Index;
-    BSTR Type;
-    BSTR DeclaringType;
-    BSTR ValueType;
-    BSTR ItemType;
-    BSTR Value;
-    BOOL Overridden;
-    hyper MetadataBits;
-    BSTR PropertyName;
-    unsigned int PropertyChainIndex;
-    } 	PropertyChainValue;
-
-typedef struct EnumType
-    {
-    BSTR Name;
-    SAFEARRAY * ValueInts;
-    SAFEARRAY * ValueStrings;
-    } 	EnumType;
-
-typedef struct CollectionElementValue
-    {
-    unsigned int Index;
-    BSTR ValueType;
-    BSTR Value;
-    hyper MetadataBits;
-    } 	CollectionElementValue;
-
-typedef 
-enum RenderTargetBitmapOptions
-    {
-        RenderTarget	= 0,
-        RenderTargetAndChildren	= ( RenderTarget + 1 ) 
-    } 	RenderTargetBitmapOptions;
-
-typedef struct BitmapDescription
-    {
-    unsigned int Width;
-    unsigned int Height;
-    DXGI_FORMAT Format;
-    DXGI_ALPHA_MODE AlphaMode;
-    } 	BitmapDescription;
-
-typedef 
-enum ResourceType
-    {
-        ResourceTypeStatic	= 0,
-        ResourceTypeTheme	= ( ResourceTypeStatic + 1 ) 
-    } 	ResourceType;
-
-typedef 
-enum VisualElementState
-    {
-        ErrorResolved	= 0,
-        ErrorResourceNotFound	= ( ErrorResolved + 1 ) ,
-        ErrorInvalidResource	= ( ErrorResourceNotFound + 1 ) 
-    } 	VisualElementState;
-
-
-
-extern RPC_IF_HANDLE __MIDL_itf_xamlom_0000_0000_v0_0_c_ifspec;
-extern RPC_IF_HANDLE __MIDL_itf_xamlom_0000_0000_v0_0_s_ifspec;
-
-#ifndef __IVisualTreeServiceCallback_INTERFACE_DEFINED__
-#define __IVisualTreeServiceCallback_INTERFACE_DEFINED__
-
-/* interface IVisualTreeServiceCallback */
-/* [unique][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IVisualTreeServiceCallback;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IVisualTreeServiceCallback, 0xAA7A8931, 0x80E4, 0x4FEC, 0x8F, 0x3B, 0x55, 0x3F, 0x87, 0xB4, 0x96, 0x6E);
-    #endif
-
-    MIDL_INTERFACE("AA7A8931-80E4-4FEC-8F3B-553F87B4966E")
-    IVisualTreeServiceCallback : public IUnknown
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE OnVisualTreeChange( 
-            /* [in] */ ParentChildRelation relation,
-            /* [in] */ VisualElement element,
-            /* [in] */ VisualMutationType mutationType) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IVisualTreeServiceCallback_INTERFACE_DEFINED__ */
-
-
-#ifndef __IVisualTreeServiceCallback2_INTERFACE_DEFINED__
-#define __IVisualTreeServiceCallback2_INTERFACE_DEFINED__
-
-/* interface IVisualTreeServiceCallback2 */
-/* [unique][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IVisualTreeServiceCallback2;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IVisualTreeServiceCallback2, 0xBAD9EB88, 0xAE77, 0x4397, 0xB9, 0x48, 0x5F, 0xA2, 0xDB, 0x0A, 0x19, 0xEA);
-    #endif
-
-    MIDL_INTERFACE("BAD9EB88-AE77-4397-B948-5FA2DB0A19EA")
-    IVisualTreeServiceCallback2 : public IVisualTreeServiceCallback
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE OnElementStateChanged( 
-            /* [in] */ InstanceHandle element,
-            /* [in] */ VisualElementState elementState,
-            /* [in] */ __RPC__in LPCWSTR context) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IVisualTreeServiceCallback2_INTERFACE_DEFINED__ */
-
-
-#ifndef __IVisualTreeService_INTERFACE_DEFINED__
-#define __IVisualTreeService_INTERFACE_DEFINED__
-
-/* interface IVisualTreeService */
-/* [unique][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IVisualTreeService;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IVisualTreeService, 0xA593B11A, 0xD17F, 0x48BB, 0x8F, 0x66, 0x83, 0x91, 0x07, 0x31, 0xC8, 0xA5);
-    #endif
-
-    MIDL_INTERFACE("A593B11A-D17F-48BB-8F66-83910731C8A5")
-    IVisualTreeService : public IUnknown
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE AdviseVisualTreeChange( 
-            /* [in] */ __RPC__in_opt IVisualTreeServiceCallback *pCallback) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE UnadviseVisualTreeChange( 
-            /* [in] */ __RPC__in_opt IVisualTreeServiceCallback *pCallback) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetEnums( 
-            /* [out] */ __RPC__out unsigned int *pCount,
-            /* [size_is][size_is][out] */ __RPC__deref_out_ecount_full_opt(*pCount) EnumType **ppEnums) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE CreateInstance( 
-            /* [in] */ __RPC__in BSTR typeName,
-            /* [in] */ __RPC__in BSTR value,
-            /* [retval][out] */ __RPC__out InstanceHandle *pInstanceHandle) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetPropertyValuesChain( 
-            /* [in] */ InstanceHandle instanceHandle,
-            /* [out] */ __RPC__out unsigned int *pSourceCount,
-            /* [size_is][size_is][out] */ __RPC__deref_out_ecount_full_opt(*pSourceCount) PropertyChainSource **ppPropertySources,
-            /* [out] */ __RPC__out unsigned int *pPropertyCount,
-            /* [size_is][size_is][out] */ __RPC__deref_out_ecount_full_opt(*pPropertyCount) PropertyChainValue **ppPropertyValues) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE SetProperty( 
-            /* [in] */ InstanceHandle instanceHandle,
-            /* [in] */ InstanceHandle value,
-            /* [in] */ unsigned int propertyIndex) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE ClearProperty( 
-            /* [in] */ InstanceHandle instanceHandle,
-            /* [in] */ unsigned int propertyIndex) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetCollectionCount( 
-            /* [in] */ InstanceHandle instanceHandle,
-            /* [out] */ __RPC__out unsigned int *pCollectionSize) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetCollectionElements( 
-            /* [in] */ InstanceHandle instanceHandle,
-            /* [in] */ unsigned int startIndex,
-            /* [out][in] */ __RPC__inout unsigned int *pElementCount,
-            /* [size_is][size_is][out] */ __RPC__deref_out_ecount_full_opt(*pElementCount) CollectionElementValue **ppElementValues) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE AddChild( 
-            /* [in] */ InstanceHandle parent,
-            /* [in] */ InstanceHandle child,
-            /* [in] */ unsigned int index) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE RemoveChild( 
-            /* [in] */ InstanceHandle parent,
-            /* [in] */ unsigned int index) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE ClearChildren( 
-            /* [in] */ InstanceHandle parent) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IVisualTreeService_INTERFACE_DEFINED__ */
-
-
-#ifndef __IXamlDiagnostics_INTERFACE_DEFINED__
-#define __IXamlDiagnostics_INTERFACE_DEFINED__
-
-/* interface IXamlDiagnostics */
-/* [unique][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IXamlDiagnostics;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IXamlDiagnostics, 0x18C9E2B6, 0x3F43, 0x4116, 0x9F, 0x2B, 0xFF, 0x93, 0x5D, 0x77, 0x70, 0xD2);
-    #endif
-
-    MIDL_INTERFACE("18C9E2B6-3F43-4116-9F2B-FF935D7770D2")
-    IXamlDiagnostics : public IUnknown
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE GetDispatcher( 
-            /* [retval][out] */ __RPC__deref_out_opt IInspectable **ppDispatcher) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetUiLayer( 
-            /* [retval][out] */ __RPC__deref_out_opt IInspectable **ppLayer) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetApplication( 
-            /* [retval][out] */ __RPC__deref_out_opt IInspectable **ppApplication) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetIInspectableFromHandle( 
-            /* [in] */ InstanceHandle instanceHandle,
-            /* [retval][out] */ __RPC__deref_out_opt IInspectable **ppInstance) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetHandleFromIInspectable( 
-            /* [in] */ __RPC__in_opt IInspectable *pInstance,
-            /* [retval][out] */ __RPC__out InstanceHandle *pHandle) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE HitTest( 
-            /* [in] */ RECT rect,
-            /* [out] */ __RPC__out unsigned int *pCount,
-            /* [size_is][size_is][out] */ __RPC__deref_out_ecount_full_opt(*pCount) InstanceHandle **ppInstanceHandles) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE RegisterInstance( 
-            /* [in] */ __RPC__in_opt IInspectable *pInstance,
-            /* [retval][out] */ __RPC__out InstanceHandle *pInstanceHandle) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetInitializationData( 
-            /* [retval][out] */ __RPC__deref_out_opt BSTR *pInitializationData) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IXamlDiagnostics_INTERFACE_DEFINED__ */
-
-
-#ifndef __IBitmapData_INTERFACE_DEFINED__
-#define __IBitmapData_INTERFACE_DEFINED__
-
-/* interface IBitmapData */
-/* [unique][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IBitmapData;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IBitmapData, 0xd1a34ef2, 0xcad8, 0x4635, 0xa3, 0xd2, 0xfc, 0xda, 0x8d, 0x3f, 0x3c, 0xaf);
-    #endif
-
-    MIDL_INTERFACE("d1a34ef2-cad8-4635-a3d2-fcda8d3f3caf")
-    IBitmapData : public IUnknown
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE CopyBytesTo( 
-            /* [in] */ unsigned int sourceOffsetInBytes,
-            /* [in] */ unsigned int maxBytesToCopy,
-            /* [size_is][out] */ __RPC__out_ecount_full(maxBytesToCopy) byte *pvBytes,
-            /* [out] */ __RPC__out unsigned int *numberOfBytesCopied) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetStride( 
-            /* [out] */ __RPC__out unsigned int *pStride) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetBitmapDescription( 
-            /* [out] */ __RPC__out BitmapDescription *pBitmapDescription) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetSourceBitmapDescription( 
-            /* [out] */ __RPC__out BitmapDescription *pBitmapDescription) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IBitmapData_INTERFACE_DEFINED__ */
-
-
-#ifndef __IVisualTreeService2_INTERFACE_DEFINED__
-#define __IVisualTreeService2_INTERFACE_DEFINED__
-
-/* interface IVisualTreeService2 */
-/* [unique][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IVisualTreeService2;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IVisualTreeService2, 0x130F5136, 0xEC43, 0x4F61, 0x89, 0xC7, 0x98, 0x01, 0xA3, 0x6D, 0x2E, 0x95);
-    #endif
-
-    MIDL_INTERFACE("130F5136-EC43-4F61-89C7-9801A36D2E95")
-    IVisualTreeService2 : public IVisualTreeService
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE GetPropertyIndex( 
-            /* [in] */ InstanceHandle object,
-            /* [in] */ __RPC__in LPCWSTR propertyName,
-            /* [out] */ __RPC__out unsigned int *pPropertyIndex) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetProperty( 
-            /* [in] */ InstanceHandle object,
-            /* [in] */ unsigned int propertyIndex,
-            /* [out] */ __RPC__out InstanceHandle *pValue) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE ReplaceResource( 
-            /* [in] */ InstanceHandle resourceDictionary,
-            /* [in] */ InstanceHandle key,
-            /* [in] */ InstanceHandle newValue) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE RenderTargetBitmap( 
-            /* [in] */ InstanceHandle handle,
-            /* [in] */ RenderTargetBitmapOptions options,
-            /* [in] */ unsigned int maxPixelWidth,
-            /* [in] */ unsigned int maxPixelHeight,
-            /* [out] */ __RPC__deref_out_opt IBitmapData **ppBitmapData) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IVisualTreeService2_INTERFACE_DEFINED__ */
-
-
-#ifndef __IVisualTreeService3_INTERFACE_DEFINED__
-#define __IVisualTreeService3_INTERFACE_DEFINED__
-
-/* interface IVisualTreeService3 */
-/* [unique][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IVisualTreeService3;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IVisualTreeService3, 0x0E79C6E0, 0x85A0, 0x4BE8, 0xB4, 0x1A, 0x65, 0x5C, 0xF1, 0xFD, 0x19, 0xBD);
-    #endif
-
-    MIDL_INTERFACE("0E79C6E0-85A0-4BE8-B41A-655CF1FD19BD")
-    IVisualTreeService3 : public IVisualTreeService2
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE ResolveResource( 
-            /* [in] */ InstanceHandle resourceContext,
-            /* [in] */ __RPC__in LPCWSTR resourceName,
-            /* [in] */ ResourceType resourceType,
-            /* [in] */ unsigned int propertyIndex) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE GetDictionaryItem( 
-            /* [in] */ InstanceHandle dictionaryHandle,
-            /* [in] */ __RPC__in LPCWSTR resourceName,
-            /* [in] */ BOOL resourceIsImplicitStyle,
-            /* [out] */ __RPC__out InstanceHandle *resourceHandle) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE AddDictionaryItem( 
-            /* [in] */ InstanceHandle dictionaryHandle,
-            /* [in] */ InstanceHandle resourceKey,
-            /* [in] */ InstanceHandle resourceHandle) = 0;
-        
-        virtual HRESULT STDMETHODCALLTYPE RemoveDictionaryItem( 
-            /* [in] */ InstanceHandle dictionaryHandle,
-            /* [in] */ InstanceHandle resourceKey) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IVisualTreeService3_INTERFACE_DEFINED__ */
-
-
-/* interface __MIDL_itf_xamlom_0000_0007 */
-/* [local] */ 
-
-#endif /* WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP) */ 
-#pragma endregion
-
-
-extern RPC_IF_HANDLE __MIDL_itf_xamlom_0000_0007_v0_0_c_ifspec;
-extern RPC_IF_HANDLE __MIDL_itf_xamlom_0000_0007_v0_0_s_ifspec;
-
-/* Additional Prototypes for ALL interfaces */
-
-unsigned long             __RPC_USER  BSTR_UserSize(     __RPC__in unsigned long *, unsigned long            , __RPC__in BSTR * ); 
-unsigned char * __RPC_USER  BSTR_UserMarshal(  __RPC__in unsigned long *, __RPC__inout_xcount(0) unsigned char *, __RPC__in BSTR * ); 
-unsigned char * __RPC_USER  BSTR_UserUnmarshal(__RPC__in unsigned long *, __RPC__in_xcount(0) unsigned char *, __RPC__out BSTR * ); 
-void                      __RPC_USER  BSTR_UserFree(     __RPC__in unsigned long *, __RPC__in BSTR * ); 
-
-unsigned long             __RPC_USER  LPSAFEARRAY_UserSize(     __RPC__in unsigned long *, unsigned long            , __RPC__in LPSAFEARRAY * ); 
-unsigned char * __RPC_USER  LPSAFEARRAY_UserMarshal(  __RPC__in unsigned long *, __RPC__inout_xcount(0) unsigned char *, __RPC__in LPSAFEARRAY * ); 
-unsigned char * __RPC_USER  LPSAFEARRAY_UserUnmarshal(__RPC__in unsigned long *, __RPC__in_xcount(0) unsigned char *, __RPC__out LPSAFEARRAY * ); 
-void                      __RPC_USER  LPSAFEARRAY_UserFree(     __RPC__in unsigned long *, __RPC__in LPSAFEARRAY * ); 
-
-unsigned long             __RPC_USER  BSTR_UserSize64(     __RPC__in unsigned long *, unsigned long            , __RPC__in BSTR * ); 
-unsigned char * __RPC_USER  BSTR_UserMarshal64(  __RPC__in unsigned long *, __RPC__inout_xcount(0) unsigned char *, __RPC__in BSTR * ); 
-unsigned char * __RPC_USER  BSTR_UserUnmarshal64(__RPC__in unsigned long *, __RPC__in_xcount(0) unsigned char *, __RPC__out BSTR * ); 
-void                      __RPC_USER  BSTR_UserFree64(     __RPC__in unsigned long *, __RPC__in BSTR * ); 
-
-unsigned long             __RPC_USER  LPSAFEARRAY_UserSize64(     __RPC__in unsigned long *, unsigned long            , __RPC__in LPSAFEARRAY * ); 
-unsigned char * __RPC_USER  LPSAFEARRAY_UserMarshal64(  __RPC__in unsigned long *, __RPC__inout_xcount(0) unsigned char *, __RPC__in LPSAFEARRAY * ); 
-unsigned char * __RPC_USER  LPSAFEARRAY_UserUnmarshal64(__RPC__in unsigned long *, __RPC__in_xcount(0) unsigned char *, __RPC__out LPSAFEARRAY * ); 
-void                      __RPC_USER  LPSAFEARRAY_UserFree64(     __RPC__in unsigned long *, __RPC__in LPSAFEARRAY * ); 
-
-/* end of Additional Prototypes */
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif
-
-#pragma endregion  // xamlOM_h
-
-#pragma region windows_ui_xaml_hosting_desktopwindowxamlsource_h
-
-/* this ALWAYS GENERATED file contains the definitions for the interfaces */
-
-
- /* File created by MIDL compiler version 8.01.0622 */
-/* @@MIDL_FILE_HEADING(  ) */
-
-
-
-/* verify that the <rpcndr.h> version is high enough to compile this file*/
-#ifndef __REQUIRED_RPCNDR_H_VERSION__
-#define __REQUIRED_RPCNDR_H_VERSION__ 500
-#endif
-
-/* verify that the <rpcsal.h> version is high enough to compile this file*/
-#ifndef __REQUIRED_RPCSAL_H_VERSION__
-#define __REQUIRED_RPCSAL_H_VERSION__ 100
-#endif
-
-#include <rpc.h>
-#include <rpcndr.h>
-
-#ifndef __RPCNDR_H_VERSION__
-#error this stub requires an updated version of <rpcndr.h>
-#endif /* __RPCNDR_H_VERSION__ */
-
-#ifndef COM_NO_WINDOWS_H
-#include <windows.h>
-#include <ole2.h>
-#endif /*COM_NO_WINDOWS_H*/
-
-#ifndef __windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_h__
-#define __windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_h__
-
-#if defined(_MSC_VER) && (_MSC_VER >= 1020)
-// #pragma once
-#endif
-
-/* Forward Declarations */ 
-
-#ifndef __IDesktopWindowXamlSourceNative_FWD_DEFINED__
-#define __IDesktopWindowXamlSourceNative_FWD_DEFINED__
-typedef interface IDesktopWindowXamlSourceNative IDesktopWindowXamlSourceNative;
-
-#endif 	/* __IDesktopWindowXamlSourceNative_FWD_DEFINED__ */
-
-
-#ifndef __IDesktopWindowXamlSourceNative2_FWD_DEFINED__
-#define __IDesktopWindowXamlSourceNative2_FWD_DEFINED__
-typedef interface IDesktopWindowXamlSourceNative2 IDesktopWindowXamlSourceNative2;
-
-#endif 	/* __IDesktopWindowXamlSourceNative2_FWD_DEFINED__ */
-
-
-/* header files for imported files */
-#include <oaidl.h>
-
-#ifdef __cplusplus
-extern "C"{
-#endif 
-
-
-/* interface __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0000 */
-/* [local] */ 
-
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS5)
-
-
-extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0000_v0_0_c_ifspec;
-extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0000_v0_0_s_ifspec;
-
-#ifndef __IDesktopWindowXamlSourceNative_INTERFACE_DEFINED__
-#define __IDesktopWindowXamlSourceNative_INTERFACE_DEFINED__
-
-/* interface IDesktopWindowXamlSourceNative */
-/* [unique][local][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IDesktopWindowXamlSourceNative;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IDesktopWindowXamlSourceNative, 0x3cbcf1bf, 0x2f76, 0x4e9c, 0x96, 0xab, 0xe8, 0x4b, 0x37, 0x97, 0x25, 0x54);
-    #endif
-
-    MIDL_INTERFACE("3cbcf1bf-2f76-4e9c-96ab-e84b37972554")
-    IDesktopWindowXamlSourceNative : public IUnknown
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE AttachToWindow( 
-            /* [annotation][in] */ 
-            _In_  HWND parentWnd) = 0;
-        
-        virtual /* [propget] */ HRESULT STDMETHODCALLTYPE get_WindowHandle( 
-            /* [retval][out] */ HWND *hWnd) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IDesktopWindowXamlSourceNative_INTERFACE_DEFINED__ */
-
-
-/* interface __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0001 */
-/* [local] */ 
-
-#endif // NTDDI_VERSION >= NTDDI_WIN10_RS5
-#if (NTDDI_VERSION >= NTDDI_WIN10_19H1)
-
-
-extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0001_v0_0_c_ifspec;
-extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0001_v0_0_s_ifspec;
-
-#ifndef __IDesktopWindowXamlSourceNative2_INTERFACE_DEFINED__
-#define __IDesktopWindowXamlSourceNative2_INTERFACE_DEFINED__
-
-/* interface IDesktopWindowXamlSourceNative2 */
-/* [unique][local][uuid][object] */ 
-
-
-EXTERN_C const IID IID_IDesktopWindowXamlSourceNative2;
-
-#if defined(__cplusplus) && !defined(CINTERFACE)
-    
-    #ifdef __CRT_UUID_DECL
-    __CRT_UUID_DECL(IDesktopWindowXamlSourceNative2, 0xe3dcd8c7, 0x3057, 0x4692, 0x99, 0xc3, 0x7b, 0x77, 0x20, 0xaf, 0xda, 0x31);
-    #endif
-
-    MIDL_INTERFACE("e3dcd8c7-3057-4692-99c3-7b7720afda31")
-    IDesktopWindowXamlSourceNative2 : public IDesktopWindowXamlSourceNative
-    {
-    public:
-        virtual HRESULT STDMETHODCALLTYPE PreTranslateMessage( 
-            /* [annotation][in] */ 
-            _In_  const MSG *message,
-            /* [retval][out] */ BOOL *result) = 0;
-        
-    };
-    
-    
-#else 	/* C style interface */
-#error Only C++ style interface is supported
-#endif 	/* C style interface */
-
-
-
-
-#endif 	/* __IDesktopWindowXamlSourceNative2_INTERFACE_DEFINED__ */
-
-
-/* interface __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0002 */
-/* [local] */ 
-
-#endif // NTDDI_VERSION >= NTDDI_WIN10_19H1
-
-
-extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0002_v0_0_c_ifspec;
-extern RPC_IF_HANDLE __MIDL_itf_windows2Eui2Examl2Ehosting2Edesktopwindowxamlsource_0000_0002_v0_0_s_ifspec;
-
-/* Additional Prototypes for ALL interfaces */
-
-/* end of Additional Prototypes */
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif
-
-#pragma endregion  // windows_ui_xaml_hosting_desktopwindowxamlsource_h
-
-// clang-format on
-////////////////////////////////////////////////////////////////////////////////
+#include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
+#include <xamlom.h>
 
 #include <atomic>
 #include <vector>
@@ -1133,66 +211,141 @@ cpp_output = json_to_cpp(json_input)
 print(cpp_output)
 */
 
-const Theme g_themeWinXP = {{
+const Theme g_themeNoRecommendedSection = {{
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions",
+                      {L"Visibility=Collapsed"}},
     ThemeTargetStyles{
-        L"Rectangle#BackgroundStroke",
-        {L"Fill:=<LinearGradientBrush StartPoint=\"0.5,0\" EndPoint=\"0.5,1\"> "
-         L"<GradientStop Color=\"#3168d5\" Offset=\"0.0\" /> <GradientStop "
-         L"Color=\"#4993E6\" Offset=\"0.1\" /> <GradientStop Color=\"#2157D7\" "
-         L"Offset=\"0.35\" /> <GradientStop Color=\"#2663E0\" Offset=\"0.8\" "
-         L"/> <GradientStop Color=\"#1941A5\" Offset=\"1.0\" "
-         L"/></LinearGradientBrush>",
-         L"VerticalAlignment=Stretch", L"Height=Auto"}},
-    ThemeTargetStyles{L"Taskbar.ExperienceToggleButton#LaunchListButton["
-                      L"AutomationProperties.AutomationId=StartButton]",
-                      {L"CornerRadius=0"}},
-    ThemeTargetStyles{
-        L"Taskbar.ExperienceToggleButton#LaunchListButton[AutomationProperties."
-        L"AutomationId=StartButton] > Taskbar.TaskListButtonPanel",
-        {L"Padding=0",
-         L"Background:=<LinearGradientBrush StartPoint=\"0.5,0\" "
-         L"EndPoint=\"0.5,1\"> <GradientStop Color=\"#388238\" Offset=\"0.0\" "
-         L"/> <GradientStop Color=\"#71B571\" Offset=\"0.1\" /> <GradientStop "
-         L"Color=\"#71B571\" Offset=\"0.35\" /> <GradientStop "
-         L"Color=\"#47AA47\" Offset=\"0.8\" /> <GradientStop Color=\"#307443\" "
-         L"Offset=\"1.0\" /></LinearGradientBrush>"}},
-    ThemeTargetStyles{L"Taskbar.ExperienceToggleButton#LaunchListButton["
-                      L"AutomationProperties.AutomationId=StartButton] > "
-                      L"Taskbar.TaskListButtonPanel > Border#BackgroundElement",
-                      {L"Background:=<ImageBrush Stretch=\"None\" "
-                       L"ImageSource=\"https://i.imgur.com/BvXJlkj.png\" />"}},
-    ThemeTargetStyles{
-        L"Taskbar.ExperienceToggleButton#LaunchListButton[AutomationProperties."
-        L"AutomationId=StartButton] > Taskbar.TaskListButtonPanel > "
-        L"Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer#Icon",
+        L"Windows.UI.Xaml.Controls.Grid#SuggestionsParentContainer",
         {L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"TextBlock#LabelControl", {L"Foreground=White"}},
-    ThemeTargetStyles{L"Rectangle#RunningIndicator", {L"Visibility=Collapsed"}},
-    ThemeTargetStyles{L"TextBlock#TimeInnerTextBlock", {L"Foreground=White"}},
-    ThemeTargetStyles{L"TextBlock#DateInnerTextBlock", {L"Foreground=White"}},
-    ThemeTargetStyles{L"SystemTray.TextIconContent > Grid > "
-                      L"SystemTray.AdaptiveTextBlock#Base > TextBlock",
-                      {L"Foreground=White"}},
     ThemeTargetStyles{
-        L"Taskbar.TaskListLabeledButtonPanel@RunningIndicatorStates > "
-        L"Border#BackgroundElement",
-        {L"Background@NoRunningIndicator=Transparent",
-         L"Background@ActiveRunningIndicator:=<LinearGradientBrush "
-         L"StartPoint=\"0.5,0\" EndPoint=\"0.5,1\"> <GradientStop "
-         L"Color=\"#1B67D7\" Offset=\"0.0\" /> <GradientStop Color=\"#1542A8\" "
-         L"Offset=\"0.1\" /> <GradientStop Color=\"#1951BA\" Offset=\"0.15\" "
-         L"/> <GradientStop Color=\"#1951BA\" Offset=\"0.95\" /> <GradientStop "
-         L"Color=\"#1542A8\" Offset=\"1.0\" /></LinearGradientBrush>",
-         L"Background:=<LinearGradientBrush StartPoint=\"0.5,0\" "
-         L"EndPoint=\"0.5,1\"> <GradientStop Color=\"#3358B5\" Offset=\"0.0\" "
-         L"/> <GradientStop Color=\"#8AC4FD\" Offset=\"0.1\" /> <GradientStop "
-         L"Color=\"#56A3FF\" Offset=\"0.2\" /> <GradientStop Color=\"#56A3FF\" "
-         L"Offset=\"0.85\" /> <GradientStop Color=\"#378DF6\" Offset=\"0.9\" "
-         L"/> <GradientStop Color=\"#163E95\" Offset=\"1.0\" "
-         L"/></LinearGradientBrush>",
-         L"BorderThickness=1", L"BorderBrush@NoRunningIndicator=Transparent",
-         L"BorderBrush@ActiveRunningIndicator=#1B67D7",
-         L"BorderBrush=#3358B5"}},
+        L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader",
+        {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList", {L"Height=504"}},
+}};
+
+// Author: kaoshipaws (https://k4oshi.top/)
+const Theme g_themeSideBySide = {{
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#UndockedRoot",
+        {L"Visibility=Visible", L"MaxWidth=700", L"Margin=0,0,300,0"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#AllAppsRoot",
+        {L"Visibility=Visible", L"Width=350",
+         L"Transform3D:=<CompositeTransform3D TranslateX=\"-602\" />"}},
+    ThemeTargetStyles{
+        L"StartDocked.AllAppsGridListView > ScrollViewer > Border > Grid > "
+        L"ScrollContentPresenter > ItemsPresenter > TileGrid",
+        {L"Transform3D:=<CompositeTransform3D TranslateX=\"20\" />"}},
+    ThemeTargetStyles{
+        L"Grid#AllAppsPaneHeader",
+        {L"Transform3D:=<CompositeTransform3D TranslateX=\"20\" />"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame",
+                      {L"MinWidth=850", L"MaxWidth=850"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.ContentControl",
+        {L"Transform3D:=<CompositeTransform3D TranslateX=\"-200\" />"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.GridView#RecommendedList > "
+        L"Windows.UI.Xaml.Controls.Border > "
+        L"Windows.UI.Xaml.Controls.ScrollViewer#ScrollViewer > "
+        L"Windows.UI.Xaml.Controls.Border#Root > Windows.UI.Xaml.Controls.Grid "
+        L"> "
+        L"Windows.UI.Xaml.Controls.ScrollContentPresenter#"
+        L"ScrollContentPresenter > Windows.UI.Xaml.Controls.ItemsPresenter > "
+        L"Windows.UI.Xaml.Controls.ItemsWrapGrid > "
+        L"Windows.UI.Xaml.Controls.GridViewItem",
+        {L"MaxWidth=220", L"MinWidth=100"}},
+}};
+
+// Author: Pyxisynth
+const Theme g_themeSideBySide2 = {{
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#UndockedRoot",
+        {L"Visibility=Visible", L"MaxWidth=700", L"Margin=232,0,0,0"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#AllAppsRoot",
+        {L"Visibility=Visible", L"Width=322",
+         L"Transform3D:=<CompositeTransform3D TranslateX=\"-1059\" />"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame",
+                      {L"MinWidth=776", L"MaxWidth=776"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.GridView#RecommendedList > "
+        L"Windows.UI.Xaml.Controls.Border > "
+        L"Windows.UI.Xaml.Controls.ScrollViewer#ScrollViewer > "
+        L"Windows.UI.Xaml.Controls.Border#Root > Windows.UI.Xaml.Controls.Grid "
+        L"> "
+        L"Windows.UI.Xaml.Controls.ScrollContentPresenter#"
+        L"ScrollContentPresenter > Windows.UI.Xaml.Controls.ItemsPresenter > "
+        L"Windows.UI.Xaml.Controls.ItemsWrapGrid > "
+        L"Windows.UI.Xaml.Controls.GridViewItem",
+        {L"MaxWidth=220", L"MinWidth=220"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsGridListView#AppsList",
+                      {L"Padding=48,3,-36,32"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AllAppsPaneHeader",
+                      {L"Margin=97,0,0,0"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#SuggestionsParentContainer",
+        {L"Height=168"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#NavigationPane",
+                      {L"FlowDirection=1", L"Margin=30,0,30,0"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView#PowerButton",
+                      {L"FlowDirection=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ItemsStackPanel",
+                      {L"FlowDirection=1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListViewItem",
+                      {L"FlowDirection=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ItemsStackPanel > "
+                      L"Windows.UI.Xaml.Controls.ListViewItem",
+                      {L"FlowDirection=0"}},
+    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton#StartMenuSearchBox",
+                      {L"Margin=23,1,23,14"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.TextBlock#NoSuggestionsWithoutSettingsLink",
+        {L"Margin=11,0,48,0"}},
+}};
+
+// Author: Windows XP (6.1.7601)
+const Theme g_themeSideBySideMinimal = {{
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#UndockedRoot",
+        {L"Visibility=Visible", L"Width=348",
+         L"Transform3D:=<CompositeTransform3D TranslateX=\"178\" />",
+         L"Margin=-80,-20,0,0", L"Padding=0,0,0,0"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#AllAppsRoot",
+        {L"Visibility=Visible", L"Width=320",
+         L"Transform3D:=<CompositeTransform3D TranslateX=\"-800\" />",
+         L"Margin=-30,-20,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#SuggestionsParentContainer",
+        {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{
+        L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsListHeader",
+        {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.SearchBoxToggleButton",
+                      {L"Height=0", L"Width=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelRoot > "
+                      L"Windows.UI.Xaml.Controls.Border",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView", {L"Margin=-575,0,0,0"}},
+    ThemeTargetStyles{L"StartDocked.UserTileView", {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList", {L"Height=504"}},
 }};
 
 std::atomic<DWORD> g_targetThreadId = 0;
@@ -1215,6 +368,32 @@ HMODULE GetCurrentModuleHandle() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // clang-format off
+
+#pragma region winrt_hpp
+
+#include <guiddef.h>
+#include <Unknwn.h>
+#include <winrt/base.h>
+
+// forward declare namespaces we alias
+namespace winrt {
+    namespace Windows {
+        namespace Foundation::Collections {}
+        namespace UI::Xaml {
+            namespace Controls {}
+            namespace Hosting {}
+        }
+    }
+}
+
+// alias some long namespaces for convenience
+namespace wf = winrt::Windows::Foundation;
+// namespace wfc = wf::Collections;
+namespace wux = winrt::Windows::UI::Xaml;
+// namespace wuxc = wux::Controls;
+namespace wuxh = wux::Hosting;
+
+#pragma endregion  // winrt_hpp
 
 #pragma region visualtreewatcher_hpp
 
@@ -1520,8 +699,6 @@ HRESULT InjectWindhawkTAP() noexcept
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <windhawk_utils.h>
-
 #include <optional>
 #include <sstream>
 #include <string>
@@ -1613,8 +790,6 @@ std::unordered_map<InstanceHandle, ElementCustomizationState>
     g_elementsCustomizationState;
 
 bool g_elementPropertyModifying;
-
-bool g_inTaskbarBackground_OnApplyTemplate;
 
 // https://stackoverflow.com/a/5665377
 std::wstring EscapeXmlAttribute(std::wstring_view data) {
@@ -2294,18 +1469,12 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
 
 std::wstring AdjustTypeName(std::wstring_view type) {
     if (type.find_first_of(L".:") == type.npos) {
-        if (type == L"Rectangle") {
-            return L"Windows.UI.Xaml.Shapes.Rectangle";
-        }
-
         return L"Windows.UI.Xaml.Controls." + std::wstring{type};
     }
 
     static const std::vector<std::pair<std::wstring_view, std::wstring_view>>
         adjustments = {
-            {L"taskbar:", L"Taskbar."},
-            {L"systemtray:", L"SystemTray."},
-            {L"udk:", L"WindowsUdk.UI.Shell."},
+            {L"StartMenu:", L"StartMenu."},
             {L"muxc:", L"Microsoft.UI.Xaml.Controls."},
         };
 
@@ -2412,8 +1581,14 @@ void ProcessAllStylesFromSettings() {
 
     PCWSTR themeName = Wh_GetStringSetting(L"theme");
     const Theme* theme = nullptr;
-    if (wcscmp(themeName, L"WinXP") == 0) {
-        theme = &g_themeWinXP;
+    if (wcscmp(themeName, L"NoRecommendedSection") == 0) {
+        theme = &g_themeNoRecommendedSection;
+    } else if (wcscmp(themeName, L"SideBySide") == 0) {
+        theme = &g_themeSideBySide;
+    } else if (wcscmp(themeName, L"SideBySide2") == 0) {
+        theme = &g_themeSideBySide2;
+    } else if (wcscmp(themeName, L"SideBySideMinimal") == 0) {
+        theme = &g_themeSideBySideMinimal;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -2546,35 +1721,94 @@ void InitializeSettingsAndTap() {
     }
 }
 
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 PVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           PVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    PVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
     if (!hWnd) {
         return hWnd;
     }
 
-    WCHAR className[64];
-    if (!g_targetThreadId && hWndParent &&
-        GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className,
-                 L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 &&
-        GetClassName(hWndParent, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-        Wh_Log(L"Initializing - Created DesktopWindowContentBridge window");
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+    if (bTextualClassName &&
+        _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+        Wh_Log(L"Initializing - Created core window: %08X",
+               (DWORD)(ULONG_PTR)hWnd);
+        InitializeSettingsAndTap();
+    }
+
+    return hWnd;
+}
+
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                             LPCWSTR lpClassName,
+                                             LPCWSTR lpWindowName,
+                                             DWORD dwStyle,
+                                             int X,
+                                             int Y,
+                                             int nWidth,
+                                             int nHeight,
+                                             HWND hWndParent,
+                                             HMENU hMenu,
+                                             HINSTANCE hInstance,
+                                             PVOID lpParam,
+                                             DWORD dwBand,
+                                             DWORD dwTypeFlags);
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
+                                      LPCWSTR lpClassName,
+                                      LPCWSTR lpWindowName,
+                                      DWORD dwStyle,
+                                      int X,
+                                      int Y,
+                                      int nWidth,
+                                      int nHeight,
+                                      HWND hWndParent,
+                                      HMENU hMenu,
+                                      HINSTANCE hInstance,
+                                      PVOID lpParam,
+                                      DWORD dwBand,
+                                      DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+    if (bTextualClassName &&
+        _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+        Wh_Log(L"Initializing - Created core window: %08X",
+               (DWORD)(ULONG_PTR)hWnd);
         InitializeSettingsAndTap();
     }
 
@@ -2633,124 +1867,61 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-HWND GetTaskbarUiWnd() {
-    DWORD dwProcessId;
-    DWORD dwCurrentProcessId = GetCurrentProcessId();
-
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) ||
-        dwProcessId != dwCurrentProcessId) {
-        return nullptr;
-    }
-
-    return FindWindowEx(hTaskbarWnd, nullptr,
-                        L"Windows.UI.Composition.DesktopWindowContentBridge",
-                        nullptr);
-}
-
-using TaskbarBackground_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
-TaskbarBackground_OnApplyTemplate_t TaskbarBackground_OnApplyTemplate_Original;
-void WINAPI TaskbarBackground_OnApplyTemplate_Hook(void* pThis) {
-    Wh_Log(L">");
-
-    g_inTaskbarBackground_OnApplyTemplate = true;
-
-    TaskbarBackground_OnApplyTemplate_Original(pThis);
-
-    g_inTaskbarBackground_OnApplyTemplate = false;
-}
-
-using Foundation_operator_eq_t = bool(WINAPI*)(void** p1, void** p2);
-Foundation_operator_eq_t Foundation_operator_eq_Original;
-bool WINAPI Foundation_operator_eq_Hook(void** p1, void** p2) {
-    if (g_inTaskbarBackground_OnApplyTemplate) {
-        Wh_Log(L">");
-
-        // The code inside TaskbarBackground::OnApplyTemplate throws an
-        // exception if operator== returns true in some cases, and that happens
-        // if the background is customized, in which case two null pointers are
-        // compared. It can be triggered with the following example:
-        // * Target: Rectangle#BackgroundFill
-        // * Style: Fill=Red
-        if (p1 && p2 && !*p1 && !*p2) {
-            return false;
-        }
-    }
-
-    return Foundation_operator_eq_Original(p1, p2);
-}
-
-bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
-    WCHAR szWindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectory(szWindowsDirectory,
-                             ARRAYSIZE(szWindowsDirectory))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return false;
-    }
-
-    // Windows 11 version 22H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(
-        path, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    // Windows 11 version 21H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(
-        path, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    return false;
-}
-
-bool HookTaskbarViewDllSymbols() {
-    WCHAR dllPath[MAX_PATH];
-    if (!GetTaskbarViewDllPath(dllPath)) {
-        Wh_Log(L"Taskbar view module not found");
-        return false;
-    }
-
-    HMODULE module =
-        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (!module) {
-        Wh_Log(L"Taskbar view module couldn't be loaded");
-        return false;
-    }
-
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarBackground::OnApplyTemplate(void))"},
-            (void**)&TaskbarBackground_OnApplyTemplate_Original,
-            (void*)TaskbarBackground_OnApplyTemplate_Hook,
-            true,
-        },
-        {
-            {LR"(bool __cdecl winrt::Windows::Foundation::operator==(struct winrt::Windows::Foundation::IUnknown const &,struct winrt::Windows::Foundation::IUnknown const &))"},
-            (void**)&Foundation_operator_eq_Original,
-            (void*)Foundation_operator_eq_Hook,
-            true,
-        },
+HWND GetCoreWnd() {
+    struct ENUM_WINDOWS_PARAM {
+        HWND* hWnd;
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    HWND hWnd = nullptr;
+    ENUM_WINDOWS_PARAM param = {&hWnd};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
+
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+                dwProcessId != GetCurrentProcessId()) {
+                return TRUE;
+            }
+
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
+            }
+
+            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+                *param.hWnd = hWnd;
+                return FALSE;
+            }
+
+            return TRUE;
+        },
+        (LPARAM)&param);
+
+    return hWnd;
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    if (!HookTaskbarViewDllSymbols()) {
-        // Can continue without the hooks.
-        // return FALSE;
-    }
+    HMODULE user32Module = LoadLibrary(L"user32.dll");
+    if (user32Module) {
+        void* pCreateWindowInBand =
+            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
+        if (pCreateWindowInBand) {
+            Wh_SetFunctionHook(pCreateWindowInBand,
+                               (void*)CreateWindowInBand_Hook,
+                               (void**)&CreateWindowInBand_Original);
+        }
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+        void* pCreateWindowInBandEx =
+            (void*)GetProcAddress(user32Module, "CreateWindowInBandEx");
+        if (pCreateWindowInBandEx) {
+            Wh_SetFunctionHook(pCreateWindowInBandEx,
+                               (void*)CreateWindowInBandEx_Hook,
+                               (void**)&CreateWindowInBandEx_Original);
+        }
+    }
 
     return TRUE;
 }
@@ -2758,11 +1929,11 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd) {
-        Wh_Log(L"Initializing - Found DesktopWindowContentBridge window");
+    HWND hCoreWnd = GetCoreWnd();
+    if (hCoreWnd) {
+        Wh_Log(L"Initializing - Found core window");
         RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
+            hCoreWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
             nullptr);
     }
 }
@@ -2775,11 +1946,11 @@ void Wh_ModUninit() {
         g_visualTreeWatcher = nullptr;
     }
 
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd) {
-        Wh_Log(L"Uninitializing - Found DesktopWindowContentBridge window");
+    HWND hCoreWnd = GetCoreWnd();
+    if (hCoreWnd) {
+        Wh_Log(L"Uninitializing - Found core window");
         RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID) WINAPI { UninitializeSettingsAndTap(); },
+            hCoreWnd, [](PVOID) WINAPI { UninitializeSettingsAndTap(); },
             nullptr);
     }
 }
@@ -2792,11 +1963,11 @@ void Wh_ModSettingsChanged() {
         g_visualTreeWatcher = nullptr;
     }
 
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd) {
-        Wh_Log(L"Reinitializing - Found DesktopWindowContentBridge window");
+    HWND hCoreWnd = GetCoreWnd();
+    if (hCoreWnd) {
+        Wh_Log(L"Reinitializing - Found core window");
         RunFromWindowThread(
-            hTaskbarUiWnd,
+            hCoreWnd,
             [](PVOID) WINAPI {
                 UninitializeSettingsAndTap();
                 InitializeSettingsAndTap();

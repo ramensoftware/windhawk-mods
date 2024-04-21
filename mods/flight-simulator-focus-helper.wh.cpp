@@ -2,7 +2,7 @@
 // @id              flight-simulator-focus-helper
 // @name            Flight Simulator window focus helper
 // @description     Makes the game window active on mouse hover and inactive on mouse leave
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -35,10 +35,21 @@ work again.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- bringToFrontOnMouseClick: true
+  $name: Bring to front on mouse click
+*/
+// ==/WindhawkModSettings==
+
 #include <commctrl.h>
-#include <windowsx.h>
+
+struct {
+    bool bringToFrontOnMouseClick;
+} g_settings;
 
 HWND g_gameWnd;
+bool g_settingForegroundWindow = false;
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
@@ -121,7 +132,9 @@ LRESULT CALLBACK GameWindowSubclassProc(_In_ HWND hWnd,
                 INPUT input{};
                 SendInput(1, &input, sizeof(INPUT));
 
+                g_settingForegroundWindow = true;
                 SetForegroundWindow(hWnd);
+                g_settingForegroundWindow = false;
             }
             break;
 
@@ -130,6 +143,24 @@ LRESULT CALLBACK GameWindowSubclassProc(_In_ HWND hWnd,
                 if (HWND hTaskbarWnd = GetTaskbarWindow()) {
                     SetForegroundWindow(hTaskbarWnd);
                 }
+            }
+            break;
+
+        case WM_WINDOWPOSCHANGING:
+            if (g_settingForegroundWindow) {
+                auto pwpos = (WINDOWPOS*)lParam;
+                pwpos->flags |= SWP_NOZORDER;
+            }
+            break;
+
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+            // Bring to top on mouse click, as it might be the foreground window
+            // but not on top due to the trick in WM_WINDOWPOSCHANGING.
+            if (g_settings.bringToFrontOnMouseClick) {
+                SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0,
+                             SWP_NOSIZE | SWP_NOMOVE);
             }
             break;
 
@@ -201,8 +232,15 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
     return hWnd;
 }
 
+void LoadSettings() {
+    g_settings.bringToFrontOnMouseClick =
+        Wh_GetIntSetting(L"bringToFrontOnMouseClick");
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    LoadSettings();
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook,
                        (void**)&pOriginalCreateWindowExW);
@@ -222,4 +260,10 @@ void Wh_ModUninit() {
     if (g_gameWnd) {
         SendMessage(g_gameWnd, g_subclassRegisteredMsg, FALSE, 0);
     }
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    LoadSettings();
 }

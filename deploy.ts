@@ -126,6 +126,17 @@ async function generateModCatalog() {
     return await enrichCatalog(catalog);
 }
 
+function getChangelogTextFromCommitMessage(message: string) {
+    let messageTrimmed = message.trim();
+    if (messageTrimmed.includes('\n')) {
+        // Remove first line.
+        return messageTrimmed.replace(/^.* \(#\d+\)\n\n/, '').trim();
+    } else {
+        // Only remove trailing PR number if it's the only line.
+        return messageTrimmed.replace(/ \(#\d+\)$/, '').trim();
+    }
+}
+
 function generateModChangelog(modId: string) {
     let changelog = '';
 
@@ -167,8 +178,9 @@ function generateModChangelog(modId: string) {
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]).replace(/^.* \(#\d+\)\n\n/, '');
-            changelog += `${message}\n`;
+            ]);
+            const changelogItem = getChangelogTextFromCommitMessage(message);
+            changelog += `${changelogItem}\n\n`;
         } else {
             changelog += 'Initial release.\n';
         }
@@ -246,12 +258,13 @@ function generateRssFeed() {
 
         let content = '';
         if (changeType === 'M') {
-            content = gitExec([
+            const message = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]).replace(/^.* \(#\d+\)\n\n/, '');
+            ]);
+            content = getChangelogTextFromCommitMessage(message);
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }
@@ -281,12 +294,20 @@ function generateRssFeed() {
 
     const showdownConverter = new showdown.Converter();
 
+    const markdownToHtml = (markdown: string) => {
+        // Showdown doesn't support trailing backslashes as newlines. Use double
+        // spaces instead. https://github.com/showdownjs/showdown/issues/394
+        markdown = markdown.replace(/\\\n/g, '  \n');
+
+        return showdownConverter.makeHtml(markdown);
+    }
+
     for (const feedItem of feedItems) {
         feed.addItem({
             title: feedItem.title,
             id: feedItem.url + '#' + feedItem.commit,
             link: feedItem.url,
-            content: showdownConverter.makeHtml(feedItem.content),
+            content: markdownToHtml(feedItem.content),
             date: feedItem.date,
         });
     }
