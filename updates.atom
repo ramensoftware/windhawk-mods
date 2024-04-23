@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-23T13:19:31.000Z</updated>
+    <updated>2024-04-23T16:06:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icon Resource Redirect 1.0.2]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#3107e3fe77c403cd149536f9c648e9603e6b4057</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-04-23T16:06:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hook the LoadImageW function to have more icons replaced.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Turn off change file extension warning 1.0]]></title>
         <id>https://windhawk.net/mods/extension-change-no-warning#758942c216ce5c5019e89e88726267a5a7fbe9d3</id>
@@ -223,16 +232,5 @@ Known issue : Under the classic theme, icons have no space between them. It is p
         <link href="https://windhawk.net/mods/classic-theme-enable"/>
         <updated>2024-03-26T13:35:25.000Z</updated>
         <content type="html"><![CDATA[<p>Update readme</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic theme transparency fix 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-transparency-fix#822ed51dfe9ad2cf9b4c88f7ed4e7a172c9efe3e</id>
-        <link href="https://windhawk.net/mods/classic-theme-transparency-fix"/>
-        <updated>2024-03-26T07:24:35.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod includes a subset of functionality of the mod "DWM Unextend frames", but only
-includes fixes needed for Classic theme. It hooks less functions, is more lightweight, does not
-use pointer arithmetic and the code is more compact.
-It also injects dllhost.exe by default, which is needed for Windows Photo Viewer
-and some dialogs.</p>]]></content>
     </entry>
 </feed>

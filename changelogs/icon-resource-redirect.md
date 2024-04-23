@@ -1,3 +1,7 @@
+## 1.0.2 ([Apr 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3107e3fe77c403cd149536f9c648e9603e6b4057/mods/icon-resource-redirect.wh.cpp))
+
+* Hook the LoadImageW function to have more icons replaced.
+
 ## 1.0.1 ([Apr 14, 2024](https://github.com/ramensoftware/windhawk-mods/blob/fd5c9631d7d4d73369b9b492edc8990c1cbfd32c/mods/icon-resource-redirect.wh.cpp))
 
 * Hook the LoadIconWithScaleDown function to have more icons replaced.
