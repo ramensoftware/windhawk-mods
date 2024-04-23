@@ -1,3 +1,9 @@
+## 1.3.1 ([Apr 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/72258fe7830a25a42dd597bd6b8588f02f4b6152/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Having more than one target applied for the same element is now supported.
+* Added the Bubbles theme.
+* Fixed some styles not being restored when the mod is unloaded.
+
 ## 1.3 ([Apr 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/085a17c3ddc3084feb9f607b971d4873076d6fb7/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added themes! Currently, only the sample WinXP theme is integrated into the mod and can be selected in the settings.
