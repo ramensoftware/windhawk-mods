@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Icon Resource Redirect
 // @description     Define alternative resource files for loading icons (e.g. instead of imageres.dll) for simple theming without having to modify system files
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -131,24 +131,32 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                                          phicon, piconid, nIcons, flags);
 }
 
-using LoadIconWithScaleDown_t = decltype(&LoadIconWithScaleDown);
-LoadIconWithScaleDown_t LoadIconWithScaleDown_Original;
-HRESULT WINAPI LoadIconWithScaleDown_Hook(HINSTANCE hinst,
-                                          PCWSTR pszName,
-                                          int cx,
-                                          int cy,
-                                          HICON* phico) {
+using LoadImageW_t = decltype(&LoadImageW);
+LoadImageW_t LoadImageW_Original;
+HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
+                              LPCWSTR name,
+                              UINT type,
+                              int cx,
+                              int cy,
+                              UINT fuLoad) {
     Wh_Log(L">");
+
+    auto original = [&]() {
+        return LoadImageW_Original(hInst, name, type, cx, cy, fuLoad);
+    };
+
+    if (type != IMAGE_ICON) {
+        return original();
+    }
 
     WCHAR szFileName[MAX_PATH];
     DWORD fileNameLen =
-        GetModuleFileName(hinst, szFileName, ARRAYSIZE(szFileName));
+        GetModuleFileName(hInst, szFileName, ARRAYSIZE(szFileName));
     switch (fileNameLen) {
         case 0:
         case ARRAYSIZE(szFileName):
             Wh_Log(L"GetModuleFileName failed");
-            return LoadIconWithScaleDown_Original(hinst, pszName, cx, cy,
-                                                  phico);
+            return original();
     }
 
     Wh_Log(L"%s", szFileName);
@@ -171,9 +179,9 @@ HRESULT WINAPI LoadIconWithScaleDown_Hook(HINSTANCE hinst,
                     continue;
                 }
 
-                UINT result = LoadIconWithScaleDown_Original(
-                    hinstRedirect, pszName, cx, cy, phico);
-                if (result == S_OK) {
+                HANDLE result = LoadImageW_Original(hinstRedirect, name, type,
+                                                    cx, cy, fuLoad);
+                if (result) {
                     Wh_Log(L"Redirected %s -> %s", szFileName,
                            redirect.c_str());
                     return result;
@@ -182,7 +190,7 @@ HRESULT WINAPI LoadIconWithScaleDown_Hook(HINSTANCE hinst,
         }
     }
 
-    return LoadIconWithScaleDown_Original(hinst, pszName, cx, cy, phico);
+    return original();
 }
 
 void LoadSettings() {
@@ -227,21 +235,8 @@ BOOL Wh_ModInit() {
                        (void*)PrivateExtractIconsW_Hook,
                        (void**)&PrivateExtractIconsW_Original);
 
-    HMODULE user32Module = LoadLibrary(L"comctl32.dll");
-    if (user32Module) {
-        auto* pLoadIconWithScaleDown =
-            (decltype(&LoadIconWithScaleDown))GetProcAddress(
-                user32Module, "LoadIconWithScaleDown");
-        if (pLoadIconWithScaleDown) {
-            Wh_SetFunctionHook((void*)pLoadIconWithScaleDown,
-                               (void*)LoadIconWithScaleDown_Hook,
-                               (void**)&LoadIconWithScaleDown_Original);
-        } else {
-            Wh_Log(L"Failed to find LoadIconWithScaleDown");
-        }
-    } else {
-        Wh_Log(L"Failed to load user32.dll");
-    }
+    Wh_SetFunctionHook((void*)LoadImageW, (void*)LoadImageW_Hook,
+                       (void**)&LoadImageW_Original);
 
     return TRUE;
 }
