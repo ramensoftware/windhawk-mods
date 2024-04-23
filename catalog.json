@@ -815,6 +815,28 @@
                 "version": "1.0"
             }
         },
+        "extension-change-no-warning": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1713878371000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1713878371000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "When a file is renamed and its extension is changed, a confirmation warning appears, this mod turns it off",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Turn off change file extension warning",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "fake-high-contrast": {
             "details": {
                 "defaultSorting": 70,
