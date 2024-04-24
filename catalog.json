@@ -1855,7 +1855,7 @@
                 "published": 1693239523000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1693239523000,
+                "updated": 1713981885000,
                 "users": 100
             },
             "metadata": {
@@ -1869,7 +1869,7 @@
                 ],
                 "name": "Taskbar Scroll Actions",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-thumbnail-reorder": {
