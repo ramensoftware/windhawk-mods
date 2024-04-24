@@ -2,7 +2,7 @@
 // @id              taskbar-scroll-actions
 // @name            Taskbar Scroll Actions
 // @description     Assign actions for scrolling over the taskbar, including virtual desktop switching and monitor brightness control
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -55,6 +55,7 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $options:
   - taskbar: The taskbar
   - notificationArea: The notification area
+  - taskbarWithoutNotificationArea: The taskbar without the notification area
 - scrollStep: 1
   $name: Scroll step
   $description: >-
@@ -66,8 +67,8 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: For Windhawk versions older
-    than 1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
+    1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
 
@@ -89,6 +90,7 @@ enum class ScrollAction {
 enum class ScrollArea {
     taskbar,
     notificationArea,
+    taskbarWithoutNotificationArea,
 };
 
 struct {
@@ -144,48 +146,95 @@ bool IsTaskbarWindow(HWND hWnd) {
            _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
 }
 
-bool IsPointInsideScrollArea(HWND hWnd, POINT pt) {
-    RECT rc{};
-    if (g_settings.scrollArea == ScrollArea::taskbar) {
-        GetWindowRect(hWnd, &rc);
-    } else if (g_settings.scrollArea == ScrollArea::notificationArea) {
-        if (hWnd == g_hTaskbarWnd) {
-            HWND hTrayNotifyWnd =
-                FindWindowEx(hWnd, NULL, L"TrayNotifyWnd", NULL);
-            if (hTrayNotifyWnd) {
-                GetWindowRect(hTrayNotifyWnd, &rc);
-            }
-        } else if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
-            RECT rcTaskbar;
-            GetWindowRect(hWnd, &rcTaskbar);
-            HWND hBridgeWnd = FindWindowEx(
-                hWnd, NULL,
-                L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
-            while (hBridgeWnd) {
-                RECT rcBridge;
-                GetWindowRect(hBridgeWnd, &rcBridge);
-                if (rcBridge.left != rcTaskbar.left ||
-                    rcBridge.top != rcTaskbar.top ||
-                    rcBridge.right != rcTaskbar.right ||
-                    rcBridge.bottom != rcTaskbar.bottom) {
-                    CopyRect(&rc, &rcBridge);
-                    break;
-                }
+bool GetNotificationAreaRect(HWND hMMTaskbarWnd, RECT* rcResult) {
+    if (hMMTaskbarWnd == g_hTaskbarWnd) {
+        HWND hTrayNotifyWnd =
+            FindWindowEx(hMMTaskbarWnd, NULL, L"TrayNotifyWnd", NULL);
+        if (!hTrayNotifyWnd) {
+            return false;
+        }
 
-                hBridgeWnd = FindWindowEx(
-                    hWnd, hBridgeWnd,
-                    L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+        return GetWindowRect(hTrayNotifyWnd, rcResult);
+    }
+
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
+        RECT rcTaskbar;
+        if (!GetWindowRect(hMMTaskbarWnd, &rcTaskbar)) {
+            return false;
+        }
+
+        HWND hBridgeWnd = FindWindowEx(
+            hMMTaskbarWnd, NULL,
+            L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+        while (hBridgeWnd) {
+            RECT rcBridge;
+            if (!GetWindowRect(hBridgeWnd, &rcBridge)) {
+                break;
             }
-        } else if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
-            HWND hClockButtonWnd =
-                FindWindowEx(hWnd, NULL, L"ClockButton", NULL);
-            if (hClockButtonWnd) {
-                GetWindowRect(hClockButtonWnd, &rc);
+
+            if (rcBridge.left != rcTaskbar.left ||
+                rcBridge.top != rcTaskbar.top ||
+                rcBridge.right != rcTaskbar.right ||
+                rcBridge.bottom != rcTaskbar.bottom) {
+                CopyRect(rcResult, &rcBridge);
+                return true;
             }
+
+            hBridgeWnd = FindWindowEx(
+                hMMTaskbarWnd, hBridgeWnd,
+                L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+        }
+
+        // On newer Win11 versions, the clock on secondary taskbars is difficult
+        // to detect without either UI Automation or UWP UI APIs. Just consider
+        // the last pixels, not accurate, but better than nothing.
+        CopyRect(rcResult, &rcTaskbar);
+        if (rcResult->right - rcResult->left > 50) {
+            if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
+                rcResult->right = rcResult->left + 50;
+            } else {
+                rcResult->left = rcResult->right - 50;
+            }
+        }
+
+        return true;
+    }
+
+    if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
+        HWND hClockButtonWnd =
+            FindWindowEx(hMMTaskbarWnd, NULL, L"ClockButton", NULL);
+        if (!hClockButtonWnd) {
+            return false;
+        }
+
+        return GetWindowRect(hClockButtonWnd, rcResult);
+    }
+
+    return true;
+}
+
+bool IsPointInsideScrollArea(HWND hMMTaskbarWnd, POINT pt) {
+    switch (g_settings.scrollArea) {
+        case ScrollArea::taskbar: {
+            RECT rc;
+            return GetWindowRect(hMMTaskbarWnd, &rc) && PtInRect(&rc, pt);
+        }
+
+        case ScrollArea::notificationArea: {
+            RECT rc;
+            return GetNotificationAreaRect(hMMTaskbarWnd, &rc) &&
+                   PtInRect(&rc, pt);
+        }
+
+        case ScrollArea::taskbarWithoutNotificationArea: {
+            RECT rc;
+            return GetWindowRect(hMMTaskbarWnd, &rc) && PtInRect(&rc, pt) &&
+                   (!GetNotificationAreaRect(hMMTaskbarWnd, &rc) ||
+                    !PtInRect(&rc, pt));
         }
     }
 
-    return PtInRect(&rc, pt);
+    return false;
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -760,7 +809,7 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
     param.uIdSubclass = uIdSubclass;
     param.dwRefData = dwRefData;
     param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
+    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
 
     UnhookWindowsHookEx(hook);
 
@@ -1065,6 +1114,8 @@ void LoadSettings() {
     g_settings.scrollArea = ScrollArea::taskbar;
     if (wcscmp(scrollArea, L"notificationArea") == 0) {
         g_settings.scrollArea = ScrollArea::notificationArea;
+    } else if (wcscmp(scrollArea, L"taskbarWithoutNotificationArea") == 0) {
+        g_settings.scrollArea = ScrollArea::taskbarWithoutNotificationArea;
     }
     Wh_FreeStringSetting(scrollArea);
 
