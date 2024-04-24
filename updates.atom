@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-23T16:06:15.000Z</updated>
+    <updated>2024-04-24T16:47:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icon Resource Redirect 1.0.3]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#3757ba003fd3b4550edf1b57b0af88182cff3789</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-04-24T16:47:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added redirection of bitmaps and cursors in addition to icons.</li>
+<li>Improved redirection to support more cases.</li>
+<li>Added detailed logging.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Icon Resource Redirect 1.0.2]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#3107e3fe77c403cd149536f9c648e9603e6b4057</id>
@@ -225,12 +236,5 @@ Known issue : Under the classic theme, icons have no space between them. It is p
         <link href="https://windhawk.net/mods/classic-theme-enable"/>
         <updated>2024-03-31T09:56:19.000Z</updated>
         <content type="html"><![CDATA[<p>Update Readme</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable Classic Theme by handle method 1.0.2]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#a78ff5da6c13e3c61c90009cc50b1ba6df17a118</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2024-03-26T13:35:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Update readme</p>]]></content>
     </entry>
 </feed>
