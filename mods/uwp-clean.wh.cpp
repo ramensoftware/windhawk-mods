@@ -18,7 +18,7 @@
 
 The Universal Windows Platform (UWP), in the spirit of being unoptimized, keep all of their many processes operating all of the time: at the logon of the user, RuntimeBroker automatically restarting, and even when UWP apps are closed. This mod makes ApplicationFrameHost and RuntimeBroker automatically terminate unless Settings or Windows Security are open. You can add to the list of apps to keep the programs open if you so choose.
 
-**Currently only supporting the preinstalled UWP apps. (Installed Store apps often stay suspended in the background)**
+**If you want to add more apps like WhatsApp etc to this list, you must turn off background processes for the app in the Metro Settings, or the app stays suspended.**
 
 */
 // ==/WindhawkModReadme==
