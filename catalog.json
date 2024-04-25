@@ -2035,6 +2035,31 @@
                 "version": "1.0.0"
             }
         },
+        "uwp-clean": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1714023124000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1714023124000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Alcatel",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Automatically end UWP processes when no UWP apps are open.",
+                "github": "https://github.com/arukateru",
+                "include": [
+                    "ApplicationFrameHost.exe",
+                    "RuntimeBroker.exe",
+                    "TextInputHost.exe",
+                    "SystemSettingsAdminFlows.exe",
+                    "ctfmon.exe"
+                ],
+                "name": "Clean up UWP processes",
+                "version": "0.1"
+            }
+        },
         "virtual-desktop-taskbar-order": {
             "details": {
                 "defaultSorting": 4530,
