@@ -545,6 +545,29 @@
                 "version": "1.0.0"
             }
         },
+        "desktop-watermark-tweaks": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1714023231000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1714023231000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Tweaks for the desktop watermark",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Desktop Watermark Tweaks",
+                "version": "1.0.0"
+            }
+        },
         "disable-feedback-hub-hotkey": {
             "details": {
                 "defaultSorting": 5990,
