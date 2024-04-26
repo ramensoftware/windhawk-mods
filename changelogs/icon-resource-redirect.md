@@ -1,3 +1,7 @@
+## 1.0.4 ([Apr 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/de61b82dd647c298c1f71c9b12f04320f012d4ff/mods/icon-resource-redirect.wh.cpp))
+
+* Added string and GDI+ image redirection.
+
 ## 1.0.3 ([Apr 24, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3757ba003fd3b4550edf1b57b0af88182cff3789/mods/icon-resource-redirect.wh.cpp))
 
 * Added redirection of bitmaps and cursors in addition to icons.

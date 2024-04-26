@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-25T05:33:51.000Z</updated>
+    <updated>2024-04-26T15:18:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icon Resource Redirect 1.0.4]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#de61b82dd647c298c1f71c9b12f04320f012d4ff</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-04-26T15:18:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added string and GDI+ image redirection.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Watermark Tweaks 1.0.0]]></title>
         <id>https://windhawk.net/mods/desktop-watermark-tweaks#6f79f483f04d62e6bcaf53d7144e17fadd78b2db</id>
@@ -229,14 +238,5 @@ imageres.dll) for simple theming without having to modify system files.</p>]]></
         <content type="html"><![CDATA[<h1 id="nameexplorerwindows">Name explorer windows</h1>
 <p>Assign custom names to explorer windows, just like in Chrome.</p>
 <p><img src="https://i.imgur.com/sSI0Kh6.gif" alt="Demonstration" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#52fb2fdb8d52bcee8b05e4e7f89ac3027f633954</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2024-04-10T16:49:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to set the maximum taskbar item width (only used for the Windows adaptive width).</li>
-</ul>]]></content>
     </entry>
 </feed>
