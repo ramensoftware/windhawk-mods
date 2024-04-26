@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.4
+// @version         1.2.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -283,7 +283,7 @@ TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_t
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Hook(
     int enumTaskbarSize) {
-    if (!g_unloading) {
+    if (enumTaskbarSize == 1 && !g_unloading) {
         return g_settings.iconSize;
     }
 
