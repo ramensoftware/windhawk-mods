@@ -1,3 +1,7 @@
+## 1.2.5 ([Apr 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/159dc6e1497d197eb5613eb190f4909ef8ab667b/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed incorrect search icon size, started happening after update KB5036980.
+
 ## 1.2.4 ([Mar 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/23514c6d6153a7fe6a79382b37c9b2c3fbf4003c/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed a possible crash caused by the weather icon resizing code.

@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-26T15:18:37.000Z</updated>
+    <updated>2024-04-26T18:41:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#159dc6e1497d197eb5613eb190f4909ef8ab667b</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-04-26T18:41:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed incorrect search icon size, started happening after update KB5036980.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Icon Resource Redirect 1.0.4]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#de61b82dd647c298c1f71c9b12f04320f012d4ff</id>
@@ -229,14 +238,5 @@ ExplorerFrame.dll with that from build 21332, but it is not supported and not re
         <content type="html"><![CDATA[<h1 id="iconresourceredirect">Icon Resource Redirect</h1>
 <p>Define alternative resource files for loading icons (e.g. instead of
 imageres.dll) for simple theming without having to modify system files.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Name explorer windows 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-name-windows#bc440b43084dec4bf6a839f7e72947bda179995c</id>
-        <link href="https://windhawk.net/mods/explorer-name-windows"/>
-        <updated>2024-04-11T22:27:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="nameexplorerwindows">Name explorer windows</h1>
-<p>Assign custom names to explorer windows, just like in Chrome.</p>
-<p><img src="https://i.imgur.com/sSI0Kh6.gif" alt="Demonstration" /></p>]]></content>
     </entry>
 </feed>
