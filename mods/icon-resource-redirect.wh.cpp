@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Icon Resource Redirect
 // @description     Define alternative resource files for loading icons (e.g. instead of imageres.dll) for simple theming without having to modify system files
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -16,6 +16,15 @@
 
 Define alternative resource files for loading icons (e.g. instead of
 imageres.dll) for simple theming without having to modify system files.
+
+The mod started with icon redirection, but was extended with time, and now it
+supports the following resource types and loading methods:
+
+* Icons extracted with the `PrivateExtractIconsW` function.
+* Icons, cursors and bitmaps loaded with the `LoadImageW` function.
+* Strings loaded with the `LoadStringW` function.
+* GDI+ images (e.g. PNGs) loaded with the `SHCreateStreamOnModuleResourceW`
+  function.
 */
 // ==/WindhawkModReadme==
 
@@ -35,6 +44,7 @@ imageres.dll) for simple theming without having to modify system files.
 #include <psapi.h>
 #include <shlobj.h>
 
+#include <functional>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -194,52 +204,44 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                                          phicon, piconid, nIcons, flags);
 }
 
-using LoadImageW_t = decltype(&LoadImageW);
-LoadImageW_t LoadImageW_Original;
-HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
-                              LPCWSTR name,
-                              UINT type,
-                              int cx,
-                              int cy,
-                              UINT fuLoad) {
-    auto original = [&]() {
-        return LoadImageW_Original(hInst, name, type, cx, cy, fuLoad);
-    };
-
+bool RedirectModule(HINSTANCE hInstance,
+                    std::function<void()> beforeFirstRedirectionFunction,
+                    std::function<bool(HINSTANCE)> redirectFunction) {
     WCHAR szFileName[MAX_PATH];
     DWORD fileNameLen;
-    if ((ULONG_PTR)hInst & 3) {
+    if ((ULONG_PTR)hInstance & 3) {
         WCHAR szNtFileName[MAX_PATH * 2];
 
-        if (!GetMappedFileName(GetCurrentProcess(), (void*)hInst, szNtFileName,
-                               ARRAYSIZE(szNtFileName))) {
+        if (!GetMappedFileName(GetCurrentProcess(), (void*)hInstance,
+                               szNtFileName, ARRAYSIZE(szNtFileName))) {
             DWORD dwError = GetLastError();
-            Wh_Log(L"> GetMappedFileName(%p) failed with error %u", hInst,
+            Wh_Log(L"> GetMappedFileName(%p) failed with error %u", hInstance,
                    dwError);
-            return original();
+            return false;
         }
 
         if (!DevicePathToDosPath(szNtFileName, szFileName,
                                  ARRAYSIZE(szFileName))) {
             Wh_Log(L"> DevicePathToDosPath failed");
-            return original();
+            return false;
         }
 
         fileNameLen = wcslen(szFileName);
     } else {
-        fileNameLen = GetModuleFileName((HINSTANCE)((ULONG_PTR)hInst & ~3),
-                                        szFileName, ARRAYSIZE(szFileName));
+        fileNameLen =
+            GetModuleFileName(hInstance, szFileName, ARRAYSIZE(szFileName));
         switch (fileNameLen) {
             case 0: {
                 DWORD dwError = GetLastError();
-                Wh_Log(L"> GetModuleFileName(%p) failed with error %u", hInst,
-                       dwError);
-                return original();
+                Wh_Log(L"> GetModuleFileName(%p) failed with error %u",
+                       hInstance, dwError);
+                return false;
             }
 
             case ARRAYSIZE(szFileName):
-                Wh_Log(L"> GetModuleFileName(%p) failed, name too long", hInst);
-                return original();
+                Wh_Log(L"> GetModuleFileName(%p) failed, name too long",
+                       hInstance);
+                return false;
         }
     }
 
@@ -259,51 +261,21 @@ HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
             const auto& redirects = it->second;
             for (const auto& redirect : redirects) {
                 if (!triedRedirection) {
-                    switch (type) {
-                        case IMAGE_BITMAP:
-                            Wh_Log(L"Resource type: Bitmap");
-                            break;
-                        case IMAGE_ICON:
-                            Wh_Log(L"Resource type: Icon");
-                            break;
-                        case IMAGE_CURSOR:
-                            Wh_Log(L"Resource type: Cursor");
-                            break;
-                        default:
-                            Wh_Log(L"Resource type: %u", type);
-                            break;
-                    }
-
-                    if (IS_INTRESOURCE(name)) {
-                        Wh_Log(L"Resource number: %u", (DWORD)(ULONG_PTR)name);
-                    } else {
-                        Wh_Log(L"Resource name: %s", name);
-                    }
-
-                    Wh_Log(L"Width: %d", cx);
-                    Wh_Log(L"Height: %d", cy);
-                    Wh_Log(L"Flags: 0x%08X", fuLoad);
-
+                    beforeFirstRedirectionFunction();
                     triedRedirection = true;
                 }
 
                 Wh_Log(L"Trying %s", redirect.c_str());
 
-                HINSTANCE hinstRedirect = GetRedirectedModule(redirect);
-                if (!hinstRedirect) {
+                HINSTANCE hInstanceRedirect = GetRedirectedModule(redirect);
+                if (!hInstanceRedirect) {
                     Wh_Log(L"GetRedirectedModule failed");
                     continue;
                 }
 
-                HANDLE result = LoadImageW_Original(hinstRedirect, name, type,
-                                                    cx, cy, fuLoad);
-                if (result) {
-                    Wh_Log(L"Redirected successfully");
-                    return result;
+                if (redirectFunction(hInstanceRedirect)) {
+                    return true;
                 }
-
-                DWORD dwError = GetLastError();
-                Wh_Log(L"LoadLibraryEx failed with error %u", dwError);
             }
         }
     }
@@ -312,7 +284,155 @@ HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
         Wh_Log(L"No redirection succeeded, falling back to original");
     }
 
-    return original();
+    return false;
+}
+
+using LoadImageW_t = decltype(&LoadImageW);
+LoadImageW_t LoadImageW_Original;
+HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
+                              LPCWSTR name,
+                              UINT type,
+                              int cx,
+                              int cy,
+                              UINT fuLoad) {
+    Wh_Log(L">");
+
+    HANDLE result;
+
+    bool redirected = RedirectModule(
+        hInst,
+        [&]() {
+            switch (type) {
+                case IMAGE_BITMAP:
+                    Wh_Log(L"Resource type: Bitmap");
+                    break;
+                case IMAGE_ICON:
+                    Wh_Log(L"Resource type: Icon");
+                    break;
+                case IMAGE_CURSOR:
+                    Wh_Log(L"Resource type: Cursor");
+                    break;
+                default:
+                    Wh_Log(L"Resource type: %u", type);
+                    break;
+            }
+
+            if (IS_INTRESOURCE(name)) {
+                Wh_Log(L"Resource number: %u", (DWORD)(ULONG_PTR)name);
+            } else {
+                Wh_Log(L"Resource name: %s", name);
+            }
+
+            Wh_Log(L"Width: %d", cx);
+            Wh_Log(L"Height: %d", cy);
+            Wh_Log(L"Flags: 0x%08X", fuLoad);
+        },
+        [&](HINSTANCE hInstanceRedirect) {
+            result = LoadImageW_Original(hInstanceRedirect, name, type, cx, cy,
+                                         fuLoad);
+            if (result) {
+                Wh_Log(L"Redirected successfully");
+                return true;
+            }
+
+            DWORD dwError = GetLastError();
+            Wh_Log(L"LoadImageW failed with error %u", dwError);
+            return false;
+        });
+    if (redirected) {
+        return result;
+    }
+
+    return LoadImageW_Original(hInst, name, type, cx, cy, fuLoad);
+}
+
+using LoadStringBaseExW_t = int(WINAPI*)(HINSTANCE hInstance,
+                                         UINT uID,
+                                         LPWSTR lpBuffer,
+                                         int cchBufferMax,
+                                         WORD wLanguage);
+LoadStringBaseExW_t LoadStringBaseExW_Original;
+int WINAPI LoadStringBaseExW_Hook(HINSTANCE hInstance,
+                                  UINT uID,
+                                  LPWSTR lpBuffer,
+                                  int cchBufferMax,
+                                  WORD wLanguage) {
+    Wh_Log(L">");
+
+    int result;
+
+    bool redirected = RedirectModule(
+        hInstance,
+        [&]() {
+            Wh_Log(L"String number: %u", uID);
+            Wh_Log(L"String language: %04X", wLanguage);
+        },
+        [&](HINSTANCE hInstanceRedirect) {
+            result = LoadStringBaseExW_Original(
+                hInstanceRedirect, uID, lpBuffer, cchBufferMax, wLanguage);
+            if (result) {
+                Wh_Log(L"Redirected successfully");
+                return true;
+            }
+
+            DWORD dwError = GetLastError();
+            Wh_Log(L"LoadStringBaseExW failed with error %u", dwError);
+            return false;
+        });
+    if (redirected) {
+        return result;
+    }
+
+    return LoadStringBaseExW_Original(hInstance, uID, lpBuffer, cchBufferMax,
+                                      wLanguage);
+}
+
+using SHCreateStreamOnModuleResourceW_t = HRESULT(WINAPI*)(HMODULE hModule,
+                                                           LPCWSTR pwszName,
+                                                           LPCWSTR pwszType,
+                                                           IStream** ppStream);
+SHCreateStreamOnModuleResourceW_t SHCreateStreamOnModuleResourceW_Original;
+HRESULT WINAPI SHCreateStreamOnModuleResourceW_Hook(HMODULE hModule,
+                                                    LPCWSTR pwszName,
+                                                    LPCWSTR pwszType,
+                                                    IStream** ppStream) {
+    Wh_Log(L">");
+
+    HRESULT result;
+
+    bool redirected = RedirectModule(
+        hModule,
+        [&]() {
+            if (IS_INTRESOURCE(pwszType)) {
+                Wh_Log(L"Resource type: %u", (DWORD)(ULONG_PTR)pwszType);
+            } else {
+                Wh_Log(L"Resource type: %s", pwszType);
+            }
+
+            if (IS_INTRESOURCE(pwszName)) {
+                Wh_Log(L"Resource number: %u", (DWORD)(ULONG_PTR)pwszName);
+            } else {
+                Wh_Log(L"Resource name: %s", pwszName);
+            }
+        },
+        [&](HINSTANCE hInstanceRedirect) {
+            result = SHCreateStreamOnModuleResourceW_Original(
+                hInstanceRedirect, pwszName, pwszType, ppStream);
+            if (SUCCEEDED(result)) {
+                Wh_Log(L"Redirected successfully");
+                return true;
+            }
+
+            Wh_Log(L"SHCreateStreamOnModuleResourceW failed with error %08X",
+                   result);
+            return false;
+        });
+    if (redirected) {
+        return result;
+    }
+
+    return SHCreateStreamOnModuleResourceW_Original(hModule, pwszName, pwszType,
+                                                    ppStream);
 }
 
 void LoadSettings() {
@@ -359,6 +479,37 @@ BOOL Wh_ModInit() {
 
     Wh_SetFunctionHook((void*)LoadImageW, (void*)LoadImageW_Hook,
                        (void**)&LoadImageW_Original);
+
+    HMODULE kernelBaseModule = LoadLibrary(L"kernelbase.dll");
+    if (kernelBaseModule) {
+        FARPROC pLoadStringBaseExW =
+            GetProcAddress(kernelBaseModule, "LoadStringBaseExW");
+        if (pLoadStringBaseExW) {
+            Wh_SetFunctionHook((void*)pLoadStringBaseExW,
+                               (void*)LoadStringBaseExW_Hook,
+                               (void**)&LoadStringBaseExW_Original);
+        } else {
+            Wh_Log(L"Couldn't find LoadStringBaseExW");
+        }
+    } else {
+        Wh_Log(L"Couldn't load kernelbase.dll");
+    }
+
+    HMODULE shcoreModule = LoadLibrary(L"shcore.dll");
+    if (shcoreModule) {
+        FARPROC pSHCreateStreamOnModuleResourceW =
+            GetProcAddress(shcoreModule, (PCSTR)109);
+        if (pSHCreateStreamOnModuleResourceW) {
+            Wh_SetFunctionHook(
+                (void*)pSHCreateStreamOnModuleResourceW,
+                (void*)SHCreateStreamOnModuleResourceW_Hook,
+                (void**)&SHCreateStreamOnModuleResourceW_Original);
+        } else {
+            Wh_Log(L"Couldn't find SHCreateStreamOnModuleResourceW (#109)");
+        }
+    } else {
+        Wh_Log(L"Couldn't load shcore.dll");
+    }
 
     return TRUE;
 }
