@@ -1020,11 +1020,12 @@
                 "published": 1713005692000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1714144717000,
+                "updated": 1714227254000,
                 "users": 28
             },
             "metadata": {
                 "author": "m417z",
+                "compilerOptions": "-lshlwapi",
                 "description": "Define alternative resource files for loading icons (e.g. instead of imageres.dll) for simple theming without having to modify system files",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -1033,7 +1034,7 @@
                 ],
                 "name": "Icon Resource Redirect",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.4"
+                "version": "1.0.5"
             }
         },
         "icon16bitfix": {
