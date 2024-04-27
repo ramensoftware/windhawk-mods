@@ -2,12 +2,13 @@
 // @id              icon-resource-redirect
 // @name            Icon Resource Redirect
 // @description     Define alternative resource files for loading icons (e.g. instead of imageres.dll) for simple theming without having to modify system files
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         *
+// @compilerOptions -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,6 +17,23 @@
 
 Define alternative resource files for loading icons (e.g. instead of
 imageres.dll) for simple theming without having to modify system files.
+
+## Theme folder
+
+A theme folder can be selected in the settings. It's a folder with alternative
+resource files, and the `theme.ini` file that contains redirection rules. For
+example, the `theme.ini` file may contain the following:
+
+```
+[redirections]
+%systemroot%\explorer.exe=explorer.exe
+%systemroot%\system32\imageres.dll=imageres.dll
+```
+
+In this case, the folder must also contain the `explorer.exe`, `imageres.dll`
+files which will be used as the custom resource files.
+
+## Supported resource types and loading methods
 
 The mod started with icon redirection, but was extended with time, and now it
 supports the following resource types and loading methods:
@@ -30,8 +48,11 @@ supports the following resource types and loading methods:
 
 // ==WindhawkModSettings==
 /*
+- themeFolder: ''
+  $name: Theme folder
+  $description: A folder with alternative resource files and theme.ini
 - redirectionResourcePaths:
-  - - original: 'C:\Windows\System32\imageres.dll'
+  - - original: '%SystemRoot%\System32\imageres.dll'
       $name: The original resource file
       $description: The original file from which icons are loaded
     - redirect: 'C:\my-themes\theme-1\imageres.dll'
@@ -43,6 +64,7 @@ supports the following resource types and loading methods:
 
 #include <psapi.h>
 #include <shlobj.h>
+#include <shlwapi.h>
 
 #include <functional>
 #include <mutex>
@@ -438,28 +460,75 @@ HRESULT WINAPI SHCreateStreamOnModuleResourceW_Hook(HMODULE hModule,
 void LoadSettings() {
     std::unordered_map<std::wstring, std::vector<std::wstring>> paths;
 
+    auto addRedirectionPath = [&paths](PCWSTR original, PCWSTR redirect) {
+        WCHAR originalExpanded[MAX_PATH];
+        DWORD originalExpandedLen = ExpandEnvironmentStrings(
+            original, originalExpanded, ARRAYSIZE(originalExpanded));
+        if (!originalExpandedLen ||
+            originalExpandedLen > ARRAYSIZE(originalExpanded)) {
+            Wh_Log(L"Failed to expand path: %s", original);
+            return;
+        }
+
+        LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                      originalExpanded, originalExpandedLen - 1,
+                      originalExpanded, originalExpandedLen - 1, nullptr,
+                      nullptr, 0);
+
+        Wh_Log(L"Configuring %s->%s", originalExpanded, redirect);
+
+        paths[originalExpanded].push_back(redirect);
+    };
+
+    PCWSTR themeFolder = Wh_GetStringSetting(L"themeFolder");
+
+    if (*themeFolder) {
+        WCHAR themeIniFile[MAX_PATH];
+        if (PathCombine(themeIniFile, themeFolder, L"theme.ini")) {
+            std::wstring data(32768, L'\0');
+            DWORD result = GetPrivateProfileSection(
+                L"redirections", data.data(), data.size(), themeIniFile);
+            if (result != data.size() - 2) {
+                for (auto* p = data.data(); *p;) {
+                    auto* pNext = p + wcslen(p) + 1;
+                    auto* pEq = wcschr(p, L'=');
+                    if (pEq) {
+                        *pEq = L'\0';
+
+                        WCHAR redirectFile[MAX_PATH];
+                        if (PathCombine(redirectFile, themeFolder, pEq + 1)) {
+                            addRedirectionPath(p, redirectFile);
+                        }
+                    } else {
+                        Wh_Log(L"Skipping %s", p);
+                    }
+
+                    p = pNext;
+                }
+            } else {
+                Wh_Log(L"Failed to read theme file");
+            }
+        }
+    }
+
+    Wh_FreeStringSetting(themeFolder);
+
     for (int i = 0;; i++) {
         PCWSTR original =
             Wh_GetStringSetting(L"redirectionResourcePaths[%d].original", i);
         PCWSTR redirect =
             Wh_GetStringSetting(L"redirectionResourcePaths[%d].redirect", i);
 
-        bool hasName = *original || *redirect;
+        bool hasRedirection = *original || *redirect;
 
-        if (hasName) {
-            std::wstring originalUpper{original};
-            LCMapStringEx(
-                LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, &originalUpper[0],
-                static_cast<int>(originalUpper.length()), &originalUpper[0],
-                static_cast<int>(originalUpper.length()), nullptr, nullptr, 0);
-
-            paths[originalUpper].push_back(redirect);
+        if (hasRedirection) {
+            addRedirectionPath(original, redirect);
         }
 
         Wh_FreeStringSetting(original);
         Wh_FreeStringSetting(redirect);
 
-        if (!hasName) {
+        if (!hasRedirection) {
             break;
         }
     }
