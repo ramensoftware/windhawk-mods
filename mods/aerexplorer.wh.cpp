@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.5.9
+// @version         1.6.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -215,8 +215,6 @@ struct
     bool             nopcfolders;
     bool             vistasearchplaceholder;
 } settings = { 0 };
-
-#define UseNavbarGlass() (settings.navbarglass && settings.noribbon)
 
 typedef HRESULT (WINAPI *VariantToBuffer_t)(LPVARIANT, void *, UINT);
 VariantToBuffer_t VariantToBuffer = nullptr;
@@ -795,7 +793,7 @@ LPCDRIVEGROUPI18N GetCurrentDriveLocale(void)
     /* So we can fallback to English without iterating again. */
     LPCDRIVEGROUPI18N en = NULL;
 
-    for (int i = 0; i < ARRAYSIZE(g_driveGroupI18n); i++)
+    for (UINT i = 0; i < ARRAYSIZE(g_driveGroupI18n); i++)
     {
         if (g_driveGroupI18n[i].lid == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US))
         {
@@ -815,14 +813,14 @@ LPCDRIVEGROUPI18N GetCurrentDriveLocale(void)
 typedef UINT (WINAPI *GetDpiForSystem_t)(void);
 GetDpiForSystem_t GetDpiForSystem = nullptr;
 
+typedef UINT (WINAPI *GetDpiForWindow_t)(HWND);
+GetDpiForWindow_t GetDpiForWindow = nullptr;
+
+typedef int (WINAPI *GetSystemMetricsForDpi_t)(int, UINT);
+GetSystemMetricsForDpi_t GetSystemMetricsForDpi = nullptr;
+
 #define ScaleForDPI(n) MulDiv(n, GetDpiForSystem(), 96)
 #define IsHighDPI() (GetDpiForSystem() >= 120)
-
-typedef BOOL (WINAPI *ShouldAppsUseDarkMode_t)(void);
-ShouldAppsUseDarkMode_t ShouldAppsUseDarkMode = nullptr;
-
-typedef BOOL (WINAPI *AllowDarkModeForWindow_t)(HWND, BOOL);
-AllowDarkModeForWindow_t AllowDarkModeForWindow = nullptr;
 
 #pragma region "Hooks"
 
@@ -932,14 +930,12 @@ void THISCALL CAddressBand__PositionChildWindows_hook(
                         tbi.cx = ScaleForDPI(settings.refreshwidth);
                         break;
                 }
-                /* Go button (same as refresh) */
-                SendMessageW(hToolbar, TB_SETBUTTONINFOW, 100, (LPARAM)&tbi);
 
-                /* Stop button (same as refresh) */
-                SendMessageW(hToolbar, TB_SETBUTTONINFOW, 101, (LPARAM)&tbi);
-
-                /* Actual refresh button */
-                SendMessageW(hToolbar, TB_SETBUTTONINFOW, 102, (LPARAM)&tbi);                    
+                /* Toolbar buttons 100-102 are go, stop, and refresh respectively */
+                for (int i = 100; i <= 102; i++)
+                {
+                    SendMessageW(hToolbar, TB_SETBUTTONINFOW, i, (LPARAM)&tbi);
+                }                   
             }
         }
     }
@@ -1050,6 +1046,35 @@ bool THISCALL CShellBrowser__ShouldShowRibbon_hook(
     : CShellBrowser__ShouldShowRibbon_orig(
         pThis, pShellItem
     );
+}
+
+#define CWM_GETISHELLBROWSER WM_USER + 7
+
+#ifdef _WIN64
+#   define IShellBrowser_IShellItem(pThis) *((IShellItem **)pThis + 46)
+#else
+#   define IShellBrowser_IShellItem(pThis) *((IShellItem **)pThis + 47)
+#endif
+
+/* Get the pointer to a navbar from an Explorer window */
+bool ExplorerHasRibbon(HWND hWnd)
+{
+    if (GetParent(hWnd))
+    {
+        hWnd = GetAncestor(hWnd, GA_ROOT);
+    }
+
+    HWND hRibbonDock = FindWindowExW(hWnd, NULL, L"UIRibbonCommandBarDock", L"UIRibbonDockTop");
+    if (hRibbonDock)
+    {
+        RECT rc = { 0 };
+        if (GetWindowRect(hRibbonDock, &rc))
+        {
+            return (rc.bottom - rc.top) > 0;
+        }
+    }
+
+    return false;
 }
 
 #pragma region "Old navigation pane sizing"
@@ -1206,35 +1231,49 @@ LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
 #define CNavBar_Window(pThis) *((HWND *)pThis + 6)
 #define CNavBar_ThemeWindow(pThis) *((HWND *)pThis + 73)
 
+using DwmExtendFrameIntoClientArea_t = decltype(&DwmExtendFrameIntoClientArea);
+DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea_orig = nullptr;
+
 /* Re-impl of function from Windows 7 */
 void CNavBar__UpdateGlass(void *pThis)
 {
     HWND hWnd = CNavBar_Window(pThis);
-    if (hWnd && IsWindow(hWnd) && IsCompositionActive() && !settings.nocomposition)
+    if (hWnd && IsWindow(hWnd))
     {
-        RECT rc;
-        GetClientRect(hWnd, &rc);
-        MARGINS mrg;
-        SecureZeroMemory(&mrg, sizeof(MARGINS));
-        mrg.cyTopHeight = rc.bottom;
-        HWND hExplorer = GetAncestor(hWnd, GA_ROOT);
-        if (hExplorer)
+        UINT dpi = GetDpiForWindow(hWnd);
+        const int captionHeight =
+        GetSystemMetricsForDpi(SM_CYFRAME, dpi)
+        + GetSystemMetricsForDpi(SM_CYCAPTION, dpi)
+        + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+
+        if (IsCompositionActive()
+        && !settings.nocomposition)
         {
-            DwmExtendFrameIntoClientArea(
-                hExplorer, &mrg
-            );
-        }
-    }
-    else
-    {
-        HWND hExplorer = GetAncestor(hWnd, GA_ROOT);
-        if (hExplorer)
-        {
-            MARGINS mrg;
-            SecureZeroMemory(&mrg, sizeof(MARGINS));
-            DwmExtendFrameIntoClientArea(
-                hExplorer, &mrg
-            );
+            HWND hExplorer = GetAncestor(hWnd, GA_ROOT);
+            if (hExplorer && !ExplorerHasRibbon(hWnd))
+            {
+                RECT rc = { 0 };
+                GetWindowRect(hWnd, &rc);
+                MapWindowPoints(HWND_DESKTOP, GetParent(hWnd), (LPPOINT)&rc, 2);
+
+                if (rc.top == 0 || rc.top == captionHeight)
+                {
+                    Wh_Log(L"Extending.");
+                    MARGINS mrg = { 0 };
+                    mrg.cyTopHeight = rc.bottom;
+                    DwmExtendFrameIntoClientArea_orig(
+                        hExplorer, &mrg
+                    );
+                }
+            }
+            else
+            {
+                MARGINS mrg = { 0 };
+                mrg.cyTopHeight = captionHeight;
+                DwmExtendFrameIntoClientArea_orig(
+                    hExplorer, &mrg
+                );
+            }
         }
     }
 }
@@ -1246,31 +1285,44 @@ void THISCALL CNavBar__SetTheme_hook(
 )
 {
     CNavBar__SetTheme_orig(pThis);
-    if (UseNavbarGlass())
+    if (settings.navbarglass)
     {
         CNavBar__UpdateGlass(pThis);
     }
 }
 
-/* Nuke separator bands */
-void *CNavBar__AddSpacerBand_addr SHARED_SECTION = nullptr;
-HRESULT (THISCALL *CNavBar__AddSpacerBand_orig)(void *, int, int) = nullptr;
-HRESULT THISCALL CNavBar__AddSpacerBand_hook(
-    void *pThis,
-    int   nIndex,
-    int   nWidth
+void *CSeparatorBand_GetBandInfo_addr SHARED_SECTION = nullptr;
+HRESULT (STDCALL *CSeparatorBand_GetBandInfo_orig)(void *, DWORD, DWORD, DESKBANDINFO *) = nullptr;
+HRESULT STDCALL CSeparatorBand_GetBandInfo_hook(
+    void         *pThis,
+    DWORD         dwBandID,
+    DWORD         dwViewMode,
+    DESKBANDINFO *pdbi
 )
 {
-    if (settings.navbarglass && nIndex == 5)
+    HRESULT hr = CSeparatorBand_GetBandInfo_orig(pThis, dwBandID, dwViewMode, pdbi);
+    if (settings.navbarglass && SUCCEEDED(hr))
     {
-        return S_OK;
+        if (settings.noribbon)
+        {
+            int cx = (dwBandID == 5) ? -4 : 0;
+            pdbi->ptMinSize.x = cx;
+            pdbi->ptMaxSize.x = cx;
+            pdbi->ptActual.x = cx;
+        }
+        else if (dwBandID == 5)
+        {
+            IDeskBand *pdb = (IDeskBand *)pThis;
+            HWND hWnd = NULL;
+            if (SUCCEEDED(pdb->GetWindow(&hWnd)) && !ExplorerHasRibbon(hWnd))
+            {
+                pdbi->ptMinSize.x = -4;
+                pdbi->ptMaxSize.x = -4;
+                pdbi->ptActual.x = -4;
+            }
+        }
     }
-
-    return CNavBar__AddSpacerBand_orig(
-        pThis,
-        nIndex,
-        settings.navbarglass ? 0 : nWidth
-    );
+    return hr;
 }
 
 void *CNavBar_s_SizableWndProc_addr SHARED_SECTION = nullptr;
@@ -1286,12 +1338,27 @@ LRESULT CALLBACK CNavBar_s_SizableWndProc_hook(
         hWnd, uMsg, wParam, lParam
     );
 
-    if (UseNavbarGlass() && uMsg == WM_SIZE)
+    // if (uMsg == 0x41f)
+    //     Wh_Log(L"0x%X, %d, %d", uMsg, wParam, lParam);
+
+    if (settings.navbarglass)
     {
         void *pThis = (void *)GetWindowLongPtrW(hWnd, 0);
-        if (pThis)
+        switch (uMsg)
         {
-            CNavBar__UpdateGlass(pThis);
+            case WM_SIZE:
+            case WM_NCPAINT:
+                if (pThis)
+                {
+                    CNavBar__UpdateGlass(pThis);
+                }
+                break;
+            case WM_NOTIFY:
+                if (pThis && lParam && ((LPNMHDR)lParam)->code == 0xFFFFFFF4)
+                {
+                    CNavBar__UpdateGlass(pThis);
+                }
+                break;
         }
     }
 
@@ -1311,7 +1378,11 @@ LRESULT CALLBACK RebarSubclassWndProc(
     DWORD_PTR  dwRefData
 )
 {
-    if (UseNavbarGlass() && IsCompositionActive() && !settings.nocomposition && (uMsg == WM_ERASEBKGND || uMsg == WM_PAINT))
+    if (settings.navbarglass
+    && IsCompositionActive()
+    && !settings.nocomposition
+    && !ExplorerHasRibbon(hWnd)
+    && (uMsg == WM_ERASEBKGND || uMsg == WM_PAINT))
     {
         PAINTSTRUCT ps;
         HDC hDC = (uMsg == WM_ERASEBKGND) ? (HDC)wParam : BeginPaint(hWnd, &ps);
@@ -1325,18 +1396,27 @@ LRESULT CALLBACK RebarSubclassWndProc(
             EndPaint(hWnd, &ps);
         }
 
+        if (uMsg == WM_PAINT)
+        {
+            Wh_Log(L"WM_PAINT %d", ExplorerHasRibbon(hWnd));
+        }
+        else if (uMsg == WM_ERASEBKGND)
+        {
+            Wh_Log(L"WM_ERASEBKGND %d", ExplorerHasRibbon(hWnd));
+        }
+
         return 0;
     }
     else if (uMsg == WM_NCDESTROY)
     {
         g_subclassedRebars.erase(std::remove_if(
-        g_subclassedRebars.begin(),
-        g_subclassedRebars.end(),
-        [hWnd](HWND hw)
-        {
-            return hw == hWnd;
-        }
-    ));
+            g_subclassedRebars.begin(),
+            g_subclassedRebars.end(),
+            [hWnd](HWND hw)
+            {
+                return hw == hWnd;
+            }
+        ));
     }
 
     return DefSubclassProc(
@@ -1357,7 +1437,7 @@ HRESULT THISCALL CNavBar_CNavBandSite__Initialize_hook(
         pThis, hWndParent
     );
 
-    if (UseNavbarGlass() && SUCCEEDED(hr))
+    if (settings.navbarglass && SUCCEEDED(hr))
     {
         HWND hWnd = CNavBar_CNavBandSite_Window(pThis);
         if (hWnd && IsWindow(hWnd))
@@ -1382,7 +1462,7 @@ void THISCALL CNavBar__OnFrameStateChanged_hook(
     CNavBar__OnFrameStateChanged_orig(
         pThis, dwUnknown
     );
-    if (UseNavbarGlass())
+    if (settings.navbarglass)
     {
         CNavBar__UpdateGlass(pThis);
     }
@@ -1846,6 +1926,7 @@ HRESULT STDCALL CShellBrowser_GetFolderFlags_hook(
     FOLDERFLAGS *pfolderFlags
 )
 {
+    Wh_Log(L"CShellBrowser::GetFolderFlags(this = %p)", pThis);
     Wh_Log(L"getfolderflags");
     HRESULT hr = CShellBrowser_GetFolderFlags_orig(pThis, pfolderMask, pfolderFlags);
     if (SUCCEEDED(hr) && settings.colheaders)
@@ -1880,6 +1961,59 @@ GUID *THISCALL CExplorerLauncher_GetHostFromTarget_hook(
         pThis, out, pItemIds
     );
 }
+
+#ifdef _WIN64
+#   define CShellBrowser_Window(pThis) *((HWND *)pThis + 55)
+
+static BOOL CALLBACK Aerexplorer_InvalidateAllChildren(HWND hWnd, LPARAM lParam)
+{
+    if (!hWnd)
+        return FALSE;
+
+    InvalidateRect(hWnd, NULL, TRUE);
+    return TRUE;
+}
+/* Hook Ribbon visibility change to fix backgrounds. */
+void *CShellBrowser___OnRibbonVisibilityChange_addr SHARED_SECTION = nullptr;
+void (STDCALL *CShellBrowser___OnRibbonVisibilityChange_orig)(void *pThis, int newState) = nullptr;
+void STDCALL CShellBrowser___OnRibbonVisibilityChange_hook(void *pThis, int newState)
+{
+    // We want to get the window of the shell browser, which is the DUIViewWndClassName
+    // inside of the explorer window.
+    HWND hWnd = CShellBrowser_Window(pThis);
+
+    Wh_Log(L"CShellBrowser::OnRibbonVisibilityChange: HWND = %p", hWnd);
+
+    HWND hWndExplorerRoot = GetAncestor(hWnd, GA_ROOTOWNER);
+    HWND hWndWorkerW = FindWindowExW(hWndExplorerRoot, NULL, L"WorkerW", NULL);
+
+    if (hWndWorkerW)
+    {
+        HWND hWndRebar = FindWindowExW(hWndWorkerW, NULL, L"RebarWindow32", NULL);
+
+        if (hWndRebar)
+        {
+            // Invalidate the window to update the background. This is required whenever
+            // the state changes, because otherwise graphical artifacts are always visible.
+            InvalidateRect(hWndRebar, NULL, TRUE);
+            EnumChildWindows(hWndRebar, Aerexplorer_InvalidateAllChildren, NULL);
+
+            // A pointer to the CNavBar is stored in the data for this window.
+            void *pNavBar = (void *)GetWindowLongPtrW(hWndWorkerW, 0);
+
+            // Refresh the glass state since it might changed after this event.
+            CNavBar__UpdateGlass(pNavBar);
+
+            // Flicker the nonclient activation state on the navbar window to force it
+            // to reflow:
+            SendMessageW(hWndWorkerW, WM_NCACTIVATE, 0, NULL);
+            SendMessageW(hWndWorkerW, WM_NCACTIVATE, 1, NULL);
+        }
+    }
+
+    return CShellBrowser___OnRibbonVisibilityChange_orig(pThis, newState);
+}
+#endif
 
 #pragma endregion // "Explorerframe.dll hooks"
 
@@ -2233,7 +2367,10 @@ HRESULT WINAPI DrawThemeParentBackground_hook(
     LPRECT  prc
 )
 {
-    if (UseNavbarGlass() && IsCompositionActive() && !settings.nocomposition)
+    if (settings.navbarglass
+    && IsCompositionActive()
+    && !ExplorerHasRibbon(hwnd)
+    && !settings.nocomposition)
     {
         WCHAR szCls[256];
         GetClassNameW(hwnd, szCls, 256);
@@ -2280,6 +2417,38 @@ HRESULT WINAPI DrawThemeParentBackground_hook(
 
     return DrawThemeParentBackground_orig(
         hwnd, hdc, prc
+    );
+}
+
+HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
+    HWND           hWnd,
+    const MARGINS *pMarInset
+)
+{
+    if (settings.navbarglass)
+    {
+        WCHAR szClass[256];
+        if (GetClassNameW(hWnd, szClass, 256)
+        && 0 == wcscmp(szClass, L"CabinetWClass")
+        && !ExplorerHasRibbon(hWnd))
+        {
+            HWND hNavBar = FindWindowExW(hWnd, NULL, L"WorkerW", NULL);
+            if (hNavBar)
+            {
+                RECT rc = { 0 };
+                GetWindowRect(hNavBar, &rc);
+                MapWindowPoints(HWND_DESKTOP, hWnd, (LPPOINT)&rc, 2);
+
+                if (pMarInset->cyTopHeight < rc.bottom)
+                {
+                    return S_OK;
+                }
+            }
+        }
+    }
+
+    return DwmExtendFrameIntoClientArea_orig(
+        hWnd, pMarInset
     );
 }
 
@@ -2531,13 +2700,6 @@ BOOL Wh_ModInit(void)
         RtlQueryFeatureConfiguration = (RtlQueryFeatureConfiguration_t)GetProcAddress(hNtDll, "RtlQueryFeatureConfiguration");
     }
 
-    HMODULE hUxTheme = LoadLibraryW(L"uxtheme.dll");
-    if (hUxTheme)
-    {
-        ShouldAppsUseDarkMode = (ShouldAppsUseDarkMode_t)GetProcAddress(hUxTheme, (LPCSTR)132);
-        AllowDarkModeForWindow = (AllowDarkModeForWindow_t)GetProcAddress(hUxTheme, (LPCSTR)133);
-    }
-
     HMODULE hPropsys = LoadLibraryW(L"propsys.dll");
     if (hPropsys)
     {
@@ -2694,14 +2856,14 @@ BOOL Wh_ModInit(void)
         },
         {
             {
-                L"protected: long "
-                STHISCALL
-                L" CNavBar::_AddSpacerBand(enum CNavBar::NavigationBands,unsigned long)"
+                L"public: virtual long "
+                SSTDCALL
+                L" CSeparatorBand::GetBandInfo(unsigned long,unsigned long,struct DESKBANDINFO *)"
             },
-            &CNavBar__AddSpacerBand_orig,
-            CNavBar__AddSpacerBand_hook,
+            &CSeparatorBand_GetBandInfo_orig,
+            CSeparatorBand_GetBandInfo_hook,
             false,
-            &CNavBar__AddSpacerBand_addr
+            &CSeparatorBand_GetBandInfo_addr
         },
         {
             {
@@ -2849,7 +3011,20 @@ BOOL Wh_ModInit(void)
             CShellBrowser_GetFolderFlags_hook,
             false,
             &CShellBrowser_GetFolderFlags_addr
+        },
+#ifdef _WIN64
+        {
+            {
+                L"private: void "
+                SSTDCALL
+                L" CShellBrowser::_OnRibbonVisibilityChange(enum CShellBrowser::ONRIBBONVISIBILITY_CHANGE)"
+            },
+            &CShellBrowser___OnRibbonVisibilityChange_orig,
+            CShellBrowser___OnRibbonVisibilityChange_hook,
+            false,
+            &CShellBrowser___OnRibbonVisibilityChange_addr
         }
+#endif
     };
 
     if (!CmwfHookSymbols(
@@ -2991,6 +3166,8 @@ BOOL Wh_ModInit(void)
     }
 
     GetDpiForSystem = (GetDpiForSystem_t)GetProcAddress(hUser32, "GetDpiForSystem");
+    GetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
+    GetSystemMetricsForDpi = (GetSystemMetricsForDpi_t)GetProcAddress(hUser32, "GetSystemMetricsForDpi");
 
     HMODULE hComCtl = LoadComCtlModule();
     if (!hComCtl)
@@ -3036,6 +3213,23 @@ BOOL Wh_ModInit(void)
     ))
     {
         Wh_Log(L"Failed to hook DrawThemeParentBackground");
+        return FALSE;
+    }
+
+    HMODULE hDwmapi = LoadLibraryW(L"dwmapi.dll");
+    if (!hDwmapi)
+    {
+        Wh_Log(L"Failed to load dwmapi.dll");
+        return FALSE;
+    }
+
+    if (!WindhawkUtils::Wh_SetFunctionHookT(
+        (DwmExtendFrameIntoClientArea_t)GetProcAddress(hDwmapi, "DwmExtendFrameIntoClientArea"),
+        DwmExtendFrameIntoClientArea_hook,
+        &DwmExtendFrameIntoClientArea_orig
+    ))
+    {
+        Wh_Log(L"Failed to hook DwmExtendFrameIntoClientArea");
         return FALSE;
     }
 
