@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-28T10:06:33.000Z</updated>
+    <updated>2024-04-28T23:47:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.2]]></title>
+        <id>https://windhawk.net/mods/explorer-frame-classic#a4713da79384ef473a7d9888ca4a0eca33410b01</id>
+        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
+        <updated>2024-04-28T23:47:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Reimplemented the Classic navigation bar option to work with the new KB5036980 update.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.6.0]]></title>
         <id>https://windhawk.net/mods/aerexplorer#a7455bd32896c65001b46233741c1d08f9f1f008</id>
@@ -190,50 +199,5 @@ The default offset is -40, but you may want to change this in the mod settings.<
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2024-04-15T19:01:49.000Z</updated>
         <content type="html"><![CDATA[<p>Fix <code>ModernSearchFeatureEnabled</code> default case</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.5.7]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#45cdb1c86c8fb0d2356fe4e97974917c22959680</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2024-04-15T10:40:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="aerexplorer">Aerexplorer</h1>
-<p>This mod includes various tweaks for the Windows Explorer to look and behave
-more like its Windows Vista, 7, 8, or older Windows 10 counterpart.</p>
-<h1 id="importantread">IMPORTANT: READ!</h1>
-<p>Windhawk needs to hook into <code>svchost.exe</code> to successfully capture the creation of Explorer windows.
-Please navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
-<code>svchost.exe</code> is in the Process inclusion list.</p>
-<h1 id="showcase">Showcase</h1>
-<p><strong>Configured like Windows Vista</strong></p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aerexplorer-vista.png" alt="Windows Vista" /></p>
-<p><strong>Configured like Windows 7</strong></p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aerexplorer-7.png" alt="Windows 7" /></p>
-<p><strong>Configured like Windows 8.0</strong></p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aerexplorer-8.png" alt="Windows 8.0" /></p>
-<p><strong>Configured like Windows 10 RTM</strong></p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/aerexplorer-10.png" alt="Windows 10 RTM" /></p>
-<h1 id="commonissues">Common issues</h1>
-<p><strong>Control Panel lost its styling.</strong></p>
-<p>OldNewExplorer allows for modification of UIFILE resources located in shell32.dll through the theme's
-shellstyle.dll. You can leave OldNewExplorer installed with all of its options disabled, or, if you're
-on 1903 or greater version, look into porting the modified UIFILEs from your shellstyle.dll to shell32.dll.mun.
-The former is generally easier, and works just fine, though.</p>
-<p><strong>The user folders keep reappearing under This PC on the navigation pane.</strong></p>
-<p>This is an issue with the way the navigation pane works. Since the user folders are under This PC in the path,
-it will try to correct itself by adding them under This PC on the navigation pane. If you use
-<a href="https://winclassic.net/thread/2013/moving-user-folders-back-pc">this registry hack</a>, they will be moved back
-under your user folder, and stop reappearing under This PC on the navigation pane.</p>
-<h1 id="support">Support</h1>
-<p>This mod is primarily tested on Windows 10 Vibranium (which includes 2004, 20H2,
-21H1, 21H2, and 22H2), but it has been confirmed to work to a varying degree on:</p>
-<ul>
-<li>Redstone 4 (1803)</li>
-<li>Redstone 5 (1809)</li>
-<li>Vanadium (1909)</li>
-<li>Iron (Server 2022)</li>
-</ul>
-<p>Additionally, you can get it working on newer versions such as Windows 11 by replacing
-ExplorerFrame.dll with that from build 21332, but it is not supported and not recommended.</p>
-<p>Feel free to try it on other versions, but it may not work.</p>]]></content>
     </entry>
 </feed>
