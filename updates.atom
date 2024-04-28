@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-27T14:14:14.000Z</updated>
+    <updated>2024-04-28T10:06:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.6.0]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#a7455bd32896c65001b46233741c1d08f9f1f008</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2024-04-28T10:06:33.000Z</updated>
+        <content type="html"><![CDATA[<p>Support glass + ribbon</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Icon Resource Redirect 1.0.5]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#cbc1433369c1ff664220cd31ee57cef2dbadf4f7</id>
@@ -228,15 +235,5 @@ under your user folder, and stop reappearing under This PC on the navigation pan
 <p>Additionally, you can get it working on newer versions such as Windows 11 by replacing
 ExplorerFrame.dll with that from build 21332, but it is not supported and not recommended.</p>
 <p>Feel free to try it on other versions, but it may not work.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Icon Resource Redirect 1.0.1]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#fd5c9631d7d4d73369b9b492edc8990c1cbfd32c</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-04-14T06:49:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hook the LoadIconWithScaleDown function to have more icons replaced.</li>
-<li>If an icon doesn't exist in the custom resource file, the original icon is used.</li>
-</ul>]]></content>
     </entry>
 </feed>
