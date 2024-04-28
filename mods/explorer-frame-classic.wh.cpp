@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -521,29 +521,16 @@ int WINAPI CommandBarExtension_GetHeight_Hook(
     return ret;
 }
 
-using Feature_FEMNB_IsEnabled_t = bool(WINAPI*)(PVOID pThis);
-Feature_FEMNB_IsEnabled_t Feature_FEMNB_IsEnabled_Original;
-bool WINAPI Feature_FEMNB_IsEnabled_Hook(PVOID pThis) {
+using CanShowModernNavBar_t = bool(WINAPI*)(PVOID pThis);
+CanShowModernNavBar_t CanShowModernNavBar_Original;
+bool WINAPI CanShowModernNavBar_Hook(PVOID pThis) {
     Wh_Log(L">");
 
     if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
         return false;
     }
 
-    return Feature_FEMNB_IsEnabled_Original(pThis);
-}
-
-using Feature_FEMNB_IsEnabled_ReportingKind_t = bool(WINAPI*)(PVOID pThis);
-Feature_FEMNB_IsEnabled_ReportingKind_t
-    Feature_FEMNB_IsEnabled_ReportingKind_Original;
-bool WINAPI Feature_FEMNB_IsEnabled_ReportingKind_Hook(PVOID pThis) {
-    Wh_Log(L">");
-
-    if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
-        return false;
-    }
-
-    return Feature_FEMNB_IsEnabled_ReportingKind_Original(pThis);
+    return CanShowModernNavBar_Original(pThis);
 }
 
 using CoCreateInstance_t = decltype(&CoCreateInstance);
@@ -579,15 +566,9 @@ bool HookExplorerFrameSymbols() {
 
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_FEMNB>::__private_IsEnabled(void))"},
-            (void**)&Feature_FEMNB_IsEnabled_Original,
-            (void*)Feature_FEMNB_IsEnabled_Hook,
-            true,
-        },
-        {
-            {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_FEMNB>::__private_IsEnabled(enum wil::ReportingKind))"},
-            (void**)&Feature_FEMNB_IsEnabled_ReportingKind_Original,
-            (void*)Feature_FEMNB_IsEnabled_ReportingKind_Hook,
+            {LR"(bool __cdecl CanShowModernNavBar(void))"},
+            (void**)&CanShowModernNavBar_Original,
+            (void*)CanShowModernNavBar_Hook,
             true,
         },
     };
