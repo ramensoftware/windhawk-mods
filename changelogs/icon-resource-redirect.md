@@ -1,3 +1,10 @@
+## 1.1 ([Apr 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a9c288908ae7264b588e9bcc266a786e92361af2/mods/icon-resource-redirect.wh.cpp))
+
+* Renamed from Icon Resource Redirect to Resource Redirect.
+* Added handling for icons loaded with the `LoadIconW` function.
+* Added handling for cursors loaded with the `LoadCursorW` function.
+* Added handling for DirectUI resources (usually `UIFILE` and `XML`) loaded with the `SetXMLFromResource` function.
+
 ## 1.0.5 ([Apr 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/cbc1433369c1ff664220cd31ee57cef2dbadf4f7/mods/icon-resource-redirect.wh.cpp))
 
 * Added an option to select a theme folder. Refer to the mod description for details.

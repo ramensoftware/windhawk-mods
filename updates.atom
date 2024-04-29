@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-28T23:47:17.000Z</updated>
+    <updated>2024-04-29T00:37:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.1]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#a9c288908ae7264b588e9bcc266a786e92361af2</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-04-29T00:37:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed from Icon Resource Redirect to Resource Redirect.</li>
+<li>Added handling for icons loaded with the <code>LoadIconW</code> function.</li>
+<li>Added handling for cursors loaded with the <code>LoadCursorW</code> function.</li>
+<li>Added handling for DirectUI resources (usually <code>UIFILE</code> and <code>XML</code>) loaded with the <code>SetXMLFromResource</code> function.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.2]]></title>
         <id>https://windhawk.net/mods/explorer-frame-classic#a4713da79384ef473a7d9888ca4a0eca33410b01</id>
@@ -192,12 +204,5 @@ The default offset is -40, but you may want to change this in the mod settings.<
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2024-04-15T19:55:20.000Z</updated>
         <content type="html"><![CDATA[<p>Fix sub-build collection</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.5.8]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#da930af2ef8190e1b68734fb88e1334b0df12b50</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2024-04-15T19:01:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix <code>ModernSearchFeatureEnabled</code> default case</p>]]></content>
     </entry>
 </feed>
