@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-30T07:19:13.000Z</updated>
+    <updated>2024-04-30T18:59:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#a36ce2c5a985dcc2822d344ccf8aacd4650fb59a</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2024-04-30T18:59:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Having more than one target applied for the same element is now supported.</li>
+<li>Fixed some styles not being restored when the mod is unloaded.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.1.1]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#597515446756cfaac51a302032e13992ce2ee32c</id>
@@ -199,12 +209,5 @@ After the mod is enabled, kill the explorer.exe process and restart it for the c
 <p>The mod works by interjecting the request for a textual description of the file explorer window layout, and injecting a offset token into it.
 The default offset is -40, but you may want to change this in the mod settings.</p>
 <p>For issue reports, contact waldemar3194 on Discord, or file a report at my <a href="https://github.com/CyprinusCarpio/windhawk-mods">github repository</a>.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Eradicate Immersive Menus 1.1.0]]></title>
-        <id>https://windhawk.net/mods/eradicate-immersive-menus#5e2bb70ab60874ee4c6adb0c2c30837080f6d634</id>
-        <link href="https://windhawk.net/mods/eradicate-immersive-menus"/>
-        <updated>2024-04-16T04:58:22.000Z</updated>
-        <content type="html"><![CDATA[<p>Apply to Narrator</p>]]></content>
     </entry>
 </feed>

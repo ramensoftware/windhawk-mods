@@ -1,3 +1,8 @@
+## 1.1.2 ([Apr 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a36ce2c5a985dcc2822d344ccf8aacd4650fb59a/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Having more than one target applied for the same element is now supported.
+* Fixed some styles not being restored when the mod is unloaded.
+
 ## 1.1.1 ([Apr 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ea404918c73f63626fee81883879365498d2cdd9/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Fixed incorrect class name replacements.
