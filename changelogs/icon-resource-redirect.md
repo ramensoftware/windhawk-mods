@@ -1,3 +1,7 @@
+## 1.1.1 ([Apr 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/597515446756cfaac51a302032e13992ce2ee32c/mods/icon-resource-redirect.wh.cpp))
+
+* Added handling for bitmaps loaded with the `LoadBitmapW` function.
+
 ## 1.1 ([Apr 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a9c288908ae7264b588e9bcc266a786e92361af2/mods/icon-resource-redirect.wh.cpp))
 
 * Renamed from Icon Resource Redirect to Resource Redirect.
