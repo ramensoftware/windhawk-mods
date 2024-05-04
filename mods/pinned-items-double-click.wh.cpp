@@ -2,14 +2,14 @@
 // @id              pinned-items-double-click
 // @name            Open pinned items with double click
 // @description     Only open pinned items when double clicking on them to avoid accidental clicks
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lversion
+// @compilerOptions -lversion -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -31,7 +31,7 @@ Only open pinned items when double clicking on them to avoid accidental clicks.
 Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
-**Note:** To customize the old taskbar on Windows 11 (if using Explorer Patcher
+**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.
 */
 // ==/WindhawkModReadme==
@@ -42,12 +42,13 @@ or a similar tool), enable the relevant option in the mod's settings.
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: For Windhawk versions older
-    than 1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
+    1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
 
 #include <windowsx.h>
+#include <wininet.h>
 
 #include <algorithm>
 #include <string>
@@ -114,7 +115,7 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
     static PVOID firstClickTaskBtnGroup;
 
     ULONGLONG tickCount = GetTickCount64();
-    ULONGLONG messagePos = GetMessagePos();
+    DWORD messagePos = GetMessagePos();
 
     if (firstClickTickCount &&
         IsDoubleClickDistance(firstClickMessagePos, messagePos) &&
@@ -407,6 +408,151 @@ bool HookSymbols(HMODULE module,
     return true;
 }
 
+std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
+    HINTERNET hOpenHandle = InternetOpen(
+        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hOpenHandle) {
+        return std::nullopt;
+    }
+
+    HINTERNET hUrlHandle =
+        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
+                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
+                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
+                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
+                        0);
+    if (!hUrlHandle) {
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwStatusCode = 0;
+    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
+    if (!HttpQueryInfo(hUrlHandle,
+                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
+        dwStatusCode != 200) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
+    if (!pUrlContent) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwNumberOfBytesRead;
+    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
+    DWORD dwLength = dwNumberOfBytesRead;
+
+    while (dwNumberOfBytesRead) {
+        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
+            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
+        if (!pNewUrlContent) {
+            InternetCloseHandle(hUrlHandle);
+            InternetCloseHandle(hOpenHandle);
+            HeapFree(GetProcessHeap(), 0, pUrlContent);
+            return std::nullopt;
+        }
+
+        pUrlContent = pNewUrlContent;
+        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
+                         &dwNumberOfBytesRead);
+        dwLength += dwNumberOfBytesRead;
+    }
+
+    InternetCloseHandle(hUrlHandle);
+    InternetCloseHandle(hOpenHandle);
+
+    // Assume UTF-8.
+    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
+                                          dwLength, nullptr, 0);
+    std::wstring unicodeContent(charsNeeded, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
+                        unicodeContent.data(), unicodeContent.size());
+
+    HeapFree(GetProcessHeap(), 0, pUrlContent);
+
+    return unicodeContent;
+}
+
+bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
+                                        const SYMBOL_HOOK* symbolHooks,
+                                        size_t symbolHooksCount) {
+    constexpr WCHAR kModIdForCache[] = L"pinned-items-double-click";
+
+    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+        return true;
+    }
+
+    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+
+    WCHAR moduleFilePath[MAX_PATH];
+    DWORD moduleFilePathLen =
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
+    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
+    DWORD moduleFileNameLen =
+        moduleFilePathLen - (moduleFileName - moduleFilePath);
+
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
+                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
+                  nullptr, 0);
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    std::wstring cacheStrKey =
+#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+    cacheStrKey += moduleFileName;
+
+    std::wstring onlineCacheUrl =
+        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
+    onlineCacheUrl += kModIdForCache;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += cacheStrKey;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += timeStamp;
+    onlineCacheUrl += L'-';
+    onlineCacheUrl += imageSize;
+    onlineCacheUrl += L".txt";
+
+    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
+
+    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
+    if (!onlineCache) {
+        Wh_Log(L"Failed to get online cache");
+        return false;
+    }
+
+    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+
+    return HookSymbols(module, symbolHooks, symbolHooksCount);
+}
+
 void LoadSettings() {
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
@@ -465,7 +611,8 @@ BOOL Wh_ModInit() {
         }
     }
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                            ARRAYSIZE(symbolHooks))) {
         return FALSE;
     }
 
