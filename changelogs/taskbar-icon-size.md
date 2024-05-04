@@ -1,3 +1,7 @@
+## 1.2.6 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/76eac50ecafbe606e0840cb0c250afb8cfb7eb00/mods/taskbar-icon-size.wh.cpp))
+
+* Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
+
 ## 1.2.5 ([Apr 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/159dc6e1497d197eb5613eb190f4909ef8ab667b/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed incorrect search icon size, started happening after update KB5036980.
