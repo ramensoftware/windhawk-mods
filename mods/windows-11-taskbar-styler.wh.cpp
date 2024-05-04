@@ -2,14 +2,14 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.3.1
+// @version         1.3.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lwininet -Wl,--export-all-symbols
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -182,15 +182,15 @@ relevant `#pragma region` regions in the code editor.
   - WinXP: WinXP
   - Bubbles: Bubbles
 - controlStyles:
-  - - target: Taskbar.TaskListButton
+  - - target: ""
       $name: Target
-    - styles: [CornerRadius=0]
+    - styles: [""]
       $name: Styles
   $name: Control styles
 - resourceVariables:
-  - - variableKey: TaskbarContextMenuMargin
+  - - variableKey: ""
       $name: Variable key
-    - value: "0"
+    - value: ""
       $name: Value
   $name: Resource variables
 */
@@ -1577,6 +1577,7 @@ HRESULT InjectWindhawkTAP() noexcept
 
 #include <commctrl.h>
 #include <roapi.h>
+#include <wininet.h>
 #include <winstring.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
@@ -2798,6 +2799,152 @@ bool WINAPI Foundation_operator_eq_Hook(void** p1, void** p2) {
     return Foundation_operator_eq_Original(p1, p2);
 }
 
+std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
+    HINTERNET hOpenHandle = InternetOpen(
+        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hOpenHandle) {
+        return std::nullopt;
+    }
+
+    HINTERNET hUrlHandle =
+        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
+                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
+                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
+                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
+                        0);
+    if (!hUrlHandle) {
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwStatusCode = 0;
+    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
+    if (!HttpQueryInfo(hUrlHandle,
+                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
+        dwStatusCode != 200) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
+    if (!pUrlContent) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwNumberOfBytesRead;
+    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
+    DWORD dwLength = dwNumberOfBytesRead;
+
+    while (dwNumberOfBytesRead) {
+        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
+            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
+        if (!pNewUrlContent) {
+            InternetCloseHandle(hUrlHandle);
+            InternetCloseHandle(hOpenHandle);
+            HeapFree(GetProcessHeap(), 0, pUrlContent);
+            return std::nullopt;
+        }
+
+        pUrlContent = pNewUrlContent;
+        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
+                         &dwNumberOfBytesRead);
+        dwLength += dwNumberOfBytesRead;
+    }
+
+    InternetCloseHandle(hUrlHandle);
+    InternetCloseHandle(hOpenHandle);
+
+    // Assume UTF-8.
+    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
+                                          dwLength, nullptr, 0);
+    std::wstring unicodeContent(charsNeeded, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
+                        unicodeContent.data(), unicodeContent.size());
+
+    HeapFree(GetProcessHeap(), 0, pUrlContent);
+
+    return unicodeContent;
+}
+
+bool HookSymbolsWithOnlineCacheFallback(
+    HMODULE module,
+    const WindhawkUtils::SYMBOL_HOOK* symbolHooks,
+    size_t symbolHooksCount) {
+    constexpr WCHAR kModIdForCache[] = L"windows-11-taskbar-styler";
+
+    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+        return true;
+    }
+
+    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+
+    WCHAR moduleFilePath[MAX_PATH];
+    DWORD moduleFilePathLen =
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
+    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
+    DWORD moduleFileNameLen =
+        moduleFilePathLen - (moduleFileName - moduleFilePath);
+
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
+                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
+                  nullptr, 0);
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    std::wstring cacheStrKey =
+#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+    cacheStrKey += moduleFileName;
+
+    std::wstring onlineCacheUrl =
+        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
+    onlineCacheUrl += kModIdForCache;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += cacheStrKey;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += timeStamp;
+    onlineCacheUrl += L'-';
+    onlineCacheUrl += imageSize;
+    onlineCacheUrl += L".txt";
+
+    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
+
+    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
+    if (!onlineCache) {
+        Wh_Log(L"Failed to get online cache");
+        return false;
+    }
+
+    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+
+    return HookSymbols(module, symbolHooks, symbolHooksCount);
+}
+
 bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
     WCHAR szWindowsDirectory[MAX_PATH];
     if (!GetWindowsDirectory(szWindowsDirectory,
@@ -2856,7 +3003,8 @@ bool HookTaskbarViewDllSymbols() {
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                              ARRAYSIZE(symbolHooks));
 }
 
 BOOL Wh_ModInit() {
