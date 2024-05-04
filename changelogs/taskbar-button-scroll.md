@@ -1,3 +1,7 @@
+## 1.0.6 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3a87f5e12b5f2c6778b4256c45c8124c38fad2cc/mods/taskbar-button-scroll.wh.cpp))
+
+* Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
+
 ## 1.0.5 ([Sep 30, 2023](https://github.com/ramensoftware/windhawk-mods/blob/eb081300de3950ca47306e7c7ebd73c18d1ee6cf/mods/taskbar-button-scroll.wh.cpp))
 
 * Improved compatiblity with other mods such as: Cycle taskbar buttons with mouse wheel.
