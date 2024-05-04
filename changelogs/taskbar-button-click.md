@@ -1,3 +1,7 @@
+## 1.0.6 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f49525eaab8fbdf923f203c514c42b215eeab10e/mods/taskbar-button-click.wh.cpp))
+
+* Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
+
 ## 1.0.5 ([Nov 24, 2023](https://github.com/ramensoftware/windhawk-mods/blob/1f28d4e873e7790ddb44cf727fbf6d90c0a8167a/mods/taskbar-button-click.wh.cpp))
 
 * Added support for the new Windows 11 taskbar labels option.
