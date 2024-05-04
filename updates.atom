@@ -2,12 +2,57 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-04-30T18:59:54.000Z</updated>
+    <updated>2024-05-04T10:57:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome UI Tweaks 1.0.0]]></title>
+        <id>https://windhawk.net/mods/chrome-ui-tweaks#81fc79654261553862040ccb2d25f9c7e58c73e9</id>
+        <link href="https://windhawk.net/mods/chrome-ui-tweaks"/>
+        <updated>2024-05-04T10:57:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromeuitweaks">Chrome UI Tweaks</h1>
+<p>This mod currently implements two tweaks for Chrome, on x86-64 Windows:</p>
+<h2 id="simplifiedbookmarkflow">Simplified Bookmark Flow</h2>
+<p>Disable the "Simplified Bookmark Flow" feature (see <a href="https://issues.chromium.org/issues/41496433">https://issues.chromium.org/issues/41496433</a>).
+When creating a new bookmark, you will immediately see the "Edit Bookmark" window.</p>
+<h2 id="menuuicustomization">Menu UI customization</h2>
+<p>"Chrome Refresh 2023" brought significant changes to the user interface, including rounding the corners
+of menus (as well as many other UI elements) and significantly increasing the spacing between items,
+meaning fewer menu items can fit on screen.</p>
+<p>This tweak lets you configure many menu UI values.
+This will affect several kinds of menus:</p>
+<ul>
+<li>Main options/settings menu (three dots at the top right, "Customize and control Google Chrome")</li>
+<li>Bookmark menus (not including the bookmark bar itself)</li>
+<li>Context menu (when you right-click)</li>
+</ul>
+<p>Keep in mind unexpectedly large, small, or negative values may cause graphical issues.
+Most values are measured in device-independent-pixels (i.e. will scale with DPI),
+and you will probably want to keep them relatively small (below 50), but feel free to experiment.</p>
+<p><code>item_vertical_margin</code> is the only MenuConfig setting that is changed initially.
+All other MenuConfig mod settings are negative one (-1) by default.
+If any MenuConfig mod setting is -1, it will be ignored.
+You can use this to reset a value back to default.
+Other negative values are increased by one (eg, setting of -3 will be interpreted as -2).
+Actual default values are described for each option if they exist/are known;
+the four potential defaults are:</p>
+<ul>
+<li>Old, for default values usually originating from before Chrome 75 (before 2019)</li>
+<li>CR2023, for default values of Chrome Refresh 2023</li>
+<li>Win10, for default values on Windows 10 (before CR2023)</li>
+<li>Win11, for default values on Windows 11 (before CR2023)</li>
+</ul>
+<p>Note that the "Old" default values may not look the same way as in older versions of Chrome
+due to other changes in the Chrome code.</p>
+<h1 id="issues">Issues</h1>
+<p>Due to implementation details, this mod may stop working on new Chrome versions.
+You can report issues on github: https://github.com/VasherMC/windhawk-mods/issues</p>
+<p>First tested Chrome version: 123.0.6312.106</p>
+<p>Latest tested Chrome version: 124.0.6367.119 (stable), 126.0.6457.0 (canary)</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.2]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#a36ce2c5a985dcc2822d344ccf8aacd4650fb59a</id>
@@ -192,22 +237,5 @@ appears, this mod turns it off.</p>
 <li>Added a working entry in the Explorer Bars submenu</li>
 <li>Removed 32bit "support"</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Command Bar 1.0]]></title>
-        <id>https://windhawk.net/mods/remove-command-bar#7f9f18d539b9f251ed36b3d5940c26bb3f33f8de</id>
-        <link href="https://windhawk.net/mods/remove-command-bar"/>
-        <updated>2024-04-18T07:05:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="removecommandbar">Remove Command Bar</h1>
-<p>This mod removes the Vista or 7 Command Bar from file explorer windows without having to patch shellstyle.dll using external tools.
-This is meant to enable accurate looks on various pre-Vista file explorer mods.
-If your shellstyle.dll is already patched, restore it using the following command in a elevated command prompt:</p>
-<pre><code>sfc /scanfile=c:\windows\system32\shellstyle.dll
-</code></pre>
-<p>and reboot your system. If this is not done, the patch from the dll will take precedence over this mod.
-After the mod is enabled, kill the explorer.exe process and restart it for the changes to take place.</p>
-<p>The mod works by interjecting the request for a textual description of the file explorer window layout, and injecting a offset token into it.
-The default offset is -40, but you may want to change this in the mod settings.</p>
-<p>For issue reports, contact waldemar3194 on Discord, or file a report at my <a href="https://github.com/CyprinusCarpio/windhawk-mods">github repository</a>.</p>]]></content>
     </entry>
 </feed>

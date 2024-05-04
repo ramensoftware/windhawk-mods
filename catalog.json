@@ -116,6 +116,29 @@
                 "version": "1.0"
             }
         },
+        "chrome-ui-tweaks": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1714820259000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1714820259000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Vasher",
+                "description": "Small UI tweaks to Google Chrome",
+                "github": "https://github.com/VasherMC",
+                "include": [
+                    "chrome.exe"
+                ],
+                "name": "Chrome UI Tweaks",
+                "version": "1.0.0"
+            }
+        },
         "chrome-wheel-scroll-tabs": {
             "details": {
                 "defaultSorting": 18020,
