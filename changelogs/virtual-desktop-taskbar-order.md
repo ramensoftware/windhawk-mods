@@ -1,3 +1,7 @@
+## 1.0.2 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/542bd0f01350b98ee485427c6323fbfcb5c6f249/mods/virtual-desktop-taskbar-order.wh.cpp))
+
+* Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
+
 ## 1.0.1 ([Mar 7, 2023](https://github.com/ramensoftware/windhawk-mods/blob/e286fcfd5b82e62a934de48dfce17044e5fbc642/mods/virtual-desktop-taskbar-order.wh.cpp))
 
 * Fixed mod sometimes failing to initialize on system startup.

@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-04T20:14:47.000Z</updated>
+    <updated>2024-05-04T20:34:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.2]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#542bd0f01350b98ee485427c6323fbfcb5c6f249</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
+        <updated>2024-05-04T20:34:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar notification icon spacing 1.0.2]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#b44c7541411462da53f27a54740123bd8bfba31c</id>
@@ -218,15 +227,5 @@ and what to display in the build section.</p>]]></content>
         <updated>2024-04-25T05:32:04.000Z</updated>
         <content type="html"><![CDATA[<p>The Universal Windows Platform (UWP), in the spirit of being unoptimized, keep all of their many processes operating all of the time: at the logon of the user, RuntimeBroker automatically restarting, and even when UWP apps are closed. This mod makes ApplicationFrameHost and RuntimeBroker automatically terminate unless Settings or Windows Security are open. You can add to the list of apps to keep the programs open if you so choose.</p>
 <p><strong>If you want to add more apps like WhatsApp etc to this list, you must turn off background processes for the app in the Metro Settings, or the app stays suspended.</strong></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Scroll Actions 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-scroll-actions#e3eaf2b9f4c26209569da42ac3e648c1faa8265a</id>
-        <link href="https://windhawk.net/mods/taskbar-scroll-actions"/>
-        <updated>2024-04-24T18:04:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a new scroll area option: The taskbar without the notification area.</li>
-<li>On new Windows 11 versions, consider the clock on secondary taskbars as a notification area.</li>
-</ul>]]></content>
     </entry>
 </feed>
