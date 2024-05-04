@@ -1796,7 +1796,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 115,
-                "updated": 1703683910000,
+                "updated": 1714846941000,
                 "users": 5643
             },
             "metadata": {
@@ -1804,7 +1804,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-D__USE_MINGW_ANSI_STDIO=0 -lcomctl32 -loleaut32 -lole32 -lshlwapi -lversion",
+                "compilerOptions": "-D__USE_MINGW_ANSI_STDIO=0 -lcomctl32 -loleaut32 -lole32 -lshlwapi -lversion -lwininet",
                 "description": "Causes a separate button to be created on the taskbar for each new window",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -1813,7 +1813,7 @@
                 ],
                 "name": "Disable grouping on the taskbar",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.1"
+                "version": "1.3.2"
             }
         },
         "taskbar-icon-size": {

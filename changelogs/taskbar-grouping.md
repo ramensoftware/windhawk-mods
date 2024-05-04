@@ -1,3 +1,7 @@
+## 1.3.2 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/63c5908556e699a14f3e007e9a7e709745f33224/mods/taskbar-grouping.wh.cpp))
+
+* Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
+
 ## 1.3.1 ([Dec 27, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a378597db91ccbf3a5bdbfbee7f3c3dd437010d7/mods/taskbar-grouping.wh.cpp))
 
 * Fixed a regression which caused pinned items to be separated when they shouldn't be (introduced in v1.3).
