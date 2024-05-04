@@ -1516,7 +1516,7 @@
                 "published": 1682167233000,
                 "rating": 10,
                 "ratingUsers": 7,
-                "updated": 1682167233000,
+                "updated": 1714856366000,
                 "users": 196
             },
             "metadata": {
@@ -1524,7 +1524,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lversion",
+                "compilerOptions": "-lversion -lwininet",
                 "description": "Only open pinned items when double clicking on them to avoid accidental clicks",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -1533,7 +1533,7 @@
                 ],
                 "name": "Open pinned items with double click",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "remove-command-bar": {

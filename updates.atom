@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-04T20:53:47.000Z</updated>
+    <updated>2024-05-04T20:59:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Open pinned items with double click 1.0.1]]></title>
+        <id>https://windhawk.net/mods/pinned-items-double-click#544193af43e9c3b22c8442070eed58c7ddb2bd88</id>
+        <link href="https://windhawk.net/mods/pinned-items-double-click"/>
+        <updated>2024-05-04T20:59:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.6]]></title>
         <id>https://windhawk.net/mods/taskbar-button-scroll#3a87f5e12b5f2c6778b4256c45c8124c38fad2cc</id>
@@ -218,15 +227,6 @@ You can report issues on github: https://github.com/VasherMC/windhawk-mods/issue
         <updated>2024-04-26T18:41:41.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed incorrect search icon size, started happening after update KB5036980.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Icon Resource Redirect 1.0.4]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#de61b82dd647c298c1f71c9b12f04320f012d4ff</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-04-26T15:18:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added string and GDI+ image redirection.</li>
 </ul>]]></content>
     </entry>
 </feed>
