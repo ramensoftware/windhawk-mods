@@ -2,14 +2,14 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.0.6
+// @version         1.0.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lversion
+// @compilerOptions -lcomctl32 -lversion -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -48,6 +48,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 // ==/WindhawkModSettings==
 
 #include <commctrl.h>
+#include <wininet.h>
 
 #include <algorithm>
 #include <string>
@@ -428,7 +429,7 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
     param.uIdSubclass = uIdSubclass;
     param.dwRefData = dwRefData;
     param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
+    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
 
     UnhookWindowsHookEx(hook);
 
@@ -775,16 +776,29 @@ struct SYMBOL_HOOK {
     bool optional = false;
 };
 
-bool HookSymbols(PCWSTR cacheId,
-                 HMODULE module,
+bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
                  size_t symbolHooksCount) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'@';
     constexpr size_t cacheMaxSize = 10240;
 
+    WCHAR moduleFilePath[MAX_PATH];
+    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
     WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + cacheId;
+    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
     Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
 
     std::wstring_view cacheBufferView(cacheBuffer);
@@ -959,6 +973,151 @@ bool HookSymbols(PCWSTR cacheId,
     return true;
 }
 
+std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
+    HINTERNET hOpenHandle = InternetOpen(
+        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hOpenHandle) {
+        return std::nullopt;
+    }
+
+    HINTERNET hUrlHandle =
+        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
+                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
+                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
+                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
+                        0);
+    if (!hUrlHandle) {
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwStatusCode = 0;
+    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
+    if (!HttpQueryInfo(hUrlHandle,
+                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
+        dwStatusCode != 200) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
+    if (!pUrlContent) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwNumberOfBytesRead;
+    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
+    DWORD dwLength = dwNumberOfBytesRead;
+
+    while (dwNumberOfBytesRead) {
+        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
+            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
+        if (!pNewUrlContent) {
+            InternetCloseHandle(hUrlHandle);
+            InternetCloseHandle(hOpenHandle);
+            HeapFree(GetProcessHeap(), 0, pUrlContent);
+            return std::nullopt;
+        }
+
+        pUrlContent = pNewUrlContent;
+        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
+                         &dwNumberOfBytesRead);
+        dwLength += dwNumberOfBytesRead;
+    }
+
+    InternetCloseHandle(hUrlHandle);
+    InternetCloseHandle(hOpenHandle);
+
+    // Assume UTF-8.
+    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
+                                          dwLength, nullptr, 0);
+    std::wstring unicodeContent(charsNeeded, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
+                        unicodeContent.data(), unicodeContent.size());
+
+    HeapFree(GetProcessHeap(), 0, pUrlContent);
+
+    return unicodeContent;
+}
+
+bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
+                                        const SYMBOL_HOOK* symbolHooks,
+                                        size_t symbolHooksCount) {
+    constexpr WCHAR kModIdForCache[] = L"taskbar-thumbnail-reorder";
+
+    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+        return true;
+    }
+
+    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+
+    WCHAR moduleFilePath[MAX_PATH];
+    DWORD moduleFilePathLen =
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
+    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
+    DWORD moduleFileNameLen =
+        moduleFilePathLen - (moduleFileName - moduleFilePath);
+
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
+                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
+                  nullptr, 0);
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    std::wstring cacheStrKey =
+#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+    cacheStrKey += moduleFileName;
+
+    std::wstring onlineCacheUrl =
+        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
+    onlineCacheUrl += kModIdForCache;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += cacheStrKey;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += timeStamp;
+    onlineCacheUrl += L'-';
+    onlineCacheUrl += imageSize;
+    onlineCacheUrl += L".txt";
+
+    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
+
+    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
+    if (!onlineCache) {
+        Wh_Log(L"Failed to get online cache");
+        return false;
+    }
+
+    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+
+    return HookSymbols(module, symbolHooks, symbolHooksCount);
+}
+
 void LoadSettings() {
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
@@ -1043,8 +1202,8 @@ BOOL Wh_ModInit() {
 
     if (g_explorerVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
-        if (!HookSymbols(L"explorer.exe", module, symbolHooks,
-                         ARRAYSIZE(symbolHooks))) {
+        if (!HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                                ARRAYSIZE(symbolHooks))) {
             return FALSE;
         }
     } else {
@@ -1054,8 +1213,8 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
-        if (!HookSymbols(L"taskbar.dll", module, symbolHooks,
-                         ARRAYSIZE(symbolHooks))) {
+        if (!HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                                ARRAYSIZE(symbolHooks))) {
             return FALSE;
         }
     }
