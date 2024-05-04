@@ -2,14 +2,14 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Show and customize text labels for running programs on the taskbar (Windows 11 only)
-// @version         1.2.4
+// @version         1.2.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0605 -loleaut32 -lole32 -lruntimeobject
+// @compilerOptions -DWINVER=0x0605 -loleaut32 -lole32 -lruntimeobject -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -112,6 +112,7 @@ choose one of the following running indicator styles:
 #include <inspectable.h>
 #include <knownfolders.h>
 #include <shlobj.h>
+#include <wininet.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -171,10 +172,6 @@ double g_initialTaskbarItemWidth;
 
 UINT_PTR g_invalidateTaskListButtonTimer;
 std::unordered_set<FrameworkElement> g_taskListButtonsWithLabelMissing;
-
-#ifndef SPI_SETLOGICALDPIOVERRIDE
-#define SPI_SETLOGICALDPIOVERRIDE 0x009F
-#endif
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 
@@ -812,7 +809,10 @@ void UpdateTaskListButtonWithLabelStyle(
             labelControlElement.HorizontalAlignment(horizontalAlignment);
         }
 
-        if (g_settings.taskbarItemWidth == 0) {
+        if (g_unloading) {
+            labelControlElement.MaxWidth(
+                std::max(0.0, 176 - firstColumnWidthPixels));
+        } else if (g_settings.taskbarItemWidth == 0) {
             labelControlElement.MaxWidth(std::max(
                 0.0,
                 g_settings.maximumTaskbarItemWidth - firstColumnWidthPixels));
@@ -1539,6 +1539,151 @@ bool HookSymbols(HMODULE module,
     return true;
 }
 
+std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
+    HINTERNET hOpenHandle = InternetOpen(
+        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hOpenHandle) {
+        return std::nullopt;
+    }
+
+    HINTERNET hUrlHandle =
+        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
+                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
+                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
+                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
+                        0);
+    if (!hUrlHandle) {
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwStatusCode = 0;
+    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
+    if (!HttpQueryInfo(hUrlHandle,
+                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
+        dwStatusCode != 200) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
+    if (!pUrlContent) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwNumberOfBytesRead;
+    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
+    DWORD dwLength = dwNumberOfBytesRead;
+
+    while (dwNumberOfBytesRead) {
+        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
+            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
+        if (!pNewUrlContent) {
+            InternetCloseHandle(hUrlHandle);
+            InternetCloseHandle(hOpenHandle);
+            HeapFree(GetProcessHeap(), 0, pUrlContent);
+            return std::nullopt;
+        }
+
+        pUrlContent = pNewUrlContent;
+        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
+                         &dwNumberOfBytesRead);
+        dwLength += dwNumberOfBytesRead;
+    }
+
+    InternetCloseHandle(hUrlHandle);
+    InternetCloseHandle(hOpenHandle);
+
+    // Assume UTF-8.
+    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
+                                          dwLength, nullptr, 0);
+    std::wstring unicodeContent(charsNeeded, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
+                        unicodeContent.data(), unicodeContent.size());
+
+    HeapFree(GetProcessHeap(), 0, pUrlContent);
+
+    return unicodeContent;
+}
+
+bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
+                                        const SYMBOL_HOOK* symbolHooks,
+                                        size_t symbolHooksCount) {
+    constexpr WCHAR kModIdForCache[] = L"taskbar-labels";
+
+    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+        return true;
+    }
+
+    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+
+    WCHAR moduleFilePath[MAX_PATH];
+    DWORD moduleFilePathLen =
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
+    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
+    DWORD moduleFileNameLen =
+        moduleFilePathLen - (moduleFileName - moduleFilePath);
+
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
+                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
+                  nullptr, 0);
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    std::wstring cacheStrKey =
+#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+    cacheStrKey += moduleFileName;
+
+    std::wstring onlineCacheUrl =
+        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
+    onlineCacheUrl += kModIdForCache;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += cacheStrKey;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += timeStamp;
+    onlineCacheUrl += L'-';
+    onlineCacheUrl += imageSize;
+    onlineCacheUrl += L".txt";
+
+    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
+
+    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
+    if (!onlineCache) {
+        Wh_Log(L"Failed to get online cache");
+        return false;
+    }
+
+    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+
+    return HookSymbols(module, symbolHooks, symbolHooksCount);
+}
+
 bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
     WCHAR szWindowsDirectory[MAX_PATH];
     if (!GetWindowsDirectory(szWindowsDirectory,
@@ -1637,6 +1782,9 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
         {
             {
+                LR"(class wil::details::FeatureImpl<struct __WilExternalFeatureTraits_Feature_29785186> `private: static class wil::details::FeatureImpl<struct __WilExternalFeatureTraits_Feature_29785186> & __cdecl wil::Feature<struct __WilExternalFeatureTraits_Feature_29785186>::GetImpl(void)'::`2'::impl)",
+
+                // Symbol before update KB5036980:
                 LR"(class wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_29785186> `private: static class wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_29785186> & __cdecl wil::Feature<struct __WilFeatureTraits_Feature_29785186>::GetImpl(void)'::`2'::impl)",
             },
             (void**)&wil_Feature_GetImpl_Original,
@@ -1645,6 +1793,10 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
         {
             {
+                LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilExternalFeatureTraits_Feature_29785186>::__private_IsEnabled(enum wil::ReportingKind))",
+                LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilExternalFeatureTraits_Feature_29785186>::__private_IsEnabled(enum wil::ReportingKind) __ptr64)",
+
+                // Symbols before update KB5036980:
                 LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_29785186>::__private_IsEnabled(enum wil::ReportingKind))",
                 LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_29785186>::__private_IsEnabled(enum wil::ReportingKind) __ptr64)",
             },
@@ -1654,7 +1806,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                              ARRAYSIZE(symbolHooks));
 }
 
 bool HookTaskbarDllSymbols() {
@@ -1731,7 +1884,8 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                              ARRAYSIZE(symbolHooks));
 }
 
 BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {

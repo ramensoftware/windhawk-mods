@@ -1,3 +1,9 @@
+## 1.2.5 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/386a0d9c151361b9c9695a67658d9ffadc2df51c/mods/taskbar-labels.wh.cpp))
+
+* Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
+* Adjusted detection of native taskbar labels being turned off for new Windows 11 builds.
+* Fixed restoring maximum label width on mod unload.
+
 ## 1.2.4 ([Apr 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/52fb2fdb8d52bcee8b05e4e7f89ac3027f633954/mods/taskbar-labels.wh.cpp))
 
 * Added an option to set the maximum taskbar item width (only used for the Windows adaptive width).
