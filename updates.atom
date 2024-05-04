@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-04T19:24:42.000Z</updated>
+    <updated>2024-05-04T19:32:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.0.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#9eef3b6773e780667f9c800372fb1d3970bfe9fd</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
+        <updated>2024-05-04T19:32:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.3.3]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#058fa8b81165b566fd988e19e42052771a59b120</id>
@@ -222,16 +231,5 @@ and what to display in the build section.</p>]]></content>
 <p>When a file is renamed and its extension is changed, a confirmation warning
 appears, this mod turns it off.</p>
 <p><img src="https://i.imgur.com/ZV47UCC.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#72258fe7830a25a42dd597bd6b8588f02f4b6152</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2024-04-23T11:52:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Having more than one target applied for the same element is now supported.</li>
-<li>Added the Bubbles theme.</li>
-<li>Fixed some styles not being restored when the mod is unloaded.</li>
-</ul>]]></content>
     </entry>
 </feed>
