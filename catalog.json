@@ -2331,7 +2331,7 @@
                 "published": 1684509250000,
                 "rating": 9,
                 "ratingUsers": 30,
-                "updated": 1713873138000,
+                "updated": 1714852671000,
                 "users": 1230
             },
             "metadata": {
@@ -2339,7 +2339,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lwininet -Wl,--export-all-symbols",
                 "description": "An advanced mod to override style attributes of the taskbar control elements",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -2348,7 +2348,7 @@
                 ],
                 "name": "Windows 11 Taskbar Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.1"
+                "version": "1.3.2"
             }
         },
         "windows-7-clock-spacing": {

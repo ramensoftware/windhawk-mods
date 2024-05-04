@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-04T19:41:40.000Z</updated>
+    <updated>2024-05-04T19:57:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#6fcd66105c7419656b3d34947dacf56a3b06927c</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2024-05-04T19:57:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.6]]></title>
         <id>https://windhawk.net/mods/taskbar-button-click#f49525eaab8fbdf923f203c514c42b215eeab10e</id>
@@ -220,15 +229,6 @@ and what to display in the build section.</p>]]></content>
 <li>Added redirection of bitmaps and cursors in addition to icons.</li>
 <li>Improved redirection to support more cases.</li>
 <li>Added detailed logging.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Icon Resource Redirect 1.0.2]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#3107e3fe77c403cd149536f9c648e9603e6b4057</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-04-23T16:06:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hook the LoadImageW function to have more icons replaced.</li>
 </ul>]]></content>
     </entry>
 </feed>

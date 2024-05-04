@@ -1,3 +1,7 @@
+## 1.3.2 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6fcd66105c7419656b3d34947dacf56a3b06927c/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
+
 ## 1.3.1 ([Apr 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/72258fe7830a25a42dd597bd6b8588f02f4b6152/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Having more than one target applied for the same element is now supported.
