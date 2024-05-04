@@ -25,7 +25,7 @@ meaning fewer menu items can fit on screen.
 
 This tweak lets you configure many menu UI values.
 This will affect several kinds of menus:
-  - main options/settings menu (three dots at the top right, "Customize and control Google Chrome")
+  - Main options/settings menu (three dots at the top right, "Customize and control Google Chrome")
   - Bookmark menus (not including the bookmark bar itself)
   - Context menu (when you right-click)
 
@@ -37,6 +37,7 @@ and you will probably want to keep them relatively small (below 50), but feel fr
 All other MenuConfig mod settings are negative one (-1) by default.
 If any MenuConfig mod setting is -1, it will be ignored.
 You can use this to reset a value back to default.
+Other negative values are increased by one (eg, setting of -3 will be interpreted as -2).
 Actual default values are described for each option if they exist/are known;
 the four potential defaults are:
 * Old, for default values usually originating from before Chrome 75 (before 2019)
@@ -70,13 +71,15 @@ Latest tested Chrome version: 124.0.6367.119 (stable), 126.0.6457.0 (canary)
 - menuconfig:
   - item:
     - item_vertical_margin: 3
-      $description: Margins between the item top/bottom and its contents. Old = 4, CR2023 = 6, Win10 = 3
+      $description: Margins between the item top/bottom and its contents.
+                    Creates spacing between items that is still clickable. Old = 4, CR2023 = 6, Win10 = 3
     - between_item_vertical_padding: -1
-      $description: Padding, if any, between successive menu items. Default = 0, Win11 = 2
+      $description: Padding, if any, between successive menu items.
+                    Creates spacing between items that is NOT clickable. Default = 0, Win11 = 2
     - item_horizontal_padding: -1
       $description: Horizontal padding between components in a menu item. Default = 8, Win11 = 12
     - item_horizontal_border_padding: -1
-      $description: Additional padding between the item left/right and its contents. Old = 0, CR2023 = 12, Win10 = -2
+      $description: Additional padding between the item left/right and its contents. Old = 0, CR2023 = 12, Win10 = -2 (setting -3)
     - item_corner_radius: -1
       $description: Radius of selection background on menu items. Default = 0, Win11 = 4
     $description: Config related to individual Menu items
@@ -108,7 +111,7 @@ Latest tested Chrome version: 124.0.6367.119 (stable), 126.0.6457.0 (canary)
     $description: Roundedness of menu corners. See also `use_bubble_border`.
   - use_bubble_border: -1
     $description: Boolean (must be 0 or 1). Default = true (1) if corner_radius greater than 0, otherwise false (0).
-                  Also (bug?) if true, menus will avoid an area at the bottom of the screen that is approximately the size of the Windows Taskbar.
+                  Also (crbug/338585369) if true, menus will avoid an area at the top and bottom of the screen that is approximately the size of the Windows Taskbar.
   - shadows:
     - bubble_menu_shadow_elevation: -1
       $description: Shadow elevation of bubble menus. Default = 12
@@ -118,14 +121,15 @@ Latest tested Chrome version: 124.0.6367.119 (stable), 126.0.6457.0 (canary)
   - show_delay: -1
     $description: Delay, in ms, between when menus are selected or moused over and the submenu appears. Default = 400, Windows = SPI_GETMENUSHOWDELAY (from Registry, default 400)
   - scroll_arrow_height: -1
-    $description: Height of the scroll arrow. Default = 3
+    $description: Size of the scroll arrow. Does not affect the size of the region that activates scrolling. Default = 3
   - submenu:
     - arrow_size: -1
       $description: Size (width and height) of arrow bounding box. Default = 8, CR2023 = 16
     - arrow_to_edge_padding: -1
       $description: Padding between the arrow and the edge. Default = 8
     - submenu_horizontal_overlap: -1
-      $description: Horizontal overlap between the submenu and its parent menu item. Old = 3, CR2023 = 0, Win11 = 1
+      $description: Horizontal overlap between the submenu and its parent menu item.
+                    Can be negative to create space between the menu and submenu. Old = 3, CR2023 = 0, Win11 = 1
 # Actionable submenu only used in Ash = Chrome OS (commit/2291f5a4d61656904ae454009305857dffa068d5)
 #    - actionable_submenu_arrow_to_edge_padding: -1
 #      $description: Edge padding for an actionable submenu arrow. Default = 14
@@ -444,7 +448,7 @@ void LoadMenuConfigSettings() {
     int tmp;
 #define LOAD_MENUCONFIG_INT(SECTION, FIELD) \
     tmp = Wh_GetIntSetting(L"menuconfig." SECTION #FIELD ); \
-    settings.menuconfig.FIELD = (tmp == -1) ? g_original_menuconfig.FIELD : tmp; \
+    settings.menuconfig.FIELD = (tmp == -1) ? g_original_menuconfig.FIELD : (tmp < 0 ? tmp+1 : tmp); \
     Wh_Log(L"Value of field " #FIELD " read as %d, set to %d", tmp, settings.menuconfig.FIELD);
 
     // item paddings and margins
