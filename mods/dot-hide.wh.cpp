@@ -2,7 +2,7 @@
 // @id              dot-hide
 // @name            Dot Hide
 // @description     Keep dot files and directories out of sight, Because it wouldn't happen in Linux...
-// @version         1.0.0
+// @version         1.0.1
 // @author          Tomer Zait (realgam3)
 // @github          https://github.com/realgam3
 // @twitter         https://twitter.com/realgam3
@@ -26,9 +26,30 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- excludedNames: ""
+  $name: Names of files and directories to exclude from hiding, separated by | without spaces.
+*/
+// ==/WindhawkModSettings==
+
 #include <string_view>
 #include <winternl.h>
+#include <vector>
 #include <windhawk_utils.h>
+
+struct {
+    std::vector<std::wstring_view> excludedNames;
+} settings;
+
+BOOL IsFileInExcludedList(std::wstring_view fileName) {
+    for (const std::wstring_view excludedName : settings.excludedNames) {
+        if (fileName == excludedName) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
 
 template<typename FileInfoType>
 void HideFilesInDirectory(void* FileInformation) {
@@ -37,12 +58,16 @@ void HideFilesInDirectory(void* FileInformation) {
     while (fileInformation) {
         std::wstring_view fileName(fileInformation->FileName, fileInformation->FileNameLength / sizeof(WCHAR));
 
-        // fileName starts with . but not in [".", ".."]
-        if (!(fileInformation->FileAttributes & FILE_ATTRIBUTE_HIDDEN) 
-			&& fileName.length() >= 2 && fileName[0] == '.'
-            && (fileName[1] != '.' || fileName.length() > 2)) {
-            Wh_Log(L"Class->Hide: %.*s", static_cast<int>(fileName.length()), fileName.data());
-            fileInformation->FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
+        if (!IsFileInExcludedList(fileName)) {
+            // fileName starts with . but not in [".", ".."]
+            if (!(fileInformation->FileAttributes & FILE_ATTRIBUTE_HIDDEN) 
+			    && fileName.length() >= 2 && fileName[0] == '.'
+                && (fileName[1] != '.' || fileName.length() > 2)) {
+                Wh_Log(L"Class->Hide: %.*s", static_cast<int>(fileName.length()), fileName.data());
+                fileInformation->FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
+            }
+        } else {
+            Wh_Log(L"Skipping excluded file: %.*s", static_cast<int>(fileName.length()), fileName.data());
         }
 
         if (fileInformation->NextEntryOffset == 0) {
@@ -144,10 +169,25 @@ NTSTATUS NTAPI NtQueryDirectoryFileEx_Hook(HANDLE FileHandle, HANDLE Event, PIO_
     return status;
 }
 
+void LoadSettings(void) {
+    std::wstring_view excludedNames = Wh_GetStringSetting(L"excludedNames");
+    while (!excludedNames.empty()) {
+        size_t newlinePos = excludedNames.find_first_of(L"|");
+        if (newlinePos == std::wstring_view::npos) {
+            settings.excludedNames.push_back(excludedNames);
+            break;
+        }
+        settings.excludedNames.push_back(excludedNames.substr(0, newlinePos));
+        excludedNames.remove_prefix(newlinePos + 1);
+    }
+}
+
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
+
+    LoadSettings();
 
     HMODULE ntdllModule = LoadLibrary(L"ntdll.dll");
 
@@ -169,4 +209,9 @@ BOOL Wh_ModInit() {
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+}
+
+BOOL Wh_ModSettingsChanged(BOOL *bReload) {
+    *bReload = TRUE;
+    return TRUE;
 }
