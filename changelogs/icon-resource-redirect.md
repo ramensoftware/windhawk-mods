@@ -1,3 +1,11 @@
+## 1.1.2 ([May 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/fab76b768b1f821b066113a1334dc8bfcf4cbc43/mods/icon-resource-redirect.wh.cpp))
+
+* Added handling for menus loaded with the `LoadMenuW` function.
+* Added handling for dialogs loaded with the `DialogBoxParamW`, `CreateDialogParamW` functions.
+* Added handling for images loaded from external files with the `LoadImageW` function.
+* Improved handling for `PrivateExtractIconsW` when an exact icon size is requested.
+* Improved logs.
+
 ## 1.1.1 ([Apr 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/597515446756cfaac51a302032e13992ce2ee32c/mods/icon-resource-redirect.wh.cpp))
 
 * Added handling for bitmaps loaded with the `LoadBitmapW` function.

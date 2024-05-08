@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-04T20:59:26.000Z</updated>
+    <updated>2024-05-08T17:02:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.1.2]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#fab76b768b1f821b066113a1334dc8bfcf4cbc43</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-05-08T17:02:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added handling for menus loaded with the <code>LoadMenuW</code> function.</li>
+<li>Added handling for dialogs loaded with the <code>DialogBoxParamW</code>, <code>CreateDialogParamW</code> functions.</li>
+<li>Added handling for images loaded from external files with the <code>LoadImageW</code> function.</li>
+<li>Improved handling for <code>PrivateExtractIconsW</code> when an exact icon size is requested.</li>
+<li>Improved logs.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Open pinned items with double click 1.0.1]]></title>
         <id>https://windhawk.net/mods/pinned-items-double-click#544193af43e9c3b22c8442070eed58c7ddb2bd88</id>
@@ -218,15 +231,6 @@ You can report issues on github: https://github.com/VasherMC/windhawk-mods/issue
         <updated>2024-04-27T14:14:14.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added an option to select a theme folder. Refer to the mod description for details.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#159dc6e1497d197eb5613eb190f4909ef8ab667b</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-04-26T18:41:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed incorrect search icon size, started happening after update KB5036980.</li>
 </ul>]]></content>
     </entry>
 </feed>
