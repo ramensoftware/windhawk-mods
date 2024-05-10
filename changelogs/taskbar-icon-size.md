@@ -1,3 +1,7 @@
+## 1.2.7 ([May 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/16879e75ab4846ac6eaf63c32539abc516850756/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed the weather icon disappearing with the new KB5036980 update.
+
 ## 1.2.6 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/76eac50ecafbe606e0840cb0c250afb8cfb7eb00/mods/taskbar-icon-size.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).

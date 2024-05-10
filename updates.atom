@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-08T17:02:48.000Z</updated>
+    <updated>2024-05-10T11:17:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#16879e75ab4846ac6eaf63c32539abc516850756</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-05-10T11:17:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the weather icon disappearing with the new KB5036980 update.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.1.2]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#fab76b768b1f821b066113a1334dc8bfcf4cbc43</id>
@@ -223,14 +232,5 @@ You can report issues on github: https://github.com/VasherMC/windhawk-mods/issue
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2024-04-28T10:06:33.000Z</updated>
         <content type="html"><![CDATA[<p>Support glass + ribbon</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Icon Resource Redirect 1.0.5]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#cbc1433369c1ff664220cd31ee57cef2dbadf4f7</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-04-27T14:14:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to select a theme folder. Refer to the mod description for details.</li>
-</ul>]]></content>
     </entry>
 </feed>
