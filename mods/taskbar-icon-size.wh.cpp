@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.6
+// @version         1.2.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -467,8 +467,13 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         return;
     }
 
+    double marginValue = static_cast<double>(40 - g_settings.iconSize) / 2;
+    if (marginValue < 0) {
+        marginValue = 0;
+    }
+
     EnumChildElements(
-        augmentedEntryPointContentGrid, [](FrameworkElement child) {
+        augmentedEntryPointContentGrid, [marginValue](FrameworkElement child) {
             if (winrt::get_class_name(child) !=
                 L"Windows.UI.Xaml.Controls.Grid") {
                 return false;
@@ -482,12 +487,6 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
                 auto margin = Thickness{8, 8, 8, 8};
 
                 if (!g_unloading) {
-                    double marginValue =
-                        static_cast<double>(40 - g_settings.iconSize) / 2;
-                    if (marginValue < 0) {
-                        marginValue = 0;
-                    }
-
                     margin.Left = marginValue;
                     margin.Top = marginValue;
                     margin.Right = marginValue;
@@ -526,7 +525,7 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
                 double maxValue = 24;
 
                 if (!g_unloading) {
-                    maxValue = 40;
+                    maxValue = 40 - marginValue * 2;
                 }
 
                 Wh_Log(L"Setting MaxWidth, MaxHeight for badge");
