@@ -2299,6 +2299,32 @@
                 "version": "1.0.0"
             }
         },
+        "windows-11-notification-center-styler": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1715436273000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1715436273000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+                "description": "An advanced mod to override style attributes of the Notification Center",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "ShellExperienceHost.exe"
+                ],
+                "name": "Windows 11 Notification Center Styler",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "windows-11-start-menu-styler": {
             "details": {
                 "defaultSorting": 11610,
