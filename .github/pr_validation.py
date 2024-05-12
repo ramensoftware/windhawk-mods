@@ -4,6 +4,7 @@ LICENSE:     MIT (https://spdx.org/licenses/MIT)
 PURPOSE:     Verifies the mod information in the modified mods.
 COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
+import json
 import os
 import re
 import sys
@@ -138,8 +139,8 @@ def main():
 
     warnings = 0
 
-    paths = [Path(p)
-             for p in os.environ['ALL_CHANGED_AND_MODIFIED_FILES'].splitlines()]
+    paths = [Path(p) for p in
+             json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
 
     added_count = int(os.environ['ADDED_FILES_COUNT'])
     modified_count = int(os.environ['MODIFIED_FILES_COUNT'])
