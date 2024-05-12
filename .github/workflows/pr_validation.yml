@@ -29,7 +29,7 @@ jobs:
 
       - name: Validate the changes
         env:
-          PR_AUTHOR: ${{ github.event.issue.pull_request }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
           MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
           ALL_CHANGED_AND_MODIFIED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
