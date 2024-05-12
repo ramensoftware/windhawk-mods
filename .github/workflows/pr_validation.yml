@@ -12,6 +12,12 @@ jobs:
     name: Test changed-files
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Fix: if the user's PR was not rebased or someone had pushed changes
+          # to the target branch, the action would report files changed from the
+          # PR commits and the target branch.
+          # https://github.com/tj-actions/changed-files/discussions/2018
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup python
         uses: actions/setup-python@v5
