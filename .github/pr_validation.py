@@ -145,6 +145,8 @@ def parse_file(file: Path, expected_author: str):
 
 
 def main():
+    print('Validating PR...')
+
     pr_author = os.environ['PR_AUTHOR']
     if pr_author in DISALLOWED_AUTHORS:
         sys.exit(f'Submissions from {pr_author} are not allowed')
