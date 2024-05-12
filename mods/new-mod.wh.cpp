@@ -3,11 +3,12 @@
 // @name            Your Awesome Mod
 // @description     The best mod ever that does great things
 // @author          You
-// @github          https://github.com/nat
+// @github          https://github.com/m417z
+// @version 1.0
 // @twitter         https://twitter.com/jack
 // @homepage        https://your-personal-homepage.example.com/
 // @include         mspaint.exe
-// @compilerOptions -lcomdlg32 -asdf
+// @compilerOptions -lcomdlg32 -Dasdf
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
