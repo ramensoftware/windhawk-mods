@@ -10,7 +10,10 @@ import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
-DISALLOWED_AUTHORS = []
+DISALLOWED_AUTHORS = [
+    # https://github.com/ramensoftware/windhawk-mods/pull/676
+    'arukateru',
+]
 
 
 def add_warning(file: Path, line: int, message: str):
