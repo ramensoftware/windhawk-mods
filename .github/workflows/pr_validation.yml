@@ -27,11 +27,11 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v44
         with:
-          separator: "\n"
+          json: "true"
           # Per example from the readme: set to false because we are using an
           # environment variable to store the output and avoid command
           # injection.
-          safe_output: false
+          escape_json: false
 
       - name: Validate the changes
         env:
