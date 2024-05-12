@@ -102,6 +102,10 @@ def parse_file(file: Path, expected_author: str):
         if value != expected:
             warnings += add_warning(file, idx + 1,
                                     f'Expected the id to be "{expected}"')
+
+        if len(value) > 50:
+            warnings += add_warning(file, idx + 1,
+                                    'ID cannot be longer than 50 characters')
     else:
         warnings += add_warning(file, 1, 'Missing @id')
 
