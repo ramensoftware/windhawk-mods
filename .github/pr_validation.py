@@ -98,7 +98,7 @@ def parse_file(file: Path, expected_author: str):
     if core_properties['id'] is not None:
         value, idx = core_properties['id']
         # Strip the two extensions
-        expected = file.stem
+        expected = file.name.removesuffix('.cpp').removesuffix('.wh')
         if value != expected:
             warnings += add_warning(file, idx + 1,
                                     f'Expected the id to be "{expected}"')
@@ -128,7 +128,7 @@ def parse_file(file: Path, expected_author: str):
         warnings += add_warning(file, 1, 'Filename should end with .wh.cpp')
 
     # Validate file name
-    if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', file.with_suffix('').with_suffix('').name):
+    if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', file.name.removesuffix('.cpp').removesuffix('.wh')):
         warnings += add_warning(file, 1,
                                 'Filename must contain only letters, numbers and dashes')
 
