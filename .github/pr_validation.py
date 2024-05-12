@@ -18,7 +18,15 @@ DISALLOWED_AUTHORS = [
 
 
 def add_warning(file: Path, line: int, message: str):
-    print(f'::warning file={file},line={line}::{message}')
+    # https://github.com/orgs/community/discussions/26736
+    def escape_data(s: str) -> str:
+        return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
+    def escape_property(s: str) -> str:
+        return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A').replace(':', '%3A').replace(',', '%2C')
+
+    print(f'::warning file={escape_property(str(file))},'
+          f'line={line}::{escape_data(message)}')
     return 1
 
 
