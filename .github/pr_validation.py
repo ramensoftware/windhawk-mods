@@ -9,12 +9,33 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, TextIO, Tuple
 
 DISALLOWED_AUTHORS = [
     # https://github.com/ramensoftware/windhawk-mods/pull/676
     'arukateru',
 ]
+
+MOD_METADATA_PARAMS = {
+    'singleValue': {
+        'id',
+        'version',
+        'github',
+        'twitter',
+        'homepage',
+        'compilerOptions',
+    },
+    'singleValueLocalizable': {
+        'name',
+        'description',
+        'author',
+    },
+    'multiValue': {
+        'include',
+        'exclude',
+        'architecture',
+    }
+}
 
 
 def add_warning(file: Path, line: int, message: str):
@@ -30,28 +51,29 @@ def add_warning(file: Path, line: int, message: str):
     return 1
 
 
-def parse_file(file: Path, expected_author: str):
+def get_mod_file_metadata(path: Path, file: TextIO):
     warnings = 0
-    print(f'Checking {file=}')
 
-    core_properties: dict[str, Optional[Tuple[str, int]]] = {
-        'id': None,
-        'github': None,
-        'version': None,
-        'compilerOptions': None,
-    }
+    properties: dict[Tuple[str, Optional[str]], Tuple[str, int]] = {}
 
-    all_properties: set[str] = set()
+    inside_metadata_block = False
 
-    for idx, line in enumerate(file.read_text().splitlines()):
-        if idx == 0:
+    line_number = 0
+    while line := file.readline():
+        line = line.rstrip('\n')
+        line_number += 1
+
+        if line_number == 1:
             if not re.fullmatch(r'//[ \t]+==WindhawkMod==[ \t]*', line):
-                warnings += add_warning(file, idx + 1,
+                warnings += add_warning(path, line_number,
                                         'First line must be "// ==WindhawkMod=="')
                 break
+
+            inside_metadata_block = True
             continue
 
         if re.fullmatch(r'//[ \t]+==\/WindhawkMod==[ \t]*', line):
+            inside_metadata_block = False
             break
 
         if line.strip() == '':
@@ -60,7 +82,7 @@ def parse_file(file: Path, expected_author: str):
         match = re.fullmatch(
             r'//[ \t]+@([a-zA-Z]+)(?::([a-z]{2}(?:-[A-Z]{2})?))?[ \t]+(.*)', line.strip())
         if not match:
-            warnings += add_warning(file, idx + 1,
+            warnings += add_warning(path, line_number,
                                     'Invalid metadata line format')
             continue
 
@@ -68,77 +90,93 @@ def parse_file(file: Path, expected_author: str):
         language = match.group(2)
         value = match.group(3)
 
-        all_properties.add(key)
-
-        if key not in core_properties:
+        if not any(key in x for x in MOD_METADATA_PARAMS.values()):
+            warnings += add_warning(path, line_number,
+                                    f'@{key} is not a valid metadata parameter')
             continue
 
-        if language is not None:
-            warnings += add_warning(file, idx + 1,
+        if key not in MOD_METADATA_PARAMS['singleValueLocalizable'] and language is not None:
+            warnings += add_warning(path, line_number,
                                     'Language cannot be specified for this property')
             continue
 
-        if core_properties[key] is not None:
-            warnings += add_warning(file, idx + 1,
-                                    f'{key} must be specified only once')
-            continue
+        if key in MOD_METADATA_PARAMS['multiValue']:
+            prefix = properties.get((key, language), ('', 1))[0]
+            properties[(key, language)] = f'{prefix}{value}\n', line_number
+        else:
+            if (key, language) in properties:
+                warnings += add_warning(path, line_number,
+                                        f'@{key} must be specified only once')
+                continue
 
-        core_properties[key] = value, idx
+            properties[(key, language)] = value, line_number
 
-    # Validate the github id specified against the PR author
-    if core_properties['github'] is not None:
-        value, idx = core_properties['github']
+    if inside_metadata_block:
+        warnings += add_warning(path, 1, 'Metadata block must be closed')
+
+    return properties, warnings
+
+
+def parse_file(path: Path, expected_author: str):
+    print(f'Checking {path=}')
+
+    with path.open(encoding='utf-8') as file:
+        properties, warnings = get_mod_file_metadata(path, file)
+
+    key = ('github', None)
+    if key in properties:
+        value, line_number = properties[key]
         if value != f'https://github.com/{expected_author}':
-            warnings += add_warning(file, idx + 1,
+            warnings += add_warning(path, line_number,
                                     f'Expected the author to be "{expected_author}"')
     else:
-        warnings += add_warning(file, 1, 'Missing @github')
+        warnings += add_warning(path, 1, f'Missing @{key[0]}')
 
-    # Validate the mod ID against the filename
-    if core_properties['id'] is not None:
-        value, idx = core_properties['id']
-        # Strip the two extensions
-        expected = file.name.removesuffix('.cpp').removesuffix('.wh')
+    key = ('id', None)
+    if key in properties:
+        value, line_number = properties[key]
+        expected = path.name.removesuffix('.cpp').removesuffix('.wh')
         if value != expected:
-            warnings += add_warning(file, idx + 1,
+            warnings += add_warning(path, line_number,
                                     f'Expected the id to be "{expected}"')
 
-        if len(value) > 50:
-            warnings += add_warning(file, idx + 1,
-                                    'ID cannot be longer than 50 characters')
-    else:
-        warnings += add_warning(file, 1, 'Missing @id')
+        if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', value):
+            warnings += add_warning(path, line_number,
+                                    '@id must contain only letters, numbers and dashes')
 
-    # Validate the version
-    if core_properties['version'] is not None:
-        value, idx = core_properties['version']
+        if len(value) < 8 or len(value) > 50:
+            warnings += add_warning(path, line_number,
+                                    '@id must be between 8 and 50 characters')
+    else:
+        warnings += add_warning(path, 1, f'Missing @{key[0]}')
+
+    key = ('version', None)
+    if key in properties:
+        value, line_number = properties[key]
         if not re.fullmatch(r'([0-9]+\.)*[0-9]+', value):
-            warnings += add_warning(file, idx + 1,
+            warnings += add_warning(path, line_number,
                                     'Version must contain only numbers and dots')
     else:
-        warnings += add_warning(file, 1, 'Missing @version')
+        warnings += add_warning(path, 1, f'Missing @{key[0]}')
 
-    if core_properties['compilerOptions'] is not None:
-        value, idx = core_properties['compilerOptions']
+    key = ('compilerOptions', None)
+    if key in properties:
+        value, line_number = properties[key]
         if not re.fullmatch(r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', value + ' '):
-            warnings += add_warning(file, idx + 1,
+            warnings += add_warning(path, line_number,
                                     'Compiler options require manual verification')
 
-    if 'author' not in all_properties:
-        warnings += add_warning(file, 1, 'Missing @author')
+    key = ('version', None)
+    if key not in properties:
+        warnings += add_warning(path, 1, f'Missing @{key[0]}')
 
     # Validate that this file has the required extensions
-    if ''.join(file.suffixes) != '.wh.cpp':
-        warnings += add_warning(file, 1, 'Filename should end with .wh.cpp')
-
-    # Validate file name
-    if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', file.name.removesuffix('.cpp').removesuffix('.wh')):
-        warnings += add_warning(file, 1,
-                                'Filename must contain only letters, numbers and dashes')
+    if ''.join(path.suffixes) != '.wh.cpp':
+        warnings += add_warning(path, 1, 'Filename should end with .wh.cpp')
 
     # Validate file path
-    if file.parent != Path('mods'):
-        warnings += add_warning(file, 1,
+    if path.parent != Path('mods'):
+        warnings += add_warning(path, 1,
                                 'File is not placed in the mods folder')
 
     return warnings
@@ -165,9 +203,7 @@ def main():
                                 f'{added_count=} {modified_count=} {all_count=}')
 
     for path in paths:
-        # Validate everything as if it were a mod, if it has the .cpp extension
-        if path.suffix == '.cpp':
-            warnings += parse_file(path, pr_author)
+        warnings += parse_file(path, pr_author)
 
     if warnings > 0:
         sys.exit(f'Got {warnings} warnings, please inspect the PR')

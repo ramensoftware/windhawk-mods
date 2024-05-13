@@ -28,13 +28,6 @@ jobs:
           # injection.
           escape_json: false
 
-          # Fix: if the user's PR was not rebased or someone had pushed changes
-          # to the target branch, the action would report files changed from the
-          # PR commits and the target branch.
-          # https://github.com/tj-actions/changed-files/discussions/2018
-          sha: ${{ github.event.pull_request.head.sha }}
-          base_sha: ${{ github.event.pull_request.base.sha }}
-
       - name: Validate the changes
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
