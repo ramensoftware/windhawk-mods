@@ -63,13 +63,12 @@ def get_mod_file_metadata(path: Path, file: TextIO):
         line = line.rstrip('\n')
         line_number += 1
 
-        if line_number == 1:
-            if not re.fullmatch(r'//[ \t]+==WindhawkMod==[ \t]*', line):
-                warnings += add_warning(path, line_number,
-                                        'First line must be "// ==WindhawkMod=="')
-                break
-
-            inside_metadata_block = True
+        if not inside_metadata_block:
+            if re.fullmatch(r'//[ \t]+==WindhawkMod==[ \t]*', line):
+                inside_metadata_block = True
+                if line_number != 1:
+                    warnings += add_warning(path, line_number,
+                                            'Metadata block must start at line 1')
             continue
 
         if re.fullmatch(r'//[ \t]+==\/WindhawkMod==[ \t]*', line):
@@ -166,7 +165,7 @@ def parse_file(path: Path, expected_author: str):
             warnings += add_warning(path, line_number,
                                     'Compiler options require manual verification')
 
-    key = ('version', None)
+    key = ('author', None)
     if key not in properties:
         warnings += add_warning(path, 1, f'Missing @{key[0]}')
 
