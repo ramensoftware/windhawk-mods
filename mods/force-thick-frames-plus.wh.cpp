@@ -2,7 +2,7 @@
 // @id              force-thick-frames-plus
 // @name            Force thick frames PLUS
 // @description     Force windows to have thick frames like in Windows Vista/7
-// @version         2
+// @version         3.1
 // @author          teknixstuff
 // @github          https://github.com/teknixstuff2
 // @include         *
@@ -21,6 +21,7 @@ Force windows to have thick frames like in Windows Vista/7. This theme should al
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <winuser.h>
+#include <Windowsx.h>
 
 using PUNICODE_STRING = PVOID;
 
@@ -41,12 +42,20 @@ LRESULT CALLBACK antiResizeProc(
         {
             case HTTOP:
             case HTTOPRIGHT:
+            case HTTOPLEFT:
+                return HTCAPTION;
             case HTRIGHT:
+            case HTLEFT:
+                RECT pos;
+                GetWindowRect(hWnd, &pos);
+                if (GET_Y_LPARAM(lParam) > (pos.top + 30)) {
+                    return HTBORDER;
+                } else {
+                    return HTCAPTION;
+                }
             case HTBOTTOMRIGHT:
             case HTBOTTOM:
             case HTBOTTOMLEFT:
-            case HTLEFT:
-            case HTTOPLEFT:
                 return HTBORDER;
             default:
                 return lr;
