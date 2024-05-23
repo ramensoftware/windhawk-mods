@@ -21,6 +21,7 @@ modern styled folder picker dialog, which is easier to navigate.
 ![Before](https://raw.githubusercontent.com/aubymori/images/main/modernize-folder-picker-dialog-before.png)
 
 **After**:
+
 ![After](https://raw.githubusercontent.com/aubymori/images/main/modernize-folder-picker-dialog-after.png)
 */
 // ==/WindhawkModReadme==
