@@ -1,3 +1,9 @@
+## 1.2.1 ([May 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dbac51f369f38001f43dd37f3007ce7ebadcbd20/mods/taskbar-volume-control.wh.cpp))
+
+* Added an option to activate volume scrolling only when holding the Ctrl key.
+* Added a new scroll area option: The taskbar without the notification area.
+* On new Windows 11 versions, consider the clock on secondary taskbars as a notification area.
+
 ## 1.2 ([Jul 15, 2023](https://github.com/ramensoftware/windhawk-mods/blob/16e1e6b2ef632628f27b36f035ada31cc904e97d/mods/taskbar-volume-control.wh.cpp))
 
 * Added support for the old taskbar on Windows 11 (e.g. with Explorer Patcher).

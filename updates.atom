@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-26T16:52:13.000Z</updated>
+    <updated>2024-05-26T17:31:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control#dbac51f369f38001f43dd37f3007ce7ebadcbd20</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
+        <updated>2024-05-26T17:31:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to activate volume scrolling only when holding the Ctrl key.</li>
+<li>Added a new scroll area option: The taskbar without the notification area.</li>
+<li>On new Windows 11 versions, consider the clock on secondary taskbars as a notification area.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Suppress Run Box Error Message 1.0.0]]></title>
         <id>https://windhawk.net/mods/suppress-run-box-error-message#a4409d8641233d1e7dc9290ef69213efee1dec77</id>
@@ -288,18 +299,6 @@ You can report issues on github: https://github.com/VasherMC/windhawk-mods/issue
         <updated>2024-04-30T07:19:13.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added handling for bitmaps loaded with the <code>LoadBitmapW</code> function.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#a9c288908ae7264b588e9bcc266a786e92361af2</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-04-29T00:37:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed from Icon Resource Redirect to Resource Redirect.</li>
-<li>Added handling for icons loaded with the <code>LoadIconW</code> function.</li>
-<li>Added handling for cursors loaded with the <code>LoadCursorW</code> function.</li>
-<li>Added handling for DirectUI resources (usually <code>UIFILE</code> and <code>XML</code>) loaded with the <code>SetXMLFromResource</code> function.</li>
 </ul>]]></content>
     </entry>
 </feed>

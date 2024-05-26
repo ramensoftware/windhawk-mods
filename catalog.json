@@ -1972,7 +1972,7 @@
                 "published": 1652940665000,
                 "rating": 10,
                 "ratingUsers": 93,
-                "updated": 1689416807000,
+                "updated": 1716744702000,
                 "users": 4972
             },
             "featured": true,
@@ -1987,7 +1987,7 @@
                 ],
                 "name": "Taskbar Volume Control",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "taskbar-wheel-cycle": {
