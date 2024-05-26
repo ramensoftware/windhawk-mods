@@ -1647,6 +1647,26 @@
                 "version": "1.0.2"
             }
         },
+        "suppress-run-box-error-message": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1716742333000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1716742333000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Prevents the error message from opening if invalid input is entered into the Run box",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Suppress Run Box Error Message",
+                "version": "1.0.0"
+            }
+        },
         "syslistview32-enabler": {
             "details": {
                 "defaultSorting": 930,
