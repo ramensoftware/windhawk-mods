@@ -2,7 +2,7 @@
 // @id              taskbar-volume-control
 // @name            Taskbar Volume Control
 // @description     Control the system volume by scrolling over the taskbar
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -48,11 +48,17 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $options:
   - taskbar: The taskbar
   - notification_area: The notification area
+  - taskbarWithoutNotificationArea: The taskbar without the notification area
 - middleClickToMute: true
   $name: Middle click to mute
   $description: >-
     With this option enabled, middle clicking the volume tray icon will
     mute/unmute the system volume (Windows 11 version 22H2 or newer).
+- ctrlScrollVolumeChange: false
+  $name: Ctrl + Scroll to change volume
+  $description: >-
+    When enabled, holding the Ctrl key and scrolling the mouse wheel will change
+    the system volume.
 - noAutomaticMuteToggle: false
   $name: No automatic mute toggle
   $description: >-
@@ -71,8 +77,8 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: For Windhawk versions older
-    than 1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
+    1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
 
@@ -89,22 +95,24 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 #include <unordered_set>
 #include <vector>
 
-enum {
-    VOLUME_INDICATOR_NONE,
-    VOLUME_INDICATOR_CLASSIC,
-    VOLUME_INDICATOR_MODERN,
-    VOLUME_INDICATOR_WIN11,
+enum class VolumeIndicator {
+    None,
+    Classic,
+    Modern,
+    Win11,
 };
 
-enum {
-    SCROLL_AREA_TASKBAR,
-    SCROLL_AREA_NOTIFICATION_AREA,
+enum class ScrollArea {
+    taskbar,
+    notificationArea,
+    taskbarWithoutNotificationArea,
 };
 
 struct {
-    int volumeIndicator;
-    int scrollArea;
+    VolumeIndicator volumeIndicator;
+    ScrollArea scrollArea;
     bool middleClickToMute;
+    bool ctrlScrollVolumeChange;
     bool noAutomaticMuteToggle;
     int volumeChangeStep;
     bool oldTaskbarOnWin11;
@@ -163,46 +171,95 @@ bool IsTaskbarWindow(HWND hWnd) {
            _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
 }
 
-bool IsPointInsideScrollArea(HWND hWnd, POINT pt) {
-    RECT rc{};
-    if (g_settings.scrollArea == SCROLL_AREA_TASKBAR) {
-        GetWindowRect(hWnd, &rc);
-    } else if (g_settings.scrollArea == SCROLL_AREA_NOTIFICATION_AREA) {
-        if (hWnd == g_hTaskbarWnd) {
-            HWND hTrayNotifyWnd =
-                FindWindowEx(hWnd, NULL, L"TrayNotifyWnd", NULL);
-            if (hTrayNotifyWnd)
-                GetWindowRect(hTrayNotifyWnd, &rc);
-        } else if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
-            RECT rcTaskbar;
-            GetWindowRect(hWnd, &rcTaskbar);
-            HWND hBridgeWnd = FindWindowEx(
-                hWnd, NULL,
-                L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
-            while (hBridgeWnd) {
-                RECT rcBridge;
-                GetWindowRect(hBridgeWnd, &rcBridge);
-                if (rcBridge.left != rcTaskbar.left ||
-                    rcBridge.top != rcTaskbar.top ||
-                    rcBridge.right != rcTaskbar.right ||
-                    rcBridge.bottom != rcTaskbar.bottom) {
-                    CopyRect(&rc, &rcBridge);
-                    break;
-                }
+bool GetNotificationAreaRect(HWND hMMTaskbarWnd, RECT* rcResult) {
+    if (hMMTaskbarWnd == g_hTaskbarWnd) {
+        HWND hTrayNotifyWnd =
+            FindWindowEx(hMMTaskbarWnd, NULL, L"TrayNotifyWnd", NULL);
+        if (!hTrayNotifyWnd) {
+            return false;
+        }
 
-                hBridgeWnd = FindWindowEx(
-                    hWnd, hBridgeWnd,
-                    L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+        return GetWindowRect(hTrayNotifyWnd, rcResult);
+    }
+
+    if (g_nExplorerVersion >= WIN_VERSION_11_21H2) {
+        RECT rcTaskbar;
+        if (!GetWindowRect(hMMTaskbarWnd, &rcTaskbar)) {
+            return false;
+        }
+
+        HWND hBridgeWnd = FindWindowEx(
+            hMMTaskbarWnd, NULL,
+            L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+        while (hBridgeWnd) {
+            RECT rcBridge;
+            if (!GetWindowRect(hBridgeWnd, &rcBridge)) {
+                break;
             }
-        } else if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
-            HWND hClockButtonWnd =
-                FindWindowEx(hWnd, NULL, L"ClockButton", NULL);
-            if (hClockButtonWnd)
-                GetWindowRect(hClockButtonWnd, &rc);
+
+            if (rcBridge.left != rcTaskbar.left ||
+                rcBridge.top != rcTaskbar.top ||
+                rcBridge.right != rcTaskbar.right ||
+                rcBridge.bottom != rcTaskbar.bottom) {
+                CopyRect(rcResult, &rcBridge);
+                return true;
+            }
+
+            hBridgeWnd = FindWindowEx(
+                hMMTaskbarWnd, hBridgeWnd,
+                L"Windows.UI.Composition.DesktopWindowContentBridge", NULL);
+        }
+
+        // On newer Win11 versions, the clock on secondary taskbars is difficult
+        // to detect without either UI Automation or UWP UI APIs. Just consider
+        // the last pixels, not accurate, but better than nothing.
+        CopyRect(rcResult, &rcTaskbar);
+        if (rcResult->right - rcResult->left > 50) {
+            if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
+                rcResult->right = rcResult->left + 50;
+            } else {
+                rcResult->left = rcResult->right - 50;
+            }
+        }
+
+        return true;
+    }
+
+    if (g_nExplorerVersion >= WIN_VERSION_10_R1) {
+        HWND hClockButtonWnd =
+            FindWindowEx(hMMTaskbarWnd, NULL, L"ClockButton", NULL);
+        if (!hClockButtonWnd) {
+            return false;
+        }
+
+        return GetWindowRect(hClockButtonWnd, rcResult);
+    }
+
+    return true;
+}
+
+bool IsPointInsideScrollArea(HWND hMMTaskbarWnd, POINT pt) {
+    switch (g_settings.scrollArea) {
+        case ScrollArea::taskbar: {
+            RECT rc;
+            return GetWindowRect(hMMTaskbarWnd, &rc) && PtInRect(&rc, pt);
+        }
+
+        case ScrollArea::notificationArea: {
+            RECT rc;
+            return GetNotificationAreaRect(hMMTaskbarWnd, &rc) &&
+                   PtInRect(&rc, pt);
+        }
+
+        case ScrollArea::taskbarWithoutNotificationArea: {
+            RECT rc;
+            return GetWindowRect(hMMTaskbarWnd, &rc) && PtInRect(&rc, pt) &&
+                   (!GetNotificationAreaRect(hMMTaskbarWnd, &rc) ||
+                    !PtInRect(&rc, pt));
         }
     }
 
-    return PtInRect(&rc, pt);
+    return false;
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -590,13 +647,13 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
 
-    if (g_settings.volumeIndicator == VOLUME_INDICATOR_WIN11 &&
+    if (g_settings.volumeIndicator == VolumeIndicator::Win11 &&
         g_nWinVersion >= WIN_VERSION_11_22H2) {
         return Win11IndicatorAdjustVolumeLevelWithMouseWheel(
             GET_WHEEL_DELTA_WPARAM(wParam));
     }
 
-    if (g_settings.volumeIndicator == VOLUME_INDICATOR_NONE) {
+    if (g_settings.volumeIndicator == VolumeIndicator::None) {
         return AdjustVolumeLevelWithMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam),
                                                0);
     }
@@ -1002,7 +1059,7 @@ static BOOL MoveSndVolCenterMouse(HWND hWnd) {
 
 static BOOL CanUseModernIndicator() {
     if (g_nWinVersion < WIN_VERSION_10_T1 ||
-        g_settings.volumeIndicator == VOLUME_INDICATOR_CLASSIC)
+        g_settings.volumeIndicator == VolumeIndicator::Classic)
         return FALSE;
 
     DWORD dwEnabled = 1;
@@ -1168,7 +1225,7 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
     param.uIdSubclass = uIdSubclass;
     param.dwRefData = dwRefData;
     param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
+    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
 
     UnhookWindowsHookEx(hook);
 
@@ -1177,6 +1234,10 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
 
 bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     if (GetCapture() != NULL) {
+        return false;
+    }
+
+    if (g_settings.ctrlScrollVolumeChange && GetKeyState(VK_CONTROL) >= 0) {
         return false;
     }
 
@@ -1508,28 +1569,33 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
 
 void LoadSettings() {
     PCWSTR volumeIndicator = Wh_GetStringSetting(L"volumeIndicator");
-    g_settings.volumeIndicator = VOLUME_INDICATOR_WIN11;
+    g_settings.volumeIndicator = VolumeIndicator::Win11;
     if (wcscmp(volumeIndicator, L"modern") == 0) {
-        g_settings.volumeIndicator = VOLUME_INDICATOR_MODERN;
+        g_settings.volumeIndicator = VolumeIndicator::Modern;
     } else if (wcscmp(volumeIndicator, L"classic") == 0) {
-        g_settings.volumeIndicator = VOLUME_INDICATOR_CLASSIC;
+        g_settings.volumeIndicator = VolumeIndicator::Classic;
     } else if (wcscmp(volumeIndicator, L"none") == 0) {
-        g_settings.volumeIndicator = VOLUME_INDICATOR_NONE;
-    }
-    // Old option for compatibility:
-    else if (wcscmp(volumeIndicator, L"tooltip") == 0) {
-        g_settings.volumeIndicator = VOLUME_INDICATOR_NONE;
+        g_settings.volumeIndicator = VolumeIndicator::None;
+    } else {
+        // Old option for compatibility.
+        if (wcscmp(volumeIndicator, L"tooltip") == 0) {
+            g_settings.volumeIndicator = VolumeIndicator::None;
+        }
     }
     Wh_FreeStringSetting(volumeIndicator);
 
     PCWSTR scrollArea = Wh_GetStringSetting(L"scrollArea");
-    g_settings.scrollArea = SCROLL_AREA_TASKBAR;
+    g_settings.scrollArea = ScrollArea::taskbar;
     if (wcscmp(scrollArea, L"notification_area") == 0) {
-        g_settings.scrollArea = SCROLL_AREA_NOTIFICATION_AREA;
+        g_settings.scrollArea = ScrollArea::notificationArea;
+    } else if (wcscmp(scrollArea, L"taskbarWithoutNotificationArea") == 0) {
+        g_settings.scrollArea = ScrollArea::taskbarWithoutNotificationArea;
     }
     Wh_FreeStringSetting(scrollArea);
 
     g_settings.middleClickToMute = Wh_GetIntSetting(L"middleClickToMute");
+    g_settings.ctrlScrollVolumeChange =
+        Wh_GetIntSetting(L"ctrlScrollVolumeChange");
     g_settings.noAutomaticMuteToggle =
         Wh_GetIntSetting(L"noAutomaticMuteToggle");
     g_settings.volumeChangeStep = Wh_GetIntSetting(L"volumeChangeStep");
@@ -1752,7 +1818,7 @@ bool HookSymbols(HMODULE module,
     if (newSystemCacheStr.length() <= cacheMaxSize) {
         Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
     } else {
-        Wh_Log(L"Cache is too large (%Iu)", newSystemCacheStr.length());
+        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
     }
 
     return true;
