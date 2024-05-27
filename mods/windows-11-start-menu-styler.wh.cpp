@@ -3,7 +3,7 @@
 // @name            Windows 11 Start Menu Styler
 // @description     An advanced mod to override style attributes of the start menu control elements
 // @version         1.1.2
-// @author          m417z-c
+// @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
