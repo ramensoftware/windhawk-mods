@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-27T19:42:35.000Z</updated>
+    <updated>2024-05-27T20:21:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.3]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#09a45ac4d6daf121bc16d69a7c961f8be0405d07</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2024-05-27T20:21:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the TranslucentStartMenu theme.</li>
+<li>Made styles defined later override styles defined earlier.</li>
+<li>Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.</li>
+<li>Added a workaround for setting FontWeight which didn't work.</li>
+<li>Fixed null property value handling which could cause a crash.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.1.3]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#d70dd616505af63c736c1cad00feb5e2350cba3f</id>
@@ -259,50 +272,5 @@ code from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chrome UI Tweaks 1.0.0]]></title>
-        <id>https://windhawk.net/mods/chrome-ui-tweaks#81fc79654261553862040ccb2d25f9c7e58c73e9</id>
-        <link href="https://windhawk.net/mods/chrome-ui-tweaks"/>
-        <updated>2024-05-04T10:57:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="chromeuitweaks">Chrome UI Tweaks</h1>
-<p>This mod currently implements two tweaks for Chrome, on x86-64 Windows:</p>
-<h2 id="simplifiedbookmarkflow">Simplified Bookmark Flow</h2>
-<p>Disable the "Simplified Bookmark Flow" feature (see <a href="https://issues.chromium.org/issues/41496433">https://issues.chromium.org/issues/41496433</a>).
-When creating a new bookmark, you will immediately see the "Edit Bookmark" window.</p>
-<h2 id="menuuicustomization">Menu UI customization</h2>
-<p>"Chrome Refresh 2023" brought significant changes to the user interface, including rounding the corners
-of menus (as well as many other UI elements) and significantly increasing the spacing between items,
-meaning fewer menu items can fit on screen.</p>
-<p>This tweak lets you configure many menu UI values.
-This will affect several kinds of menus:</p>
-<ul>
-<li>Main options/settings menu (three dots at the top right, "Customize and control Google Chrome")</li>
-<li>Bookmark menus (not including the bookmark bar itself)</li>
-<li>Context menu (when you right-click)</li>
-</ul>
-<p>Keep in mind unexpectedly large, small, or negative values may cause graphical issues.
-Most values are measured in device-independent-pixels (i.e. will scale with DPI),
-and you will probably want to keep them relatively small (below 50), but feel free to experiment.</p>
-<p><code>item_vertical_margin</code> is the only MenuConfig setting that is changed initially.
-All other MenuConfig mod settings are negative one (-1) by default.
-If any MenuConfig mod setting is -1, it will be ignored.
-You can use this to reset a value back to default.
-Other negative values are increased by one (eg, setting of -3 will be interpreted as -2).
-Actual default values are described for each option if they exist/are known;
-the four potential defaults are:</p>
-<ul>
-<li>Old, for default values usually originating from before Chrome 75 (before 2019)</li>
-<li>CR2023, for default values of Chrome Refresh 2023</li>
-<li>Win10, for default values on Windows 10 (before CR2023)</li>
-<li>Win11, for default values on Windows 11 (before CR2023)</li>
-</ul>
-<p>Note that the "Old" default values may not look the same way as in older versions of Chrome
-due to other changes in the Chrome code.</p>
-<h1 id="issues">Issues</h1>
-<p>Due to implementation details, this mod may stop working on new Chrome versions.
-You can report issues on github: https://github.com/VasherMC/windhawk-mods/issues</p>
-<p>First tested Chrome version: 123.0.6312.106</p>
-<p>Latest tested Chrome version: 124.0.6367.119 (stable), 126.0.6457.0 (canary)</p>]]></content>
     </entry>
 </feed>

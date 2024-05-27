@@ -1,3 +1,11 @@
+## 1.1.3 ([May 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/09a45ac4d6daf121bc16d69a7c961f8be0405d07/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added the TranslucentStartMenu theme.
+* Made styles defined later override styles defined earlier.
+* Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.
+* Added a workaround for setting FontWeight which didn't work.
+* Fixed null property value handling which could cause a crash.
+
 ## 1.1.2 ([Apr 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a36ce2c5a985dcc2822d344ccf8aacd4650fb59a/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Having more than one target applied for the same element is now supported.
