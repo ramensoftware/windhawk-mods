@@ -6,7 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -lole32
+// @compilerOptions -lole32 -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -32,6 +32,7 @@ modern styled folder picker dialog, which is easier to navigate.
 
 #include <initguid.h>
 #include <shlobj.h>
+#include <winrt/base.h>
 #include <windhawk_utils.h>
 
 using SHBrowseForFolderW_t = decltype(&SHBrowseForFolderW);
@@ -43,7 +44,7 @@ PIDLIST_ABSOLUTE WINAPI SHBrowseForFolderW_hook(
     if (!lpbi) return NULL;
 
     /* Make the dialog */
-    IFileOpenDialog *pDialog = nullptr;
+    winrt::com_ptr<IFileOpenDialog> pDialog = nullptr;
     RETURN_IF_FAILED(CoCreateInstance(
         CLSID_FileOpenDialog,
         NULL,
@@ -65,12 +66,12 @@ PIDLIST_ABSOLUTE WINAPI SHBrowseForFolderW_hook(
     if (lpbi->pidlRoot)
     {
         /* We have to convert from PIDLIST_ABSOLUTE -> IShellItem * */
-        IShellItem *pRoot = nullptr;
+        winrt::com_ptr<IShellItem> pRoot = nullptr;
         RETURN_IF_FAILED(SHCreateItemFromIDList(
             lpbi->pidlRoot,
             IID_PPV_ARGS(&pRoot)
         ));
-        RETURN_IF_FAILED(pDialog->SetFolder(pRoot));
+        RETURN_IF_FAILED(pDialog->SetFolder(pRoot.get()));
     }
 
     HRESULT hr = pDialog->Show(lpbi->hwndOwner);
@@ -91,12 +92,21 @@ PIDLIST_ABSOLUTE WINAPI SHBrowseForFolderW_hook(
     RETURN_IF_FAILED(pDialog->GetResult(&pResult));
 
     LPWSTR pszPath = nullptr;
-    RETURN_IF_FAILED(pResult->GetDisplayName(SIGDN_FILESYSPATH, &pszPath));
+    if (FAILED(pResult->GetDisplayName(SIGDN_FILESYSPATH, &pszPath)))
+    {
+        pResult->Release();
+        pResult = nullptr;
+        return NULL;
+    }
 
     /* Convert from wide character string to PIDLIST_ABSOLUTE */
-    if (pszPath) return ILCreateFromPathW(pszPath);
+    if (pszPath) {
+        PIDLIST_ABSOLUTE result = ILCreateFromPathW(pszPath);
+        CoTaskMemFree(pszPath);
+        return result;
+    }
 
-    return NULL;//SHBrowseForFolderW_orig(lpbi);
+    return NULL;
 }
 
 BOOL Wh_ModInit(void)
