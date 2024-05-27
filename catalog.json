@@ -1271,6 +1271,27 @@
                 "version": "0.7"
             }
         },
+        "modernize-folder-picker-dialog": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1716835371000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1716835371000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lole32 -loleaut32",
+                "description": "Replaces the classic \"Browse For Folder\" dialog",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Modernize Folder Picker Dialog",
+                "version": "1.0.0"
+            }
+        },
         "more-space-in-language-indicator": {
             "details": {
                 "defaultSorting": 369,

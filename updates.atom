@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-26T17:31:42.000Z</updated>
+    <updated>2024-05-27T18:42:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Modernize Folder Picker Dialog 1.0.0]]></title>
+        <id>https://windhawk.net/mods/modernize-folder-picker-dialog#8db14bfb508a52cc7652ad6fff42373baf3c4a20</id>
+        <link href="https://windhawk.net/mods/modernize-folder-picker-dialog"/>
+        <updated>2024-05-27T18:42:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="modernizefolderpickerdialog">Modernize Folder Picker Dialog</h1>
+<p>This mod replaces the outdated, hard-to-use "Browse For Folder" dialog with a
+modern styled folder picker dialog, which is easier to navigate.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/modernize-folder-picker-dialog-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/modernize-folder-picker-dialog-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Control 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-control#dbac51f369f38001f43dd37f3007ce7ebadcbd20</id>
@@ -290,15 +303,6 @@ You can report issues on github: https://github.com/VasherMC/windhawk-mods/issue
         <content type="html"><![CDATA[<ul>
 <li>Having more than one target applied for the same element is now supported.</li>
 <li>Fixed some styles not being restored when the mod is unloaded.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1.1]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#597515446756cfaac51a302032e13992ce2ee32c</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-04-30T07:19:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added handling for bitmaps loaded with the <code>LoadBitmapW</code> function.</li>
 </ul>]]></content>
     </entry>
 </feed>
