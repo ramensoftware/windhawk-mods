@@ -92,12 +92,10 @@ PIDLIST_ABSOLUTE WINAPI SHBrowseForFolderW_hook(
     RETURN_IF_FAILED(pDialog->GetResult(&pResult));
 
     LPWSTR pszPath = nullptr;
-    if (FAILED(pResult->GetDisplayName(SIGDN_FILESYSPATH, &pszPath)))
-    {
-        pResult->Release();
-        pResult = nullptr;
-        return NULL;
-    }
+    hr = pResult->GetDisplayName(SIGDN_FILESYSPATH, &pszPath);
+    pResult->Release();
+    pResult = nullptr;
+    RETURN_IF_FAILED(hr);
 
     /* Convert from wide character string to PIDLIST_ABSOLUTE */
     if (pszPath) {
