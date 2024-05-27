@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-27T20:21:26.000Z</updated>
+    <updated>2024-05-27T20:28:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.0.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#0959f2f57a96dae3785498c063209383ab6b8bdb</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2024-05-27T20:28:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Made styles defined later override styles defined earlier.</li>
+<li>Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.</li>
+<li>Added a workaround for setting FontWeight which didn't work.</li>
+<li>Fixed the mod not working until some settings are changed.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.3]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#09a45ac4d6daf121bc16d69a7c961f8be0405d07</id>
@@ -260,15 +272,6 @@ code from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <id>https://windhawk.net/mods/taskbar-grouping#63c5908556e699a14f3e007e9a7e709745f33224</id>
         <link href="https://windhawk.net/mods/taskbar-grouping"/>
         <updated>2024-05-04T18:22:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#76eac50ecafbe606e0840cb0c250afb8cfb7eb00</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-05-04T18:08:58.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
 </ul>]]></content>
