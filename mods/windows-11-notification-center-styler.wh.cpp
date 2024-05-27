@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     An advanced mod to override style attributes of the Notification Center
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -97,9 +97,11 @@ properties of a control change, the target conditions aren't evaluated again.
 
 Each style is written as `Style=Value`, for example: `Height=5`. The `:=` syntax
 can be used to use XAML syntax, for example: `Fill:=<SolidColorBrush
-Color="Red"/>`. In addition, a visual state can be specified as following:
-`Style@VisualState=Value`, in which case the style will only apply when the
-visual state group specified in the target matches the specified visual state.
+Color="Red"/>`. Specifying an empty value with the XAML syntax will clear the
+property value, for example: `Fill:=`. In addition, a visual state can be
+specified as following: `Style@VisualState=Value`, in which case the style will
+only apply when the visual state group specified in the target matches the
+specified visual state.
 
 ### Resource variables
 
@@ -508,6 +510,8 @@ HRESULT InjectWindhawkTAP() noexcept
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -612,6 +616,36 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     }
 
     return value;
+}
+
+void SetOrClearValue(DependencyObject elementDo,
+                     DependencyProperty property,
+                     winrt::Windows::Foundation::IInspectable value) {
+    if (value == DependencyProperty::UnsetValue()) {
+        elementDo.ClearValue(property);
+        return;
+    }
+
+    // This might fail. See `ReadLocalValueWithWorkaround` for an example (which
+    // we now handle but there might be other cases).
+    try {
+        // `setter.Value()` returns font weight as an int. Using it with
+        // `SetValue` results in the following error: 0x80004002 (No such
+        // interface supported). Box it as `Windows.UI.Text.FontWeight` as a
+        // workaround.
+        if (property == Controls::TextBlock::FontWeightProperty()) {
+            auto valueInt = value.try_as<int>();
+            if (valueInt && *valueInt >= std::numeric_limits<uint16_t>::min() &&
+                *valueInt <= std::numeric_limits<uint16_t>::max()) {
+                value = winrt::box_value(winrt::Windows::UI::Text::FontWeight{
+                    static_cast<uint16_t>(*valueInt)});
+            }
+        }
+
+        elementDo.SetValue(property, value);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
 }
 
 // https://stackoverflow.com/a/5665377
@@ -740,7 +774,9 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
                 xaml += L"\"";
-                if (!rule.isXamlValue) {
+                if (rule.isXamlValue && rule.value.empty()) {
+                    xaml += L" Value=\"{x:Null}\" />\n";
+                } else if (!rule.isXamlValue) {
                     xaml += L" Value=\"";
                     xaml += EscapeXmlAttribute(rule.value);
                     xaml += L"\" />\n";
@@ -758,10 +794,13 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             auto style = GetStyleFromXamlSetters(type, xaml);
 
-            for (size_t i = 0; i < styleRules.size(); i++) {
-                const auto setter = style.Setters().GetAt(i).as<Setter>();
-                propertyOverrides[setter.Property()]
-                                 [styleRules[i].visualState] = setter.Value();
+            uint32_t i = 0;
+            for (const auto& rule : styleRules) {
+                const auto setter = style.Setters().GetAt(i++).as<Setter>();
+                propertyOverrides[setter.Property()][rule.visualState] =
+                    rule.isXamlValue && rule.value.empty()
+                        ? DependencyProperty::UnsetValue()
+                        : setter.Value();
             }
         }
 
@@ -931,7 +970,10 @@ FindElementPropertyOverrides(FrameworkElement element,
     std::unordered_map<VisualStateGroup, PropertyOverrides> overrides;
     std::unordered_set<DependencyProperty> propertiesAdded;
 
-    for (auto& override : g_elementsCustomizationRules) {
+    for (auto it = g_elementsCustomizationRules.rbegin();
+         it != g_elementsCustomizationRules.rend(); ++it) {
+        auto& override = *it;
+
         VisualStateGroup visualStateGroup = nullptr;
 
         if (!TestElementMatcher(element, override.elementMatcher,
@@ -1022,7 +1064,7 @@ void ApplyCustomizationsForVisualStateGroup(
             propertyCustomizationState.originalValue =
                 ReadLocalValueWithWorkaround(element, property);
             propertyCustomizationState.customValue = it->second;
-            element.SetValue(property, it->second);
+            SetOrClearValue(element, property, it->second);
         }
 
         propertyCustomizationState.propertyChangedToken =
@@ -1054,8 +1096,8 @@ void ApplyCustomizationsForVisualStateGroup(
                     }
 
                     g_elementPropertyModifying = true;
-                    element.SetValue(property,
-                                     *propertyCustomizationState.customValue);
+                    SetOrClearValue(element, property,
+                                    *propertyCustomizationState.customValue);
                     g_elementPropertyModifying = false;
                 });
     }
@@ -1113,18 +1155,12 @@ void ApplyCustomizationsForVisualStateGroup(
                             }
 
                             propertyCustomizationState.customValue = it->second;
-                            element.SetValue(property, it->second);
+                            SetOrClearValue(element, property, it->second);
                         } else {
                             if (propertyCustomizationState.originalValue) {
-                                if (*propertyCustomizationState.originalValue ==
-                                    DependencyProperty::UnsetValue()) {
-                                    element.ClearValue(property);
-                                } else {
-                                    element.SetValue(property,
-                                                     *propertyCustomizationState
-                                                          .originalValue);
-                                }
-
+                                SetOrClearValue(
+                                    element, property,
+                                    *propertyCustomizationState.originalValue);
                                 propertyCustomizationState.originalValue
                                     .reset();
                             }
@@ -1152,19 +1188,7 @@ void RestoreCustomizationsForVisualStateGroup(
                 property, state.propertyChangedToken);
 
             if (state.originalValue) {
-                if (*state.originalValue == DependencyProperty::UnsetValue()) {
-                    element.ClearValue(property);
-                } else {
-                    // This might fail. See `ReadLocalValueWithWorkaround` for
-                    // an example (which we now handle but there might be other
-                    // cases).
-                    try {
-                        element.SetValue(property, *state.originalValue);
-                    } catch (winrt::hresult_error const& ex) {
-                        Wh_Log(L"Error %08X: %s", ex.code(),
-                               ex.message().c_str());
-                    }
-                }
+                SetOrClearValue(element, property, *state.originalValue);
             }
         }
     }
@@ -1335,9 +1359,6 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
     auto value = str.substr(eqPos + 1);
 
     result.value = TrimStringView(value);
-    if (result.value.empty()) {
-        throw std::runtime_error("Bad style syntax, empty value");
-    }
 
     if (name.size() > 0 && name.back() == L':') {
         result.isXamlValue = true;
@@ -1566,6 +1587,39 @@ void InitializeSettingsAndTap() {
     }
 }
 
+bool IsTargetThreadDescription(PCWSTR threadDescription) {
+    return wcscmp(threadDescription, L"ActionCenter") == 0;
+}
+
+bool IsTargetThread(HANDLE thread) {
+    using GetThreadDescription_t =
+        HRESULT(WINAPI*)(HANDLE hThread, PWSTR * ppszThreadDescription);
+
+    static auto pGetThreadDescription = []() -> GetThreadDescription_t {
+        HMODULE hKernel32Module = LoadLibrary(L"kernel32.dll");
+        if (!hKernel32Module) {
+            return nullptr;
+        }
+
+        return (GetThreadDescription_t)GetProcAddress(hKernel32Module,
+                                                      "GetThreadDescription");
+    }();
+
+    if (!pGetThreadDescription) {
+        return false;
+    }
+
+    PWSTR threadDescription;
+    bool isTargetThread = false;
+    HRESULT hr = pGetThreadDescription(thread, &threadDescription);
+    if (SUCCEEDED(hr)) {
+        isTargetThread = IsTargetThreadDescription(threadDescription);
+        LocalFree(threadDescription);
+    }
+
+    return isTargetThread;
+}
+
 using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
                                            LPCWSTR lpClassName,
                                            LPCWSTR lpWindowName,
@@ -1596,7 +1650,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
     HWND hWnd = CreateWindowInBand_Original(
         dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
         hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (!hWnd) {
+    if (!hWnd || !IsTargetThread(GetCurrentThread())) {
         return hWnd;
     }
 
@@ -1644,7 +1698,7 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     HWND hWnd = CreateWindowInBandEx_Original(
         dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
         hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
-    if (!hWnd) {
+    if (!hWnd || !IsTargetThread(GetCurrentThread())) {
         return hWnd;
     }
 
@@ -1724,8 +1778,20 @@ HWND GetCoreWnd() {
             ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
 
             DWORD dwProcessId = 0;
-            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
-                dwProcessId != GetCurrentProcessId()) {
+            DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &dwProcessId);
+            if (!dwThreadId || dwProcessId != GetCurrentProcessId()) {
+                return TRUE;
+            }
+
+            bool isTargetThread = false;
+            HANDLE hThread =
+                OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, dwThreadId);
+            if (hThread) {
+                isTargetThread = IsTargetThread(hThread);
+                CloseHandle(hThread);
+            }
+
+            if (!isTargetThread) {
                 return TRUE;
             }
 
@@ -1744,6 +1810,55 @@ HWND GetCoreWnd() {
         (LPARAM)&param);
 
     return hWnd;
+}
+
+HWND GetCoreWndOfThread(DWORD threadId) {
+    struct ENUM_WINDOWS_PARAM {
+        HWND* hWnd;
+    };
+
+    HWND hWnd = nullptr;
+    ENUM_WINDOWS_PARAM param = {&hWnd};
+    EnumThreadWindows(
+        threadId,
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
+
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
+            }
+
+            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+                *param.hWnd = hWnd;
+                return FALSE;
+            }
+
+            return TRUE;
+        },
+        (LPARAM)&param);
+
+    return hWnd;
+}
+
+using SetThreadDescription_t = HRESULT(WINAPI*)(HANDLE hThread,
+                                                PCWSTR lpThreadDescription);
+SetThreadDescription_t SetThreadDescription_Original;
+HRESULT WINAPI SetThreadDescription_Hook(HANDLE hThread,
+                                         PCWSTR lpThreadDescription) {
+    Wh_Log(L"> %s", lpThreadDescription ? lpThreadDescription : L"(null)");
+
+    if (lpThreadDescription && IsTargetThreadDescription(lpThreadDescription)) {
+        HWND hCoreWnd = GetCoreWndOfThread(GetThreadId(hThread));
+        if (hCoreWnd) {
+            Wh_Log(L"Initializing - Thread description was set");
+            RunFromWindowThread(
+                hCoreWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
+                nullptr);
+        }
+    }
+
+    return SetThreadDescription_Original(hThread, lpThreadDescription);
 }
 
 BOOL Wh_ModInit() {
@@ -1765,6 +1880,17 @@ BOOL Wh_ModInit() {
             Wh_SetFunctionHook(pCreateWindowInBandEx,
                                (void*)CreateWindowInBandEx_Hook,
                                (void**)&CreateWindowInBandEx_Original);
+        }
+    }
+
+    HMODULE hKernel32Module = LoadLibrary(L"kernel32.dll");
+    if (hKernel32Module) {
+        void* pSetThreadDescription =
+            (void*)GetProcAddress(hKernel32Module, "SetThreadDescription");
+        if (pSetThreadDescription) {
+            Wh_SetFunctionHook(pSetThreadDescription,
+                               (void*)SetThreadDescription_Hook,
+                               (void**)&SetThreadDescription_Original);
         }
     }
 
