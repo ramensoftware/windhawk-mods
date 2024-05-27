@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     An advanced mod to override style attributes of the start menu control elements
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -50,6 +50,10 @@ SideBySide2](https://github.com/ramensoftware/windows-11-start-menu-styling-guid
 [![SideBySideMinimal](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/SideBySideMinimal/screenshot-small.png)
 \
 SideBySideMinimal](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/SideBySideMinimal/README.md)
+
+[![TranslucentStartMenu](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/TranslucentStartMenu/screenshot-small.png)
+\
+TranslucentStartMenu](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/TranslucentStartMenu/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 start menu
 styling
@@ -102,9 +106,11 @@ properties of a control change, the target conditions aren't evaluated again.
 
 Each style is written as `Style=Value`, for example: `Height=5`. The `:=` syntax
 can be used to use XAML syntax, for example: `Fill:=<SolidColorBrush
-Color="Red"/>`. In addition, a visual state can be specified as following:
-`Style@VisualState=Value`, in which case the style will only apply when the
-visual state group specified in the target matches the specified visual state.
+Color="Red"/>`. Specifying an empty value with the XAML syntax will clear the
+property value, for example: `Fill:=`. In addition, a visual state can be
+specified as following: `Style@VisualState=Value`, in which case the style will
+only apply when the visual state group specified in the target matches the
+specified visual state.
 
 ### Resource variables
 
@@ -133,6 +139,7 @@ code from the **TranslucentTB** project.
   - SideBySide: SideBySide
   - SideBySide2: SideBySide2
   - SideBySideMinimal: SideBySideMinimal
+  - TranslucentStartMenu: TranslucentStartMenu
 - controlStyles:
   - - target: ""
       $name: Target
@@ -346,6 +353,33 @@ const Theme g_themeSideBySideMinimal = {{
     ThemeTargetStyles{L"StartDocked.PowerOptionsView", {L"Margin=-575,0,0,0"}},
     ThemeTargetStyles{L"StartDocked.UserTileView", {L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"StartMenu.PinnedList", {L"Height=504"}},
+}};
+
+// Author: Undisputed00x
+const Theme g_themeTranslucentStartMenu = {{
+    ThemeTargetStyles{
+        L"Border#AcrylicBorder",
+        {L"CornerRadius=15",
+         L"Background:=<AcrylicBrush TintColor=\"Transparent\" "
+         L"TintLuminosityOpacity=\"0\" TintOpacity=\"0\" Opacity=\"1\"/>",
+         L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"Border#AcrylicOverlay", {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{
+        L"Border#BorderElement",
+        {L"CornerRadius=10", L"BorderThickness=0,0,0,0",
+         L"Background:=<AcrylicBrush TintLuminosityOpacity=\"0.03\" "
+         L"TintOpacity=\"0\" Opacity=\"1\"/>"}},
+    ThemeTargetStyles{L"Grid#ShowMoreSuggestions", {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#SuggestionsParentContainer",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsListHeader",
+                      {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartMenu.PinnedList", {L"Height=504"}},
+    ThemeTargetStyles{
+        L"MenuFlyoutPresenter",
+        {L"Background:=<AcrylicBrush TintColor=\"Transparent\" "
+         L"TintLuminosityOpacity=\"0\" TintOpacity=\"0\" Opacity=\"1\"/>",
+         L"BorderThickness=0,0,0,0"}},
 }};
 
 std::atomic<DWORD> g_targetThreadId = 0;
@@ -715,6 +749,8 @@ HRESULT InjectWindhawkTAP() noexcept
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -805,8 +841,8 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
     DependencyProperty property) {
     const auto value = elementDo.ReadLocalValue(property);
-    if (winrt::get_class_name(value) ==
-        L"Windows.UI.Xaml.Data.BindingExpressionBase") {
+    if (value && winrt::get_class_name(value) ==
+                     L"Windows.UI.Xaml.Data.BindingExpressionBase") {
         // BindingExpressionBase was observed to be returned for XAML properties
         // that were declared as following:
         //
@@ -819,6 +855,36 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     }
 
     return value;
+}
+
+void SetOrClearValue(DependencyObject elementDo,
+                     DependencyProperty property,
+                     winrt::Windows::Foundation::IInspectable value) {
+    if (value == DependencyProperty::UnsetValue()) {
+        elementDo.ClearValue(property);
+        return;
+    }
+
+    // This might fail. See `ReadLocalValueWithWorkaround` for an example (which
+    // we now handle but there might be other cases).
+    try {
+        // `setter.Value()` returns font weight as an int. Using it with
+        // `SetValue` results in the following error: 0x80004002 (No such
+        // interface supported). Box it as `Windows.UI.Text.FontWeight` as a
+        // workaround.
+        if (property == Controls::TextBlock::FontWeightProperty()) {
+            auto valueInt = value.try_as<int>();
+            if (valueInt && *valueInt >= std::numeric_limits<uint16_t>::min() &&
+                *valueInt <= std::numeric_limits<uint16_t>::max()) {
+                value = winrt::box_value(winrt::Windows::UI::Text::FontWeight{
+                    static_cast<uint16_t>(*valueInt)});
+            }
+        }
+
+        elementDo.SetValue(property, value);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
 }
 
 // https://stackoverflow.com/a/5665377
@@ -947,7 +1013,9 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
                 xaml += L"\"";
-                if (!rule.isXamlValue) {
+                if (rule.isXamlValue && rule.value.empty()) {
+                    xaml += L" Value=\"{x:Null}\" />\n";
+                } else if (!rule.isXamlValue) {
                     xaml += L" Value=\"";
                     xaml += EscapeXmlAttribute(rule.value);
                     xaml += L"\" />\n";
@@ -965,10 +1033,13 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             auto style = GetStyleFromXamlSetters(type, xaml);
 
-            for (size_t i = 0; i < styleRules.size(); i++) {
-                const auto setter = style.Setters().GetAt(i).as<Setter>();
-                propertyOverrides[setter.Property()]
-                                 [styleRules[i].visualState] = setter.Value();
+            uint32_t i = 0;
+            for (const auto& rule : styleRules) {
+                const auto setter = style.Setters().GetAt(i++).as<Setter>();
+                propertyOverrides[setter.Property()][rule.visualState] =
+                    rule.isXamlValue && rule.value.empty()
+                        ? DependencyProperty::UnsetValue()
+                        : setter.Value();
             }
         }
 
@@ -1079,6 +1150,11 @@ bool TestElementMatcher(FrameworkElement element,
          GetResolvedPropertyValues(matcher.type, &matcher.propertyValues)) {
         const auto value =
             ReadLocalValueWithWorkaround(elementDo, propertyValue.first);
+        if (!value) {
+            Wh_Log(L"Null property value");
+            return false;
+        }
+
         const auto className = winrt::get_class_name(value);
         const auto expectedClassName =
             winrt::get_class_name(propertyValue.second);
@@ -1133,7 +1209,10 @@ FindElementPropertyOverrides(FrameworkElement element,
     std::unordered_map<VisualStateGroup, PropertyOverrides> overrides;
     std::unordered_set<DependencyProperty> propertiesAdded;
 
-    for (auto& override : g_elementsCustomizationRules) {
+    for (auto it = g_elementsCustomizationRules.rbegin();
+         it != g_elementsCustomizationRules.rend(); ++it) {
+        auto& override = *it;
+
         VisualStateGroup visualStateGroup = nullptr;
 
         if (!TestElementMatcher(element, override.elementMatcher,
@@ -1224,7 +1303,7 @@ void ApplyCustomizationsForVisualStateGroup(
             propertyCustomizationState.originalValue =
                 ReadLocalValueWithWorkaround(element, property);
             propertyCustomizationState.customValue = it->second;
-            element.SetValue(property, it->second);
+            SetOrClearValue(element, property, it->second);
         }
 
         propertyCustomizationState.propertyChangedToken =
@@ -1256,8 +1335,8 @@ void ApplyCustomizationsForVisualStateGroup(
                     }
 
                     g_elementPropertyModifying = true;
-                    element.SetValue(property,
-                                     *propertyCustomizationState.customValue);
+                    SetOrClearValue(element, property,
+                                    *propertyCustomizationState.customValue);
                     g_elementPropertyModifying = false;
                 });
     }
@@ -1315,18 +1394,12 @@ void ApplyCustomizationsForVisualStateGroup(
                             }
 
                             propertyCustomizationState.customValue = it->second;
-                            element.SetValue(property, it->second);
+                            SetOrClearValue(element, property, it->second);
                         } else {
                             if (propertyCustomizationState.originalValue) {
-                                if (*propertyCustomizationState.originalValue ==
-                                    DependencyProperty::UnsetValue()) {
-                                    element.ClearValue(property);
-                                } else {
-                                    element.SetValue(property,
-                                                     *propertyCustomizationState
-                                                          .originalValue);
-                                }
-
+                                SetOrClearValue(
+                                    element, property,
+                                    *propertyCustomizationState.originalValue);
                                 propertyCustomizationState.originalValue
                                     .reset();
                             }
@@ -1354,19 +1427,7 @@ void RestoreCustomizationsForVisualStateGroup(
                 property, state.propertyChangedToken);
 
             if (state.originalValue) {
-                if (*state.originalValue == DependencyProperty::UnsetValue()) {
-                    element.ClearValue(property);
-                } else {
-                    // This might fail. See `ReadLocalValueWithWorkaround` for
-                    // an example (which we now handle but there might be other
-                    // cases).
-                    try {
-                        element.SetValue(property, *state.originalValue);
-                    } catch (winrt::hresult_error const& ex) {
-                        Wh_Log(L"Error %08X: %s", ex.code(),
-                               ex.message().c_str());
-                    }
-                }
+                SetOrClearValue(element, property, *state.originalValue);
             }
         }
     }
@@ -1537,9 +1598,6 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
     auto value = str.substr(eqPos + 1);
 
     result.value = TrimStringView(value);
-    if (result.value.empty()) {
-        throw std::runtime_error("Bad style syntax, empty value");
-    }
 
     if (name.size() > 0 && name.back() == L':') {
         result.isXamlValue = true;
@@ -1668,18 +1726,6 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
 }
 
 void ProcessAllStylesFromSettings() {
-    for (int i = 0;; i++) {
-        try {
-            if (!ProcessSingleTargetStylesFromSettings(i)) {
-                break;
-            }
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-        } catch (std::exception const& ex) {
-            Wh_Log(L"Error: %S", ex.what());
-        }
-    }
-
     PCWSTR themeName = Wh_GetStringSetting(L"theme");
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"NoRecommendedSection") == 0) {
@@ -1690,6 +1736,8 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeSideBySide2;
     } else if (wcscmp(themeName, L"SideBySideMinimal") == 0) {
         theme = &g_themeSideBySideMinimal;
+    } else if (wcscmp(themeName, L"TranslucentStartMenu") == 0) {
+        theme = &g_themeTranslucentStartMenu;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -1706,6 +1754,18 @@ void ProcessAllStylesFromSettings() {
             } catch (std::exception const& ex) {
                 Wh_Log(L"Error: %S", ex.what());
             }
+        }
+    }
+
+    for (int i = 0;; i++) {
+        try {
+            if (!ProcessSingleTargetStylesFromSettings(i)) {
+                break;
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        } catch (std::exception const& ex) {
+            Wh_Log(L"Error: %S", ex.what());
         }
     }
 }
