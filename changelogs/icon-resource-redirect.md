@@ -1,3 +1,8 @@
+## 1.1.3 ([May 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d70dd616505af63c736c1cad00feb5e2350cba3f/mods/icon-resource-redirect.wh.cpp))
+
+* Hook ANSI variant functions: LoadImageA, LoadIconA, LoadCursorA, LoadBitmapA, LoadMenuA, DialogBoxParamA, CreateDialogParamA, LoadStringA.
+* In case multiple icons are extracted and the custom resource only overrides some of them, return the original icons. We'd ideally like to return a combined result, but unfortunately that's not trivial to implement, and returning the original icons is better than returning a partial result.
+
 ## 1.1.2 ([May 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/fab76b768b1f821b066113a1334dc8bfcf4cbc43/mods/icon-resource-redirect.wh.cpp))
 
 * Added handling for menus loaded with the `LoadMenuW` function.
