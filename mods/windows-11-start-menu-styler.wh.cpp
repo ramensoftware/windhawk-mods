@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              windows-11-start-menu-styler-c
-// @name            Windows 11 Start Menu Styler-c
+// @id              windows-11-start-menu-styler
+// @name            Windows 11 Start Menu Styler
 // @description     An advanced mod to override style attributes of the start menu control elements
 // @version         1.1.2
 // @author          m417z-c
