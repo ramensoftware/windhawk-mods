@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. instead of icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -89,11 +89,53 @@ std::shared_mutex g_redirectionResourcePathsMutex;
 thread_local bool g_redirectionResourcePathsMutexLocked;
 std::unordered_map<std::wstring, std::vector<std::wstring>>
     g_redirectionResourcePaths;
+std::unordered_map<std::string, std::vector<std::string>>
+    g_redirectionResourcePathsA;
 
 std::shared_mutex g_redirectionResourceModulesMutex;
 std::unordered_map<std::wstring, HMODULE> g_redirectionResourceModules;
 
 std::atomic<DWORD> g_operationCounter;
+
+// chooseAW<char> returns OptionA.
+// chooseAW<WCHAR> returns OptionW.
+template <typename T, auto OptionA, auto OptionW>
+auto chooseAW() {
+    if constexpr (std::is_same_v<T, char>) {
+        return OptionA;
+    } else {
+        static_assert(std::is_same_v<T, WCHAR>);
+        return OptionW;
+    }
+}
+
+auto StrToW(PCWSTR str) {
+    struct {
+        PCWSTR p;
+    } result;
+    result.p = str;
+    return result;
+}
+
+// https://stackoverflow.com/a/69410299
+auto StrToW(PCSTR str) {
+    struct {
+        std::wstring wstr;
+        PCWSTR p;
+    } result;
+
+    int strLen = static_cast<int>(strlen(str));
+    int sizeNeeded = MultiByteToWideChar(CP_ACP, 0, str, strLen, nullptr, 0);
+    if (sizeNeeded <= 0) {
+        throw std::runtime_error("MultiByteToWideChar() failed: " +
+                                 std::to_string(sizeNeeded));
+    }
+
+    result.wstr.resize(sizeNeeded);
+    MultiByteToWideChar(CP_ACP, 0, str, strLen, result.wstr.data(), sizeNeeded);
+    result.p = result.wstr.c_str();
+    return result;
+}
 
 // A helper function to skip locking if the thread already holds the lock, since
 // it's UB. Nested locks may happen if one hooked function is implemented with
@@ -210,28 +252,32 @@ void FreeAndClearRedirectedModules() {
     }
 }
 
+template <typename T>
 bool RedirectFileName(DWORD c,
-                      PCWSTR fileName,
+                      const T* fileName,
                       std::function<void()> beforeFirstRedirectionFunction,
-                      std::function<bool(PCWSTR)> redirectFunction) {
+                      std::function<bool(const T*)> redirectFunction) {
     if (!fileName) {
         Wh_Log(L"[%u] Error, nullptr file name, falling back to original", c);
         return false;
     }
 
-    std::wstring fileNameUpper{fileName};
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, &fileNameUpper[0],
-                  static_cast<int>(fileNameUpper.length()), &fileNameUpper[0],
-                  static_cast<int>(fileNameUpper.length()), nullptr, nullptr,
-                  0);
+    std::basic_string<T> fileNameUpper{fileName};
+    (chooseAW<T, LCMapStringA, LCMapStringW>())(
+        LOCALE_USER_DEFAULT, LCMAP_UPPERCASE, &fileNameUpper[0],
+        static_cast<int>(fileNameUpper.length()), &fileNameUpper[0],
+        static_cast<int>(fileNameUpper.length()));
 
     bool triedRedirection = false;
 
     {
         auto lock{RedirectionResourcePathsMutexSharedLock()};
 
-        if (const auto it = g_redirectionResourcePaths.find(fileNameUpper);
-            it != g_redirectionResourcePaths.end()) {
+        const auto& redirectionResourcePaths =
+            *(chooseAW<T, &g_redirectionResourcePathsA,
+                       &g_redirectionResourcePaths>());
+        if (const auto it = redirectionResourcePaths.find(fileNameUpper);
+            it != redirectionResourcePaths.end()) {
             const auto& redirects = it->second;
             for (const auto& redirect : redirects) {
                 if (!triedRedirection) {
@@ -239,7 +285,7 @@ bool RedirectFileName(DWORD c,
                     triedRedirection = true;
                 }
 
-                Wh_Log(L"[%u] Trying %s", c, redirect.c_str());
+                Wh_Log(L"[%u] Trying %s", c, StrToW(redirect.c_str()).p);
 
                 if (redirectFunction(redirect.c_str())) {
                     return true;
@@ -355,7 +401,7 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
 
     UINT result;
 
-    bool redirected = RedirectFileName(
+    bool redirected = RedirectFileName<WCHAR>(
         c, szFileName,
         [&]() {
             Wh_Log(L"[%u] cxIcon: %d, %d", c, LOWORD(cxIcon), HIWORD(cxIcon));
@@ -374,6 +420,44 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                                                    cxIcon, cyIcon, phicon,
                                                    piconid, nIcons, flags);
             if (result != 0xFFFFFFFF && result != 0) {
+                // In case multiple icons are requested and the custom resource
+                // only overrides some of them, we'd ideally like to return a
+                // combined result. Unfortunately, that's not trivial to
+                // implement, so return the original icons in this case.
+                //
+                // An example where multiple icons are requested is the Change
+                // Icon dialog in shortcut file properties. If a partial result
+                // is returned, only the returned icons are displayed.
+                bool multipleIcons = nIcons > (HIWORD(cxIcon) ? 2 : 1);
+                bool partialResult = result < nIcons;
+                UINT multipleIconsOriginalCount = 0;
+                if (multipleIcons && partialResult) {
+                    multipleIconsOriginalCount = PrivateExtractIconsW_Original(
+                        szFileName, nIconIndex, cxIcon, cyIcon, nullptr,
+                        nullptr, nIcons, flags);
+                }
+
+                if (result < multipleIconsOriginalCount) {
+                    Wh_Log(
+                        L"[%u] Got less icons than the original file has: %u "
+                        L"vs. %u, replacing redirection with the original "
+                        L"icons",
+                        c, result, multipleIconsOriginalCount);
+
+                    if (phicon) {
+                        for (UINT i = 0; i < nIcons; i++) {
+                            if (phicon[i]) {
+                                DestroyIcon(phicon[i]);
+                                phicon[i] = nullptr;
+                            }
+                        }
+                    }
+
+                    result = PrivateExtractIconsW_Original(
+                        szFileName, nIconIndex, cxIcon, cyIcon, phicon, piconid,
+                        nIcons, flags);
+                }
+
                 Wh_Log(L"[%u] Redirected successfully, result: %u", c, result);
                 return true;
             }
@@ -429,14 +513,13 @@ UINT WINAPI PrivateExtractIconsW_Hook(LPCWSTR szFileName,
                                          phicon, piconid, nIcons, flags);
 }
 
-using LoadImageW_t = decltype(&LoadImageW);
-LoadImageW_t LoadImageW_Original;
-HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
-                              LPCWSTR name,
-                              UINT type,
-                              int cx,
-                              int cy,
-                              UINT fuLoad) {
+template <auto* Original, typename T>
+HANDLE LoadImageAW_Hook(HINSTANCE hInst,
+                        const T* name,
+                        UINT type,
+                        int cx,
+                        int cy,
+                        UINT fuLoad) {
     DWORD c = ++g_operationCounter;
 
     PCWSTR typeClarification = L"";
@@ -452,20 +535,20 @@ HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
             break;
     }
 
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c, type: %u%s", c, chooseAW<T, L'A', L'W'>(),
+               type, typeClarification);
+
     if (!hInst) {
         if (fuLoad & LR_LOADFROMFILE) {
-            Wh_Log(L"[%u] > Type: %u%s, file name: %s", c, type,
-                   typeClarification, name);
+            Wh_Log(L"%s, file name: %s", prefix, StrToW(name).p);
         } else {
-            Wh_Log(L"[%u] > Type: %u%s, resource identifier: %zu", c, type,
-                   typeClarification, (ULONG_PTR)name);
+            Wh_Log(L"%s, resource identifier: %zu", prefix, (ULONG_PTR)name);
         }
     } else if (IS_INTRESOURCE(name)) {
-        Wh_Log(L"[%u] > Type: %u%s, resource number: %u", c, type,
-               typeClarification, (DWORD)(ULONG_PTR)name);
+        Wh_Log(L"%s, resource number: %u", prefix, (DWORD)(ULONG_PTR)name);
     } else {
-        Wh_Log(L"[%u] > Type: %u%s, resource name: %s", c, type,
-               typeClarification, name);
+        Wh_Log(L"%s, resource name: %s", prefix, StrToW(name).p);
     }
 
     HANDLE result;
@@ -478,33 +561,33 @@ HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
     };
 
     if (!hInst && (fuLoad & LR_LOADFROMFILE)) {
-        redirected = RedirectFileName(
+        redirected = RedirectFileName<T>(
             c, name, std::move(beforeFirstRedirectionFunction),
-            [&](PCWSTR fileNameRedirect) {
-                result = LoadImageW_Original(hInst, fileNameRedirect, type, cx,
-                                             cy, fuLoad);
+            [&](const T* fileNameRedirect) {
+                result =
+                    (*Original)(hInst, fileNameRedirect, type, cx, cy, fuLoad);
                 if (result) {
                     Wh_Log(L"[%u] Redirected successfully", c);
                     return true;
                 }
 
                 DWORD dwError = GetLastError();
-                Wh_Log(L"[%u] LoadImageW failed with error %u", c, dwError);
+                Wh_Log(L"[%u] LoadImage failed with error %u", c, dwError);
                 return false;
             });
     } else {
         redirected = RedirectModule(
             c, hInst, std::move(beforeFirstRedirectionFunction),
             [&](HINSTANCE hInstanceRedirect) {
-                result = LoadImageW_Original(hInstanceRedirect, name, type, cx,
-                                             cy, fuLoad);
+                result =
+                    (*Original)(hInstanceRedirect, name, type, cx, cy, fuLoad);
                 if (result) {
                     Wh_Log(L"[%u] Redirected successfully", c);
                     return true;
                 }
 
                 DWORD dwError = GetLastError();
-                Wh_Log(L"[%u] LoadImageW failed with error %u", c, dwError);
+                Wh_Log(L"[%u] LoadImage failed with error %u", c, dwError);
                 return false;
             });
     }
@@ -513,20 +596,47 @@ HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
         return result;
     }
 
-    return LoadImageW_Original(hInst, name, type, cx, cy, fuLoad);
+    return (*Original)(hInst, name, type, cx, cy, fuLoad);
 }
 
-using LoadIconW_t = decltype(&LoadIconW);
-LoadIconW_t LoadIconW_Original;
-HICON WINAPI LoadIconW_Hook(HINSTANCE hInstance, LPCWSTR lpIconName) {
+using LoadImageA_t = decltype(&LoadImageA);
+LoadImageA_t LoadImageA_Original;
+HANDLE WINAPI LoadImageA_Hook(HINSTANCE hInst,
+                              LPCSTR name,
+                              UINT type,
+                              int cx,
+                              int cy,
+                              UINT fuLoad) {
+    return LoadImageAW_Hook<&LoadImageA_Original>(hInst, name, type, cx, cy,
+                                                  fuLoad);
+}
+
+using LoadImageW_t = decltype(&LoadImageW);
+LoadImageW_t LoadImageW_Original;
+HANDLE WINAPI LoadImageW_Hook(HINSTANCE hInst,
+                              LPCWSTR name,
+                              UINT type,
+                              int cx,
+                              int cy,
+                              UINT fuLoad) {
+    return LoadImageAW_Hook<&LoadImageW_Original>(hInst, name, type, cx, cy,
+                                                  fuLoad);
+}
+
+template <auto* Original, typename T>
+HICON LoadIconAW_Hook(HINSTANCE hInstance, const T* lpIconName) {
     DWORD c = ++g_operationCounter;
 
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
+
     if (!hInstance) {
-        Wh_Log(L"[%u] > Resource identifier: %zu", c, (ULONG_PTR)lpIconName);
+        Wh_Log(L"%s, resource identifier: %zu", prefix, (ULONG_PTR)lpIconName);
     } else if (IS_INTRESOURCE(lpIconName)) {
-        Wh_Log(L"[%u] > Resource number: %u", c, (DWORD)(ULONG_PTR)lpIconName);
+        Wh_Log(L"%s, resource number: %u", prefix,
+               (DWORD)(ULONG_PTR)lpIconName);
     } else {
-        Wh_Log(L"[%u] > Resource name: %s", c, lpIconName);
+        Wh_Log(L"%s, resource name: %s", prefix, StrToW(lpIconName).p);
     }
 
     HICON result;
@@ -534,35 +644,50 @@ HICON WINAPI LoadIconW_Hook(HINSTANCE hInstance, LPCWSTR lpIconName) {
     bool redirected = RedirectModule(
         c, hInstance, []() {},
         [&](HINSTANCE hInstanceRedirect) {
-            result = LoadIconW_Original(hInstanceRedirect, lpIconName);
+            result = (*Original)(hInstanceRedirect, lpIconName);
             if (result) {
                 Wh_Log(L"[%u] Redirected successfully", c);
                 return true;
             }
 
             DWORD dwError = GetLastError();
-            Wh_Log(L"[%u] LoadIconW failed with error %u", c, dwError);
+            Wh_Log(L"[%u] LoadIcon failed with error %u", c, dwError);
             return false;
         });
     if (redirected) {
         return result;
     }
 
-    return LoadIconW_Original(hInstance, lpIconName);
+    return (*Original)(hInstance, lpIconName);
 }
 
-using LoadCursorW_t = decltype(&LoadCursorW);
-LoadCursorW_t LoadCursorW_Original;
-HCURSOR WINAPI LoadCursorW_Hook(HINSTANCE hInstance, LPCWSTR lpCursorName) {
+using LoadIconA_t = decltype(&LoadIconA);
+LoadIconA_t LoadIconA_Original;
+HICON WINAPI LoadIconA_Hook(HINSTANCE hInstance, LPCSTR lpIconName) {
+    return LoadIconAW_Hook<&LoadIconA_Original>(hInstance, lpIconName);
+}
+
+using LoadIconW_t = decltype(&LoadIconW);
+LoadIconW_t LoadIconW_Original;
+HICON WINAPI LoadIconW_Hook(HINSTANCE hInstance, LPCWSTR lpIconName) {
+    return LoadIconAW_Hook<&LoadIconW_Original>(hInstance, lpIconName);
+}
+
+template <auto* Original, typename T>
+HCURSOR LoadCursorAW_Hook(HINSTANCE hInstance, const T* lpCursorName) {
     DWORD c = ++g_operationCounter;
 
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
+
     if (!hInstance) {
-        Wh_Log(L"[%u] > Resource identifier: %zu", c, (ULONG_PTR)lpCursorName);
+        Wh_Log(L"%s, resource identifier: %zu", prefix,
+               (ULONG_PTR)lpCursorName);
     } else if (IS_INTRESOURCE(lpCursorName)) {
-        Wh_Log(L"[%u] > Resource number: %u", c,
+        Wh_Log(L"%s, resource number: %u", prefix,
                (DWORD)(ULONG_PTR)lpCursorName);
     } else {
-        Wh_Log(L"[%u] > Resource name: %s", c, lpCursorName);
+        Wh_Log(L"%s, resource name: %s", prefix, StrToW(lpCursorName).p);
     }
 
     HCURSOR result;
@@ -570,35 +695,50 @@ HCURSOR WINAPI LoadCursorW_Hook(HINSTANCE hInstance, LPCWSTR lpCursorName) {
     bool redirected = RedirectModule(
         c, hInstance, []() {},
         [&](HINSTANCE hInstanceRedirect) {
-            result = LoadCursorW_Original(hInstanceRedirect, lpCursorName);
+            result = (*Original)(hInstanceRedirect, lpCursorName);
             if (result) {
                 Wh_Log(L"[%u] Redirected successfully", c);
                 return true;
             }
 
             DWORD dwError = GetLastError();
-            Wh_Log(L"[%u] LoadCursorW failed with error %u", c, dwError);
+            Wh_Log(L"[%u] LoadCursor failed with error %u", c, dwError);
             return false;
         });
     if (redirected) {
         return result;
     }
 
-    return LoadCursorW_Original(hInstance, lpCursorName);
+    return (*Original)(hInstance, lpCursorName);
 }
 
-using LoadBitmapW_t = decltype(&LoadBitmapW);
-LoadBitmapW_t LoadBitmapW_Original;
-HBITMAP WINAPI LoadBitmapW_Hook(HINSTANCE hInstance, LPCWSTR lpBitmapName) {
+using LoadCursorA_t = decltype(&LoadCursorA);
+LoadCursorA_t LoadCursorA_Original;
+HCURSOR WINAPI LoadCursorA_Hook(HINSTANCE hInstance, LPCSTR lpCursorName) {
+    return LoadCursorAW_Hook<&LoadCursorA_Original>(hInstance, lpCursorName);
+}
+
+using LoadCursorW_t = decltype(&LoadCursorW);
+LoadCursorW_t LoadCursorW_Original;
+HCURSOR WINAPI LoadCursorW_Hook(HINSTANCE hInstance, LPCWSTR lpCursorName) {
+    return LoadCursorAW_Hook<&LoadCursorW_Original>(hInstance, lpCursorName);
+}
+
+template <auto* Original, typename T>
+HBITMAP LoadBitmapAW_Hook(HINSTANCE hInstance, const T* lpBitmapName) {
     DWORD c = ++g_operationCounter;
 
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
+
     if (!hInstance) {
-        Wh_Log(L"[%u] > Resource identifier: %zu", c, (ULONG_PTR)lpBitmapName);
+        Wh_Log(L"%s, resource identifier: %zu", prefix,
+               (ULONG_PTR)lpBitmapName);
     } else if (IS_INTRESOURCE(lpBitmapName)) {
-        Wh_Log(L"[%u] > Resource number: %u", c,
+        Wh_Log(L"%s, resource number: %u", prefix,
                (DWORD)(ULONG_PTR)lpBitmapName);
     } else {
-        Wh_Log(L"[%u] > Resource name: %s", c, lpBitmapName);
+        Wh_Log(L"%s, resource name: %s", prefix, StrToW(lpBitmapName).p);
     }
 
     HBITMAP result;
@@ -606,32 +746,47 @@ HBITMAP WINAPI LoadBitmapW_Hook(HINSTANCE hInstance, LPCWSTR lpBitmapName) {
     bool redirected = RedirectModule(
         c, hInstance, []() {},
         [&](HINSTANCE hInstanceRedirect) {
-            result = LoadBitmapW_Original(hInstanceRedirect, lpBitmapName);
+            result = (*Original)(hInstanceRedirect, lpBitmapName);
             if (result) {
                 Wh_Log(L"[%u] Redirected successfully", c);
                 return true;
             }
 
             DWORD dwError = GetLastError();
-            Wh_Log(L"[%u] LoadBitmapW failed with error %u", c, dwError);
+            Wh_Log(L"[%u] LoadBitmap failed with error %u", c, dwError);
             return false;
         });
     if (redirected) {
         return result;
     }
 
-    return LoadBitmapW_Original(hInstance, lpBitmapName);
+    return (*Original)(hInstance, lpBitmapName);
 }
 
-using LoadMenuW_t = decltype(&LoadMenuW);
-LoadMenuW_t LoadMenuW_Original;
-HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
+using LoadBitmapA_t = decltype(&LoadBitmapA);
+LoadBitmapA_t LoadBitmapA_Original;
+HBITMAP WINAPI LoadBitmapA_Hook(HINSTANCE hInstance, LPCSTR lpBitmapName) {
+    return LoadBitmapAW_Hook<&LoadBitmapA_Original>(hInstance, lpBitmapName);
+}
+
+using LoadBitmapW_t = decltype(&LoadBitmapW);
+LoadBitmapW_t LoadBitmapW_Original;
+HBITMAP WINAPI LoadBitmapW_Hook(HINSTANCE hInstance, LPCWSTR lpBitmapName) {
+    return LoadBitmapAW_Hook<&LoadBitmapW_Original>(hInstance, lpBitmapName);
+}
+
+template <auto* Original, typename T>
+HMENU LoadMenuAW_Hook(HINSTANCE hInstance, const T* lpMenuName) {
     DWORD c = ++g_operationCounter;
 
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
+
     if (IS_INTRESOURCE(lpMenuName)) {
-        Wh_Log(L"[%u] > Resource number: %u", c, (DWORD)(ULONG_PTR)lpMenuName);
+        Wh_Log(L"%s, resource number: %u", prefix,
+               (DWORD)(ULONG_PTR)lpMenuName);
     } else {
-        Wh_Log(L"[%u] > Resource name: %s", c, lpMenuName);
+        Wh_Log(L"%s, resource name: %s", prefix, StrToW(lpMenuName).p);
     }
 
     HMENU result;
@@ -639,37 +794,51 @@ HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
     bool redirected = RedirectModule(
         c, hInstance, []() {},
         [&](HINSTANCE hInstanceRedirect) {
-            result = LoadMenuW_Original(hInstanceRedirect, lpMenuName);
+            result = (*Original)(hInstanceRedirect, lpMenuName);
             if (result) {
                 Wh_Log(L"[%u] Redirected successfully", c);
                 return true;
             }
 
             DWORD dwError = GetLastError();
-            Wh_Log(L"[%u] LoadMenuW failed with error %u", c, dwError);
+            Wh_Log(L"[%u] LoadMenu failed with error %u", c, dwError);
             return false;
         });
     if (redirected) {
         return result;
     }
 
-    return LoadMenuW_Original(hInstance, lpMenuName);
+    return (*Original)(hInstance, lpMenuName);
 }
 
-using DialogBoxParamW_t = decltype(&DialogBoxParamW);
-DialogBoxParamW_t DialogBoxParamW_Original;
-INT_PTR WINAPI DialogBoxParamW_Hook(HINSTANCE hInstance,
-                                    LPCWSTR lpTemplateName,
-                                    HWND hWndParent,
-                                    DLGPROC lpDialogFunc,
-                                    LPARAM dwInitParam) {
+using LoadMenuA_t = decltype(&LoadMenuA);
+LoadMenuA_t LoadMenuA_Original;
+HMENU WINAPI LoadMenuA_Hook(HINSTANCE hInstance, LPCSTR lpMenuName) {
+    return LoadMenuAW_Hook<&LoadMenuA_Original>(hInstance, lpMenuName);
+}
+
+using LoadMenuW_t = decltype(&LoadMenuW);
+LoadMenuW_t LoadMenuW_Original;
+HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
+    return LoadMenuAW_Hook<&LoadMenuW_Original>(hInstance, lpMenuName);
+}
+
+template <auto* Original, typename T>
+INT_PTR DialogBoxParamAW_Hook(HINSTANCE hInstance,
+                              const T* lpTemplateName,
+                              HWND hWndParent,
+                              DLGPROC lpDialogFunc,
+                              LPARAM dwInitParam) {
     DWORD c = ++g_operationCounter;
 
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
+
     if (IS_INTRESOURCE(lpTemplateName)) {
-        Wh_Log(L"[%u] > Resource number: %u", c,
+        Wh_Log(L"%s, resource number: %u", prefix,
                (DWORD)(ULONG_PTR)lpTemplateName);
     } else {
-        Wh_Log(L"[%u] > Resource name: %s", c, lpTemplateName);
+        Wh_Log(L"%s, resource name: %s", prefix, StrToW(lpTemplateName).p);
     }
 
     INT_PTR result;
@@ -684,24 +853,98 @@ INT_PTR WINAPI DialogBoxParamW_Hook(HINSTANCE hInstance,
             // In this case, there's no reliable way to find out whether
             // DialogBoxParamW failed, since any value can be returned.
             // Therefore, only make sure that the dialog resource exists.
-            if (!FindResourceEx(hInstanceRedirect, RT_DIALOG, lpTemplateName,
-                                0)) {
+            if (!(chooseAW<T, FindResourceExA, FindResourceExW>())(
+                    hInstanceRedirect, (T*)RT_DIALOG, lpTemplateName, 0)) {
                 Wh_Log(L"[%u] Resource not found", c);
                 return false;
             }
 
             Wh_Log(L"[%u] Redirected successfully", c);
-            result =
-                DialogBoxParamW_Original(hInstanceRedirect, lpTemplateName,
-                                         hWndParent, lpDialogFunc, dwInitParam);
+            result = (*Original)(hInstanceRedirect, lpTemplateName, hWndParent,
+                                 lpDialogFunc, dwInitParam);
             return true;
         });
     if (redirected) {
         return result;
     }
 
-    return DialogBoxParamW_Original(hInstance, lpTemplateName, hWndParent,
-                                    lpDialogFunc, dwInitParam);
+    return (*Original)(hInstance, lpTemplateName, hWndParent, lpDialogFunc,
+                       dwInitParam);
+}
+
+using DialogBoxParamA_t = decltype(&DialogBoxParamA);
+DialogBoxParamA_t DialogBoxParamA_Original;
+INT_PTR WINAPI DialogBoxParamA_Hook(HINSTANCE hInstance,
+                                    LPCSTR lpTemplateName,
+                                    HWND hWndParent,
+                                    DLGPROC lpDialogFunc,
+                                    LPARAM dwInitParam) {
+    return DialogBoxParamAW_Hook<&DialogBoxParamA_Original>(
+        hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
+}
+
+using DialogBoxParamW_t = decltype(&DialogBoxParamW);
+DialogBoxParamW_t DialogBoxParamW_Original;
+INT_PTR WINAPI DialogBoxParamW_Hook(HINSTANCE hInstance,
+                                    LPCWSTR lpTemplateName,
+                                    HWND hWndParent,
+                                    DLGPROC lpDialogFunc,
+                                    LPARAM dwInitParam) {
+    return DialogBoxParamAW_Hook<&DialogBoxParamW_Original>(
+        hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
+}
+
+template <auto* Original, typename T>
+HWND CreateDialogParamAW_Hook(HINSTANCE hInstance,
+                              const T* lpTemplateName,
+                              HWND hWndParent,
+                              DLGPROC lpDialogFunc,
+                              LPARAM dwInitParam) {
+    DWORD c = ++g_operationCounter;
+
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
+
+    if (IS_INTRESOURCE(lpTemplateName)) {
+        Wh_Log(L"%s, resource number: %u", prefix,
+               (DWORD)(ULONG_PTR)lpTemplateName);
+    } else {
+        Wh_Log(L"%s, resource name: %s", prefix, StrToW(lpTemplateName).p);
+    }
+
+    HWND result;
+
+    bool redirected = RedirectModule(
+        c, hInstance, []() {},
+        [&](HINSTANCE hInstanceRedirect) {
+            result = (*Original)(hInstanceRedirect, lpTemplateName, hWndParent,
+                                 lpDialogFunc, dwInitParam);
+            if (result) {
+                Wh_Log(L"[%u] Redirected successfully", c);
+                return true;
+            }
+
+            DWORD dwError = GetLastError();
+            Wh_Log(L"[%u] CreateDialogParam failed with error %u", c, dwError);
+            return false;
+        });
+    if (redirected) {
+        return result;
+    }
+
+    return (*Original)(hInstance, lpTemplateName, hWndParent, lpDialogFunc,
+                       dwInitParam);
+}
+
+using CreateDialogParamA_t = decltype(&CreateDialogParamA);
+CreateDialogParamA_t CreateDialogParamA_Original;
+HWND WINAPI CreateDialogParamA_Hook(HINSTANCE hInstance,
+                                    LPCSTR lpTemplateName,
+                                    HWND hWndParent,
+                                    DLGPROC lpDialogFunc,
+                                    LPARAM dwInitParam) {
+    return CreateDialogParamAW_Hook<&CreateDialogParamA_Original>(
+        hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
 }
 
 using CreateDialogParamW_t = decltype(&CreateDialogParamW);
@@ -711,78 +954,63 @@ HWND WINAPI CreateDialogParamW_Hook(HINSTANCE hInstance,
                                     HWND hWndParent,
                                     DLGPROC lpDialogFunc,
                                     LPARAM dwInitParam) {
-    DWORD c = ++g_operationCounter;
-
-    if (IS_INTRESOURCE(lpTemplateName)) {
-        Wh_Log(L"[%u] > Resource number: %u", c,
-               (DWORD)(ULONG_PTR)lpTemplateName);
-    } else {
-        Wh_Log(L"[%u] > Resource name: %s", c, lpTemplateName);
-    }
-
-    HWND result;
-
-    bool redirected = RedirectModule(
-        c, hInstance, []() {},
-        [&](HINSTANCE hInstanceRedirect) {
-            result = CreateDialogParamW_Original(hInstanceRedirect,
-                                                 lpTemplateName, hWndParent,
-                                                 lpDialogFunc, dwInitParam);
-            if (result) {
-                Wh_Log(L"[%u] Redirected successfully", c);
-                return true;
-            }
-
-            DWORD dwError = GetLastError();
-            Wh_Log(L"[%u] CreateDialogParamW failed with error %u", c, dwError);
-            return false;
-        });
-    if (redirected) {
-        return result;
-    }
-
-    return CreateDialogParamW_Original(hInstance, lpTemplateName, hWndParent,
-                                       lpDialogFunc, dwInitParam);
+    return CreateDialogParamAW_Hook<&CreateDialogParamW_Original>(
+        hInstance, lpTemplateName, hWndParent, lpDialogFunc, dwInitParam);
 }
 
-using LoadStringBaseExW_t = int(WINAPI*)(HINSTANCE hInstance,
-                                         UINT uID,
-                                         LPWSTR lpBuffer,
-                                         int cchBufferMax,
-                                         WORD wLanguage);
-LoadStringBaseExW_t LoadStringBaseExW_Original;
-int WINAPI LoadStringBaseExW_Hook(HINSTANCE hInstance,
-                                  UINT uID,
-                                  LPWSTR lpBuffer,
-                                  int cchBufferMax,
-                                  WORD wLanguage) {
+template <auto* Original, typename T>
+int LoadStringAW_Hook(HINSTANCE hInstance,
+                      UINT uID,
+                      T* lpBuffer,
+                      int cchBufferMax) {
     DWORD c = ++g_operationCounter;
 
-    Wh_Log(L"[%u] > String number: %u", c, uID);
+    WCHAR prefix[64];
+    swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
+
+    Wh_Log(L"%s, string number: %u", prefix, uID);
 
     int result;
 
     bool redirected = RedirectModule(
-        c, hInstance,
-        [&]() { Wh_Log(L"[%u] String language: %04X", c, wLanguage); },
+        c, hInstance, [&]() {},
         [&](HINSTANCE hInstanceRedirect) {
-            result = LoadStringBaseExW_Original(
-                hInstanceRedirect, uID, lpBuffer, cchBufferMax, wLanguage);
+            result =
+                (*Original)(hInstanceRedirect, uID, lpBuffer, cchBufferMax);
             if (result) {
                 Wh_Log(L"[%u] Redirected successfully", c);
                 return true;
             }
 
             DWORD dwError = GetLastError();
-            Wh_Log(L"[%u] LoadStringBaseExW failed with error %u", c, dwError);
+            Wh_Log(L"[%u] LoadString failed with error %u", c, dwError);
             return false;
         });
     if (redirected) {
         return result;
     }
 
-    return LoadStringBaseExW_Original(hInstance, uID, lpBuffer, cchBufferMax,
-                                      wLanguage);
+    return (*Original)(hInstance, uID, lpBuffer, cchBufferMax);
+}
+
+using LoadStringA_t = decltype(&LoadStringA);
+LoadStringA_t LoadStringA_Original;
+int WINAPI LoadStringA_Hook(HINSTANCE hInstance,
+                            UINT uID,
+                            LPSTR lpBuffer,
+                            int cchBufferMax) {
+    return LoadStringAW_Hook<&LoadStringA_Original>(hInstance, uID, lpBuffer,
+                                                    cchBufferMax);
+}
+
+using LoadStringW_t = decltype(&LoadStringW);
+LoadStringW_t LoadStringW_Original;
+int WINAPI LoadStringW_Hook(HINSTANCE hInstance,
+                            UINT uID,
+                            LPWSTR lpBuffer,
+                            int cchBufferMax) {
+    return LoadStringAW_Hook<&LoadStringW_Original>(hInstance, uID, lpBuffer,
+                                                    cchBufferMax);
 }
 
 using SHCreateStreamOnModuleResourceW_t = HRESULT(WINAPI*)(HMODULE hModule,
@@ -894,8 +1122,10 @@ HRESULT __thiscall SetXMLFromResource_Hook(void* pThis,
 
 void LoadSettings() {
     std::unordered_map<std::wstring, std::vector<std::wstring>> paths;
+    std::unordered_map<std::string, std::vector<std::string>> pathsA;
 
-    auto addRedirectionPath = [&paths](PCWSTR original, PCWSTR redirect) {
+    auto addRedirectionPath = [&paths, &pathsA](PCWSTR original,
+                                                PCWSTR redirect) {
         WCHAR originalExpanded[MAX_PATH];
         DWORD originalExpandedLen = ExpandEnvironmentStrings(
             original, originalExpanded, ARRAYSIZE(originalExpanded));
@@ -905,14 +1135,27 @@ void LoadSettings() {
             return;
         }
 
+        Wh_Log(L"Configuring %s->%s", originalExpanded, redirect);
+
         LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
                       originalExpanded, originalExpandedLen - 1,
                       originalExpanded, originalExpandedLen - 1, nullptr,
                       nullptr, 0);
 
-        Wh_Log(L"Configuring %s->%s", originalExpanded, redirect);
-
         paths[originalExpanded].push_back(redirect);
+
+        char originalExpandedA[MAX_PATH];
+        char redirectA[MAX_PATH];
+        size_t charsConverted = 0;
+        if (wcstombs_s(&charsConverted, originalExpandedA,
+                       ARRAYSIZE(originalExpandedA), originalExpanded,
+                       _TRUNCATE) == 0 &&
+            wcstombs_s(&charsConverted, redirectA, ARRAYSIZE(redirectA),
+                       redirect, _TRUNCATE) == 0) {
+            pathsA[originalExpandedA].push_back(redirectA);
+        } else {
+            Wh_Log(L"Error configuring ANSI paths");
+        }
     };
 
     PCWSTR themeFolder = Wh_GetStringSetting(L"themeFolder");
@@ -970,6 +1213,7 @@ void LoadSettings() {
 
     std::unique_lock lock{g_redirectionResourcePathsMutex};
     g_redirectionResourcePaths = std::move(paths);
+    g_redirectionResourcePathsA = std::move(pathsA);
 }
 
 BOOL Wh_ModInit() {
@@ -981,42 +1225,55 @@ BOOL Wh_ModInit() {
                        (void*)PrivateExtractIconsW_Hook,
                        (void**)&PrivateExtractIconsW_Original);
 
+    Wh_SetFunctionHook((void*)LoadImageA, (void*)LoadImageA_Hook,
+                       (void**)&LoadImageA_Original);
+
     Wh_SetFunctionHook((void*)LoadImageW, (void*)LoadImageW_Hook,
                        (void**)&LoadImageW_Original);
+
+    Wh_SetFunctionHook((void*)LoadIconA, (void*)LoadIconA_Hook,
+                       (void**)&LoadIconA_Original);
 
     Wh_SetFunctionHook((void*)LoadIconW, (void*)LoadIconW_Hook,
                        (void**)&LoadIconW_Original);
 
+    Wh_SetFunctionHook((void*)LoadCursorA, (void*)LoadCursorA_Hook,
+                       (void**)&LoadCursorA_Original);
+
     Wh_SetFunctionHook((void*)LoadCursorW, (void*)LoadCursorW_Hook,
                        (void**)&LoadCursorW_Original);
+
+    Wh_SetFunctionHook((void*)LoadBitmapA, (void*)LoadBitmapA_Hook,
+                       (void**)&LoadBitmapA_Original);
 
     Wh_SetFunctionHook((void*)LoadBitmapW, (void*)LoadBitmapW_Hook,
                        (void**)&LoadBitmapW_Original);
 
+    Wh_SetFunctionHook((void*)LoadMenuA, (void*)LoadMenuA_Hook,
+                       (void**)&LoadMenuA_Original);
+
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook,
                        (void**)&LoadMenuW_Original);
 
+    Wh_SetFunctionHook((void*)DialogBoxParamA, (void*)DialogBoxParamA_Hook,
+                       (void**)&DialogBoxParamA_Original);
+
     Wh_SetFunctionHook((void*)DialogBoxParamW, (void*)DialogBoxParamW_Hook,
                        (void**)&DialogBoxParamW_Original);
+
+    Wh_SetFunctionHook((void*)CreateDialogParamA,
+                       (void*)CreateDialogParamA_Hook,
+                       (void**)&CreateDialogParamA_Original);
 
     Wh_SetFunctionHook((void*)CreateDialogParamW,
                        (void*)CreateDialogParamW_Hook,
                        (void**)&CreateDialogParamW_Original);
 
-    HMODULE kernelBaseModule = LoadLibrary(L"kernelbase.dll");
-    if (kernelBaseModule) {
-        FARPROC pLoadStringBaseExW =
-            GetProcAddress(kernelBaseModule, "LoadStringBaseExW");
-        if (pLoadStringBaseExW) {
-            Wh_SetFunctionHook((void*)pLoadStringBaseExW,
-                               (void*)LoadStringBaseExW_Hook,
-                               (void**)&LoadStringBaseExW_Original);
-        } else {
-            Wh_Log(L"Couldn't find LoadStringBaseExW");
-        }
-    } else {
-        Wh_Log(L"Couldn't load kernelbase.dll");
-    }
+    Wh_SetFunctionHook((void*)LoadStringA, (void*)LoadStringA_Hook,
+                       (void**)&LoadStringA_Original);
+
+    Wh_SetFunctionHook((void*)LoadStringW, (void*)LoadStringW_Hook,
+                       (void**)&LoadStringW_Original);
 
     HMODULE shcoreModule = LoadLibrary(L"shcore.dll");
     if (shcoreModule) {
