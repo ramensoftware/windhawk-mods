@@ -2,12 +2,20 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-30T19:30:16.000Z</updated>
+    <updated>2024-05-30T19:32:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[RegEdit Fix "Copy Key Name" 1.0.0]]></title>
+        <id>https://windhawk.net/mods/regedit-fix-copy-key-name#7a1443091dde49710a83de0c78b6f882b7a83710</id>
+        <link href="https://windhawk.net/mods/regedit-fix-copy-key-name"/>
+        <updated>2024-05-30T19:32:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="regeditfixcopykeyname">RegEdit Fix "Copy Key Name"</h1>
+<p>Makes the "Copy Key Name" context menu option actually copy the name of the key instead of the path.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[RegEdit Auto Trim Whitespace on Navigation Bar 1.0.0]]></title>
         <id>https://windhawk.net/mods/regedit-auto-trim-whitespace-on-navigation-bar#2a4aa41254ca603eb67ac75f827f2965d65d0a1f</id>
@@ -264,17 +272,6 @@ code from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
 <li>Fixed clock with seconds precision issue for some earlier Windows 11 versions.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.2.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#386a0d9c151361b9c9695a67658d9ffadc2df51c</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2024-05-04T18:49:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
-<li>Adjusted detection of native taskbar labels being turned off for new Windows 11 builds.</li>
-<li>Fixed restoring maximum label width on mod unload.</li>
 </ul>]]></content>
     </entry>
 </feed>

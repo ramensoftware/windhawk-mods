@@ -1578,6 +1578,26 @@
                 "version": "1.0.0"
             }
         },
+        "regedit-fix-copy-key-name": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1717097524000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1717097524000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Makes the \"Copy Key Name\" context menu option actually copy the name of the key instead of the path.",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "regedit.exe"
+                ],
+                "name": "RegEdit Fix \"Copy Key Name\"",
+                "version": "1.0.0"
+            }
+        },
         "remove-command-bar": {
             "details": {
                 "defaultSorting": 387,
