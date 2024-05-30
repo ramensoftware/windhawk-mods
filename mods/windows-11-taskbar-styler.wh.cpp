@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.3.2
+// @version         1.3.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -40,6 +40,10 @@ WinXP](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/ma
 [![Bubbles](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/Bubbles/screenshot.png)
 \
 Bubbles](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/Bubbles/README.md)
+
+[![TranslucentTaskbar](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/TranslucentTaskbar/screenshot.png)
+\
+TranslucentTaskbar](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/TranslucentTaskbar/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 taskbar
 styling
@@ -92,9 +96,11 @@ properties of a control change, the target conditions aren't evaluated again.
 
 Each style is written as `Style=Value`, for example: `Height=5`. The `:=` syntax
 can be used to use XAML syntax, for example: `Fill:=<SolidColorBrush
-Color="Red"/>`. In addition, a visual state can be specified as following:
-`Style@VisualState=Value`, in which case the style will only apply when the
-visual state group specified in the target matches the specified visual state.
+Color="Red"/>`. Specifying an empty value with the XAML syntax will clear the
+property value, for example: `Fill:=`. In addition, a visual state can be
+specified as following: `Style@VisualState=Value`, in which case the style will
+only apply when the visual state group specified in the target matches the
+specified visual state.
 
 A couple of practical examples:
 
@@ -181,6 +187,7 @@ relevant `#pragma region` regions in the code editor.
   - "": None
   - WinXP: WinXP
   - Bubbles: Bubbles
+  - TranslucentTaskbar: TranslucentTaskbar
 - controlStyles:
   - - target: ""
       $name: Target
@@ -1238,6 +1245,25 @@ const Theme g_themeBubbles = {{
     ThemeTargetStyles{L"TextBlock#SearchBoxTextBlock", {L"Foreground=White"}},
 }};
 
+const Theme g_themeTranslucentTaskbar = {{
+    ThemeTargetStyles{
+        L"Rectangle#BackgroundFill",
+        {L"Fill:=<AcrylicBrush TintColor=\"Transparent\" TintOpacity=\"0\" "
+         L"TintLuminosityOpacity=\"0\" Opacity=\"1\"/>"}},
+    ThemeTargetStyles{L"Rectangle#BackgroundStroke", {L"Visibility=Collapsed"}},
+    ThemeTargetStyles{
+        L"MenuFlyoutPresenter",
+        {L"Background:=<AcrylicBrush TintColor=\"Transparent\" "
+         L"TintOpacity=\"0\" TintLuminosityOpacity=\"0\" Opacity=\"1\"/>",
+         L"BorderThickness=0,0,0,0", L"CornerRadius=14", L"Padding=,3,4,3,4"}},
+    ThemeTargetStyles{
+        L"Border#OverflowFlyoutBackgroundBorder",
+        {L"Background:=<AcrylicBrush TintColor=\"Transparent\" "
+         L"TintOpacity=\"0\" TintLuminosityOpacity=\"0\" Opacity=\"1\"/>",
+         L"BorderThickness=0,0,0,0", L"CornerRadius=15",
+         L"Margin=-2,-2,-2,-2"}},
+}};
+
 std::atomic<DWORD> g_targetThreadId = 0;
 
 void ApplyCustomizations(InstanceHandle handle,
@@ -1563,8 +1589,6 @@ HRESULT InjectWindhawkTAP() noexcept
 // clang-format on
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <windhawk_utils.h>
-
 #include <list>
 #include <optional>
 #include <sstream>
@@ -1582,6 +1606,8 @@ HRESULT InjectWindhawkTAP() noexcept
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -1668,14 +1694,21 @@ std::unordered_map<InstanceHandle, ElementCustomizationState>
 
 bool g_elementPropertyModifying;
 
-bool g_inTaskbarBackground_OnApplyTemplate;
+struct BackgroundFillDelayedApplyData {
+    UINT_PTR timer;
+    InstanceHandle handle;
+    winrt::weak_ref<wux::FrameworkElement> element;
+    std::wstring fallbackClassName;
+};
+
+std::optional<BackgroundFillDelayedApplyData> g_backgroundFillDelayedApplyData;
 
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
     DependencyProperty property) {
     const auto value = elementDo.ReadLocalValue(property);
-    if (winrt::get_class_name(value) ==
-        L"Windows.UI.Xaml.Data.BindingExpressionBase") {
+    if (value && winrt::get_class_name(value) ==
+                     L"Windows.UI.Xaml.Data.BindingExpressionBase") {
         // BindingExpressionBase was observed to be returned for XAML properties
         // that were declared as following:
         //
@@ -1688,6 +1721,36 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     }
 
     return value;
+}
+
+void SetOrClearValue(DependencyObject elementDo,
+                     DependencyProperty property,
+                     winrt::Windows::Foundation::IInspectable value) {
+    if (value == DependencyProperty::UnsetValue()) {
+        elementDo.ClearValue(property);
+        return;
+    }
+
+    // This might fail. See `ReadLocalValueWithWorkaround` for an example (which
+    // we now handle but there might be other cases).
+    try {
+        // `setter.Value()` returns font weight as an int. Using it with
+        // `SetValue` results in the following error: 0x80004002 (No such
+        // interface supported). Box it as `Windows.UI.Text.FontWeight` as a
+        // workaround.
+        if (property == Controls::TextBlock::FontWeightProperty()) {
+            auto valueInt = value.try_as<int>();
+            if (valueInt && *valueInt >= std::numeric_limits<uint16_t>::min() &&
+                *valueInt <= std::numeric_limits<uint16_t>::max()) {
+                value = winrt::box_value(winrt::Windows::UI::Text::FontWeight{
+                    static_cast<uint16_t>(*valueInt)});
+            }
+        }
+
+        elementDo.SetValue(property, value);
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
 }
 
 // https://stackoverflow.com/a/5665377
@@ -1816,7 +1879,9 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
                 xaml += L"\"";
-                if (!rule.isXamlValue) {
+                if (rule.isXamlValue && rule.value.empty()) {
+                    xaml += L" Value=\"{x:Null}\" />\n";
+                } else if (!rule.isXamlValue) {
                     xaml += L" Value=\"";
                     xaml += EscapeXmlAttribute(rule.value);
                     xaml += L"\" />\n";
@@ -1834,10 +1899,13 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             auto style = GetStyleFromXamlSetters(type, xaml);
 
-            for (size_t i = 0; i < styleRules.size(); i++) {
-                const auto setter = style.Setters().GetAt(i).as<Setter>();
-                propertyOverrides[setter.Property()]
-                                 [styleRules[i].visualState] = setter.Value();
+            uint32_t i = 0;
+            for (const auto& rule : styleRules) {
+                const auto setter = style.Setters().GetAt(i++).as<Setter>();
+                propertyOverrides[setter.Property()][rule.visualState] =
+                    rule.isXamlValue && rule.value.empty()
+                        ? DependencyProperty::UnsetValue()
+                        : setter.Value();
             }
         }
 
@@ -1948,6 +2016,11 @@ bool TestElementMatcher(FrameworkElement element,
          GetResolvedPropertyValues(matcher.type, &matcher.propertyValues)) {
         const auto value =
             ReadLocalValueWithWorkaround(elementDo, propertyValue.first);
+        if (!value) {
+            Wh_Log(L"Null property value");
+            return false;
+        }
+
         const auto className = winrt::get_class_name(value);
         const auto expectedClassName =
             winrt::get_class_name(propertyValue.second);
@@ -2002,7 +2075,10 @@ FindElementPropertyOverrides(FrameworkElement element,
     std::unordered_map<VisualStateGroup, PropertyOverrides> overrides;
     std::unordered_set<DependencyProperty> propertiesAdded;
 
-    for (auto& override : g_elementsCustomizationRules) {
+    for (auto it = g_elementsCustomizationRules.rbegin();
+         it != g_elementsCustomizationRules.rend(); ++it) {
+        auto& override = *it;
+
         VisualStateGroup visualStateGroup = nullptr;
 
         if (!TestElementMatcher(element, override.elementMatcher,
@@ -2093,7 +2169,7 @@ void ApplyCustomizationsForVisualStateGroup(
             propertyCustomizationState.originalValue =
                 ReadLocalValueWithWorkaround(element, property);
             propertyCustomizationState.customValue = it->second;
-            element.SetValue(property, it->second);
+            SetOrClearValue(element, property, it->second);
         }
 
         propertyCustomizationState.propertyChangedToken =
@@ -2125,8 +2201,8 @@ void ApplyCustomizationsForVisualStateGroup(
                     }
 
                     g_elementPropertyModifying = true;
-                    element.SetValue(property,
-                                     *propertyCustomizationState.customValue);
+                    SetOrClearValue(element, property,
+                                    *propertyCustomizationState.customValue);
                     g_elementPropertyModifying = false;
                 });
     }
@@ -2184,18 +2260,12 @@ void ApplyCustomizationsForVisualStateGroup(
                             }
 
                             propertyCustomizationState.customValue = it->second;
-                            element.SetValue(property, it->second);
+                            SetOrClearValue(element, property, it->second);
                         } else {
                             if (propertyCustomizationState.originalValue) {
-                                if (*propertyCustomizationState.originalValue ==
-                                    DependencyProperty::UnsetValue()) {
-                                    element.ClearValue(property);
-                                } else {
-                                    element.SetValue(property,
-                                                     *propertyCustomizationState
-                                                          .originalValue);
-                                }
-
+                                SetOrClearValue(
+                                    element, property,
+                                    *propertyCustomizationState.originalValue);
                                 propertyCustomizationState.originalValue
                                     .reset();
                             }
@@ -2223,19 +2293,7 @@ void RestoreCustomizationsForVisualStateGroup(
                 property, state.propertyChangedToken);
 
             if (state.originalValue) {
-                if (*state.originalValue == DependencyProperty::UnsetValue()) {
-                    element.ClearValue(property);
-                } else {
-                    // This might fail. See `ReadLocalValueWithWorkaround` for
-                    // an example (which we now handle but there might be other
-                    // cases).
-                    try {
-                        element.SetValue(property, *state.originalValue);
-                    } catch (winrt::hresult_error const& ex) {
-                        Wh_Log(L"Error %08X: %s", ex.code(),
-                               ex.message().c_str());
-                    }
-                }
+                SetOrClearValue(element, property, *state.originalValue);
             }
         }
     }
@@ -2251,9 +2309,9 @@ void RestoreCustomizationsForVisualStateGroup(
     }
 }
 
-void ApplyCustomizations(InstanceHandle handle,
-                         FrameworkElement element,
-                         PCWSTR fallbackClassName) {
+void ApplyCustomizationsWithNoDelay(InstanceHandle handle,
+                                    FrameworkElement element,
+                                    PCWSTR fallbackClassName) {
     auto overrides = FindElementPropertyOverrides(element, fallbackClassName);
     if (overrides.empty()) {
         return;
@@ -2290,7 +2348,65 @@ void ApplyCustomizations(InstanceHandle handle,
     }
 }
 
+void ApplyCustomizations(InstanceHandle handle,
+                         FrameworkElement element,
+                         PCWSTR fallbackClassName) {
+    if (winrt::get_class_name(element) == L"Windows.UI.Xaml.Shapes.Rectangle" &&
+        element.Name() == L"BackgroundFill") {
+        // If customized before
+        // `winrt::Taskbar::implementation::TaskbarBackground::OnApplyTemplate`
+        // is executed, it can lead to a crash, or the customization may be
+        // overridden. See:
+        // https://github.com/ramensoftware/windows-11-taskbar-styling-guide/issues/4
+        Wh_Log(L"Delaying customization of BackgroundFill");
+
+        auto previousTimer = g_backgroundFillDelayedApplyData
+                                 ? g_backgroundFillDelayedApplyData->timer
+                                 : 0;
+
+        auto& delayedApplyData = g_backgroundFillDelayedApplyData.emplace();
+
+        delayedApplyData.handle = handle;
+        delayedApplyData.element = element;
+        delayedApplyData.fallbackClassName = fallbackClassName;
+
+        delayedApplyData.timer = SetTimer(
+            nullptr, previousTimer, 0,
+            [](HWND hwnd,         // handle of window for timer messages
+               UINT uMsg,         // WM_TIMER message
+               UINT_PTR idEvent,  // timer identifier
+               DWORD dwTime       // current system time
+               ) WINAPI {
+                Wh_Log(L"Running delayed customization of BackgroundFill");
+
+                auto& delayedApplyData = *g_backgroundFillDelayedApplyData;
+
+                if (auto element = delayedApplyData.element.get()) {
+                    ApplyCustomizationsWithNoDelay(
+                        delayedApplyData.handle, std::move(element),
+                        delayedApplyData.fallbackClassName.c_str());
+                } else {
+                    Wh_Log(L"Element no longer exists");
+                }
+
+                KillTimer(nullptr, delayedApplyData.timer);
+                g_backgroundFillDelayedApplyData.reset();
+            });
+
+        return;
+    }
+
+    ApplyCustomizationsWithNoDelay(handle, std::move(element),
+                                   fallbackClassName);
+}
+
 void CleanupCustomizations(InstanceHandle handle) {
+    if (g_backgroundFillDelayedApplyData &&
+        g_backgroundFillDelayedApplyData->handle == handle) {
+        KillTimer(nullptr, g_backgroundFillDelayedApplyData->timer);
+        g_backgroundFillDelayedApplyData.reset();
+    }
+
     auto it = g_elementsCustomizationState.find(handle);
     if (it == g_elementsCustomizationState.end()) {
         return;
@@ -2406,9 +2522,6 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
     auto value = str.substr(eqPos + 1);
 
     result.value = TrimStringView(value);
-    if (result.value.empty()) {
-        throw std::runtime_error("Bad style syntax, empty value");
-    }
 
     if (name.size() > 0 && name.back() == L':') {
         result.isXamlValue = true;
@@ -2539,24 +2652,14 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
 }
 
 void ProcessAllStylesFromSettings() {
-    for (int i = 0;; i++) {
-        try {
-            if (!ProcessSingleTargetStylesFromSettings(i)) {
-                break;
-            }
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-        } catch (std::exception const& ex) {
-            Wh_Log(L"Error: %S", ex.what());
-        }
-    }
-
     PCWSTR themeName = Wh_GetStringSetting(L"theme");
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"WinXP") == 0) {
         theme = &g_themeWinXP;
     } else if (wcscmp(themeName, L"Bubbles") == 0) {
         theme = &g_themeBubbles;
+    } else if (wcscmp(themeName, L"TranslucentTaskbar") == 0) {
+        theme = &g_themeTranslucentTaskbar;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -2573,6 +2676,18 @@ void ProcessAllStylesFromSettings() {
             } catch (std::exception const& ex) {
                 Wh_Log(L"Error: %S", ex.what());
             }
+        }
+    }
+
+    for (int i = 0;; i++) {
+        try {
+            if (!ProcessSingleTargetStylesFromSettings(i)) {
+                break;
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        } catch (std::exception const& ex) {
+            Wh_Log(L"Error: %S", ex.what());
         }
     }
 }
@@ -2631,6 +2746,11 @@ void ProcessResourceVariablesFromSettings() {
 }
 
 void UninitializeSettingsAndTap() {
+    if (g_backgroundFillDelayedApplyData) {
+        KillTimer(nullptr, g_backgroundFillDelayedApplyData->timer);
+        g_backgroundFillDelayedApplyData.reset();
+    }
+
     for (const auto& [handle, elementCustomizationState] :
          g_elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
@@ -2767,253 +2887,8 @@ HWND GetTaskbarUiWnd() {
                         nullptr);
 }
 
-using TaskbarBackground_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
-TaskbarBackground_OnApplyTemplate_t TaskbarBackground_OnApplyTemplate_Original;
-void WINAPI TaskbarBackground_OnApplyTemplate_Hook(void* pThis) {
-    Wh_Log(L">");
-
-    g_inTaskbarBackground_OnApplyTemplate = true;
-
-    TaskbarBackground_OnApplyTemplate_Original(pThis);
-
-    g_inTaskbarBackground_OnApplyTemplate = false;
-}
-
-using Foundation_operator_eq_t = bool(WINAPI*)(void** p1, void** p2);
-Foundation_operator_eq_t Foundation_operator_eq_Original;
-bool WINAPI Foundation_operator_eq_Hook(void** p1, void** p2) {
-    if (g_inTaskbarBackground_OnApplyTemplate) {
-        Wh_Log(L">");
-
-        // The code inside TaskbarBackground::OnApplyTemplate throws an
-        // exception if operator== returns true in some cases, and that happens
-        // if the background is customized, in which case two null pointers are
-        // compared. It can be triggered with the following example:
-        // * Target: Rectangle#BackgroundFill
-        // * Style: Fill=Red
-        if (p1 && p2 && !*p1 && !*p2) {
-            return false;
-        }
-    }
-
-    return Foundation_operator_eq_Original(p1, p2);
-}
-
-std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
-    HINTERNET hOpenHandle = InternetOpen(
-        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hOpenHandle) {
-        return std::nullopt;
-    }
-
-    HINTERNET hUrlHandle =
-        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
-                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
-                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
-                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
-                        0);
-    if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwStatusCode = 0;
-    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
-    if (!HttpQueryInfo(hUrlHandle,
-                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
-                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
-        dwStatusCode != 200) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
-    if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
-    DWORD dwLength = dwNumberOfBytesRead;
-
-    while (dwNumberOfBytesRead) {
-        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
-            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
-        if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
-            HeapFree(GetProcessHeap(), 0, pUrlContent);
-            return std::nullopt;
-        }
-
-        pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
-        dwLength += dwNumberOfBytesRead;
-    }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
-
-    // Assume UTF-8.
-    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
-                                          dwLength, nullptr, 0);
-    std::wstring unicodeContent(charsNeeded, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
-                        unicodeContent.data(), unicodeContent.size());
-
-    HeapFree(GetProcessHeap(), 0, pUrlContent);
-
-    return unicodeContent;
-}
-
-bool HookSymbolsWithOnlineCacheFallback(
-    HMODULE module,
-    const WindhawkUtils::SYMBOL_HOOK* symbolHooks,
-    size_t symbolHooksCount) {
-    constexpr WCHAR kModIdForCache[] = L"windows-11-taskbar-styler";
-
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
-        return true;
-    }
-
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
-
-    WCHAR moduleFilePath[MAX_PATH];
-    DWORD moduleFilePathLen =
-        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
-    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    DWORD moduleFileNameLen =
-        moduleFilePathLen - (moduleFileName - moduleFilePath);
-
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
-                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
-                  nullptr, 0);
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    std::wstring cacheStrKey =
-#if defined(_M_IX86)
-        L"symbol-x86-cache-";
-#elif defined(_M_X64)
-        L"symbol-cache-";
-#else
-#error "Unsupported architecture"
-#endif
-    cacheStrKey += moduleFileName;
-
-    std::wstring onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
-    onlineCacheUrl += kModIdForCache;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += cacheStrKey;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += timeStamp;
-    onlineCacheUrl += L'-';
-    onlineCacheUrl += imageSize;
-    onlineCacheUrl += L".txt";
-
-    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
-
-    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
-        Wh_Log(L"Failed to get online cache");
-        return false;
-    }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
-
-    return HookSymbols(module, symbolHooks, symbolHooksCount);
-}
-
-bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
-    WCHAR szWindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectory(szWindowsDirectory,
-                             ARRAYSIZE(szWindowsDirectory))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return false;
-    }
-
-    // Windows 11 version 22H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(
-        path, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    // Windows 11 version 21H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(
-        path, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    return false;
-}
-
-bool HookTaskbarViewDllSymbols() {
-    WCHAR dllPath[MAX_PATH];
-    if (!GetTaskbarViewDllPath(dllPath)) {
-        Wh_Log(L"Taskbar view module not found");
-        return false;
-    }
-
-    HMODULE module =
-        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (!module) {
-        Wh_Log(L"Taskbar view module couldn't be loaded");
-        return false;
-    }
-
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarBackground::OnApplyTemplate(void))"},
-            (void**)&TaskbarBackground_OnApplyTemplate_Original,
-            (void*)TaskbarBackground_OnApplyTemplate_Hook,
-            true,
-        },
-        {
-            {LR"(bool __cdecl winrt::Windows::Foundation::operator==(struct winrt::Windows::Foundation::IUnknown const &,struct winrt::Windows::Foundation::IUnknown const &))"},
-            (void**)&Foundation_operator_eq_Original,
-            (void*)Foundation_operator_eq_Hook,
-            true,
-        },
-    };
-
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L">");
-
-    if (!HookTaskbarViewDllSymbols()) {
-        // Can continue without the hooks.
-        // return FALSE;
-    }
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
