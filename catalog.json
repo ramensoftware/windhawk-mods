@@ -1557,6 +1557,27 @@
                 "version": "1.0.1"
             }
         },
+        "regedit-auto-trim-whitespace-on-navigation-bar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1717097416000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1717097416000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "compilerOptions": "-lshlwapi",
+                "description": "Automatically trims whitespace on the navigation bar",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "regedit.exe"
+                ],
+                "name": "RegEdit Auto Trim Whitespace on Navigation Bar",
+                "version": "1.0.0"
+            }
+        },
         "remove-command-bar": {
             "details": {
                 "defaultSorting": 387,
