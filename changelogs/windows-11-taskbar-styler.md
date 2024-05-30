@@ -1,3 +1,12 @@
+## 1.3.3 ([May 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7cb5b296f3dd8385719119f7693a9037e5d9e46f/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added the TranslucentTaskbar theme.
+* Made styles defined later override styles defined earlier.
+* Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.
+* Added a workaround for setting FontWeight which didn't work.
+* Fixed null property value handling which could cause a crash.
+* Fixed background customization which was sometimes not applied on launch.
+
 ## 1.3.2 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6fcd66105c7419656b3d34947dacf56a3b06927c/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
