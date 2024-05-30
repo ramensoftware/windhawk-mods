@@ -6,7 +6,6 @@
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         regedit.exe
-// @compilerOptions -lshlwapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
