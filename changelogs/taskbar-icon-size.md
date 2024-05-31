@@ -1,3 +1,8 @@
+## 1.2.8 ([May 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/09d81d6358f4f0fc82e59541b4f0e6daaaad19fd/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed the weather icon disappearing if taskbar icons are centered.
+* Added a restart prompt when the taskbar button width is changed in settings.
+
 ## 1.2.7 ([May 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/16879e75ab4846ac6eaf63c32539abc516850756/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed the weather icon disappearing with the new KB5036980 update.

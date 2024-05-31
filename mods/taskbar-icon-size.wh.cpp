@@ -2,14 +2,14 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.7
+// @version         1.2.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0605 -lole32 -loleaut32 -lshcore -lwininet
+// @compilerOptions -DWINVER=0x0605 -lcomctl32 -lole32 -loleaut32 -lshcore -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -110,6 +110,15 @@ bool g_inSystemTraySecondaryController_UpdateFrameSize;
 bool g_inAugmentedEntryPointButton_UpdateButtonPadding;
 
 double* double_48_value_Original;
+
+HANDLE g_restartExplorerPromptThread;
+std::atomic<HWND> g_restartExplorerPromptWindow;
+
+constexpr WCHAR kRestartExplorerPromptTitle[] =
+    L"Taskbar height and icon size - Windhawk";
+constexpr WCHAR kRestartExplorerPromptText[] =
+    L"Explorer needs to be restarted to apply the new taskbar button width. "
+    L"Restart now?";
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 typedef enum MONITOR_DPI_TYPE {
@@ -313,7 +322,7 @@ double WINAPI SystemTrayController_GetFrameSize_Hook(void* pThis,
                                                      int enumTaskbarSize) {
     Wh_Log(L">");
 
-    if (g_taskbarHeight) {
+    if (enumTaskbarSize == 1 && g_taskbarHeight) {
         return g_taskbarHeight;
     }
 
@@ -329,7 +338,7 @@ SystemTraySecondaryController_GetFrameSize_Hook(void* pThis,
                                                 int enumTaskbarSize) {
     Wh_Log(L">");
 
-    if (g_taskbarHeight) {
+    if (enumTaskbarSize == 1 && g_taskbarHeight) {
         return g_taskbarHeight;
     }
 
@@ -343,17 +352,16 @@ TaskbarConfiguration_GetFrameSize_t TaskbarConfiguration_GetFrameSize_Original;
 double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int enumTaskbarSize) {
     Wh_Log(L">");
 
-    double ret = TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
-
-    if (!g_originalTaskbarHeight) {
-        g_originalTaskbarHeight = ret;
+    if (enumTaskbarSize == 1 && !g_originalTaskbarHeight) {
+        g_originalTaskbarHeight =
+            TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
     }
 
-    if (g_taskbarHeight) {
+    if (enumTaskbarSize == 1 && g_taskbarHeight) {
         return g_taskbarHeight;
     }
 
-    return ret;
+    return TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
 }
 
 using TaskbarFrame_MaxHeight_double_t = void(WINAPI*)(void* pThis,
@@ -472,72 +480,100 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         marginValue = 0;
     }
 
-    EnumChildElements(
-        augmentedEntryPointContentGrid, [marginValue](FrameworkElement child) {
-            if (winrt::get_class_name(child) !=
-                L"Windows.UI.Xaml.Controls.Grid") {
-                return false;
-            }
-
-            FrameworkElement panel = child;
-            if ((panel = FindChildByClassName(
-                     panel, L"Windows.UI.Xaml.Controls.Grid")) &&
-                (panel = FindChildByClassName(
-                     panel, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel"))) {
-                auto margin = Thickness{8, 8, 8, 8};
-
-                if (!g_unloading) {
-                    margin.Left = marginValue;
-                    margin.Top = marginValue;
-                    margin.Right = marginValue;
-                    margin.Bottom = marginValue;
-
-                    if (g_taskbarHeight < 48) {
-                        margin.Top -=
-                            static_cast<double>(48 - g_taskbarHeight) / 2;
-                        if (margin.Top < 0) {
-                            margin.Top = 0;
-                        }
-
-                        margin.Bottom = marginValue * 2 - margin.Top;
-                    }
-                }
-
-                Wh_Log(L"Setting Margin=%f,%f,%f,%f for panel", margin.Left,
-                       margin.Top, margin.Right, margin.Bottom);
-
-                panel.Margin(margin);
-            } else {
-                return false;
-            }
-
-            FrameworkElement badge = panel;
-            if ((badge = FindChildByClassName(
-                     badge, L"Windows.UI.Xaml.Controls.Border")) &&
-                (badge = FindChildByClassName(
-                     badge, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
-                (badge = FindChildByClassName(
-                     badge, L"Windows.UI.Xaml.Controls.Grid")) &&
-                (badge = FindChildByName(badge, L"SmallTicker1")) &&
-                (badge = FindChildByClassName(
-                     badge, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
-                (badge = FindChildByName(badge, L"BadgeAnchorSmallTicker"))) {
-                double maxValue = 24;
-
-                if (!g_unloading) {
-                    maxValue = 40 - marginValue * 2;
-                }
-
-                Wh_Log(L"Setting MaxWidth, MaxHeight for badge");
-
-                badge.MaxWidth(maxValue);
-                badge.MaxHeight(maxValue);
-            } else {
-                return false;
-            }
-
+    EnumChildElements(augmentedEntryPointContentGrid, [marginValue](
+                                                          FrameworkElement
+                                                              child) {
+        if (winrt::get_class_name(child) != L"Windows.UI.Xaml.Controls.Grid") {
             return false;
-        });
+        }
+
+        FrameworkElement panelGrid =
+            FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid");
+        if (!panelGrid) {
+            return false;
+        }
+
+        FrameworkElement panel = FindChildByClassName(
+            panelGrid, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel");
+        if (!panel) {
+            return false;
+        }
+
+        Wh_Log(L"Processing %f x %f widget", panelGrid.Width(),
+               panelGrid.Height());
+
+        bool widePanel = panelGrid.Width() > panelGrid.Height();
+        if (widePanel) {
+            panelGrid.VerticalAlignment(g_unloading
+                                            ? VerticalAlignment::Stretch
+                                            : VerticalAlignment::Center);
+        } else {
+            auto margin = Thickness{8, 8, 8, 8};
+
+            if (!g_unloading) {
+                margin.Left = marginValue;
+                margin.Top = marginValue;
+                margin.Right = marginValue;
+                margin.Bottom = marginValue;
+
+                if (g_taskbarHeight < 48) {
+                    margin.Top -= static_cast<double>(48 - g_taskbarHeight) / 2;
+                    if (margin.Top < 0) {
+                        margin.Top = 0;
+                    }
+
+                    margin.Bottom = marginValue * 2 - margin.Top;
+                }
+            }
+
+            Wh_Log(L"Setting Margin=%f,%f,%f,%f for panel", margin.Left,
+                   margin.Top, margin.Right, margin.Bottom);
+
+            panel.Margin(margin);
+        }
+
+        FrameworkElement tickerGrid = panel;
+        if ((tickerGrid = FindChildByClassName(
+                 tickerGrid, L"Windows.UI.Xaml.Controls.Border")) &&
+            (tickerGrid = FindChildByClassName(
+                 tickerGrid, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
+            (tickerGrid = FindChildByClassName(
+                 tickerGrid, L"Windows.UI.Xaml.Controls.Grid"))) {
+            // OK.
+        } else {
+            return false;
+        }
+
+        double badgeMaxValue = g_unloading ? 24 : 40 - marginValue * 2;
+
+        FrameworkElement badgeSmall = tickerGrid;
+        if ((badgeSmall = FindChildByName(badgeSmall, L"SmallTicker1")) &&
+            (badgeSmall = FindChildByClassName(
+                 badgeSmall, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
+            (badgeSmall =
+                 FindChildByName(badgeSmall, L"BadgeAnchorSmallTicker"))) {
+            Wh_Log(L"Setting MaxWidth=%f, MaxHeight=%f for small badge",
+                   badgeMaxValue, badgeMaxValue);
+
+            badgeSmall.MaxWidth(badgeMaxValue);
+            badgeSmall.MaxHeight(badgeMaxValue);
+        }
+
+        FrameworkElement badgeLarge = tickerGrid;
+        if ((badgeLarge = FindChildByName(badgeLarge, L"LargeTicker1")) &&
+            (badgeLarge = FindChildByClassName(
+                 badgeLarge, L"AdaptiveCards.Rendering.Uwp.WholeItemsPanel")) &&
+            (badgeLarge =
+                 FindChildByName(badgeLarge, L"BadgeAnchorLargeTicker"))) {
+            Wh_Log(L"Setting MaxWidth=%f, MaxHeight=%f for large badge",
+                   badgeMaxValue, badgeMaxValue);
+
+            badgeLarge.MaxWidth(badgeMaxValue);
+            badgeLarge.MaxHeight(badgeMaxValue);
+        }
+
+        return false;
+    });
 }
 
 using SHAppBarMessage_t = decltype(&SHAppBarMessage);
@@ -675,6 +711,68 @@ void ApplySettings(int taskbarHeight) {
     g_applyingSettings = false;
 }
 
+void PromptForExplorerRestart() {
+    if (g_restartExplorerPromptThread) {
+        if (WaitForSingleObject(g_restartExplorerPromptThread, 0) !=
+            WAIT_OBJECT_0) {
+            return;
+        }
+
+        CloseHandle(g_restartExplorerPromptThread);
+    }
+
+    g_restartExplorerPromptThread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParameter) WINAPI -> DWORD {
+            TASKDIALOGCONFIG taskDialogConfig{
+                .cbSize = sizeof(taskDialogConfig),
+                .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+                .dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON,
+                .pszWindowTitle = kRestartExplorerPromptTitle,
+                .pszMainIcon = TD_INFORMATION_ICON,
+                .pszContent = kRestartExplorerPromptText,
+                .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam,
+                                 LPARAM lParam, LONG_PTR lpRefData)
+                                  WINAPI -> HRESULT {
+                    switch (msg) {
+                        case TDN_CREATED:
+                            g_restartExplorerPromptWindow = hwnd;
+                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE);
+                            break;
+
+                        case TDN_DESTROYED:
+                            g_restartExplorerPromptWindow = nullptr;
+                            break;
+                    }
+
+                    return S_OK;
+                },
+            };
+
+            int button;
+            if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button,
+                                             nullptr, nullptr)) &&
+                button == IDYES) {
+                WCHAR commandLine[] =
+                    L"cmd.exe /c "
+                    L"\"taskkill /F /IM explorer.exe & start explorer\"";
+                STARTUPINFO si = {
+                    .cb = sizeof(si),
+                };
+                PROCESS_INFORMATION pi{};
+                if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE,
+                                  0, nullptr, nullptr, &si, &pi)) {
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
+                }
+            }
+
+            return 0;
+        },
+        nullptr, 0, nullptr);
+}
+
 struct SYMBOL_HOOK {
     std::vector<std::wstring_view> symbols;
     void** pOriginalFunction;
@@ -684,7 +782,8 @@ struct SYMBOL_HOOK {
 
 bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
+                 size_t symbolHooksCount,
+                 bool cacheOnly = false) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'#';
     constexpr size_t cacheMaxSize = 10240;
@@ -838,6 +937,10 @@ bool HookSymbols(HMODULE module,
 
     Wh_Log(L"Couldn't resolve all symbols from cache");
 
+    if (cacheOnly) {
+        return false;
+    }
+
     WH_FIND_SYMBOL findSymbol;
     HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
     if (!findSymbolHandle) {
@@ -955,11 +1058,12 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
                                         size_t symbolHooksCount) {
     constexpr WCHAR kModIdForCache[] = L"taskbar-icon-size";
 
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+    if (HookSymbols(module, symbolHooks, symbolHooksCount,
+                    /*cacheOnly=*/true)) {
         return true;
     }
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
 
     WCHAR moduleFilePath[MAX_PATH];
     DWORD moduleFilePathLen =
@@ -1014,12 +1118,11 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
 
     auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
+    if (onlineCache) {
+        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    } else {
         Wh_Log(L"Failed to get online cache");
-        return false;
     }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
 
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
@@ -1349,14 +1452,31 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    HWND restartExplorerPromptWindow = g_restartExplorerPromptWindow;
+    if (restartExplorerPromptWindow) {
+        PostMessage(restartExplorerPromptWindow, WM_CLOSE, 0, 0);
+    }
+
+    if (g_restartExplorerPromptThread) {
+        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+        CloseHandle(g_restartExplorerPromptThread);
+        g_restartExplorerPromptThread = nullptr;
+    }
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
+    int oldTaskbarButtonWidth = g_settings.taskbarButtonWidth;
+
     LoadSettings();
 
     if (g_taskbarViewDllLoaded) {
         ApplySettings(g_settings.taskbarHeight);
+    }
+
+    if (g_settings.taskbarButtonWidth != oldTaskbarButtonWidth) {
+        PromptForExplorerRestart();
     }
 }
