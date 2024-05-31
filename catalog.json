@@ -1578,6 +1578,27 @@
                 "version": "1.0.0"
             }
         },
+        "regedit-disable-beep": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1717144071000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1717144071000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "compilerOptions": "-lshlwapi",
+                "description": "Prevents RegEdit from beeping when an invalid key is entered to the navigation bar",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "regedit.exe"
+                ],
+                "name": "RegEdit Disable Beep",
+                "version": "1.0.0"
+            }
+        },
         "regedit-fix-copy-key-name": {
             "details": {
                 "defaultSorting": 0,
