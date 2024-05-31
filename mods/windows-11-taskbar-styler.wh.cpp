@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     An advanced mod to override style attributes of the taskbar control elements
-// @version         1.3.3
+// @version         1.3.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1255,7 +1255,7 @@ const Theme g_themeTranslucentTaskbar = {{
         L"MenuFlyoutPresenter",
         {L"Background:=<AcrylicBrush TintColor=\"Transparent\" "
          L"TintOpacity=\"0\" TintLuminosityOpacity=\"0\" Opacity=\"1\"/>",
-         L"BorderThickness=0,0,0,0", L"CornerRadius=14", L"Padding=,3,4,3,4"}},
+         L"BorderThickness=0,0,0,0", L"CornerRadius=14", L"Padding=3,4,3,4"}},
     ThemeTargetStyles{
         L"Border#OverflowFlyoutBackgroundBorder",
         {L"Background:=<AcrylicBrush TintColor=\"Transparent\" "
@@ -1695,13 +1695,13 @@ std::unordered_map<InstanceHandle, ElementCustomizationState>
 bool g_elementPropertyModifying;
 
 struct BackgroundFillDelayedApplyData {
-    UINT_PTR timer;
-    InstanceHandle handle;
+    UINT_PTR timer = 0;
     winrt::weak_ref<wux::FrameworkElement> element;
     std::wstring fallbackClassName;
 };
 
-std::optional<BackgroundFillDelayedApplyData> g_backgroundFillDelayedApplyData;
+std::unordered_map<InstanceHandle, BackgroundFillDelayedApplyData>
+    g_backgroundFillDelayedApplyData;
 
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
@@ -2360,13 +2360,10 @@ void ApplyCustomizations(InstanceHandle handle,
         // https://github.com/ramensoftware/windows-11-taskbar-styling-guide/issues/4
         Wh_Log(L"Delaying customization of BackgroundFill");
 
-        auto previousTimer = g_backgroundFillDelayedApplyData
-                                 ? g_backgroundFillDelayedApplyData->timer
-                                 : 0;
+        auto& delayedApplyData = g_backgroundFillDelayedApplyData[handle];
 
-        auto& delayedApplyData = g_backgroundFillDelayedApplyData.emplace();
+        auto previousTimer = delayedApplyData.timer;
 
-        delayedApplyData.handle = handle;
         delayedApplyData.element = element;
         delayedApplyData.fallbackClassName = fallbackClassName;
 
@@ -2379,18 +2376,27 @@ void ApplyCustomizations(InstanceHandle handle,
                ) WINAPI {
                 Wh_Log(L"Running delayed customization of BackgroundFill");
 
-                auto& delayedApplyData = *g_backgroundFillDelayedApplyData;
+                for (auto it = g_backgroundFillDelayedApplyData.begin();
+                     it != g_backgroundFillDelayedApplyData.end(); ++it) {
+                    auto& delayedApplyData = it->second;
+                    if (delayedApplyData.timer != idEvent) {
+                        continue;
+                    }
 
-                if (auto element = delayedApplyData.element.get()) {
-                    ApplyCustomizationsWithNoDelay(
-                        delayedApplyData.handle, std::move(element),
-                        delayedApplyData.fallbackClassName.c_str());
-                } else {
-                    Wh_Log(L"Element no longer exists");
+                    InstanceHandle handle = it->first;
+
+                    if (auto element = delayedApplyData.element.get()) {
+                        ApplyCustomizationsWithNoDelay(
+                            handle, std::move(element),
+                            delayedApplyData.fallbackClassName.c_str());
+                    } else {
+                        Wh_Log(L"Element no longer exists");
+                    }
+
+                    KillTimer(nullptr, delayedApplyData.timer);
+                    g_backgroundFillDelayedApplyData.erase(it);
+                    break;
                 }
-
-                KillTimer(nullptr, delayedApplyData.timer);
-                g_backgroundFillDelayedApplyData.reset();
             });
 
         return;
@@ -2401,10 +2407,10 @@ void ApplyCustomizations(InstanceHandle handle,
 }
 
 void CleanupCustomizations(InstanceHandle handle) {
-    if (g_backgroundFillDelayedApplyData &&
-        g_backgroundFillDelayedApplyData->handle == handle) {
-        KillTimer(nullptr, g_backgroundFillDelayedApplyData->timer);
-        g_backgroundFillDelayedApplyData.reset();
+    if (auto it = g_backgroundFillDelayedApplyData.find(handle);
+        it != g_backgroundFillDelayedApplyData.end()) {
+        KillTimer(nullptr, it->second.timer);
+        g_backgroundFillDelayedApplyData.erase(it);
     }
 
     auto it = g_elementsCustomizationState.find(handle);
@@ -2746,10 +2752,11 @@ void ProcessResourceVariablesFromSettings() {
 }
 
 void UninitializeSettingsAndTap() {
-    if (g_backgroundFillDelayedApplyData) {
-        KillTimer(nullptr, g_backgroundFillDelayedApplyData->timer);
-        g_backgroundFillDelayedApplyData.reset();
+    for (auto& [handle, data] : g_backgroundFillDelayedApplyData) {
+        KillTimer(nullptr, data.timer);
     }
+
+    g_backgroundFillDelayedApplyData.clear();
 
     for (const auto& [handle, elementCustomizationState] :
          g_elementsCustomizationState) {

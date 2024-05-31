@@ -2460,7 +2460,7 @@
                 "published": 1684509250000,
                 "rating": 9,
                 "ratingUsers": 31,
-                "updated": 1717105767000,
+                "updated": 1717153765000,
                 "users": 1436
             },
             "metadata": {
@@ -2477,7 +2477,7 @@
                 ],
                 "name": "Windows 11 Taskbar Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.3"
+                "version": "1.3.4"
             }
         },
         "windows-7-clock-spacing": {

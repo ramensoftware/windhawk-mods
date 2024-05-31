@@ -1,3 +1,8 @@
+## 1.3.4 ([May 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ff1acfae87ae906f670c3b0d43f7fbb8c3dcfd03/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Fixed taskbar background customization when there's more than one monitor.
+* TranslucentTaskbar theme: Fixed menu flyout padding.
+
 ## 1.3.3 ([May 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7cb5b296f3dd8385719119f7693a9037e5d9e46f/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added the TranslucentTaskbar theme.
