@@ -6,13 +6,14 @@
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         regedit.exe
+// @compilerOptions -lshlwapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
 
 // ==WindhawkModReadme==
 /*
-# RegEdit Auto Trim Whitespace on Navigation Bar
+# RegEdit Disable Beep
 When an invalid key is entered into the navigation bar, RegEdit plays a beep sound. This mod disables this sound.
 */
 // ==/WindhawkModReadme==
