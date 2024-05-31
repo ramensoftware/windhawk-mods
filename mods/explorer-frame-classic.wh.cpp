@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -533,6 +533,21 @@ bool WINAPI CanShowModernNavBar_Hook(PVOID pThis) {
     return CanShowModernNavBar_Original(pThis);
 }
 
+using CachedExplorerExtensionState_IsModernNavBarAvailable_t =
+    bool(WINAPI*)(PVOID pThis);
+CachedExplorerExtensionState_IsModernNavBarAvailable_t
+    CachedExplorerExtensionState_IsModernNavBarAvailable_Original;
+bool WINAPI
+CachedExplorerExtensionState_IsModernNavBarAvailable_Hook(PVOID pThis) {
+    Wh_Log(L">");
+
+    if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
+        return false;
+    }
+
+    return CachedExplorerExtensionState_IsModernNavBarAvailable_Original(pThis);
+}
+
 using CoCreateInstance_t = decltype(&CoCreateInstance);
 CoCreateInstance_t CoCreateInstance_Original;
 HRESULT WINAPI CoCreateInstance_Hook(REFCLSID rclsid,
@@ -569,7 +584,13 @@ bool HookExplorerFrameSymbols() {
             {LR"(bool __cdecl CanShowModernNavBar(void))"},
             (void**)&CanShowModernNavBar_Original,
             (void*)CanShowModernNavBar_Hook,
-            true,
+            true,  // Before Win11 24H2.
+        },
+        {
+            {LR"(public: static bool __cdecl CachedExplorerExtensionState::IsModernNavBarAvailable(void))"},
+            (void**)&CachedExplorerExtensionState_IsModernNavBarAvailable_Original,
+            (void*)CachedExplorerExtensionState_IsModernNavBarAvailable_Hook,
+            true,  // Since Win11 24H2.
         },
     };
 
