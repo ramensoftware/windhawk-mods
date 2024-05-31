@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-05-31T11:09:25.000Z</updated>
+    <updated>2024-05-31T11:45:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.0.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#324f683b222562fba882a506476da597fce9fe6f</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2024-05-31T11:45:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The mod now targets all ShellExperienceHost.exe windows, including the notification center, taskbar jump lists and notification popups.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.4]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#ff1acfae87ae906f670c3b0d43f7fbb8c3dcfd03</id>
@@ -265,15 +274,6 @@ code from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#b44c7541411462da53f27a54740123bd8bfba31c</id>
         <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
         <updated>2024-05-04T20:14:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#6fcd66105c7419656b3d34947dacf56a3b06927c</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2024-05-04T19:57:51.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
 </ul>]]></content>
