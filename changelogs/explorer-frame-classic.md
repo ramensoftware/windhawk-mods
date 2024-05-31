@@ -1,3 +1,7 @@
+## 1.0.3 ([May 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/74a502b48643c06d82e956ff5e5327a87a167e6d/mods/explorer-frame-classic.wh.cpp))
+
+* Made compatible with Windows 11 24H2.
+
 ## 1.0.2 ([Apr 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a4713da79384ef473a7d9888ca4a0eca33410b01/mods/explorer-frame-classic.wh.cpp))
 
 * Reimplemented the Classic navigation bar option to work with the new KB5036980 update.

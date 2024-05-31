@@ -818,7 +818,7 @@
                 "published": 1696691422000,
                 "rating": 10,
                 "ratingUsers": 26,
-                "updated": 1714348037000,
+                "updated": 1717179907000,
                 "users": 968
             },
             "metadata": {
@@ -835,7 +835,7 @@
                 ],
                 "name": "Classic Explorer navigation bar",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "explorer-name-windows": {
