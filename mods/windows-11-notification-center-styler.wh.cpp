@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     An advanced mod to override style attributes of the Notification Center
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -25,7 +25,9 @@
 # Windows 11 Notification Center Styler
 
 An advanced mod to override style attributes of the notification center and
-calendar.
+calendar. Starting with version 1.0.2, all elements that are part of
+ShellExperienceHost.exe can be customized, including taskbar jump lists and
+notification popups.
 
 **Note**: This mod requires Windhawk v1.4 or later.
 
@@ -137,13 +139,13 @@ code from the **TranslucentTB** project.
 #include <xamlom.h>
 
 #include <atomic>
-#include <vector>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.UI.Xaml.h>
 
-std::atomic<DWORD> g_targetThreadId = 0;
+std::atomic<bool> g_initialized;
+thread_local bool g_initializedForThread;
 
 void ApplyCustomizations(InstanceHandle handle,
                          winrt::Windows::UI::Xaml::FrameworkElement element,
@@ -251,11 +253,6 @@ void VisualTreeWatcher::UnadviseVisualTreeChange()
 
 HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
 {
-    if (GetCurrentThreadId() != g_targetThreadId)
-    {
-        return S_OK;
-    }
-
     Wh_Log(L"========================================");
 
     switch (mutationType)
@@ -569,7 +566,8 @@ struct ElementCustomizationRules {
     PropertyOverridesMaybeUnresolved propertyOverrides;
 };
 
-std::vector<ElementCustomizationRules> g_elementsCustomizationRules;
+thread_local std::vector<ElementCustomizationRules>
+    g_elementsCustomizationRules;
 
 struct ElementPropertyCustomizationState {
     std::optional<winrt::Windows::Foundation::IInspectable> originalValue;
@@ -593,10 +591,10 @@ struct ElementCustomizationState {
         perVisualStateGroup;
 };
 
-std::unordered_map<InstanceHandle, ElementCustomizationState>
+thread_local std::unordered_map<InstanceHandle, ElementCustomizationState>
     g_elementsCustomizationState;
 
-bool g_elementPropertyModifying;
+thread_local bool g_elementPropertyModifying;
 
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     DependencyObject elementDo,
@@ -1552,7 +1550,7 @@ void ProcessResourceVariablesFromSettings() {
     }
 }
 
-void UninitializeSettingsAndTap() {
+void UninitializeForCurrentThread() {
     for (const auto& [handle, elementCustomizationState] :
          g_elementsCustomizationState) {
         auto element = elementCustomizationState.element.get();
@@ -1568,56 +1566,38 @@ void UninitializeSettingsAndTap() {
 
     g_elementsCustomizationRules.clear();
 
-    g_targetThreadId = 0;
+    g_initializedForThread = false;
 }
 
-void InitializeSettingsAndTap() {
-    DWORD kNoThreadId = 0;
-    if (!g_targetThreadId.compare_exchange_strong(kNoThreadId,
-                                                  GetCurrentThreadId())) {
+void UninitializeSettingsAndTap() {
+    if (g_visualTreeWatcher) {
+        g_visualTreeWatcher->UnadviseVisualTreeChange();
+        g_visualTreeWatcher = nullptr;
+    }
+
+    g_initialized = false;
+}
+
+void InitializeForCurrentThread() {
+    if (g_initializedForThread) {
         return;
     }
 
     ProcessAllStylesFromSettings();
     ProcessResourceVariablesFromSettings();
 
+    g_initializedForThread = true;
+}
+
+void InitializeSettingsAndTap() {
+    if (g_initialized.exchange(true)) {
+        return;
+    }
+
     HRESULT hr = InjectWindhawkTAP();
     if (FAILED(hr)) {
         Wh_Log(L"Error %08X", hr);
     }
-}
-
-bool IsTargetThreadDescription(PCWSTR threadDescription) {
-    return wcscmp(threadDescription, L"ActionCenter") == 0;
-}
-
-bool IsTargetThread(HANDLE thread) {
-    using GetThreadDescription_t =
-        HRESULT(WINAPI*)(HANDLE hThread, PWSTR * ppszThreadDescription);
-
-    static auto pGetThreadDescription = []() -> GetThreadDescription_t {
-        HMODULE hKernel32Module = LoadLibrary(L"kernel32.dll");
-        if (!hKernel32Module) {
-            return nullptr;
-        }
-
-        return (GetThreadDescription_t)GetProcAddress(hKernel32Module,
-                                                      "GetThreadDescription");
-    }();
-
-    if (!pGetThreadDescription) {
-        return false;
-    }
-
-    PWSTR threadDescription;
-    bool isTargetThread = false;
-    HRESULT hr = pGetThreadDescription(thread, &threadDescription);
-    if (SUCCEEDED(hr)) {
-        isTargetThread = IsTargetThreadDescription(threadDescription);
-        LocalFree(threadDescription);
-    }
-
-    return isTargetThread;
 }
 
 using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
@@ -1650,7 +1630,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
     HWND hWnd = CreateWindowInBand_Original(
         dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
         hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (!hWnd || !IsTargetThread(GetCurrentThread())) {
+    if (!hWnd) {
         return hWnd;
     }
 
@@ -1660,6 +1640,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
         _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
         Wh_Log(L"Initializing - Created core window: %08X",
                (DWORD)(ULONG_PTR)hWnd);
+        InitializeForCurrentThread();
         InitializeSettingsAndTap();
     }
 
@@ -1698,7 +1679,7 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     HWND hWnd = CreateWindowInBandEx_Original(
         dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
         hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
-    if (!hWnd || !IsTargetThread(GetCurrentThread())) {
+    if (!hWnd) {
         return hWnd;
     }
 
@@ -1708,6 +1689,7 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
         _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
         Wh_Log(L"Initializing - Created core window: %08X",
                (DWORD)(ULONG_PTR)hWnd);
+        InitializeForCurrentThread();
         InitializeSettingsAndTap();
     }
 
@@ -1766,32 +1748,20 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-HWND GetCoreWnd() {
+std::vector<HWND> GetCoreWnds() {
     struct ENUM_WINDOWS_PARAM {
-        HWND* hWnd;
+        std::vector<HWND>* hWnds;
     };
 
-    HWND hWnd = nullptr;
-    ENUM_WINDOWS_PARAM param = {&hWnd};
+    std::vector<HWND> hWnds;
+    ENUM_WINDOWS_PARAM param = {&hWnds};
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
             ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
 
             DWORD dwProcessId = 0;
-            DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &dwProcessId);
-            if (!dwThreadId || dwProcessId != GetCurrentProcessId()) {
-                return TRUE;
-            }
-
-            bool isTargetThread = false;
-            HANDLE hThread =
-                OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, dwThreadId);
-            if (hThread) {
-                isTargetThread = IsTargetThread(hThread);
-                CloseHandle(hThread);
-            }
-
-            if (!isTargetThread) {
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+                dwProcessId != GetCurrentProcessId()) {
                 return TRUE;
             }
 
@@ -1801,64 +1771,14 @@ HWND GetCoreWnd() {
             }
 
             if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-                *param.hWnd = hWnd;
-                return FALSE;
+                param.hWnds->push_back(hWnd);
             }
 
             return TRUE;
         },
         (LPARAM)&param);
 
-    return hWnd;
-}
-
-HWND GetCoreWndOfThread(DWORD threadId) {
-    struct ENUM_WINDOWS_PARAM {
-        HWND* hWnd;
-    };
-
-    HWND hWnd = nullptr;
-    ENUM_WINDOWS_PARAM param = {&hWnd};
-    EnumThreadWindows(
-        threadId,
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
-            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
-
-            WCHAR szClassName[32];
-            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
-                return TRUE;
-            }
-
-            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-                *param.hWnd = hWnd;
-                return FALSE;
-            }
-
-            return TRUE;
-        },
-        (LPARAM)&param);
-
-    return hWnd;
-}
-
-using SetThreadDescription_t = HRESULT(WINAPI*)(HANDLE hThread,
-                                                PCWSTR lpThreadDescription);
-SetThreadDescription_t SetThreadDescription_Original;
-HRESULT WINAPI SetThreadDescription_Hook(HANDLE hThread,
-                                         PCWSTR lpThreadDescription) {
-    Wh_Log(L"> %s", lpThreadDescription ? lpThreadDescription : L"(null)");
-
-    if (lpThreadDescription && IsTargetThreadDescription(lpThreadDescription)) {
-        HWND hCoreWnd = GetCoreWndOfThread(GetThreadId(hThread));
-        if (hCoreWnd) {
-            Wh_Log(L"Initializing - Thread description was set");
-            RunFromWindowThread(
-                hCoreWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
-                nullptr);
-        }
-    }
-
-    return SetThreadDescription_Original(hThread, lpThreadDescription);
+    return hWnds;
 }
 
 BOOL Wh_ModInit() {
@@ -1883,45 +1803,36 @@ BOOL Wh_ModInit() {
         }
     }
 
-    HMODULE hKernel32Module = LoadLibrary(L"kernel32.dll");
-    if (hKernel32Module) {
-        void* pSetThreadDescription =
-            (void*)GetProcAddress(hKernel32Module, "SetThreadDescription");
-        if (pSetThreadDescription) {
-            Wh_SetFunctionHook(pSetThreadDescription,
-                               (void*)SetThreadDescription_Hook,
-                               (void**)&SetThreadDescription_Original);
-        }
-    }
-
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    HWND hCoreWnd = GetCoreWnd();
-    if (hCoreWnd) {
-        Wh_Log(L"Initializing - Found core window");
+    auto hCoreWnds = GetCoreWnds();
+    for (auto hCoreWnd : hCoreWnds) {
+        Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
-            hCoreWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
+            hCoreWnd, [](PVOID) WINAPI { InitializeForCurrentThread(); },
             nullptr);
+    }
+
+    if (hCoreWnds.size() > 0) {
+        Wh_Log(L"Initializing - Found core windows");
+        InitializeSettingsAndTap();
     }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
+    UninitializeSettingsAndTap();
 
-    HWND hCoreWnd = GetCoreWnd();
-    if (hCoreWnd) {
-        Wh_Log(L"Uninitializing - Found core window");
+    auto hCoreWnds = GetCoreWnds();
+    for (auto hCoreWnd : hCoreWnds) {
+        Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
-            hCoreWnd, [](PVOID) WINAPI { UninitializeSettingsAndTap(); },
+            hCoreWnd, [](PVOID) WINAPI { UninitializeForCurrentThread(); },
             nullptr);
     }
 }
@@ -1929,20 +1840,22 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
+    UninitializeSettingsAndTap();
 
-    HWND hCoreWnd = GetCoreWnd();
-    if (hCoreWnd) {
-        Wh_Log(L"Reinitializing - Found core window");
+    auto hCoreWnds = GetCoreWnds();
+    for (auto hCoreWnd : hCoreWnds) {
+        Wh_Log(L"Reinitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) WINAPI {
-                UninitializeSettingsAndTap();
-                InitializeSettingsAndTap();
+                UninitializeForCurrentThread();
+                InitializeForCurrentThread();
             },
             nullptr);
+    }
+
+    if (hCoreWnds.size() > 0) {
+        Wh_Log(L"Reinitializing - Found core windows");
+        InitializeSettingsAndTap();
     }
 }
