@@ -17,6 +17,7 @@
 /*
 # CE Disable Process Button Flashing
 When Cheat Engine is started, the Open Process button is flashed until the button is pressed:
+
 ![Screenshot](https://i.imgur.com/FGMthzy.gif)
 
 This mod disables this flashing on the Open Process button.
