@@ -2,7 +2,7 @@
 // @id              ce-disable-process-button-flashing
 // @name            CE Disable Process Button Flashing
 // @description     Disables the flashing on the Open Process button in Cheat Engine
-// @version         1.0.0
+// @version         1.0.1
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         cheatengine-x86_64.exe
