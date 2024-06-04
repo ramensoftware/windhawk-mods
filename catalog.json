@@ -102,7 +102,7 @@
                 "published": 1717491726000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1717491726000,
+                "updated": 1717498560000,
                 "users": 0
             },
             "metadata": {
@@ -116,7 +116,7 @@
                     "cheatengine-i386.exe"
                 ],
                 "name": "CE Disable Process Button Flashing",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "center-titlebar": {

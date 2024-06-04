@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-04T09:02:06.000Z</updated>
+    <updated>2024-06-04T10:56:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CE Disable Process Button Flashing 1.0.1]]></title>
+        <id>https://windhawk.net/mods/ce-disable-process-button-flashing#a0ca3b1a75a180e115ac1658bab730758723622a</id>
+        <link href="https://windhawk.net/mods/ce-disable-process-button-flashing"/>
+        <updated>2024-06-04T10:56:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>CE Disable Process Button Flashing v1.0.1</li>
+</ul>
+<p>Fix terminated offset according to Cheat Engine 7.5</p>
+<ul>
+<li>Update version number</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CE Disable Process Button Flashing 1.0.0]]></title>
         <id>https://windhawk.net/mods/ce-disable-process-button-flashing#b0f5ffd4775c271f45ee47e0f320113cc9c203a1</id>
@@ -267,15 +280,6 @@ code from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <id>https://windhawk.net/mods/pinned-items-double-click#544193af43e9c3b22c8442070eed58c7ddb2bd88</id>
         <link href="https://windhawk.net/mods/pinned-items-double-click"/>
         <updated>2024-05-04T20:59:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-scroll#3a87f5e12b5f2c6778b4256c45c8124c38fad2cc</id>
-        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
-        <updated>2024-05-04T20:53:47.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
 </ul>]]></content>
