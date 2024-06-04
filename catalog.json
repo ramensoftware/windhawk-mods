@@ -96,6 +96,29 @@
                 "version": "1.0.1"
             }
         },
+        "ce-disable-process-button-flashing": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1717491726000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1717491726000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "compilerOptions": "-masm=intel",
+                "description": "Disables the flashing on the Open Process button in Cheat Engine",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "cheatengine-x86_64.exe",
+                    "cheatengine-x86_64-SSE4-AVX2.exe",
+                    "cheatengine-i386.exe"
+                ],
+                "name": "CE Disable Process Button Flashing",
+                "version": "1.0.0"
+            }
+        },
         "center-titlebar": {
             "details": {
                 "defaultSorting": 2060,
