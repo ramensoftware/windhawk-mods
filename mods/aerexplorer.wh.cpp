@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.6.0
+// @version         1.6.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -2713,8 +2713,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    /* This needs to be hooked EARLY. */
-    const CMWF_SYMBOL_HOOK isCplHooks[] = {
+    const CMWF_SYMBOL_HOOK efHooks[] = {
         {
             {
                 L"private: struct _GUID "
@@ -2725,21 +2724,7 @@ BOOL Wh_ModInit(void)
             CExplorerLauncher_GetHostFromTarget_hook,
             false,
             &CExplorerLauncher_GetHostFromTarget_addr
-        }
-    };
-        
-
-    if (!CmwfHookSymbols(
-        hExplorerFrame,
-        isCplHooks,
-        ARRAYSIZE(isCplHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook either CExplorerLauncher::GetHostFromTarget");
-        return FALSE;
-    }
-
-    const CMWF_SYMBOL_HOOK efHooks[] = {
+        },
         {
             {
                 L"private: bool "
