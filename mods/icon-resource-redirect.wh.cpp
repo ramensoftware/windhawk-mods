@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. instead of icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.1.3
+// @version         1.1.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -60,7 +60,10 @@ The mod supports the following resource types and loading methods:
 - redirectionResourcePaths:
   - - original: '%SystemRoot%\System32\imageres.dll'
       $name: The original resource file
-      $description: The original file from which resources are loaded
+      $description: >-
+        The original file from which resources are loaded, can be a pattern
+        where '*' matches any number characters and '?' matches any single
+        character
     - redirect: 'C:\my-themes\theme-1\imageres.dll'
       $name: The custom resource file
       $description: The custom resource file that will be used instead
@@ -91,11 +94,58 @@ std::unordered_map<std::wstring, std::vector<std::wstring>>
     g_redirectionResourcePaths;
 std::unordered_map<std::string, std::vector<std::string>>
     g_redirectionResourcePathsA;
+std::vector<std::pair<std::wstring, std::wstring>>
+    g_redirectionResourcePathPatterns;
+std::vector<std::pair<std::string, std::string>>
+    g_redirectionResourcePathPatternsA;
 
 std::shared_mutex g_redirectionResourceModulesMutex;
 std::unordered_map<std::wstring, HMODULE> g_redirectionResourceModules;
 
 std::atomic<DWORD> g_operationCounter;
+
+// https://github.com/tidwall/match.c
+//
+// match returns true if str matches pattern. This is a very
+// simple wildcard match where '*' matches on any number characters
+// and '?' matches on any one character.
+//
+// pattern:
+//   { term }
+// term:
+// 	 '*'         matches any sequence of non-Separator characters
+// 	 '?'         matches any single non-Separator character
+// 	 c           matches character c (c != '*', '?')
+template <typename T>
+bool strmatch(const T* pat, size_t plen, const T* str, size_t slen) {
+    while (plen > 0) {
+        if (pat[0] == '*') {
+            if (plen == 1)
+                return true;
+            if (pat[1] == '*') {
+                pat++;
+                plen--;
+                continue;
+            }
+            if (strmatch(pat + 1, plen - 1, str, slen))
+                return true;
+            if (slen == 0)
+                return false;
+            str++;
+            slen--;
+            continue;
+        }
+        if (slen == 0)
+            return false;
+        if (pat[0] != '?' && str[0] != pat[0])
+            return false;
+        pat++;
+        plen--;
+        str++;
+        slen--;
+    }
+    return slen == 0 && plen == 0;
+}
 
 // chooseAW<char> returns OptionA.
 // chooseAW<WCHAR> returns OptionW.
@@ -292,6 +342,28 @@ bool RedirectFileName(DWORD c,
                 }
             }
         }
+
+        const auto& redirectionResourcePathPatterns =
+            *(chooseAW<T, &g_redirectionResourcePathPatternsA,
+                       &g_redirectionResourcePathPatterns>());
+        for (const auto& [pattern, redirect] :
+             redirectionResourcePathPatterns) {
+            if (!strmatch(pattern.data(), pattern.size(), fileNameUpper.data(),
+                          fileNameUpper.size())) {
+                continue;
+            }
+
+            if (!triedRedirection) {
+                beforeFirstRedirectionFunction();
+                triedRedirection = true;
+            }
+
+            Wh_Log(L"[%u] Trying %s", c, StrToW(redirect.c_str()).p);
+
+            if (redirectFunction(redirect.c_str())) {
+                return true;
+            }
+        }
     }
 
     if (triedRedirection) {
@@ -374,6 +446,31 @@ bool RedirectModule(DWORD c,
                 if (redirectFunction(hInstanceRedirect)) {
                     return true;
                 }
+            }
+        }
+
+        for (const auto& [pattern, redirect] :
+             g_redirectionResourcePathPatterns) {
+            if (!strmatch(pattern.data(), pattern.size(), szFileName,
+                          fileNameLen)) {
+                continue;
+            }
+
+            if (!triedRedirection) {
+                beforeFirstRedirectionFunction();
+                triedRedirection = true;
+            }
+
+            Wh_Log(L"[%u] Trying %s", c, redirect.c_str());
+
+            HINSTANCE hInstanceRedirect = GetRedirectedModule(redirect);
+            if (!hInstanceRedirect) {
+                Wh_Log(L"[%u] GetRedirectedModule failed", c);
+                continue;
+            }
+
+            if (redirectFunction(hInstanceRedirect)) {
+                return true;
             }
         }
     }
@@ -1123,9 +1220,11 @@ HRESULT __thiscall SetXMLFromResource_Hook(void* pThis,
 void LoadSettings() {
     std::unordered_map<std::wstring, std::vector<std::wstring>> paths;
     std::unordered_map<std::string, std::vector<std::string>> pathsA;
+    std::vector<std::pair<std::wstring, std::wstring>> pathPatterns;
+    std::vector<std::pair<std::string, std::string>> pathPatternsA;
 
-    auto addRedirectionPath = [&paths, &pathsA](PCWSTR original,
-                                                PCWSTR redirect) {
+    auto addRedirectionPath = [&paths, &pathsA, &pathPatterns, &pathPatternsA](
+                                  PCWSTR original, PCWSTR redirect) {
         WCHAR originalExpanded[MAX_PATH];
         DWORD originalExpandedLen = ExpandEnvironmentStrings(
             original, originalExpanded, ARRAYSIZE(originalExpanded));
@@ -1135,14 +1234,23 @@ void LoadSettings() {
             return;
         }
 
-        Wh_Log(L"Configuring %s->%s", originalExpanded, redirect);
+        // Remove null terminator from len.
+        originalExpandedLen--;
+
+        bool isPattern = wcscspn(originalExpanded, L"*?") < originalExpandedLen;
+
+        Wh_Log(L"Configuring%s %s->%s", isPattern ? L" pattern" : L"",
+               originalExpanded, redirect);
 
         LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
-                      originalExpanded, originalExpandedLen - 1,
-                      originalExpanded, originalExpandedLen - 1, nullptr,
-                      nullptr, 0);
+                      originalExpanded, originalExpandedLen, originalExpanded,
+                      originalExpandedLen, nullptr, nullptr, 0);
 
-        paths[originalExpanded].push_back(redirect);
+        if (isPattern) {
+            pathPatterns.push_back({originalExpanded, redirect});
+        } else {
+            paths[originalExpanded].push_back(redirect);
+        }
 
         char originalExpandedA[MAX_PATH];
         char redirectA[MAX_PATH];
@@ -1152,9 +1260,13 @@ void LoadSettings() {
                        _TRUNCATE) == 0 &&
             wcstombs_s(&charsConverted, redirectA, ARRAYSIZE(redirectA),
                        redirect, _TRUNCATE) == 0) {
-            pathsA[originalExpandedA].push_back(redirectA);
+            if (isPattern) {
+                pathPatternsA.push_back({originalExpandedA, redirectA});
+            } else {
+                pathsA[originalExpandedA].push_back(redirectA);
+            }
         } else {
-            Wh_Log(L"Error configuring ANSI paths");
+            Wh_Log(L"Error configuring ANSI redirection");
         }
     };
 
@@ -1214,6 +1326,8 @@ void LoadSettings() {
     std::unique_lock lock{g_redirectionResourcePathsMutex};
     g_redirectionResourcePaths = std::move(paths);
     g_redirectionResourcePathsA = std::move(pathsA);
+    g_redirectionResourcePathPatterns = std::move(pathPatterns);
+    g_redirectionResourcePathPatternsA = std::move(pathPatternsA);
 }
 
 BOOL Wh_ModInit() {
