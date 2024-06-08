@@ -1,3 +1,7 @@
+## 1.6.1 ([Jun 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3ffd256e00086a152824bfc867257abd31545083/mods/aerexplorer.wh.cpp))
+
+Aerexplorer 1.6.1: Merge isCplHooks into efHooks
+
 ## 1.6.0 ([Apr 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a7455bd32896c65001b46233741c1d08f9f1f008/mods/aerexplorer.wh.cpp))
 
 Support glass + ribbon

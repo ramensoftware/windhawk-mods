@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-08T09:47:53.000Z</updated>
+    <updated>2024-06-08T15:06:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.6.1]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#3ffd256e00086a152824bfc867257abd31545083</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2024-06-08T15:06:56.000Z</updated>
+        <content type="html"><![CDATA[<p>Aerexplorer 1.6.1: Merge isCplHooks into efHooks</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.1.4]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#5d1f12d1d984919a764556f139724d8eec004900</id>
@@ -272,14 +279,5 @@ resource variables.</p>
 <p>The VisualTreeWatcher implementation is based on the
 <a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
 code from the <strong>TranslucentTB</strong> project.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#16879e75ab4846ac6eaf63c32539abc516850756</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-05-10T11:17:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the weather icon disappearing with the new KB5036980 update.</li>
-</ul>]]></content>
     </entry>
 </feed>
