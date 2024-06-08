@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.2
+// @version         1.3.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -63,8 +63,6 @@ or a similar tool), enable the relevant option in the mod's settings.
   $name: Place ungrouped items together
   $description: >-
     Place each newly opened item next to existing items it would group with.
-
-    Note: This option only works on Windows 11 version 22H2 and newer.
 - useWindowIcons: false
   $name: Use window icons
   $description: >-
@@ -120,6 +118,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -174,10 +173,17 @@ bool g_inTaskBandLaunch;
 bool g_inUpdateItemIcon;
 bool g_inTaskBtnGroupGetIcon;
 bool g_inGetJumpViewParams;
+bool g_inFindTaskBtnGroup;
+PVOID g_findTaskBtnGroup_TaskGroupSentinel =
+    &g_findTaskBtnGroup_TaskGroupSentinel;
+std::function<bool(PVOID)> g_findTaskBtnGroup_Callback;
+std::atomic<DWORD> g_cTaskListWnd__CreateTBGroup_ThreadId;
 bool g_disableGetLauncherName;
 std::atomic<DWORD> g_compareStringOrdinalHookThreadId;
 bool g_compareStringOrdinalIgnoreSuffix;
 bool g_compareStringOrdinalAnySuffixEqual;
+
+constexpr size_t ITaskListUIOffset = 0x28;
 
 winrt::com_ptr<IUnknown> GetTaskGroupWithoutSuffix(
     PVOID taskGroup,
@@ -234,6 +240,26 @@ bool RemoveAppIdSuffix(WCHAR appIdStripped[MAX_PATH], PCWSTR appIdWithSuffix) {
 using CTaskGroup_GetNumItems_t = int(WINAPI*)(PVOID pThis);
 CTaskGroup_GetNumItems_t CTaskGroup_GetNumItems_Original;
 
+using CTaskGroup_SetAppID_t = HRESULT(WINAPI*)(PVOID pThis, PCWSTR appId);
+CTaskGroup_SetAppID_t CTaskGroup_SetAppID_Original;
+
+using CTaskGroup_GetFlags_t = DWORD(WINAPI*)(PVOID pThis);
+CTaskGroup_GetFlags_t CTaskGroup_GetFlags_Original;
+
+using CTaskGroup_UpdateFlags_t = HRESULT(WINAPI*)(PVOID pThis,
+                                                  DWORD updateMask,
+                                                  DWORD newFlags);
+CTaskGroup_UpdateFlags_t CTaskGroup_UpdateFlags_Original;
+
+using CTaskGroup_GetTitleText_t = HRESULT(WINAPI*)(PVOID pThis,
+                                                   PVOID taskItem,
+                                                   WCHAR* buffer,
+                                                   int bufferSize);
+CTaskGroup_GetTitleText_t CTaskGroup_GetTitleText_Original;
+
+using CTaskGroup_SetTip_t = HRESULT(WINAPI*)(PVOID pThis, PCWSTR tip);
+CTaskGroup_SetTip_t CTaskGroup_SetTip_Original;
+
 using CTaskGroup_DoesWindowMatch_t =
     HRESULT(WINAPI*)(PVOID pThis,
                      HWND hWnd,
@@ -242,6 +268,9 @@ using CTaskGroup_DoesWindowMatch_t =
                      int* windowMatchConfidence,
                      PVOID* taskItem);
 CTaskGroup_DoesWindowMatch_t CTaskGroup_DoesWindowMatch_Original;
+
+using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(PVOID pThis);
+CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType_Original;
 
 using CTaskBand__MatchWindow_t = HRESULT(WINAPI*)(PVOID pThis,
                                                   HWND hWnd,
@@ -483,26 +512,6 @@ PCWSTR WINAPI CTaskGroup_GetAppID_Hook(PVOID pThis) {
 
     return CTaskGroup_GetAppID_Original(pThis);
 }
-
-using CTaskGroup_SetAppID_t = HRESULT(WINAPI*)(PVOID pThis, PCWSTR appId);
-CTaskGroup_SetAppID_t CTaskGroup_SetAppID_Original;
-
-using CTaskGroup_GetFlags_t = DWORD(WINAPI*)(PVOID pThis);
-CTaskGroup_GetFlags_t CTaskGroup_GetFlags_Original;
-
-using CTaskGroup_UpdateFlags_t = HRESULT(WINAPI*)(PVOID pThis,
-                                                  DWORD updateMask,
-                                                  DWORD newFlags);
-CTaskGroup_UpdateFlags_t CTaskGroup_UpdateFlags_Original;
-
-using CTaskGroup_GetTitleText_t = HRESULT(WINAPI*)(PVOID pThis,
-                                                   PVOID taskItem,
-                                                   WCHAR* buffer,
-                                                   int bufferSize);
-CTaskGroup_GetTitleText_t CTaskGroup_GetTitleText_Original;
-
-using CTaskGroup_SetTip_t = HRESULT(WINAPI*)(PVOID pThis, PCWSTR tip);
-CTaskGroup_SetTip_t CTaskGroup_SetTip_Original;
 
 PVOID GetTaskBand() {
     static PVOID taskBand = nullptr;
@@ -750,6 +759,14 @@ CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup_Original;
 PVOID WINAPI CTaskBtnGroup_GetGroup_Hook(PVOID pThis) {
     // Wh_Log(L">");
 
+    if (g_inFindTaskBtnGroup) {
+        if (g_findTaskBtnGroup_Callback(pThis)) {
+            return g_findTaskBtnGroup_TaskGroupSentinel;
+        }
+
+        return nullptr;
+    }
+
     PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(pThis);
 
     if (g_inGetJumpViewParams) {
@@ -763,33 +780,63 @@ PVOID WINAPI CTaskBtnGroup_GetGroup_Hook(PVOID pThis) {
     return taskGroup;
 }
 
-using ITaskBtnGroup_InsertPtr_t = HRESULT(WINAPI*)(PVOID pThis,
-                                                   int index,
-                                                   PVOID taskBtnGroup,
-                                                   int* insertedIndex);
-ITaskBtnGroup_InsertPtr_t ITaskBtnGroup_InsertPtr_Original;
-HRESULT WINAPI ITaskBtnGroup_InsertPtr_Hook(PVOID pThis,
-                                            int index,
-                                            PVOID taskBtnGroup,
-                                            int* insertedIndex) {
+using CTaskListWnd__GetTBGroupFromGroup_t = PVOID(WINAPI*)(PVOID pThis,
+                                                           PVOID taskGroup,
+                                                           int* foundIndex);
+CTaskListWnd__GetTBGroupFromGroup_t CTaskListWnd__GetTBGroupFromGroup_Original;
+
+PVOID FindTaskBtnGroup(PVOID taskList,
+                       std::function<bool(PVOID)> callback,
+                       int* foundIndex = nullptr) {
+    g_inFindTaskBtnGroup = true;
+    g_findTaskBtnGroup_Callback = std::move(callback);
+
+    PVOID taskBtnGroup = CTaskListWnd__GetTBGroupFromGroup_Original(
+        taskList, g_findTaskBtnGroup_TaskGroupSentinel, foundIndex);
+
+    g_findTaskBtnGroup_Callback = nullptr;
+    g_inFindTaskBtnGroup = false;
+
+    return taskBtnGroup;
+}
+
+using CTaskListWnd_IsOnPrimaryTaskband_t = BOOL(WINAPI*)(PVOID pThis);
+CTaskListWnd_IsOnPrimaryTaskband_t CTaskListWnd_IsOnPrimaryTaskband_Original;
+
+using CTaskListWnd__CreateTBGroup_t = PVOID(WINAPI*)(PVOID pThis,
+                                                     PVOID taskGroup,
+                                                     int index);
+CTaskListWnd__CreateTBGroup_t CTaskListWnd__CreateTBGroup_Original;
+PVOID WINAPI CTaskListWnd__CreateTBGroup_Hook(PVOID pThis,
+                                              PVOID taskGroup,
+                                              int index) {
     Wh_Log(L">");
 
-    auto original = [&]() {
-        return ITaskBtnGroup_InsertPtr_Original(pThis, index, taskBtnGroup,
-                                                insertedIndex);
-    };
+    g_cTaskListWnd__CreateTBGroup_ThreadId = GetCurrentThreadId();
 
-    if (!g_settings.placeUngroupedItemsTogether || index != DA_LAST ||
-        !taskBtnGroup) {
+    PVOID ret = CTaskListWnd__CreateTBGroup_Original(pThis, taskGroup, index);
+
+    g_cTaskListWnd__CreateTBGroup_ThreadId = 0;
+
+    return ret;
+}
+
+using DPA_InsertPtr_t = decltype(&DPA_InsertPtr);
+DPA_InsertPtr_t DPA_InsertPtr_Original;
+int WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
+    auto original = [&]() { return DPA_InsertPtr_Original(hdpa, i, p); };
+
+    if (g_cTaskListWnd__CreateTBGroup_ThreadId != GetCurrentThreadId()) {
         return original();
     }
 
-    HDPA dpa = *(HDPA*)pThis;
-    if (!dpa) {
+    Wh_Log(L">");
+
+    if (!g_settings.placeUngroupedItemsTogether || i != DA_LAST || !p) {
         return original();
     }
 
-    PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(taskBtnGroup);
+    PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(p);
     if (!taskGroup) {
         return original();
     }
@@ -799,9 +846,9 @@ HRESULT WINAPI ITaskBtnGroup_InsertPtr_Hook(PVOID pThis,
 
     int lastMatchIndex = DA_LAST;
 
-    int count = DPA_GetPtrCount(dpa);
+    int count = DPA_GetPtrCount(hdpa);
     for (int i = 0; i < count; i++) {
-        PVOID taskBtnGroupIter = DPA_GetPtr(dpa, i);
+        PVOID taskBtnGroupIter = DPA_GetPtr(hdpa, i);
         if (!taskBtnGroupIter) {
             continue;
         }
@@ -828,7 +875,7 @@ HRESULT WINAPI ITaskBtnGroup_InsertPtr_Hook(PVOID pThis,
     }
 
     if (lastMatchIndex != DA_LAST) {
-        index = lastMatchIndex + 1;
+        i = lastMatchIndex + 1;
     }
 
     return original();
@@ -849,6 +896,22 @@ void WINAPI CTaskBand_HandleTaskGroupSwitchItemAdded_Hook(PVOID pThis,
 
     // CTaskBand_HandleTaskGroupSwitchItemAdded_Original(pThis, switchItem);
 }
+
+using CTaskListWnd_GroupChanged_t = LONG_PTR(WINAPI*)(void* pThis,
+                                                      void* taskGroup,
+                                                      int taskGroupProperty);
+CTaskListWnd_GroupChanged_t CTaskListWnd_GroupChanged_Original;
+
+using CTaskListWnd_HandleTaskGroupPinned_t = void(WINAPI*)(PVOID pThis,
+                                                           PVOID taskGroup);
+CTaskListWnd_HandleTaskGroupPinned_t
+    CTaskListWnd_HandleTaskGroupPinned_Original;
+
+using CTaskListWnd_HandleTaskGroupUnpinned_t = void(WINAPI*)(PVOID pThis,
+                                                             PVOID taskGroup,
+                                                             int flags);
+CTaskListWnd_HandleTaskGroupUnpinned_t
+    CTaskListWnd_HandleTaskGroupUnpinned_Original;
 
 void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
     WCHAR appId1Copy[MAX_PATH] = L"";
@@ -889,11 +952,8 @@ void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
     }
 }
 
-void SwapTaskGroupIdsWithUnsuffixedInstance(PVOID taskGroup) {
-    if (CTaskGroup_GetNumItems_Original(taskGroup) > 1) {
-        return;
-    }
-
+void HandleUnsuffixedInstanceOnTaskDestroyed(PVOID taskList_TaskListUI,
+                                             PVOID taskGroup) {
     PVOID taskBand = GetTaskBand();
     if (!taskBand) {
         return;
@@ -926,7 +986,49 @@ void SwapTaskGroupIdsWithUnsuffixedInstance(PVOID taskGroup) {
         return;
     }
 
+    bool taskGroupIsPinned = CTaskGroup_GetFlags_Original(taskGroup) & 1;
+
+    Wh_Log(L"Swapping with matched prefixed item");
+
     SwapTaskGroupIds(taskGroup, taskGroupMatched.get());
+
+    if (taskGroupIsPinned) {
+        CTaskListWnd_HandleTaskGroupPinned_Original(taskList_TaskListUI,
+                                                    taskGroupMatched.get());
+    }
+}
+
+LONG_PTR OnTaskDestroyed(std::function<LONG_PTR()> original,
+                         PVOID taskList_TaskListUI,
+                         PVOID taskGroup,
+                         PVOID taskItem) {
+    if (!CTaskListWnd_IsOnPrimaryTaskband_Original(taskList_TaskListUI)) {
+        return original();
+    }
+
+    int numItems = CTaskGroup_GetNumItems_Original(taskGroup);
+    bool taskGroupIsPinned = CTaskGroup_GetFlags_Original(taskGroup) & 1;
+
+    if (numItems == 1) {
+        HandleUnsuffixedInstanceOnTaskDestroyed(taskList_TaskListUI, taskGroup);
+    }
+
+    LONG_PTR ret = original();
+
+    if (numItems == 0) {
+        HandleUnsuffixedInstanceOnTaskDestroyed(taskList_TaskListUI, taskGroup);
+    }
+
+    if (taskGroupIsPinned && numItems == 1 && g_settings.useWindowIcons &&
+        CTaskListWnd_GroupChanged_Original) {
+        // Trigger CTaskListWnd::GroupChanged to trigger an icon change.
+        // https://github.com/ramensoftware/windhawk-mods/issues/644
+        int taskGroupProperty = 4;  // saw this in the debugger
+        CTaskListWnd_GroupChanged_Original(taskList_TaskListUI, taskGroup,
+                                           taskGroupProperty);
+    }
+
+    return ret;
 }
 
 using CTaskListWnd_TaskDestroyed_t = LONG_PTR(WINAPI*)(PVOID pThis,
@@ -940,20 +1042,12 @@ LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_Hook(PVOID pThis,
                                                 int taskDestroyedFlags) {
     Wh_Log(L">");
 
-    int numItems = CTaskGroup_GetNumItems_Original(taskGroup);
+    auto original = [&]() {
+        return CTaskListWnd_TaskDestroyed_Original(pThis, taskGroup, taskItem,
+                                                   taskDestroyedFlags);
+    };
 
-    if (numItems == 1) {
-        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
-    }
-
-    LONG_PTR ret = CTaskListWnd_TaskDestroyed_Original(
-        pThis, taskGroup, taskItem, taskDestroyedFlags);
-
-    if (numItems == 0) {
-        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
-    }
-
-    return ret;
+    return OnTaskDestroyed(original, pThis, taskGroup, taskItem);
 }
 
 using CTaskListWnd_TaskDestroyed_2_t = LONG_PTR(WINAPI*)(PVOID pThis,
@@ -965,18 +1059,101 @@ LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_2_Hook(PVOID pThis,
                                                   PVOID taskItem) {
     Wh_Log(L">");
 
-    int numItems = CTaskGroup_GetNumItems_Original(taskGroup);
+    auto original = [&]() {
+        return CTaskListWnd_TaskDestroyed_2_Original(pThis, taskGroup,
+                                                     taskItem);
+    };
 
-    if (numItems == 1) {
-        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
+    return OnTaskDestroyed(original, pThis, taskGroup, taskItem);
+}
+
+void HandleSuffixedInstanceOnTaskCreated(PVOID taskList_TaskListUI,
+                                         PVOID taskGroup) {
+    PVOID taskList = (BYTE*)taskList_TaskListUI - ITaskListUIOffset;
+
+    PCWSTR appId = CTaskGroup_GetAppID_Original(taskGroup);
+    if (!appId) {
+        return;
     }
 
-    LONG_PTR ret =
-        CTaskListWnd_TaskDestroyed_2_Original(pThis, taskGroup, taskItem);
-
-    if (numItems == 0) {
-        SwapTaskGroupIdsWithUnsuffixedInstance(taskGroup);
+    WCHAR appIdOriginal[MAX_PATH];
+    if (!RemoveAppIdSuffix(appIdOriginal, appId)) {
+        return;
     }
+
+    PVOID taskBtnGroupMatched =
+        FindTaskBtnGroup(taskList, [appIdOriginal](PVOID taskBtnGroup) {
+            PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(taskBtnGroup);
+            if (!taskGroup) {
+                return false;
+            }
+
+            int windowMatchConfidence;
+            winrt::com_ptr<IUnknown> taskItemMatched;
+            HRESULT hr = CTaskGroup_DoesWindowMatch_Original(
+                taskGroup, nullptr, nullptr, appIdOriginal,
+                &windowMatchConfidence, taskItemMatched.put_void());
+            bool matched = SUCCEEDED(hr);
+
+            return matched;
+        });
+    if (!taskBtnGroupMatched) {
+        return;
+    }
+
+    bool taskGroupMatchedIsPinnedType =
+        CTaskBtnGroup_GetGroupType_Original(taskBtnGroupMatched) == 2;
+    if (!taskGroupMatchedIsPinnedType) {
+        return;
+    }
+
+    PVOID taskGroupMatched =
+        CTaskBtnGroup_GetGroup_Original(taskBtnGroupMatched);
+    if (!taskGroupMatched) {
+        return;
+    }
+
+    Wh_Log(L"Swapping with matched pinned item");
+
+    SwapTaskGroupIds(taskGroup, taskGroupMatched);
+
+    CTaskListWnd_HandleTaskGroupUnpinned_Original(taskList_TaskListUI,
+                                                  taskGroupMatched, 0);
+    CTaskListWnd_HandleTaskGroupPinned_Original(taskList_TaskListUI, taskGroup);
+}
+
+using CTaskListWnd__TaskCreated_t = LONG_PTR(WINAPI*)(PVOID pThis,
+                                                      PVOID taskGroup,
+                                                      PVOID taskItem,
+                                                      int param3);
+CTaskListWnd__TaskCreated_t CTaskListWnd__TaskCreated_Original;
+LONG_PTR WINAPI CTaskListWnd__TaskCreated_Hook(PVOID pThis,
+                                               PVOID taskGroup,
+                                               PVOID taskItem,
+                                               int param3) {
+    Wh_Log(L">");
+
+    auto original = [&]() {
+        return CTaskListWnd__TaskCreated_Original(pThis, taskGroup, taskItem,
+                                                  param3);
+    };
+
+    PVOID pThis_TaskListUI = (BYTE*)pThis + ITaskListUIOffset;
+
+    if (!CTaskListWnd_IsOnPrimaryTaskband_Original(pThis_TaskListUI)) {
+        return original();
+    }
+
+    LONG_PTR ret = original();
+
+    // Check if it exists on the task list.
+    PVOID taskBtnGroup =
+        CTaskListWnd__GetTBGroupFromGroup_Original(pThis, taskGroup, nullptr);
+    if (!taskBtnGroup) {
+        return ret;
+    }
+
+    HandleSuffixedInstanceOnTaskCreated(pThis_TaskListUI, taskGroup);
 
     return ret;
 }
@@ -1075,7 +1252,8 @@ struct SYMBOL_HOOK {
 
 bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
+                 size_t symbolHooksCount,
+                 bool cacheOnly = false) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'#';
     constexpr size_t cacheMaxSize = 10240;
@@ -1229,6 +1407,10 @@ bool HookSymbols(HMODULE module,
 
     Wh_Log(L"Couldn't resolve all symbols from cache");
 
+    if (cacheOnly) {
+        return false;
+    }
+
     WH_FIND_SYMBOL findSymbol;
     HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
     if (!findSymbolHandle) {
@@ -1346,11 +1528,12 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
                                         size_t symbolHooksCount) {
     constexpr WCHAR kModIdForCache[] = L"taskbar-grouping";
 
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+    if (HookSymbols(module, symbolHooks, symbolHooksCount,
+                    /*cacheOnly=*/true)) {
         return true;
     }
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
 
     WCHAR moduleFilePath[MAX_PATH];
     DWORD moduleFilePathLen =
@@ -1405,12 +1588,11 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
 
     auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
+    if (onlineCache) {
+        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    } else {
         Wh_Log(L"Failed to get online cache");
-        return false;
     }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
 
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
@@ -1424,52 +1606,6 @@ bool HookTaskbarSymbols() {
                     LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void) __ptr64)",
                 },
                 (void**)&CTaskGroup_GetNumItems_Original,
-            },
-            {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ * __ptr64,struct _ITEMIDLIST_ABSOLUTE const * __ptr64,unsigned short const * __ptr64,enum WINDOWMATCHCONFIDENCE * __ptr64,struct ITaskItem * __ptr64 * __ptr64) __ptr64)",
-                },
-                (void**)&CTaskGroup_DoesWindowMatch_Original,
-            },
-            {
-                {
-                    LR"(protected: long __cdecl CTaskBand::_MatchWindow(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE,struct ITaskGroup * *,struct ITaskItem * *))",
-                    LR"(protected: long __cdecl CTaskBand::_MatchWindow(struct HWND__ * __ptr64,struct _ITEMIDLIST_ABSOLUTE const * __ptr64,unsigned short const * __ptr64,enum WINDOWMATCHCONFIDENCE,struct ITaskGroup * __ptr64 * __ptr64,struct ITaskItem * __ptr64 * __ptr64) __ptr64)",
-                },
-                (void**)&CTaskBand__MatchWindow_Original,
-            },
-            {
-                {
-                    LR"(protected: void __cdecl CTaskBand::_HandleWindowResolved(struct RESOLVEDWINDOW *))",
-                    LR"(protected: void __cdecl CTaskBand::_HandleWindowResolved(struct RESOLVEDWINDOW * __ptr64) __ptr64)",
-                },
-                (void**)&CTaskBand__HandleWindowResolved_Original,
-                (void*)CTaskBand__HandleWindowResolved_Hook,
-            },
-            {
-                {
-                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW *,struct ITaskListUI *,struct ITaskGroup *,struct ITaskItem *))",
-                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW * __ptr64,struct ITaskListUI * __ptr64,struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
-                },
-                (void**)&CTaskBand__HandleItemResolved_Original,
-                (void*)CTaskBand__HandleItemResolved_Hook,
-            },
-            {
-                {
-                    LR"(private: long __cdecl CTaskBand::CLauncherTask::_Launch(void))",
-                    LR"(private: long __cdecl CTaskBand::CLauncherTask::_Launch(void) __ptr64)",
-                },
-                (void**)&CTaskBand__Launch_Original,
-                (void*)CTaskBand__Launch_Hook,
-            },
-            {
-                {
-                    LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))",
-                    LR"(public: virtual unsigned short const * __ptr64 __cdecl CTaskGroup::GetAppID(void) __ptr64)",
-                },
-                (void**)&CTaskGroup_GetAppID_Original,
-                (void*)CTaskGroup_GetAppID_Hook,
             },
             {
                 {
@@ -1505,6 +1641,59 @@ bool HookTaskbarSymbols() {
                     LR"(public: virtual long __cdecl CTaskGroup::SetTip(unsigned short const * __ptr64) __ptr64)",
                 },
                 (void**)&CTaskGroup_SetTip_Original,
+            },
+            {
+                {
+                    LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))",
+                    LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ * __ptr64,struct _ITEMIDLIST_ABSOLUTE const * __ptr64,unsigned short const * __ptr64,enum WINDOWMATCHCONFIDENCE * __ptr64,struct ITaskItem * __ptr64 * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskGroup_DoesWindowMatch_Original,
+            },
+            {
+                {
+                    LR"(protected: long __cdecl CTaskBand::_MatchWindow(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE,struct ITaskGroup * *,struct ITaskItem * *))",
+                    LR"(protected: long __cdecl CTaskBand::_MatchWindow(struct HWND__ * __ptr64,struct _ITEMIDLIST_ABSOLUTE const * __ptr64,unsigned short const * __ptr64,enum WINDOWMATCHCONFIDENCE,struct ITaskGroup * __ptr64 * __ptr64,struct ITaskItem * __ptr64 * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskBand__MatchWindow_Original,
+            },
+            {
+                {
+                    LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))",
+                    LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void) __ptr64)",
+                },
+                (void**)&CTaskBtnGroup_GetGroupType_Original,
+            },
+            {
+                {
+                    LR"(protected: void __cdecl CTaskBand::_HandleWindowResolved(struct RESOLVEDWINDOW *))",
+                    LR"(protected: void __cdecl CTaskBand::_HandleWindowResolved(struct RESOLVEDWINDOW * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskBand__HandleWindowResolved_Original,
+                (void*)CTaskBand__HandleWindowResolved_Hook,
+            },
+            {
+                {
+                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW *,struct ITaskListUI *,struct ITaskGroup *,struct ITaskItem *))",
+                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW * __ptr64,struct ITaskListUI * __ptr64,struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskBand__HandleItemResolved_Original,
+                (void*)CTaskBand__HandleItemResolved_Hook,
+            },
+            {
+                {
+                    LR"(private: long __cdecl CTaskBand::CLauncherTask::_Launch(void))",
+                    LR"(private: long __cdecl CTaskBand::CLauncherTask::_Launch(void) __ptr64)",
+                },
+                (void**)&CTaskBand__Launch_Original,
+                (void*)CTaskBand__Launch_Hook,
+            },
+            {
+                {
+                    LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))",
+                    LR"(public: virtual unsigned short const * __ptr64 __cdecl CTaskGroup::GetAppID(void) __ptr64)",
+                },
+                (void**)&CTaskGroup_GetAppID_Original,
+                (void*)CTaskGroup_GetAppID_Hook,
             },
             {
                 {
@@ -1606,11 +1795,25 @@ bool HookTaskbarSymbols() {
             },
             {
                 {
-                    LR"(public: long __cdecl CDPA_Base<struct ITaskBtnGroup,class CTContainer_PolicyUnOwned<struct ITaskBtnGroup> >::InsertPtr(int,struct ITaskBtnGroup *,int *))",
-                    LR"(public: long __cdecl CDPA_Base<struct ITaskBtnGroup,class CTContainer_PolicyUnOwned<struct ITaskBtnGroup> >::InsertPtr(int,struct ITaskBtnGroup * __ptr64,int * __ptr64) __ptr64)",
+                    LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))",
+                    LR"(protected: struct ITaskBtnGroup * __ptr64 __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup * __ptr64,int * __ptr64) __ptr64)",
                 },
-                (void**)&ITaskBtnGroup_InsertPtr_Original,
-                (void*)ITaskBtnGroup_InsertPtr_Hook,
+                (void**)&CTaskListWnd__GetTBGroupFromGroup_Original,
+            },
+            {
+                {
+                    LR"(public: virtual int __cdecl CTaskListWnd::IsOnPrimaryTaskband(void))",
+                    LR"(public: virtual int __cdecl CTaskListWnd::IsOnPrimaryTaskband(void) __ptr64)",
+                },
+                (void**)&CTaskListWnd_IsOnPrimaryTaskband_Original,
+            },
+            {
+                {
+                    LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_CreateTBGroup(struct ITaskGroup *,int))",
+                    LR"(protected: struct ITaskBtnGroup * __ptr64 __cdecl CTaskListWnd::_CreateTBGroup(struct ITaskGroup * __ptr64,int) __ptr64)",
+                },
+                (void**)&CTaskListWnd__CreateTBGroup_Original,
+                (void*)CTaskListWnd__CreateTBGroup_Hook,
             },
             {
                 // Available from Windows 11.
@@ -1621,6 +1824,30 @@ bool HookTaskbarSymbols() {
                 (void**)&CTaskBand_HandleTaskGroupSwitchItemAdded_Original,
                 (void*)CTaskBand_HandleTaskGroupSwitchItemAdded_Hook,
                 true,
+            },
+            {
+                // Available from Windows 11.
+                {
+                    LR"(public: virtual void __cdecl CTaskListWnd::GroupChanged(struct ITaskGroup *,enum winrt::WindowsUdk::UI::Shell::TaskGroupProperty))",
+                    LR"(public: virtual void __cdecl CTaskListWnd::GroupChanged(struct ITaskGroup * __ptr64,enum winrt::WindowsUdk::UI::Shell::TaskGroupProperty) __ptr64)",
+                },
+                (void**)&CTaskListWnd_GroupChanged_Original,
+                nullptr,
+                true,
+            },
+            {
+                {
+                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup *))",
+                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskListWnd_HandleTaskGroupPinned_Original,
+            },
+            {
+                {
+                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *,enum HandleTaskGroupUnpinnedFlags))",
+                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup * __ptr64,enum HandleTaskGroupUnpinnedFlags) __ptr64)",
+                },
+                (void**)&CTaskListWnd_HandleTaskGroupUnpinned_Original,
             },
             {
                 // An older variant, see the newer variant below.
@@ -1641,6 +1868,14 @@ bool HookTaskbarSymbols() {
                 (void**)&CTaskListWnd_TaskDestroyed_2_Original,
                 (void*)CTaskListWnd_TaskDestroyed_2_Hook,
                 true,
+            },
+            {
+                {
+                    LR"(protected: long __cdecl CTaskListWnd::_TaskCreated(struct ITaskGroup *,struct ITaskItem *,int))",
+                    LR"(protected: long __cdecl CTaskListWnd::_TaskCreated(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64,int) __ptr64)",
+                },
+                (void**)&CTaskListWnd__TaskCreated_Original,
+                (void*)CTaskListWnd__TaskCreated_Hook,
             },
         };
 
@@ -1774,6 +2009,9 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)kernelBaseCompareStringOrdinal,
                        (void*)CompareStringOrdinal_Hook,
                        (void**)&CompareStringOrdinal_Original);
+
+    Wh_SetFunctionHook((void*)DPA_InsertPtr, (void*)DPA_InsertPtr_Hook,
+                       (void**)&DPA_InsertPtr_Original);
 
     return TRUE;
 }
