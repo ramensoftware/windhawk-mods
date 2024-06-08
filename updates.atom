@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-08T08:24:42.000Z</updated>
+    <updated>2024-06-08T09:47:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.1.4]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#5d1f12d1d984919a764556f139724d8eec004900</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-06-08T09:47:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for using patterns for redirection, where '*' matches any number characters and '?' matches any single character, for example: <code>C:\Programs\Firefox-Version-*\firefox.exe</code>.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.3]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#dd54a40e9c8dd461d01ea9b1ef38bfa9436e533e</id>
@@ -271,19 +280,6 @@ code from the <strong>TranslucentTB</strong> project.</p>]]></content>
         <updated>2024-05-10T11:17:39.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the weather icon disappearing with the new KB5036980 update.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1.2]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#fab76b768b1f821b066113a1334dc8bfcf4cbc43</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-05-08T17:02:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added handling for menus loaded with the <code>LoadMenuW</code> function.</li>
-<li>Added handling for dialogs loaded with the <code>DialogBoxParamW</code>, <code>CreateDialogParamW</code> functions.</li>
-<li>Added handling for images loaded from external files with the <code>LoadImageW</code> function.</li>
-<li>Improved handling for <code>PrivateExtractIconsW</code> when an exact icon size is requested.</li>
-<li>Improved logs.</li>
 </ul>]]></content>
     </entry>
 </feed>

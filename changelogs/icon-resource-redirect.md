@@ -1,3 +1,7 @@
+## 1.1.4 ([Jun 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5d1f12d1d984919a764556f139724d8eec004900/mods/icon-resource-redirect.wh.cpp))
+
+* Added support for using patterns for redirection, where '\*' matches any number characters and '?' matches any single character, for example: `C:\Programs\Firefox-Version-*\firefox.exe`.
+
 ## 1.1.3 ([May 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d70dd616505af63c736c1cad00feb5e2350cba3f/mods/icon-resource-redirect.wh.cpp))
 
 * Hook ANSI variant functions: LoadImageA, LoadIconA, LoadCursorA, LoadBitmapA, LoadMenuA, DialogBoxParamA, CreateDialogParamA, LoadStringA.
