@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-04T10:56:00.000Z</updated>
+    <updated>2024-06-08T08:24:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#dd54a40e9c8dd461d01ea9b1ef38bfa9436e533e</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2024-06-08T08:24:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved handling of pinned items in several cases such as virtual desktop switching and moving items between monitors.</li>
+<li>Made the "Place ungrouped items together" option work on Windows 10.</li>
+<li>Fixed icon not being restored after a window is closed if the "Use window icons" option is enabled.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CE Disable Process Button Flashing 1.0.1]]></title>
         <id>https://windhawk.net/mods/ce-disable-process-button-flashing#a0ca3b1a75a180e115ac1658bab730758723622a</id>
@@ -273,15 +284,6 @@ code from the <strong>TranslucentTB</strong> project.</p>]]></content>
 <li>Added handling for images loaded from external files with the <code>LoadImageW</code> function.</li>
 <li>Improved handling for <code>PrivateExtractIconsW</code> when an exact icon size is requested.</li>
 <li>Improved logs.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Open pinned items with double click 1.0.1]]></title>
-        <id>https://windhawk.net/mods/pinned-items-double-click#544193af43e9c3b22c8442070eed58c7ddb2bd88</id>
-        <link href="https://windhawk.net/mods/pinned-items-double-click"/>
-        <updated>2024-05-04T20:59:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to <a href="https://ramensoftware.com/windhawk-and-symbol-download-errors">the relevant blog post</a>.</li>
 </ul>]]></content>
     </entry>
 </feed>

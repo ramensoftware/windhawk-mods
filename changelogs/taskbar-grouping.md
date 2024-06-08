@@ -1,3 +1,9 @@
+## 1.3.3 ([Jun 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dd54a40e9c8dd461d01ea9b1ef38bfa9436e533e/mods/taskbar-grouping.wh.cpp))
+
+* Improved handling of pinned items in several cases such as virtual desktop switching and moving items between monitors.
+* Made the "Place ungrouped items together" option work on Windows 10.
+* Fixed icon not being restored after a window is closed if the "Use window icons" option is enabled.
+
 ## 1.3.2 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/63c5908556e699a14f3e007e9a7e709745f33224/mods/taskbar-grouping.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
