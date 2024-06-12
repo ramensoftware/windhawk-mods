@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-08T15:06:56.000Z</updated>
+    <updated>2024-06-12T11:09:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#3fe4bb2e2b2b6ea124b622c91bfee9350b7ab2c7</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2024-06-12T11:09:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="verticaltaskbarforwindows11">Vertical Taskbar for Windows 11</h1>
+<p>Finally, the missing vertical taskbar option for Windows 11!</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>The mod was designed for up-to-date Windows 11 versions 22H2 and 23H2. Other
+versions weren't tested and are probably not compatible.</p>
+<p>Some of the other taskbar mods, such as <a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height and icon
+size</a>, aren't compatible with this
+mod.</p>
+<h2 id="funding">Funding</h2>
+<p>The development of this mod was funded by <a href="https://authlite.com/">AuthLite LLC</a>.
+Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
+<p><img src="https://i.imgur.com/BxQMy5K.png" alt="Screenshot" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.6.1]]></title>
         <id>https://windhawk.net/mods/aerexplorer#3ffd256e00086a152824bfc867257abd31545083</id>
@@ -205,79 +223,5 @@ modern styled folder picker dialog, which is easier to navigate.</p>
 <p>If Windows is unable to find the program/file/directory you enter in Run, then it shows the following error message:
 <img src="https://i.imgur.com/2M9szrY.png" alt="Screenshot" /></p>
 <p>This mod suppresses this error message. Additionally, you can also choose to automatically close the Run box when an error occurs, which by default the Run box would just reopen.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.0]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#3f97fef9c8b453dfee716aab2e50a636f04234fd</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2024-05-11T14:04:33.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11notificationcenterstyler">Windows 11 Notification Center Styler</h1>
-<p>An advanced mod to override style attributes of the notification center and
-calendar.</p>
-<p><strong>Note</strong>: This mod requires Windhawk v1.4 or later.</p>
-<p>Also check out the <strong>Windows 11 Taskbar Styler</strong>, <strong>Windows 11 Start Menu
-Styler</strong> mods.</p>
-<h2 id="examples">Examples</h2>
-<h3 id="hidethefocusassistsection">Hide the focus assist section</h3>
-<p><strong>Target</strong>: <code>ActionCenter.FocusSessionControl</code><br />
-<strong>Style</strong>: <code>Height=0</code></p>
-<h3 id="squarethecornersofthenotificationcenter">Square the corners of the notification center</h3>
-<p><strong>Target</strong>: <code>Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid</code><br />
-<strong>Style</strong>: <code>CornerRadius=0</code></p>
-<h3 id="squarethecornersofthecalendar">Square the corners of the calendar</h3>
-<p><strong>Target</strong>: <code>Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid</code><br />
-<strong>Style</strong>: <code>CornerRadius=0</code></p>
-<h3 id="squarethecornersofthequickactioncenter">Square the corners of the quick action center</h3>
-<p><strong>Target</strong>: <code>Windows.UI.Xaml.Controls.Grid#ControlCenterRegion</code><br />
-<strong>Style</strong>: <code>CornerRadius=0</code></p>
-<h3 id="calendarandnotificationtitlebarstitlesontherightbuttonsontheleft">Calendar and notification titlebars: titles on the right, buttons on the left</h3>
-<p><strong>Target</strong>: <code>Windows.UI.Xaml.Controls.Grid#RootContent</code><br />
-<strong>Style</strong>: <code>FlowDirection=1</code></p>
-<h3 id="addacceleratorkeyaltxtoclearallnotifications">Add accelerator key (ALT+X) to clear all notifications</h3>
-<p><strong>Target</strong>: <code>Windows.UI.Xaml.Controls.Button#ClearAll</code><br />
-<strong>Style</strong>: <code>AccessKey=x</code></p>
-<h3 id="addacceleratorkeyaltetoexpandcollapsethecalendar">Add accelerator key (ALT+E) to expand/collapse the calendar</h3>
-<p><strong>Target</strong>: <code>Windows.UI.Xaml.Controls.Button#ExpandCollapseButton</code><br />
-<strong>Style</strong>: <code>AccessKey=e</code></p>
-<h2 id="advancedstyling">Advanced styling</h2>
-<p>The settings have two sections: control styles and resource
-variables. Control styles allow to override styles, such as size and color, for
-the target elements. Resource variables allow to override predefined variables.
-For a more detailed explanation and examples, refer to the sections below.</p>
-<p>The <a href="https://ramensoftware.com/uwpspy">UWPSpy</a> tool can be used to inspect the
-notification center control elements in real time, and experiment with various styles.</p>
-<h3 id="controlstyles">Control styles</h3>
-<p>Each entry has a target control and a list of styles.</p>
-<p>The target control is written as <code>Class</code> or <code>Class#Name</code>, i.e. the target
-control class name (the tag name in XAML resource files), such as
-<code>ActionCenter.FocusSessionControl</code> or <code>Rectangle</code>, optionally followed by <code>#</code> and the
-target control's name (<code>x:Name</code> attribute in XAML resource files). The target
-control can also include:</p>
-<ul>
-<li>Child control index, for example: <code>Class#Name[2]</code> will only match the relevant
-control that's also the second child among all of its parent's child controls.</li>
-<li>Control properties, for example:
-<code>Class#Name[Property1=Value1][Property2=Value2]</code>.</li>
-<li>Parent controls, separated by <code>&gt;</code>, for example: <code>ParentClass#ParentName &gt;
-Class#Name</code>.</li>
-<li>Visual state group name, for example: <code>Class#Name@VisualStateGroupName</code>. It
-can be specified for the target control or for a parent control, but can be
-specified only once per target. The visual state group can be used in styles
-as specified below.</li>
-</ul>
-<p><strong>Note</strong>: The target is evaluated only once. If, for example, the index or the
-properties of a control change, the target conditions aren't evaluated again.</p>
-<p>Each style is written as <code>Style=Value</code>, for example: <code>Height=5</code>. The <code>:=</code> syntax
-can be used to use XAML syntax, for example: <code>Fill:=&lt;SolidColorBrush
-Color="Red"/&gt;</code>. In addition, a visual state can be specified as following:
-<code>Style@VisualState=Value</code>, in which case the style will only apply when the
-visual state group specified in the target matches the specified visual state.</p>
-<h3 id="resourcevariables">Resource variables</h3>
-<p>Some variables, such as size and padding for various controls, are defined as
-resource variables.</p>
-<h2 id="implementationnotes">Implementation notes</h2>
-<p>The VisualTreeWatcher implementation is based on the
-<a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
-code from the <strong>TranslucentTB</strong> project.</p>]]></content>
     </entry>
 </feed>
