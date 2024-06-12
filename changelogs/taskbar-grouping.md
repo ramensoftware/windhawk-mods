@@ -1,3 +1,7 @@
+## 1.3.4 ([Jun 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2b6d67dad8cc2a2eb66f52202f7e0495252e8921/mods/taskbar-grouping.wh.cpp))
+
+* Fixed the "Pinned items remain in place" pinned items modes, for which the pinned items disappeared when running the program.
+
 ## 1.3.3 ([Jun 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dd54a40e9c8dd461d01ea9b1ef38bfa9436e533e/mods/taskbar-grouping.wh.cpp))
 
 * Improved handling of pinned items in several cases such as virtual desktop switching and moving items between monitors.

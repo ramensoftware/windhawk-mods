@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-12T11:09:34.000Z</updated>
+    <updated>2024-06-12T13:47:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#2b6d67dad8cc2a2eb66f52202f7e0495252e8921</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2024-06-12T13:47:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the "Pinned items remain in place" pinned items modes, for which the pinned items disappeared when running the program.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#3fe4bb2e2b2b6ea124b622c91bfee9350b7ab2c7</id>
@@ -212,16 +221,5 @@ modern styled folder picker dialog, which is easier to navigate.</p>
 <li>Added a new scroll area option: The taskbar without the notification area.</li>
 <li>On new Windows 11 versions, consider the clock on secondary taskbars as a notification area.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Suppress Run Box Error Message 1.0.0]]></title>
-        <id>https://windhawk.net/mods/suppress-run-box-error-message#a4409d8641233d1e7dc9290ef69213efee1dec77</id>
-        <link href="https://windhawk.net/mods/suppress-run-box-error-message"/>
-        <updated>2024-05-26T16:52:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="suppressrunboxerrormessage">Suppress Run Box Error Message</h1>
-<p>Prevents the error message from opening if invalid input is entered into the Run box</p>
-<p>If Windows is unable to find the program/file/directory you enter in Run, then it shows the following error message:
-<img src="https://i.imgur.com/2M9szrY.png" alt="Screenshot" /></p>
-<p>This mod suppresses this error message. Additionally, you can also choose to automatically close the Run box when an error occurs, which by default the Run box would just reopen.</p>]]></content>
     </entry>
 </feed>
