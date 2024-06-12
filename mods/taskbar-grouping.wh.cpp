@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.3
+// @version         1.3.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1137,6 +1137,10 @@ LONG_PTR WINAPI CTaskListWnd__TaskCreated_Hook(PVOID pThis,
         return CTaskListWnd__TaskCreated_Original(pThis, taskGroup, taskItem,
                                                   param3);
     };
+
+    if (g_settings.pinnedItemsMode != PinnedItemsMode::replace) {
+        return original();
+    }
 
     PVOID pThis_TaskListUI = (BYTE*)pThis + ITaskListUIOffset;
 
