@@ -139,6 +139,30 @@
                 "version": "1.0"
             }
         },
+        "change-explorer-default-location": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1718734451000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1718734451000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lshell32",
+                "description": "Allows you to change what shell location or directory Explorer starts in.",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Change Explorer Default Location",
+                "version": "1.0.0"
+            }
+        },
         "chrome-ui-tweaks": {
             "details": {
                 "defaultSorting": 840,

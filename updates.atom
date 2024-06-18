@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-18T17:50:38.000Z</updated>
+    <updated>2024-06-18T18:14:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Change Explorer Default Location 1.0.0]]></title>
+        <id>https://windhawk.net/mods/change-explorer-default-location#7e213cbdc94ce26de846f6eddb3290d915a35908</id>
+        <link href="https://windhawk.net/mods/change-explorer-default-location"/>
+        <updated>2024-06-18T18:14:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="changeexplorerdefaultlocation">Change Explorer Default Location</h1>
+<p>This mod allows you to change the shell location or directory where Explorer starts.
+The directory can be either a regular path, or a shell location. A list of CLSIDs
+for shell locations in Windows 10 can be found
+<a href="https://www.tenforums.com/tutorials/3123-clsid-key-guid-shortcuts-list-windows-10-a.html">here</a>.</p>
+<p>Shell locations must be prefixed with <code>shell:::</code> (e.g. <code>shell:::{031E4825-7B94-4dc3-B131-E946B44C8DD5}</code>).</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Open With - Remove Microsoft Store Menu Item 1.0.0]]></title>
         <id>https://windhawk.net/mods/remove-ms-store-open-with#5d19436db760d33ed22329a199902e1f431c8000</id>
@@ -207,16 +219,6 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
 <li>Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.</li>
 <li>Added a workaround for setting FontWeight which didn't work.</li>
 <li>Fixed null property value handling which could cause a crash.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1.3]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#d70dd616505af63c736c1cad00feb5e2350cba3f</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-05-27T19:42:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hook ANSI variant functions: LoadImageA, LoadIconA, LoadCursorA, LoadBitmapA, LoadMenuA, DialogBoxParamA, CreateDialogParamA, LoadStringA.</li>
-<li>In case multiple icons are extracted and the custom resource only overrides some of them, return the original icons. We'd ideally like to return a combined result, but unfortunately that's not trivial to implement, and returning the original icons is better than returning a partial result.</li>
 </ul>]]></content>
     </entry>
 </feed>
