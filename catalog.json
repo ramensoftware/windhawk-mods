@@ -1663,6 +1663,27 @@
                 "version": "1.0"
             }
         },
+        "remove-ms-store-open-with": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1718733038000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1718733038000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lshell32",
+                "description": "Removes the \"Search with Microsoft Store\" menu item from the \"Open with\" submenu",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Open With - Remove Microsoft Store Menu Item",
+                "version": "1.0.0"
+            }
+        },
         "ribbon-caption-icon-fix": {
             "details": {
                 "defaultSorting": 1780,

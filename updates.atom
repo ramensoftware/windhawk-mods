@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-18T17:16:31.000Z</updated>
+    <updated>2024-06-18T17:50:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Open With - Remove Microsoft Store Menu Item 1.0.0]]></title>
+        <id>https://windhawk.net/mods/remove-ms-store-open-with#5d19436db760d33ed22329a199902e1f431c8000</id>
+        <link href="https://windhawk.net/mods/remove-ms-store-open-with"/>
+        <updated>2024-06-18T17:50:38.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="openwithremovemicrosoftstoremenuitem">Open With - Remove Microsoft Store Menu Item</h1>
+<p>This mod removes the "Search with Microsoft Store" item from the "Open with"
+submenu in File Explorer. The item is unremovable by normal means (MUI/registry
+editing).</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.1]]></title>
         <id>https://windhawk.net/mods/classic-browser-fix#1ccf94fa2ad58436e5fdbcaa5ec1f77d23bd50e3</id>
@@ -204,18 +218,5 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
 <li>Hook ANSI variant functions: LoadImageA, LoadIconA, LoadCursorA, LoadBitmapA, LoadMenuA, DialogBoxParamA, CreateDialogParamA, LoadStringA.</li>
 <li>In case multiple icons are extracted and the custom resource only overrides some of them, return the original icons. We'd ideally like to return a combined result, but unfortunately that's not trivial to implement, and returning the original icons is better than returning a partial result.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modernize Folder Picker Dialog 1.0.0]]></title>
-        <id>https://windhawk.net/mods/modernize-folder-picker-dialog#8db14bfb508a52cc7652ad6fff42373baf3c4a20</id>
-        <link href="https://windhawk.net/mods/modernize-folder-picker-dialog"/>
-        <updated>2024-05-27T18:42:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="modernizefolderpickerdialog">Modernize Folder Picker Dialog</h1>
-<p>This mod replaces the outdated, hard-to-use "Browse For Folder" dialog with a
-modern styled folder picker dialog, which is easier to navigate.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/modernize-folder-picker-dialog-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/modernize-folder-picker-dialog-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
