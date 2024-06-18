@@ -195,7 +195,7 @@
                 "published": 1706897392000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1706897392000,
+                "updated": 1718730991000,
                 "users": 65
             },
             "metadata": {
@@ -207,10 +207,11 @@
                     "msedge.exe",
                     "chrome.exe",
                     "chromium.exe",
+                    "Skype.exe",
                     "steam.exe"
                 ],
                 "name": "Fix browsers for Windows Classic theme",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "classic-conhost": {
