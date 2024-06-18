@@ -17,7 +17,13 @@ This mod removes the "Search with Microsoft Store" item from the "Open with"
 submenu in File Explorer. The item is unremovable by normal means (MUI/registry
 editing).
 
-**Before**
+**Before**:
+
+![Before](https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-before.png)
+
+**After**:
+
+![After](https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-after.png)
 */
 // ==/WindhawkModReadme==
 
