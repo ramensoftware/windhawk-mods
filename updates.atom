@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-18T18:14:11.000Z</updated>
+    <updated>2024-06-19T13:01:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win7 Disable Composition for process 1.0]]></title>
+        <id>https://windhawk.net/mods/win7-dwm-disable#0372b9ba0a24d011c0862fc15e9530f58d9e36d9</id>
+        <link href="https://windhawk.net/mods/win7-dwm-disable"/>
+        <updated>2024-06-19T13:01:17.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod lets you disable DWM desktop composition when you run a certain program.</p>
+<p>It acts the same as the "Disable desktop composition" option in the Compatibility tab, however this can be used for 64-bit programs as well.</p>
+<p>To include a program to be affected by the mod, use the process inclusion option on the Advanced tab.</p>
+<p>NOTE: If your program re-enables DWM composition by itself (for example, OBS versions that support turning it off via the program), it will not work</p>
+<p>Example with Notepad:</p>
+<p><img src="https://i.imgur.com/4O06W7H.png" alt="Notepad" /></p>
+<p>IMPORTANT: This mod is only for actual Windows 7, it will not work on newer versions</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Change Explorer Default Location 1.0.0]]></title>
         <id>https://windhawk.net/mods/change-explorer-default-location#7e213cbdc94ce26de846f6eddb3290d915a35908</id>
@@ -206,19 +219,6 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
 <li>Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.</li>
 <li>Added a workaround for setting FontWeight which didn't work.</li>
 <li>Fixed the mod not working until some settings are changed.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.3]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#09a45ac4d6daf121bc16d69a7c961f8be0405d07</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2024-05-27T20:21:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the TranslucentStartMenu theme.</li>
-<li>Made styles defined later override styles defined earlier.</li>
-<li>Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.</li>
-<li>Added a workaround for setting FontWeight which didn't work.</li>
-<li>Fixed null property value handling which could cause a crash.</li>
 </ul>]]></content>
     </entry>
 </feed>

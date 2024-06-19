@@ -2497,6 +2497,24 @@
                 "version": "1.0.0"
             }
         },
+        "win7-dwm-disable": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1718802077000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1718802077000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Jevil7452",
+                "compilerOptions": "-ldwmapi",
+                "description": "Disables desktop composition when a certain process is running",
+                "github": "https://github.com/Jevil7452",
+                "name": "Win7 Disable Composition for process",
+                "version": "1.0"
+            }
+        },
         "windows-11-notification-center-styler": {
             "details": {
                 "defaultSorting": 1280,
