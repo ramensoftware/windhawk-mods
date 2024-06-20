@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-19T13:01:17.000Z</updated>
+    <updated>2024-06-20T13:36:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SecureBoot Warning Watermark Enabler 1]]></title>
+        <id>https://windhawk.net/mods/isretailready-false#e17e347378ee1bfe0d7012674829724e70fe1cd8</id>
+        <link href="https://windhawk.net/mods/isretailready-false"/>
+        <updated>2024-06-20T13:36:51.000Z</updated>
+        <content type="html"><![CDATA[<p>Certain versions of Windows starting with 8 have code for a SecureBoot watermark, which is usually hidden in normal circumstances, even if SecureBoot is off. It can be forcefully enabled by making a function (CDesktopWatermark::s_IsRetailReady) return false.
+<img src="https://i.imgur.com/k0giME6.png" alt="Watermark" /></p>
+<p>It may not work with all versions of Windows.</p>
+<p>Tested on:</p>
+<ul>
+<li>1703 (Windhawk Mod) - worked fine</li>
+<li>1803 (shell32.dll patch) - worked fine</li>
+<li>1809 (Windhawk Mod) - worked fine</li>
+<li>21H2 (Windhawk Mod) - the watermark enabled but the warning wasn't there - missing text resources?</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win7 Disable Composition for process 1.0]]></title>
         <id>https://windhawk.net/mods/win7-dwm-disable#0372b9ba0a24d011c0862fc15e9530f58d9e36d9</id>
@@ -208,17 +224,5 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
 <p>This mod automatically trims whitespace on RegEdit's navigation bar.</p>
 <p>If there is leading whitespace in the key entered in the navigation bar, then RegEdit doesn't navigate to the key and instead plays a beep sound.</p>
 <p>This causes frustration when pasting a key into the navigation bar which has leading whitespace in it. This mod fixes that by automatically trimming the whitespace.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.0.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#0959f2f57a96dae3785498c063209383ab6b8bdb</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2024-05-27T20:28:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Made styles defined later override styles defined earlier.</li>
-<li>Empty values are now allowed. Setting an empty value with the XAML syntax clears the property value.</li>
-<li>Added a workaround for setting FontWeight which didn't work.</li>
-<li>Fixed the mod not working until some settings are changed.</li>
-</ul>]]></content>
     </entry>
 </feed>

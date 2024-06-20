@@ -1146,6 +1146,26 @@
                 "version": "1.0.0"
             }
         },
+        "isretailready-false": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1718890611000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1718890611000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Jevil7452",
+                "description": "Enables the normally hidden \"SecureBoot isn't configured correctly\" watermark",
+                "github": "https://github.com/Jevil7452",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "SecureBoot Warning Watermark Enabler",
+                "version": "1"
+            }
+        },
         "legacy-file-copy": {
             "details": {
                 "defaultSorting": 7550,
