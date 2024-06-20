@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.6.1
+// @version         1.6.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -1056,7 +1056,7 @@ bool THISCALL CShellBrowser__ShouldShowRibbon_hook(
 #   define IShellBrowser_IShellItem(pThis) *((IShellItem **)pThis + 47)
 #endif
 
-/* Get the pointer to a navbar from an Explorer window */
+/* Is the Ribbon visible? */
 bool ExplorerHasRibbon(HWND hWnd)
 {
     if (GetParent(hWnd))
@@ -1224,7 +1224,28 @@ LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
     );
 }
 
-#pragma endregion
+#ifdef _WIN64
+#   define CNscTree_Indent(pThis)  *((DWORD *)pThis + 116)
+#else
+#   define CNscTree_Indent(pThis)  *((DWORD *)pThis + 75)
+#endif
+
+void *CNscTree_ScaleAndSetIndent_addr SHARED_SECTION = nullptr;
+void (THISCALL *CNscTree_ScaleAndSetIndent_orig)(void *);
+void THISCALL CNscTree_ScaleAndSetIndent_hook(
+    void *pThis
+)
+{
+    /* It's inaccurate in Vista but changing this value doesn't
+       seem to do anything there */
+    if (settings.npst == NPST_SEVEN)
+    {
+        CNscTree_Indent(pThis) = 10;
+    }
+    CNscTree_ScaleAndSetIndent_orig(pThis);
+}
+
+#pragma endregion // ""Old navigation pane sizing""
 
 #pragma region "Navbar glass"
 
@@ -1258,7 +1279,6 @@ void CNavBar__UpdateGlass(void *pThis)
 
                 if (rc.top == 0 || rc.top == captionHeight)
                 {
-                    Wh_Log(L"Extending.");
                     MARGINS mrg = { 0 };
                     mrg.cyTopHeight = rc.bottom;
                     DwmExtendFrameIntoClientArea_orig(
@@ -1338,9 +1358,6 @@ LRESULT CALLBACK CNavBar_s_SizableWndProc_hook(
         hWnd, uMsg, wParam, lParam
     );
 
-    // if (uMsg == 0x41f)
-    //     Wh_Log(L"0x%X, %d, %d", uMsg, wParam, lParam);
-
     if (settings.navbarglass)
     {
         void *pThis = (void *)GetWindowLongPtrW(hWnd, 0);
@@ -1394,15 +1411,6 @@ LRESULT CALLBACK RebarSubclassWndProc(
         if (uMsg == WM_PAINT)
         {
             EndPaint(hWnd, &ps);
-        }
-
-        if (uMsg == WM_PAINT)
-        {
-            Wh_Log(L"WM_PAINT %d", ExplorerHasRibbon(hWnd));
-        }
-        else if (uMsg == WM_ERASEBKGND)
-        {
-            Wh_Log(L"WM_ERASEBKGND %d", ExplorerHasRibbon(hWnd));
         }
 
         return 0;
@@ -1926,8 +1934,6 @@ HRESULT STDCALL CShellBrowser_GetFolderFlags_hook(
     FOLDERFLAGS *pfolderFlags
 )
 {
-    Wh_Log(L"CShellBrowser::GetFolderFlags(this = %p)", pThis);
-    Wh_Log(L"getfolderflags");
     HRESULT hr = CShellBrowser_GetFolderFlags_orig(pThis, pfolderMask, pfolderFlags);
     if (SUCCEEDED(hr) && settings.colheaders)
     {
@@ -1981,8 +1987,6 @@ void STDCALL CShellBrowser___OnRibbonVisibilityChange_hook(void *pThis, int newS
     // We want to get the window of the shell browser, which is the DUIViewWndClassName
     // inside of the explorer window.
     HWND hWnd = CShellBrowser_Window(pThis);
-
-    Wh_Log(L"CShellBrowser::OnRibbonVisibilityChange: HWND = %p", hWnd);
 
     HWND hWndExplorerRoot = GetAncestor(hWnd, GA_ROOTOWNER);
     HWND hWndWorkerW = FindWindowExW(hWndExplorerRoot, NULL, L"WorkerW", NULL);
@@ -2827,6 +2831,17 @@ BOOL Wh_ModInit(void)
             CNscTree_s_SubClassTreeWndProc_hook,
             false,
             &CNscTree_s_SubClassTreeWndProc_addr
+        },
+        {
+            {
+                L"private: void "
+                STHISCALL
+                L" CNscTree::ScaleAndSetIndent(void)"
+            },
+            &CNscTree_ScaleAndSetIndent_orig,
+            CNscTree_ScaleAndSetIndent_hook,
+            false,
+            &CNscTree_ScaleAndSetIndent_addr
         },
         {
             {
