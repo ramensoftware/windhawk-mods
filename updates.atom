@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-20T13:36:51.000Z</updated>
+    <updated>2024-06-20T18:19:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.6.2]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#6c9a8296166542e539dc0166b6310b516b19e39c</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2024-06-20T18:19:16.000Z</updated>
+        <content type="html"><![CDATA[<p>Navigation pane accuracy fixes for Windows 7 style, code cleanup</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SecureBoot Warning Watermark Enabler 1]]></title>
         <id>https://windhawk.net/mods/isretailready-false#e17e347378ee1bfe0d7012674829724e70fe1cd8</id>
@@ -214,15 +221,5 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
         <updated>2024-05-30T19:32:04.000Z</updated>
         <content type="html"><![CDATA[<h1 id="regeditfixcopykeyname">RegEdit Fix "Copy Key Name"</h1>
 <p>Makes the "Copy Key Name" context menu option actually copy the name of the key instead of the path.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[RegEdit Auto Trim Whitespace on Navigation Bar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/regedit-auto-trim-whitespace-on-navigation-bar#2a4aa41254ca603eb67ac75f827f2965d65d0a1f</id>
-        <link href="https://windhawk.net/mods/regedit-auto-trim-whitespace-on-navigation-bar"/>
-        <updated>2024-05-30T19:30:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="regeditautotrimwhitespaceonnavigationbar">RegEdit Auto Trim Whitespace on Navigation Bar</h1>
-<p>This mod automatically trims whitespace on RegEdit's navigation bar.</p>
-<p>If there is leading whitespace in the key entered in the navigation bar, then RegEdit doesn't navigate to the key and instead plays a beep sound.</p>
-<p>This causes frustration when pasting a key into the navigation bar which has leading whitespace in it. This mod fixes that by automatically trimming the whitespace.</p>]]></content>
     </entry>
 </feed>

@@ -1,3 +1,7 @@
+## 1.6.2 ([Jun 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6c9a8296166542e539dc0166b6310b516b19e39c/mods/aerexplorer.wh.cpp))
+
+Navigation pane accuracy fixes for Windows 7 style, code cleanup
+
 ## 1.6.1 ([Jun 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3ffd256e00086a152824bfc867257abd31545083/mods/aerexplorer.wh.cpp))
 
 Aerexplorer 1.6.1: Merge isCplHooks into efHooks

@@ -32,7 +32,7 @@
                 "published": 1713177639000,
                 "rating": 10,
                 "ratingUsers": 8,
-                "updated": 1717859216000,
+                "updated": 1718907556000,
                 "users": 564
             },
             "metadata": {
@@ -44,7 +44,7 @@
                     "*"
                 ],
                 "name": "Aerexplorer",
-                "version": "1.6.1"
+                "version": "1.6.2"
             }
         },
         "aero-flyout-fix": {
