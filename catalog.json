@@ -78,7 +78,7 @@
                 "published": 1702929559000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1702935895000,
+                "updated": 1718988570000,
                 "users": 515
             },
             "metadata": {
@@ -93,7 +93,7 @@
                     "explorer.exe"
                 ],
                 "name": "Aero Tray",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "ce-disable-process-button-flashing": {
