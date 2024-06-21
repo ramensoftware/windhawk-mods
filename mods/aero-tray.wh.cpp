@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              aero-tray
-// @name            Aero Tray
+// @name            Aero Tray 
 // @description     Restores Windows 7/8 tray overflow
-// @version         1.0.1
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -947,6 +947,7 @@ const WindhawkUtils::SYMBOL_HOOK hooks[] = {
 };
 
 LPCWSTR SIB_PATH = L"%PROGRAMFILES(X86)%\\StartIsBack\\StartIsBack64.dll";
+LPCWSTR SIB_PATH_USER = L"%LOCALAPPDATA%\\StartIsBack\\StartIsBack64.dll";
 
 BOOL Wh_ModInit(void)
 {
@@ -956,6 +957,13 @@ BOOL Wh_ModInit(void)
     ExpandEnvironmentStringsW(SIB_PATH, szSIBPath, MAX_PATH);
 
     HMODULE hSib = LoadLibraryW(szSIBPath);
+    if (!hSib)
+    {
+        WCHAR szUserSIBPath[MAX_PATH];
+        ExpandEnvironmentStringsW(SIB_PATH_USER, szUserSIBPath, MAX_PATH);
+        hSib = LoadLibraryW(szUserSIBPath);
+    }
+
     if (hSib)
     {
         PatchStartIsBack(hSib);
