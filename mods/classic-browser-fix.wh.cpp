@@ -2,8 +2,8 @@
 // @id              classic-browser-fix
 // @name            Fix browsers for Windows Classic theme
 // @description     Forces the border from Aero Light theme to fix glitched border in Classic theme
-// @version         1.1
-// @author 			Anixx
+// @version         1.2
+// @author 			Anixx, levitation
 // @github 			https://github.com/Anixx
 // @include         msedge.exe
 // @include         chrome.exe
@@ -29,6 +29,6 @@ which fixes their glitches when using Windows Classic theme.
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
-    SetThemeAppProperties(0);
+    SetThemeAppProperties(STAP_ALLOW_CONTROLS);       //Without the STAP_ALLOW_CONTROLS flag the file save dialog fails to open.
     return TRUE;
 }
