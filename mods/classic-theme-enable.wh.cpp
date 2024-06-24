@@ -3,7 +3,7 @@
 // @name            Enable Classic Theme by handle method
 // @description     Disables theming by closing the handle
 // @version         1.2.0
-// @author          Anixx, levitation
+// @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
 // @compilerOptions -lntdll -lwtsapi32
@@ -60,6 +60,7 @@ more classic, particularly, the *Enable SysListView32* mod and *Classic Taskbar 
 
 ![Windows Classic](https://i.imgur.com/gB7mwpp.png)
 
+Authors: Anixx, levitation
 */
 // ==/WindhawkModReadme==
 
