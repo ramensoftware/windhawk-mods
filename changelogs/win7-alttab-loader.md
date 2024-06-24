@@ -1,3 +1,14 @@
+## 1.0.2 ([Jun 24, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5ba4de576191570cfd6748518b3ed427391181d0/mods/win7-alttab-loader.wh.cpp))
+
+- Remove misinformation about Windows 10 AltTab.dll
+- Better theming recommendations
+  - Link to a theme *not* made by Alcatel
+  - Suggest better tools for theme editing; WSB was necessary at the time
+  because this was all pretty new, but now most Windows 7 themes will come
+  with the AltTab class and can be used as a base.
+- I also updated the images (the DWM one now shows glass), but that is on
+a seperate repository.
+
 ## 1.0.1 ([Aug 8, 2023](https://github.com/ramensoftware/windhawk-mods/blob/f960450eb653d48c9ab3177e706b93b59a4e8394/mods/win7-alttab-loader.wh.cpp))
 
 * Update README to link to more proper theme

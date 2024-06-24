@@ -2476,7 +2476,7 @@
                 "published": 1690590362000,
                 "rating": 9,
                 "ratingUsers": 2,
-                "updated": 1691529954000,
+                "updated": 1719198375000,
                 "users": 277
             },
             "metadata": {
@@ -2491,7 +2491,7 @@
                     "explorer.exe"
                 ],
                 "name": "Windows 7 Alt+Tab Loader",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "win7-command-bar": {
