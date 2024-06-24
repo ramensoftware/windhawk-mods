@@ -2,7 +2,7 @@
 // @id              win7-alttab-loader
 // @name            Windows 7 Alt+Tab Loader
 // @description     Loads Windows 7 Alt+Tab on Windows 10.
-// @version         1.0.1
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -17,10 +17,10 @@ This mod allows the Windows 7 Alt+Tab UI to work on Windows 10.
 
 # ⚠ IMPORTANT: PREREQUISITES! ⚠
 - You will need a copy of `AltTab.dll` from Windows 7 (x64). Once you have this, drop it into `C:\Windows`.
-  - **DO NOT DROP IT INTO `C:\Windows\System32`!!!!!!!! THIS WILL REPLACE THE WINDOWS 10 VERSION OF `AltTab.dll` AND CAN POTENTIALLY BREAK THINGS!!!!!!!!**
 - You will also need an msstyles theme with a proper `AltTab` class, or else it will not render properly (Windows 3.x System font, weird looking selection, transparent background on basic theme)
-  - [Here is a Windows 7 theme with proper classes.](https://windows7themenew2.carrd.co/)
-  - You can make one with Windows Style Builder, which allows you to add classes to msstyles.
+  - [Here is a Windows 7 theme with proper classes.](https://www.deviantart.com/vaporvance/art/Aero10-for-Windows-10-1903-22H2-909711949)
+  - You can make one with Windows Style Builder, which allows you to add classes to theme, or you can base on one that already does, and edit using
+  msstyleEditor (recommended).
 - Once you have all these and install this mod, you will need to restart `explorer.exe` for the Windows 7 Alt+Tab UI to load.
   - You will also need to restart `explorer.exe` to apply any new settings.
 
