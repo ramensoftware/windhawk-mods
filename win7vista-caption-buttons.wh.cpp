@@ -1,18 +1,22 @@
 // ==WindhawkMod==
-// @id				project-longhorn-caption-buttons
-// @name 			Restore Windows 7/Vista Caption Buttons for Project: Longhorn
-// @description		This mod is used by Project: Longhorn to have windows vista styled caption buttons.
+// @id				win7vista-caption-buttons
+// @name 			Restore Windows 7/Vista Caption Buttons.
+// @description			this mod allows windows vista styled caption buttons.
 // @version			0.1
 // @author			PepperMarioYT
 // @github			https://github.com/PepperMarioYT
 // @include			dwm.exe
-// @architecture	x86-64
+// @architecture		x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # The leaker known as ImSwordQueen. The leaker of mods while sleeping
 ## I, PepperMarioYT did not create this mod, instead it was created by Dulappy (https://github.com/Dulappy), i just modified it for Project Longhorn
+##### Modified: enabled Vista caption buttons by default.
+##### supports: only supports Vanadium, recconended 21H2
+##### This does not include aero, you need the Aero10 Theme
+##### add dwm.exe to the inclusion list
 */
 // ==/WindhawkModReadme==
 
@@ -22,8 +26,8 @@
   $name: Divisor
   $description: The divisor in CTopLevelWindow_UpdateNCAreaButton_Hook (default 21)
 - VistaMaximize: true
-  $name: Vista/Project: Longhorn caption style
-  $description: At 96dpi, add 1 pixel to the width of the Maximize/Restore button and subtracts 1 pixel from the button height, Project: Longhorn has it on at default.
+  $name: Vista caption style
+  $description: At 96dpi, add 1 pixel to the width of the Maximize/Restore button and subtracts 1 pixel from the button height.
 */
 // ==/WindhawkModSettings==
 
