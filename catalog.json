@@ -96,6 +96,30 @@
                 "version": "1.0.2"
             }
         },
+        "basic-themer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1719423839000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1719423839000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-ldwmapi -lwtsapi32",
+                "description": "Applies the Windows Basic theme to desktop windows",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "dwm.exe"
+                ],
+                "name": "Basic Themer",
+                "version": "1.0.0"
+            }
+        },
         "ce-disable-process-button-flashing": {
             "details": {
                 "defaultSorting": 9,

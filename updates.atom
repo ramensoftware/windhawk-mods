@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-26T15:38:20.000Z</updated>
+    <updated>2024-06-26T17:43:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Basic Themer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/basic-themer#406c4f97e1c979c85e91af3bd524248437120603</id>
+        <link href="https://windhawk.net/mods/basic-themer"/>
+        <updated>2024-06-26T17:43:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="basicthemer">Basic Themer</h1>
+<p>This mod applies non-DWM frames (Windows Basic theme) to desktop windows when DWM is
+enabled.</p>
+<h1 id="importantread">IMPORTANT: READ!</h1>
+<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
+Settings, Advanced settings, More advanced settings, and make sure that
+<code>dwm.exe</code> is in the Process inclusion list.</p>
+<h2 id="applicationissues">Application issues</h2>
+<p>Certain issues with applications (e.g. Ribbon applications) may arise when using this
+mod. This is because these applications still believe that DWM is enabled despite using
+basic frames. To circumvent this, use the "DWM Unextend Frames" mod.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Blacklist, whitelist</li>
+<li>Apply to secure desktop (UAC, LogonUI) only</li>
+<li>Useful for Windows 7 Aero theme</li>
+<li>Disable animations on affected windows</li>
+</ul>
+<h2 id="images">Images</h2>
+<p><strong>Preview</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/basic-themer-preview.png" alt="Preview" /></p>
+<p><strong>Secure Desktop only (with classic UAC and Windows 7 Style UAC Dim mod)</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/basic-themer-secure-desktop.png" alt="Secure Desktop only" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Style UAC Dim 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-style-uac-dim#899771ff7041afe450a9febe2062727c8921d64a</id>
@@ -216,16 +245,6 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
         <updated>2024-05-31T11:45:02.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>The mod now targets all ShellExperienceHost.exe windows, including the notification center, taskbar jump lists and notification popups.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.4]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#ff1acfae87ae906f670c3b0d43f7fbb8c3dcfd03</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2024-05-31T11:09:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed taskbar background customization when there's more than one monitor.</li>
-<li>TranslucentTaskbar theme: Fixed menu flyout padding.</li>
 </ul>]]></content>
     </entry>
 </feed>
