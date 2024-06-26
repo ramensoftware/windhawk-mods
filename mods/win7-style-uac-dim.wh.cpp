@@ -7,6 +7,7 @@
 // @github          https://github.com/aubymori
 // @include         consent.exe
 // @compilerOptions -lgdi32 -lgdiplus
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
