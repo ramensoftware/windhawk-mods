@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              win7-uac-dim
-// @name            Windows 7 UAC Dim
+// @id              win7-style-uac-dim
+// @name            Windows 7 Style UAC Dim
 // @description     Restores the desktop screenshot on the User Account Control screen
 // @version         1.0.0
 // @author          aubymori
@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 7 UAC Behavior
+# Windows 7 Style UAC Dim
 This mod restores the full desktop screenshot on the background of the secure desktop
 for UAC. Since Windows 8, it has only displayed the wallpaper.
 
