@@ -2565,7 +2565,7 @@
                 "published": 1719416300000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1719416300000,
+                "updated": 1719436894000,
                 "users": 0
             },
             "metadata": {
@@ -2580,7 +2580,7 @@
                     "consent.exe"
                 ],
                 "name": "Windows 7 Style UAC Dim",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "windows-11-notification-center-styler": {

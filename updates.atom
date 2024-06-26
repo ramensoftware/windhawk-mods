@@ -2,12 +2,20 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-26T17:43:59.000Z</updated>
+    <updated>2024-06-26T21:21:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Style UAC Dim 1.0.1]]></title>
+        <id>https://windhawk.net/mods/win7-style-uac-dim#23d2093ff51e6dce83bfe5ca4746bd0835380bf5</id>
+        <link href="https://windhawk.net/mods/win7-style-uac-dim"/>
+        <updated>2024-06-26T21:21:34.000Z</updated>
+        <content type="html"><![CDATA[<p>Turns out a lot of people experience windows and menus being left behind
+on real hardware.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Basic Themer 1.0.0]]></title>
         <id>https://windhawk.net/mods/basic-themer#406c4f97e1c979c85e91af3bd524248437120603</id>
@@ -236,15 +244,6 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the weather icon disappearing if taskbar icons are centered.</li>
 <li>Added a restart prompt when the taskbar button width is changed in settings.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.0.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#324f683b222562fba882a506476da597fce9fe6f</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2024-05-31T11:45:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The mod now targets all ShellExperienceHost.exe windows, including the notification center, taskbar jump lists and notification popups.</li>
 </ul>]]></content>
     </entry>
 </feed>
