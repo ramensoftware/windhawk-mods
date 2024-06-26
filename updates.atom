@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-24T03:06:15.000Z</updated>
+    <updated>2024-06-26T15:38:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Style UAC Dim 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-style-uac-dim#899771ff7041afe450a9febe2062727c8921d64a</id>
+        <link href="https://windhawk.net/mods/win7-style-uac-dim"/>
+        <updated>2024-06-26T15:38:20.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7styleuacdim">Windows 7 Style UAC Dim</h1>
+<p>This mod restores the full desktop screenshot on the background of the secure desktop
+for UAC. Since Windows 8, it has only displayed the wallpaper.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/win7-uac-dim-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/main/win7-uac-dim-after.png" alt="After" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 1.0.2]]></title>
         <id>https://windhawk.net/mods/win7-alttab-loader#5ba4de576191570cfd6748518b3ed427391181d0</id>
@@ -214,13 +227,5 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
 <li>Fixed taskbar background customization when there's more than one monitor.</li>
 <li>TranslucentTaskbar theme: Fixed menu flyout padding.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[RegEdit Disable Beep 1.0.0]]></title>
-        <id>https://windhawk.net/mods/regedit-disable-beep#c7ed2c43828b70744ea0f1647c7d3b0088ce1f55</id>
-        <link href="https://windhawk.net/mods/regedit-disable-beep"/>
-        <updated>2024-05-31T08:27:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="regeditdisablebeep">RegEdit Disable Beep</h1>
-<p>When an invalid key is entered into the navigation bar, RegEdit plays a beep sound. This mod disables this sound.</p>]]></content>
     </entry>
 </feed>

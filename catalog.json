@@ -2535,6 +2535,30 @@
                 "version": "1.0"
             }
         },
+        "win7-style-uac-dim": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1719416300000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1719416300000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -lgdiplus",
+                "description": "Restores the desktop screenshot on the User Account Control screen",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "consent.exe"
+                ],
+                "name": "Windows 7 Style UAC Dim",
+                "version": "1.0.0"
+            }
+        },
         "windows-11-notification-center-styler": {
             "details": {
                 "defaultSorting": 1670,
