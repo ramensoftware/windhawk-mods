@@ -2,7 +2,7 @@
 // @id              win7-style-uac-dim
 // @name            Windows 7 Style UAC Dim
 // @description     Restores the desktop screenshot on the User Account Control screen
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         consent.exe
@@ -72,9 +72,6 @@ const WindhawkUtils::SYMBOL_HOOK hooks[] = {
 
 BOOL Wh_ModInit(void)
 {
-    /* Wait for windows and menus to go away */
-    Sleep(250);
-
     /* Take a screenshot of the desktop */
     HDC hScreenDC = GetDC(NULL);
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
