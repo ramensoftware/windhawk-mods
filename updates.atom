@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-26T21:21:34.000Z</updated>
+    <updated>2024-06-27T11:59:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#78d005fa29bcbfaab1f5ea2777f1217468703c9f</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2024-06-27T11:59:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added themes! Currently, only the TranslucentShell theme is integrated into the mod and can be selected in the settings.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Style UAC Dim 1.0.1]]></title>
         <id>https://windhawk.net/mods/win7-style-uac-dim#23d2093ff51e6dce83bfe5ca4746bd0835380bf5</id>
@@ -234,16 +243,6 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
         <updated>2024-05-31T18:25:07.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Made compatible with Windows 11 24H2.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.8]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#09d81d6358f4f0fc82e59541b4f0e6daaaad19fd</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-05-31T14:47:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the weather icon disappearing if taskbar icons are centered.</li>
-<li>Added a restart prompt when the taskbar button width is changed in settings.</li>
 </ul>]]></content>
     </entry>
 </feed>

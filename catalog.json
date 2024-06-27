@@ -2589,7 +2589,7 @@
                 "published": 1715436273000,
                 "rating": 10,
                 "ratingUsers": 6,
-                "updated": 1717155902000,
+                "updated": 1719489546000,
                 "users": 167
             },
             "metadata": {
@@ -2606,7 +2606,7 @@
                 ],
                 "name": "Windows 11 Notification Center Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.1"
             }
         },
         "windows-11-start-menu-styler": {

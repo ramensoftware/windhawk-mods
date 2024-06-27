@@ -1,3 +1,7 @@
+## 1.1 ([Jun 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/78d005fa29bcbfaab1f5ea2777f1217468703c9f/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added themes! Currently, only the TranslucentShell theme is integrated into the mod and can be selected in the settings.
+
 ## 1.0.2 ([May 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/324f683b222562fba882a506476da597fce9fe6f/mods/windows-11-notification-center-styler.wh.cpp))
 
 * The mod now targets all ShellExperienceHost.exe windows, including the notification center, taskbar jump lists and notification popups.
