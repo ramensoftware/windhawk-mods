@@ -2,7 +2,7 @@
 // @id              sib-plusplus-tweaker
 // @name            StartIsBack++ Tweaker
 // @description     Modify StartIsBack++'s features (2.9.20)
-// @version         0.3
+// @version         0.4
 // @author          Erizur
 // @github          https://github.com/Erizur
 // @include         explorer.exe
@@ -182,13 +182,18 @@ void DoModulePatch()
         uint8_t* p_trackingBG = (uint8_t*)(FindPattern("48 8B C4 48 89 50 10 48 89 48 08",(uintptr_t)g_hStartIsBackModule));
         uint8_t* p_trackingBorder = (uint8_t*)(FindPattern("4C 8B DC 49 89 6B 18 49 89 73 20",(uintptr_t)g_hStartIsBackModule));
 
-        VirtualProtect(p_trackingBG, 1, PAGE_EXECUTE_READWRITE, &old);
-        p_trackingBG[0] = 0xC3;
-        VirtualProtect(p_trackingBG, 1, old, 0);
-        
-        VirtualProtect(p_trackingBorder, 1, PAGE_EXECUTE_READWRITE, &old);
-        p_trackingBorder[0] = 0xC3;
-        VirtualProtect(p_trackingBorder, 1, old, 0);
+        if(p_trackingBG)
+        {
+            VirtualProtect(p_trackingBG, 1, PAGE_EXECUTE_READWRITE, &old);
+            p_trackingBG[0] = 0xC3;
+            VirtualProtect(p_trackingBG, 1, old, &old);
+        }
+        if(p_trackingBorder)
+        {
+            VirtualProtect(p_trackingBorder, 1, PAGE_EXECUTE_READWRITE, &old);
+            p_trackingBorder[0] = 0xC3;
+            VirtualProtect(p_trackingBorder, 1, old, &old);
+        }
     }
     if(mod_settings.DisableCustomOrb == TRUE)
     {
@@ -196,48 +201,62 @@ void DoModulePatch()
         uint8_t* p_createOrb = (uint8_t*)(FindPattern("40 56 48 83 EC 40 48 8D 15 03 70 01 00",(uintptr_t)g_hStartIsBackModule));
         uint8_t* p_winKeyHook = (uint8_t*)(FindPattern("40 53 48 81 EC A0 00 00 00",(uintptr_t)g_hStartIsBackModule));
 
-        VirtualProtect(p_createOrb, 1, PAGE_EXECUTE_READWRITE, &old);
-        p_createOrb[0] = 0xC3;
-        VirtualProtect(p_createOrb, 1, old, 0);
-        
-        VirtualProtect(p_winKeyHook, 1, PAGE_EXECUTE_READWRITE, &old);
-        p_winKeyHook[0] = 0xC3;
-        VirtualProtect(p_winKeyHook, 1, old, 0);
+        if(p_createOrb)
+        {
+            VirtualProtect(p_createOrb, 1, PAGE_EXECUTE_READWRITE, &old);
+            p_createOrb[0] = 0xC3;
+            VirtualProtect(p_createOrb, 1, old, &old);
+        }
+        if(p_winKeyHook)
+        {
+            VirtualProtect(p_winKeyHook, 1, PAGE_EXECUTE_READWRITE, &old);
+            p_winKeyHook[0] = 0xC3;
+            VirtualProtect(p_winKeyHook, 1, old, &old);
+        }
     }
     if(mod_settings.DisableCDSB == TRUE)
     {
         Wh_Log(L"- Disable Custom Scrollbar...");
         uint8_t* p_cdScrollbar = (uint8_t*)(FindPattern("40 55 41 56 48 83 EC 28 4C 8B F1",(uintptr_t)g_hStartIsBackModule));
 
-        VirtualProtect(p_cdScrollbar, 2, PAGE_EXECUTE_READWRITE, &old);
-        p_cdScrollbar[0] = 0xC3;
-        p_cdScrollbar[1] = 0xC3;
-        VirtualProtect(p_cdScrollbar, 2, old, 0);
+        if(p_cdScrollbar)
+        {
+            VirtualProtect(p_cdScrollbar, 2, PAGE_EXECUTE_READWRITE, &old);
+            p_cdScrollbar[0] = 0xC3;
+            p_cdScrollbar[1] = 0xC3;
+            VirtualProtect(p_cdScrollbar, 2, old, &old);
+        }
     }
     if(mod_settings.DisableSMAnim == TRUE)
     {
         Wh_Log(L"- Disable Start Menu Animations...");
         uint8_t* p_smAnimations = (uint8_t*)(FindPattern("41 8D 51 08 8D 4A 40 FF 15 CA 7B 05 00",(uintptr_t)g_hStartIsBackModule));
 
-        VirtualProtect(p_smAnimations, 7, PAGE_EXECUTE_READWRITE, &old);
-        for(int i=0; i < 7; i++) p_smAnimations[i] = 0x90;
-        VirtualProtect(p_smAnimations, 7, old, 0);
+        if(p_smAnimations)
+        {
+            VirtualProtect(p_smAnimations, 7, PAGE_EXECUTE_READWRITE, &old);
+            for(int i=0; i < 7; i++) p_smAnimations[i] = 0x90;
+            VirtualProtect(p_smAnimations, 7, old, &old);
+        }
     }
     if(mod_settings.ForceDWM == TRUE)
     {
         Wh_Log(L"- Force DWM Composition (Taskbar & Start Menu)...");
         uint8_t* p_dwmComposition = (uint8_t*)(FindPattern("48 8B CB E8 43 1D 03 00 84 C0 75 4E",(uintptr_t)g_hStartIsBackModule)) - 9;
 
-        VirtualProtect(p_dwmComposition, 9, PAGE_EXECUTE_READWRITE, &old);
-        for(int i=0; i < 9; i++) p_dwmComposition[i] = 0x90;
-        VirtualProtect(p_dwmComposition, 9, old, 0);
+        if(p_dwmComposition) {
+            VirtualProtect(p_dwmComposition, 9, PAGE_EXECUTE_READWRITE, &old);
+            for(int i=0; i < 9; i++) p_dwmComposition[i] = 0x90;
+            VirtualProtect(p_dwmComposition, 9, old, &old);
+        }
     }
     if(mod_settings.MatchSevenFolders == TRUE)
     {
         Wh_Log(L"- Match 7 Start Menu Links...");
-        SpecialFoldersList = decltype(SpecialFoldersList)(REL((uintptr_t)(FindPattern("48 8D 35 ?? ?? ?? ?? 4C 8B F1 4C 8D 2D ?? ?? ?? ?? 33 FF",(uintptr_t)g_hStartIsBackModule)),3) - 8);
+        uintptr_t addr = (uintptr_t)(FindPattern("48 8D 35 ?? ?? ?? ?? 4C 8B F1 4C 8D 2D ?? ?? ?? ?? 33 FF",(uintptr_t)g_hStartIsBackModule)); // first check if pattern exists
+        SpecialFoldersList = decltype(SpecialFoldersList)(REL(addr, 3) - 8); // match address and add - 8 as offset, then cast to struct.
 
-        if(SpecialFoldersList)
+        if(addr && SpecialFoldersList)
         {
             VirtualProtect(SpecialFoldersList, sizeof(FOLDERDEFINITION)*22, PAGE_EXECUTE_READWRITE, &old);
 
@@ -248,7 +267,7 @@ void DoModulePatch()
             SpecialFoldersList[10].strParseName = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ED228FDF-9EA8-4870-83b1-96b02CFE0D52}"; // Games
             SpecialFoldersList[19].strParseName = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{2559a1f1-21d7-11d4-bdaf-00c04f60b9f0}"; // Help & Support
 
-            VirtualProtect(SpecialFoldersList, sizeof(FOLDERDEFINITION)*22, old, 0);
+            VirtualProtect(SpecialFoldersList, sizeof(FOLDERDEFINITION)*22, old, &old);
         }
     }
 
@@ -357,7 +376,7 @@ void LoadSettings(void)
     mod_settings.RestoreAPPadding = Wh_GetIntSetting(L"RestoreAPPadding");
 }
 
-void CheckForStartIsBack()
+BOOL CheckForStartIsBack()
 {
     const wchar_t *SIB_PATH = mod_settings.SIBPath;
     wchar_t workingSibPath[1024] = { 0 };
@@ -373,14 +392,17 @@ void CheckForStartIsBack()
     ))
     {
         Wh_Log(L"Failed to get size of StartIsBack module! Exiting.");
-        return;
+        return FALSE;
     }
     g_StartIsBackSize = miSib.SizeOfImage;
 
     if (g_hStartIsBackModule) DoModulePatch();
     else {
         Wh_Log(L"StartIsBack DLL could NOT be found. Please make sure you properly placed the path.\nOr you're using Aerexplorer and this is getting called from the other explorer window. (heh...)");
+        return FALSE;
     }
+
+    return TRUE;
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
@@ -398,9 +420,9 @@ BOOL Wh_ModInit() {
         }
 
     Wh_Log(L"Initalize SIB++ Tweaker.");
-    
+
     LoadSettings();
-    CheckForStartIsBack();
+    if(!CheckForStartIsBack()) return FALSE;
 
     if(mod_settings.RestoreAPPadding == TRUE)
     {
@@ -443,6 +465,8 @@ BOOL Wh_ModInit() {
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Exiting SIB++ Tweaker.");
+
+    system("taskkill /F /IM explorer.exe & start explorer");
 }
 
 // The mod setting were changed, reload them.
