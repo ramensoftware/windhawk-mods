@@ -2,7 +2,7 @@
 // @id              sib-plusplus-tweaker
 // @name            StartIsBack++ Tweaker
 // @description     Modify StartIsBack++'s features (2.9.20)
-// @version         0.4
+// @version         0.4.1
 // @author          Erizur
 // @github          https://github.com/Erizur
 // @include         explorer.exe
@@ -321,7 +321,7 @@ BOOL WINAPI SetWindowPos_hook(
                 X,
                 Y,
                 cx,
-                MulDiv(374, GetDeviceCaps(dc, LOGPIXELSY), 96),
+                cy + MulDiv(13, GetDeviceCaps(dc, LOGPIXELSY), 96), //losing values...
                 uFlags
             );
         }
