@@ -6,6 +6,7 @@
 // @author 			Anixx
 // @github 			https://github.com/Anixx
 // @include         msedge.exe
+// @include         brave.exe
 // @include         chrome.exe
 // @include         chromium.exe
 // @include         Skype.exe
