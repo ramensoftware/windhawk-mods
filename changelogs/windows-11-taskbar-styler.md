@@ -1,3 +1,8 @@
+## 1.3.5 ([Jun 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d02494284cfba2bb2c9fcb54ad499c0489ac45dd/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added a new theme: Squircle.
+* Fixed a crash with some themes when the "Icon and label"-style search button is used.
+
 ## 1.3.4 ([May 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ff1acfae87ae906f670c3b0d43f7fbb8c3dcfd03/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Fixed taskbar background customization when there's more than one monitor.
