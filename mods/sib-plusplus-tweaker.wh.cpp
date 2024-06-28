@@ -14,7 +14,7 @@
 /*
 # StartIsBack++ Tweaker (2.9.20)
 Modifies StartIsBack++'s internal functions for more customizable options.
-Might not work on your end if you patched your StartIsBack++ DLL previously.
+Might not work if the StartIsBack++ DLL installed has been patched previously.
 **Works only on StartIsBack++ 2.9.20. Functionality on older/newer versions is not guaranteed.**
 
 ## Features
