@@ -2,7 +2,7 @@
 // @id              sib-plusplus-tweaker
 // @name            StartIsBack++ Tweaker
 // @description     Modify StartIsBack++'s features (2.9.20)
-// @version         0.5
+// @version         0.6
 // @author          Erizur
 // @github          https://github.com/Erizur
 // @include         explorer.exe
@@ -18,36 +18,44 @@ Might not work if the StartIsBack++ DLL installed has been patched previously.
 **Works only on StartIsBack++ 2.9.20. Functionality on older/newer versions is not guaranteed.**
 
 ## Features
-**Remove Hottracking** - Removes the Item button glow present in StartIsBack++, which is used for 7/8 behavior. 
+**Remove Hottracking** - Removes the Item button glow present in StartIsBack++, which is used for 7/8 behavior.\
 ![Remove Hottracking](https://raw.githubusercontent.com/Erizur/imagehosting/main/nohottracking.png)
 
-**Disable Start Menu Animations** - Disables the start menu animations, while leaving everything else untouched. Similar to the behavior present in older versions of Windows.
+**Disable Start Menu Animations** - Disables the start menu animations, while leaving everything else untouched.
+Similar to the behavior present in older versions of Windows.\
 ![Disable Start Menu Animations](https://raw.githubusercontent.com/Erizur/imagehosting/main/startanims.gif)
 
 **Force DWM Composition** - Enable this option to force DWM blur instead of a custom one. 
-Does NOT work with "Use custom start menu coloring" & "Use custom taskbar coloring" enabled.
+Does NOT work with "Use custom start menu coloring" & "Use custom taskbar coloring" enabled.\
 ![Force DWM Composition](https://raw.githubusercontent.com/Erizur/imagehosting/main/forcedwm.png)
 
 **Disable Custom Drawn Scrollbar** - In order to match custom themes, SIB uses a custom drawn scrollbar for the "All Programs" menu. 
-Here you can force a native scrollbar instead.
+Here you can force a native scrollbar instead.\
 ![Disable Custom Drawn Scrollbar](https://raw.githubusercontent.com/Erizur/imagehosting/main/nocdscroll.png)
 
-**Disable Custom Orb** - This option disables StartIsBack's custom orb and tries to prevent Windows key hooking.
+**Disable Custom Orb** - This option disables StartIsBack's custom orb and tries to prevent Windows key hooking.\
 ![Disable Custom Orb](https://raw.githubusercontent.com/Erizur/imagehosting/main/nocustomorb.png)
 
-**Fix "All Programs" Menu Padding** - This restores the smaller size used for the "All Programs" menu.
+**Fix "All Programs" Menu Padding** - This restores the smaller size used for the "All Programs" menu.\
 ![Menu Padding](https://raw.githubusercontent.com/Erizur/imagehosting/main/restoreappadding.png)
 
 **Match Windows 7 Start Menu Links** - (This option requires the following links enabled to work properly: Computer/This PC, Connect To, Command Prompt) 
-Tries to match as close as possible the Start Menu Links used in Windows 7's default Start Menu (Games, Help & Support).
+Tries to match as close as possible the Start Menu Links used in Windows 7's default Start Menu (Games, Help & Support).\
 ![Match Windows 7 Start Menu Links](https://raw.githubusercontent.com/Erizur/imagehosting/main/restoredlinks2.png)
 
-**Fix User Folders On Corrupted Namespace** - Fixes the User Folders from opening up in a corrupted namespace if you used Aerexplorer or a registry hack to move them back from "This PC".
+**Fix User Folders On Corrupted Namespace** - Fixes the User Folders from opening up in a corrupted namespace if you used Aerexplorer or a registry hack to move them back from "This PC".\
 ![Fix User Folders On Corrupted Namespace](https://raw.githubusercontent.com/Erizur/imagehosting/main/fixfolders.png)
+
+**Hide UWP Settings results** - Removes Windows 10's Immersive Settings from showing up on the search menu.\
+![Hide UWP Settings results](https://raw.githubusercontent.com/Erizur/imagehosting/main/hideuwp.png)
+
+**Always use standard user profile picture** - Uses the standard profile picture when you don't have a custom one set, rather than the custom-drawn one created at runtime.\
+![Hide UWP Settings results](https://raw.githubusercontent.com/Erizur/imagehosting/main/custompfp.png)
 
 ## Special Thanks
 - Wiktorwiktor12: FindPattern function & Custom Folder help.
 - Aubymori: Additional help.
+- TeknixStuff: "Hide UWP Settings results" & "Always use standard user profile picture" settings contributor.
 */
 // ==/WindhawkModReadme==
 
@@ -80,6 +88,12 @@ Tries to match as close as possible the Start Menu Links used in Windows 7's def
 - FixUserFolders: FALSE
   $name: Fix User Folders On Corrupted Namespace
   $description: Based on a patch originally made by YukisCoffee. Fixes the User Folders from opening up in a corrupted namespace if you used Aerexplorer or a registry hack to move them back from "This PC".
+- DisableImmersiveCPL: FALSE
+  $name: Hide UWP Settings results
+  $description: Enable this to remove UWP settings from search results.
+- FixPFP: FALSE
+  $name: Always use standard user profile picture
+  $description: Uses the standard profile picture when you don't have a custom one set, rather than the custom-drawn one created at runtime.
 */
 // ==/WindhawkModSettings==
 
@@ -113,6 +127,8 @@ struct _settings {
     BOOL MatchSevenFolders = FALSE;
     BOOL RestoreAPPadding = FALSE;
     BOOL FixUserFolders = FALSE;
+    BOOL DisableImmersiveCPL = FALSE;
+    BOOL FixPFP = FALSE;
 } mod_settings;
 
 enum SHELLMENUTYPE : __int32
@@ -281,6 +297,48 @@ void DoModulePatch()
             VirtualProtect(p_dwmComposition, 9, old, &old);
         }
     }
+    if(mod_settings.FixPFP == TRUE)
+    {
+        Wh_Log(L"- Force standard user picture...");
+        uint8_t* p_pfp = (uint8_t*)(FindPattern("48 85 DB 75 50",(uintptr_t)g_hStartIsBackModule));
+
+        if(p_pfp)
+        {
+            VirtualProtect(p_pfp+3, 1, PAGE_EXECUTE_READWRITE, &old);
+            memset(p_pfp+3,0xEB,1);
+            VirtualProtect(p_pfp+3, 1, old, &old);
+        }
+    }
+    if(mod_settings.DisableImmersiveCPL == TRUE)
+    {
+        Wh_Log(L"- Remove UWP settings from search...");
+        const wchar_t p_settingsR[] = L"shell:::{ED7BA470-8E54-465E-825C-99712043E01C}";
+
+        uint8_t* p_settings1 = (uint8_t*)(FindPattern("73 00 68 00 65 00 6C 00 6C 00 3A 00 3A 00 3A 00 7B 00 39 00 39 00 45 00 32 00 42 00 33 00 36 00 32 00 2D 00 33 00 45 00 34 00 45 00 2D 00 34 00 32 00 35 00 35 00 2D 00 39 00 42 00 32 00 39 00 2D 00 34 00 31 00 41 00 37 00 46 00 34 00 30 00 37 00 37 00 37 00 42 00 41 00 7D 00 5C 00",(uintptr_t)g_hStartIsBackModule));
+        uint8_t* p_settings2 = (uint8_t*)(FindPattern("73 00 68 00 65 00 6C 00 6C 00 3A 00 3A 00 3A 00 7B 00 39 00 39 00 45 00 32 00 42 00 33 00 36 00 32 00 2D 00 33 00 45 00 34 00 45 00 2D 00 34 00 32 00 35 00 35 00 2D 00 39 00 42 00 32 00 39 00 2D 00 34 00 31 00 41 00 37 00 46 00 34 00 30 00 37 00 37 00 37 00 42 00 42 00 7D 00 5C 00",(uintptr_t)g_hStartIsBackModule));
+        uint8_t* p_settings3 = (uint8_t*)(FindPattern("73 00 68 00 65 00 6C 00 6C 00 3A 00 3A 00 3A 00 7B 00 39 00 39 00 45 00 32 00 42 00 33 00 36 00 32 00 2D 00 33 00 45 00 34 00 45 00 2D 00 34 00 32 00 35 00 35 00 2D 00 39 00 42 00 32 00 39 00 2D 00 34 00 31 00 41 00 37 00 46 00 34 00 30 00 37 00 37 00 37 00 42 00 42 00 7D 00 00 00",(uintptr_t)g_hStartIsBackModule));
+
+        if(p_settings1)
+        {
+            VirtualProtect(p_settings1, 92, PAGE_EXECUTE_READWRITE, &old);
+            memcpy(p_settings1, p_settingsR, 92);
+            VirtualProtect(p_settings1, 92, old, &old);
+        }
+
+        if(p_settings2)
+        {
+            VirtualProtect(p_settings2, 92, PAGE_EXECUTE_READWRITE, &old);
+            memcpy(p_settings2, p_settingsR, 92);
+            VirtualProtect(p_settings2, 92, old, &old);
+        }
+
+        if(p_settings3)
+        {
+            VirtualProtect(p_settings3, 92, PAGE_EXECUTE_READWRITE, &old);
+            memcpy(p_settings3, p_settingsR, 92);
+            VirtualProtect(p_settings3, 92, old, &old);
+        }
+    }
     if(mod_settings.MatchSevenFolders == TRUE)
     {
         Wh_Log(L"- Match 7 Start Menu Links...");
@@ -295,8 +353,8 @@ void DoModulePatch()
             SpecialFoldersList[10] = SpecialFoldersList[12];
             SpecialFoldersList[12] = temp;
 
-            SpecialFoldersList[10].strParseName = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{ED228FDF-9EA8-4870-83b1-96b02CFE0D52}"; // Games
-            SpecialFoldersList[19].strParseName = L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}\\0\\::{2559a1f1-21d7-11d4-bdaf-00c04f60b9f0}"; // Help & Support
+            SpecialFoldersList[10].strParseName = L"shell:::{ED228FDF-9EA8-4870-83b1-96b02CFE0D52}"; // Games
+            SpecialFoldersList[19].strParseName = L"shell:::{2559a1f1-21d7-11d4-bdaf-00c04f60b9f0}"; // Help & Support
 
             VirtualProtect(SpecialFoldersList, sizeof(FOLDERDEFINITION)*22, old, &old);
         }
@@ -408,6 +466,8 @@ void LoadSettings(void)
     mod_settings.MatchSevenFolders = Wh_GetIntSetting(L"MatchSevenFolders");
     mod_settings.RestoreAPPadding = Wh_GetIntSetting(L"RestoreAPPadding");
     mod_settings.FixUserFolders = Wh_GetIntSetting(L"FixUserFolders");
+    mod_settings.FixPFP = Wh_GetIntSetting(L"FixPFP");
+    mod_settings.DisableImmersiveCPL = Wh_GetIntSetting(L"DisableImmersiveCPL");
 }
 
 BOOL CheckForStartIsBack()
