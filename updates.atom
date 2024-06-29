@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-06-28T21:57:11.000Z</updated>
+    <updated>2024-06-29T01:11:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[StartIsBack++ Tweaker 0.5]]></title>
+        <id>https://windhawk.net/mods/sib-plusplus-tweaker#fff05a9be6853eb3b7a8c6cf85d79c43142f1241</id>
+        <link href="https://windhawk.net/mods/sib-plusplus-tweaker"/>
+        <updated>2024-06-29T01:11:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New option: Fix User Folders On Corrupted Namespace</li>
+<li>Removed re-scale of "All Programs" menu as it caused some artifacts</li>
+<li>Fixed "All Programs" menu resize handling</li>
+<li>Updated Readme</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[StartIsBack++ Tweaker 0.4]]></title>
         <id>https://windhawk.net/mods/sib-plusplus-tweaker#d63ed3bf36b5dcd9083f0710e63196982fe4ec9f</id>
@@ -239,19 +251,6 @@ Thank you for contributing and allowing all Windhawk users to enjoy it!</p>
 <li>Improved handling of pinned items in several cases such as virtual desktop switching and moving items between monitors.</li>
 <li>Made the "Place ungrouped items together" option work on Windows 10.</li>
 <li>Fixed icon not being restored after a window is closed if the "Use window icons" option is enabled.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CE Disable Process Button Flashing 1.0.1]]></title>
-        <id>https://windhawk.net/mods/ce-disable-process-button-flashing#a0ca3b1a75a180e115ac1658bab730758723622a</id>
-        <link href="https://windhawk.net/mods/ce-disable-process-button-flashing"/>
-        <updated>2024-06-04T10:56:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>CE Disable Process Button Flashing v1.0.1</li>
-</ul>
-<p>Fix terminated offset according to Cheat Engine 7.5</p>
-<ul>
-<li>Update version number</li>
 </ul>]]></content>
     </entry>
 </feed>

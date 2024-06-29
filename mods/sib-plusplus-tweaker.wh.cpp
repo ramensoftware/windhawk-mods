@@ -2,12 +2,12 @@
 // @id              sib-plusplus-tweaker
 // @name            StartIsBack++ Tweaker
 // @description     Modify StartIsBack++'s features (2.9.20)
-// @version         0.4
+// @version         0.5
 // @author          Erizur
 // @github          https://github.com/Erizur
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomdlg32 -luser32 -lole32 -lgdi32
+// @compilerOptions -lcomdlg32 -luser32 -lole32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,8 +18,32 @@ Might not work if the StartIsBack++ DLL installed has been patched previously.
 **Works only on StartIsBack++ 2.9.20. Functionality on older/newer versions is not guaranteed.**
 
 ## Features
-As of now, the mod can do interesting things as restoring Windows 7's links, disable Hottracking or disable Start Menu animations.
-Read the options or the [WinClassic post](https://winclassic.net/thread/2377/startisback-tweaker-2-9-20) for more info.
+**Remove Hottracking** - Removes the Item button glow present in StartIsBack++, which is used for 7/8 behavior. 
+![Remove Hottracking](https://raw.githubusercontent.com/Erizur/imagehosting/main/nohottracking.png)
+
+**Disable Start Menu Animations** - Disables the start menu animations, while leaving everything else untouched. Similar to the behavior present in older versions of Windows.
+![Disable Start Menu Animations](https://raw.githubusercontent.com/Erizur/imagehosting/main/startanims.gif)
+
+**Force DWM Composition** - Enable this option to force DWM blur instead of a custom one. 
+Does NOT work with "Use custom start menu coloring" & "Use custom taskbar coloring" enabled.
+![Force DWM Composition](https://raw.githubusercontent.com/Erizur/imagehosting/main/forcedwm.png)
+
+**Disable Custom Drawn Scrollbar** - In order to match custom themes, SIB uses a custom drawn scrollbar for the "All Programs" menu. 
+Here you can force a native scrollbar instead.
+![Disable Custom Drawn Scrollbar](https://raw.githubusercontent.com/Erizur/imagehosting/main/nocdscroll.png)
+
+**Disable Custom Orb** - This option disables StartIsBack's custom orb and tries to prevent Windows key hooking.
+![Disable Custom Orb](https://raw.githubusercontent.com/Erizur/imagehosting/main/nocustomorb.png)
+
+**Fix "All Programs" Menu Padding** - This restores the smaller size used for the "All Programs" menu.
+![Menu Padding](https://raw.githubusercontent.com/Erizur/imagehosting/main/restoreappadding.png)
+
+**Match Windows 7 Start Menu Links** - (This option requires the following links enabled to work properly: Computer/This PC, Connect To, Command Prompt) 
+Tries to match as close as possible the Start Menu Links used in Windows 7's default Start Menu (Games, Help & Support).
+![Match Windows 7 Start Menu Links](https://raw.githubusercontent.com/Erizur/imagehosting/main/restoredlinks2.png)
+
+**Fix User Folders On Corrupted Namespace** - Fixes the User Folders from opening up in a corrupted namespace if you used Aerexplorer or a registry hack to move them back from "This PC".
+![Fix User Folders On Corrupted Namespace](https://raw.githubusercontent.com/Erizur/imagehosting/main/fixfolders.png)
 
 ## Special Thanks
 - Wiktorwiktor12: FindPattern function & Custom Folder help.
@@ -53,6 +77,9 @@ Read the options or the [WinClassic post](https://winclassic.net/thread/2377/sta
 - MatchSevenFolders: FALSE
   $name: Match Windows 7 Start Menu Links
   $description: Enable this to replace some of the start menu links to match Windows 7's Start Menu. (Swaps Computer's placement, Replace Connect To with Games, Replace Command Prompt with Help & Support)
+- FixUserFolders: FALSE
+  $name: Fix User Folders On Corrupted Namespace
+  $description: Based on a patch originally made by YukisCoffee. Fixes the User Folders from opening up in a corrupted namespace if you used Aerexplorer or a registry hack to move them back from "This PC".
 */
 // ==/WindhawkModSettings==
 
@@ -72,6 +99,9 @@ Read the options or the [WinClassic post](https://winclassic.net/thread/2377/sta
 #include <windows.h>
 #include <psapi.h>
 #include <combaseapi.h>
+#include <processthreadsapi.h>
+#include <psapi.h>
+#include <shlobj.h>
 
 struct _settings {
     LPCWSTR SIBPath = L"%PROGRAMFILES(X86)%\\StartIsBack\\StartIsBack64.dll";
@@ -82,6 +112,7 @@ struct _settings {
     BOOL DisableCustomOrb = FALSE;
     BOOL MatchSevenFolders = FALSE;
     BOOL RestoreAPPadding = FALSE;
+    BOOL FixUserFolders = FALSE;
 } mod_settings;
 
 enum SHELLMENUTYPE : __int32
@@ -295,46 +326,48 @@ LRESULT WINAPI SendMessageW_hook(
     else return SendMessageW_orig(hWnd, uMsg, wParam, lParam);
 }
 
-using SetWindowPos_t = decltype(&SetWindowPos);
-SetWindowPos_t SetWindowPos_orig = nullptr;
-BOOL WINAPI SetWindowPos_hook(
-    HWND hWnd,
-    HWND hWndInsertAfter,
-    int  X,
-    int  Y,
-    int  cx,
-    int  cy,
-    UINT uFlags
-)
+using ILCreateFromPathW_t = decltype(&ILCreateFromPathW);
+ILCreateFromPathW_t ILCreateFromPathW_orig;
+PIDLIST_ABSOLUTE ILCreateFromPathW_hook(PCWSTR pszPath)
 {
+    // Ensure that the caller is coming from SIB module:
     void *retaddr = __builtin_return_address(0);
-    if (((ULONGLONG)retaddr >= (ULONGLONG)g_hStartIsBackModule) && ((ULONGLONG)retaddr < ((ULONGLONG)g_hStartIsBackModule + g_StartIsBackSize)))
+    if ( ((ULONGLONG)retaddr >  (ULONGLONG)g_hStartIsBackModule) && ((ULONGLONG)retaddr < ( (ULONGLONG)g_hStartIsBackModule + g_StartIsBackSize )) )
     {
-        WCHAR className[MAX_PATH];
-        GetClassName(hWnd, className, MAX_PATH);
-        if(0 == wcscmp(className, L"NamespaceTreeControl"))
+        WCHAR pszPathNew[1024];
+
+        if (0 == wcscmp(pszPath, L"shell:::{A8CDFF1C-4878-43be-B5FD-F8091C1C60D0}"))
         {
-            HDC dc = GetDC(hWnd);
-            return SetWindowPos_orig(
-                hWnd,
-                hWndInsertAfter,
-                X,
-                Y,
-                cx,
-                MulDiv(374, GetDeviceCaps(dc, LOGPIXELSY), 96),
-                uFlags
-            );
+            // Documents
+            wcscpy(pszPathNew, L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}\\::{A8CDFF1C-4878-43be-B5FD-F8091C1C60D0}");
         }
+        else if (0 == wcscmp(pszPath, L"shell:::{3ADD1653-EB32-4CB0-BBD7-DFA0ABB5ACCA}"))
+        {
+            // Pictures
+            wcscpy(pszPathNew, L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}\\::{3ADD1653-EB32-4CB0-BBD7-DFA0ABB5ACCA}");
+        }
+        else if (0 == wcscmp(pszPath, L"shell:::{1CF1260C-4DD0-4EBB-811F-33C572699FDE}"))
+        {
+            // Music
+            wcscpy(pszPathNew, L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}\\::{1CF1260C-4DD0-4EBB-811F-33C572699FDE}");
+        }
+        else if (0 == wcscmp(pszPath, L"shell:::{374DE290-123F-4565-9164-39C4925E467B}"))
+        {
+            // Downloads
+            wcscpy(pszPathNew, L"shell:::{59031a47-3f72-44a7-89c5-5595fe6b30ee}\\::{374DE290-123F-4565-9164-39C4925E467B}");
+        }
+        else
+        {
+            // Copy the original string.
+            wcscpy(pszPathNew, pszPath);
+        }
+
+        PIDLIST_ABSOLUTE r = ILCreateFromPathW_orig(pszPathNew);
+        return r;
     }
-    return SetWindowPos_orig(
-        hWnd,
-        hWndInsertAfter,
-        X,
-        Y,
-        cx,
-        cy,
-        uFlags
-    );
+
+    // If we're not SIB, then just return.
+    return ILCreateFromPathW_orig(pszPath);
 }
 
 using InflateRect_t = decltype(&InflateRect);
@@ -374,6 +407,7 @@ void LoadSettings(void)
     mod_settings.ForceDWM = Wh_GetIntSetting(L"ForceDWM");
     mod_settings.MatchSevenFolders = Wh_GetIntSetting(L"MatchSevenFolders");
     mod_settings.RestoreAPPadding = Wh_GetIntSetting(L"RestoreAPPadding");
+    mod_settings.FixUserFolders = Wh_GetIntSetting(L"FixUserFolders");
 }
 
 BOOL CheckForStartIsBack()
@@ -436,17 +470,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Failed to hook SendMessageW");
             return FALSE;
         }
-
-        if (!Wh_SetFunctionHook(
-            (void *)SetWindowPos,
-            (void *)SetWindowPos_hook,
-            (void **)&SetWindowPos_orig
-        ))
-        {
-            Wh_Log(L"Failed to hook SetWindowPos");
-            return FALSE;
-        }
-
+        
         if (!Wh_SetFunctionHook(
             (void *)InflateRect,
             (void *)InflateRect_hook,
@@ -456,6 +480,19 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Failed to hook InflateRect");
             return FALSE;
         }
+    }
+
+    if(mod_settings.FixUserFolders == TRUE)
+    {
+        Wh_Log(L"- Fix User Folders...");
+        HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+        FARPROC pfnILCreateFromPathW = GetProcAddress(hShell32, "ILCreateFromPathW");
+
+        Wh_SetFunctionHook(
+            (void *)pfnILCreateFromPathW,
+            (void *)ILCreateFromPathW_hook,
+            (void **)&ILCreateFromPathW_orig
+        );
     }
 
     Wh_Log(L"All done!");
