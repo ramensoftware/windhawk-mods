@@ -1,3 +1,9 @@
+## 0.6 ([Jun 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/51ecb85379958fe13463806cdeef497ff1886bad/mods/sib-plusplus-tweaker.wh.cpp))
+
+- Added 2 new options: "Hide UWP Settings results" & "Always use standard user profile picture", done by TeknixStuff.
+- Updated Readme
+- Deleted Control Panel workaround for Windows 7 links
+
 ## 0.5 ([Jun 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/fff05a9be6853eb3b7a8c6cf85d79c43142f1241/mods/sib-plusplus-tweaker.wh.cpp))
 
 * New option: Fix User Folders On Corrupted Namespace

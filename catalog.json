@@ -1800,7 +1800,7 @@
                 "published": 1719611831000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1719623492000,
+                "updated": 1719695441000,
                 "users": 2
             },
             "metadata": {
@@ -1815,7 +1815,7 @@
                     "explorer.exe"
                 ],
                 "name": "StartIsBack++ Tweaker",
-                "version": "0.5"
+                "version": "0.6"
             }
         },
         "slick-window-arrangement": {
