@@ -21,8 +21,7 @@ Might not work if the StartIsBack++ DLL installed has been patched previously.
 **Remove Hottracking** - Removes the Item button glow present in StartIsBack++, which is used for 7/8 behavior. 
 ![Remove Hottracking](https://raw.githubusercontent.com/Erizur/imagehosting/main/nohottracking.png)
 
-**Disable Start Menu Animations** - Disables the start menu animations, while leaving everything else untouched.
-Similar to the behavior present in older versions of Windows.
+**Disable Start Menu Animations** - Disables the start menu animations, while leaving everything else untouched. Similar to the behavior present in older versions of Windows.
 ![Disable Start Menu Animations](https://raw.githubusercontent.com/Erizur/imagehosting/main/startanims.gif)
 
 **Force DWM Composition** - Enable this option to force DWM blur instead of a custom one. 
