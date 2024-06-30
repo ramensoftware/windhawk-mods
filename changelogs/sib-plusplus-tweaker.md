@@ -1,3 +1,7 @@
+## 0.7 ([Jun 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4cf9e3d6035f8c6621d53fe8bc91d489f71eeef9/mods/sib-plusplus-tweaker.wh.cpp))
+
+- Removed "Always use standard user profile picture" setting due to bug reports.
+
 ## 0.6 ([Jun 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/51ecb85379958fe13463806cdeef497ff1886bad/mods/sib-plusplus-tweaker.wh.cpp))
 
 - Added 2 new options: "Hide UWP Settings results" & "Always use standard user profile picture", done by TeknixStuff.
