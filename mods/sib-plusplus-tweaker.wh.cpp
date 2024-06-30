@@ -2,7 +2,7 @@
 // @id              sib-plusplus-tweaker
 // @name            StartIsBack++ Tweaker
 // @description     Modify StartIsBack++'s features (2.9.20)
-// @version         0.6
+// @version         0.7
 // @author          Erizur
 // @github          https://github.com/Erizur
 // @include         explorer.exe
@@ -49,13 +49,10 @@ Tries to match as close as possible the Start Menu Links used in Windows 7's def
 **Hide UWP Settings results** - Removes Windows 10's Immersive Settings from showing up on the search menu.\
 ![Hide UWP Settings results](https://raw.githubusercontent.com/Erizur/imagehosting/main/hideuwp.png)
 
-**Always use standard user profile picture** - Uses the standard profile picture when you don't have a custom one set, rather than the custom-drawn one created at runtime.\
-![Hide UWP Settings results](https://raw.githubusercontent.com/Erizur/imagehosting/main/custompfp.png)
-
 ## Special Thanks
 - Wiktorwiktor12: FindPattern function & Custom Folder help.
 - Aubymori: Additional help.
-- TeknixStuff: "Hide UWP Settings results" & "Always use standard user profile picture" settings contributor.
+- TeknixStuff: "Hide UWP Settings results" setting contributor.
 */
 // ==/WindhawkModReadme==
 
@@ -91,9 +88,6 @@ Tries to match as close as possible the Start Menu Links used in Windows 7's def
 - DisableImmersiveCPL: FALSE
   $name: Hide UWP Settings results
   $description: Enable this to remove UWP settings from search results.
-- FixPFP: FALSE
-  $name: Always use standard user profile picture
-  $description: Uses the standard profile picture when you don't have a custom one set, rather than the custom-drawn one created at runtime.
 */
 // ==/WindhawkModSettings==
 
@@ -128,7 +122,6 @@ struct _settings {
     BOOL RestoreAPPadding = FALSE;
     BOOL FixUserFolders = FALSE;
     BOOL DisableImmersiveCPL = FALSE;
-    BOOL FixPFP = FALSE;
 } mod_settings;
 
 enum SHELLMENUTYPE : __int32
@@ -297,18 +290,6 @@ void DoModulePatch()
             VirtualProtect(p_dwmComposition, 9, old, &old);
         }
     }
-    if(mod_settings.FixPFP == TRUE)
-    {
-        Wh_Log(L"- Force standard user picture...");
-        uint8_t* p_pfp = (uint8_t*)(FindPattern("48 85 DB 75 50",(uintptr_t)g_hStartIsBackModule));
-
-        if(p_pfp)
-        {
-            VirtualProtect(p_pfp+3, 1, PAGE_EXECUTE_READWRITE, &old);
-            memset(p_pfp+3,0xEB,1);
-            VirtualProtect(p_pfp+3, 1, old, &old);
-        }
-    }
     if(mod_settings.DisableImmersiveCPL == TRUE)
     {
         Wh_Log(L"- Remove UWP settings from search...");
@@ -466,7 +447,6 @@ void LoadSettings(void)
     mod_settings.MatchSevenFolders = Wh_GetIntSetting(L"MatchSevenFolders");
     mod_settings.RestoreAPPadding = Wh_GetIntSetting(L"RestoreAPPadding");
     mod_settings.FixUserFolders = Wh_GetIntSetting(L"FixUserFolders");
-    mod_settings.FixPFP = Wh_GetIntSetting(L"FixPFP");
     mod_settings.DisableImmersiveCPL = Wh_GetIntSetting(L"DisableImmersiveCPL");
 }
 
