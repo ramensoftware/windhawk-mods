@@ -1,3 +1,7 @@
+## 1.3.0 ([Jun 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7d397e9a2b1f8831a2ea3730ab1823fa327e04e5/mods/classic-desktop-icons.wh.cpp))
+
+- Fix non-translucent selection rectangle (thanks @kawapure)
+
 ## 1.2.1 ([Oct 5, 2023](https://github.com/ramensoftware/windhawk-mods/blob/a6a0290dc5e9738ffeb512cbb69281dde7f7a74d/mods/classic-desktop-icons.wh.cpp))
 
 * Add option to force non-translucent selection rectangle

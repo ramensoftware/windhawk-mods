@@ -290,10 +290,13 @@
                 "published": 1694937060000,
                 "rating": 10,
                 "ratingUsers": 5,
-                "updated": 1696487454000,
+                "updated": 1719771477000,
                 "users": 205
             },
             "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
                 "author": "aubymori",
                 "compilerOptions": "-luser32 -luxtheme -lcomctl32",
                 "description": "Enables the classic selection style on desktop icons.",
@@ -302,7 +305,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Desktop Icons",
-                "version": "1.2.1"
+                "version": "1.3.0"
             }
         },
         "classic-explorer-treeview": {
