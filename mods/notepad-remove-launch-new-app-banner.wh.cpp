@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
-// @include         C:\Windows\System32\notepad.exe
+// @include         %SystemRoot%\System32\notepad.exe
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
