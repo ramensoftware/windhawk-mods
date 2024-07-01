@@ -1602,6 +1602,28 @@
                 "version": "1.0"
             }
         },
+        "notepad-remove-launch-new-app-banner": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1719859404000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1719859404000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsProfessional",
+                "description": "Removes the banner in classic notepad that tells you to launch the new app.",
+                "github": "https://github.com/ItsProfessional",
+                "include": [
+                    "%SystemRoot%\\System32\\notepad.exe",
+                    "%SystemRoot%\\SysWOW64\\notepad.exe",
+                    "%SystemRoot%\\notepad.exe"
+                ],
+                "name": "Notepad Remove Launch New App Banner",
+                "version": "1.0.0"
+            }
+        },
         "old-this-pc-commands": {
             "details": {
                 "defaultSorting": 3810,
