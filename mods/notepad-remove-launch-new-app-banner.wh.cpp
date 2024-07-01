@@ -6,6 +6,7 @@
 // @author          ItsProfessional
 // @github          https://github.com/ItsProfessional
 // @include         %SystemRoot%\System32\notepad.exe
+// @include         %SystemRoot%\SysWOW64\notepad.exe
 // @include         %SystemRoot%\notepad.exe
 // ==/WindhawkMod==
 
