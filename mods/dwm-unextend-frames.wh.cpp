@@ -2,7 +2,7 @@
 // @id              dwm-unextend-frames
 // @name            DWM Unextend Frames
 // @description     Makes applications think DWM is disabled
-// @version         1.2.0
+// @version         1.3.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -24,12 +24,19 @@ is not. This is useful for anyone doing a setup with non-DWM frames
 **After**:
 
 ![After](https://raw.githubusercontent.com/aubymori/images/main/dwm-unextend-frames-after.png)
-
-*Mod originally authored by Taniko Yamamoto.*
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- secureonly: false
+  $name: Apply to Secure Desktop only
+  $description: Only the Secure Desktop (UAC, LogonUI) will behave like DWM is off
+*/
+// ==/WindhawkModSettings==
+
 #include <dwmapi.h>
+#include <processthreadsapi.h>
 #include <windhawk_utils.h>
 
 #ifdef _WIN64
@@ -45,13 +52,38 @@ is not. This is useful for anyone doing a setup with non-DWM frames
 #   define DWM_E_COMPOSITIONDISABLED 0x80263001
 #endif
 
+bool g_bSecureOnly = false;
+
+bool IsThreadDesktopSecure(void)
+{
+    HDESK hDesk = GetThreadDesktop(GetCurrentThreadId());
+    if (hDesk)
+    {
+        WCHAR szDeskName[256] = { 0 };
+        if (GetUserObjectInformationW(
+            hDesk,
+            UOI_NAME,
+            &szDeskName,
+            sizeof(szDeskName),
+            nullptr
+        ))
+        {
+            if (0 == wcsicmp(szDeskName, L"winlogon"))
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /* uxtheme.dll hooks */
 
 typedef BOOL (WINAPI *IsCompositionActive_t)(void);
 IsCompositionActive_t IsCompositionActive_orig;
 BOOL WINAPI IsCompositionActive_hook(void)
 {
-    return FALSE;
+    return g_bSecureOnly ? !IsThreadDesktopSecure() : FALSE;
 }
 
 /* dwmapi.dll hooks */
@@ -63,9 +95,9 @@ HRESULT WINAPI DwmIsCompositionEnabled_hook(
 )
 {
     HRESULT hr = DwmIsCompositionEnabled_orig(pfEnabled);
-    if (SUCCEEDED(hr))
+    if (SUCCEEDED(hr) && *pfEnabled)
     {
-        *pfEnabled = FALSE;
+        *pfEnabled = g_bSecureOnly ? !IsThreadDesktopSecure() : FALSE;
     }
     return hr;
 }
@@ -77,6 +109,10 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
     const MARGINS *pMarInset
 )
 {
+    if (g_bSecureOnly && !IsThreadDesktopSecure())
+    {
+        return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
+    }
     return DWM_E_COMPOSITIONDISABLED;
 }
 
@@ -87,6 +123,10 @@ HRESULT WINAPI DwmEnableBlurBehindWindow_hook(
     const DWM_BLURBEHIND *pBlurBehind
 )
 {
+    if (g_bSecureOnly && !IsThreadDesktopSecure())
+    {
+        return DwmEnableBlurBehindWindow_orig(hWnd, pBlurBehind);
+    }
     return DWM_E_COMPOSITIONDISABLED;
 }
 
@@ -99,7 +139,8 @@ HRESULT WINAPI DwmSetWindowAttribute_hook(
     DWORD   cbAttribute
 )
 {
-    if (dwAttribute != DWMWA_EXTENDED_FRAME_BOUNDS)
+    if ((g_bSecureOnly && !IsThreadDesktopSecure())
+    || dwAttribute != DWMWA_EXTENDED_FRAME_BOUNDS)
     {
         return DwmSetWindowAttribute_orig(
             hWnd, dwAttribute, pvAttribute, cbAttribute
@@ -124,7 +165,8 @@ BOOL WINAPI SetWindowCompositionAttribute_hook(
     LPWINCOMPATTRDATA pData
 )
 {
-    if (pData->nAttr != 19)
+    if ((g_bSecureOnly && !IsThreadDesktopSecure())
+    || pData->nAttr != 19)
     {
         return SetWindowCompositionAttribute_orig(
             hWnd, pData
@@ -146,7 +188,7 @@ HRESULT THISCALL DirectUI_DUIXmlParser__InitializeTables_hook(
     void *pThis
 )
 {
-    DUIXmlParser_Composited(pThis) = FALSE;
+    DUIXmlParser_Composited(pThis) = g_bSecureOnly ? !IsThreadDesktopSecure() : FALSE;
     return DirectUI_DUIXmlParser__InitializeTables_orig(pThis);
 }
 
@@ -231,8 +273,15 @@ const WindhawkUtils::SYMBOL_HOOK comctl32_hook = {
     false
 };
 
+void LoadSettings(void)
+{
+    g_bSecureOnly = Wh_GetIntSetting(L"secureonly");
+}
+
 BOOL Wh_ModInit(void)
 {
+    LoadSettings();
+
     LOAD_MODULE(uxtheme)
     HOOK_FUNCTION(uxtheme, IsCompositionActive)
 
@@ -263,4 +312,9 @@ BOOL Wh_ModInit(void)
     }
 
     return TRUE;
+}
+
+void Wh_ModSettingsChanged(void)
+{
+    LoadSettings();
 }
