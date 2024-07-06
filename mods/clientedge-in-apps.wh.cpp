@@ -11,7 +11,7 @@
 // ==WindhawkModReadme==
 /*
 Adds WS_EX_CLIENTEDGE (3D border) to some apps to look better in Classic theme. Includes SysListView32 control in 
-File Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathematica.
+File Explorer, Internet Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathematica.
 
 Before:
 
