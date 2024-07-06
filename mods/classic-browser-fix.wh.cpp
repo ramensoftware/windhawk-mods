@@ -2,7 +2,7 @@
 // @id              classic-browser-fix
 // @name            Fix browsers for Windows Classic theme
 // @description     Forces the border from Aero Light theme to fix glitched border in Classic theme
-// @version         1.1
+// @version         1.2
 // @author 			Anixx
 // @github 			https://github.com/Anixx
 // @include         msedge.exe
