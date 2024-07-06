@@ -10,6 +10,14 @@
 // @include         flux.exe
 // ==/WindhawkMod==
 
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/levitation-opensource/my-windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/levitation-opensource/my-windhawk-mods/
+
 // ==WindhawkModReadme==
 /*
 # Maintain colour temperature of f.lux
