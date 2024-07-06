@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              clientedge-in-apps
-// @name            Clientedge (3D border) in choosen apps
-// @description     Adds WS_EX_CLIENTEDGE style to some apps to look better in Classic theme.
-// @version         1.0.0
+// @name            Clientedge Everywhere
+// @description     Adds 3D border (WS_EX_CLIENTEDGE style) to some windows to look better in Classic theme.
+// @version         1.1.0
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -11,7 +11,7 @@
 // ==WindhawkModReadme==
 /*
 Adds WS_EX_CLIENTEDGE (3D border) to some apps to look better in Classic theme. Includes SysListView32 control in 
-File Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathematica.
+File Explorer, Internet Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathematica.
 
 Before:
 
@@ -48,6 +48,15 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
     if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"Edit")) {
         GetClassNameW(hWndParent, wszClassName, 256);
         if (!wcscmp(wszClassName, L"Notepad")) {
+            dwExStyle |= WS_EX_CLIENTEDGE;
+        }
+    }
+
+    // Internet Explorer
+
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"Shell DocObject View")) {
+        GetClassNameW(hWndParent, wszClassName, 256);
+        if (!wcscmp(wszClassName, L"TabWindowClass")) {
             dwExStyle |= WS_EX_CLIENTEDGE;
         }
     }
