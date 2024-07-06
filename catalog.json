@@ -102,7 +102,7 @@
                 "published": 1719423839000,
                 "rating": 8,
                 "ratingUsers": 2,
-                "updated": 1719423839000,
+                "updated": 1720265128000,
                 "users": 66
             },
             "metadata": {
@@ -117,7 +117,7 @@
                     "dwm.exe"
                 ],
                 "name": "Basic Themer",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "ce-disable-process-button-flashing": {
