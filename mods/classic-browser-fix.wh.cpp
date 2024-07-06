@@ -6,11 +6,11 @@
 // @author 			Anixx
 // @github 			https://github.com/Anixx
 // @include         msedge.exe
-// @include         brave.exe
 // @include         chrome.exe
 // @include         chromium.exe
 // @include         Skype.exe
 // @include         steam.exe
+// @include         brave.exe
 
 // @compilerOptions -luxtheme
 // ==/WindhawkMod==
@@ -23,7 +23,6 @@ which fixes their glitches when using Windows Classic theme.
 
 ![Aero Lite](https://i.imgur.com/5enqSD8.png)
 
-Authors: Anixx, levitation
 */
 // ==/WindhawkModReadme==
 
@@ -31,6 +30,6 @@ Authors: Anixx, levitation
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
-    SetThemeAppProperties(STAP_ALLOW_CONTROLS);       //Without the STAP_ALLOW_CONTROLS flag the file save dialog fails to open.
+    SetThemeAppProperties(STAP_ALLOW_CONTROLS); // Reported problems in File Picker without this flag.
     return TRUE;
 }
