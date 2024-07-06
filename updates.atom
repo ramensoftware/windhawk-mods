@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-06T11:31:13.000Z</updated>
+    <updated>2024-07-06T11:31:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.2]]></title>
+        <id>https://windhawk.net/mods/classic-browser-fix#77c66fbd6c63d5ac8642a77789dbc30880a33e71</id>
+        <link href="https://windhawk.net/mods/classic-browser-fix"/>
+        <updated>2024-07-06T11:31:46.000Z</updated>
+        <content type="html"><![CDATA[<p>plus Brave browser, mitigate reported issues in File Picker</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Clientedge Everywhere 1.1.0]]></title>
         <id>https://windhawk.net/mods/clientedge-in-apps#97fac6cb48581f099d1f98752b27f8e4188f9f21</id>
@@ -229,17 +236,5 @@ a seperate repository.</li>
 <p>Example with Notepad:</p>
 <p><img src="https://i.imgur.com/4O06W7H.png" alt="Notepad" /></p>
 <p>IMPORTANT: This mod is only for actual Windows 7, it will not work on newer versions</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Change Explorer Default Location 1.0.0]]></title>
-        <id>https://windhawk.net/mods/change-explorer-default-location#7e213cbdc94ce26de846f6eddb3290d915a35908</id>
-        <link href="https://windhawk.net/mods/change-explorer-default-location"/>
-        <updated>2024-06-18T18:14:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="changeexplorerdefaultlocation">Change Explorer Default Location</h1>
-<p>This mod allows you to change the shell location or directory where Explorer starts.
-The directory can be either a regular path, or a shell location. A list of CLSIDs
-for shell locations in Windows 10 can be found
-<a href="https://www.tenforums.com/tutorials/3123-clsid-key-guid-shortcuts-list-windows-10-a.html">here</a>.</p>
-<p>Shell locations must be prefixed with <code>shell:::</code> (e.g. <code>shell:::{031E4825-7B94-4dc3-B131-E946B44C8DD5}</code>).</p>]]></content>
     </entry>
 </feed>
