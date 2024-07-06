@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-06T11:25:28.000Z</updated>
+    <updated>2024-07-06T11:31:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Clientedge Everywhere 1.1.0]]></title>
+        <id>https://windhawk.net/mods/clientedge-in-apps#97fac6cb48581f099d1f98752b27f8e4188f9f21</id>
+        <link href="https://windhawk.net/mods/clientedge-in-apps"/>
+        <updated>2024-07-06T11:31:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Internet Explorer</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Basic Themer 1.1.0]]></title>
         <id>https://windhawk.net/mods/basic-themer#158c2c73690dc245e9f6c9b44da0ab5961b1d8f4</id>
@@ -232,19 +241,5 @@ The directory can be either a regular path, or a shell location. A list of CLSID
 for shell locations in Windows 10 can be found
 <a href="https://www.tenforums.com/tutorials/3123-clsid-key-guid-shortcuts-list-windows-10-a.html">here</a>.</p>
 <p>Shell locations must be prefixed with <code>shell:::</code> (e.g. <code>shell:::{031E4825-7B94-4dc3-B131-E946B44C8DD5}</code>).</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Open With - Remove Microsoft Store Menu Item 1.0.0]]></title>
-        <id>https://windhawk.net/mods/remove-ms-store-open-with#5d19436db760d33ed22329a199902e1f431c8000</id>
-        <link href="https://windhawk.net/mods/remove-ms-store-open-with"/>
-        <updated>2024-06-18T17:50:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="openwithremovemicrosoftstoremenuitem">Open With - Remove Microsoft Store Menu Item</h1>
-<p>This mod removes the "Search with Microsoft Store" item from the "Open with"
-submenu in File Explorer. The item is unremovable by normal means (MUI/registry
-editing).</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>
