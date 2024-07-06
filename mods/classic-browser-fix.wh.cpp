@@ -10,6 +10,7 @@
 // @include         chromium.exe
 // @include         Skype.exe
 // @include         steam.exe
+// @include         brave.exe
 
 // @compilerOptions -luxtheme
 // ==/WindhawkMod==
@@ -29,6 +30,6 @@ which fixes their glitches when using Windows Classic theme.
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
-    SetThemeAppProperties(0);
+    SetThemeAppProperties(STAP_ALLOW_CONTROLS); // Reported problems in File Picker without this flag.
     return TRUE;
 }
