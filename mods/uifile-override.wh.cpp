@@ -12,8 +12,14 @@
 // ==WindhawkModReadme==
 /*
 # UIFILE Override
-Mod that overrides DirectUI XML files same way as OldNewExplorer, loading them
-from shellstyle.dll.
+Mod that overrides DirectUI XML files, similar to OldNewExplorer, loading them
+from current theme shellstyle.dll. Mainly used for explorer.
+## How to use
+For overriding a UIFILE resource, you need to add to your shellstyle.dll a resource named as the file you want to override:\
+**shell32.dll UIFILE 21** -> **shellstyle.dll SHELL32_UIFILE 21**.\
+This will override the original resource from shell32 to the one in shellstyle.
+### Resource UIFILE 21 loading from shellstyle.dll:
+![Explorer loading resource shell32.dll UIFILE 21 from shellstye.dll](https://i.imgur.com/4sxHtUd.png)
 */
 // ==/WindhawkModReadme==
 
