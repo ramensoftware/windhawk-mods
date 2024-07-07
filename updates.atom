@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-07T06:56:30.000Z</updated>
+    <updated>2024-07-07T08:39:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[UXTheme hook 1.0]]></title>
+        <id>https://windhawk.net/mods/uxtheme-hook#041ef1c28ab0714b460b38b9844911e43456bd00</id>
+        <link href="https://windhawk.net/mods/uxtheme-hook"/>
+        <updated>2024-07-07T08:39:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="uxthemehook">UXTheme hook</h1>
+<p>apply custom themes.</p>
+<h3 id="important">⚠ Important ⚠</h3>
+<p>in order for this mod to work properly, you must include <code>winlogon.exe</code> and <code>logonui.exe</code> in windhawk's process inclusion list, in its advanced settings.</p>
+<h3 id="bugs">bugs</h3>
+<p>the colors in control panel might be weird sometimes. works fine if you leave control panel open, then switch themes.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[UIFILE Override 1.0]]></title>
         <id>https://windhawk.net/mods/uifile-override#5a35e8af0e0dedd36d5dc3b800cba300739a518c</id>
@@ -222,21 +234,5 @@ a seperate repository.</li>
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2024-06-20T18:19:16.000Z</updated>
         <content type="html"><![CDATA[<p>Navigation pane accuracy fixes for Windows 7 style, code cleanup</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SecureBoot Warning Watermark Enabler 1]]></title>
-        <id>https://windhawk.net/mods/isretailready-false#e17e347378ee1bfe0d7012674829724e70fe1cd8</id>
-        <link href="https://windhawk.net/mods/isretailready-false"/>
-        <updated>2024-06-20T13:36:51.000Z</updated>
-        <content type="html"><![CDATA[<p>Certain versions of Windows starting with 8 have code for a SecureBoot watermark, which is usually hidden in normal circumstances, even if SecureBoot is off. It can be forcefully enabled by making a function (CDesktopWatermark::s_IsRetailReady) return false.
-<img src="https://i.imgur.com/k0giME6.png" alt="Watermark" /></p>
-<p>It may not work with all versions of Windows.</p>
-<p>Tested on:</p>
-<ul>
-<li>1703 (Windhawk Mod) - worked fine</li>
-<li>1803 (shell32.dll patch) - worked fine</li>
-<li>1809 (Windhawk Mod) - worked fine</li>
-<li>21H2 (Windhawk Mod) - the watermark enabled but the warning wasn't there - missing text resources?</li>
-</ul>]]></content>
     </entry>
 </feed>

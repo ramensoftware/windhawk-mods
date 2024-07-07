@@ -2420,6 +2420,30 @@
                 "version": "0.1"
             }
         },
+        "uxtheme-hook": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1720341593000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1720341593000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "rounk-ctrl",
+                "compilerOptions": "-luxtheme -lgdi32",
+                "description": "Allows you to apply custom themes",
+                "github": "https://github.com/rounk-ctrl",
+                "include": [
+                    "winlogon.exe",
+                    "explorer.exe",
+                    "systemsettings.exe",
+                    "logonui.exe"
+                ],
+                "name": "UXTheme hook",
+                "version": "1.0"
+            }
+        },
         "virtual-desktop-taskbar-order": {
             "details": {
                 "defaultSorting": 5570,
