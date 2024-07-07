@@ -4,7 +4,7 @@
 // @description     Keeps your preferred f.lux colour temperature settings, eliminating automatic changes
 // @version         1.0
 // @author          Roland Pihlakas
-// @github          https://github.com/levitation-opensource/
+// @github          https://github.com/levitation/
 // @homepage        https://www.simplify.ee/
 // @compilerOptions -lkernel32
 // @include         flux.exe
