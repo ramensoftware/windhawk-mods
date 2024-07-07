@@ -2354,6 +2354,27 @@
                 "version": "1.0"
             }
         },
+        "uifile-override": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1720335390000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1720335390000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "xalejandro",
+                "compilerOptions": "-luxtheme -lshlwapi",
+                "description": "Override UIFILE resources",
+                "github": "https://github.com/tetawaves",
+                "include": [
+                    "*"
+                ],
+                "name": "UIFILE Override",
+                "version": "1.0"
+            }
+        },
         "unlock-taskmgr-server": {
             "details": {
                 "defaultSorting": 225,

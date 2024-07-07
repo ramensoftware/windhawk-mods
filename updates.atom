@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-06T11:31:46.000Z</updated>
+    <updated>2024-07-07T06:56:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[UIFILE Override 1.0]]></title>
+        <id>https://windhawk.net/mods/uifile-override#5a35e8af0e0dedd36d5dc3b800cba300739a518c</id>
+        <link href="https://windhawk.net/mods/uifile-override"/>
+        <updated>2024-07-07T06:56:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="uifileoverride">UIFILE Override</h1>
+<p>Mod that overrides UIFILE resources, similar to OldNewExplorer, loading them
+from current theme shellstyle.dll. Mainly used for explorer.</p>
+<h2 id="howtouse">How to use</h2>
+<p>For overriding a UIFILE resource with this mod, you need to add to your shellstyle.dll a resource named as the file you want to override:<br />
+<strong>shell32.dll UIFILE 21</strong> -&gt; <strong>shellstyle.dll SHELL32_UIFILE 21</strong>.<br />
+This will override the original UIFILE resource from shell32 to the one in shellstyle.</p>
+<h3 id="resourceuifile21loadingfromshellstyledll">Resource UIFILE 21 loading from shellstyle.dll:</h3>
+<p><img src="https://i.imgur.com/4sxHtUd.png" alt="Explorer loading resource shell32.dll UIFILE 21 from shellstye.dll" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.2]]></title>
         <id>https://windhawk.net/mods/classic-browser-fix#77c66fbd6c63d5ac8642a77789dbc30880a33e71</id>
@@ -223,18 +238,5 @@ a seperate repository.</li>
 <li>1809 (Windhawk Mod) - worked fine</li>
 <li>21H2 (Windhawk Mod) - the watermark enabled but the warning wasn't there - missing text resources?</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win7 Disable Composition for process 1.0]]></title>
-        <id>https://windhawk.net/mods/win7-dwm-disable#0372b9ba0a24d011c0862fc15e9530f58d9e36d9</id>
-        <link href="https://windhawk.net/mods/win7-dwm-disable"/>
-        <updated>2024-06-19T13:01:17.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod lets you disable DWM desktop composition when you run a certain program.</p>
-<p>It acts the same as the "Disable desktop composition" option in the Compatibility tab, however this can be used for 64-bit programs as well.</p>
-<p>To include a program to be affected by the mod, use the process inclusion option on the Advanced tab.</p>
-<p>NOTE: If your program re-enables DWM composition by itself (for example, OBS versions that support turning it off via the program), it will not work</p>
-<p>Example with Notepad:</p>
-<p><img src="https://i.imgur.com/4O06W7H.png" alt="Notepad" /></p>
-<p>IMPORTANT: This mod is only for actual Windows 7, it will not work on newer versions</p>]]></content>
     </entry>
 </feed>
