@@ -9,6 +9,7 @@
 // @include         explorer.exe
 // @include         systemsettings.exe
 // @include         logonui.exe
+// @include         rundll32.exe
 // @compilerOptions -luxtheme -lgdi32
 // ==/WindhawkMod==
 
