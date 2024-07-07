@@ -1367,6 +1367,28 @@
                 "version": "0.7"
             }
         },
+        "maintain-flux-colour-temperature": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1720345866000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1720345866000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Roland Pihlakas",
+                "compilerOptions": "-lkernel32",
+                "description": "Keeps your preferred f.lux colour temperature settings, eliminating automatic changes",
+                "github": "https://github.com/levitation",
+                "homepage": "https://www.simplify.ee/",
+                "include": [
+                    "flux.exe"
+                ],
+                "name": "Maintain colour temperature of f.lux",
+                "version": "1.0"
+            }
+        },
         "modernize-folder-picker-dialog": {
             "details": {
                 "defaultSorting": 5920,

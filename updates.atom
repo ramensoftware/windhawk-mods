@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-07T08:39:53.000Z</updated>
+    <updated>2024-07-07T09:51:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Maintain colour temperature of f.lux 1.0]]></title>
+        <id>https://windhawk.net/mods/maintain-flux-colour-temperature#3ebfcc35a494cc2c1cc0f65c11728a5badd6e1bb</id>
+        <link href="https://windhawk.net/mods/maintain-flux-colour-temperature"/>
+        <updated>2024-07-07T09:51:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="maintaincolourtemperatureofflux">Maintain colour temperature of f.lux</h1>
+<p>Keeps your preferred f.lux colour temperature settings, eliminating automatic changes. You can choose the desired colour temperature from f.lux dropdown menu, and f.lux will not change it later automatically.</p>
+<p>The mod operates by providing f.lux always with a fixed day and time. This fixed day and time can be adjusted by the user in the settings panel of this mod, if necessary, though the default setting should be usually suitable. By default the noon of approximately midsummer day of Northern Hemisphere is chosen as the fixed day and time. The particular day and time are not very important, what matters is that the fixed time is not near the time points where f.lux would usually get triggered to adjust the screen colour on its own.</p>
+<p>There are many posts in f.lux forum asking for this functionality since 2016. Unfortunately there were no solutions provided so far:</p>
+<ul>
+<li><a href="https://forum.justgetflux.com/topic/3012/disable-f-lux-s-automatic-adjustments-based-on-time-location/">Disable f.lux's automatic adjustments based on time/location</a></li>
+<li><a href="https://forum.justgetflux.com/topic/6162/can-automatic-timer-settings-be-disabled">Can automatic timer settings be disabled?</a></li>
+<li><a href="https://forum.justgetflux.com/topic/6228/disabling-all-automatic-functions">Disabling all automatic functions.</a></li>
+<li><a href="https://forum.justgetflux.com/topic/7904/how-to-disable-automatic-change-based-on-time-location">How To Disable Automatic Change Based On Time / Location ?</a></li>
+<li><a href="https://forum.justgetflux.com/topic/8404/how-do-i-stop-flux-to-stop-changing-colors-arbitrary-force-always-on-mode-force-coupling-day-and-night-colors">How do I stop flux to stop changing colors arbitrary / Force always on mode / Force coupling day and night colors?</a></li>
+<li><a href="https://forum.justgetflux.com/topic/8431/sleeping-during-the-day">Sleeping during the day</a></li>
+<li><a href="https://forum.justgetflux.com/topic/8475/how-do-i-make-my-own-permanent-preset">How do I make my own Permanent preset?</a></li>
+<li><a href="https://forum.justgetflux.com/topic/8502/disable-circadian-response-only/">Disable Circadian Response Only</a></li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[UXTheme hook 1.0]]></title>
         <id>https://windhawk.net/mods/uxtheme-hook#041ef1c28ab0714b460b38b9844911e43456bd00</id>
@@ -227,12 +247,5 @@ a seperate repository.</li>
         <link href="https://windhawk.net/mods/aero-tray"/>
         <updated>2024-06-21T16:49:30.000Z</updated>
         <content type="html"><![CDATA[<p>Fix StartIsBack++ patching on per-user installations</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.6.2]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#6c9a8296166542e539dc0166b6310b516b19e39c</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2024-06-20T18:19:16.000Z</updated>
-        <content type="html"><![CDATA[<p>Navigation pane accuracy fixes for Windows 7 style, code cleanup</p>]]></content>
     </entry>
 </feed>
