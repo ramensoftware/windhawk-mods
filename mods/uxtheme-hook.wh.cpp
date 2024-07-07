@@ -37,6 +37,7 @@ the colors in control panel might be weird sometimes. works fine if you leave co
 #include <windhawk_utils.h>
 #include <vector>
 #include <uxtheme.h>
+#include <winerror.h>
 
 #ifdef _WIN64
 #define STDCALL  __cdecl
@@ -59,7 +60,7 @@ HRESULT STDCALL CThemeSignature_VerifyHook(
     PVOID hFile
 )
 {
-    return 0;
+    return ERROR_SUCCESS;
 }
 #pragma endregion
 
@@ -104,7 +105,7 @@ VOID STDCALL Element_PaintBgHook(class Element* This, HDC hdc, class Value* valu
 using SetSysColors_t = decltype(&SetSysColors);
 SetSysColors_t SetSysColors_orig;
 
-int STDCALL SetSysColors_hook(int cElements, const INT *lpaElements, const COLORREF *lpaRgbValues)
+int WINAPI SetSysColors_hook(int cElements, const INT *lpaElements, const COLORREF *lpaRgbValues)
 {
     // logonui
     if (cElements == 13) return 1;
@@ -140,15 +141,14 @@ BOOL Wh_ModInit() {
     }
     
     // for logonui
-    WindhawkUtils::Wh_SetFunctionHookT((void*)SetSysColors, (void*)SetSysColors_hook,
-                       (void**)&SetSysColors_orig);
+    WindhawkUtils::Wh_SetFunctionHookT(SetSysColors, SetSysColors_hook, &SetSysColors_orig);
 
     WindhawkUtils::SYMBOL_HOOK duiHooks[] =
     {
         {
             {L"public: void " SSTDCALL " DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
-            (void **)&Element_PaintBg,
-            (void *)Element_PaintBgHook,
+            &Element_PaintBg,
+            Element_PaintBgHook,
             false
         },
     };
