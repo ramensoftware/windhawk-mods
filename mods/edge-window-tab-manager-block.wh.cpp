@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              edge-window-tab-manager-block-local
+// @id              edge-window-tab-manager-block
 // @name            Prevent Edge from lagging your Taskbar process
 // @description     Blocks Edge window Alt-Tab manager
 // @version         1.0
