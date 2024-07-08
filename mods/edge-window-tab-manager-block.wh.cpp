@@ -70,12 +70,6 @@ The benefit of this small mod is that you can conveniently install or uninstall 
 #include <roapi.h>
 
 
-#ifndef WH_MOD
-#define WH_MOD
-#include <mods_api.h>
-#endif
-
-
 template <typename T>
 BOOL Wh_SetFunctionHookT(
     FARPROC targetFunction,
