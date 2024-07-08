@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-07T09:51:06.000Z</updated>
+    <updated>2024-07-08T07:00:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[UXTheme hook 1.1]]></title>
+        <id>https://windhawk.net/mods/uxtheme-hook#ed8141fe586e4fccc124b2ced4063f248aa38179</id>
+        <link href="https://windhawk.net/mods/uxtheme-hook"/>
+        <updated>2024-07-08T07:00:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>fix calling conventions</li>
+<li>works when directly applying .theme files</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Maintain colour temperature of f.lux 1.0]]></title>
         <id>https://windhawk.net/mods/maintain-flux-colour-temperature#3ebfcc35a494cc2c1cc0f65c11728a5badd6e1bb</id>
@@ -240,12 +250,5 @@ with the AltTab class and can be used as a base.</li>
 <li>I also updated the images (the DWM one now shows glass), but that is on
 a seperate repository.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aero Tray 1.0.2]]></title>
-        <id>https://windhawk.net/mods/aero-tray#6509ac2f18f92f80ade80870cc978983fbf636d7</id>
-        <link href="https://windhawk.net/mods/aero-tray"/>
-        <updated>2024-06-21T16:49:30.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix StartIsBack++ patching on per-user installations</p>]]></content>
     </entry>
 </feed>

@@ -2448,7 +2448,7 @@
                 "published": 1720341593000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1720341593000,
+                "updated": 1720422047000,
                 "users": 5
             },
             "metadata": {
@@ -2460,10 +2460,11 @@
                     "winlogon.exe",
                     "explorer.exe",
                     "systemsettings.exe",
-                    "logonui.exe"
+                    "logonui.exe",
+                    "rundll32.exe"
                 ],
                 "name": "UXTheme hook",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "virtual-desktop-taskbar-order": {
