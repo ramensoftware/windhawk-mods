@@ -354,7 +354,7 @@ public:
     {
         if (!initialized)
         {
-            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_MULTITHREADED));
+            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
         }
         return initialized;
     }
