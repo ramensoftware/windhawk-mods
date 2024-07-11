@@ -26,11 +26,11 @@ Fixes Taskbar background in classic theme by replacing black background with a c
 
 Before:
 
-![Before](https://github.com/levitation-opensource/my-windhawk-mods/screenshots/after-classic-taskbar-background-fix.png)
+![Before](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/before-classic-taskbar-background-fix.png)
 
 After:
 
-![After](https://github.com/levitation-opensource/my-windhawk-mods/screenshots/before-classic-taskbar-background-fix.png)
+![After](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png)
 */
 // ==/WindhawkModReadme==
 
@@ -324,6 +324,7 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
 
     Wh_Log(L"Uniniting...");
+
 
     if (g_initThread) {
 
