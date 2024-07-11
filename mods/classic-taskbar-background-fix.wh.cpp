@@ -74,8 +74,7 @@ bool WindowNeedsBackgroundRepaint(HWND hWnd) {
     WCHAR szClassName[32];
     if (hWnd && GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
         return
-            _wcsicmp(szClassName, L"Shell_TrayWnd") == 0
-            || _wcsicmp(szClassName, L"Start") == 0                     //around of start button
+            _wcsicmp(szClassName, L"Shell_TrayWnd") == 0        //around of start button
             || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0        //secondary taskbar
             || _wcsicmp(szClassName, L"MSTaskListWClass") == 0      //around of taskbar buttons
             || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray
@@ -200,8 +199,13 @@ bool TryInit(bool* abort, bool callApplyHookOperations) {
     Wh_SetFunctionHookT(pEndPaint, EndPaintHook, &pOriginalEndPaint);
 
 
-    if (callApplyHookOperations)
+    if (callApplyHookOperations) {
         Wh_ApplyHookOperations();   //we are running in a separate thread outside of Wh_ModInit() therefore need to call Wh_ApplyHookOperations manually
+
+        //apply the new colour immediately
+        //taskbar repaint is possible only after hooking is actually applied, so when TryInit() is called from Wh_ModInit() then taskbar repaint is not possible at this moment yet
+        TriggerTaskbarRepaint(hwndTaskbar);
+    }
 
 
     //apply the new colour immediately
@@ -250,6 +254,11 @@ void Wh_ModAfterInit(void) {
         else {
             Wh_Log(L"ResumeThread failed");
         }
+    }
+    else {  //if the init was done in Wh_ModInit then hooking was done only after that and taskbar repaint was not yet possible until now
+
+        //apply the updated colour immediately
+        TriggerTaskbarRepaint(NULL);
     }
 }
 
