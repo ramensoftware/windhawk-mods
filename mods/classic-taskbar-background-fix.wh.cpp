@@ -74,7 +74,8 @@ bool WindowNeedsBackgroundRepaint(HWND hWnd) {
     WCHAR szClassName[32];
     if (hWnd && GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
         return
-            _wcsicmp(szClassName, L"Shell_TrayWnd") == 0        //around of start button
+            _wcsicmp(szClassName, L"Shell_TrayWnd") == 0
+            || _wcsicmp(szClassName, L"Start") == 0                     //around of start button
             || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0        //secondary taskbar
             || _wcsicmp(szClassName, L"MSTaskListWClass") == 0      //around of taskbar buttons
             || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray
