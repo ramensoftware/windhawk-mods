@@ -40,12 +40,28 @@ After:
   $name: Repaint the "Show desktop button"
   $options:
   - yes: Yes
+  - highlightOnHover: Yes, and use highlight colour on mouse over
+  - windowBackgroundOnHover: Yes, and use window background colour on mouse over
   - no: No
 */
 // ==/WindhawkModSettings==
 
 
 #include <windowsx.h>
+
+
+#ifndef WH_MOD
+#define WH_MOD
+#include <mods_api.h>
+#endif
+
+
+enum class RepaintDesktopButtonConfig {
+    yes,
+    highlightOnHover,
+    windowBackgroundOnHover,
+    no
+};
 
 
 template <typename T>
@@ -63,31 +79,87 @@ HANDLE g_initThread = NULL;
 HANDLE g_initThreadStopSignal = NULL;
 HWND g_hwndTaskbar = NULL;
 
-bool g_repaintDesktopButton = false;
+RepaintDesktopButtonConfig g_repaintDesktopButtonConfig;
 
 
 using EndPaint_t = decltype(&EndPaint);
 EndPaint_t pOriginalEndPaint;
 
 
-bool WindowNeedsBackgroundRepaint(HWND hWnd) {
+RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
+    if (wcscmp(string, L"no") == 0) {
+        return RepaintDesktopButtonConfig::no;
+    }
+    else if (wcscmp(string, L"highlightOnHover") == 0) {
+        return RepaintDesktopButtonConfig::highlightOnHover;
+    }
+    else if (wcscmp(string, L"windowBackgroundOnHover") == 0) {
+        return RepaintDesktopButtonConfig::windowBackgroundOnHover;
+    }
+    else {
+        return RepaintDesktopButtonConfig::yes;
+    }
+}
+
+
+bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* paintRect) {
 
     WCHAR szClassName[32];
     if (
-        hWnd
+        hWnd 
         && GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName))
+    ) {
+        if (
+            (
+                g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::highlightOnHover
+                || g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::windowBackgroundOnHover
+            )
+            && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0
         ) {
-        return
-            _wcsicmp(szClassName, L"Shell_TrayWnd") == 0        //around of start button
-            || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0        //secondary taskbar
-            || _wcsicmp(szClassName, L"MSTaskListWClass") == 0      //around of taskbar buttons
-            || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray
-            || _wcsicmp(szClassName, L"Button") == 0        //three dots 
-            || _wcsicmp(szClassName, L"ToolbarWindow32") == 0      //tray icons
-            || _wcsicmp(szClassName, L"TrayClockWClass") == 0       //clock
-            || _wcsicmp(szClassName, L"TrayButton") == 0        //action center button
-            || (g_repaintDesktopButton && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0)   //show desktop button
-            ;
+            POINT cursorPos;
+            if (GetCursorPos(&cursorPos)) {
+                if (ScreenToClient(
+                    hWnd,
+                    &cursorPos
+                )) {
+                    bool mouseIsOverShowDesktopButton = PtInRect(
+                        paintRect,
+                        cursorPos
+                    );
+
+                    if (mouseIsOverShowDesktopButton) {
+                        if (g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::highlightOnHover)
+                            *colorIndex = COLOR_HIGHLIGHT;
+                        else
+                            *colorIndex = COLOR_WINDOW;
+                    }
+                    else {
+                        *colorIndex = COLOR_3DFACE;
+                    }
+
+                    return true;
+                }
+            }
+        }
+        else {
+            bool result =
+                _wcsicmp(szClassName, L"Shell_TrayWnd") == 0        //around of start button
+                || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0        //secondary taskbar
+                || _wcsicmp(szClassName, L"MSTaskListWClass") == 0      //around of taskbar buttons
+                || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray
+                || _wcsicmp(szClassName, L"Button") == 0        //three dots 
+                || _wcsicmp(szClassName, L"ToolbarWindow32") == 0      //tray icons
+                || _wcsicmp(szClassName, L"TrayClockWClass") == 0       //clock
+                || _wcsicmp(szClassName, L"TrayButton") == 0        //action center button
+                || (
+                    g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::yes 
+                    && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0   //show desktop button
+                );
+            if (result)
+                *colorIndex = COLOR_3DFACE;
+            return result;
+        }
+
     }
     else {
         return false;
@@ -138,16 +210,17 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
 
 BOOL WINAPI EndPaintHook(
     IN HWND                 hWnd,
-    IN const PAINTSTRUCT* lpPaint
+    IN const PAINTSTRUCT*   lpPaint
 ) {
+    int colorIndex;
     if (
         g_hwndTaskbar   //is the current process the taskbar process?
-        && lpPaint
-        && lpPaint->hdc
-        && WindowNeedsBackgroundRepaint(hWnd)
-        ) {
+        && lpPaint 
+        && lpPaint->hdc 
+        && WindowNeedsBackgroundRepaint(&colorIndex, hWnd, &lpPaint->rcPaint)
+    ) {
         COLORREF black = RGB(0, 0, 0);
-        COLORREF buttonFace = GetSysColor(COLOR_3DFACE);
+        COLORREF buttonFace = GetSysColor(colorIndex);
         if (buttonFace != black)
             ConditionalFillRect(lpPaint->hdc, lpPaint->rcPaint, black, buttonFace);
     }
@@ -171,11 +244,11 @@ bool TryInit(bool* abort, bool canTriggerRepaint) {
 
     DWORD taskbarProcessId;
     if (
-        !GetWindowThreadProcessId(hwndTaskbar, &taskbarProcessId)
-        || !taskbarProcessId
-        ) {
+		!GetWindowThreadProcessId(hwndTaskbar, &taskbarProcessId) 
+		|| !taskbarProcessId
+	) {
         return false;   //retry
-    }
+	}
 
     Wh_Log(L"taskbarProcessId: %u", taskbarProcessId);
     if (taskbarProcessId != GetCurrentProcessId()) {
@@ -250,11 +323,10 @@ void Wh_ModAfterInit(void) {
 void LoadSettings() {
 
     //config option to keep "show desktop" button black
-    //TODO: option to use some other colour for "show desktop" button, for example window background colour - the same colour of hidden tray icons popup panel background uses
-    //TODO: option to have different colour for "show desktop" button during mouse over
     PCWSTR configString = Wh_GetStringSetting(L"RepaintDesktopButton");
-    g_repaintDesktopButton = (wcscmp(configString, L"no") != 0);        //default is yes, so if it is not "no" then it is yes
-    Wh_FreeStringSetting(configString);
+    g_repaintDesktopButtonConfig = DesktopButtonConfigFromString(configString);
+
+    Wh_FreeStringSetting(configString);     
 }
 
 BOOL Wh_ModInit() {
@@ -284,7 +356,7 @@ BOOL Wh_ModInit() {
     else if (abort) {
         return FALSE;   //if the taskbar process is already running then subsequent non-taskbar related explorer.exe instances will not be hooked
     }
-    else {
+    else {      
         //Taskbar was not yet found, maybe it is still initialising in the current process, so we need to retry later.
         //Hooking CreateWindowExW would cause potential instabilities during mod unload therefore using polling thread instead.
 
@@ -363,7 +435,7 @@ void Wh_ModUninit() {
     if (
         g_initThreadStopSignal
         && !g_retryInitInAThread     //was the thread successfully resumed?
-        ) {
+    ) {
         //we could close the signal handle regardless whether the thread was successfully resumed since if the thread resume failed then the program will crash anyway IF the mod is unloaded AND the thread is manually resumed later by somebody. But just in case hoping that maybe the mod DLL will not be unloaded as long as it has threads, then lets keep the signal handle alive as well.
 
         CloseHandle(g_initThreadStopSignal);
