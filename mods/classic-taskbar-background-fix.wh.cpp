@@ -61,18 +61,22 @@ BOOL Wh_SetFunctionHookT(
 bool g_retryInitInAThread = false;
 HANDLE g_initThread = NULL;
 HANDLE g_initThreadStopSignal = NULL;
+HWND g_hwndTaskbar = NULL;
 
 bool g_repaintDesktopButton = false;
 
 
-typedef BOOL(WINAPI* EndPaint_t)(HWND, const PAINTSTRUCT*);
+using EndPaint_t = decltype(&EndPaint);
 EndPaint_t pOriginalEndPaint;
 
 
 bool WindowNeedsBackgroundRepaint(HWND hWnd) {
 
     WCHAR szClassName[32];
-    if (hWnd && GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
+    if (
+        hWnd
+        && GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName))
+        ) {
         return
             _wcsicmp(szClassName, L"Shell_TrayWnd") == 0        //around of start button
             || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0        //secondary taskbar
@@ -134,10 +138,14 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
 
 BOOL WINAPI EndPaintHook(
     IN HWND                 hWnd,
-    IN const PAINTSTRUCT*   lpPaint
+    IN const PAINTSTRUCT* lpPaint
 ) {
-    if (lpPaint && lpPaint->hdc && WindowNeedsBackgroundRepaint(hWnd)) {
-
+    if (
+        g_hwndTaskbar   //is the current process the taskbar process?
+        && lpPaint
+        && lpPaint->hdc
+        && WindowNeedsBackgroundRepaint(hWnd)
+        ) {
         COLORREF black = RGB(0, 0, 0);
         COLORREF buttonFace = GetSysColor(COLOR_3DFACE);
         if (buttonFace != black)
@@ -147,19 +155,14 @@ BOOL WINAPI EndPaintHook(
     return pOriginalEndPaint(hWnd, lpPaint);
 }
 
+void TriggerTaskbarRepaint() {
 
-void TriggerTaskbarRepaint(HWND hwndTaskbar) {
-
-    if (!hwndTaskbar) {     //is taskbar hwnd already detected?
-        hwndTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
-        Wh_Log(L"hwndTaskbar: 0x%llX", (long long)hwndTaskbar);
-    }
-
+    HWND hwndTaskbar = g_hwndTaskbar;
     if (hwndTaskbar)
         RedrawWindow(hwndTaskbar, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 
-bool TryInit(bool* abort, bool callApplyHookOperations) {
+bool TryInit(bool* abort, bool canTriggerRepaint) {
 
     HWND hwndTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
     Wh_Log(L"hwndTaskbar: 0x%llX", (long long)hwndTaskbar);
@@ -167,8 +170,12 @@ bool TryInit(bool* abort, bool callApplyHookOperations) {
         return false;   //retry
 
     DWORD taskbarProcessId;
-    if (!GetWindowThreadProcessId(hwndTaskbar, &taskbarProcessId))
+    if (
+        !GetWindowThreadProcessId(hwndTaskbar, &taskbarProcessId)
+        || !taskbarProcessId
+        ) {
         return false;   //retry
+    }
 
     Wh_Log(L"taskbarProcessId: %u", taskbarProcessId);
     if (taskbarProcessId != GetCurrentProcessId()) {
@@ -176,43 +183,17 @@ bool TryInit(bool* abort, bool callApplyHookOperations) {
         *abort = true;
         return false;
     }
-
-
-    Wh_Log(L"Initialising hooks...");
-
-
-    HMODULE hUser32 = GetModuleHandle(L"user32.dll"); 	//when we reach here then we can be sure that user32.dll has been already loaded
-    if (!hUser32) {
-        Wh_Log(L"Loading user32.dll failed");
-        *abort = true;
-        return false;
-    }
-
-    FARPROC pEndPaint = GetProcAddress(hUser32, "EndPaint");
-    if (!pEndPaint) {
-        Wh_Log(L"Finding hookable functions from user32.dll failed");
-        *abort = true;
-        return false;
+    else {
+        g_hwndTaskbar = hwndTaskbar;
     }
 
 
-    Wh_SetFunctionHookT(pEndPaint, EndPaintHook, &pOriginalEndPaint);
-
-
-    if (callApplyHookOperations) {
-        Wh_ApplyHookOperations();   //we are running in a separate thread outside of Wh_ModInit() therefore need to call Wh_ApplyHookOperations manually
-
-        //apply the new colour immediately
-        //taskbar repaint is possible only after hooking is actually applied, so when TryInit() is called from Wh_ModInit() then taskbar repaint is not possible at this moment yet
-        TriggerTaskbarRepaint(hwndTaskbar);
+    if (canTriggerRepaint) {
+        TriggerTaskbarRepaint();
     }
 
 
-    //apply the new colour immediately
-    TriggerTaskbarRepaint(hwndTaskbar);
-
-
-    Wh_Log(L"Initialising hooks done");
+    Wh_Log(L"Initialising taskbar hwnd done");
 
     return true;
 }
@@ -232,7 +213,7 @@ retry:  //wait until taskbar has properly initialised in order to detect whether
     isRetry = true;
 
     bool abort = false;
-    if (TryInit(&abort, /*callApplyHookOperations*/true)) {
+    if (TryInit(&abort, /*canTriggerRepaint*/true)) {
         return TRUE;  //hooks done
     }
     else if (abort) {
@@ -244,6 +225,10 @@ retry:  //wait until taskbar has properly initialised in order to detect whether
 }
 
 void Wh_ModAfterInit(void) {
+
+    Wh_Log(L"Initialising hooks done");
+
+
     //Run the hook thread only after Wh_ModAfterInit() has been called. This is in order to avoid race condition in calling Wh_ApplyHookOperations().
     if (g_retryInitInAThread) {
 
@@ -258,17 +243,18 @@ void Wh_ModAfterInit(void) {
     else {  //if the init was done in Wh_ModInit then hooking was done only after that and taskbar repaint was not yet possible until now
 
         //apply the updated colour immediately
-        TriggerTaskbarRepaint(NULL);
+        TriggerTaskbarRepaint();
     }
 }
 
 void LoadSettings() {
 
     //config option to keep "show desktop" button black
-    //TODO: option to use some other colour, for example the colour of hidden tray icons popup panel background
+    //TODO: option to use some other colour for "show desktop" button, for example window background colour - the same colour of hidden tray icons popup panel background uses
+    //TODO: option to have different colour for "show desktop" button during mouse over
     PCWSTR configString = Wh_GetStringSetting(L"RepaintDesktopButton");
     g_repaintDesktopButton = (wcscmp(configString, L"no") != 0);        //default is yes, so if it is not "no" then it is yes
-    Wh_FreeStringSetting(configString);     
+    Wh_FreeStringSetting(configString);
 }
 
 BOOL Wh_ModInit() {
@@ -278,14 +264,30 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
 
+    HMODULE hUser32 = GetModuleHandle(L"user32.dll"); 	//when we reach here then we can be sure that user32.dll has been already loaded
+    if (!hUser32) {
+        Wh_Log(L"Loading user32.dll failed");
+        return FALSE;
+    }
+
+    FARPROC pEndPaint = GetProcAddress(hUser32, "EndPaint");
+    if (!pEndPaint) {
+        Wh_Log(L"Finding hookable functions from user32.dll failed");
+        return FALSE;
+    }
+
+
     bool abort = false;
-    if (TryInit(&abort, /*callApplyHookOperations*/false)) {    //NB! calling Wh_ApplyHookOperations() is not allowed during Wh_ModInit()
-        return TRUE;  //hooks done
+    if (TryInit(&abort, /*canTriggerRepaint*/false)) {    //NB! calling Wh_ApplyHookOperations() is not allowed during Wh_ModInit()
+        //set hooks at the end and then exit the function
     }
     else if (abort) {
         return FALSE;   //if the taskbar process is already running then subsequent non-taskbar related explorer.exe instances will not be hooked
     }
-    else {      //taskbar was not yet found, maybe it is still initialising in the current process, so we need to retry later
+    else {
+        //Taskbar was not yet found, maybe it is still initialising in the current process, so we need to retry later.
+        //Hooking CreateWindowExW would cause potential instabilities during mod unload therefore using polling thread instead.
+
         g_initThreadStopSignal = CreateEvent(
             /*lpEventAttributes = */NULL,           // default security attributes
             /*bManualReset = */TRUE,				// manual-reset event
@@ -303,14 +305,14 @@ BOOL Wh_ModInit() {
             /*dwStackSize = */0,
             InitThreadFunc,
             /*lpParameter = */NULL,
-            /*dwCreationFlags = */CREATE_SUSPENDED, 	//The thread does NOT run immediately after creation. This is in order to avoid any race conditions in calling Wh_ApplyHookOperations() before Wh_ModInit() has completed and Wh_ModAfterInit() has started     //TODO: is this concern important?
+            /*dwCreationFlags = */CREATE_SUSPENDED, 	//The thread does NOT run immediately after creation. This is in order to avoid any race conditions in calling Wh_ApplyHookOperations() before Wh_ModInit() has completed and Wh_ModAfterInit() has started
             /*lpThreadId = */NULL
         );
 
         if (g_initThread) {
             Wh_Log(L"InitThread created");
             g_retryInitInAThread = true;
-            return TRUE;
+            //set hooks at the end and then exit the function
         }
         else {
             Wh_Log(L"CreateThread failed");
@@ -319,6 +321,13 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     }
+
+
+    Wh_Log(L"Initialising hooks...");
+
+    Wh_SetFunctionHookT(pEndPaint, EndPaintHook, &pOriginalEndPaint);
+
+    return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
@@ -328,7 +337,7 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 
     //apply the updated colour immediately
-    TriggerTaskbarRepaint(NULL);
+    TriggerTaskbarRepaint();
 }
 
 void Wh_ModUninit() {
@@ -354,14 +363,16 @@ void Wh_ModUninit() {
     if (
         g_initThreadStopSignal
         && !g_retryInitInAThread     //was the thread successfully resumed?
-    ) {
+        ) {
+        //we could close the signal handle regardless whether the thread was successfully resumed since if the thread resume failed then the program will crash anyway IF the mod is unloaded AND the thread is manually resumed later by somebody. But just in case hoping that maybe the mod DLL will not be unloaded as long as it has threads, then lets keep the signal handle alive as well.
+
         CloseHandle(g_initThreadStopSignal);
         g_initThreadStopSignal = NULL;
     }
 
 
     //apply the default colour immediately
-    TriggerTaskbarRepaint(NULL);
+    TriggerTaskbarRepaint();
 
 
     Wh_Log(L"Uninit complete");
