@@ -278,7 +278,7 @@ BOOL Wh_ModInit() {
 
 
     bool abort = false;
-    if (TryInit(&abort, /*canTriggerRepaint*/false)) {    //NB! calling Wh_ApplyHookOperations() is not allowed during Wh_ModInit()
+    if (TryInit(&abort, /*canTriggerRepaint*/false)) {    //NB! calling TriggerTaskbarRepaint() would be premature during Wh_ModInit()
         //set hooks at the end and then exit the function
     }
     else if (abort) {
