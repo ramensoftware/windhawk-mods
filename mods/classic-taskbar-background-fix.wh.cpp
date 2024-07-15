@@ -305,7 +305,7 @@ BOOL Wh_ModInit() {
             /*dwStackSize = */0,
             InitThreadFunc,
             /*lpParameter = */NULL,
-            /*dwCreationFlags = */CREATE_SUSPENDED, 	//The thread does NOT run immediately after creation. This is in order to avoid any race conditions in calling Wh_ApplyHookOperations() before Wh_ModInit() has completed and Wh_ModAfterInit() has started
+            /*dwCreationFlags = */CREATE_SUSPENDED, 	//The thread does NOT run immediately after creation. This is in order to avoid any race conditions in calling TriggerTaskbarRepaint() from the thread before Wh_ModInit() has completed and hooks are activated
             /*lpThreadId = */NULL
         );
 
