@@ -49,6 +49,8 @@ After:
 // ==/WindhawkModSettings==
 
 
+#include <map>
+#include <mutex>
 #include <windowsx.h>
 
 
@@ -81,9 +83,22 @@ HANDLE g_initThread = NULL;
 HANDLE g_initThreadStopSignal = NULL;
 HWND g_hwndTaskbar = NULL;
 
+typedef struct tagMemDCInfo {
+    HDC originalHdc;
+    HBITMAP memBitmap;
+    HGDIOBJ oldBitmap;
+    int colorIndex;
+} MemDCInfo;
+
+
+std::mutex g_hdcMapMutex;
+std::map<HDC, MemDCInfo> g_hdcMap;      //using map not unordered_map since the latter becomes slow when doing many insertions and removals. Also it is expected that the current map will contain only a few elements at a time
+
 RepaintDesktopButtonConfig g_repaintDesktopButtonConfig;
 
 
+using BeginPaint_t = decltype(&BeginPaint);
+BeginPaint_t pOriginalBeginPaint;
 using EndPaint_t = decltype(&EndPaint);
 EndPaint_t pOriginalEndPaint;
 
@@ -157,15 +172,14 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
                     g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::yes 
                     && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0   //show desktop button
                 );
-            if (result)
-                *colorIndex = COLOR_3DFACE;
+
+            *colorIndex = COLOR_3DFACE;     //unused if result == false
             return result;
         }
 
     }
-    else {
-        return false;
-    }
+    
+    return false;
 }
 
 void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF newColor) {
@@ -210,25 +224,137 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
     DeleteDC(memDC);
 }
 
+HDC WINAPI BeginPaintHook(
+    IN  HWND          hWnd,
+    OUT LPPAINTSTRUCT lpPaint
+) {
+    HDC hdc = pOriginalBeginPaint(hWnd, lpPaint);
+
+    if (hdc != lpPaint->hdc)
+        Wh_Log(L"hdc != lpPaint->hdc");
+
+    int colorIndex;
+    if (
+        g_hwndTaskbar   //is the current process the taskbar process?
+        && lpPaint
+        && lpPaint->hdc
+        && WindowNeedsBackgroundRepaint(&colorIndex, hWnd, &lpPaint->rcPaint)
+    ) {
+        //Send memDC to the caller to prevent occasional flickering. With memDC we can repaint the pixels before they are updated on screen.
+        HDC memDC = CreateCompatibleDC(hdc);
+        if (!memDC) {
+            Wh_Log(L"CreateCompatibleDC failed");
+        }
+        else {
+            BITMAP bitmapHeader = {};
+            HGDIOBJ hBitmap = GetCurrentObject(lpPaint->hdc, OBJ_BITMAP);
+            if (!hBitmap) {
+                Wh_Log(L"GetCurrentObject failed");
+            }
+            else {
+                if (!GetObjectW(hBitmap, sizeof(BITMAP), &bitmapHeader)) {
+                    Wh_Log(L"GetObjectW failed");
+                }
+                else {
+                    int width = bitmapHeader.bmWidth;
+                    int height = bitmapHeader.bmHeight;
+
+                    //need full bitmap copy here - could not create a smaller compatible bitmap with only the width and height of lpPaint->rcPaint since that would mess up ClientToScreen coordinates conversion in the program.
+                    HBITMAP memBitmap = CreateCompatibleBitmap(lpPaint->hdc, width, height);
+                    if (!memBitmap) {
+                        Wh_Log(L"CreateCompatibleBitmap failed");
+                    }
+                    else {
+                        HGDIOBJ oldBitmap = SelectObject(memDC, memBitmap);
+                        if (!oldBitmap) {
+                            Wh_Log(L"SelectObject failed");
+                        }
+                        else {
+                            MemDCInfo memDCInfo;
+                            memDCInfo.originalHdc = lpPaint->hdc;
+                            memDCInfo.memBitmap = memBitmap;
+                            memDCInfo.oldBitmap = oldBitmap;
+                            memDCInfo.colorIndex = colorIndex;
+
+                            {
+                                std::lock_guard<std::mutex> guard(g_hdcMapMutex);
+                                g_hdcMap.insert({ memDC, memDCInfo });
+                            }
+
+                            lpPaint->hdc = memDC;
+                            return memDC;
+                        }
+
+                        DeleteObject(memBitmap);
+                    }
+
+                    DeleteDC(memDC);
+                }
+            }
+        }
+    }
+    
+    return hdc;
+}
+
 BOOL WINAPI EndPaintHook(
     IN HWND                 hWnd,
     IN const PAINTSTRUCT*   lpPaint
 ) {
-    int colorIndex;
     if (
         g_hwndTaskbar   //is the current process the taskbar process?
-        && lpPaint 
-        && lpPaint->hdc 
-        && WindowNeedsBackgroundRepaint(&colorIndex, hWnd, &lpPaint->rcPaint)
+        && lpPaint
+        && lpPaint->hdc
     ) {
-        COLORREF black = RGB(0, 0, 0);
-        COLORREF buttonFace = GetSysColor(colorIndex);
-        if (buttonFace != black)
-            ConditionalFillRect(lpPaint->hdc, lpPaint->rcPaint, black, buttonFace);
-    }
+        MemDCInfo memDCInfo;
+        bool found = false;
+        {
+            std::lock_guard<std::mutex> guard(g_hdcMapMutex);
 
+            auto it = g_hdcMap.find(lpPaint->hdc);
+            if (it != g_hdcMap.end()) {   //there is a chance that EndPaint gets a call that is paired with BeginPaint from time before hooking or before g_hwndTaskbar was set
+                found = true;
+                memDCInfo = it->second;
+                g_hdcMap.erase(lpPaint->hdc);
+            }
+        }
+
+        if (found) {
+
+            if (!GetSysColorBrush(memDCInfo.colorIndex)) {        //Verify that the brush is supported by the current system. GetSysColor() does not have return value, so need to use GetSysColorBrush() for verification purposes.
+                Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
+            }
+            else {
+                COLORREF buttonFace = GetSysColor(memDCInfo.colorIndex);
+                COLORREF black = RGB(0, 0, 0);
+                if (buttonFace != black) {
+                    ConditionalFillRect(lpPaint->hdc, lpPaint->rcPaint, black, buttonFace);
+                }
+            }
+
+            HDC memDC = lpPaint->hdc;
+            HDC hdc = memDCInfo.originalHdc;
+            const RECT* rect = &lpPaint->rcPaint;
+
+            if (!BitBlt(hdc, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top, memDC, rect->left, rect->top, SRCCOPY))
+                Wh_Log(L"BitBlt failed");
+
+            //clean up
+            SelectObject(memDC, memDCInfo.oldBitmap);
+            DeleteObject(memDCInfo.memBitmap);
+
+            DeleteDC(memDC);
+
+            //pass original HDC to original EndPaint
+            PAINTSTRUCT paintStruct = *lpPaint;
+            paintStruct.hdc = hdc;
+            return pOriginalEndPaint(hWnd, &paintStruct);
+        }
+    }
+    
     return pOriginalEndPaint(hWnd, lpPaint);
 }
+
 
 void TriggerTaskbarRepaint() {
 
@@ -344,8 +470,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    FARPROC pBeginPaint = GetProcAddress(hUser32, "BeginPaint");
     FARPROC pEndPaint = GetProcAddress(hUser32, "EndPaint");
-    if (!pEndPaint) {
+    if (
+        !pEndPaint
+        || !pBeginPaint
+    ) {
         Wh_Log(L"Finding hookable functions from user32.dll failed");
         return FALSE;
     }
@@ -399,6 +529,7 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"Initialising hooks...");
 
+    Wh_SetFunctionHookT(pBeginPaint, BeginPaintHook, &pOriginalBeginPaint);
     Wh_SetFunctionHookT(pEndPaint, EndPaintHook, &pOriginalEndPaint);
 
     return TRUE;
