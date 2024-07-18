@@ -184,44 +184,79 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
 
 void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF newColor) {
 
-    //create a compatible DC and bitmap
+    //Create a compatible DC and bitmap. Even though hdc is already a memDC, we need to create one more memDC, since we need to get access to pixels using GetDIBits and SetDIBits, which does not support providing x coordinates.
     HDC memDC = CreateCompatibleDC(hdc);
-    HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right - rect.left, rect.bottom - rect.top);
-    HGDIOBJ oldBitmap = SelectObject(memDC, memBitmap);
-
-    //copy the existing content from hdc
-    BitBlt(memDC, 0, 0, rect.right - rect.left, rect.bottom - rect.top, hdc, rect.left, rect.top, SRCCOPY);
-
-    //get pixels array from bitmap
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = rect.right - rect.left;
-    bmi.bmiHeader.biHeight = -(rect.bottom - rect.top);     //negative height to ensure top-down bitmap
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;  //32-bit color depth
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    int pixelCount = (rect.right - rect.left) * (rect.bottom - rect.top);
-    COLORREF* pixels = new COLORREF[pixelCount];
-    GetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
-
-    //modify the pixels
-    for (int i = 0; i < pixelCount; ++i) {
-        if (pixels[i] == oldColor)
-            pixels[i] = newColor;
+    if (!memDC) {
+        Wh_Log(L"CreateCompatibleDC failed");
+        return;
     }
 
-    //save pixels array back to bitmap
-    SetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
-    delete[] pixels;
+    HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right - rect.left, rect.bottom - rect.top);
+    if (!memBitmap) {
+        Wh_Log(L"CreateCompatibleBitmap failed");
+    }
+    else {
+        HGDIOBJ oldBitmap = SelectObject(memDC, memBitmap);
+        if (!oldBitmap) {
+            Wh_Log(L"SelectObject failed");
+        }
+        else {
+            //copy the existing content from hdc
+            if (!BitBlt(memDC, 0, 0, rect.right - rect.left, rect.bottom - rect.top, hdc, rect.left, rect.top, SRCCOPY)) {
+                Wh_Log(L"BitBlt failed");
+            }
+            else {
+                //get pixels array from bitmap
+                BITMAPINFO bmi = {};
+                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bmi.bmiHeader.biWidth = rect.right - rect.left;
+                bmi.bmiHeader.biHeight = rect.bottom - rect.top;
+                bmi.bmiHeader.biPlanes = 1;
+                bmi.bmiHeader.biBitCount = 32;  //32-bit color depth
+                bmi.bmiHeader.biCompression = BI_RGB;
 
-    //blit the modified content back to hdc
-    BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY);
+                int pixelCount = (rect.right - rect.left) * (rect.bottom - rect.top);
+                if (pixelCount == 0) {
+                    Wh_Log(L"pixelCount == 0");
+                }
+                else {
+                    COLORREF* pixels = new COLORREF[pixelCount];
 
-    //clean up
-    SelectObject(memDC, oldBitmap);
-    DeleteObject(memBitmap);
-    DeleteDC(memDC);
+                    int getDIBitsResult = GetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
+                    if (getDIBitsResult == NULL || getDIBitsResult == ERROR_INVALID_PARAMETER) {
+                        Wh_Log(L"GetDIBits failed");
+                        delete[] pixels;
+                    }
+                    else {
+                        //modify the pixels
+                        for (int i = 0; i < pixelCount; ++i) {
+                            if (pixels[i] == oldColor)
+                                pixels[i] = newColor;
+                        }
+
+                        //save pixels array back to bitmap
+                        int setDIBitsResult = SetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
+                        delete[] pixels;
+
+                        if (setDIBitsResult == NULL || setDIBitsResult == ERROR_INVALID_PARAMETER) {
+                            Wh_Log(L"SetDIBits failed");
+                        }
+                        else {
+                            //blit the modified content back to hdc
+                            //TODO: blit directly to original hdc, non to memDC from BeginPaint
+                            if (!BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY))
+                                Wh_Log(L"BitBlt failed");
+                        }
+                    }
+                }
+            }
+
+            //clean up
+            SelectObject(memDC, oldBitmap);
+            DeleteObject(memBitmap);
+        }
+        DeleteDC(memDC);
+    }
 }
 
 HDC WINAPI BeginPaintHook(
