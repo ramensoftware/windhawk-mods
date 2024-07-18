@@ -54,12 +54,6 @@ After:
 #include <windowsx.h>
 
 
-#ifndef WH_MOD
-#define WH_MOD
-#include <mods_api.h>
-#endif
-
-
 enum class RepaintDesktopButtonConfig {
     yes,
     highlightOnHover,
