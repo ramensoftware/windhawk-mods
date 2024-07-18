@@ -22,7 +22,9 @@
 /*
 # Classic Taskbar background fix
 
-Fixes Taskbar background in classic theme by replacing black background with a classic button face colour.
+Fixes Taskbar **background** in classic theme by replacing **black background** with a classic button face colour.
+
+NB! This mod does not fix the buttons' colour, for that there are other mods available.
 
 Before:
 
