@@ -18,6 +18,9 @@ It does this by hooking to DefWindowProc and listening for any changes to the ac
 It also changes the color opacity based on the value that has been set in the Mod Settings.
 
 ***This will not function properly without OpenGlass installed.***
+
+### Bugs so far
+* When changing the mod settings, the SIB taskbar and start menu opacity may occassionally not match that of the window titlebar. This can be fixed by changing the theme color from Windows itself.
 */
 // ==/WindhawkModReadme==
 
@@ -203,6 +206,7 @@ void RefreshDWM()
     
     PostMessage(hWnd, WM_THEMECHANGED, 0, 0);                 // refresh part of the settings related to theme
     PostMessage(hWnd, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);  // refresh part of the settings related to color/backdrop
+    PostMessage(hWnd, WM_SYSCOLORCHANGE, 0, 0);
 }
 
 #pragma region -- Color read and write functions --
@@ -234,14 +238,17 @@ BOOL WriteNewColor(COLORREF input)
     set_DWORD(L"SOFTWARE\\Microsoft\\Windows\\DWM", L"ColorizationAfterglowBalanceOverride", newSettings.clrAftGlowBal);
     set_DWORD(L"SOFTWARE\\Microsoft\\Windows\\DWM", L"GlassOpacity", newSettings.clrBlurBal);
     set_DWORD(L"SOFTWARE\\Microsoft\\Windows\\DWM", L"GlassType", settings.isTransparent ? 1 : 4);
+    set_DWORD(L"SOFTWARE\\Microsoft\\Windows\\DWM", L"GlassOverrideAccent", settings.isTransparent ? 1 : 0);
 
     if (keyExists(L"SOFTWARE\\StartIsBack"))
     {
         set_DWORD(L"SOFTWARE\\StartIsBack", L"StartMenuColor", RGB(GetBValue(newColor), GetGValue(newColor), GetRValue(newColor)));
         set_DWORD(L"SOFTWARE\\StartIsBack", L"TaskbarColor", RGB(GetBValue(newColor), GetGValue(newColor), GetRValue(newColor)));
-        set_DWORD(L"SOFTWARE\\StartIsBack", L"StartMenuAlpha", settings.isTransparent ? (newSettings.nIntensity / 100.0) * 255.0 : 255);
-        set_DWORD(L"SOFTWARE\\StartIsBack", L"TaskbarAlpha", settings.isTransparent ? (newSettings.nIntensity / 100.0) * 255.0 : 255);
+        set_DWORD(L"SOFTWARE\\StartIsBack", L"StartMenuAlpha", settings.isTransparent ? newSettings.nIntensity / 100.0 * 255.0 : 255.0);
+        set_DWORD(L"SOFTWARE\\StartIsBack", L"TaskbarAlpha", settings.isTransparent ? newSettings.nIntensity / 100.0 * 255.0: 255.0);
     }
+
+    RefreshDWM();
     return TRUE;
 }
 
@@ -279,9 +286,6 @@ void ColorFunction(BOOL force = false)
                 WriteNewColor(tempSettings.clrColor);
 
                 isWorking = false;
-
-                // Post DWM color changed
-                // RefreshDWM();
             }
         }
     }
@@ -335,7 +339,7 @@ BOOL LoadSettings() {
     current = oldSettings.clrColor;
 
     ColorFunction(true);
-    RefreshDWM();
+	RefreshDWM();
     return TRUE;
 }
 
@@ -369,17 +373,18 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (keyExists(L"SOFTWARE\\StartIsBack"))
+    {
+        Wh_Log(L"Detected StartIsBack++ installation");
+    }
+
     if (!LoadSettings())
     {
         Wh_Log(L"Failed to load settings");
         return FALSE;
     }
 
-    if (keyExists(L"SOFTWARE\\StartIsBack"))
-    {
-        Wh_Log(L"Detected StartIsBack++ installation");
-    }
-
+	RefreshDWM();
     Wh_Log(L"Loaded as %s", username.c_str());
     return TRUE;
 }
