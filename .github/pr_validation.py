@@ -124,9 +124,7 @@ def get_mod_file_metadata(path: Path, file: TextIO):
     return properties, warnings
 
 
-def parse_file(path: Path, expected_author: str):
-    print(f'Checking {path=}')
-
+def validate_metadata(path: Path, expected_author: str):
     with path.open(encoding='utf-8') as file:
         properties, warnings = get_mod_file_metadata(path, file)
 
@@ -197,6 +195,54 @@ def parse_file(path: Path, expected_author: str):
         warnings += add_warning(path, 1,
                                 'File is not placed in the mods folder')
 
+    return warnings
+
+
+def validate_symbol_hooks(path: Path):
+    warnings = 0
+
+    mod_source = path.read_text(encoding='utf-8')
+    mod_source_lines = mod_source.splitlines()
+
+    p = r'^[ \t]*(?:const[ \t]+)?(?:CMWF_|WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
+    for match in re.finditer(p, mod_source, re.MULTILINE):
+        symbol_block_name = match.group(1)
+
+        p = r'(exe|dll)_?hooks?$'
+        if re.search(p, symbol_block_name, flags=re.IGNORECASE):
+            continue
+
+        line_num = 1 + mod_source[:match.start()].count('\n')
+
+        previous_line = mod_source_lines[line_num - 2]
+
+        if previous_line.lstrip().startswith('//'):
+            p = r'\s*//(\s*[^\s,]+\s*,)*(\s*[^\s,]+\s*)$'
+            if not re.fullmatch(p, previous_line):
+                warning_msg = (
+                    'Unrecognized comment syntax. Specify all target modules in '
+                    'a comment above the symbol hooks variable, separated with commas.'
+                )
+                warnings += add_warning(path, line_num, warning_msg)
+            continue
+
+        warning_msg = (
+            'Please rename the symbol hooks variable to indicate the target module.\n'
+            'Examples: user32DllHook, user32DllHooks, user32dll_hook, user32dll_hooks\n'
+            'If the target module contains invalid characters, or if there is more than '
+            'one target module, add all target modules in a comment above the symbol '
+            'hooks variable, separated with commas.'
+        )
+        warnings += add_warning(path, line_num, warning_msg)
+
+    return warnings
+
+
+def parse_file(path: Path, expected_author: str):
+    print(f'Checking {path=}')
+
+    warnings = validate_metadata(path, expected_author)
+    warnings += validate_symbol_hooks(path)
     return warnings
 
 
