@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-19T12:28:23.000Z</updated>
+    <updated>2024-07-19T22:20:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.6]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#b16412c8ab6de3303ecb179ddcb39a2fe8b28e25</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2024-07-19T22:20:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the RosePine theme.</li>
+<li>Updated the Squircle theme.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent color sync 1.0]]></title>
         <id>https://windhawk.net/mods/accent-color-sync#7bc74ba3694b934452c45f010dda182d70c1e222</id>
@@ -235,34 +245,5 @@ Read the options or the <a href="https://winclassic.net/thread/2377/startisback-
         <updated>2024-06-26T21:21:34.000Z</updated>
         <content type="html"><![CDATA[<p>Turns out a lot of people experience windows and menus being left behind
 on real hardware.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Basic Themer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/basic-themer#406c4f97e1c979c85e91af3bd524248437120603</id>
-        <link href="https://windhawk.net/mods/basic-themer"/>
-        <updated>2024-06-26T17:43:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="basicthemer">Basic Themer</h1>
-<p>This mod applies non-DWM frames (Windows Basic theme) to desktop windows when DWM is
-enabled.</p>
-<h1 id="importantread">IMPORTANT: READ!</h1>
-<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
-Settings, Advanced settings, More advanced settings, and make sure that
-<code>dwm.exe</code> is in the Process inclusion list.</p>
-<h2 id="applicationissues">Application issues</h2>
-<p>Certain issues with applications (e.g. Ribbon applications) may arise when using this
-mod. This is because these applications still believe that DWM is enabled despite using
-basic frames. To circumvent this, use the "DWM Unextend Frames" mod.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Blacklist, whitelist</li>
-<li>Apply to secure desktop (UAC, LogonUI) only</li>
-<li>Useful for Windows 7 Aero theme</li>
-<li>Disable animations on affected windows</li>
-</ul>
-<h2 id="images">Images</h2>
-<p><strong>Preview</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/basic-themer-preview.png" alt="Preview" /></p>
-<p><strong>Secure Desktop only (with classic UAC and Windows 7 Style UAC Dim mod)</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/basic-themer-secure-desktop.png" alt="Secure Desktop only" /></p>]]></content>
     </entry>
 </feed>
