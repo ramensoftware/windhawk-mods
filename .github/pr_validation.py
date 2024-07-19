@@ -9,6 +9,8 @@ import json
 import os
 import re
 import sys
+import urllib.request
+from functools import cache
 from pathlib import Path
 from typing import Optional, TextIO, Tuple
 
@@ -221,6 +223,13 @@ def validate_metadata(path: Path, expected_author: str):
     return warnings
 
 
+@cache
+def get_existing_windows_file_names():
+    url = 'https://winbindex.m417z.com/data/filenames.json'
+    response = urllib.request.urlopen(url).read()
+    return json.loads(response)
+
+
 def validate_symbol_hooks(path: Path):
     warnings = 0
 
@@ -231,30 +240,46 @@ def validate_symbol_hooks(path: Path):
     for match in re.finditer(p, mod_source, re.MULTILINE):
         symbol_block_name = match.group(1)
 
-        p = r'(exe|dll)_?hooks?$'
-        if re.search(p, symbol_block_name, flags=re.IGNORECASE):
-            continue
-
         line_num = 1 + mod_source[: match.start()].count('\n')
+
+        p = r'(.*)(exe|dll)_?hooks?'
+        if match := re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE):
+            base_name = match.group(1)
+            suffix = match.group(2)
+            full_name = f'{base_name}.{suffix}'.lower()
+            if full_name not in get_existing_windows_file_names():
+                warning_msg = f'"{full_name}" is not recognized as a Windows file name'
+                warnings += add_warning(path, line_num, warning_msg)
+            continue
 
         previous_line = mod_source_lines[line_num - 2]
 
         if previous_line.lstrip().startswith('//'):
-            p = r'\s*//(\s*[^\s,]+\s*,)*(\s*[^\s,]+\s*)$'
-            if not re.fullmatch(p, previous_line):
+            comment = previous_line.lstrip().removeprefix('//').strip()
+            if comment == '':
                 warning_msg = (
-                    'Unrecognized comment syntax. Specify all target modules in '
-                    'a comment above the symbol hooks variable, separated with commas.'
+                    'Empty comment. Specify all target modules in a comment above the'
+                    ' symbol hooks variable, separated with commas.'
                 )
                 warnings += add_warning(path, line_num, warning_msg)
+                continue
+
+            names = comment.split(',')
+            for name in names:
+                name = name.strip().lower()
+                if name not in get_existing_windows_file_names():
+                    warning_msg = (
+                        f'"{full_name}" is not recognized as a Windows file name'
+                    )
+                    warnings += add_warning(path, line_num - 1, warning_msg)
             continue
 
         warning_msg = (
-            'Please rename the symbol hooks variable to indicate the target module.\n'
-            'Examples: user32DllHook, user32DllHooks, user32dll_hook, user32dll_hooks\n'
-            'If the target module contains invalid characters, or if there is more than '
-            'one target module, add all target modules in a comment above the symbol '
-            'hooks variable, separated with commas.'
+            'Please rename the symbol hooks variable to indicate the target'
+            ' module.\nExamples: user32DllHook, user32DllHooks, user32dll_hook,'
+            ' user32dll_hooks\nIf the target module contains invalid characters, or if'
+            ' there is more than one target module, add all target modules in a comment'
+            ' above the symbol hooks variable, separated with commas.'
         )
         warnings += add_warning(path, line_num, warning_msg)
 
@@ -288,7 +313,7 @@ def main():
         warnings += add_warning(
             paths[0],
             1,
-            f'Must be one added or one modified file, got '
+            'Must be one added or one modified file, got '
             f'{added_count=} {modified_count=} {all_count=}',
         )
 
