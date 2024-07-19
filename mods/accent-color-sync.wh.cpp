@@ -5,7 +5,6 @@
 // @version             1.0
 // @author              CatmanFan
 // @github              https://github.com/CatmanFan
-// @exclude             C:\Windows\system32\*
 // @include             explorer.exe
 // @compilerOptions     -lcomdlg32 -ldwmapi
 // ==/WindhawkMod==
