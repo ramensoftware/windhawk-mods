@@ -16,6 +16,14 @@ DISALLOWED_AUTHORS = [
     'arukateru',
 ]
 
+VERIFIED_TWITTER_ACCOUNTS = {
+    'https://twitter.com/m417z': 'https://github.com/m417z',
+    'https://twitter.com/AhmedWalid605': 'https://github.com/ahmed605',
+    'https://twitter.com/learn_more': 'https://github.com/learn-more',
+    'https://twitter.com/realgam3': 'https://github.com/realgam3',
+    'https://twitter.com/teknixstuff': 'https://github.com/teknixstuff',
+}
+
 MOD_METADATA_PARAMS = {
     'singleValue': {
         'id',
@@ -122,12 +130,16 @@ def parse_file(path: Path, expected_author: str):
     with path.open(encoding='utf-8') as file:
         properties, warnings = get_mod_file_metadata(path, file)
 
+    github = None
+
     key = ('github', None)
     if key in properties:
         value, line_number = properties[key]
-        if value != f'https://github.com/{expected_author}':
+        github = value
+        expected = f'https://github.com/{expected_author}'
+        if value != expected:
             warnings += add_warning(path, line_number,
-                                    f'Expected the author to be "{expected_author}"')
+                                    f'Expected @{key[0]} to be "{expected}"')
     else:
         warnings += add_warning(path, 1, f'Missing @{key[0]}')
 
@@ -157,6 +169,13 @@ def parse_file(path: Path, expected_author: str):
                                     'Version must contain only numbers and dots')
     else:
         warnings += add_warning(path, 1, f'Missing @{key[0]}')
+
+    key = ('twitter', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if github is None or VERIFIED_TWITTER_ACCOUNTS.get(value) != github:
+            warnings += add_warning(path, line_number,
+                                    f'@{key[0]} requires manual verification')
 
     key = ('compilerOptions', None)
     if key in properties:
