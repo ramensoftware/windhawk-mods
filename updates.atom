@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-08T19:47:40.000Z</updated>
+    <updated>2024-07-19T12:28:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent color sync 1.0]]></title>
+        <id>https://windhawk.net/mods/accent-color-sync#7bc74ba3694b934452c45f010dda182d70c1e222</id>
+        <link href="https://windhawk.net/mods/accent-color-sync"/>
+        <updated>2024-07-19T12:28:23.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod syncs accent colors used by OpenGlass and StartIsBack++ (if found) with that of the DWM every time a change to the latter is effectuated.
+It does this by hooking to DefWindowProc and listening for any changes to the accent color.</p>
+<p>It also changes the color opacity based on the value that has been set in the Mod Settings.</p>
+<p><strong><em>This will not function properly without OpenGlass installed.</em></strong></p>
+<h3 id="bugssofar">Bugs so far</h3>
+<ul>
+<li>When changing the mod settings, the SIB taskbar and start menu opacity may occassionally not match that of the window titlebar. This can be fixed by changing the theme color from Windows itself.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Prevent Edge from lagging your Taskbar process 1.0]]></title>
         <id>https://windhawk.net/mods/edge-window-tab-manager-block#3100a61198d0238712e2e303fe366a1d7aa3ac08</id>
@@ -250,18 +264,5 @@ basic frames. To circumvent this, use the "DWM Unextend Frames" mod.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/basic-themer-preview.png" alt="Preview" /></p>
 <p><strong>Secure Desktop only (with classic UAC and Windows 7 Style UAC Dim mod)</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/basic-themer-secure-desktop.png" alt="Secure Desktop only" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Style UAC Dim 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-style-uac-dim#899771ff7041afe450a9febe2062727c8921d64a</id>
-        <link href="https://windhawk.net/mods/win7-style-uac-dim"/>
-        <updated>2024-06-26T15:38:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7styleuacdim">Windows 7 Style UAC Dim</h1>
-<p>This mod restores the full desktop screenshot on the background of the secure desktop
-for UAC. Since Windows 8, it has only displayed the wallpaper.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/win7-uac-dim-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/win7-uac-dim-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>

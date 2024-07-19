@@ -3,6 +3,27 @@
         "version": "1.4.1"
     },
     "mods": {
+        "accent-color-sync": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1721392103000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1721392103000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "CatmanFan",
+                "compilerOptions": "-lcomdlg32 -ldwmapi",
+                "description": "Syncs OpenGlass & StartIsBack++ colors with DWM",
+                "github": "https://github.com/CatmanFan",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Accent color sync",
+                "version": "1.0"
+            }
+        },
         "acrylic-effect-radius-changer": {
             "details": {
                 "defaultSorting": 664,
