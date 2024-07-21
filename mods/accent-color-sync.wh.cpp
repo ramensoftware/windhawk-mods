@@ -312,7 +312,7 @@ long __cdecl CCTrackBar_SetThumbPosition_hook(class CCTrackBar* This, int value)
 }
 #pragma endregion
 
-WindhawkUtils::SYMBOL_HOOK hooks[] = {
+WindhawkUtils::SYMBOL_HOOK dui70dll_hooks[] = {
     {
         {L"StrToID"},
         (void**)&StrToID,
@@ -411,7 +411,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to load dui70.dll");
         return FALSE;
     }
-    if (!WindhawkUtils::HookSymbols(hDui, hooks, ARRAYSIZE(hooks)))
+    if (!WindhawkUtils::HookSymbols(hDui, dui70dll_hooks, ARRAYSIZE(dui70dll_hooks)))
     {
         Wh_Log(L"Failed to hook DUI symbols");
         return FALSE;
