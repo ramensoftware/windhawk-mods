@@ -26,7 +26,7 @@ Fixes Taskbar background in classic theme by replacing black background with a c
 
 Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the picture below. This mod does not fix the buttons' colour, for that purpose there are other mods available.
 
-This mod can be considered as an alternative to installing the @valinet's modified OpenShell StartMenuDLL.dll.
+This mod can be considered as an alternative to installing the @valinet's modified version of OpenShell StartMenuDLL.dll.
 
 Before:
 
@@ -35,6 +35,15 @@ Before:
 After:
 
 ![After](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png)
+
+
+## Mod configuration
+
+If you use some other mod for rendering buttons than 'Classic Taskbar 3D buttons Lite' and your Taskbar is sometimes extremely full (with small buttons) and you want to preserve the full contrast of the button borders, then go to the settings of the current mod and under "Compatibility with classic Taskbar buttons mods" choose "No compatibility adjustments". Otherwise you can keep this setting at its default value - "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'".
+
+
+## Acknowledgements
+I would like to thank @Anixx for testing the mod during its development and illustrating the issues found.
 */
 // ==/WindhawkModReadme==
 
@@ -47,6 +56,11 @@ After:
   - highlightOnHover: Yes, and use highlight colour on mouse over
   - blackOnHover: Yes, and use black colour on mouse over
   - no: No
+- CompatWithTaskbarButtonsMods: classic-taskbar-buttons-lite
+  $name: Compatibility with classic Taskbar buttons mods
+  $options:
+  - classic-taskbar-buttons-lite: Enhance compatibility with 'Classic Taskbar 3D buttons Lite'
+  - no: No compatibility adjustments
 */
 // ==/WindhawkModSettings==
 
@@ -57,10 +71,24 @@ After:
 #include <uxtheme.h>
 
 
+//clang compiler does not have these macros defined. Definitions taken from <minwindef.h>
+#ifndef max
+#define max(a,b)            (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef min
+#define min(a,b)            (((a) < (b)) ? (a) : (b))
+#endif
+
+
 enum class RepaintDesktopButtonConfig {
     yes,
     highlightOnHover,
     blackOnHover,
+    no
+};
+
+enum class CompatWithTaskbarButtonsModsConfig {
+    classicTaskbarButtonsLite,
     no
 };
 
@@ -98,12 +126,15 @@ std::mutex g_hdcMapMutex;
 std::map<HDC, MemDCInfo> g_hdcMap;      //using map not unordered_map since the latter becomes slow when doing many insertions and removals. Also it is expected that the current map will contain only a few elements at a time
 
 RepaintDesktopButtonConfig g_repaintDesktopButtonConfig;
+CompatWithTaskbarButtonsModsConfig g_compatWithTaskbarButtonsModsConfig;
 
 
 using BeginPaint_t = decltype(&BeginPaint);
 BeginPaint_t pOriginalBeginPaint;
 using EndPaint_t = decltype(&EndPaint);
 EndPaint_t pOriginalEndPaint;
+using DrawFrameControl_t = decltype(&DrawFrameControl);
+DrawFrameControl_t pOriginalDrawFrameControl;
 //using DrawThemeParentBackground_t = decltype(&DrawThemeParentBackground);     //this declaration is a bit different in Windhawk headers than in Visual Studio, so using manual declaration instead to avoid both intellisense and compilation errors
 typedef HRESULT(WINAPI* DrawThemeParentBackground_t)(HWND, HDC, const RECT*);
 DrawThemeParentBackground_t pOriginalDrawThemeParentBackground;
@@ -123,6 +154,15 @@ RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
     }
     else {
         return RepaintDesktopButtonConfig::yes;
+    }
+}
+
+CompatWithTaskbarButtonsModsConfig CompatWithTaskbarButtonsModsConfigFromString(PCWSTR string) {
+    if (wcscmp(string, L"no") == 0) {
+        return CompatWithTaskbarButtonsModsConfig::no;
+    }
+    else {
+        return CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite;
     }
 }
 
@@ -215,7 +255,7 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
         return;
     }
 
-    //Create a compatible DC and bitmap. Even though hdc is already a memDC, we need to create one more memDC, since we need to get access to pixels using GetDIBits and SetDIBits, which does not support providing x coordinates.
+    //Create a compatible DC and bitmap. Even though hdc is already a memDC, we need to create one more memDC, since we need to get access to pixels using ExtFloodFill which does not support providing top-left coordinates, or alternatively, using GetDIBits and SetDIBits, which does not support providing left-right coordinates.
     HDC memDC = CreateCompatibleDC(hdc);
     if (!memDC) {
         Wh_Log(L"CreateCompatibleDC failed");
@@ -261,7 +301,7 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
                             }
                             else {
                                 //blit the modified content back to hdc
-                                //TODO: try to blit directly to original hdc, non to memDC from BeginPaint?
+                                //TODO: try to blit directly to original hdc, not to memDC from BeginPaint?
                                 if (!BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY))
                                     Wh_Log(L"BitBlt to hdc failed");
                             }
@@ -304,7 +344,7 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
                         }
                         else {
                             //blit the modified content back to hdc
-                            //TODO: try to blit directly to original hdc, non to memDC from BeginPaint?
+                            //TODO: try to blit directly to original hdc, not to memDC from BeginPaint?
                             if (!BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY))
                                 Wh_Log(L"BitBlt to hdc failed");
                         }
@@ -321,6 +361,7 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
     }
 }
 
+//BeginPaint/EndPaint hook currently fixes the background around taskbar buttons and Start button
 HDC WINAPI BeginPaintHook(
     IN  HWND          hWnd,
     OUT LPPAINTSTRUCT lpPaint
@@ -395,6 +436,7 @@ HDC WINAPI BeginPaintHook(
     return hdc;
 }
 
+//BeginPaint/EndPaint hook currently fixes the background around taskbar buttons and Start button
 BOOL WINAPI EndPaintHook(
     IN HWND                 hWnd,
     IN const PAINTSTRUCT*   lpPaint
@@ -454,6 +496,57 @@ BOOL WINAPI EndPaintHook(
     return pOriginalEndPaint(hWnd, lpPaint);
 }
 
+//this hook is needed in case the buttons are offset in their hdc so that there are spaces in between buttons and some background appears between buttons
+BOOL WINAPI DrawFrameControlHook(
+    IN HDC    hdc,
+    IN LPRECT lprc,
+    IN UINT   uType,
+    IN UINT   uState
+) {
+    int colorIndex = COLOR_3DFACE;
+    if (
+        g_hwndTaskbar   //is the current process the taskbar process?
+        && uType == DFC_BUTTON
+        && ((uState & DFCS_BUTTONPUSH) != 0)
+        && lprc
+        && g_compatWithTaskbarButtonsModsConfig == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite
+        //cannot use WindowFromDC and WindowNeedsBackgroundRepaint check here since WindowFromDC will fail for some reason
+    ) {
+        HBRUSH brush = GetSysColorBrush(colorIndex);
+        if (!brush) {            //verify that the brush is supported by the current system
+            Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
+        }
+        else {                
+            COLORREF buttonFace = GetSysColor(colorIndex);
+
+            RECT rect;
+            if (!GetClipBox(hdc, &rect)) {
+                SetRectEmpty(&rect);
+            }
+
+            //Mitigation for case @Anixx classic-taskbar-buttons-lite mod is being used, which changes the left and right offsets of taskbar buttons before they are rendered. Without the mitigation there would appear black OR dark lines on left and right side of the button.
+            //
+            //This mitigation will not usually interfere with the operation of mod classic-taskbar-buttons-lite-vs-without-spacing by @OrthodoxWin32. Normally the buttons will have still one pixel of space between them even with that mod, and we are here extending the rect size also only by one pixel. If the taskbar is extremely full, then the one pixel space between the buttons vanishes, but the result of repainting does not seem too visible in this case either. Unfortunately selective repaint would not be trivial in this case.
+            // 
+            //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
+
+            RECT fillRect = *lprc;
+            fillRect.left = max(lprc->left - 1, rect.left);
+            fillRect.right = min(lprc->right + 1, rect.right);
+
+            FillRect(hdc, &fillRect, brush);
+        }
+    }
+
+    return pOriginalDrawFrameControl(
+        hdc,
+        lprc,
+        uType,
+        uState
+    );
+}
+
+//this hook currently fixes regions near tray area
 bool DrawThemeParentBackgroundInternal(HWND hwnd, HDC hdc) {
 
     RECT rect;
@@ -469,28 +562,22 @@ bool DrawThemeParentBackgroundInternal(HWND hwnd, HDC hdc) {
         if (colorIndex == blackColorIndex) {  //Repaint the area as black again. Used for "show desktop" button if the mod settings say so.
 
             HBRUSH brush = CreateSolidBrush(black);
-            if (brush) {            //verify that the brush is supported by the current system
-                HGDIOBJ holdbrush = SelectObject(hdc, brush);
-                if (holdbrush && holdbrush != HGDI_ERROR) {
-
-                    FillRect(hdc, &rect, brush);
-                    SelectObject(hdc, holdbrush);
-
-                    return true;
-                }
+            if (!brush) {
+                Wh_Log(L"CreateSolidBrush failed");
+            }
+            else {
+                FillRect(hdc, &rect, brush);
+                return true;
             }
         }
         else {
             HBRUSH brush = GetSysColorBrush(colorIndex);
-            if (brush) {            //verify that the brush is supported by the current system
-                HGDIOBJ holdbrush = SelectObject(hdc, brush);
-                if (holdbrush && holdbrush != HGDI_ERROR) {
-
-                    FillRect(hdc, &rect, brush);
-                    SelectObject(hdc, holdbrush);  // select old brush
-
-                    return true;
-                }
+            if (!brush) {            //verify that the brush is supported by the current system
+                Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
+            }
+            else {
+                FillRect(hdc, &rect, brush);
+                return true;
             }
         }
     }
@@ -630,11 +717,16 @@ void Wh_ModAfterInit(void) {
 
 void LoadSettings() {
 
-    //config option to keep "show desktop" button black
-    PCWSTR configString = Wh_GetStringSetting(L"RepaintDesktopButton");
-    g_repaintDesktopButtonConfig = DesktopButtonConfigFromString(configString);
+    PCWSTR configString;
 
+    //config option to keep "show desktop" button black
+    configString = Wh_GetStringSetting(L"RepaintDesktopButton");
+    g_repaintDesktopButtonConfig = DesktopButtonConfigFromString(configString);
     Wh_FreeStringSetting(configString);     
+
+    configString = Wh_GetStringSetting(L"CompatWithTaskbarButtonsMods");
+    g_compatWithTaskbarButtonsModsConfig = CompatWithTaskbarButtonsModsConfigFromString(configString);
+    Wh_FreeStringSetting(configString);
 }
 
 BOOL Wh_ModInit() {
@@ -652,9 +744,11 @@ BOOL Wh_ModInit() {
 
     FARPROC pBeginPaint = GetProcAddress(hUser32, "BeginPaint");
     FARPROC pEndPaint = GetProcAddress(hUser32, "EndPaint");
+    FARPROC pDrawFrameControl = GetProcAddress(hUser32, "DrawFrameControl");
     if (
         !pEndPaint
         || !pBeginPaint
+        || !pDrawFrameControl
     ) {
         Wh_Log(L"Finding hookable functions from user32.dll failed");
         return FALSE;
@@ -728,6 +822,7 @@ BOOL Wh_ModInit() {
 
     Wh_SetFunctionHookT(pBeginPaint, BeginPaintHook, &pOriginalBeginPaint);
     Wh_SetFunctionHookT(pEndPaint, EndPaintHook, &pOriginalEndPaint);
+    Wh_SetFunctionHookT(pDrawFrameControl, DrawFrameControlHook, &pOriginalDrawFrameControl);
     Wh_SetFunctionHookT(pDrawThemeParentBackground, DrawThemeParentBackgroundHook, &pOriginalDrawThemeParentBackground);
     Wh_SetFunctionHookT(pDrawThemeParentBackgroundEx, DrawThemeParentBackgroundExHook, &pOriginalDrawThemeParentBackgroundEx);
 
