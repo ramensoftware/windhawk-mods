@@ -13,6 +13,7 @@ jobs:
   run:
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         version: ['1.3', '1.3.1', '1.4', '1.4.1']
     steps:
