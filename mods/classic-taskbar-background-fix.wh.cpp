@@ -45,7 +45,7 @@ After:
   $options:
   - yes: Yes
   - highlightOnHover: Yes, and use highlight colour on mouse over
-  - windowBackgroundOnHover: Yes, and use window background colour on mouse over
+  - blackOnHover: Yes, and use black colour on mouse over
   - no: No
 */
 // ==/WindhawkModSettings==
@@ -60,7 +60,7 @@ After:
 enum class RepaintDesktopButtonConfig {
     yes,
     highlightOnHover,
-    windowBackgroundOnHover,
+    blackOnHover,
     no
 };
 
@@ -118,8 +118,8 @@ RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
     else if (wcscmp(string, L"highlightOnHover") == 0) {
         return RepaintDesktopButtonConfig::highlightOnHover;
     }
-    else if (wcscmp(string, L"windowBackgroundOnHover") == 0) {
-        return RepaintDesktopButtonConfig::windowBackgroundOnHover;
+    else if (wcscmp(string, L"blackOnHover") == 0) {
+        return RepaintDesktopButtonConfig::blackOnHover;
     }
     else {
         return RepaintDesktopButtonConfig::yes;
@@ -135,9 +135,10 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
         && GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName))
     ) {
         if (
-            (
+            isDrawThemeParentBackgroundCall
+            && (
                 g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::highlightOnHover
-                || g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::windowBackgroundOnHover
+                || g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::blackOnHover
             )
             && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0
         ) {
@@ -156,7 +157,7 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
                         if (g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::highlightOnHover)
                             *colorIndex = COLOR_HIGHLIGHT;
                         else
-                            *colorIndex = COLOR_WINDOW;
+                            *colorIndex = blackColorIndex;
                     }
                     else {
                         *colorIndex = COLOR_3DFACE;
@@ -167,7 +168,7 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
             }
         }
         else if (
-            isDrawThemeParentBackgroundCall        //painting the "show desktop" button black agains since withtout it earlier calls to DrawThemeParentBackground would remove the black color from "show desktop" button as a side effect of painting other tray areas
+            isDrawThemeParentBackgroundCall        //painting the "show desktop" button black again since without it earlier calls to DrawThemeParentBackground would remove the black color from "show desktop" button as a side effect of painting other tray areas
             && g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::no
             && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0   //show desktop button
         ) {
