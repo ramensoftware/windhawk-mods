@@ -242,7 +242,7 @@ def validate_symbol_hooks(path: Path):
 
         line_num = 1 + mod_source[: match.start()].count('\n')
 
-        p = r'(.*)(exe|dll)_?hooks?'
+        p = r'(.*?)_?(exe|dll)_?hooks?'
         if match := re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE):
             base_name = match.group(1)
             suffix = match.group(2)
@@ -275,11 +275,17 @@ def validate_symbol_hooks(path: Path):
             continue
 
         warning_msg = (
-            'Please rename the symbol hooks variable to indicate the target'
-            ' module.\nExamples: user32DllHook, user32DllHooks, user32dll_hook,'
-            ' user32dll_hooks\nIf the target module contains invalid characters, or if'
-            ' there is more than one target module, add all target modules in a comment'
-            ' above the symbol hooks variable, separated with commas.'
+            'Please rename the symbol hooks variable to indicate the target module.'
+            ' Examples (can end with "hook" or "hooks"):\n'
+            + '* user32DllHooks\n'
+            + '* user32dll_hooks\n'
+            + '* user32_dll_hooks\n'
+            + 'If the target module name can\'t be represented by a variable name, or'
+            ' if there is more than one target module, add all target modules in a'
+            ' comment above the symbol hooks variable, separated with commas.'
+            ' Example:\n'
+            + '// explorer.exe, taskbar.dll\n'
+            + 'WindhawkUtils::SYMBOL_HOOK hooks[] = {...};'
         )
         warnings += add_warning(path, line_num, warning_msg)
 
