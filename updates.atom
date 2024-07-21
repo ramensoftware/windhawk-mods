@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-21T13:05:06.000Z</updated>
+    <updated>2024-07-21T18:54:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Color Sync 1.2]]></title>
+        <id>https://windhawk.net/mods/accent-color-sync#120bd157b2a8eb1c99a1ebd8363686cbc40de906</id>
+        <link href="https://windhawk.net/mods/accent-color-sync"/>
+        <updated>2024-07-21T18:54:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add option to sync with DWM's opacity value.</li>
+<li>Add support for x86 Windows.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent Color Sync 1.1]]></title>
         <id>https://windhawk.net/mods/accent-color-sync#45b792a63461caa9ac8c5864b83fcf26d724e549</id>
@@ -238,15 +248,6 @@ Read the options or the <a href="https://winclassic.net/thread/2377/startisback-
         <content type="html"><![CDATA[<ul>
 <li>Added a new theme: Squircle.</li>
 <li>Fixed a crash with some themes when the "Icon and label"-style search button is used.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#78d005fa29bcbfaab1f5ea2777f1217468703c9f</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2024-06-27T11:59:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added themes! Currently, only the TranslucentShell theme is integrated into the mod and can be selected in the settings.</li>
 </ul>]]></content>
     </entry>
 </feed>

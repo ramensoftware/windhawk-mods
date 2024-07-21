@@ -1,3 +1,8 @@
+## 1.2 ([Jul 21, 2024](https://github.com/ramensoftware/windhawk-mods/blob/120bd157b2a8eb1c99a1ebd8363686cbc40de906/mods/accent-color-sync.wh.cpp))
+
+* Add option to sync with DWM's opacity value.
+* Add support for x86 Windows.
+
 ## 1.1 ([Jul 21, 2024](https://github.com/ramensoftware/windhawk-mods/blob/45b792a63461caa9ac8c5864b83fcf26d724e549/mods/accent-color-sync.wh.cpp))
 
 * Add files via upload
