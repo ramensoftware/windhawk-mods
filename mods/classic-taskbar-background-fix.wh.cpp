@@ -6,7 +6,7 @@
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
-// @compilerOptions -luser32 -lgdi32
+// @compilerOptions -luser32 -lgdi32 -luxtheme
 // @include         explorer.exe
 // ==/WindhawkMod==
 
@@ -22,9 +22,11 @@
 /*
 # Classic Taskbar background fix
 
-Fixes Taskbar **background** in classic theme by replacing **black background** with a classic button face colour. 
+Fixes Taskbar background in classic theme by replacing black background with a classic button face colour. 
 
-NB! Install this mod only if you have issues with **black background** around taskbar buttons and tray icons, like illustrated in the picture below. This mod does not fix the buttons' colour, for that purpose there are other mods available.
+Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the picture below. This mod does not fix the buttons' colour, for that purpose there are other mods available.
+
+This mod can be considered as an alternative to installing the @valinet's modified OpenShell StartMenuDLL.dll.
 
 Before:
 
@@ -36,7 +38,7 @@ After:
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
+// ==WindhawkModSettings-TemporarilyDisabled==
 /*
 - RepaintDesktopButton: yes
   $name: Repaint the "Show desktop button"
@@ -46,12 +48,13 @@ After:
   - windowBackgroundOnHover: Yes, and use window background colour on mouse over
   - no: No
 */
-// ==/WindhawkModSettings==
+// ==/WindhawkModSettings-TemporarilyDisabled==
 
 
 #include <map>
 #include <mutex>
 #include <windowsx.h>
+#include <uxtheme.h>
 
 
 enum class RepaintDesktopButtonConfig {
@@ -72,10 +75,15 @@ BOOL Wh_SetFunctionHookT(
 }
 
 
+const COLORREF black = RGB(0, 0, 0);
+
 bool g_retryInitInAThread = false;
 HANDLE g_initThread = NULL;
 HANDLE g_initThreadStopSignal = NULL;
 HWND g_hwndTaskbar = NULL;
+
+HMODULE hUxtheme = NULL;
+
 
 typedef struct tagMemDCInfo {
     HDC originalHdc;
@@ -95,6 +103,11 @@ using BeginPaint_t = decltype(&BeginPaint);
 BeginPaint_t pOriginalBeginPaint;
 using EndPaint_t = decltype(&EndPaint);
 EndPaint_t pOriginalEndPaint;
+//using DrawThemeParentBackground_t = decltype(&DrawThemeParentBackground);     //this declaration is a bit different in Windhawk headers than in Visual Studio, so using manual declaration instead to avoid both intellisense and compilation errors
+typedef HRESULT(WINAPI* DrawThemeParentBackground_t)(HWND, HDC, const RECT*);
+DrawThemeParentBackground_t pOriginalDrawThemeParentBackground;
+typedef HRESULT(WINAPI* DrawThemeParentBackgroundEx_t)(HWND, HDC, DWORD, const RECT*);
+DrawThemeParentBackgroundEx_t pOriginalDrawThemeParentBackgroundEx;
 
 
 RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
@@ -113,7 +126,7 @@ RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
 }
 
 
-bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* paintRect) {
+bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* paintRect, bool includeTrayArea) {
 
     WCHAR szClassName[32];
     if (
@@ -153,30 +166,44 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
             }
         }
         else {
+
             bool result =
-                _wcsicmp(szClassName, L"Shell_TrayWnd") == 0        //around of start button
+                _wcsicmp(szClassName, L"Shell_TrayWnd") == 0        //around of start button in case OpenShell is active
+                || _wcsicmp(szClassName, L"Start") == 0             //around of start button in case OpenShell is NOT active
                 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0        //secondary taskbar
                 || _wcsicmp(szClassName, L"MSTaskListWClass") == 0      //around of taskbar buttons
-                || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray
-                || _wcsicmp(szClassName, L"Button") == 0        //three dots 
-                || _wcsicmp(szClassName, L"ToolbarWindow32") == 0      //tray icons
-                || _wcsicmp(szClassName, L"TrayClockWClass") == 0       //clock
-                || _wcsicmp(szClassName, L"TrayButton") == 0        //action center button
                 || (
-                    g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::yes 
-                    && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0   //show desktop button
+                    includeTrayArea
+                    && (
+                        _wcsicmp(szClassName, L"CiceroUIWndFrame") == 0     //language bar
+                        || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray
+                        || _wcsicmp(szClassName, L"Button") == 0        //three dots 
+                        || _wcsicmp(szClassName, L"SysPager") == 0      //visible tray icons
+                        //|| _wcsicmp(szClassName, L"ToolbarWindow32") == 0      //Background of both visible and hidden tray icons. Commenting out in order to not repaint hidden tray icons popup background.
+                        || _wcsicmp(szClassName, L"TrayClockWClass") == 0       //clock
+                        || _wcsicmp(szClassName, L"TrayButton") == 0        //action center button
+                        || (
+                            g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::yes
+                            && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0   //show desktop button
+                        )
+                    )
                 );
 
             *colorIndex = COLOR_3DFACE;     //unused if result == false
             return result;
         }
-
     }
     
     return false;
 }
 
-void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF newColor) {
+void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF newColor, int newColorIndex, bool useFloodFill) {
+
+    int pixelCount = (rect.right - rect.left) * (rect.bottom - rect.top);
+    if (pixelCount == 0) {
+        //Wh_Log(L"pixelCount == 0");
+        return;
+    }
 
     //Create a compatible DC and bitmap. Even though hdc is already a memDC, we need to create one more memDC, since we need to get access to pixels using GetDIBits and SetDIBits, which does not support providing x coordinates.
     HDC memDC = CreateCompatibleDC(hdc);
@@ -192,28 +219,58 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
     else {
         HGDIOBJ oldBitmap = SelectObject(memDC, memBitmap);
         if (!oldBitmap) {
-            Wh_Log(L"SelectObject failed");
+            Wh_Log(L"SelectObject for memBitmap failed");
         }
         else {
             //copy the existing content from hdc
             if (!BitBlt(memDC, 0, 0, rect.right - rect.left, rect.bottom - rect.top, hdc, rect.left, rect.top, SRCCOPY)) {
-                Wh_Log(L"BitBlt failed");
+                Wh_Log(L"BitBlt to memDC failed");
             }
             else {
-                //get pixels array from bitmap
-                BITMAPINFO bmi = {};
-                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                bmi.bmiHeader.biWidth = rect.right - rect.left;
-                bmi.bmiHeader.biHeight = rect.bottom - rect.top;
-                bmi.bmiHeader.biPlanes = 1;
-                bmi.bmiHeader.biBitCount = 32;  //32-bit color depth
-                bmi.bmiHeader.biCompression = BI_RGB;
+                if (useFloodFill) {
 
-                int pixelCount = (rect.right - rect.left) * (rect.bottom - rect.top);
-                if (pixelCount == 0) {
-                    Wh_Log(L"pixelCount == 0");
+                    HBRUSH newBrush = GetSysColorBrush(newColorIndex);
+                    if (!newBrush) {
+                        Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
+                    }
+                    else {
+                        HGDIOBJ oldBrush = SelectObject(memDC, newBrush);
+                        if (!oldBrush) {
+                            Wh_Log(L"SelectObject for newBrush failed");
+                        }
+                        else {
+                            if (!ExtFloodFill(
+                                memDC,
+                                //start from bottom right corner
+                                rect.right - rect.left - 1, //right
+                                rect.bottom - rect.top - 1, //bottom
+                                oldColor,
+                                FLOODFILLSURFACE
+                            )) {
+                                //Wh_Log(L"ExtFloodFill failed");
+                            }
+                            else {
+                                //blit the modified content back to hdc
+                                //TODO: try to blit directly to original hdc, non to memDC from BeginPaint?
+                                if (!BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY))
+                                    Wh_Log(L"BitBlt to hdc failed");
+                            }
+
+                            SelectObject(memDC, oldBrush);
+                        }
+                    }
                 }
-                else {
+                else {      //use conditional colour replacement on all pixels
+
+                    //get pixels array from bitmap
+                    BITMAPINFO bmi = {};
+                    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                    bmi.bmiHeader.biWidth = rect.right - rect.left;
+                    bmi.bmiHeader.biHeight = rect.bottom - rect.top;
+                    bmi.bmiHeader.biPlanes = 1;
+                    bmi.bmiHeader.biBitCount = 32;  //32-bit color depth
+                    bmi.bmiHeader.biCompression = BI_RGB;
+
                     COLORREF* pixels = new COLORREF[pixelCount];
 
                     int getDIBitsResult = GetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
@@ -237,9 +294,9 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
                         }
                         else {
                             //blit the modified content back to hdc
-                            //TODO: blit directly to original hdc, non to memDC from BeginPaint
+                            //TODO: try to blit directly to original hdc, non to memDC from BeginPaint?
                             if (!BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY))
-                                Wh_Log(L"BitBlt failed");
+                                Wh_Log(L"BitBlt to hdc failed");
                         }
                     }
                 }
@@ -249,6 +306,7 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
             SelectObject(memDC, oldBitmap);
             DeleteObject(memBitmap);
         }
+
         DeleteDC(memDC);
     }
 }
@@ -267,7 +325,7 @@ HDC WINAPI BeginPaintHook(
         g_hwndTaskbar   //is the current process the taskbar process?
         && lpPaint
         && lpPaint->hdc
-        && WindowNeedsBackgroundRepaint(&colorIndex, hWnd, &lpPaint->rcPaint)
+        && WindowNeedsBackgroundRepaint(&colorIndex, hWnd, &lpPaint->rcPaint, /*includeTrayArea*/false)
     ) {
         //Send memDC to the caller to prevent occasional flickering. With memDC we can repaint the pixels before they are updated on screen.
         HDC memDC = CreateCompatibleDC(hdc);
@@ -275,6 +333,7 @@ HDC WINAPI BeginPaintHook(
             Wh_Log(L"CreateCompatibleDC failed");
         }
         else {
+            //GetClipBox does not work well here for some reason, causing taskbar buttons to be partially updated
             BITMAP bitmapHeader = {};
             HGDIOBJ hBitmap = GetCurrentObject(lpPaint->hdc, OBJ_BITMAP);
             if (!hBitmap) {
@@ -355,9 +414,8 @@ BOOL WINAPI EndPaintHook(
             }
             else {
                 COLORREF buttonFace = GetSysColor(memDCInfo.colorIndex);
-                COLORREF black = RGB(0, 0, 0);
                 if (buttonFace != black) {
-                    ConditionalFillRect(lpPaint->hdc, lpPaint->rcPaint, black, buttonFace);
+                    ConditionalFillRect(lpPaint->hdc, lpPaint->rcPaint, black, buttonFace, memDCInfo.colorIndex, /*useFloodFill*/true);
                 }
             }
 
@@ -382,6 +440,79 @@ BOOL WINAPI EndPaintHook(
     }
     
     return pOriginalEndPaint(hWnd, lpPaint);
+}
+
+HRESULT WINAPI DrawThemeParentBackgroundHook(
+    IN HWND                     hwnd,
+    IN HDC                      hdc,
+    IN OPTIONAL const RECT*     prc
+) {
+    RECT rect;
+    if (!GetClipBox(hdc, &rect)) {
+        SetRectEmpty(&rect);
+    }
+
+    int colorIndex;
+    if (
+        g_hwndTaskbar   //is the current process the taskbar process?
+        && WindowNeedsBackgroundRepaint(&colorIndex, hwnd, &rect, /*includeTrayArea*/true)        //needed in order to not repaint hidden tray icons popup
+    ) {
+        HBRUSH brush = GetSysColorBrush(colorIndex);
+        if (brush) {            //verify that the brush is supported by the current system
+            HGDIOBJ holdbrush = SelectObject(hdc, brush);
+            if (holdbrush && holdbrush != HGDI_ERROR) {
+
+                FillRect(hdc, &rect, brush);
+                SelectObject(hdc, holdbrush);  // select old brush
+
+                return S_OK;
+            }
+        }
+    }
+    
+    return pOriginalDrawThemeParentBackground(
+        hwnd,
+        hdc,
+        prc
+    );
+}
+
+//currently explorer.exe uses only DrawThemeParentBackground, but I am hooking DrawThemeParentBackgroundEx anyway - just in case explorer will switch to this alternative API in the future
+HRESULT WINAPI DrawThemeParentBackgroundExHook(
+    IN HWND       hwnd,
+    IN HDC        hdc,
+    IN DWORD      dwFlags,
+    IN const RECT* prc
+) {
+    RECT rect;
+    if (!GetClipBox(hdc, &rect)) {
+        SetRectEmpty(&rect);
+    }
+
+    int colorIndex;
+    if (
+        g_hwndTaskbar   //is the current process the taskbar process?
+        && WindowNeedsBackgroundRepaint(&colorIndex, hwnd, &rect, /*includeTrayArea*/true)        //needed in order to not repaint hidden tray icons popup
+    ) {
+        HBRUSH brush = GetSysColorBrush(colorIndex);
+        if (brush) {            //verify that the brush is supported by the current system
+            HGDIOBJ holdbrush = SelectObject(hdc, brush);
+            if (holdbrush && holdbrush != HGDI_ERROR) {
+
+                FillRect(hdc, &rect, brush);
+                SelectObject(hdc, holdbrush);  // select old brush
+
+                return S_OK;
+            }
+        }
+    }
+
+    return pOriginalDrawThemeParentBackgroundEx(
+        hwnd,
+        hdc,
+        dwFlags,
+        prc
+    );
 }
 
 
@@ -510,6 +641,23 @@ BOOL Wh_ModInit() {
     }
 
 
+    hUxtheme = LoadLibraryW(L"uxtheme.dll");
+    if (!hUxtheme) {
+        Wh_Log(L"Loading uxtheme.dll failed");
+        return FALSE;
+    }
+
+    FARPROC pDrawThemeParentBackground = GetProcAddress(hUxtheme, "DrawThemeParentBackground");
+    FARPROC pDrawThemeParentBackgroundEx = GetProcAddress(hUxtheme, "DrawThemeParentBackgroundEx");
+    if (
+        !pDrawThemeParentBackground
+        || !pDrawThemeParentBackgroundEx
+    ) {
+        Wh_Log(L"Finding hookable functions from uxtheme.dll failed");
+        return FALSE;
+    }
+
+
     bool abort = false;
     if (TryInit(&abort, /*canTriggerRepaint*/false)) {    //NB! calling TriggerTaskbarRepaint() would be premature during Wh_ModInit()
         //set hooks at the end and then exit the function
@@ -560,6 +708,8 @@ BOOL Wh_ModInit() {
 
     Wh_SetFunctionHookT(pBeginPaint, BeginPaintHook, &pOriginalBeginPaint);
     Wh_SetFunctionHookT(pEndPaint, EndPaintHook, &pOriginalEndPaint);
+    Wh_SetFunctionHookT(pDrawThemeParentBackground, DrawThemeParentBackgroundHook, &pOriginalDrawThemeParentBackground);
+    Wh_SetFunctionHookT(pDrawThemeParentBackgroundEx, DrawThemeParentBackgroundExHook, &pOriginalDrawThemeParentBackgroundEx);
 
     return TRUE;
 }
@@ -602,6 +752,12 @@ void Wh_ModUninit() {
 
         CloseHandle(g_initThreadStopSignal);
         g_initThreadStopSignal = NULL;
+    }
+
+
+    if (hUxtheme) {
+        FreeLibrary(hUxtheme);
+        hUxtheme = NULL;
     }
 
 
