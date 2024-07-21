@@ -280,7 +280,7 @@ StrToId_T StrToID;
 intptr_t intensitySlider = 0;
 
 typedef unsigned short(*__cdecl Element_GetID_T)(class Element*, void*);
-Element_GetID_T GetId;
+Element_GetID_T Element_GetID;
 
 typedef void(* __cdecl Element_OnPropertyChanged_T)(class Element*, class PropertyInfo const *,int,class Value *,class Value *);
 Element_OnPropertyChanged_T Element_OnPropertyChanged;
@@ -289,7 +289,7 @@ void __cdecl Element_OnPropertyChanged_hook(class Element* This, class PropertyI
 {
     Element_OnPropertyChanged(This, prop, integer, valueA, valueB);
 
-    ATOM id = GetId(This, &This);
+    ATOM id = Element_GetID(This, &This);
     if (intensitySlider != id && id == StrToID((unsigned const short*)L"IntensitySlider"))
     {
         intensitySlider = reinterpret_cast<intptr_t>(This);
@@ -320,7 +320,7 @@ WindhawkUtils::SYMBOL_HOOK hooks[] = {
 
     {
         {L"public: unsigned short __cdecl DirectUI::Element::GetID(void)"},
-        (void**)&GetId
+        (void**)&Element_GetID
     },
 
     {
