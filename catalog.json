@@ -9,19 +9,19 @@
                 "published": 1721392103000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1721392103000,
+                "updated": 1721567106000,
                 "users": 4
             },
             "metadata": {
-                "author": "CatmanFan",
-                "compilerOptions": "-lcomdlg32 -ldwmapi",
-                "description": "Syncs OpenGlass & StartIsBack++ colors with DWM",
+                "author": "CatmanFan / Mr._Lechkar",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Synchronises OpenGlass and Control Panel color settings",
                 "github": "https://github.com/CatmanFan",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Accent color sync",
-                "version": "1.0"
+                "name": "Accent Color Sync",
+                "version": "1.1"
             }
         },
         "acrylic-effect-radius-changer": {
