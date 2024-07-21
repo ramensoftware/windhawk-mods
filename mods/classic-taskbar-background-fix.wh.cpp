@@ -38,7 +38,7 @@ After:
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings-TemporarilyDisabled==
+// ==WindhawkModSettings==
 /*
 - RepaintDesktopButton: yes
   $name: Repaint the "Show desktop button"
@@ -48,7 +48,7 @@ After:
   - windowBackgroundOnHover: Yes, and use window background colour on mouse over
   - no: No
 */
-// ==/WindhawkModSettings-TemporarilyDisabled==
+// ==/WindhawkModSettings==
 
 
 #include <map>
@@ -76,6 +76,7 @@ BOOL Wh_SetFunctionHookT(
 
 
 const COLORREF black = RGB(0, 0, 0);
+const int blackColorIndex = -1;    //mod's internal code for black colour
 
 bool g_retryInitInAThread = false;
 HANDLE g_initThread = NULL;
@@ -126,7 +127,7 @@ RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
 }
 
 
-bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* paintRect, bool includeTrayArea) {
+bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* paintRect, bool isDrawThemeParentBackgroundCall) {
 
     WCHAR szClassName[32];
     if (
@@ -165,6 +166,14 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
                 }
             }
         }
+        else if (
+            isDrawThemeParentBackgroundCall        //painting the "show desktop" button black agains since withtout it earlier calls to DrawThemeParentBackground would remove the black color from "show desktop" button as a side effect of painting other tray areas
+            && g_repaintDesktopButtonConfig == RepaintDesktopButtonConfig::no
+            && _wcsicmp(szClassName, L"TrayShowDesktopButtonWClass") == 0   //show desktop button
+        ) {
+            *colorIndex = blackColorIndex;     
+            return true;
+        }
         else {
 
             bool result =
@@ -173,13 +182,13 @@ bool WindowNeedsBackgroundRepaint(OUT int* colorIndex, HWND hWnd, const RECT* pa
                 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0        //secondary taskbar
                 || _wcsicmp(szClassName, L"MSTaskListWClass") == 0      //around of taskbar buttons
                 || (
-                    includeTrayArea
+                    isDrawThemeParentBackgroundCall
                     && (
                         _wcsicmp(szClassName, L"CiceroUIWndFrame") == 0     //language bar
-                        || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray
-                        || _wcsicmp(szClassName, L"Button") == 0        //three dots 
+                        || _wcsicmp(szClassName, L"TrayNotifyWnd") == 0     //around of tray, sometimes may be a very thin line, but could be also a wider area
+                        || _wcsicmp(szClassName, L"Button") == 0        //three dots of the "show hidden icons" button
                         || _wcsicmp(szClassName, L"SysPager") == 0      //visible tray icons
-                        //|| _wcsicmp(szClassName, L"ToolbarWindow32") == 0      //Background of both visible and hidden tray icons. Commenting out in order to not repaint hidden tray icons popup background.
+                        //|| _wcsicmp(szClassName, L"ToolbarWindow32") == 0      //Background of both visible and hidden tray icons. Commenting out in order to not repaint hidden tray icons popup background. Not needed anyway, since painting SysPager class has already the desired effect.
                         || _wcsicmp(szClassName, L"TrayClockWClass") == 0       //clock
                         || _wcsicmp(szClassName, L"TrayButton") == 0        //action center button
                         || (
@@ -325,7 +334,7 @@ HDC WINAPI BeginPaintHook(
         g_hwndTaskbar   //is the current process the taskbar process?
         && lpPaint
         && lpPaint->hdc
-        && WindowNeedsBackgroundRepaint(&colorIndex, hWnd, &lpPaint->rcPaint, /*includeTrayArea*/false)
+        && WindowNeedsBackgroundRepaint(&colorIndex, hWnd, &lpPaint->rcPaint, /*isDrawThemeParentBackgroundCall*/false)
     ) {
         //Send memDC to the caller to prevent occasional flickering. With memDC we can repaint the pixels before they are updated on screen.
         HDC memDC = CreateCompatibleDC(hdc);
@@ -419,6 +428,8 @@ BOOL WINAPI EndPaintHook(
                 }
             }
 
+
+            //blit the mem DC back to original HDC
             HDC memDC = lpPaint->hdc;
             HDC hdc = memDCInfo.originalHdc;
             const RECT* rect = &lpPaint->rcPaint;
@@ -442,11 +453,8 @@ BOOL WINAPI EndPaintHook(
     return pOriginalEndPaint(hWnd, lpPaint);
 }
 
-HRESULT WINAPI DrawThemeParentBackgroundHook(
-    IN HWND                     hwnd,
-    IN HDC                      hdc,
-    IN OPTIONAL const RECT*     prc
-) {
+bool DrawThemeParentBackgroundInternal(HWND hwnd, HDC hdc) {
+
     RECT rect;
     if (!GetClipBox(hdc, &rect)) {
         SetRectEmpty(&rect);
@@ -455,26 +463,55 @@ HRESULT WINAPI DrawThemeParentBackgroundHook(
     int colorIndex;
     if (
         g_hwndTaskbar   //is the current process the taskbar process?
-        && WindowNeedsBackgroundRepaint(&colorIndex, hwnd, &rect, /*includeTrayArea*/true)        //needed in order to not repaint hidden tray icons popup
-    ) {
-        HBRUSH brush = GetSysColorBrush(colorIndex);
-        if (brush) {            //verify that the brush is supported by the current system
-            HGDIOBJ holdbrush = SelectObject(hdc, brush);
-            if (holdbrush && holdbrush != HGDI_ERROR) {
+        && WindowNeedsBackgroundRepaint(&colorIndex, hwnd, &rect, /*isDrawThemeParentBackgroundCall*/true)        //needed in order to not repaint hidden tray icons popup
+        ) {
+        if (colorIndex == blackColorIndex) {  //Repaint the area as black again. Used for "show desktop" button if the mod settings say so.
 
-                FillRect(hdc, &rect, brush);
-                SelectObject(hdc, holdbrush);  // select old brush
+            HBRUSH brush = CreateSolidBrush(black);
+            if (brush) {            //verify that the brush is supported by the current system
+                HGDIOBJ holdbrush = SelectObject(hdc, brush);
+                if (holdbrush && holdbrush != HGDI_ERROR) {
 
-                return S_OK;
+                    FillRect(hdc, &rect, brush);
+                    SelectObject(hdc, holdbrush);
+
+                    return true;
+                }
+            }
+        }
+        else {
+            HBRUSH brush = GetSysColorBrush(colorIndex);
+            if (brush) {            //verify that the brush is supported by the current system
+                HGDIOBJ holdbrush = SelectObject(hdc, brush);
+                if (holdbrush && holdbrush != HGDI_ERROR) {
+
+                    FillRect(hdc, &rect, brush);
+                    SelectObject(hdc, holdbrush);  // select old brush
+
+                    return true;
+                }
             }
         }
     }
-    
-    return pOriginalDrawThemeParentBackground(
-        hwnd,
-        hdc,
-        prc
-    );
+
+    return false;
+}
+
+HRESULT WINAPI DrawThemeParentBackgroundHook(
+    IN HWND                     hwnd,
+    IN HDC                      hdc,
+    IN OPTIONAL const RECT*     prc
+) {
+    if (DrawThemeParentBackgroundInternal(hwnd, hdc)) {
+        return S_OK;
+    }
+    else {
+        return pOriginalDrawThemeParentBackground(
+            hwnd,
+            hdc,
+            prc
+        );
+    }
 }
 
 //currently explorer.exe uses only DrawThemeParentBackground, but I am hooking DrawThemeParentBackgroundEx anyway - just in case explorer will switch to this alternative API in the future
@@ -484,35 +521,17 @@ HRESULT WINAPI DrawThemeParentBackgroundExHook(
     IN DWORD      dwFlags,
     IN const RECT* prc
 ) {
-    RECT rect;
-    if (!GetClipBox(hdc, &rect)) {
-        SetRectEmpty(&rect);
+    if (DrawThemeParentBackgroundInternal(hwnd, hdc)) {
+        return S_OK;
     }
-
-    int colorIndex;
-    if (
-        g_hwndTaskbar   //is the current process the taskbar process?
-        && WindowNeedsBackgroundRepaint(&colorIndex, hwnd, &rect, /*includeTrayArea*/true)        //needed in order to not repaint hidden tray icons popup
-    ) {
-        HBRUSH brush = GetSysColorBrush(colorIndex);
-        if (brush) {            //verify that the brush is supported by the current system
-            HGDIOBJ holdbrush = SelectObject(hdc, brush);
-            if (holdbrush && holdbrush != HGDI_ERROR) {
-
-                FillRect(hdc, &rect, brush);
-                SelectObject(hdc, holdbrush);  // select old brush
-
-                return S_OK;
-            }
-        }
+    else {
+        return pOriginalDrawThemeParentBackgroundEx(
+            hwnd,
+            hdc,
+            dwFlags,
+            prc
+        );
     }
-
-    return pOriginalDrawThemeParentBackgroundEx(
-        hwnd,
-        hdc,
-        dwFlags,
-        prc
-    );
 }
 
 
