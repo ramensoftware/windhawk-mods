@@ -322,31 +322,35 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
                     bmi.bmiHeader.biCompression = BI_RGB;
 
                     COLORREF* pixels = new COLORREF[pixelCount];
-
-                    int getDIBitsResult = GetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
-                    if (getDIBitsResult == NULL || getDIBitsResult == ERROR_INVALID_PARAMETER) {
-                        Wh_Log(L"GetDIBits failed");
-                        delete[] pixels;
+                    if (!pixels) {
+                        Wh_Log(L"Allocating pixels array failed");
                     }
                     else {
-                        //modify the pixels
-                        for (int i = 0; i < pixelCount; ++i) {
-                            if (pixels[i] == oldColor)
-                                pixels[i] = newColor;
-                        }
-
-                        //save pixels array back to bitmap
-                        int setDIBitsResult = SetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
-                        delete[] pixels;
-
-                        if (setDIBitsResult == NULL || setDIBitsResult == ERROR_INVALID_PARAMETER) {
-                            Wh_Log(L"SetDIBits failed");
+                        int getDIBitsResult = GetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
+                        if (getDIBitsResult == NULL || getDIBitsResult == ERROR_INVALID_PARAMETER) {
+                            Wh_Log(L"GetDIBits failed");
+                            delete[] pixels;
                         }
                         else {
-                            //blit the modified content back to hdc
-                            //TODO: try to blit directly to original hdc, not to memDC from BeginPaint?
-                            if (!BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY))
-                                Wh_Log(L"BitBlt to hdc failed");
+                            //modify the pixels
+                            for (int i = 0; i < pixelCount; ++i) {
+                                if (pixels[i] == oldColor)
+                                    pixels[i] = newColor;
+                            }
+
+                            //save pixels array back to bitmap
+                            int setDIBitsResult = SetDIBits(memDC, memBitmap, 0, rect.bottom - rect.top, pixels, &bmi, DIB_RGB_COLORS);
+                            delete[] pixels;
+
+                            if (setDIBitsResult == NULL || setDIBitsResult == ERROR_INVALID_PARAMETER) {
+                                Wh_Log(L"SetDIBits failed");
+                            }
+                            else {
+                                //blit the modified content back to hdc
+                                //TODO: try to blit directly to original hdc, not to memDC from BeginPaint?
+                                if (!BitBlt(hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, memDC, 0, 0, SRCCOPY))
+                                    Wh_Log(L"BitBlt to hdc failed");
+                            }
                         }
                     }
                 }
@@ -517,8 +521,6 @@ BOOL WINAPI DrawFrameControlHook(
             Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
         }
         else {                
-            COLORREF buttonFace = GetSysColor(colorIndex);
-
             RECT rect;
             if (!GetClipBox(hdc, &rect)) {
                 SetRectEmpty(&rect);
