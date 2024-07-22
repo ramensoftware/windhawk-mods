@@ -9,7 +9,9 @@ import urllib.request
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional, Tuple
+
+import win32api
 
 
 class Architecture(Enum):
@@ -52,6 +54,26 @@ def get_engine_path(windhawk_dir: Path) -> Optional[str]:
     p = r'^\s*EnginePath\s*=\s*(.*?)\s*$'
     match = re.search(p, config, flags=re.MULTILINE)
     return match.group(1) if match else None
+
+
+def get_file_version(path: Path) -> Tuple[int, int, int, int]:
+    info = win32api.GetFileVersionInfo(str(path), '\\')
+    ms = info['FileVersionMS']
+    ls = info['FileVersionLS']
+    return (
+        win32api.HIWORD(ms),
+        win32api.LOWORD(ms),
+        win32api.HIWORD(ls),
+        win32api.LOWORD(ls),
+    )
+
+
+def str_to_file_version(version: str) -> Tuple[int, int, int, int]:
+    parts = [int(x) for x in version.split('.')]
+    if len(parts) != 4:
+        raise RuntimeError(f'Invalid file version: {version}')
+
+    return (parts[0], parts[1], parts[2], parts[3])
 
 
 def get_mod_info(path: Path) -> ModInfo:
@@ -113,7 +135,7 @@ def get_mod_info(path: Path) -> ModInfo:
 
     if version is None:
         raise RuntimeError('@version is not specified')
-    
+
     if not architectures:
         architectures = {Architecture.x86, Architecture.x86_64}
 
@@ -122,6 +144,8 @@ def get_mod_info(path: Path) -> ModInfo:
 
 def check_mod(mod_file: Path, windhawk_dir: Path):
     print(f'Checking {mod_file}')
+
+    windhawk_version = get_file_version(windhawk_dir / 'windhawk.exe')
 
     compiler_path = windhawk_dir / 'Compiler' / 'bin' / 'g++.exe'
 
@@ -154,12 +178,33 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
             compiler_target = 'x86_64-w64-mingw32'
 
         with tempfile.TemporaryDirectory() as tmp:
+            version_definitions_should_ignore = False
+            # if mod_info.id in [
+            #     'aerexplorer',
+            #     'classic-taskdlg-fix',
+            #     'msg-box-font-fix',
+            # ]:
+            #     version_definitions_should_ignore = True
+
+            version_definitions = []
+            if (
+                windhawk_version >= str_to_file_version('1.5.0.0')
+                and not version_definitions_should_ignore
+            ):
+                version_definitions += [
+                    '-DWINVER=0x0A00',
+                    '-D_WIN32_WINNT=0x0A00',
+                    '-D_WIN32_IE=0x0A00',
+                    '-DNTDDI_VERSION=0x0A00000C',
+                ]
+
             compiler_args = [
                 '-std=c++20',
                 '-O2',
                 '-shared',
                 '-DUNICODE',
                 '-D_UNICODE',
+                *version_definitions,
                 '-D__USE_MINGW_ANSI_STDIO=0',
                 '-DWH_MOD',
                 f'-DWH_MOD_ID=L"{mod_info.id}"',
@@ -175,13 +220,15 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
                 *extra_args,
             ]
 
-            if mod_info.id in [
-                'accent-color-sync',
-                'aerexplorer',
-                'basic-themer',
-                'classic-maximized-windows-fix',
-            ]:
-                compiler_args.append('-DWH_UTILS_ENABLE_DEPRECATED_PARTS')
+            # if mod_info.id in [
+            #     'accent-color-sync',
+            #     'aerexplorer',
+            #     'basic-themer',
+            #     'classic-maximized-windows-fix',
+            #     'taskbar-vertical',
+            #     'win7-alttab-loader',
+            # ]:
+            #     compiler_args.append('-DWH_ENABLE_DEPRECATED_PARTS')
 
             print(f'Running compiler, extra args: {extra_args}')
             result = subprocess.call([compiler_path, *compiler_args])
