@@ -67,6 +67,7 @@ I would like to thank @Anixx for testing the mod during its development and illu
 
 #include <map>
 #include <mutex>
+#include <new>          //std::nothrow
 #include <windowsx.h>
 #include <uxtheme.h>
 
@@ -321,7 +322,7 @@ void ConditionalFillRect(HDC hdc, const RECT& rect, COLORREF oldColor, COLORREF 
                     bmi.bmiHeader.biBitCount = 32;  //32-bit color depth
                     bmi.bmiHeader.biCompression = BI_RGB;
 
-                    COLORREF* pixels = new COLORREF[pixelCount];
+                    COLORREF* pixels = new(std::nothrow) COLORREF[pixelCount];
                     if (!pixels) {
                         Wh_Log(L"Allocating pixels array failed");
                     }
