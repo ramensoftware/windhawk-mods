@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-21T18:54:36.000Z</updated>
+    <updated>2024-07-23T06:47:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Color Sync 1.3]]></title>
+        <id>https://windhawk.net/mods/accent-color-sync#7c4df7d217e3e09907079ed0d5a13df0cf64d5f0</id>
+        <link href="https://windhawk.net/mods/accent-color-sync"/>
+        <updated>2024-07-23T06:47:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed bugs in which OpenGlass opacity did not update when changing theme or clicking "Cancel" on the 'Color &amp; Appearance' page.</li>
+<li>Tweaked color balance calculation to be more accurate, including adding hotfixes for forcing certain values to match Windows 7's.</li>
+<li>Fixed crash bug from the default opacity value using the wrong calculation.</li>
+<li>Removed transparency option as OpenGlass-legacy still does not yet support opaque rendering.</li>
+<li>Added Spanish &amp; French translation (partial).</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent Color Sync 1.2]]></title>
         <id>https://windhawk.net/mods/accent-color-sync#120bd157b2a8eb1c99a1ebd8363686cbc40de906</id>
@@ -238,16 +251,6 @@ Read the options or the <a href="https://winclassic.net/thread/2377/startisback-
 <ul>
 <li>Wiktorwiktor12: FindPattern function &amp; Custom Folder help.</li>
 <li>Aubymori: Additional help.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.5]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#d02494284cfba2bb2c9fcb54ad499c0489ac45dd</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2024-06-28T17:00:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a new theme: Squircle.</li>
-<li>Fixed a crash with some themes when the "Icon and label"-style search button is used.</li>
 </ul>]]></content>
     </entry>
 </feed>
