@@ -37,13 +37,6 @@ You may need to try changing the accent color manually if changes do not automat
 
 // ==WindhawkModSettings==
 /*
-- transparency: TRUE
-  $name: Enable transparency
-  $name:fr-FR: Activer la transparence
-  $name:es-ES: Habilitar transparencia
-  $description: Replicates the option found in Windows 7. At present, this only sets the OpenGlass solid color balance to 100 if this option is disabled.
-  $description:fr-FR: Réplication de l'option disponible sur Windows 7. À présent, si cette option est désactivée, elle définit simplement à 100 % la balance des couleurs solides pour OpenGlass.
-  $description:es-ES: Reproduce la opción que se encuentra en Windows 7. Al momento, si ella está deshabilitada, solo establece el balance de color sólido de OpenGlass en 100.
 - syncDWM: FALSE
   $name: Sync with DWM
   $name:fr-FR: Synchroniser avec DWM
@@ -578,7 +571,7 @@ BOOL LoadSettings()
         if (!exists_DWORD(dwmKey, opacityValue)) return FALSE;
     }
 
-    settings.boolTransparency = Wh_GetIntSetting(L"transparency");
+    settings.boolTransparency = TRUE;
     settings.boolSyncDWM = Wh_GetIntSetting(L"syncDWM");
 
     return TRUE;
@@ -586,12 +579,6 @@ BOOL LoadSettings()
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L"Settings changed");
-
-    if (settings.boolTransparency != Wh_GetIntSetting(L"transparency"))
-    {
-        MessageBoxW(nullptr, L"You will now be logged out so that full changes can take effect. Please save your work first, then click OK.", L"Logging out", MB_ICONWARNING | MB_OK);
-        system("shutdown /l");
-    }
 
     *bReload = TRUE;
     return TRUE;
