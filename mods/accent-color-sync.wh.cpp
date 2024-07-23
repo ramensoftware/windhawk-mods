@@ -461,6 +461,7 @@ void THISCALL CCPushButton_OnSelectedPropertyChanged_hook(class CCPushButton* Th
     if (current > 0 && current == okButton)
     {
         settings.opacity = opacity;
+        SyncOpacity();
     }
 
     // Cancel button
