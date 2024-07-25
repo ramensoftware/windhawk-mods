@@ -178,28 +178,38 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
             compiler_target = 'x86_64-w64-mingw32'
 
         with tempfile.TemporaryDirectory() as tmp:
-            version_definitions_should_ignore = False
-            # if mod_info.id in [
-            #     'aerexplorer',
-            #     'classic-taskdlg-fix',
-            #     'msg-box-font-fix',
-            # ]:
-            #     version_definitions_should_ignore = True
+            cpp_version = '20'
+            if (
+                windhawk_version >= str_to_file_version('1.5.0.0')
+                # Temporary compatibility rules:
+                and (mod_info.id, mod_info.version)
+                not in [
+                    ('chrome-ui-tweaks', '1.0.0'),
+                    ('taskbar-vertical', '1.0'),
+                ],
+            ):
+                cpp_version = '23'
 
             version_definitions = []
             if (
                 windhawk_version >= str_to_file_version('1.5.0.0')
-                and not version_definitions_should_ignore
+                # Temporary compatibility rules:
+                and (mod_info.id, mod_info.version)
+                not in [
+                    ('aerexplorer', '1.6.2'),
+                    ('classic-taskdlg-fix', '1.1.0'),
+                    ('msg-box-font-fix', '1.5.0'),
+                ],
             ):
                 version_definitions += [
                     '-DWINVER=0x0A00',
                     '-D_WIN32_WINNT=0x0A00',
                     '-D_WIN32_IE=0x0A00',
-                    '-DNTDDI_VERSION=0x0A00000C',
+                    '-DNTDDI_VERSION=0x0A000008',
                 ]
 
             compiler_args = [
-                '-std=c++20',
+                f'-std=c++{cpp_version}',
                 '-O2',
                 '-shared',
                 '-DUNICODE',
@@ -220,15 +230,34 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
                 *extra_args,
             ]
 
-            # if mod_info.id in [
-            #     'accent-color-sync',
-            #     'aerexplorer',
-            #     'basic-themer',
-            #     'classic-maximized-windows-fix',
-            #     'taskbar-vertical',
-            #     'win7-alttab-loader',
-            # ]:
-            #     compiler_args.append('-DWH_ENABLE_DEPRECATED_PARTS')
+            if (mod_info.id, mod_info.version) in [
+                ('accent-color-sync', '1.31'),
+                ('aerexplorer', '1.6.2'),
+                ('basic-themer', '1.1.0'),
+                ('classic-maximized-windows-fix', '2.1'),
+                ('taskbar-vertical', '1.0'),
+                ('win7-alttab-loader', '1.0.2'),
+                ('ce-disable-process-button-flashing', '1.0.1'),
+                ('msg-box-font-fix', '1.5.0'),
+                ('sib-plusplus-tweaker', '0.7'),
+                ('windows-7-clock-spacing', '1.0.0'),
+            ]:
+                compiler_args.append('-DWH_ENABLE_DEPRECATED_PARTS')
+
+            if (mod_info.id, mod_info.version) in [
+                ('classic-explorer-treeview', '1.1'),
+                ('taskbar-button-scroll', '1.0.6'),
+                ('taskbar-clock-customization', '1.3.3'),
+                ('taskbar-notification-icon-spacing', '1.0.2'),
+                ('taskbar-vertical', '1.0'),
+                ('taskbar-wheel-cycle', '1.1.3'),
+            ]:
+                compiler_args.append('-lruntimeobject')
+
+            if (mod_info.id, mod_info.version) in [
+                ('taskbar-empty-space-clicks', '1.3'),
+            ]:
+                compiler_args.append('-DUIATYPES_H')
 
             print(f'Running compiler, extra args: {extra_args}')
             result = subprocess.call([compiler_path, *compiler_args])
