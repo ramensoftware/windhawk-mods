@@ -9,7 +9,7 @@ import urllib.request
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import win32api
 
@@ -28,7 +28,7 @@ class ModInfo:
 
 
 def extract_windhawk(installer_path: Path, target_dir: Path):
-    print(f'Extracting {installer_path} to {target_dir}...')
+    print(f'Extracting {installer_path} to {target_dir}')
 
     subprocess.check_call(f'"{installer_path}" /S /PORTABLE /D={target_dir}')
 
@@ -37,7 +37,7 @@ def extract_windhawk(installer_path: Path, target_dir: Path):
 
 def download_and_extract_windhawk(windhawk_version: str, target_dir: Path):
     url = f'https://github.com/ramensoftware/windhawk/releases/download/v{windhawk_version}/windhawk_setup.exe'
-    print(f'Downloading {url}...')
+    print(f'Downloading {url}')
 
     with tempfile.TemporaryDirectory() as tmp:
         target_setup_file = Path(tmp) / 'windhawk_setup.exe'
@@ -56,7 +56,7 @@ def get_engine_path(windhawk_dir: Path) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def get_file_version(path: Path) -> Tuple[int, int, int, int]:
+def get_file_version(path: Path) -> tuple[int, int, int, int]:
     info = win32api.GetFileVersionInfo(str(path), '\\')
     ms = info['FileVersionMS']
     ls = info['FileVersionLS']
@@ -68,7 +68,7 @@ def get_file_version(path: Path) -> Tuple[int, int, int, int]:
     )
 
 
-def str_to_file_version(version: str) -> Tuple[int, int, int, int]:
+def str_to_file_version(version: str) -> tuple[int, int, int, int]:
     parts = [int(x) for x in version.split('.')]
     if len(parts) != 4:
         raise RuntimeError(f'Invalid file version: {version}')
@@ -178,7 +178,7 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
             compiler_target = 'x86_64-w64-mingw32'
 
         with tempfile.TemporaryDirectory() as tmp:
-            cpp_version = '20'
+            cpp_version = 20
             if (
                 windhawk_version >= str_to_file_version('1.5.0.0')
                 # Temporary compatibility rules:
@@ -186,15 +186,9 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
                 not in [
                     ('chrome-ui-tweaks', '1.0.0'),
                     ('taskbar-vertical', '1.0'),
-                ],
+                ]
             ):
-                cpp_version = '23'
-
-            print(f'{windhawk_version=}')
-            print(f'{str_to_file_version('1.5.0.0')=}')
-            print(f'{windhawk_version >= str_to_file_version('1.5.0.0')=}')
-            print(f'{(mod_info.id, mod_info.version)}')
-            print(f'{cpp_version=}')
+                cpp_version = 23
 
             version_definitions = []
             if (
@@ -205,7 +199,7 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
                     ('aerexplorer', '1.6.2'),
                     ('classic-taskdlg-fix', '1.1.0'),
                     ('msg-box-font-fix', '1.5.0'),
-                ],
+                ]
             ):
                 version_definitions += [
                     '-DWINVER=0x0A00',
