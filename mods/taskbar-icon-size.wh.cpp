@@ -2,14 +2,14 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.8
+// @version         1.2.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0605 -lcomctl32 -lole32 -loleaut32 -lshcore -lwininet
+// @compilerOptions -DWINVER=0x0605 -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshcore -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -79,6 +79,7 @@ Tweaker](https://tweaker.ramensoftware.com/).
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <string>
@@ -103,6 +104,7 @@ std::atomic<bool> g_applyingSettings;
 std::atomic<bool> g_pendingFrameSizeChange;
 std::atomic<bool> g_pendingMeasureOverride;
 std::atomic<bool> g_unloading;
+std::atomic<int> g_hookCallCounter;
 
 int g_originalTaskbarHeight;
 int g_taskbarHeight;
@@ -234,6 +236,8 @@ using TrayUI_GetMinSize_t = void(WINAPI*)(void* pThis,
                                           SIZE* size);
 TrayUI_GetMinSize_t TrayUI_GetMinSize_Original;
 void WINAPI TrayUI_GetMinSize_Hook(void* pThis, HMONITOR monitor, SIZE* size) {
+    Wh_Log(L">");
+
     TrayUI_GetMinSize_Original(pThis, monitor, size);
 
     // Reassign min height to fix displaced secondary taskbar when auto-hide is
@@ -261,6 +265,8 @@ void WINAPI TrayUI__HandleSettingChange_Hook(void* pThis,
                                              void* param2,
                                              void* param3,
                                              void* param4) {
+    Wh_Log(L">");
+
     TrayUI__HandleSettingChange_Original(pThis, param1, param2, param3, param4);
 
     if (g_applyingSettings) {
@@ -420,18 +426,21 @@ void WINAPI TaskbarController_OnFrameSizeChanged_Hook(void* pThis) {
     g_pendingFrameSizeChange = false;
 }
 
-using TaskbarFrame_MeasureOverride_t = void*(WINAPI*)(void* pThis,
-                                                      void* param1,
-                                                      void* param2);
+using TaskbarFrame_MeasureOverride_t = winrt::Windows::Foundation::Size*(
+    WINAPI*)(void* pThis, void* param1, void* param2);
 TaskbarFrame_MeasureOverride_t TaskbarFrame_MeasureOverride_Original;
-void* WINAPI TaskbarFrame_MeasureOverride_Hook(void* pThis,
-                                               void* param1,
-                                               void* param2) {
+winrt::Windows::Foundation::Size* WINAPI
+TaskbarFrame_MeasureOverride_Hook(void* pThis, void* param1, void* param2) {
+    g_hookCallCounter++;
+
     Wh_Log(L">");
 
-    void* ret = TaskbarFrame_MeasureOverride_Original(pThis, param1, param2);
+    winrt::Windows::Foundation::Size* ret =
+        TaskbarFrame_MeasureOverride_Original(pThis, param1, param2);
 
     g_pendingMeasureOverride = false;
+
+    g_hookCallCounter--;
 
     return ret;
 }
@@ -1157,6 +1166,7 @@ bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     SYMBOL_HOOK symbolHooks[] =  //
         {
             {
@@ -1185,6 +1195,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&TaskListItemViewModel_GetIconHeight_Original,
                 (void*)TaskListItemViewModel_GetIconHeight_Hook,
+                true,  // Gone in KB5040527 (Taskbar.View.dll 2124.16310.10.0).
             },
             {
                 {LR"(public: static double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetIconHeightInViewPixels(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
@@ -1312,7 +1323,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    SYMBOL_HOOK symbolHooks[] = {
+    SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {
                 LR"(void __cdecl IconUtils::GetIconSize(bool,enum IconUtils::IconType,struct tagSIZE *))",
@@ -1355,8 +1366,8 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    return HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
+                                              ARRAYSIZE(taskbarDllHooks));
 }
 
 BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
@@ -1462,6 +1473,10 @@ void Wh_ModUninit() {
         WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
         CloseHandle(g_restartExplorerPromptThread);
         g_restartExplorerPromptThread = nullptr;
+    }
+
+    while (g_hookCallCounter > 0) {
+        Sleep(100);
     }
 }
 
