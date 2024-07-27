@@ -1,3 +1,7 @@
+## 1.2.9 ([Jul 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7e0bd27ae1d12ae639497fbc9b48bb791f98b078/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed compatibility with update KB5040527 for Windows 11 version 23H2.
+
 ## 1.2.8 ([May 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/09d81d6358f4f0fc82e59541b4f0e6daaaad19fd/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed the weather icon disappearing if taskbar icons are centered.
