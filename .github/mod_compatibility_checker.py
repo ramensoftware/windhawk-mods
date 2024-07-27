@@ -190,6 +190,12 @@ def check_mod(mod_file: Path, windhawk_dir: Path):
             ):
                 cpp_version = '23'
 
+            print(f'{windhawk_version=}')
+            print(f'{str_to_file_version('1.5.0.0')=}')
+            print(f'{windhawk_version >= str_to_file_version('1.5.0.0')=}')
+            print(f'{(mod_info.id, mod_info.version)}')
+            print(f'{cpp_version=}')
+
             version_definitions = []
             if (
                 windhawk_version >= str_to_file_version('1.5.0.0')
