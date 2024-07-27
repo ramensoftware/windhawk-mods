@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-23T06:47:42.000Z</updated>
+    <updated>2024-07-27T00:57:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Color Sync 1.31]]></title>
+        <id>https://windhawk.net/mods/accent-color-sync#940c28ba0fb4ccebb782988516dd6bb5a7f23de0</id>
+        <link href="https://windhawk.net/mods/accent-color-sync"/>
+        <updated>2024-07-27T00:57:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Set <em>Sync with DWM</em> option to enabled by default, and added notice for updating regarding this option in the readme.</li>
+<li>Update French and Spanish translation.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent Color Sync 1.3]]></title>
         <id>https://windhawk.net/mods/accent-color-sync#7c4df7d217e3e09907079ed0d5a13df0cf64d5f0</id>
@@ -233,24 +243,6 @@ This will override the original UIFILE resource from shell32 to the one in shell
 <li>Removed re-scale of "All Programs" menu as it caused some artifacts</li>
 <li>Fixed "All Programs" menu resize handling</li>
 <li>Updated Readme</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[StartIsBack++ Tweaker 0.4]]></title>
-        <id>https://windhawk.net/mods/sib-plusplus-tweaker#d63ed3bf36b5dcd9083f0710e63196982fe4ec9f</id>
-        <link href="https://windhawk.net/mods/sib-plusplus-tweaker"/>
-        <updated>2024-06-28T21:57:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startisbacktweaker2920">StartIsBack++ Tweaker (2.9.20)</h1>
-<p>Modifies StartIsBack++'s internal functions for more customizable options.
-Might not work if the StartIsBack++ DLL installed has been patched previously.
-<strong>Works only on StartIsBack++ 2.9.20. Functionality on older/newer versions is not guaranteed.</strong></p>
-<h2 id="features">Features</h2>
-<p>As of now, the mod can do interesting things as restoring Windows 7's links, disable Hottracking or disable Start Menu animations.
-Read the options or the <a href="https://winclassic.net/thread/2377/startisback-tweaker-2-9-20">WinClassic post</a> for more info.</p>
-<h2 id="specialthanks">Special Thanks</h2>
-<ul>
-<li>Wiktorwiktor12: FindPattern function &amp; Custom Folder help.</li>
-<li>Aubymori: Additional help.</li>
 </ul>]]></content>
     </entry>
 </feed>

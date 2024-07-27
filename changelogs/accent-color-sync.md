@@ -1,3 +1,8 @@
+## 1.31 ([Jul 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/940c28ba0fb4ccebb782988516dd6bb5a7f23de0/mods/accent-color-sync.wh.cpp))
+
+* Set *Sync with DWM* option to enabled by default, and added notice for updating regarding this option in the readme.
+* Update French and Spanish translation.
+
 ## 1.3 ([Jul 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7c4df7d217e3e09907079ed0d5a13df0cf64d5f0/mods/accent-color-sync.wh.cpp))
 
 * Fixed bugs in which OpenGlass opacity did not update when changing theme or clicking "Cancel" on the 'Color & Appearance' page.
