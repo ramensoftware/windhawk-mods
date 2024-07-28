@@ -2754,7 +2754,7 @@
                 "published": 1715436273000,
                 "rating": 10,
                 "ratingUsers": 11,
-                "updated": 1719489546000,
+                "updated": 1722155130000,
                 "users": 916
             },
             "metadata": {
@@ -2763,7 +2763,7 @@
                 ],
                 "author": "m417z",
                 "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
-                "description": "An advanced mod to override style attributes of the Notification Center",
+                "description": "Customize the Notification Center with themes contributed by others or create your own",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -2771,7 +2771,7 @@
                 ],
                 "name": "Windows 11 Notification Center Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "windows-11-start-menu-styler": {

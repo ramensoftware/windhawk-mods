@@ -1,3 +1,7 @@
+## 1.1.1 ([Jul 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/931b937d1cfa9782375c939c104de17bf0b5047a/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Updated the TranslucentShell theme.
+
 ## 1.1 ([Jun 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/78d005fa29bcbfaab1f5ea2777f1217468703c9f/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added themes! Currently, only the TranslucentShell theme is integrated into the mod and can be selected in the settings.

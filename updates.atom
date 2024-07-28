@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-27T12:01:19.000Z</updated>
+    <updated>2024-07-28T08:25:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#931b937d1cfa9782375c939c104de17bf0b5047a</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2024-07-28T08:25:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the TranslucentShell theme.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.9]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#7e0bd27ae1d12ae639497fbc9b48bb791f98b078</id>
@@ -229,17 +238,6 @@ This will override the original UIFILE resource from shell32 to the one in shell
         <updated>2024-06-30T06:45:28.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Removed "Always use standard user profile picture" setting due to bug reports.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[StartIsBack++ Tweaker 0.6]]></title>
-        <id>https://windhawk.net/mods/sib-plusplus-tweaker#51ecb85379958fe13463806cdeef497ff1886bad</id>
-        <link href="https://windhawk.net/mods/sib-plusplus-tweaker"/>
-        <updated>2024-06-29T21:10:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added 2 new options: "Hide UWP Settings results" &amp; "Always use standard user profile picture", done by TeknixStuff.</li>
-<li>Updated Readme</li>
-<li>Deleted Control Panel workaround for Windows 7 links</li>
 </ul>]]></content>
     </entry>
 </feed>
