@@ -2,7 +2,7 @@
 // @id              eradicate-immersive-menus
 // @name            Eradicate Immersive Menus
 // @description     Gets rid of immersive menus system-wide
-// @version         1.0.0
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -61,36 +61,42 @@ restart Windhawk. If that does not work, simply add it to the exclusion list in 
   $name: Apply to Network tray icon
 - defender: true
   $name: Apply to Windows Security
+- narrator: true
+  $name: Apply to Narrator
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_api.h>
 #include <windhawk_utils.h>
 
 struct {
     BOOL explorer;
     /* Tray icons are always 64-bit */
-    #ifdef _WIN64
+#ifdef _WIN64
     BOOL sound;
     BOOL network;
     BOOL defender;
     BOOL nosettingsicon;
-    #endif
+    BOOL narrator;
+#endif
 } settings;
 
 /* ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu */
 typedef bool (__fastcall *ICMH_CAODTM_t)(HMENU, HWND);
 
-ICMH_CAODTM_t ICMH_CAODTM_orig_shell32;
-ICMH_CAODTM_t ICMH_CAODTM_orig_ExplorerFrame;
+#define ORIG(MODULE) \
+ICMH_CAODTM_t ICMH_CAODTM_orig_ ## MODULE = nullptr;
+
+ORIG(shell32)
+ORIG(ExplorerFrame)
 /* Explorer and tray icons are always 64-bit */
 #ifdef _WIN64
-ICMH_CAODTM_t ICMH_CAODTM_orig_explorer;
-ICMH_CAODTM_t ICMH_CAODTM_orig_twinui;
-ICMH_CAODTM_t ICMH_CAODTM_orig_twinui_pcshell;
-ICMH_CAODTM_t ICMH_CAODTM_orig_SndVolSSO;
-ICMH_CAODTM_t ICMH_CAODTM_orig_pnidui;
-ICMH_CAODTM_t ICMH_CAODTM_orig_SecurityHealthSSO;
+ORIG(explorer)
+ORIG(twinui)
+ORIG(twinui_pcshell)
+ORIG(SndVolSSO)
+ORIG(pnidui)
+ORIG(SecurityHealthSSO)
+ORIG(Narrator)
 #endif
 
 /** 
@@ -135,7 +141,7 @@ BOOL SetMenuItemInfoW_hook(
   * Hooks ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu for a given DLL.
   * There are many DLLs that have this function, so each one needs to be accounted for.
   */
-inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
+inline bool HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
 {
     HMODULE hModule;
 
@@ -152,7 +158,7 @@ inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
     if (!hModule)
     {
         Wh_Log(L"Failed to load %s", lpDll);
-        return FALSE;
+        return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK hook = {
@@ -178,27 +184,40 @@ inline BOOL HookICMH_CAODTM(LPCWSTR lpDll, ICMH_CAODTM_t *pOrig)
 
     if (bHookSuccess)
     {
-        return TRUE;
+        return true;
     }
 
     Wh_Log(
         L"Failed to hook ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu in %s.",
         lpDll ? lpDll : L"explorer.exe"
     );
-    return FALSE;
+    return false;
 }
+
+#define LoadIntSetting(NAME) \
+settings.NAME = Wh_GetIntSetting(L ## #NAME)
 
 void LoadSettings()
 {
-    settings.explorer = Wh_GetIntSetting(L"explorer", TRUE);
+    LoadIntSetting(explorer);
     /* Tray icons are always 64-bit */
 #ifdef _WIN64
-    settings.sound          = Wh_GetIntSetting(L"sound",          TRUE);
-    settings.network        = Wh_GetIntSetting(L"network",        TRUE);
-    settings.defender       = Wh_GetIntSetting(L"defender",       TRUE);
-    settings.nosettingsicon = Wh_GetIntSetting(L"nosettingsicon", TRUE);
+    LoadIntSetting(sound);
+    LoadIntSetting(network);
+    LoadIntSetting(defender);
+    LoadIntSetting(nosettingsicon);
+    LoadIntSetting(narrator);
 #endif
 }
+
+#define HOOK(MODULE) \
+HookICMH_CAODTM(L ## #MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE)
+
+#define HOOK_SAFE(MODULE, MODULE_SAFE) \
+HookICMH_CAODTM(L ## MODULE L".dll", &ICMH_CAODTM_orig_ ## MODULE_SAFE)
+
+#define HOOK_SELF(NAME) \
+HookICMH_CAODTM(NULL, &ICMH_CAODTM_orig_ ## NAME)
 
 BOOL Wh_ModInit()
 {
@@ -208,9 +227,9 @@ BOOL Wh_ModInit()
 #ifdef _WIN64
     WCHAR szProcessPath[MAX_PATH];
     GetModuleFileNameW(NULL, szProcessPath, MAX_PATH);
-    BOOL bIsExplorer = (wcsicmp(szProcessPath, L"C:\\Windows\\explorer.exe") == 0);
+    bool bIsExplorer = (0 == wcsicmp(szProcessPath, L"C:\\Windows\\explorer.exe"));
 
-    if (settings.nosettingsicon)
+    if (settings.nosettingsicon && bIsExplorer)
     {
         Wh_SetFunctionHook(
             (void *)SetMenuItemInfoW,
@@ -222,54 +241,20 @@ BOOL Wh_ModInit()
 
     if (settings.explorer
 #ifdef _WIN64
-    && wcsicmp(szProcessPath, L"C:\\Windows\\System32\\SecurityHealthSystray.exe")
+    && 0 != wcsicmp(szProcessPath, L"C:\\Windows\\System32\\SecurityHealthSystray.exe")
 #endif
     )
     {
-        if (!HookICMH_CAODTM(
-            L"shell32.dll",
-            &ICMH_CAODTM_orig_shell32
-        ))
-        {
-            return FALSE;
-        }
-        
-        
-        if (!HookICMH_CAODTM(
-            L"ExplorerFrame.dll",
-            &ICMH_CAODTM_orig_ExplorerFrame
-        ))
-        {
-            return FALSE;
-        }
+        HOOK(shell32);
+        HOOK(ExplorerFrame);
         
         /* Explorer itself is always 64-bit */
 #ifdef _WIN64
         if (bIsExplorer)
         {
-            if (!HookICMH_CAODTM(
-                NULL,
-                &ICMH_CAODTM_orig_explorer
-            ))
-            {
-                return FALSE;
-            }
-
-            if (!HookICMH_CAODTM(
-                L"twinui.dll",
-                &ICMH_CAODTM_orig_twinui
-            ))
-            {
-                return FALSE;
-            }
-
-            if (!HookICMH_CAODTM(
-                L"twinui.pcshell.dll",
-                &ICMH_CAODTM_orig_twinui_pcshell
-            ))
-            {
-                return FALSE;
-            }
+            HOOK_SELF(explorer);
+            HOOK(twinui);
+            HOOK_SAFE("twinui.pcshell", twinui_pcshell);
         }
 #endif
     }
@@ -280,37 +265,25 @@ BOOL Wh_ModInit()
     {
         if (settings.sound)
         {
-            if (!HookICMH_CAODTM(
-                L"SndVolSSO.dll",
-                &ICMH_CAODTM_orig_SndVolSSO
-            ))
-            {
-                return FALSE;
-            }
+            HOOK(SndVolSSO);
         }
 
         if (settings.network)
         {
-            if (!HookICMH_CAODTM(
-                L"pnidui.dll",
-                &ICMH_CAODTM_orig_pnidui
-            ))
-            {
-                return FALSE;
-            }
+            HOOK(pnidui);
         }
     }
 
     if (settings.defender
-    &&  0 == wcscmp(wcslwr(szProcessPath), L"c:\\windows\\system32\\securityhealthsystray.exe"))
+    &&  0 == wcsicmp(szProcessPath, L"C:\\Windows\\System32\\SecurityHealthSystray.exe"))
     {
-        if (!HookICMH_CAODTM(
-            L"SecurityHealthSSO.dll",
-            &ICMH_CAODTM_orig_SecurityHealthSSO
-        ))
-        {
-            return FALSE;
-        }
+        HOOK(SecurityHealthSSO);
+    }
+
+    if (settings.narrator
+    &&  0 == wcsicmp(szProcessPath, L"C:\\Windows\\System32\\Narrator.exe"))
+    {
+        HOOK_SELF(Narrator);
     }
 #endif
 

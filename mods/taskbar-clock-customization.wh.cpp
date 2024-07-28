@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.3.2
+// @version         1.3.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -29,7 +29,7 @@ a news feed, and more.
 
 Only Windows 10 64-bit and Windows 11 are supported.
 
-**Note:** To customize the old taskbar on Windows 11 (if using Explorer Patcher
+**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.
 
 ![Screenshot](https://i.imgur.com/gM9kbH5.png)
@@ -270,8 +270,8 @@ styles, such as the font color and size.
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    Explorer Patcher or a similar tool). Note: For Windhawk versions older
-    than 1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
+    1.3, you have to disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
 
@@ -423,46 +423,63 @@ GetDateFormatEx_t GetDateFormatEx_Original;
 using GetDateFormatW_t = decltype(&GetDateFormatW);
 GetDateFormatW_t GetDateFormatW_Original;
 
-std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
-    HINTERNET hOpenHandle, hUrlHandle;
-    LPBYTE pUrlContent;
-    DWORD dwLength, dwNumberOfBytesRead;
-
-    hOpenHandle =
-        InternetOpen(L"TaskbarClockCustomization", INTERNET_OPEN_TYPE_PRECONFIG,
-                     nullptr, nullptr, 0);
-    if (hOpenHandle == nullptr) {
+std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl,
+                                          bool failIfNot200 = true) {
+    HINTERNET hOpenHandle = InternetOpen(
+        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hOpenHandle) {
         return std::nullopt;
     }
 
-    hUrlHandle =
+    HINTERNET hUrlHandle =
         InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
                         INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
                             INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
                             INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
                         0);
-    if (hUrlHandle == nullptr) {
+    if (!hUrlHandle) {
         InternetCloseHandle(hOpenHandle);
         return std::nullopt;
     }
 
-    pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
-    if (pUrlContent) {
-        InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
-        dwLength = dwNumberOfBytesRead;
-
-        while (dwNumberOfBytesRead) {
-            LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
-                GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
-            if (!pNewUrlContent) {
-                break;
-            }
-
-            pUrlContent = pNewUrlContent;
-            InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                             &dwNumberOfBytesRead);
-            dwLength += dwNumberOfBytesRead;
+    if (failIfNot200) {
+        DWORD dwStatusCode = 0;
+        DWORD dwStatusCodeSize = sizeof(dwStatusCode);
+        if (!HttpQueryInfo(hUrlHandle,
+                           HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                           &dwStatusCode, &dwStatusCodeSize, nullptr) ||
+            dwStatusCode != 200) {
+            InternetCloseHandle(hUrlHandle);
+            InternetCloseHandle(hOpenHandle);
+            return std::nullopt;
         }
+    }
+
+    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
+    if (!pUrlContent) {
+        InternetCloseHandle(hUrlHandle);
+        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    DWORD dwNumberOfBytesRead;
+    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
+    DWORD dwLength = dwNumberOfBytesRead;
+
+    while (dwNumberOfBytesRead) {
+        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
+            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
+        if (!pNewUrlContent) {
+            InternetCloseHandle(hUrlHandle);
+            InternetCloseHandle(hOpenHandle);
+            HeapFree(GetProcessHeap(), 0, pUrlContent);
+            return std::nullopt;
+        }
+
+        pUrlContent = pNewUrlContent;
+        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
+                         &dwNumberOfBytesRead);
+        dwLength += dwNumberOfBytesRead;
     }
 
     InternetCloseHandle(hUrlHandle);
@@ -533,7 +550,8 @@ void UpdateWebContent() {
     if (g_settings.webContentsUrl && g_settings.webContentsBlockStart &&
         g_settings.webContentsStart && g_settings.webContentsEnd) {
         lastUrl = g_settings.webContentsUrl;
-        urlContent = GetUrlContent(g_settings.webContentsUrl);
+        urlContent =
+            GetUrlContent(g_settings.webContentsUrl, /*failIfNot200=*/false);
 
         std::wstring extracted;
         if (urlContent) {
@@ -576,7 +594,7 @@ void UpdateWebContent() {
 
         if (item.url.get() != lastUrl) {
             lastUrl = item.url;
-            urlContent = GetUrlContent(item.url);
+            urlContent = GetUrlContent(item.url, /*failIfNot200=*/false);
         }
 
         if (!urlContent) {
@@ -886,7 +904,7 @@ size_t ResolveFormatToken(PCWSTR format, PCWSTR* resolved) {
     if (wcsncmp(L"%web", format, sizeof("%web") - 1) == 0) {
         WCHAR indexChar = format[sizeof("%web") - 1];
         if (indexChar >= L'1' && indexChar <= L'9') {
-            int index = indexChar - L'1';
+            size_t index = indexChar - L'1';
             if (index >= 0 && index < g_settings.webContentsItems.size()) {
                 PCWSTR formatAfterIndex = format + sizeof("%web1") - 1;
 
@@ -1001,7 +1019,8 @@ ICalendar_Second_t ICalendar_Second_Original;
 
 using ThreadPoolTimer_CreateTimer_t = LPVOID(WINAPI*)(LPVOID param1,
                                                       LPVOID param2,
-                                                      ULONGLONG* elapse);
+                                                      LPVOID param3,
+                                                      LPVOID param4);
 ThreadPoolTimer_CreateTimer_t ThreadPoolTimer_CreateTimer_Original;
 
 using ThreadPoolTimer_CreateTimer_lambda_t = LPVOID(WINAPI*)(DWORD_PTR** param1,
@@ -1402,23 +1421,34 @@ int WINAPI ICalendar_Second_Hook(LPVOID pThis) {
 // called in some Windows versions due to function inlining.
 LPVOID WINAPI ThreadPoolTimer_CreateTimer_Hook(LPVOID param1,
                                                LPVOID param2,
-                                               ULONGLONG* elapse) {
-    Wh_Log(L"> %zu", *elapse);
+                                               LPVOID param3,
+                                               LPVOID param4) {
+    // In newer Windows 11 versions, there are only 3 arguments, but that's OK
+    // because argument 4 is just ignored (register d9).
+    ULONGLONG** elapse =
+        (ULONGLONG**)(g_winVersion >= WinVersion::Win11_22H2 ? &param3
+                                                             : &param4);
+
+    Wh_Log(L"> %zu", **elapse);
 
     ULONGLONG elapseNew;
 
     if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inGetTimeToolTipString && *elapse == 10000000) {
+        !g_inGetTimeToolTipString && **elapse == 10000000) {
         // Make the next refresh happen next second. Without this hook, the
         // timer was always set one second forward, and so the clock was
         // accumulating a delay, finally caused one second to be skipped.
         SYSTEMTIME time;
-        GetLocalTime_Original(&time);
+        if (GetLocalTime_Original) {
+            GetLocalTime_Original(&time);
+        } else {
+            GetLocalTime(&time);
+        }
         elapseNew = 10000ULL * (1000 - time.wMilliseconds);
-        elapse = &elapseNew;
+        *elapse = &elapseNew;
     }
 
-    return ThreadPoolTimer_CreateTimer_Original(param1, param2, elapse);
+    return ThreadPoolTimer_CreateTimer_Original(param1, param2, param3, param4);
 }
 
 // Similar to ThreadPoolTimer_CreateTimer_Hook. Only one of them is called in
@@ -1436,7 +1466,11 @@ LPVOID WINAPI ThreadPoolTimer_CreateTimer_lambda_Hook(DWORD_PTR** param1,
         // timer was always set one second forward, and so the clock was
         // accumulating a delay, finally caused one second to be skipped.
         SYSTEMTIME time;
-        GetLocalTime_Original(&time);
+        if (GetLocalTime_Original) {
+            GetLocalTime_Original(&time);
+        } else {
+            GetLocalTime(&time);
+        }
         *elapse = 10000ULL * (1000 - time.wMilliseconds);
     }
 
@@ -1522,7 +1556,11 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
         sentinelSystemTime.wSecond = 59;
         if (memcmp(lpDate, &sentinelSystemTime, sizeof(sentinelSystemTime)) ==
             0) {
-            GetLocalTime_Original(const_cast<SYSTEMTIME*>(lpDate));
+            if (GetLocalTime_Original) {
+                GetLocalTime_Original(const_cast<SYSTEMTIME*>(lpDate));
+            } else {
+                GetLocalTime(const_cast<SYSTEMTIME*>(lpDate));
+            }
         }
 
         if (dwFlags & DATE_SHORTDATE) {
@@ -2016,6 +2054,80 @@ bool HookSymbols(HMODULE module,
     return true;
 }
 
+bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
+                                        const SYMBOL_HOOK* symbolHooks,
+                                        size_t symbolHooksCount) {
+    constexpr WCHAR kModIdForCache[] = L"taskbar-clock-customization";
+
+    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+        return true;
+    }
+
+    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+
+    WCHAR moduleFilePath[MAX_PATH];
+    DWORD moduleFilePathLen =
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
+    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
+        Wh_Log(L"GetModuleFileName failed");
+        return false;
+    }
+
+    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        Wh_Log(L"GetModuleFileName returned unsupported path");
+        return false;
+    }
+
+    moduleFileName++;
+
+    DWORD moduleFileNameLen =
+        moduleFilePathLen - (moduleFileName - moduleFilePath);
+
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
+                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
+                  nullptr, 0);
+
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
+    IMAGE_NT_HEADERS* header =
+        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
+    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
+
+    std::wstring cacheStrKey =
+#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+    cacheStrKey += moduleFileName;
+
+    std::wstring onlineCacheUrl =
+        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
+    onlineCacheUrl += kModIdForCache;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += cacheStrKey;
+    onlineCacheUrl += L'/';
+    onlineCacheUrl += timeStamp;
+    onlineCacheUrl += L'-';
+    onlineCacheUrl += imageSize;
+    onlineCacheUrl += L".txt";
+
+    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
+
+    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
+    if (!onlineCache) {
+        Wh_Log(L"Failed to get online cache");
+        return false;
+    }
+
+    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+
+    return HookSymbols(module, symbolHooks, symbolHooksCount);
+}
+
 void LoadSettings() {
     g_settings.showSeconds = Wh_GetIntSetting(L"ShowSeconds");
     g_settings.timeFormat = Wh_GetStringSetting(L"TimeFormat");
@@ -2291,6 +2403,8 @@ BOOL Wh_ModInit() {
                 {
                     LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &))",
                     LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const & __ptr64,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const & __ptr64) __ptr64)",
+                    // Windows 11 21H2:
+                    LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl winrt::impl::consume_Windows_System_Threading_IThreadPoolTimerStatics<struct winrt::Windows::System::Threading::IThreadPoolTimerStatics>::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &)const )",
                 },
                 (void**)&ThreadPoolTimer_CreateTimer_Original,
                 (void*)ThreadPoolTimer_CreateTimer_Hook,
@@ -2300,6 +2414,8 @@ BOOL Wh_ModInit() {
                 {
                     LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
                     LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const & __ptr64)const __ptr64)",
+                    // Windows 11 21H2:
+                    LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
                 },
                 (void**)&ThreadPoolTimer_CreateTimer_lambda_Original,
                 (void*)ThreadPoolTimer_CreateTimer_lambda_Hook,
@@ -2351,8 +2467,9 @@ BOOL Wh_ModInit() {
     };
 
     if (g_winVersion <= WinVersion::Win10) {
-        if (!HookSymbols(GetModuleHandle(nullptr), taskbarHooks10,
-                         ARRAYSIZE(taskbarHooks10))) {
+        if (!HookSymbolsWithOnlineCacheFallback(GetModuleHandle(nullptr),
+                                                taskbarHooks10,
+                                                ARRAYSIZE(taskbarHooks10))) {
             return FALSE;
         }
     } else {
@@ -2426,7 +2543,8 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
-        if (!HookSymbols(module, taskbarHooks11, ARRAYSIZE(taskbarHooks11))) {
+        if (!HookSymbolsWithOnlineCacheFallback(module, taskbarHooks11,
+                                                ARRAYSIZE(taskbarHooks11))) {
             return FALSE;
         }
     }

@@ -126,6 +126,17 @@ async function generateModCatalog() {
     return await enrichCatalog(catalog);
 }
 
+function getChangelogTextFromCommitMessage(message: string) {
+    let messageTrimmed = message.trim();
+    if (messageTrimmed.includes('\n')) {
+        // Remove first line.
+        return messageTrimmed.replace(/^.* \(#\d+\)\n\n/, '').trim();
+    } else {
+        // Only remove trailing PR number if it's the only line.
+        return messageTrimmed.replace(/ \(#\d+\)$/, '').trim();
+    }
+}
+
 function generateModChangelog(modId: string) {
     let changelog = '';
 
@@ -167,8 +178,9 @@ function generateModChangelog(modId: string) {
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]).replace(/^.* \(#\d+\)\n\n/, '');
-            changelog += `${message}\n`;
+            ]);
+            const changelogItem = getChangelogTextFromCommitMessage(message);
+            changelog += `${changelogItem}\n\n`;
         } else {
             changelog += 'Initial release.\n';
         }
@@ -246,12 +258,13 @@ function generateRssFeed() {
 
         let content = '';
         if (changeType === 'M') {
-            content = gitExec([
+            const message = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
-            ]).replace(/^.* \(#\d+\)\n\n/, '');
+            ]);
+            content = getChangelogTextFromCommitMessage(message);
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }

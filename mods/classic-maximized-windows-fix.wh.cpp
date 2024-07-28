@@ -2,7 +2,7 @@
 // @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
-// @version         1.2
+// @version         2.1
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         *
@@ -16,6 +16,8 @@
 // @exclude         winlogon.exe
 // @exclude         logonui.exe
 // @exclude         ApplicationFrameHost.exe
+// @exclude         gameinputsvc.exe
+// @exclude         svchost.exe
 
 // @compilerOptions -lgdi32 -luser32
 // ==/WindhawkMod==
@@ -46,15 +48,18 @@ so rarely they may be affected. For consistency, I manually excluded `conhost.ex
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
+#include <synchapi.h>
+#include <windhawk_utils.h>
 
-// No critical section; this is only written to once and from only one thread.
-bool g_instanceHasInit = false;
+// Defines data shared by all instances of the library, even across processes.
+#define SHARED_SECTION __attribute__((section(".shared")))
+asm(".section .shared,\"dws\"\n");
 
-CRITICAL_SECTION g_lockForAffectedWindows;
+CRITICAL_SECTION g_criticalSection;
 std::vector<HWND> g_affectedWindows;
+std::vector<HWND> g_fakeUndoWindows;
 
-CRITICAL_SECTION g_lockForAffectedThreads;
-std::unordered_map<DWORD, HHOOK> g_affectedThreads;
+void *g_pfnThemePostWndProc SHARED_SECTION = NULL;
 
 // === DPI HELPERS === //
 // These are only available in Windows 10, version 1607 and newer.
@@ -85,27 +90,83 @@ int GetSystemMetricsForWindow(HWND hWnd, int nIndex)
  */
 LRESULT ApplyWindowMasking(HWND hWnd)
 {
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
     int sizeBorders =
         GetSystemMetricsForWindow(hWnd, SM_CXSIZEFRAME) +
         GetSystemMetricsForWindow(hWnd, SM_CXPADDEDBORDER);
-
     RECT rcWindow;
-    GetWindowRect(hWnd, &rcWindow);
+    HRGN hRgn = NULL;
 
-    int cxWindow = rcWindow.right - rcWindow.left;
-    int cyWindow = rcWindow.bottom - rcWindow.top;
-
-    // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
-    // our responsibility to clean.
-    HRGN hRgn = CreateRectRgn(
-        0 + sizeBorders, 0 + sizeBorders,
-        cxWindow - sizeBorders, cyWindow - sizeBorders
-    );
-
-    g_affectedWindows.push_back(hWnd);
-
-    if (SetWindowRgn(hWnd, hRgn, TRUE))
+    if (canLock)
     {
+        GetWindowRect(hWnd, &rcWindow);
+
+        int cxWindow = rcWindow.right - rcWindow.left;
+        int cyWindow = rcWindow.bottom - rcWindow.top;
+
+        // SetWindowRgn transfers ownership of the HRGN to the operating system, so it's not
+        // our responsibility to clean.
+        hRgn = CreateRectRgn(
+            0 + sizeBorders, 0 + sizeBorders,
+            cxWindow - sizeBorders, cyWindow - sizeBorders
+        );
+
+        g_affectedWindows.push_back(hWnd);
+    
+        // If the window is marked as "fake undo", then remove that flag.
+        std::vector<HWND>::iterator i;
+        if ((i = std::find(g_fakeUndoWindows.begin(), g_fakeUndoWindows.end(), hWnd)) != g_fakeUndoWindows.end())
+        {
+            std::vector<HWND>::iterator newEnd = std::remove(g_fakeUndoWindows.begin(), g_fakeUndoWindows.end(), hWnd);
+            g_fakeUndoWindows.erase(newEnd, g_fakeUndoWindows.end());
+        }
+            
+        LeaveCriticalSection(&g_criticalSection);
+    }
+
+    if (hRgn != NULL && SetWindowRgn(hWnd, hRgn, TRUE))
+    {
+        return S_OK;
+    }
+
+    return E_FAIL;
+}
+
+/*
+ * FakeUndoWindowMasking: Fakes removing the window mask by applying a massive one
+ *                        over the window.
+ *
+ * This is required in order to fix a small bug with Aero Snap, where removing the
+ * mask properly breaks the snap positioning for the first time the window is snapped
+ * after maximising (unless the window is resized).
+ *
+ * TODO: Find a better solution. Needless to say, this is pretty ugly and it would be
+ * preferable that a mask isn't leftover at all.
+ */
+LRESULT FakeUndoWindowMasking(HWND hWnd)
+{
+    std::vector<HWND>::iterator i;
+
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
+
+    if (canLock)
+    {
+        if ((i = std::find(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd)) != g_affectedWindows.end())
+        {
+            std::vector<HWND>::iterator newEnd = std::remove(g_affectedWindows.begin(), g_affectedWindows.end(), hWnd);
+            g_affectedWindows.erase(newEnd, g_affectedWindows.end());
+            g_fakeUndoWindows.push_back(hWnd);
+
+            HRGN hRgn = CreateRectRgn(
+                0, 0,
+                99999, 99999
+            );
+
+            SetWindowRgn(hWnd, hRgn, TRUE);
+        }
+
+        LeaveCriticalSection(&g_criticalSection);
+
         return S_OK;
     }
 
@@ -119,7 +180,7 @@ LRESULT UndoWindowMasking(HWND hWnd)
 {
     std::vector<HWND>::iterator i;
 
-    BOOL canLock = TryEnterCriticalSection(&g_lockForAffectedWindows);
+    BOOL canLock = TryEnterCriticalSection(&g_criticalSection);
 
     if (canLock)
     {
@@ -131,7 +192,7 @@ LRESULT UndoWindowMasking(HWND hWnd)
             SetWindowRgn(hWnd, NULL, TRUE);
         }
 
-        LeaveCriticalSection(&g_lockForAffectedWindows);
+        LeaveCriticalSection(&g_criticalSection);
 
         return S_OK;
     }
@@ -156,9 +217,9 @@ void HandleMaxForWindow(HWND hWnd, UINT uMsg)
                 GetSystemMetricsForWindow(hWnd, SM_CXPADDEDBORDER);
 
             /**
-            * Get the info for the monitor the window is on.
-            * This contains rcWork, which accounts for the taskbar.
-            */
+             * Get the info for the monitor the window is on.
+             * This contains rcWork, which accounts for the taskbar.
+             */
             HMONITOR hm = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi;
             mi.cbSize = sizeof(MONITORINFO);
@@ -184,7 +245,7 @@ void HandleMaxForWindow(HWND hWnd, UINT uMsg)
         }
         else
         {
-            UndoWindowMasking(hWnd);
+            FakeUndoWindowMasking(hWnd);
         }
     }
 }
@@ -193,33 +254,43 @@ typedef LRESULT (WINAPI *DefWindowProcA_t)(HWND, UINT, WPARAM, LPARAM);
 DefWindowProcA_t DefWindowProcA_orig;
 LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    LRESULT result = DefWindowProcA_orig(hWnd, uMsg, wParam, lParam);
+
     HandleMaxForWindow(hWnd, uMsg);
 
-    return DefWindowProcA_orig(hWnd, uMsg, wParam, lParam);
+    return result;
 }
 
 typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND, UINT, WPARAM, LPARAM);
 DefWindowProcW_t DefWindowProcW_orig;
 LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    LRESULT result = DefWindowProcW_orig(hWnd, uMsg, wParam, lParam);
+
     HandleMaxForWindow(hWnd, uMsg);
 
-    return DefWindowProcW_orig(hWnd, uMsg, wParam, lParam);
+    return result;
 }
 
 /*
- * OnCallWndProc: Handle window procedure calls received from the hooks.
+ * ThemePostWndProc_hook: Leverage theme hooks being available to hook window procedures globally.
+ *
+ * Since the theme engine is available for most applications, even for the majority of classic theme
+ * users since Windows 8, it is possible to take advantage of one of its hooks in order to globally
+ * hook window procedure handling.
+ *
+ * To my knowledge, this will only fail for 16-bit applications (which Windhawk cannot hook anyways)
+ * and windows owned by certain system processes (such as CSRSS).
  */
-LRESULT CALLBACK OnCallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
+typedef BOOL (CALLBACK *ThemePostWndProc_t)(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *plResult, void **ppvParam);
+ThemePostWndProc_t ThemePostWndProc_orig;
+BOOL CALLBACK ThemePostWndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *plResult, void **ppvParam)
 {
-    CWPSTRUCT *params = (CWPSTRUCT *)lParam;
+    BOOL result = ThemePostWndProc_orig(hWnd, uMsg, wParam, lParam, plResult, ppvParam);
 
-    if (nCode < 0)
-        return 0;
+    HandleMaxForWindow(hWnd, uMsg);
 
-    HandleMaxForWindow(params->hwnd, params->message);
-
-    return 0;
+    return result;
 }
 
 /*
@@ -227,10 +298,7 @@ LRESULT CALLBACK OnCallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
  */
 bool InitCriticalSections()
 {
-    if (!InitializeCriticalSectionAndSpinCount(&g_lockForAffectedWindows, 0x400))
-        return false;
-
-    if (!InitializeCriticalSectionAndSpinCount(&g_lockForAffectedThreads, 0x400))
+    if (!InitializeCriticalSectionAndSpinCount(&g_criticalSection, 0x400))
         return false;
 
     return true;
@@ -241,91 +309,98 @@ bool InitCriticalSections()
  */
 void CleanCriticalSections()
 {
-    DeleteCriticalSection(&g_lockForAffectedWindows);
-    DeleteCriticalSection(&g_lockForAffectedThreads);
+    DeleteCriticalSection(&g_criticalSection);
 }
 
+struct CMWF_SYMBOL_HOOK {
+    std::vector<std::wstring> symbols;
+    void** pOriginalFunction;
+    void* hookFunction = nullptr;
+    bool optional = false;
+    void **pSharedMemoryCache;
+};
+
 /*
- * InstallHookForCurrentThread: Sets up a Windows Hook for listening to application messages.
- *
- * This is used as an alternative method to knowing when a window is maximized, since it doesn't
- * depend on a program calling DefWindowProc.
+ * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
+ *                  module's shared memory for faster access.
  */
-HRESULT InstallHookForCurrentThread()
+bool CmwfHookSymbols(
+        HMODULE module,
+        const CMWF_SYMBOL_HOOK *symbolHooks,
+        size_t symbolHooksCount
+)
 {
-    HRESULT hr = S_OK;
-    DWORD currentThreadId = GetCurrentThreadId();
-    Wh_Log(L"Entering critical section in thread #%d", currentThreadId);
-    EnterCriticalSection(&g_lockForAffectedThreads);
-
-    if (!g_affectedThreads.contains(currentThreadId))
+    bool anyUncachedHooks = false;
+    std::vector<void **> proxyAddresses(symbolHooksCount);
+    std::vector<WindhawkUtils::SYMBOL_HOOK> proxyHooks;
+    
+    for (size_t i = 0; i < symbolHooksCount; i++)
     {
-        HHOOK hHook = SetWindowsHookExW(
-            WH_CALLWNDPROC,
-            (HOOKPROC)OnCallWndProc,
-            NULL,
-            currentThreadId
-        );
-
-        if (hHook)
+        void *address = nullptr;
+        if (symbolHooks[i].pSharedMemoryCache && *(symbolHooks[i].pSharedMemoryCache) != NULL)
         {
+            address = *(symbolHooks[i].pSharedMemoryCache);
             Wh_Log(
-                L"Installed Windows Hook #%d (%p) for thread #%d (%p)",
-                hHook, hHook,
-                currentThreadId, currentThreadId
+                L"CmwfHookSymbols: Hooking symbol %.*s from in-memory cache.",
+                symbolHooks[i].symbols[0].length(),
+                symbolHooks[i].symbols[0].data()
             );
-            g_affectedThreads.insert(
-                std::make_pair(currentThreadId, hHook)
+            Wh_SetFunctionHook(
+                address,
+                symbolHooks[i].hookFunction,
+                symbolHooks[i].pOriginalFunction
             );
         }
         else
         {
-            hr = E_FAIL;
+            address = nullptr;
+            anyUncachedHooks = true;
+
+            WindhawkUtils::SYMBOL_HOOK hook = {
+                symbolHooks[i].symbols,
+                &proxyAddresses[i],
+                NULL,
+                symbolHooks[i].optional
+            };
+
+            proxyHooks.push_back(hook);
         }
     }
-    Wh_Log(L"Leaving critical section in thread #%d", currentThreadId);
-    LeaveCriticalSection(&g_lockForAffectedThreads);
 
-    return hr;
-}
-
-/*
- * UninstallHooks: Uninstall all Windows Hooks for every thread.
- */
-void UninstallHooks()
-{
-    DWORD currentThreadId = GetCurrentThreadId();
-    Wh_Log(L"Entering critical section in thread #%d", currentThreadId);
-    EnterCriticalSection(&g_lockForAffectedThreads);
-
-    int installedHooks = g_affectedThreads.size();
-
-    for (auto &it : g_affectedThreads)
+    if (anyUncachedHooks)
     {
-        HHOOK &hHook = it.second;
-        BOOL success = UnhookWindowsHookEx(hHook);
+        if (!WindhawkUtils::HookSymbols(module, proxyHooks.data(), proxyHooks.size()))
+        {
+            return false;
+        }
 
-        if (success)
-            installedHooks--;
+        int curProxyHook = 0;
+        for (void *address : proxyAddresses)
+        {
+            if (address == NULL)
+            {
+                continue;
+            }
+
+            if (
+                symbolHooks[curProxyHook].pSharedMemoryCache && 
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) == NULL
+            )
+            {
+                *(symbolHooks[curProxyHook].pSharedMemoryCache) = address;
+            }
+
+            Wh_SetFunctionHook(
+                address,
+                symbolHooks[curProxyHook].hookFunction,
+                symbolHooks[curProxyHook].pOriginalFunction
+            );
+
+            curProxyHook++;
+        }
     }
 
-    for (HWND &it : g_affectedWindows)
-    {
-        UndoWindowMasking(it);
-    }
-
-    if (installedHooks == 0)
-    {
-        Wh_Log(L"Successfully uninstalled all hooks.");
-        g_affectedThreads.clear();
-    }
-    else
-    {
-        Wh_Log(L"Failed to uninstall %d hooks. Memory was not cleared for process.", installedHooks);
-    }
-
-    Wh_Log(L"Leaving critical section in thread #%d", currentThreadId);
-    LeaveCriticalSection(&g_lockForAffectedThreads);
+    return true;
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
@@ -337,6 +412,7 @@ BOOL Wh_ModInit()
     InitCriticalSections();
 
     HMODULE user32 = LoadLibraryW(L"user32.dll");
+    HMODULE uxtheme = LoadLibraryW(L"uxtheme.dll");
 
     // Init DPI helpers:
     *(FARPROC *)&g_pGetDpiForWindow = GetProcAddress(user32, "GetDpiForWindow");
@@ -358,10 +434,22 @@ BOOL Wh_ModInit()
         (void **)&DefWindowProcA_orig
     );
 
-    // Windows hook as a workaround for some applications (i.e. Firefox):
-    InstallHookForCurrentThread();
+    CMWF_SYMBOL_HOOK symbolHooks[] = {
+        {
+            .symbols = {
+                #ifdef _WIN64
+                L"int __cdecl ThemePostWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,__int64 *,void * *)"
+                #else
+                L"int __stdcall ThemePostWndProc(struct HWND__ *,unsigned int,unsigned int,long,long *,void * *)"
+                #endif
+            },
+            .pOriginalFunction = (void **)&ThemePostWndProc_orig,
+            .hookFunction = (void *)ThemePostWndProc_hook,
+            .pSharedMemoryCache = (void **)&g_pfnThemePostWndProc
+        }
+    };
 
-    g_instanceHasInit = true;
+    CmwfHookSymbols(uxtheme, symbolHooks, ARRAYSIZE(symbolHooks));
 
     Wh_Log(L"Finished init");
 
@@ -373,63 +461,5 @@ void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
 
-    UninstallHooks();
     CleanCriticalSections();
-
-    g_instanceHasInit = false;
-}
-
-/*
- * DllMain: Listen for thread creation for hook installation.
- */
-BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID lpvReserved)
-{
-    switch (fdwReason)
-    {
-        // DLL_THREAD_ATTACH: Install a Windows Hook on all incoming threads (if necessary):
-        case DLL_THREAD_ATTACH:
-        {
-            InstallHookForCurrentThread();
-            break;
-        }
-
-        case DLL_THREAD_DETACH:
-        {
-            DWORD currentThreadId = GetCurrentThreadId();
-            Wh_Log(L"Entering critical section in thread #%d", currentThreadId);
-            EnterCriticalSection(&g_lockForAffectedThreads);
-
-            if (g_affectedThreads.contains(currentThreadId))
-            {
-                HHOOK &hHook = g_affectedThreads.at(currentThreadId);
-                BOOL status = UnhookWindowsHookEx(hHook);
-
-                if (status)
-                {
-                    Wh_Log(
-                        L"Successfully detached Windows Hook #%d (%p) for thread #%d (%p)!",
-                        hHook, hHook,
-                        currentThreadId, currentThreadId
-                    );
-
-                    g_affectedThreads.erase(currentThreadId);
-                }
-                else
-                {
-                    Wh_Log(
-                        L"Failed to detach Windows Hook #%d (%p) for thread #%d (%p)",
-                        hHook, hHook,
-                        currentThreadId, currentThreadId
-                    );
-                }
-            }
-
-            Wh_Log(L"Leaving critical section in thread #%d", currentThreadId);
-            LeaveCriticalSection(&g_lockForAffectedThreads);
-
-            break;
-        }
-    }
-
-    return TRUE;
 }

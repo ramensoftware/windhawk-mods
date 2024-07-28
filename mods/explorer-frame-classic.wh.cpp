@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,6 +11,14 @@
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
 
 // ==WindhawkModReadme==
 /*
@@ -89,13 +97,6 @@ constexpr winrt::guid IID_Controls_IGrid{
     0x9014,
     0x58A1,
     {0xB4, 0xAD, 0xC5, 0x04, 0x49, 0x13, 0xA5, 0xBB}};
-
-// FE870F2F-89EF-5DAC-9F33-968D0DC577C3
-constexpr winrt::guid IID_IRowDefinition{
-    0xFE870F2F,
-    0x89EF,
-    0x5DAC,
-    {0x9F, 0x33, 0x96, 0x8D, 0x0D, 0xC5, 0x77, 0xC3}};
 
 // clang-format off
 struct IUIElement : ::IInspectable {
@@ -520,56 +521,55 @@ int WINAPI CommandBarExtension_GetHeight_Hook(
     return ret;
 }
 
-using Feature_FEMNB_IsEnabled_t = bool(WINAPI*)(PVOID pThis);
-Feature_FEMNB_IsEnabled_t Feature_FEMNB_IsEnabled_Original;
-bool WINAPI Feature_FEMNB_IsEnabled_Hook(PVOID pThis) {
+using CanShowModernNavBar_t = bool(WINAPI*)(PVOID pThis);
+CanShowModernNavBar_t CanShowModernNavBar_Original;
+bool WINAPI CanShowModernNavBar_Hook(PVOID pThis) {
     Wh_Log(L">");
 
     if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
         return false;
     }
 
-    return Feature_FEMNB_IsEnabled_Original(pThis);
+    return CanShowModernNavBar_Original(pThis);
 }
 
-using Feature_FEMNB_IsEnabled_ReportingKind_t = bool(WINAPI*)(PVOID pThis);
-Feature_FEMNB_IsEnabled_ReportingKind_t
-    Feature_FEMNB_IsEnabled_ReportingKind_Original;
-bool WINAPI Feature_FEMNB_IsEnabled_ReportingKind_Hook(PVOID pThis) {
-    Wh_Log(L">");
-
-    if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
-        return false;
-    }
-
-    return Feature_FEMNB_IsEnabled_ReportingKind_Original(pThis);
-}
-
-using Feature_WASDKInFileExplorer_IsEnabled_t = bool(WINAPI*)(PVOID pThis);
-Feature_WASDKInFileExplorer_IsEnabled_t
-    Feature_WASDKInFileExplorer_IsEnabled_Original;
-bool WINAPI Feature_WASDKInFileExplorer_IsEnabled_Hook(PVOID pThis) {
-    Wh_Log(L">");
-
-    if (g_settings.explorerStyle == ExplorerStyle::classicRibbonUI) {
-        return false;
-    }
-
-    return Feature_WASDKInFileExplorer_IsEnabled_Original(pThis);
-}
-
-using Feature_WASDKInFileExplorer_IsEnabled_t = bool(WINAPI*)(PVOID pThis);
-Feature_WASDKInFileExplorer_IsEnabled_t
-    Feature_WASDKInFileExplorer_IsEnabled_ReportingKind_Original;
+using CachedExplorerExtensionState_IsModernNavBarAvailable_t =
+    bool(WINAPI*)(PVOID pThis);
+CachedExplorerExtensionState_IsModernNavBarAvailable_t
+    CachedExplorerExtensionState_IsModernNavBarAvailable_Original;
 bool WINAPI
-Feature_WASDKInFileExplorer_IsEnabled_ReportingKind_Hook(PVOID pThis) {
+CachedExplorerExtensionState_IsModernNavBarAvailable_Hook(PVOID pThis) {
     Wh_Log(L">");
 
-    if (g_settings.explorerStyle == ExplorerStyle::classicRibbonUI) {
+    if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
         return false;
     }
 
-    return Feature_WASDKInFileExplorer_IsEnabled_ReportingKind_Original(pThis);
+    return CachedExplorerExtensionState_IsModernNavBarAvailable_Original(pThis);
+}
+
+using CoCreateInstance_t = decltype(&CoCreateInstance);
+CoCreateInstance_t CoCreateInstance_Original;
+HRESULT WINAPI CoCreateInstance_Hook(REFCLSID rclsid,
+                                     LPUNKNOWN pUnkOuter,
+                                     DWORD dwClsContext,
+                                     REFIID riid,
+                                     LPVOID* ppv) {
+    Wh_Log(L">");
+
+    constexpr winrt::guid CLSID_XamlIslandViewAdapter{
+        0x6480100B,
+        0x5A83,
+        0x4D1E,
+        {0x9F, 0x69, 0x8A, 0xE5, 0xA8, 0x8E, 0x9A, 0x33}};
+
+    if (IsEqualCLSID(rclsid, CLSID_XamlIslandViewAdapter) &&
+        g_settings.explorerStyle == ExplorerStyle::classicRibbonUI) {
+        return REGDB_E_CLASSNOTREG;
+    }
+
+    return CoCreateInstance_Original(rclsid, pUnkOuter, dwClsContext, riid,
+                                     ppv);
 }
 
 bool HookExplorerFrameSymbols() {
@@ -581,28 +581,16 @@ bool HookExplorerFrameSymbols() {
 
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_FEMNB>::__private_IsEnabled(void))"},
-            (void**)&Feature_FEMNB_IsEnabled_Original,
-            (void*)Feature_FEMNB_IsEnabled_Hook,
-            true,
+            {LR"(bool __cdecl CanShowModernNavBar(void))"},
+            (void**)&CanShowModernNavBar_Original,
+            (void*)CanShowModernNavBar_Hook,
+            true,  // Before Win11 24H2.
         },
         {
-            {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_FEMNB>::__private_IsEnabled(enum wil::ReportingKind))"},
-            (void**)&Feature_FEMNB_IsEnabled_ReportingKind_Original,
-            (void*)Feature_FEMNB_IsEnabled_ReportingKind_Hook,
-            true,
-        },
-        {
-            {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_WASDKInFileExplorer>::__private_IsEnabled(void))"},
-            (void**)&Feature_WASDKInFileExplorer_IsEnabled_Original,
-            (void*)Feature_WASDKInFileExplorer_IsEnabled_Hook,
-            true,
-        },
-        {
-            {LR"(public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_WASDKInFileExplorer>::__private_IsEnabled(enum wil::ReportingKind))"},
-            (void**)&Feature_WASDKInFileExplorer_IsEnabled_ReportingKind_Original,
-            (void*)Feature_WASDKInFileExplorer_IsEnabled_ReportingKind_Hook,
-            true,
+            {LR"(public: static bool __cdecl CachedExplorerExtensionState::IsModernNavBarAvailable(void))"},
+            (void**)&CachedExplorerExtensionState_IsModernNavBarAvailable_Original,
+            (void*)CachedExplorerExtensionState_IsModernNavBarAvailable_Hook,
+            true,  // Since Win11 24H2.
         },
     };
 
@@ -663,6 +651,9 @@ BOOL Wh_ModInit() {
     if (!HookFileExplorerExtensionsSymbols()) {
         return FALSE;
     }
+
+    Wh_SetFunctionHook((void*)CoCreateInstance, (void*)CoCreateInstance_Hook,
+                       (void**)&CoCreateInstance_Original);
 
     return TRUE;
 }
