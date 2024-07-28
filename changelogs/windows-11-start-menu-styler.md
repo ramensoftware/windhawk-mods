@@ -1,3 +1,7 @@
+## 1.1.5 ([Jul 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b6c907a723f18b738c615933ec1834ef9009f18d/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Updated SideBySide2 theme with several fixes.
+
 ## 1.1.4 ([Jul 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2007927c9158132859b6d559104a7539742c74d7/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added themes: Fluent2Inspired, Windows10, Windows11_Metro10.
