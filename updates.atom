@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-28T08:26:51.000Z</updated>
+    <updated>2024-07-28T08:27:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.7]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#5ceffe5133b88ab09b00e41a846cd7a4bcb4e4c0</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2024-07-28T08:27:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added themes: DockLike, WinVista.</li>
+<li>Updated themes: TranslucentTaskbar, Squircle, RosePine, Bubbles.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.4]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#2007927c9158132859b6d559104a7539742c74d7</id>
@@ -231,14 +241,5 @@ This will override the original UIFILE resource from shell32 to the one in shell
         <content type="html"><![CDATA[<h1 id="notepadremovelaunchnewappbanner">Notepad Remove Launch New App Banner</h1>
 <p>This mod removes the banner in classic notepad (which stills exists in the latest version of Windows 11 in <code>System32</code>, but can only be opened if the App Execution Alias is disabled) that tells you to launch the new app.</p>
 <p><img src="https://i.imgur.com/8eFaQSb.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Desktop Icons 1.3.0]]></title>
-        <id>https://windhawk.net/mods/classic-desktop-icons#7d397e9a2b1f8831a2ea3730ab1823fa327e04e5</id>
-        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
-        <updated>2024-06-30T18:17:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix non-translucent selection rectangle (thanks @kawapure)</li>
-</ul>]]></content>
     </entry>
 </feed>

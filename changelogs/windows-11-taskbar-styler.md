@@ -1,3 +1,8 @@
+## 1.3.7 ([Jul 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5ceffe5133b88ab09b00e41a846cd7a4bcb4e4c0/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added themes: DockLike, WinVista.
+* Updated themes: TranslucentTaskbar, Squircle, RosePine, Bubbles.
+
 ## 1.3.6 ([Jul 19, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b16412c8ab6de3303ecb179ddcb39a2fe8b28e25/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added the RosePine theme.
