@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-28T08:25:30.000Z</updated>
+    <updated>2024-07-28T08:26:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.4]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#2007927c9158132859b6d559104a7539742c74d7</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2024-07-28T08:26:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added themes: Fluent2Inspired, Windows10, Windows11_Metro10.</li>
+<li>Updated themes: SideBySide, SideBySide2, TranslucentStartMenu.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.1]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#931b937d1cfa9782375c939c104de17bf0b5047a</id>
@@ -229,15 +239,6 @@ This will override the original UIFILE resource from shell32 to the one in shell
         <updated>2024-06-30T18:17:57.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fix non-translucent selection rectangle (thanks @kawapure)</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[StartIsBack++ Tweaker 0.7]]></title>
-        <id>https://windhawk.net/mods/sib-plusplus-tweaker#4cf9e3d6035f8c6621d53fe8bc91d489f71eeef9</id>
-        <link href="https://windhawk.net/mods/sib-plusplus-tweaker"/>
-        <updated>2024-06-30T06:45:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Removed "Always use standard user profile picture" setting due to bug reports.</li>
 </ul>]]></content>
     </entry>
 </feed>
