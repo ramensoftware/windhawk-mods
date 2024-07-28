@@ -1853,7 +1853,7 @@
                 "published": 1700466353000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1700466353000,
+                "updated": 1722203317000,
                 "users": 212
             },
             "metadata": {
@@ -1866,7 +1866,7 @@
                     "wordpad.exe"
                 ],
                 "name": "UIRibbon Caption Icon Fix",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "shrink-address-bar-height": {
