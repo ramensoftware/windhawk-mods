@@ -2,7 +2,7 @@
 // @id              ribbon-caption-icon-fix
 // @name            UIRibbon Caption Icon Fix
 // @description     Fixes the position of the caption icon in UIRibbon.
-// @version         1.0
+// @version         1.0.1
 // @author          Taniko Yamamoto
 // @author:ja       山本たにこ
 // @github          https://github.com/YukisCoffee
@@ -14,6 +14,9 @@
 // ==WindhawkModReadme==
 /*
 # UIRibbon Caption Icon Fix
+
+*Copyright (C) 2024 Taniko Yamamoto. All rights reserved.* Please do not use in your projects without express
+permission of the copyright holder.
 
 Fixes the position of the caption icon in UIRibbon, which is ordinarily broken since Windows 10, due to
 window frames becoming only 1 pixel wide. Whenever ribbons are displayed on a custom theme with wider
