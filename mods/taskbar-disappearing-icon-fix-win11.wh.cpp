@@ -545,6 +545,7 @@ void WINAPI TaskListButton_Hook2_Hook(void* pThis, struct winrt::hstring w) {
 // ===========================================================
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // taskbar.view.dll
     SYMBOL_HOOK symbolHooks[] = {
         // {
         //     {
@@ -583,6 +584,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
+    // taskbar.dll
     SYMBOL_HOOK symbolHooks[] = {};
 
     return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
