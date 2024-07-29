@@ -1,3 +1,7 @@
+## 1.0.4 ([Jul 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/8c10530a488a7c65b7b0815ee9c19131faece5b9/mods/explorer-frame-classic.wh.cpp))
+
+* Adjusted spacing for Windows 11 update KB5040527.
+
 ## 1.0.3 ([May 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/74a502b48643c06d82e956ff5e5327a87a167e6d/mods/explorer-frame-classic.wh.cpp))
 
 * Made compatible with Windows 11 24H2.

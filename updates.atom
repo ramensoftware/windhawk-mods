@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-29T08:55:42.000Z</updated>
+    <updated>2024-07-29T18:05:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.4]]></title>
+        <id>https://windhawk.net/mods/explorer-frame-classic#8c10530a488a7c65b7b0815ee9c19131faece5b9</id>
+        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
+        <updated>2024-07-29T18:05:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Adjusted spacing for Windows 11 update KB5040527.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Disappearing Icon Fix for Windows 11 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11#329b6d6f4c8cbfbe7ee5aaafd53dc3922cd67a1c</id>
@@ -237,14 +246,5 @@ This will override the original UIFILE resource from shell32 to the one in shell
         <link href="https://windhawk.net/mods/classic-browser-fix"/>
         <updated>2024-07-06T11:31:46.000Z</updated>
         <content type="html"><![CDATA[<p>plus Brave browser, mitigate reported issues in File Picker</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Clientedge Everywhere 1.1.0]]></title>
-        <id>https://windhawk.net/mods/clientedge-in-apps#97fac6cb48581f099d1f98752b27f8e4188f9f21</id>
-        <link href="https://windhawk.net/mods/clientedge-in-apps"/>
-        <updated>2024-07-06T11:31:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Internet Explorer</li>
-</ul>]]></content>
     </entry>
 </feed>

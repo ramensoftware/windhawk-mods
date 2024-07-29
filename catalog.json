@@ -941,7 +941,7 @@
                 "published": 1696691422000,
                 "rating": 10,
                 "ratingUsers": 33,
-                "updated": 1717179907000,
+                "updated": 1722276351000,
                 "users": 1212
             },
             "metadata": {
@@ -949,7 +949,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lole32 -loleaut32",
+                "compilerOptions": "-lole32 -loleaut32 -lversion",
                 "description": "Restores the classic Explorer navigation bar to the version before the Windows 11 \"Moments 4\" update",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -958,7 +958,7 @@
                 ],
                 "name": "Classic Explorer navigation bar",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.3"
+                "version": "1.0.4"
             }
         },
         "explorer-name-windows": {
