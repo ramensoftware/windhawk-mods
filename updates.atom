@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-28T21:48:37.000Z</updated>
+    <updated>2024-07-29T08:55:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Disappearing Icon Fix for Windows 11 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11#329b6d6f4c8cbfbe7ee5aaafd53dc3922cd67a1c</id>
+        <link href="https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11"/>
+        <updated>2024-07-29T08:55:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbardisappearingiconfixforwindows11">Taskbar Disappearing Icon Fix for Windows 11</h1>
+<p>Tries to fix disappearing icon bug in Windows 11 taskbar while switching virtual desktops.</p>
+<p>Since I cannot reproduce this bug very reliably, this mod may not have fixed the bug entirely. Let me know if it still persists.</p>
+<p>Takeaway message:</p>
+<ul>
+<li>It is observed that hiding (<code>Visibility: Collapsed</code>) the invisible icon and then making it visible after a while will fix it.</li>
+<li>However, hiding the icon for a while results in flickering.</li>
+<li>The mod tries to flicker the icon only when the system tries to change its display name, typically while switching virtual desktops, making the flicker hardly visible.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[UIRibbon Caption Icon Fix 1.0.1]]></title>
         <id>https://windhawk.net/mods/ribbon-caption-icon-fix#826bbbc6eae09d97930483a2c62a5062f548e94c</id>
@@ -230,16 +245,6 @@ This will override the original UIFILE resource from shell32 to the one in shell
         <updated>2024-07-06T11:31:13.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Internet Explorer</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Basic Themer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/basic-themer#158c2c73690dc245e9f6c9b44da0ab5961b1d8f4</id>
-        <link href="https://windhawk.net/mods/basic-themer"/>
-        <updated>2024-07-06T11:25:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix issue with windows having completely white frames</li>
-<li>Add proper credits to README</li>
 </ul>]]></content>
     </entry>
 </feed>

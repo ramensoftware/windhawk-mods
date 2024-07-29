@@ -2104,6 +2104,30 @@
                 "version": "1.3.3"
             }
         },
+        "taskbar-disappearing-icon-fix-win11": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1722243342000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1722243342000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "yezhiyi9670",
+                "compilerOptions": "-DWINVER=0x0605 -loleaut32 -lole32 -lruntimeobject -lwininet",
+                "description": "Tries to fix disappearing icon in Windows 11 taskbar while switching virtual desktops.",
+                "github": "https://github.com/yezhiyi9670",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Disappearing Icon Fix for Windows 11",
+                "version": "1.0"
+            }
+        },
         "taskbar-empty-space-clicks": {
             "details": {
                 "defaultSorting": 8210,
