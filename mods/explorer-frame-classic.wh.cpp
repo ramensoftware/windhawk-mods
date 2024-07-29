@@ -2,14 +2,14 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32
+// @compilerOptions -lole32 -loleaut32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -55,10 +55,6 @@ configuration**:
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
-
-#include <algorithm>
-#include <string>
-#include <vector>
 
 #include <inspectable.h>
 
@@ -440,6 +436,60 @@ enum Visibility : int32_t {
 }  // namespace WASDK
 #pragma endregion  // WASDK
 
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+    static VS_FIXEDFILEINFO* fixedFileInfo =
+        GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return false;
+    }
+
+    WORD moduleMajor = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleMinor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleBuild = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD moduleQfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    if (moduleMajor != major) {
+        return moduleMajor > major;
+    }
+
+    if (moduleMinor != minor) {
+        return moduleMinor > minor;
+    }
+
+    if (moduleBuild != build) {
+        return moduleBuild > build;
+    }
+
+    return moduleQfe >= qfe;
+}
+
 bool HandleNavigationBarControl(IUnknown* navigationBarControl) {
     winrt::com_ptr<WASDK::IUIElement> uiElement;
     (*(IUnknown**)((BYTE*)navigationBarControl + 0x08))
@@ -515,7 +565,9 @@ int WINAPI CommandBarExtension_GetHeight_Hook(
     int ret = CommandBarExtension_GetHeight_Original(pThis, sizeIn, sizeOut);
 
     if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
-        sizeOut->Height = 6;
+        static const float newHeight =
+            IsVersionAtLeast(10, 0, 22621, 3958) ? 0 : 6;
+        sizeOut->Height = newHeight;
     }
 
     return ret;
@@ -579,7 +631,7 @@ bool HookExplorerFrameSymbols() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
         {
             {LR"(bool __cdecl CanShowModernNavBar(void))"},
             (void**)&CanShowModernNavBar_Original,
@@ -594,7 +646,8 @@ bool HookExplorerFrameSymbols() {
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookSymbols(module, explorerFrameDllHooks,
+                       ARRAYSIZE(explorerFrameDllHooks));
 }
 
 bool HookFileExplorerExtensionsSymbols() {
@@ -614,7 +667,7 @@ bool HookFileExplorerExtensionsSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
         {
             {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::NavigationBarControl::OnApplyTemplate(void))"},
             (void**)&Feature_NavigationBarControl_OnApplyTemplate_Original,
@@ -627,7 +680,8 @@ bool HookFileExplorerExtensionsSymbols() {
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    return HookSymbols(module, fileExplorerExtensionsDllHooks,
+                       ARRAYSIZE(fileExplorerExtensionsDllHooks));
 }
 
 void LoadSettings() {
