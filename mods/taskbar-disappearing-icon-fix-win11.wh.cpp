@@ -193,7 +193,7 @@ void WINAPI TaskListButton_Hook2_Hook(void* pThis, struct winrt::hstring w) {
 // ===========================================================
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // taskbar.view.dll
+    // taskbar.view.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         // {
         //     {
