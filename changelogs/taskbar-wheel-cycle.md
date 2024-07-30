@@ -1,3 +1,7 @@
+## 1.1.4 ([Jul 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a480102c52e3cd16e1cea214913e1395155c82c0/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Fixed compatibility with update KB5040527.
+
 ## 1.1.3 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/711f6777f4e21b0995a580b248006136a750be6e/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
