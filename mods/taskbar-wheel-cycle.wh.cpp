@@ -2,14 +2,14 @@
 // @id              taskbar-wheel-cycle
 // @name            Cycle taskbar buttons with mouse wheel
 // @description     Use the mouse wheel while hovering over the taskbar to cycle between taskbar buttons (Windows 11 only)
-// @version         1.1.3
+// @version         1.1.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -loleaut32 -lole32 -lwininet
+// @compilerOptions -lcomctl32 -loleaut32 -lole32 -lruntimeobject -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -67,7 +67,6 @@ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 #include <winrt/Windows.UI.Xaml.Input.h>
 
 #include <algorithm>
-#include <atomic>
 #include <memory>
 #include <regex>
 #include <string>
@@ -125,7 +124,7 @@ CTaskBand_SwitchTo_t CTaskBand_SwitchTo_Original;
 
 #pragma region offsets
 
-void* CTaskListWnd__GetRequiredCols;
+void* CTaskListWnd_GetFocusedBtn;
 void* CTaskListWnd__FixupTaskIndicies;
 
 size_t OffsetFromAssembly(void* func,
@@ -163,8 +162,7 @@ size_t OffsetFromAssembly(void* func,
 }
 
 HDPA* EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(LONG_PTR lp) {
-    static size_t offset =
-        OffsetFromAssembly(CTaskListWnd__GetRequiredCols, 0xE0);
+    static size_t offset = OffsetFromAssembly(CTaskListWnd_GetFocusedBtn, 0xE0);
 
     return (HDPA*)(lp + offset);
 }
@@ -1095,7 +1093,8 @@ struct SYMBOL_HOOK {
 
 bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
+                 size_t symbolHooksCount,
+                 bool cacheOnly = false) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'#';
     constexpr size_t cacheMaxSize = 10240;
@@ -1249,6 +1248,10 @@ bool HookSymbols(HMODULE module,
 
     Wh_Log(L"Couldn't resolve all symbols from cache");
 
+    if (cacheOnly) {
+        return false;
+    }
+
     WH_FIND_SYMBOL findSymbol;
     HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
     if (!findSymbolHandle) {
@@ -1366,11 +1369,12 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
                                         size_t symbolHooksCount) {
     constexpr WCHAR kModIdForCache[] = L"taskbar-wheel-cycle";
 
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+    if (HookSymbols(module, symbolHooks, symbolHooksCount,
+                    /*cacheOnly=*/true)) {
         return true;
     }
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
 
     WCHAR moduleFilePath[MAX_PATH];
     DWORD moduleFilePathLen =
@@ -1425,12 +1429,11 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
 
     auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
+    if (onlineCache) {
+        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    } else {
         Wh_Log(L"Failed to get online cache");
-        return false;
     }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
 
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
@@ -1489,6 +1492,7 @@ bool HookTaskbarViewDllSymbols() {
         return false;
     }
 
+    // Taskbar.View.dll, ExplorerExtensions.dll
     SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerWheelChanged(void *))"},
@@ -1508,7 +1512,7 @@ BOOL HookTaskbarDllSymbols() {
         return FALSE;
     }
 
-    SYMBOL_HOOK symbolHooks[] = {
+    SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void))"},
             (void**)&CWindowTaskItem_GetWindow_Original,
@@ -1527,8 +1531,8 @@ BOOL HookTaskbarDllSymbols() {
         },
         // For offsets:
         {
-            {LR"(protected: int __cdecl CTaskListWnd::_GetRequiredCols(int))"},
-            (void**)&CTaskListWnd__GetRequiredCols,
+            {LR"(public: virtual long __cdecl CTaskListWnd::GetFocusedBtn(struct ITaskGroup * *,int *))"},
+            (void**)&CTaskListWnd_GetFocusedBtn,
         },
         {
             {LR"(protected: void __cdecl CTaskListWnd::_FixupTaskIndicies(struct ITaskBtnGroup *,int,int))"},
@@ -1536,8 +1540,8 @@ BOOL HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    return HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
+                                              ARRAYSIZE(taskbarDllHooks));
 }
 
 BOOL Wh_ModInit() {
