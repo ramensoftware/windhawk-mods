@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-07-30T18:58:22.000Z</updated>
+    <updated>2024-08-03T19:12:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Qt scrollbar grippers 1.0]]></title>
+        <id>https://windhawk.net/mods/fix-qt-scrollbar-grippers#ad2ad2e2f07630fcdefb96a16bcc53695bb97490</id>
+        <link href="https://windhawk.net/mods/fix-qt-scrollbar-grippers"/>
+        <updated>2024-08-03T19:12:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixqtscrollbargrippers">Fix Qt scrollbar grippers</h1>
+<p><img src="https://raw.githubusercontent.com/kawapure/images/main/fix-qt-scrollbar-grippers.png" alt="Preview" /></p>
+<p>Qt applications compiled after 2021 (against Qt 6.1+) lack the scrollbar grippers (the lines in the middle),
+visible on custom visual styles, because the responsible drawing code was removed. Here is a lazy hack around
+that.</p>
+<p>These were removed in Qt <a href="https://github.com/qt/qtbase/commit/5f5c342924a0d9a2856b2f2d6db373e25723f2b0">because the developers thought that these changes wouldn't affect Windows 10</a>.
+They were wrong.</p>
+<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
+<p>This mod targets the Interactive Disassembler (IDA) by default. Other applications must be manually specified
+for injection.</p>
+<p>In Windhawk, go to the "Advanced" tab and scroll down to 
+"Custom process inclusion list". In that box, put the filename of the <code>.exe</code>. 
+The mod will immediately apply to those programs after you click "Save".</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.4]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#a480102c52e3cd16e1cea214913e1395155c82c0</id>
@@ -233,20 +252,5 @@ Ensure that the following options are disabled:</p>
 <p>in order for this mod to work properly, you must include <code>winlogon.exe</code> and <code>logonui.exe</code> in windhawk's process inclusion list, in its advanced settings.</p>
 <h3 id="bugs">bugs</h3>
 <p>the colors in control panel might be weird sometimes. works fine if you leave control panel open, then switch themes.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UIFILE Override 1.0]]></title>
-        <id>https://windhawk.net/mods/uifile-override#5a35e8af0e0dedd36d5dc3b800cba300739a518c</id>
-        <link href="https://windhawk.net/mods/uifile-override"/>
-        <updated>2024-07-07T06:56:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="uifileoverride">UIFILE Override</h1>
-<p>Mod that overrides UIFILE resources, similar to OldNewExplorer, loading them
-from current theme shellstyle.dll. Mainly used for explorer.</p>
-<h2 id="howtouse">How to use</h2>
-<p>For overriding a UIFILE resource with this mod, you need to add to your shellstyle.dll a resource named as the file you want to override:<br />
-<strong>shell32.dll UIFILE 21</strong> -&gt; <strong>shellstyle.dll SHELL32_UIFILE 21</strong>.<br />
-This will override the original UIFILE resource from shell32 to the one in shellstyle.</p>
-<h3 id="resourceuifile21loadingfromshellstyledll">Resource UIFILE 21 loading from shellstyle.dll:</h3>
-<p><img src="https://i.imgur.com/4sxHtUd.png" alt="Explorer loading resource shell32.dll UIFILE 21 from shellstye.dll" /></p>]]></content>
     </entry>
 </feed>

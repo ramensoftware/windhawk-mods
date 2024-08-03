@@ -1073,6 +1073,30 @@
                 "version": "1.0"
             }
         },
+        "fix-qt-scrollbar-grippers": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1722712367000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1722712367000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "kawapure",
+                "compilerOptions": "-lcomdlg32 -luxtheme",
+                "description": "Fixes scrollbar grippers in Qt 6.1+",
+                "github": "https://github.com/kawapure",
+                "homepage": "https://kawapure.github.io",
+                "include": [
+                    "ida64.exe",
+                    "ida.exe"
+                ],
+                "name": "Fix Qt scrollbar grippers",
+                "twitter": "https://twitter.com/kawaipure",
+                "version": "1.0"
+            }
+        },
         "flight-simulator-focus-helper": {
             "details": {
                 "defaultSorting": 81,
