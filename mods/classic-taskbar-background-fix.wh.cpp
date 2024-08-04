@@ -37,11 +37,6 @@ After:
 ![After](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png)
 
 
-## Mod configuration
-
-If you use some other mod for rendering buttons than 'Classic Taskbar 3D buttons Lite' and your Taskbar is sometimes extremely full (with small buttons) and you want to preserve the full contrast of the button borders, then go to the settings of the current mod and under "Compatibility with classic Taskbar buttons mods" choose "No compatibility adjustments". Otherwise you can keep this setting at its default value - "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'".
-
-
 ## Acknowledgements
 I would like to thank @Anixx for testing the mod during its development and illustrating the issues found.
 */
@@ -56,11 +51,6 @@ I would like to thank @Anixx for testing the mod during its development and illu
   - highlightOnHover: Yes, and use highlight colour on mouse over
   - blackOnHover: Yes, and use black colour on mouse over
   - no: No
-- CompatWithTaskbarButtonsMods: classic-taskbar-buttons-lite
-  $name: Compatibility with classic Taskbar buttons mods
-  $options:
-  - classic-taskbar-buttons-lite: Enhance compatibility with 'Classic Taskbar 3D buttons Lite'
-  - no: No compatibility adjustments
 */
 // ==/WindhawkModSettings==
 
@@ -85,11 +75,6 @@ enum class RepaintDesktopButtonConfig {
     yes,
     highlightOnHover,
     blackOnHover,
-    no
-};
-
-enum class CompatWithTaskbarButtonsModsConfig {
-    classicTaskbarButtonsLite,
     no
 };
 
@@ -127,7 +112,6 @@ std::mutex g_hdcMapMutex;
 std::map<HDC, MemDCInfo> g_hdcMap;      //using map not unordered_map since the latter becomes slow when doing many insertions and removals. Also it is expected that the current map will contain only a few elements at a time
 
 RepaintDesktopButtonConfig g_repaintDesktopButtonConfig;
-CompatWithTaskbarButtonsModsConfig g_compatWithTaskbarButtonsModsConfig;
 
 
 using BeginPaint_t = decltype(&BeginPaint);
@@ -155,15 +139,6 @@ RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
     }
     else {
         return RepaintDesktopButtonConfig::yes;
-    }
-}
-
-CompatWithTaskbarButtonsModsConfig CompatWithTaskbarButtonsModsConfigFromString(PCWSTR string) {
-    if (wcscmp(string, L"no") == 0) {
-        return CompatWithTaskbarButtonsModsConfig::no;
-    }
-    else {
-        return CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite;
     }
 }
 
@@ -514,30 +489,38 @@ BOOL WINAPI DrawFrameControlHook(
         && uType == DFC_BUTTON
         && ((uState & DFCS_BUTTONPUSH) != 0)
         && lprc
-        && g_compatWithTaskbarButtonsModsConfig == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite
         //cannot use WindowFromDC and WindowNeedsBackgroundRepaint check here since WindowFromDC will fail for some reason
     ) {
-        HBRUSH brush = GetSysColorBrush(colorIndex);
-        if (!brush) {            //verify that the brush is supported by the current system
-            Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
+        if (lprc->top > 0) {   //Start button has lprc->top == 2, but painting it here causes white or black lines around start button for some reason, so lets exclude it. For multi-line taskbar, the lprc->top of the second button row is still 0, so the second row will be properly handled here. Note that DrawFrameControl is called for Start Button only certain conditions, not always, so you might not get this log message.
+            Wh_Log(L"Not calling FillRect in DrawFrameControlHook for Start Button.");
         }
-        else {                
-            RECT rect;
-            if (!GetClipBox(hdc, &rect)) {
-                SetRectEmpty(&rect);
+        else {
+            HBRUSH brush = GetSysColorBrush(colorIndex);
+            if (!brush) {            //verify that the brush is supported by the current system
+                Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
             }
+            else {
+                RECT hdcRect;
+                if (!GetClipBox(hdc, &hdcRect)) {
+                    SetRectEmpty(&hdcRect);
+                }
 
-            //Mitigation for case @Anixx classic-taskbar-buttons-lite mod is being used, which changes the left and right offsets of taskbar buttons before they are rendered. Without the mitigation there would appear black OR dark lines on left and right side of the button.
-            //
-            //This mitigation will not usually interfere with the operation of mod classic-taskbar-buttons-lite-vs-without-spacing by @OrthodoxWin32. Normally the buttons will have still one pixel of space between them even with that mod, and we are here extending the rect size also only by one pixel. If the taskbar is extremely full, then the one pixel space between the buttons vanishes, but the result of repainting does not seem too visible in this case either. Unfortunately selective repaint would not be trivial in this case.
-            // 
-            //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
+                RECT fillRect = *lprc;
 
-            RECT fillRect = *lprc;
-            fillRect.left = max(lprc->left - 1, rect.left);
-            fillRect.right = min(lprc->right + 1, rect.right);
+                if (fillRect.left <= 10) {     //Only the leftmost buttons need left side adjustment. The others are mitigated by the lprc->right + 10 formula
+                    //Mitigation for case @Anixx classic-taskbar-buttons-lite mod is being used. classic-taskbar-buttons-lite mod changes the offsets of the lprc before calling DrawFrameControl() from CTaskBtnGroup__DrawBar_hook(), so need to calculate the original left offset to paint its background. Without the mitigation there would appear black OR dark lines on left side of the leftmost Taskbar button.
+                    // 
+                    //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
+                    fillRect.left = hdcRect.left;
+                }
 
-            FillRect(hdc, &fillRect, brush);
+                //Sometimes there would still be black lines around buttons, if I would add just +1 to the right offset. This becomes visible when Taskbar has only one row. Adding bigger right side offset avoids that.
+                //It is safe to extend the rect more pixels towards right since the buttons are always drawn in left to right order, so the extended rect does not overdraw the next button. 
+                //In contrast, it would not be safe to extend the rect towards left too much since that would overdraw the previous button.
+                fillRect.right = min(fillRect.right + 10, hdcRect.right);
+
+                FillRect(hdc, &fillRect, brush);
+            }
         }
     }
 
@@ -561,7 +544,7 @@ bool DrawThemeParentBackgroundInternal(HWND hwnd, HDC hdc) {
     if (
         g_hwndTaskbar   //is the current process the taskbar process?
         && WindowNeedsBackgroundRepaint(&colorIndex, hwnd, &rect, /*isDrawThemeParentBackgroundCall*/true)        //needed in order to not repaint hidden tray icons popup
-        ) {
+    ) {
         if (colorIndex == blackColorIndex) {  //Repaint the area as black again. Used for "show desktop" button if the mod settings say so.
 
             HBRUSH brush = CreateSolidBrush(black);
@@ -725,10 +708,6 @@ void LoadSettings() {
     //config option to keep "show desktop" button black
     configString = Wh_GetStringSetting(L"RepaintDesktopButton");
     g_repaintDesktopButtonConfig = DesktopButtonConfigFromString(configString);
-    Wh_FreeStringSetting(configString);     
-
-    configString = Wh_GetStringSetting(L"CompatWithTaskbarButtonsMods");
-    g_compatWithTaskbarButtonsModsConfig = CompatWithTaskbarButtonsModsConfigFromString(configString);
     Wh_FreeStringSetting(configString);
 }
 
@@ -739,7 +718,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
 
-    HMODULE hUser32 = GetModuleHandle(L"user32.dll"); 	//when we reach here then we can be sure that user32.dll has been already loaded
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (!hUser32) {
         Wh_Log(L"Loading user32.dll failed");
         return FALSE;
