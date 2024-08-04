@@ -2,7 +2,7 @@
 // @id              classic-file-picker-dialog
 // @name            Classic File Picker dialog
 // @description     Redirect the Windows Vista+ file picker to the Windows XP one
-// @version         1.1
+// @version         1.1.1
 // @author 	        Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -13,7 +13,7 @@
 This mod replaces the default file picker (open/save dialog) with the legacy one,
 which was used in Windows XP and Windws 2000.
 
-For 3D border in the dialog, install the mod "ClientEdge in choosen apps"
+For 3D border in the dialog, install the mod "ClientEdge Everywhere"
 
 The mod is based on the idea by xdmg01.
 
