@@ -2,7 +2,7 @@
 // @id              classic-file-picker-dialog
 // @name            Classic File Picker dialog
 // @description     Redirect the Windows Vista+ file picker to the Windows XP one
-// @version         1.1
+// @version         1.1.1
 // @author 	        Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -13,7 +13,7 @@
 This mod replaces the default file picker (open/save dialog) with the legacy one,
 which was used in Windows XP and Windws 2000.
 
-For 3D border in the dialog, install the mod "ClientEdge in choosen apps"
+For 3D border in the dialog, install the mod "ClientEdge Everywhere"
 
 The mod is based on the idea by xdmg01.
 
@@ -48,7 +48,7 @@ long CALCON CFileOpenSave__s_CreateInstance_hook(int param_1, GUID *param_2, voi
 BOOL Wh_ModInit() {
     HMODULE module = LoadLibrary(L"comdlg32.dll");
 
-    WindhawkUtils::SYMBOL_HOOK symbolHook[] = {
+    WindhawkUtils::SYMBOL_HOOK comdlg32DllHooks[] = {
         {
             {L"int" SCALCON L"IsCommonItemDialogAvailable(void)"},
             (void**)&IsCommonItemDialogAvailable_orig,
@@ -61,7 +61,7 @@ BOOL Wh_ModInit() {
         }
     };
 
-    WindhawkUtils::HookSymbols(module, symbolHook, ARRAYSIZE(symbolHook));
+    WindhawkUtils::HookSymbols(module, comdlg32DllHooks, ARRAYSIZE(comdlg32DllHooks));
 
     return TRUE;
 }
