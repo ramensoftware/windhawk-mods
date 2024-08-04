@@ -48,7 +48,7 @@ long CALCON CFileOpenSave__s_CreateInstance_hook(int param_1, GUID *param_2, voi
 BOOL Wh_ModInit() {
     HMODULE module = LoadLibrary(L"comdlg32.dll");
 
-    WindhawkUtils::SYMBOL_HOOK symbolHook[] = {
+    WindhawkUtils::SYMBOL_HOOK comdlg32DllHooks[] = {
         {
             {L"int" SCALCON L"IsCommonItemDialogAvailable(void)"},
             (void**)&IsCommonItemDialogAvailable_orig,
@@ -61,7 +61,7 @@ BOOL Wh_ModInit() {
         }
     };
 
-    WindhawkUtils::HookSymbols(module, symbolHook, ARRAYSIZE(symbolHook));
+    WindhawkUtils::HookSymbols(module, comdlg32DllHooks, ARRAYSIZE(comdlg32DllHooks));
 
     return TRUE;
 }
