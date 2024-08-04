@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-03T19:12:47.000Z</updated>
+    <updated>2024-08-04T10:23:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic File Picker dialog 1.1.1]]></title>
+        <id>https://windhawk.net/mods/classic-file-picker-dialog#1b2a786aeb208e28f3aec941300c7710d20c403e</id>
+        <link href="https://windhawk.net/mods/classic-file-picker-dialog"/>
+        <updated>2024-08-04T10:23:27.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix reference to another mod</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Qt scrollbar grippers 1.0]]></title>
         <id>https://windhawk.net/mods/fix-qt-scrollbar-grippers#ad2ad2e2f07630fcdefb96a16bcc53695bb97490</id>
@@ -240,17 +247,5 @@ Ensure that the following options are disabled:</p>
 <li><a href="https://forum.justgetflux.com/topic/8475/how-do-i-make-my-own-permanent-preset">How do I make my own Permanent preset?</a></li>
 <li><a href="https://forum.justgetflux.com/topic/8502/disable-circadian-response-only/">Disable Circadian Response Only</a></li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UXTheme hook 1.0]]></title>
-        <id>https://windhawk.net/mods/uxtheme-hook#041ef1c28ab0714b460b38b9844911e43456bd00</id>
-        <link href="https://windhawk.net/mods/uxtheme-hook"/>
-        <updated>2024-07-07T08:39:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="uxthemehook">UXTheme hook</h1>
-<p>apply custom themes.</p>
-<h3 id="important">⚠ Important ⚠</h3>
-<p>in order for this mod to work properly, you must include <code>winlogon.exe</code> and <code>logonui.exe</code> in windhawk's process inclusion list, in its advanced settings.</p>
-<h3 id="bugs">bugs</h3>
-<p>the colors in control panel might be weird sometimes. works fine if you leave control panel open, then switch themes.</p>]]></content>
     </entry>
 </feed>

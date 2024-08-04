@@ -364,7 +364,7 @@
                 "published": 1709574778000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1709713642000,
+                "updated": 1722767007000,
                 "users": 179
             },
             "metadata": {
@@ -375,7 +375,7 @@
                     "*"
                 ],
                 "name": "Classic File Picker dialog",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "classic-list-group-fix": {
