@@ -491,7 +491,15 @@ BOOL WINAPI DrawFrameControlHook(
         && lprc
         //cannot use WindowFromDC and WindowNeedsBackgroundRepaint check here since WindowFromDC will fail for some reason
     ) {
-        if (lprc->top > 0) {   //Start button has lprc->top == 2, but painting it here causes white or black lines around start button for some reason, so lets exclude it. For multi-line taskbar, the lprc->top of the second button row is still 0, so the second row will be properly handled here. Note that DrawFrameControl is called for Start Button only certain conditions, not always, so you might not get this log message.
+         
+        RECT hdcRect;
+        if (!GetClipBox(hdc, &hdcRect)) {
+            SetRectEmpty(&hdcRect);
+        }
+
+        bool isStartButton = (hdcRect.right - hdcRect.left) < 200 && (hdcRect.bottom - hdcRect.top) < 200;
+        if (isStartButton) {   
+            //note that DrawFrameControl is called for Start Button only certain conditions, not always, so you might not get this log message at all times.
             Wh_Log(L"Not calling FillRect in DrawFrameControlHook for Start Button.");
         }
         else {
@@ -500,24 +508,34 @@ BOOL WINAPI DrawFrameControlHook(
                 Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
             }
             else {
-                RECT hdcRect;
-                if (!GetClipBox(hdc, &hdcRect)) {
-                    SetRectEmpty(&hdcRect);
-                }
-
                 RECT fillRect = *lprc;
 
-                if (fillRect.left <= 10) {     //Only the leftmost buttons need left side adjustment. The others are mitigated by the lprc->right + 10 formula
-                    //Mitigation for case @Anixx classic-taskbar-buttons-lite mod is being used. classic-taskbar-buttons-lite mod changes the offsets of the lprc before calling DrawFrameControl() from CTaskBtnGroup__DrawBar_hook(), so need to calculate the original left offset to paint its background. Without the mitigation there would appear black OR dark lines on left side of the leftmost Taskbar button.
-                    // 
-                    //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
-                    fillRect.left = hdcRect.left;
-                }
+                //FillRect left offset updates below are mitigations for case @Anixx classic-taskbar-buttons-lite mod is being used. classic-taskbar-buttons-lite mod changes the offsets of the lprc before calling DrawFrameControl() from CTaskBtnGroup__DrawBar_hook(), so need to calculate the original left offset to paint its background. Without the mitigation there would appear black OR dark lines on left side of the leftmost Taskbar button.
+                //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
 
-                //Sometimes there would still be black lines around buttons, if I would add just +1 to the right offset. This becomes visible when Taskbar has only one row. Adding bigger right side offset avoids that.
-                //It is safe to extend the rect more pixels towards right since the buttons are always drawn in left to right order, so the extended rect does not overdraw the next button. 
-                //In contrast, it would not be safe to extend the rect towards left too much since that would overdraw the previous button.
-                fillRect.right = min(fillRect.right + 10, hdcRect.right);
+                bool isHorisontal = (hdcRect.right - hdcRect.left) > (hdcRect.bottom - hdcRect.top);
+                if (isHorisontal) { 
+
+                    if (fillRect.left <= 10) {     //Only the leftmost buttons need left side adjustment. The others are mitigated by the lprc->right + 10 formula
+
+                        fillRect.left = hdcRect.left;
+                    }
+
+                    //Sometimes there would still be black lines around buttons, if I would add just +1 to the right offset. This becomes visible when Taskbar has only one row. Adding bigger right side offset avoids that.
+                    //It is safe to extend the rect more pixels towards right since the buttons are always drawn in left to right order, so the extended rect does not overdraw the next button. 
+                    //In contrast, it would not be safe to extend the rect towards left too much since that would overdraw the previous button.
+
+                    fillRect.right = min(fillRect.right + 10, hdcRect.right);
+                }
+                else {  //vertical taskbar
+
+                    //Sometimes there would still be black lines around buttons, if I would add just +1 to the left and right offset. Adding bigger left and right side offset avoids that.              
+                    //In case of vertical Taskbar, do not extend the buttons background too much either: Try to leave at least some horisontal space around the buttons in hdc for flood fill to spread in order to avoid horisontal lines between buttons.
+                    //These considerations apply for some reason also if the vertical Taskbar is on the right side of screen, so that makes things simpler here.
+                                                            
+                    fillRect.left = max(fillRect.left - 10, hdcRect.left + 1);  //+1 : lets reserve leftmost pixel column for flood fill since left side has more space. Also it seems that the space between fillRect.right and hdcRect.right is not actually fully usable, some of that space is in border of Taskbar and some of it lies even outside of Taskbar for some reason.
+                    fillRect.right = min(fillRect.right + 10, hdcRect.right);
+                }
 
                 FillRect(hdc, &fillRect, brush);
             }
