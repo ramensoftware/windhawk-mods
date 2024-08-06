@@ -37,6 +37,11 @@ After:
 ![After](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png)
 
 
+## Mod configuration
+
+If you use some other mod for rendering buttons than 'Classic Taskbar 3D buttons Lite' and your Taskbar is sometimes extremely full (with small buttons) and you want to preserve the full contrast of the button borders, then go to the settings of the current mod and under "Compatibility with classic Taskbar buttons mods" choose "No compatibility adjustments". Otherwise you can keep this setting at its default value - "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'".
+
+
 ## Acknowledgements
 I would like to thank @Anixx for testing the mod during its development and illustrating the issues found.
 */
@@ -51,6 +56,11 @@ I would like to thank @Anixx for testing the mod during its development and illu
   - highlightOnHover: Yes, and use highlight colour on mouse over
   - blackOnHover: Yes, and use black colour on mouse over
   - no: No
+- CompatWithTaskbarButtonsMods: classic-taskbar-buttons-lite
+  $name: Compatibility with classic Taskbar buttons mods
+  $options:
+  - classic-taskbar-buttons-lite: Enhance compatibility with 'Classic Taskbar 3D buttons Lite'
+  - no: No compatibility adjustments
 */
 // ==/WindhawkModSettings==
 
@@ -75,6 +85,11 @@ enum class RepaintDesktopButtonConfig {
     yes,
     highlightOnHover,
     blackOnHover,
+    no
+};
+
+enum class CompatWithTaskbarButtonsModsConfig {
+    classicTaskbarButtonsLite,
     no
 };
 
@@ -112,6 +127,7 @@ std::mutex g_hdcMapMutex;
 std::map<HDC, MemDCInfo> g_hdcMap;      //using map not unordered_map since the latter becomes slow when doing many insertions and removals. Also it is expected that the current map will contain only a few elements at a time
 
 RepaintDesktopButtonConfig g_repaintDesktopButtonConfig;
+CompatWithTaskbarButtonsModsConfig g_compatWithTaskbarButtonsModsConfig;
 
 
 using BeginPaint_t = decltype(&BeginPaint);
@@ -139,6 +155,15 @@ RepaintDesktopButtonConfig DesktopButtonConfigFromString(PCWSTR string) {
     }
     else {
         return RepaintDesktopButtonConfig::yes;
+    }
+}
+
+CompatWithTaskbarButtonsModsConfig CompatWithTaskbarButtonsModsConfigFromString(PCWSTR string) {
+    if (wcscmp(string, L"no") == 0) {
+        return CompatWithTaskbarButtonsModsConfig::no;
+    }
+    else {
+        return CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite;
     }
 }
 
@@ -510,15 +535,18 @@ BOOL WINAPI DrawFrameControlHook(
             else {
                 RECT fillRect = *lprc;
 
-                //FillRect left offset updates below are mitigations for case @Anixx classic-taskbar-buttons-lite mod is being used. classic-taskbar-buttons-lite mod changes the offsets of the lprc before calling DrawFrameControl() from CTaskBtnGroup__DrawBar_hook(), so need to calculate the original left offset to paint its background. Without the mitigation there would appear black OR dark lines on left side of the leftmost Taskbar button.
-                //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
-
                 bool isHorisontal = (hdcRect.right - hdcRect.left) > (hdcRect.bottom - hdcRect.top);
                 if (isHorisontal) { 
 
                     if (fillRect.left <= 10) {     //Only the leftmost buttons need left side adjustment. The others are mitigated by the lprc->right + 10 formula
 
                         fillRect.left = hdcRect.left;
+                    }
+                    else if (g_compatWithTaskbarButtonsModsConfig == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite) {
+
+                        //Mitigations for case @Anixx classic-taskbar-buttons-lite mod is being used. classic-taskbar-buttons-lite mod changes the offsets of the lprc before calling DrawFrameControl() from CTaskBtnGroup__DrawBar_hook(), so need to calculate the original left offset to paint its background. Without the mitigation there would appear black OR dark lines on left side of the leftmost Taskbar button.
+                        //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
+                        fillRect.left = max(fillRect.left - 1, hdcRect.left);
                     }
 
                     //Sometimes there would still be black lines around buttons, if I would add just +1 to the right offset. This becomes visible when Taskbar has only one row. Adding bigger right side offset avoids that.
@@ -531,10 +559,17 @@ BOOL WINAPI DrawFrameControlHook(
 
                     //Sometimes there would still be black lines around buttons, if I would add just +1 to the left and right offset. Adding bigger left and right side offset avoids that.              
                     //In case of vertical Taskbar, do not extend the buttons background too much either: Try to leave at least some horisontal space around the buttons in hdc for flood fill to spread in order to avoid horisontal lines between buttons.
-                    //These considerations apply for some reason also if the vertical Taskbar is on the right side of screen, so that makes things simpler here.
-                                                            
-                    fillRect.left = max(fillRect.left - 10, hdcRect.left + 1);  //+1 : lets reserve leftmost pixel column for flood fill since left side has more space. Also it seems that the space between fillRect.right and hdcRect.right is not actually fully usable, some of that space is in border of Taskbar and some of it lies even outside of Taskbar for some reason.
-                    fillRect.right = min(fillRect.right + 10, hdcRect.right);
+                    //In some computers the vertical Taskbar buttons are aligned left, while in others they are aligned right                
+
+                    if (g_compatWithTaskbarButtonsModsConfig == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite) {
+
+                        fillRect.left = max(fillRect.left - 2, hdcRect.left);
+                        fillRect.right = min(fillRect.right + 2, hdcRect.right);
+                    }
+                    else {
+                        fillRect.left = max(fillRect.left - 1, hdcRect.left);  
+                        fillRect.right = min(fillRect.right + 1, hdcRect.right);
+                    }
                 }
 
                 FillRect(hdc, &fillRect, brush);
@@ -726,6 +761,10 @@ void LoadSettings() {
     //config option to keep "show desktop" button black
     configString = Wh_GetStringSetting(L"RepaintDesktopButton");
     g_repaintDesktopButtonConfig = DesktopButtonConfigFromString(configString);
+    Wh_FreeStringSetting(configString);     
+
+    configString = Wh_GetStringSetting(L"CompatWithTaskbarButtonsMods");
+    g_compatWithTaskbarButtonsModsConfig = CompatWithTaskbarButtonsModsConfigFromString(configString);
     Wh_FreeStringSetting(configString);
 }
 
