@@ -65,11 +65,24 @@ I would like to thank @Anixx for testing the mod during its development and illu
 // ==/WindhawkModSettings==
 
 
+#include <windowsx.h>
+#include <winnt.h>      //defines HRESULT, needed for Visual Studio intellisense only, in clang the HRESULT seems to be defined already elsewhere, but the include does not harm either
+//#include <uxtheme.h>    //currently not needed since we use our own declaration of DrawThemeParentBackground and DrawThemeParentBackgroundEx
+
 #include <map>
 #include <mutex>
 #include <new>          //std::nothrow
-#include <windowsx.h>
-#include <uxtheme.h>
+
+
+
+template <typename T>
+BOOL Wh_SetFunctionHookT(
+    FARPROC targetFunction,
+    T hookFunction,
+    T* originalFunction
+) {
+    return Wh_SetFunctionHook((void*)targetFunction, (void*)hookFunction, (void**)originalFunction);
+}
 
 
 //clang compiler does not have these macros defined. Definitions taken from <minwindef.h>
@@ -92,16 +105,6 @@ enum class CompatWithTaskbarButtonsModsConfig {
     classicTaskbarButtonsLite,
     no
 };
-
-
-template <typename T>
-BOOL Wh_SetFunctionHookT(
-    FARPROC targetFunction,
-    T hookFunction,
-    T* originalFunction
-) {
-    return Wh_SetFunctionHook((void*)targetFunction, (void*)hookFunction, (void**)originalFunction);
-}
 
 
 const COLORREF black = RGB(0, 0, 0);
