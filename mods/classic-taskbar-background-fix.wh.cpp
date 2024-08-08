@@ -563,12 +563,12 @@ BOOL WINAPI DrawFrameControlHook(
 
                     if (g_compatWithTaskbarButtonsModsConfig == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite) {
 
-                        fillRect.left = max(fillRect.left - 2, hdcRect.left);
-                        fillRect.right = min(fillRect.right + 2, hdcRect.right);
+                        fillRect.left = max(fillRect.left - 3, hdcRect.left);
+                        fillRect.right = min(fillRect.right + 3, hdcRect.right);
                     }
                     else {
-                        fillRect.left = max(fillRect.left - 1, hdcRect.left);  
-                        fillRect.right = min(fillRect.right + 1, hdcRect.right);
+                        fillRect.left = max(fillRect.left - 2, hdcRect.left);  
+                        fillRect.right = min(fillRect.right + 2, hdcRect.right);
                     }
                 }
 
