@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-04T10:23:27.000Z</updated>
+    <updated>2024-08-09T17:18:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#32678e0ef871bf50c15cd8692b9317b869915542</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2024-08-09T17:18:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Another attempt at fixing multiple pinned items appearing for the same program.</li>
+<li>Added support for Windows 11 version 24H2.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic File Picker dialog 1.1.1]]></title>
         <id>https://windhawk.net/mods/classic-file-picker-dialog#1b2a786aeb208e28f3aec941300c7710d20c403e</id>
@@ -226,26 +236,6 @@ Ensure that the following options are disabled:</p>
         <content type="html"><![CDATA[<ul>
 <li>fix calling conventions</li>
 <li>works when directly applying .theme files</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Maintain colour temperature of f.lux 1.0]]></title>
-        <id>https://windhawk.net/mods/maintain-flux-colour-temperature#3ebfcc35a494cc2c1cc0f65c11728a5badd6e1bb</id>
-        <link href="https://windhawk.net/mods/maintain-flux-colour-temperature"/>
-        <updated>2024-07-07T09:51:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="maintaincolourtemperatureofflux">Maintain colour temperature of f.lux</h1>
-<p>Keeps your preferred f.lux colour temperature settings, eliminating automatic changes. You can choose the desired colour temperature from f.lux dropdown menu, and f.lux will not change it later automatically.</p>
-<p>The mod operates by providing f.lux always with a fixed day and time. This fixed day and time can be adjusted by the user in the settings panel of this mod, if necessary, though the default setting should be usually suitable. By default the noon of approximately midsummer day of Northern Hemisphere is chosen as the fixed day and time. The particular day and time are not very important, what matters is that the fixed time is not near the time points where f.lux would usually get triggered to adjust the screen colour on its own.</p>
-<p>There are many posts in f.lux forum asking for this functionality since 2016. Unfortunately there were no solutions provided so far:</p>
-<ul>
-<li><a href="https://forum.justgetflux.com/topic/3012/disable-f-lux-s-automatic-adjustments-based-on-time-location/">Disable f.lux's automatic adjustments based on time/location</a></li>
-<li><a href="https://forum.justgetflux.com/topic/6162/can-automatic-timer-settings-be-disabled">Can automatic timer settings be disabled?</a></li>
-<li><a href="https://forum.justgetflux.com/topic/6228/disabling-all-automatic-functions">Disabling all automatic functions.</a></li>
-<li><a href="https://forum.justgetflux.com/topic/7904/how-to-disable-automatic-change-based-on-time-location">How To Disable Automatic Change Based On Time / Location ?</a></li>
-<li><a href="https://forum.justgetflux.com/topic/8404/how-do-i-stop-flux-to-stop-changing-colors-arbitrary-force-always-on-mode-force-coupling-day-and-night-colors">How do I stop flux to stop changing colors arbitrary / Force always on mode / Force coupling day and night colors?</a></li>
-<li><a href="https://forum.justgetflux.com/topic/8431/sleeping-during-the-day">Sleeping during the day</a></li>
-<li><a href="https://forum.justgetflux.com/topic/8475/how-do-i-make-my-own-permanent-preset">How do I make my own Permanent preset?</a></li>
-<li><a href="https://forum.justgetflux.com/topic/8502/disable-circadian-response-only/">Disable Circadian Response Only</a></li>
 </ul>]]></content>
     </entry>
 </feed>

@@ -1,3 +1,8 @@
+## 1.3.5 ([Aug 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/32678e0ef871bf50c15cd8692b9317b869915542/mods/taskbar-grouping.wh.cpp))
+
+* Another attempt at fixing multiple pinned items appearing for the same program.
+* Added support for Windows 11 version 24H2.
+
 ## 1.3.4 ([Jun 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2b6d67dad8cc2a2eb66f52202f7e0495252e8921/mods/taskbar-grouping.wh.cpp))
 
 * Fixed the "Pinned items remain in place" pinned items modes, for which the pinned items disappeared when running the program.
