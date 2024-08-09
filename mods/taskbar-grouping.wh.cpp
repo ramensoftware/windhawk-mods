@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.4
+// @version         1.3.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -907,6 +907,7 @@ using CTaskListWnd_HandleTaskGroupPinned_t = void(WINAPI*)(PVOID pThis,
 CTaskListWnd_HandleTaskGroupPinned_t
     CTaskListWnd_HandleTaskGroupPinned_Original;
 
+// The flags argument is absent in newer Windows versions.
 using CTaskListWnd_HandleTaskGroupUnpinned_t = void(WINAPI*)(PVOID pThis,
                                                              PVOID taskGroup,
                                                              int flags);
@@ -988,7 +989,7 @@ void HandleUnsuffixedInstanceOnTaskDestroyed(PVOID taskList_TaskListUI,
 
     bool taskGroupIsPinned = CTaskGroup_GetFlags_Original(taskGroup) & 1;
 
-    Wh_Log(L"Swapping with matched prefixed item");
+    Wh_Log(L"Swapping with matched suffixed item");
 
     SwapTaskGroupIds(taskGroup, taskGroupMatched.get());
 
@@ -1002,7 +1003,11 @@ LONG_PTR OnTaskDestroyed(std::function<LONG_PTR()> original,
                          PVOID taskList_TaskListUI,
                          PVOID taskGroup,
                          PVOID taskItem) {
-    if (!CTaskListWnd_IsOnPrimaryTaskband_Original(taskList_TaskListUI)) {
+    // taskItem is null when unpinning, for example. Not returning in this case
+    // causes a bug in which the item stays pinned if there are running
+    // instances on other monitors or virtual desktops.
+    if (!CTaskListWnd_IsOnPrimaryTaskband_Original(taskList_TaskListUI) ||
+        !taskItem) {
         return original();
     }
 
@@ -1117,6 +1122,8 @@ void HandleSuffixedInstanceOnTaskCreated(PVOID taskList_TaskListUI,
 
     SwapTaskGroupIds(taskGroup, taskGroupMatched);
 
+    // The flags argument is absent in newer Windows versions. According to the
+    // calling convention, it just gets ignored.
     CTaskListWnd_HandleTaskGroupUnpinned_Original(taskList_TaskListUI,
                                                   taskGroupMatched, 0);
     CTaskListWnd_HandleTaskGroupPinned_Original(taskList_TaskListUI, taskGroup);
@@ -1602,7 +1609,8 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
 }
 
 bool HookTaskbarSymbols() {
-    SYMBOL_HOOK symbolHooks[] =  //
+    // Taskbar.dll, explorer.exe
+    SYMBOL_HOOK symbolHooks[] =
         {
             {
                 {
@@ -1848,6 +1856,10 @@ bool HookTaskbarSymbols() {
             },
             {
                 {
+                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *))",
+                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup * __ptr64) __ptr64)",
+
+                    // Before Windows 11 24H2.
                     LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *,enum HandleTaskGroupUnpinnedFlags))",
                     LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup * __ptr64,enum HandleTaskGroupUnpinnedFlags) __ptr64)",
                 },
