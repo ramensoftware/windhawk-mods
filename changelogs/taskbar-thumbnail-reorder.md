@@ -1,3 +1,7 @@
+## 1.0.8 ([Aug 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2efe8bfdd78e6d3aa282afe913543b2e6e0ac84b/mods/taskbar-thumbnail-reorder.wh.cpp))
+
+* Added support for Windows 11 version 24H2.
+
 ## 1.0.7 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/9eef3b6773e780667f9c800372fb1d3970bfe9fd/mods/taskbar-thumbnail-reorder.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
