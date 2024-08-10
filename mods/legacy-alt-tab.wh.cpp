@@ -12,7 +12,7 @@
 /*
 Enables legacy Alt+Tab dialog from Windows XP and Windows 2000
 
-!(Legacy Alt+Tab)[https://i.imgur.com/wdX9PW7.png]
+![Legacy Alt+Tab](https://i.imgur.com/wdX9PW7.png)
 
 */
 // ==/WindhawkModReadme==
