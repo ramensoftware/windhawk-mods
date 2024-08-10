@@ -2,12 +2,20 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-10T12:09:01.000Z</updated>
+    <updated>2024-08-10T13:47:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy Alt+Tab dialog 1.0]]></title>
+        <id>https://windhawk.net/mods/legacy-alt-tab#00ded682e58440e653b80814a164723252f65c46</id>
+        <link href="https://windhawk.net/mods/legacy-alt-tab"/>
+        <updated>2024-08-10T13:47:02.000Z</updated>
+        <content type="html"><![CDATA[<p>Enables legacy Alt+Tab dialog from Windows XP and Windows 2000</p>
+<p><img src="https://i.imgur.com/wdX9PW7.png" alt="Legacy Alt+Tab" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 taskbar on Windows 11 1.0]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-on-win11#fdcbbba78e2a2598fab384f47ca8751c0e1bb68d</id>
@@ -211,34 +219,5 @@ It does this by hooking to DefWindowProc and listening for any changes to the ac
 <ul>
 <li>When changing the mod settings, the SIB taskbar and start menu opacity may occassionally not match that of the window titlebar. This can be fixed by changing the theme color from Windows itself.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Prevent Edge from lagging your Taskbar process 1.0]]></title>
-        <id>https://windhawk.net/mods/edge-window-tab-manager-block#3100a61198d0238712e2e303fe366a1d7aa3ac08</id>
-        <link href="https://windhawk.net/mods/edge-window-tab-manager-block"/>
-        <updated>2024-07-08T19:47:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="preventedgefromlaggingyourtaskbarprocess">Prevent Edge from lagging your Taskbar process</h1>
-<p>This mod is for tab hoarders using Edge browser. </p>
-<p>When you set Alt-Tab to show open windows only (and not individual tabs), it should turn off a problematic feature in the Taskbar process. However, in reality, when you have many tabs open in Edge, the existence of this "Alt-Tab showing browser tabs" feature in Windows still causes issues - the Taskbar will lag and start to consume lot of CPU. This regardless whether the browser tabs are shown in Alt-Tab. There was an experimental Edge flag <code>#edge-window-tab-manager</code> that you could set to "off" in order to disable the problematic feature. However, the flag has been removed. This mod solves the issue in a different way.</p>
-<h2 id="installation">Installation</h2>
-<p>The mod takes effect next time you launch Edge. In order for the mod to take effect immediately, ensure that no Edge processes remain in memory when first installing this mod. Alternatively, restart your computer after installing the mod.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>If the above installation procedure does not help, look in Edge's system settings at the following url:\
-<code>edge://settings/system</code>\
-Ensure that the following options are disabled:</p>
-<ul>
-<li>"Startup boost" </li>
-<li>"Continue running background extensions and apps when Microsoft Edge is closed"</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>It operates by blocking the problematic Edge window Alt-Tab manager functionality, which in turn would affect the Taskbar operation. For time being, only Edge needs this mod, other Chromium-based browsers do not need it.</p>
-<h2 id="whatwouldbethealternativestousingedgealtogether">What would be the alternatives to using Edge altogether?</h2>
-<p>As a problem-free alternative, I recommend Brave browser. It has same vertical tabs functionality as Edge does, so they are quite similar. Brave does not hog the Taskbar process.</p>
-<h2 id="moreinfo">More info</h2>
-<p>See also the following Reddit post:
-<a href="https://www.reddit.com/r/edge/comments/1090h93/having_too_many_1000_microsoft_edge_tabs_open_can/">Having too many (1,000+) Microsoft Edge tabs open can break File Explorer in Windows 10</a>.</p>
-<p>This mod is built as a variation of the code of a loader program developed by gexgd0419:
-<a href="https://github.com/gexgd0419/EdgeWindowTabManagerBlock">EdgeWindowTabManagerBlock: A program that blocks the WindowTabManager feature of Microsoft Edge</a>.</p>
-<p>The benefit of this small mod is that you can conveniently install or uninstall the fix directly via Windhawk UI with fewer steps and less attention to technical details.</p>]]></content>
     </entry>
 </feed>

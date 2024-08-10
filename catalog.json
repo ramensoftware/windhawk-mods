@@ -1265,6 +1265,26 @@
                 "version": "1"
             }
         },
+        "legacy-alt-tab": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1723297622000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1723297622000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "description": "Enables legacy Alt+Tab dialog from Windows XP and Windows 2000",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Legacy Alt+Tab dialog",
+                "version": "1.0"
+            }
+        },
         "legacy-file-copy": {
             "details": {
                 "defaultSorting": 8350,
