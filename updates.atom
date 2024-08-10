@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-09T17:18:31.000Z</updated>
+    <updated>2024-08-10T12:09:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 taskbar on Windows 11 1.0]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11#fdcbbba78e2a2598fab384f47ca8751c0e1bb68d</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11"/>
+        <updated>2024-08-10T12:09:01.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod enables Windows 10 taskbar on Windows 11 versions 21H2 to 23H2 via registry method, without
+using Explorer Patcher. </p>
+<p>It may be useful also on later versions of Windows with Explorer.exe downgraded to previous versions
+and/or manipulated Windows features using vivetool utility.</p>
+<p>If you want to get rid of the cogwheel icon in the tray area, use the mod "Hide Action Center icon".
+You can restore the clock and set up the tray icons using legacy tray setup dialog,
+which you can start with command <code>shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}</code></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.5]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#32678e0ef871bf50c15cd8692b9317b869915542</id>
@@ -227,15 +240,5 @@ Ensure that the following options are disabled:</p>
 <p>This mod is built as a variation of the code of a loader program developed by gexgd0419:
 <a href="https://github.com/gexgd0419/EdgeWindowTabManagerBlock">EdgeWindowTabManagerBlock: A program that blocks the WindowTabManager feature of Microsoft Edge</a>.</p>
 <p>The benefit of this small mod is that you can conveniently install or uninstall the fix directly via Windhawk UI with fewer steps and less attention to technical details.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UXTheme hook 1.1]]></title>
-        <id>https://windhawk.net/mods/uxtheme-hook#ed8141fe586e4fccc124b2ced4063f248aa38179</id>
-        <link href="https://windhawk.net/mods/uxtheme-hook"/>
-        <updated>2024-07-08T07:00:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>fix calling conventions</li>
-<li>works when directly applying .theme files</li>
-</ul>]]></content>
     </entry>
 </feed>

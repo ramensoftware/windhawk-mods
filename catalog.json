@@ -2684,6 +2684,26 @@
                 "version": "1.1.0"
             }
         },
+        "win10-taskbar-on-win11": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1723291741000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1723291741000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "description": "Enables Windows 10 taskbar on Windows 11 versions 21H2 to 23H2 via registry",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Windows 10 taskbar on Windows 11",
+                "version": "1.0"
+            }
+        },
         "win32-tray-clock-experience": {
             "details": {
                 "defaultSorting": 5120,
