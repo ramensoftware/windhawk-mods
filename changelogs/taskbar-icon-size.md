@@ -1,3 +1,7 @@
+## 1.2.10 ([Aug 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/e3b2fcf725fb4688a56af83dd299f2605182cdcc/mods/taskbar-icon-size.wh.cpp))
+
+* Added support for Windows 11 version 24H2.
+
 ## 1.2.9 ([Jul 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7e0bd27ae1d12ae639497fbc9b48bb791f98b078/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed compatibility with update KB5040527 for Windows 11 version 23H2.
