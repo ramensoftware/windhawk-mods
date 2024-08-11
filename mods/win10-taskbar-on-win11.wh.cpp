@@ -18,7 +18,8 @@ and/or manipulated Windows features using vivetool utility.
 
 If you want to get rid of the cogwheel icon in the tray area, use the mod "Hide Action Center icon".
 You can restore the clock and set up the tray icons using legacy tray setup dialog,
-which you can start with command `shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}` from the Run dialog.
+which you can start with command `shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}` from the Run dialog
+or a shortcut.
 */
 // ==/WindhawkModReadme==
 
