@@ -10,8 +10,8 @@
 
 // ==WindhawkModReadme==
 /*
-This mod enables Windows 10 taskbar on Windows 11 versions 21H2 to 23H2 via registry hook, without
-using Explorer Patcher. 
+This mod enables Windows 10 taskbar on Windows 11 versions 21H2 to 23H2 via registry query hook, without
+using Explorer Patcher. The actual registry values remain unaffected.
 
 It may be useful also on later versions of Windows with Explorer.exe downgraded to previous versions
 and/or manipulated Windows features using vivetool utility.
