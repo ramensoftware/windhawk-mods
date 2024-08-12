@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-10T20:15:38.000Z</updated>
+    <updated>2024-08-12T14:10:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 taskbar on Windows 11 1.0.1]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11#6deadd9a1b7273347088f6ffe82459bca72b6c41</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11"/>
+        <updated>2024-08-12T14:10:59.000Z</updated>
+        <content type="html"><![CDATA[<p>More clarity in description</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.0.8]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#2efe8bfdd78e6d3aa282afe913543b2e6e0ac84b</id>
@@ -201,17 +208,6 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
         <content type="html"><![CDATA[<ul>
 <li>Add option to sync with DWM's opacity value.</li>
 <li>Add support for x86 Windows.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.1]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#45b792a63461caa9ac8c5864b83fcf26d724e549</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2024-07-21T13:05:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Add files via upload</p></li>
-<li><p>Update fix</p></li>
-<li><p>Add files via upload</p></li>
 </ul>]]></content>
     </entry>
 </feed>
