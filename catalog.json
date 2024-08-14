@@ -2498,7 +2498,7 @@
                 "published": 1720335390000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1720335390000,
+                "updated": 1723672189000,
                 "users": 21
             },
             "metadata": {
@@ -2510,7 +2510,7 @@
                     "*"
                 ],
                 "name": "UIFILE Override",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "unlock-taskmgr-server": {
