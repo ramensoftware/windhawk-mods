@@ -1,3 +1,7 @@
+## 1.0.3 ([Aug 14, 2024](https://github.com/ramensoftware/windhawk-mods/blob/c541b5650cd974bbbf77bfac89f9f12851d58dc0/mods/win7-alttab-loader.wh.cpp))
+
+Windows 7 Alt+Tab Loader 1.0.3: Remove dead WindhawkUtils namespace
+
 ## 1.0.2 ([Jun 24, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5ba4de576191570cfd6748518b3ed427391181d0/mods/win7-alttab-loader.wh.cpp))
 
 - Remove misinformation about Windows 10 AltTab.dll
