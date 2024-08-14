@@ -2,7 +2,7 @@
 // @id              uifile-override
 // @name            UIFILE Override
 // @description     Override UIFILE resources
-// @version         1.0
+// @version         1.0.1
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -174,7 +174,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to load dui70.dll");
     }
 
-    if (lstrcmpW(L"C:\\Windows\\explorer.exe", exePath)) {
+    if (lstrcmpiW(L"C:\\Windows\\explorer.exe", exePath)) {
         return TRUE;
     }
 
@@ -184,7 +184,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         {{L"long " STHISCALL " DUI_LoadUIFileFromResources(struct HINSTANCE__ "
           "*,unsigned int,unsigned short * *)"},
          (void**)&DUILoadUIFileFromResources_orig,
@@ -199,10 +199,16 @@ BOOL Wh_ModInit() {
 
     };
 
-    if (!WindhawkUtils::HookSymbols(hShell32, hooks, 2)) {
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, 2)) {
         Wh_Log(L"Failed to hook shell32.dll");
         return FALSE;
     }
 
     return TRUE;
+}
+
+void Wh_ModUninit(void) {
+    if (g_ShellStyleMod) {
+        FreeLibrary(g_ShellStyleMod);
+    }
 }
