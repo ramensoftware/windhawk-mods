@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-14T21:49:49.000Z</updated>
+    <updated>2024-08-14T21:50:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.3]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#1f573ac96e33fb6a48c81f1ab4068db7d39d7e11</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
+        <updated>2024-08-14T21:50:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with update KB5040527 for Windows 11 version 23H2.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[UIFILE Override 1.0.1]]></title>
         <id>https://windhawk.net/mods/uifile-override#632302ab902c1d9adb22ad003bb27e41897ca79e</id>
@@ -192,16 +201,6 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
         <updated>2024-07-27T12:01:19.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with update KB5040527 for Windows 11 version 23H2.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.31]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#940c28ba0fb4ccebb782988516dd6bb5a7f23de0</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2024-07-27T00:57:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Set <em>Sync with DWM</em> option to enabled by default, and added notice for updating regarding this option in the readme.</li>
-<li>Update French and Spanish translation.</li>
 </ul>]]></content>
     </entry>
 </feed>
