@@ -2,7 +2,7 @@
 // @id              win7-alttab-loader
 // @name            Windows 7 Alt+Tab Loader
 // @description     Loads Windows 7 Alt+Tab on Windows 10.
-// @version         1.0.2
+// @version         1.0.3
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -205,96 +205,6 @@ inline BOOL VnPatchDelayIAT(HMODULE hMod, PSTR libName, PSTR funcName, uintptr_t
     }
     FreeLibrary(lib);
     return FALSE;
-}
-
-#include <initializer_list>
-namespace YukisCoffee::WindhawkUtils
-{
-    struct SymbolHooks
-    {
-        PCWSTR symbolName;
-        void *hookFunction;
-        void **pOriginalFunction;
-    };
-
-    bool hookWithSymbols(HMODULE module, std::initializer_list<SymbolHooks> hooks, PCWSTR server = NULL)
-    {
-        WH_FIND_SYMBOL symbol;
-        HANDLE findSymbol;
-
-        if (!module)
-        {
-            Wh_Log(L"Loaded invalid module");
-            return false;
-        }
-
-        // These functions are terribly named, which is why I wrote this wrapper
-        // in the first place.
-        findSymbol = Wh_FindFirstSymbol(module, server, &symbol);
-
-        if (findSymbol)
-        {
-            do
-            {
-                for (SymbolHooks hook : hooks)
-                {
-                    // If the symbol is unknown, then learn it.
-                    if (!*hook.pOriginalFunction && 0 == wcscmp(symbol.symbol, hook.symbolName))
-                    {
-                        if (hook.hookFunction)
-                        {
-                            // This is unsafe if you make any typo at all.
-                            Wh_SetFunctionHook(
-                                symbol.address,
-                                hook.hookFunction,
-                                hook.pOriginalFunction
-                            );
-
-                            Wh_Log(
-                                L"Installed hook for symbol %s at %p.", 
-                                hook.symbolName,
-                                symbol.address
-                            );
-                        }
-                        else
-                        {
-                            *hook.pOriginalFunction = symbol.address;
-
-                            Wh_Log(
-                                L"Found symbol %s for %p.", 
-                                hook.symbolName,
-                                symbol.address
-                            );
-                        }
-                    }
-                }
-            }
-            while (Wh_FindNextSymbol(findSymbol, &symbol));
-
-            Wh_FindCloseSymbol(findSymbol);
-        }
-        else
-        {
-            Wh_Log(L"Unable to find symbols for module.");
-            return false;
-        }
-
-        // If a requested symbol is not found at all, then error as such.
-        for (SymbolHooks hook : hooks)
-        {
-            if (!*hook.pOriginalFunction)
-            {
-                Wh_Log(
-                    L"Original function for symbol hook %s not found.",
-                    hook.symbolName
-                );
-
-                return false;
-            }
-        }
-
-        return true;
-    }
 }
 
 //=========================================================================================================================================
