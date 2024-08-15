@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-14T21:50:22.000Z</updated>
+    <updated>2024-08-15T12:47:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorerframe fixes for Win11 22H2+ 1.0]]></title>
+        <id>https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus#441cbdf65a82b86f878448b997fa6c9daeafd093</id>
+        <link href="https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus"/>
+        <updated>2024-08-15T12:47:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerframefixesforwin1122h2">Explorerframe fixes for Win11 22H2+</h1>
+<p>This mod fixes a couple of issues with File Explorer windows appearance in Windows 11 releases 22H2, 23H2 and 24H2.</p>
+<p>Unpredictable menu bar appearance: On Windows 11 22H2 and 23H2, the menu bar may appear unpredictably. This mod allows the user to disable the menu bar entirely, or have it be shown at all times.
+You can force show/hide the menu bar in the mod settings. Forcing the menu bar to be shown is intended for the Classic theme.</p>
+<p>Delay on navigation to a new folder when using SysListView32: this is caused by a extra erroneous message sent to the list view window. This mod supresses it, fixing the problem.</p>
+<p>Black artifacts briefly visible in new file explorer windows under Classic theme: this is caused by incorrect handling of WM_ERASEBKGND in CabinetWClass window procedure. This mod adds a option to correct this.</p>
+<p>Changes will be visible in new file explorer windows.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.3]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#1f573ac96e33fb6a48c81f1ab4068db7d39d7e11</id>
@@ -192,15 +205,6 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
         <updated>2024-07-28T08:25:30.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Updated the TranslucentShell theme.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.9]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#7e0bd27ae1d12ae639497fbc9b48bb791f98b078</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-07-27T12:01:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with update KB5040527 for Windows 11 version 23H2.</li>
 </ul>]]></content>
     </entry>
 </feed>

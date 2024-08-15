@@ -984,6 +984,30 @@
                 "version": "1.0"
             }
         },
+        "explorerframe-fixes-for-win11-22h2plus": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1723726056000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1723726056000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Waldemar",
+                "compilerOptions": "-lcomctl32 -lgdi32",
+                "description": "Fixes three problems with file explorer",
+                "github": "https://github.com/CyprinusCarpio",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorerframe fixes for Win11 22H2+",
+                "version": "1.0"
+            }
+        },
         "extension-change-no-warning": {
             "details": {
                 "defaultSorting": 7080,
