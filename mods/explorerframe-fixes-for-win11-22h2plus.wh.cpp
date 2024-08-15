@@ -204,7 +204,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK explorerframe_hooks[] =
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] =
     {
         {   {
                 L"private: virtual __int64 __cdecl CExplorerFrame::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
@@ -222,7 +222,7 @@ BOOL Wh_ModInit()
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_hooks, 2))
+    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, 2))
     {
         Wh_Log(L"Failed install explorerframe hooks");
         return FALSE;
@@ -236,7 +236,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK shell32_hooks[] =
+    WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] =
     {
         {   {
                 L"public: virtual long __cdecl CListViewHost::CreateControl(struct HWND__ *,struct IListControlHost *,struct IViewSettings *)"
@@ -248,7 +248,7 @@ BOOL Wh_ModInit()
         
     };
 
-    if (!WindhawkUtils::HookSymbols(hShell32, shell32_hooks, 1))
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, 1))
     {
         Wh_Log(L"Failed to hook CListViewHost::CreateControl");
         return FALSE;
