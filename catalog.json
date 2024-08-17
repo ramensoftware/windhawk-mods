@@ -481,7 +481,7 @@
                 "published": 1708239757000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1708239757000,
+                "updated": 1723930010000,
                 "users": 68
             },
             "metadata": {
@@ -493,7 +493,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Taskbar 3D buttons Lite",
-                "version": "1.2"
+                "version": "1.3"
             }
         },
         "classic-taskbar-buttons-lite-vs-without-spacing": {

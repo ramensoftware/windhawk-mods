@@ -2,7 +2,7 @@
 // @id              classic-taskbar-buttons-lite
 // @name            Classic Taskbar 3D buttons Lite
 // @description     Lightweight mod, restoring the 3D buttons in classic theme
-// @version         1.2
+// @version         1.3
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -61,9 +61,6 @@ void CALCON CTaskBtnGroup__DrawBar_hook(
     {
         uState |= DFCS_PUSHED;
     }
-	
-	lprcDest->left++;
-	lprcDest->right--;
 
     DrawFrameControl(
         hDC,
@@ -86,11 +83,35 @@ void CALCON CTaskBtnGroup__DrawBar_hook(
     return;
 }
 
+
+/* Add spacing between taskbar items */
+typedef long (* CTaskBtnGroup_SetLocation_t)(void *, int, int, LPRECT);
+CTaskBtnGroup_SetLocation_t CTaskBtnGroup_SetLocation_orig;
+long __cdecl CTaskBtnGroup_SetLocation_hook(
+    void  *pThis,
+    int    i1,
+    int    i2,
+    LPRECT lprc
+)
+{
+    APPBARDATA abd;
+    abd.cbSize = sizeof(APPBARDATA);
+    if (SHAppBarMessage(ABM_GETTASKBARPOS, &abd))
+    {
+        if (abd.uEdge == ABE_BOTTOM || abd.uEdge == ABE_TOP)
+        {
+            lprc->right -= 2;
+        }
+    }
+
+    return CTaskBtnGroup_SetLocation_orig(pThis, i1, i2, lprc);
+}
+
 BOOL Wh_ModInit(void)
 {
     HMODULE hExplorer = GetModuleHandleW(NULL);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
             {
                 L"private: void " 
@@ -101,10 +122,18 @@ BOOL Wh_ModInit(void)
             (void *)CTaskBtnGroup__DrawBar_hook,
             FALSE
         },
+                {
+            {
+                L"public: virtual long __cdecl CTaskBtnGroup::SetLocation(int,int,struct tagRECT const *)"
+            },
+            (void **)&CTaskBtnGroup_SetLocation_orig,
+            (void*)CTaskBtnGroup_SetLocation_hook,
+            FALSE
+        }
 
     };
 
-    if (!WindhawkUtils::HookSymbols(hExplorer, hooks, ARRAYSIZE(hooks)))
+    if (!WindhawkUtils::HookSymbols(hExplorer, explorerExeHooks, ARRAYSIZE(explorerExeHooks)))
     {
         Wh_Log(L"Failed to hook one or more functions");
         return FALSE;
