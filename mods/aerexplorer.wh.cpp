@@ -2935,10 +2935,11 @@ BOOL Wh_ModInit(void)
     HMODULE hStorage = LoadLibraryW(L"windows.storage.dll");
     if (!hStorage)
     {
-        Wh_Log(L"Failed to load windwos.storage.dll");
+        Wh_Log(L"Failed to load windows.storage.dll");
         return FALSE;
     }
 
+    // windows.storage.dll
     const WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
         {
             {
