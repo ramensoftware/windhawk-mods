@@ -6,7 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi
+// @compilerOptions -lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi -DWINVER=0x0A00
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -805,6 +805,11 @@ LPCDRIVEGROUPI18N GetCurrentDriveLocale(void)
 
     return en;
 }
+
+/* Only available in Windows 10, version 1607 and later. */
+WINUSERAPI UINT WINAPI GetDpiForSystem(void);
+WINUSERAPI UINT WINAPI GetDpiForWindow(HWND);
+WINUSERAPI int WINAPI GetSystemMetricsForDpi(int, UINT);
 
 #define ScaleForDPI(n) MulDiv(n, GetDpiForSystem(), 96)
 #define IsHighDPI() (GetDpiForSystem() >= 120)
