@@ -24,11 +24,9 @@
 
 Fixes Taskbar background in classic theme by replacing black background with a classic button face colour. 
 
-Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the picture below. 
+Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the pictures below.
 
-**Note**: This mod does not fix the buttons' appearance, for that purpose there are other mods available. This is by design, for you to be able to choose your favourite buttons mod.
-
-When combined with a classic Taskbar buttons mod, this Taskbar background mod can be considered as an alternative to installing the @valinet's modified version of OpenShell StartMenuDLL.dll.
+**When combined with some classic Taskbar buttons mod**, then this Taskbar background mod can be considered as an alternative to installing the @valinet's modified version of OpenShell StartMenuDLL.dll.
 
 Before:
 
@@ -36,16 +34,21 @@ Before:
 
 After:
 
-![After](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png)
+![After](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png) 
+
+
+## Note: This mod requires a complementary buttons mod to be activated
+
+**This mod does not fix the buttons' appearance, for that purpose there are other mods available. This is by design, for you to be able to choose your favourite buttons mod.** Currently known Windhawk buttons mods are "Classic Taskbar 3D buttons Lite" and "Classic Taskbar 3D buttons with extended compatibility". Both are 3D buttons mods. At the time of this mod's release, there is no flat buttons mod available, but hopefully there may appear such mod later.
 
 
 ## Mod configuration
 
-If you use 'Classic Taskbar 3D buttons Lite' and you have issues with vertical black lines around buttons then go to the settings of the current Taskbar background mod and under "Compatibility with classic Taskbar buttons mods" choose "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'". Usually the presence of 'Classic Taskbar 3D buttons Lite' should be detected automatically, but if there will be forks which still have the same increased button spacing behaviour, then you may need to set this setting manually.
+If you use 'Classic Taskbar 3D buttons Lite' and you have issues with vertical black lines around buttons then go to the settings of the current Taskbar background mod and under "Compatibility with classic Taskbar buttons mods" choose "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'". Usually the presence of 'Classic Taskbar 3D buttons Lite' should be detected automatically, but if there will be forks which still have the same increased button spacing behaviour, but a different mod id, then you may need to set this setting manually.
 
 
 ## Acknowledgements
-I would like to thank @Anixx for testing the mod during its development and illustrating the issues found.
+I would like to thank @Anixx and @OrthodoxWindows for testing the mod during its development and illustrating the issues found.
 */
 // ==/WindhawkModReadme==
 
