@@ -24,9 +24,11 @@
 
 Fixes Taskbar background in classic theme by replacing black background with a classic button face colour. 
 
-Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the picture below. This mod does not fix the buttons' colour, for that purpose there are other mods available.
+Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the picture below. 
 
-This mod can be considered as an alternative to installing the @valinet's modified version of OpenShell StartMenuDLL.dll.
+**Note**: This mod does not fix the buttons' appearance, for that purpose there are other mods available. This is by design, for you to be able to choose your favourite buttons mod.
+
+When combined with a classic Taskbar buttons mod, this Taskbar background mod can be considered as an alternative to installing the @valinet's modified version of OpenShell StartMenuDLL.dll.
 
 Before:
 
@@ -39,7 +41,7 @@ After:
 
 ## Mod configuration
 
-If you use some other mod for rendering buttons than 'Classic Taskbar 3D buttons Lite' and your Taskbar is sometimes extremely full (with small buttons) and you want to preserve the full contrast of the button borders, then go to the settings of the current mod and under "Compatibility with classic Taskbar buttons mods" choose "No compatibility adjustments". Otherwise you can keep this setting at its default value - "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'".
+If you use 'Classic Taskbar 3D buttons Lite' and you have issues with vertical black lines around buttons then go to the settings of the current Taskbar background mod and under "Compatibility with classic Taskbar buttons mods" choose "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'". Usually the presence of 'Classic Taskbar 3D buttons Lite' should be detected automatically, but if there will be forks which still have the same increased button spacing behaviour, then you may need to set this setting manually.
 
 
 ## Acknowledgements
@@ -56,11 +58,12 @@ I would like to thank @Anixx for testing the mod during its development and illu
   - highlightOnHover: Yes, and use highlight colour on mouse over
   - blackOnHover: Yes, and use black colour on mouse over
   - no: No
-- CompatWithTaskbarButtonsMods: classic-taskbar-buttons-lite
+- CompatWithTaskbarButtonsMods: auto-detect
   $name: Compatibility with classic Taskbar buttons mods
   $options:
+  - auto-detect: Auto detect
   - classic-taskbar-buttons-lite: Enhance compatibility with 'Classic Taskbar 3D buttons Lite'
-  - no: No compatibility adjustments
+  - no: No compatibility adjustments needed
 */
 // ==/WindhawkModSettings==
 
@@ -68,6 +71,7 @@ I would like to thank @Anixx for testing the mod during its development and illu
 #include <windowsx.h>
 #include <winnt.h>      //defines HRESULT, needed for Visual Studio intellisense only, in clang the HRESULT seems to be defined already elsewhere, but the include does not harm either
 //#include <uxtheme.h>    //currently not needed since we use our own declaration of DrawThemeParentBackground and DrawThemeParentBackgroundEx
+#include <intrin.h>
 
 #include <map>
 #include <mutex>
@@ -102,10 +106,13 @@ enum class RepaintDesktopButtonConfig {
 };
 
 enum class CompatWithTaskbarButtonsModsConfig {
+    autoDetect,
     classicTaskbarButtonsLite,
     no
 };
 
+
+const int nMaxDllPathLength = (MAX_PATH * 16);  //there is no function for retrieving the module name length, so need to use custom limit
 
 const COLORREF black = RGB(0, 0, 0);
 const int blackColorIndex = -1;    //mod's internal code for black colour
@@ -115,6 +122,8 @@ HANDLE g_initThread = NULL;
 HANDLE g_initThreadStopSignal = NULL;
 HWND g_hwndTaskbar = NULL;
 
+std::mutex g_classicTaskbarButtonsLiteModDetectionMutex;
+std::map<void*, bool> g_classicTaskbarButtonsLiteModDetectionMap;
 HMODULE hUxtheme = NULL;
 
 
@@ -165,9 +174,123 @@ CompatWithTaskbarButtonsModsConfig CompatWithTaskbarButtonsModsConfigFromString(
     if (wcscmp(string, L"no") == 0) {
         return CompatWithTaskbarButtonsModsConfig::no;
     }
-    else {
+    else if (wcscmp(string, L"classic-taskbar-buttons-lite") == 0) {
         return CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite;
     }
+    else {
+        return CompatWithTaskbarButtonsModsConfig::autoDetect;
+    }
+}
+
+
+#ifdef _MSC_VER
+#define ReturnAddress()     _ReturnAddress()
+#else
+#define ReturnAddress()     __builtin_return_address(0)
+#endif
+
+HMODULE GetCallerModule(void* address) {
+
+    if (!address)
+        return NULL;
+
+    SetLastError(0);    //some Windows API-s do not clear earlier errors in case of success, so lets clear it here manually just in case, so we can check for error after the call
+
+    HMODULE hModule;
+    if (!GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCTSTR)address,
+        &hModule
+    )) {    //usually GetModuleHandleExW fails in case of .NET executables
+        int errorCode = GetLastError();
+        Wh_Log(L"Getting caller module failed for address 0x%llX error %i", (long long)address, errorCode);
+        return NULL;
+    }
+    return hModule;
+}
+
+PCWSTR GetModuleName(
+    HMODULE hModule,
+    LPWSTR  stackBuffer,
+    int     stackBufferSize
+) {
+    if (!hModule)
+        return NULL;
+
+    SetLastError(0);    //some Windows API-s do not clear earlier errors in case of success, so lets clear it here manually just in case, so we can check for error after the call
+
+    if (!GetModuleFileNameW(
+        hModule,
+        stackBuffer,
+        stackBufferSize
+    )) {
+        Wh_Log(L"GetModuleFileNameW failed. Module 0x%llX", (long long)hModule);
+        return NULL;
+    }
+    //If the buffer is too small to hold the module name, the string is truncated to nSize characters including the terminating null character, the function returns nSize, and the function sets the last error to ERROR_INSUFFICIENT_BUFFER.
+    //https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulefilenamew
+    else if (GetLastError()) {  //ERROR_INSUFFICIENT_BUFFER
+        Wh_Log(L"GetModuleFileNameW failed, probably the module path is too long. Module 0x%llX", (long long)hModule);
+        return NULL;
+    }
+    else {
+        return stackBuffer;
+    }
+}
+
+bool IsCallerClassicTaskbarButtonsLiteMod(void* returnAddress) {
+
+    bool callerIsClassicTaskbarButtonsLiteMod = false;
+    if (
+        g_compatWithTaskbarButtonsModsConfig 
+        == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite
+    ) {
+        callerIsClassicTaskbarButtonsLiteMod = true;
+    }
+    else if (
+        g_compatWithTaskbarButtonsModsConfig 
+        == CompatWithTaskbarButtonsModsConfig::autoDetect
+    ) {
+        std::lock_guard<std::mutex> guard(g_classicTaskbarButtonsLiteModDetectionMutex);
+        auto it = g_classicTaskbarButtonsLiteModDetectionMap.find(returnAddress);
+        if (it != g_classicTaskbarButtonsLiteModDetectionMap.end()) {
+            callerIsClassicTaskbarButtonsLiteMod = it->second;
+        }
+        else {
+            HMODULE callerModule = GetCallerModule(returnAddress);
+
+            WCHAR stackBuffer[nMaxDllPathLength];
+            PCWSTR callerDllPath = GetModuleName(
+                callerModule,
+                stackBuffer,
+                nMaxDllPathLength
+            );
+
+            if (
+                callerDllPath
+                && (
+                    wcsstr(callerDllPath, L"classic-taskbar-buttons-lite_")    //underscore is needed to exclude classic-taskbar-buttons-lite-vs-without-spacing
+                    || wcsstr(callerDllPath, L"classic-taskbar-buttons-lite-fork")     //local copy of classic-taskbar-buttons-lite mod
+                )
+            ) {
+                callerIsClassicTaskbarButtonsLiteMod = true;
+
+                Wh_Log(L"A classic-taskbar-buttons-lite mod detected");
+            }
+            else {
+                Wh_Log(L"A non classic-taskbar-buttons-lite mod detected");
+            }
+
+            //Saving to a map enables handling cases where the user changes the active buttons mod. Also there may be different callers to this hooked function. We need to have special handling only if the caller is classic-taskbar-buttons-lite mod, otherwise no special handling is needed.
+            //We could use DllMain() to remove obsolete entries from g_classicTaskbarButtonsLiteModDetectionMap, but it is expected to happen rarely that a dll (or mod) using the DrawFrameControl() function is unloaded, so lets not bother with that.
+            g_classicTaskbarButtonsLiteModDetectionMap.insert({ 
+                returnAddress, 
+                callerIsClassicTaskbarButtonsLiteMod 
+            });
+        }
+    }
+
+    return callerIsClassicTaskbarButtonsLiteMod;
 }
 
 
@@ -536,6 +659,10 @@ BOOL WINAPI DrawFrameControlHook(
                 Wh_Log(L"GetSysColorBrush failed - is the colour supported by current OS?");
             }
             else {
+                void* returnAddress = ReturnAddress();      //need to call directly from the hooked function, not from IsCallerClassicTaskbarButtonsLiteMod(), else the call stack may become modified
+                bool callerIsClassicTaskbarButtonsLiteMod = IsCallerClassicTaskbarButtonsLiteMod(returnAddress);
+
+
                 RECT fillRect = *lprc;
 
                 bool isHorisontal = (hdcRect.right - hdcRect.left) > (hdcRect.bottom - hdcRect.top);
@@ -545,7 +672,7 @@ BOOL WINAPI DrawFrameControlHook(
 
                         fillRect.left = hdcRect.left;
                     }
-                    else if (g_compatWithTaskbarButtonsModsConfig == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite) {
+                    else if (callerIsClassicTaskbarButtonsLiteMod) {
 
                         //Mitigations for case @Anixx classic-taskbar-buttons-lite mod is being used. classic-taskbar-buttons-lite mod changes the offsets of the lprc before calling DrawFrameControl() from CTaskBtnGroup__DrawBar_hook(), so need to calculate the original left offset to paint its background. Without the mitigation there would appear black OR dark lines on left side of the leftmost Taskbar button.
                         //Postprocessing the result of DrawFrameControl by conditional colour replacement fill method would not work reliably here since in certain conditions the sides of the offset buttons will not appear exactly black, but dark instead (for example 25-25-25). Even though the offset sides are outside of the lprc, the DrawFrameControl can still fill these offset sides with that dark colour if the original button background (before offsetting by classic-taskbar-buttons-lite) is left here unpainted before the call to DrawFrameControl.
@@ -564,7 +691,7 @@ BOOL WINAPI DrawFrameControlHook(
                     //In case of vertical Taskbar, do not extend the buttons background too much either: Try to leave at least some horisontal space around the buttons in hdc for flood fill to spread in order to avoid horisontal lines between buttons.
                     //In some computers the vertical Taskbar buttons are aligned left, while in others they are aligned right                
 
-                    if (g_compatWithTaskbarButtonsModsConfig == CompatWithTaskbarButtonsModsConfig::classicTaskbarButtonsLite) {
+                    if (callerIsClassicTaskbarButtonsLiteMod) {
 
                         fillRect.left = max(fillRect.left - 3, hdcRect.left);
                         fillRect.right = min(fillRect.right + 3, hdcRect.right);
@@ -825,7 +952,7 @@ BOOL Wh_ModInit() {
         //Taskbar was not yet found, maybe it is still initialising in the current process, so we need to retry later.
         //Hooking CreateWindowExW would cause potential instabilities during mod unload therefore using polling thread instead.
 
-        g_initThreadStopSignal = CreateEvent(
+        g_initThreadStopSignal = CreateEventW(
             /*lpEventAttributes = */NULL,           // default security attributes
             /*bManualReset = */TRUE,				// manual-reset event
             /*bInitialState = */FALSE,              // initial state is nonsignaled
