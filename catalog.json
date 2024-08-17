@@ -453,6 +453,28 @@
                 "version": "1.0.0"
             }
         },
+        "classic-taskbar-background-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1723893068000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1723893068000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Roland Pihlakas",
+                "compilerOptions": "-luser32 -lgdi32 -luxtheme",
+                "description": "Fixes Taskbar background in classic theme by replacing black background with a classic button face colour",
+                "github": "https://github.com/levitation",
+                "homepage": "https://www.simplify.ee/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Taskbar background fix",
+                "version": "1.0"
+            }
+        },
         "classic-taskbar-buttons-lite": {
             "details": {
                 "defaultSorting": 680,

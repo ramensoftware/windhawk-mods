@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-15T12:47:36.000Z</updated>
+    <updated>2024-08-17T11:11:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar background fix 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-background-fix#069694253210b43492a520720b96abc9ebd0e48b</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-background-fix"/>
+        <updated>2024-08-17T11:11:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classictaskbarbackgroundfix">Classic Taskbar background fix</h1>
+<p>Fixes Taskbar background in classic theme by replacing black background with a classic button face colour. </p>
+<p>Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the pictures below.</p>
+<p><strong>When combined with some classic Taskbar buttons mod</strong>, then this Taskbar background mod can be considered as an alternative to installing the @valinet's modified version of OpenShell StartMenuDLL.dll.</p>
+<p>Before:</p>
+<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/before-classic-taskbar-background-fix.png" alt="Before" /></p>
+<p>After:</p>
+<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png" alt="After" /> </p>
+<h2 id="notethismodrequiresacomplementarybuttonsmodtobeactivated">Note: This mod requires a complementary buttons mod to be activated</h2>
+<p><strong>This mod does not fix the buttons' appearance, for that purpose there are other mods available. This is by design, for you to be able to choose your favourite buttons mod.</strong> Currently known Windhawk buttons mods are "Classic Taskbar 3D buttons Lite" and "Classic Taskbar 3D buttons with extended compatibility". Both are 3D buttons mods. At the time of this mod's release, there is no flat buttons mod available, but hopefully there may appear such mod later.</p>
+<h2 id="modconfiguration">Mod configuration</h2>
+<p>If you use 'Classic Taskbar 3D buttons Lite' and you have issues with vertical black lines around buttons then go to the settings of the current Taskbar background mod and under "Compatibility with classic Taskbar buttons mods" choose "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'". Usually the presence of 'Classic Taskbar 3D buttons Lite' should be detected automatically, but if there will be forks which still have the same increased button spacing behaviour, but a different mod id, then you may need to set this setting manually.</p>
+<h2 id="acknowledgements">Acknowledgements</h2>
+<p>I would like to thank @Anixx and @OrthodoxWindows for testing the mod during its development and illustrating the issues found.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorerframe fixes for Win11 22H2+ 1.0]]></title>
         <id>https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus#441cbdf65a82b86f878448b997fa6c9daeafd093</id>
@@ -196,15 +216,6 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
         <content type="html"><![CDATA[<ul>
 <li>Added themes: Fluent2Inspired, Windows10, Windows11_Metro10.</li>
 <li>Updated themes: SideBySide, SideBySide2, TranslucentStartMenu.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#931b937d1cfa9782375c939c104de17bf0b5047a</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2024-07-28T08:25:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the TranslucentShell theme.</li>
 </ul>]]></content>
     </entry>
 </feed>
