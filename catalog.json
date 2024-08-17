@@ -2538,6 +2538,29 @@
                 "version": "1.0"
             }
         },
+        "transparent-screensaver-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1723929138000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1723929138000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Allows transparent screensavers to see your desktop again",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "winlogon.exe"
+                ],
+                "name": "Transparent Screensaver Fix",
+                "version": "1.0.0"
+            }
+        },
         "uifile-override": {
             "details": {
                 "defaultSorting": 220,
