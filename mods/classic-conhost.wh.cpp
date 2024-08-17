@@ -2,7 +2,7 @@
 // @id              classic-conhost
 // @name            Classic Conhost
 // @description     Forces classic theme and optionally client edge on console windows
-// @version         1.0.2
+// @version         1.0.3
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -15,6 +15,14 @@
 # Classic Conhost
 
 This mod will apply classic theme and optionally client edge to console windows.
+
+# Deprecation notice
+As Windhawk hooking is unable to hook into `conhost.exe` reliably, this mod has many
+issues. For this reason, I forked the Windows Terminal's OpenConsole (which itself is
+basically the exact same as Windows' built-in conhost), and made it include the features
+from this mod. You can get my fork, ConhostEX, [here](https://github.com/aubymori/ConhostEX).
+Since this mod is outdated and has a successor, it is deprecated, will not receive any future
+updates, and I highly advise against using it.
 
 # IMPORTANT: READ!
 Windhawk and this mod need to inject into `conhost.exe` for this mod to work properly.
