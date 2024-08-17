@@ -276,7 +276,7 @@ def validate_symbol_hooks(path: Path):
 
         previous_line = mod_source_lines[line_num - 2]
         targets_from_comment = get_target_modules_from_previous_line(previous_line)
-        targets_from_comment_valid = all(
+        targets_from_comment_valid = targets_from_comment and all(
             is_existing_windows_file_name(x) for x in targets_from_comment
         )
 
