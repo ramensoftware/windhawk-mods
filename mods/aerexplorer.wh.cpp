@@ -2555,7 +2555,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    const WindhawkUtils::SYMBOL_HOOK efHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[] = {
         {
             {
                 L"private: struct _GUID "
@@ -2840,8 +2840,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hExplorerFrame,
-        efHooks,
-        ARRAYSIZE(efHooks)
+        explorerframeDllHooks,
+        ARRAYSIZE(explorerframeDllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in ExplorerFrame.dll");
@@ -2855,7 +2855,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    const WindhawkUtils::SYMBOL_HOOK shHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         {
             {
                 L"private: int "
@@ -2924,8 +2924,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hShell32,
-        shHooks,
-        ARRAYSIZE(shHooks)
+        shell32DllHooks,
+        ARRAYSIZE(shell32DllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in shell32.dll");
@@ -2939,7 +2939,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    const WindhawkUtils::SYMBOL_HOOK storageHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
         {
             {
                 L"public: long "
@@ -2954,8 +2954,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hStorage,
-        storageHooks,
-        ARRAYSIZE(storageHooks)
+        windowsStorageDllHooks,
+        ARRAYSIZE(windowsStorageDllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in windows.storage.dll");
