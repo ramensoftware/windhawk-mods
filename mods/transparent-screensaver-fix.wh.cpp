@@ -86,7 +86,7 @@ DWORD CUser_CreateProcessW_hook(
     );
 }
 
-const WindhawkUtils::SYMBOL_HOOK winlogonHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK winlogonExeHooks[] = {
     {
         {
             L"unsigned long __cdecl RunScreenSaver(struct _WLSM_GLOBAL_CONTEXT *,struct SCREEN_SAVER_DATA *,struct _WINLOGON_JOB * *)"
@@ -117,8 +117,8 @@ BOOL Wh_ModInit(void)
 {
     if (!WindhawkUtils::HookSymbols(
         GetModuleHandleW(NULL),
-        winlogonHooks,
-        ARRAYSIZE(winlogonHooks)
+        winlogonExeHooks,
+        ARRAYSIZE(winlogonExeHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in winlogon.exe");
