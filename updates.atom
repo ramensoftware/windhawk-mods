@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-17T21:26:50.000Z</updated>
+    <updated>2024-08-17T21:59:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Conhost 1.0.3]]></title>
+        <id>https://windhawk.net/mods/classic-conhost#688cd3ace4db50a66fc0952c94aff0f0d6ec5396</id>
+        <link href="https://windhawk.net/mods/classic-conhost"/>
+        <updated>2024-08-17T21:59:58.000Z</updated>
+        <content type="html"><![CDATA[<p>Add deprecation notice to README</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Taskbar 3D buttons Lite 1.3]]></title>
         <id>https://windhawk.net/mods/classic-taskbar-buttons-lite#566fb1cf966ef3c85ad460480db6b338a5434bfa</id>
@@ -212,12 +219,5 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
 <li>However, hiding the icon for a while results in flickering.</li>
 <li>The mod tries to flicker the icon only when the system tries to change its display name, typically while switching virtual desktops, making the flicker hardly visible.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UIRibbon Caption Icon Fix 1.0.1]]></title>
-        <id>https://windhawk.net/mods/ribbon-caption-icon-fix#826bbbc6eae09d97930483a2c62a5062f548e94c</id>
-        <link href="https://windhawk.net/mods/ribbon-caption-icon-fix"/>
-        <updated>2024-07-28T21:48:37.000Z</updated>
-        <content type="html"><![CDATA[<p>Changed the license.</p>]]></content>
     </entry>
 </feed>
