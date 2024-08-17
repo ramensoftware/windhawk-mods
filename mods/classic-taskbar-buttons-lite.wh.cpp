@@ -111,7 +111,7 @@ BOOL Wh_ModInit(void)
 {
     HMODULE hExplorer = GetModuleHandleW(NULL);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
             {
                 L"private: void " 
@@ -133,7 +133,7 @@ BOOL Wh_ModInit(void)
 
     };
 
-    if (!WindhawkUtils::HookSymbols(hExplorer, hooks, ARRAYSIZE(hooks)))
+    if (!WindhawkUtils::HookSymbols(hExplorer, explorerExeHooks, ARRAYSIZE(explorerExeHooks)))
     {
         Wh_Log(L"Failed to hook one or more functions");
         return FALSE;
