@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-17T11:11:08.000Z</updated>
+    <updated>2024-08-17T19:59:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.6.3]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#f463da266f92aea2182a8be649b9b83c6fddbf3a</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2024-08-17T19:59:47.000Z</updated>
+        <content type="html"><![CDATA[<p>Make compilable on Windhawk 1.5</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Taskbar background fix 1.0]]></title>
         <id>https://windhawk.net/mods/classic-taskbar-background-fix#069694253210b43492a520720b96abc9ebd0e48b</id>
@@ -206,16 +213,6 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
         <content type="html"><![CDATA[<ul>
 <li>Added themes: DockLike, WinVista.</li>
 <li>Updated themes: TranslucentTaskbar, Squircle, RosePine, Bubbles.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.4]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#2007927c9158132859b6d559104a7539742c74d7</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2024-07-28T08:26:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added themes: Fluent2Inspired, Windows10, Windows11_Metro10.</li>
-<li>Updated themes: SideBySide, SideBySide2, TranslucentStartMenu.</li>
 </ul>]]></content>
     </entry>
 </feed>

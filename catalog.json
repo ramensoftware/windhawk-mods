@@ -57,19 +57,19 @@
                 "published": 1713177639000,
                 "rating": 10,
                 "ratingUsers": 19,
-                "updated": 1718907556000,
+                "updated": 1723924787000,
                 "users": 786
             },
             "metadata": {
                 "author": "aubymori",
-                "compilerOptions": "-lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi",
+                "compilerOptions": "-lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi -DWINVER=0x0A00",
                 "description": "Various tweaks for Windows Explorer to make it more like older versions.",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
                 "name": "Aerexplorer",
-                "version": "1.6.2"
+                "version": "1.6.3"
             }
         },
         "aero-flyout-fix": {

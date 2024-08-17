@@ -1,3 +1,7 @@
+## 1.6.3 ([Aug 17, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f463da266f92aea2182a8be649b9b83c6fddbf3a/mods/aerexplorer.wh.cpp))
+
+Make compilable on Windhawk 1.5
+
 ## 1.6.2 ([Jun 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6c9a8296166542e539dc0166b6310b516b19e39c/mods/aerexplorer.wh.cpp))
 
 Navigation pane accuracy fixes for Windows 7 style, code cleanup
