@@ -254,7 +254,11 @@ def get_target_modules_from_previous_line(previous_line: str):
     if comment == '':
         return []
 
-    return [x.strip() for x in comment.split(',')]
+    names = [x.strip() for x in comment.split(',')]
+    if not all(x.endswith('.dll') or x.endswith('.exe') for x in names):
+        return []
+
+    return names
 
 
 def validate_symbol_hooks(path: Path):
@@ -270,21 +274,16 @@ def validate_symbol_hooks(path: Path):
         line_num = 1 + mod_source[: match.start()].count('\n')
 
         target_from_name = get_target_module_from_symbol_block_name(symbol_block_name)
-        target_from_name_valid = target_from_name and is_existing_windows_file_name(
-            target_from_name
-        )
 
         previous_line = mod_source_lines[line_num - 2]
         targets_from_comment = get_target_modules_from_previous_line(previous_line)
-        targets_from_comment_valid = targets_from_comment and all(
-            is_existing_windows_file_name(x) for x in targets_from_comment
-        )
 
-        if target_from_name_valid and targets_from_comment_valid:
-            warning_msg = 'Use either a comment or a variable name, not both.'
+        if target_from_name and targets_from_comment:
+            warning_msg = (
+                'Use either a comment or a variable name, not both. For example, you'
+                ' can rename the variable from "user32DllHooks" to "user32Hooks".'
+            )
             warnings += add_warning(path, line_num - 1, warning_msg)
-        elif target_from_name_valid or targets_from_comment_valid:
-            continue
         elif target_from_name or targets_from_comment:
             if target_from_name and not is_existing_windows_file_name(target_from_name):
                 warning_msg = (
