@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-18T16:37:56.000Z</updated>
+    <updated>2024-08-18T18:20:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar background fix 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-background-fix#60c8140bb45f1efcd5e800376b0b88ab76d2b860</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-background-fix"/>
+        <updated>2024-08-18T18:20:16.000Z</updated>
+        <content type="html"><![CDATA[<p>Adjustment for painting multi-row horisontal taskbar that is fully populated in all rows</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.11]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#68b57c0b24b7d2ef165ac7a4698ee8f2591fc445</id>
@@ -203,15 +210,6 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
         <updated>2024-07-30T18:58:22.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with update KB5040527.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.4]]></title>
-        <id>https://windhawk.net/mods/explorer-frame-classic#8c10530a488a7c65b7b0815ee9c19131faece5b9</id>
-        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
-        <updated>2024-07-29T18:05:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Adjusted spacing for Windows 11 update KB5040527.</li>
 </ul>]]></content>
     </entry>
 </feed>
