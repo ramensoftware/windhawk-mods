@@ -4,10 +4,13 @@ LICENSE:     MIT (https://spdx.org/licenses/MIT)
 PURPOSE:     Verifies the mod information in the modified mods.
 COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
+
 import json
 import os
 import re
 import sys
+import urllib.request
+from functools import cache
 from pathlib import Path
 from typing import Optional, TextIO, Tuple
 
@@ -15,6 +18,14 @@ DISALLOWED_AUTHORS = [
     # https://github.com/ramensoftware/windhawk-mods/pull/676
     'arukateru',
 ]
+
+VERIFIED_TWITTER_ACCOUNTS = {
+    'https://twitter.com/m417z': 'https://github.com/m417z',
+    'https://twitter.com/AhmedWalid605': 'https://github.com/ahmed605',
+    'https://twitter.com/learn_more': 'https://github.com/learn-more',
+    'https://twitter.com/realgam3': 'https://github.com/realgam3',
+    'https://twitter.com/teknixstuff': 'https://github.com/teknixstuff',
+}
 
 MOD_METADATA_PARAMS = {
     'singleValue': {
@@ -34,7 +45,7 @@ MOD_METADATA_PARAMS = {
         'include',
         'exclude',
         'architecture',
-    }
+    },
 }
 
 
@@ -44,10 +55,18 @@ def add_warning(file: Path, line: int, message: str):
         return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
 
     def escape_property(s: str) -> str:
-        return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A').replace(':', '%3A').replace(',', '%2C')
+        return (
+            s.replace('%', '%25')
+            .replace('\r', '%0D')
+            .replace('\n', '%0A')
+            .replace(':', '%3A')
+            .replace(',', '%2C')
+        )
 
-    print(f'::warning file={escape_property(str(file))},'
-          f'line={line}::{escape_data(message)}')
+    print(
+        f'::warning file={escape_property(str(file))},'
+        f'line={line}::{escape_data(message)}'
+    )
     return 1
 
 
@@ -67,8 +86,9 @@ def get_mod_file_metadata(path: Path, file: TextIO):
             if re.fullmatch(r'//[ \t]+==WindhawkMod==[ \t]*', line):
                 inside_metadata_block = True
                 if line_number != 1:
-                    warnings += add_warning(path, line_number,
-                                            'Metadata block must start at line 1')
+                    warnings += add_warning(
+                        path, line_number, 'Metadata block must start at line 1'
+                    )
             continue
 
         if re.fullmatch(r'//[ \t]+==\/WindhawkMod==[ \t]*', line):
@@ -79,10 +99,11 @@ def get_mod_file_metadata(path: Path, file: TextIO):
             continue
 
         match = re.fullmatch(
-            r'//[ \t]+@([a-zA-Z]+)(?::([a-z]{2}(?:-[A-Z]{2})?))?[ \t]+(.*)', line.strip())
+            r'//[ \t]+@([a-zA-Z]+)(?::([a-z]{2}(?:-[A-Z]{2})?))?[ \t]+(.*)',
+            line.strip(),
+        )
         if not match:
-            warnings += add_warning(path, line_number,
-                                    'Invalid metadata line format')
+            warnings += add_warning(path, line_number, 'Invalid metadata line format')
             continue
 
         key = match.group(1)
@@ -90,13 +111,18 @@ def get_mod_file_metadata(path: Path, file: TextIO):
         value = match.group(3)
 
         if not any(key in x for x in MOD_METADATA_PARAMS.values()):
-            warnings += add_warning(path, line_number,
-                                    f'@{key} is not a valid metadata parameter')
+            warnings += add_warning(
+                path, line_number, f'@{key} is not a valid metadata parameter'
+            )
             continue
 
-        if key not in MOD_METADATA_PARAMS['singleValueLocalizable'] and language is not None:
-            warnings += add_warning(path, line_number,
-                                    'Language cannot be specified for this property')
+        if (
+            key not in MOD_METADATA_PARAMS['singleValueLocalizable']
+            and language is not None
+        ):
+            warnings += add_warning(
+                path, line_number, 'Language cannot be specified for this property'
+            )
             continue
 
         if key in MOD_METADATA_PARAMS['multiValue']:
@@ -104,8 +130,9 @@ def get_mod_file_metadata(path: Path, file: TextIO):
             properties[(key, language)] = f'{prefix}{value}\n', line_number
         else:
             if (key, language) in properties:
-                warnings += add_warning(path, line_number,
-                                        f'@{key} must be specified only once')
+                warnings += add_warning(
+                    path, line_number, f'@{key} must be specified only once'
+                )
                 continue
 
             properties[(key, language)] = value, line_number
@@ -116,18 +143,21 @@ def get_mod_file_metadata(path: Path, file: TextIO):
     return properties, warnings
 
 
-def parse_file(path: Path, expected_author: str):
-    print(f'Checking {path=}')
-
+def validate_metadata(path: Path, expected_author: str):
     with path.open(encoding='utf-8') as file:
         properties, warnings = get_mod_file_metadata(path, file)
+
+    github = None
 
     key = ('github', None)
     if key in properties:
         value, line_number = properties[key]
-        if value != f'https://github.com/{expected_author}':
-            warnings += add_warning(path, line_number,
-                                    f'Expected the author to be "{expected_author}"')
+        github = value
+        expected = f'https://github.com/{expected_author}'
+        if value != expected:
+            warnings += add_warning(
+                path, line_number, f'Expected @{key[0]} to be "{expected}"'
+            )
     else:
         warnings += add_warning(path, 1, f'Missing @{key[0]}')
 
@@ -136,16 +166,19 @@ def parse_file(path: Path, expected_author: str):
         value, line_number = properties[key]
         expected = path.name.removesuffix('.cpp').removesuffix('.wh')
         if value != expected:
-            warnings += add_warning(path, line_number,
-                                    f'Expected the id to be "{expected}"')
+            warnings += add_warning(
+                path, line_number, f'Expected the id to be "{expected}"'
+            )
 
         if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', value):
-            warnings += add_warning(path, line_number,
-                                    '@id must contain only letters, numbers and dashes')
+            warnings += add_warning(
+                path, line_number, '@id must contain only letters, numbers and dashes'
+            )
 
         if len(value) < 8 or len(value) > 50:
-            warnings += add_warning(path, line_number,
-                                    '@id must be between 8 and 50 characters')
+            warnings += add_warning(
+                path, line_number, '@id must be between 8 and 50 characters'
+            )
     else:
         warnings += add_warning(path, 1, f'Missing @{key[0]}')
 
@@ -153,17 +186,27 @@ def parse_file(path: Path, expected_author: str):
     if key in properties:
         value, line_number = properties[key]
         if not re.fullmatch(r'([0-9]+\.)*[0-9]+', value):
-            warnings += add_warning(path, line_number,
-                                    'Version must contain only numbers and dots')
+            warnings += add_warning(
+                path, line_number, 'Version must contain only numbers and dots'
+            )
     else:
         warnings += add_warning(path, 1, f'Missing @{key[0]}')
+
+    key = ('twitter', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if github is None or VERIFIED_TWITTER_ACCOUNTS.get(value) != github:
+            warnings += add_warning(
+                path, line_number, f'@{key[0]} requires manual verification'
+            )
 
     key = ('compilerOptions', None)
     if key in properties:
         value, line_number = properties[key]
         if not re.fullmatch(r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', value + ' '):
-            warnings += add_warning(path, line_number,
-                                    'Compiler options require manual verification')
+            warnings += add_warning(
+                path, line_number, 'Compiler options require manual verification'
+            )
 
     key = ('author', None)
     if key not in properties:
@@ -175,9 +218,108 @@ def parse_file(path: Path, expected_author: str):
 
     # Validate file path
     if path.parent != Path('mods'):
-        warnings += add_warning(path, 1,
-                                'File is not placed in the mods folder')
+        warnings += add_warning(path, 1, 'File is not placed in the mods folder')
 
+    return warnings
+
+
+@cache
+def get_existing_windows_file_names():
+    url = 'https://winbindex.m417z.com/data/filenames.json'
+    response = urllib.request.urlopen(url).read()
+    return json.loads(response)
+
+
+def is_existing_windows_file_name(name: str):
+    return name.lower() in get_existing_windows_file_names()
+
+
+def get_target_module_from_symbol_block_name(symbol_block_name: str):
+    p = r'(.*?)_?(exe|dll)_?hooks?'
+    match = re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE)
+    if not match:
+        return None
+
+    base_name = match.group(1)
+    suffix = match.group(2)
+    return f'{base_name}.{suffix}'
+
+
+def get_target_modules_from_previous_line(previous_line: str):
+    previous_line = previous_line.lstrip()
+    if not previous_line.startswith('//'):
+        return []
+
+    comment = previous_line.removeprefix('//').strip()
+    if comment == '':
+        return []
+
+    names = [x.strip() for x in comment.split(',')]
+    if not all(x.endswith('.dll') or x.endswith('.exe') for x in names):
+        return []
+
+    return names
+
+
+def validate_symbol_hooks(path: Path):
+    warnings = 0
+
+    mod_source = path.read_text(encoding='utf-8')
+    mod_source_lines = mod_source.splitlines()
+
+    p = r'^[ \t]*(?:const[ \t]+)?(?:CMWF_|WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
+    for match in re.finditer(p, mod_source, re.MULTILINE):
+        symbol_block_name = match.group(1)
+
+        line_num = 1 + mod_source[: match.start()].count('\n')
+
+        target_from_name = get_target_module_from_symbol_block_name(symbol_block_name)
+
+        previous_line = mod_source_lines[line_num - 2]
+        targets_from_comment = get_target_modules_from_previous_line(previous_line)
+
+        if target_from_name and targets_from_comment:
+            warning_msg = (
+                'Use either a comment or a variable name, not both. For example, you'
+                ' can rename the variable from "user32DllHooks" to "user32Hooks".'
+            )
+            warnings += add_warning(path, line_num - 1, warning_msg)
+        elif target_from_name or targets_from_comment:
+            if target_from_name and not is_existing_windows_file_name(target_from_name):
+                warning_msg = (
+                    f'"{target_from_name}" is not recognized as a Windows file name'
+                )
+                warnings += add_warning(path, line_num, warning_msg)
+
+            for target in targets_from_comment:
+                if not is_existing_windows_file_name(target):
+                    warning_msg = f'"{target}" is not recognized as a Windows file name'
+                    warnings += add_warning(path, line_num - 1, warning_msg)
+            continue
+
+        warning_msg = (
+            'Please rename the symbol hooks variable to indicate the target module.'
+            ' Examples (can end with "hook" or "hooks"):\n'
+            + '* user32DllHooks\n'
+            + '* user32dll_hooks\n'
+            + '* user32_dll_hooks\n'
+            + 'If the target module name can\'t be represented by a variable name, or'
+            ' if there is more than one target module, add all target modules in a'
+            ' comment above the symbol hooks variable, separated with commas.'
+            ' Example:\n'
+            + '// explorer.exe, taskbar.dll\n'
+            + 'WindhawkUtils::SYMBOL_HOOK hooks[] = {...};'
+        )
+        warnings += add_warning(path, line_num, warning_msg)
+
+    return warnings
+
+
+def parse_file(path: Path, expected_author: str):
+    print(f'Checking {path=}')
+
+    warnings = validate_metadata(path, expected_author)
+    warnings += validate_symbol_hooks(path)
     return warnings
 
 
@@ -190,16 +332,19 @@ def main():
 
     warnings = 0
 
-    paths = [Path(p) for p in
-             json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
+    paths = [Path(p) for p in json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
 
     added_count = int(os.environ['ADDED_FILES_COUNT'])
     modified_count = int(os.environ['MODIFIED_FILES_COUNT'])
     all_count = int(os.environ['ALL_CHANGED_AND_MODIFIED_FILES_COUNT'])
 
     if (added_count, modified_count, all_count) not in [(1, 0, 1), (0, 1, 1)]:
-        warnings += add_warning(paths[0], 1, f'Must be one added or one modified file, got '
-                                f'{added_count=} {modified_count=} {all_count=}')
+        warnings += add_warning(
+            paths[0],
+            1,
+            'Must be one added or one modified file, got '
+            f'{added_count=} {modified_count=} {all_count=}',
+        )
 
     for path in paths:
         warnings += parse_file(path, pr_author)
