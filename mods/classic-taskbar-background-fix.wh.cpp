@@ -2,7 +2,7 @@
 // @id              classic-taskbar-background-fix
 // @name            Classic Taskbar background fix
 // @description     Fixes Taskbar background in classic theme by replacing black background with a classic button face colour
-// @version         1.0
+// @version         1.0.1
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
@@ -699,7 +699,11 @@ BOOL WINAPI DrawFrameControlHook(
                     //It is safe to extend the rect more pixels towards right since the buttons are always drawn in left to right order, so the extended rect does not overdraw the next button. 
                     //In contrast, it would not be safe to extend the rect towards left too much since that would overdraw the previous button.
 
-                    fillRect.right = min(fillRect.right + 10, hdcRect.right);
+                    //extend the rect by +3px or +4px at most in order to keep room for flood fill to spread in case of multi-row horisontal taskbar is fully populated in all rows
+                    if (callerIsClassicTaskbarButtonsLiteMod)
+                        fillRect.right = min(fillRect.right + 4, hdcRect.right);
+                    else
+                        fillRect.right = min(fillRect.right + 3, hdcRect.right);   
                 }
                 else {  //vertical taskbar
 
