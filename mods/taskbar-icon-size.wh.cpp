@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.10
+// @version         1.2.11
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -395,27 +395,29 @@ SystemTrayController_UpdateFrameSize_t
 void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
     Wh_Log(L">");
 
-    // Find the last height offset and reset the height value.
-    //
-    // 66 0f 2e b3 b0 00 00 00 UCOMISD    uVar4,qword ptr [RBX + 0xb0]
-    // 7a 4c                   JP         LAB_180075641
-    // 75 4a                   JNZ        LAB_180075641
-
-    DWORD lastHeightOffset = 0;
-    const BYTE* start =
-        (const BYTE*)SystemTrayController_UpdateFrameSize_SymbolAddress;
-    const BYTE* end = start + 0x200;
-    for (const BYTE* p = start; p != end; p++) {
-        if (p[0] == 0x66 && p[1] == 0x0F && p[2] == 0x2E && p[3] == 0xB3 &&
-            p[8] == 0x7A && p[10] == 0x75) {
-            lastHeightOffset = *(DWORD*)(p + 4);
-            break;
+    static LONG lastHeightOffset = []() -> LONG {
+        // Find the last height offset and reset the height value.
+        //
+        // 66 0f 2e b3 b0 00 00 00 UCOMISD    uVar4,qword ptr [RBX + 0xb0]
+        // 7a 4c                   JP         LAB_180075641
+        // 75 4a                   JNZ        LAB_180075641
+        const BYTE* start =
+            (const BYTE*)SystemTrayController_UpdateFrameSize_SymbolAddress;
+        const BYTE* end = start + 0x200;
+        for (const BYTE* p = start; p != end; p++) {
+            if (p[0] == 0x66 && p[1] == 0x0F && p[2] == 0x2E && p[3] == 0xB3 &&
+                p[8] == 0x7A && p[10] == 0x75) {
+                LONG offset = *(LONG*)(p + 4);
+                Wh_Log(L"lastHeightOffset=0x%X", offset);
+                return offset;
+            }
         }
-    }
 
-    Wh_Log(L"lastHeightOffset=0x%X", lastHeightOffset);
+        Wh_Log(L"lastHeightOffset not found");
+        return 0;
+    }();
 
-    if (lastHeightOffset) {
+    if (lastHeightOffset > 0) {
         *(double*)((BYTE*)pThis + lastHeightOffset) = 0;
     }
 
@@ -424,6 +426,23 @@ void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
     SystemTrayController_UpdateFrameSize_Original(pThis);
 
     g_inSystemTrayController_UpdateFrameSize = false;
+}
+
+using TaskbarFrame_MaxHeight_double_t = void(WINAPI*)(void* pThis,
+                                                      double value);
+TaskbarFrame_MaxHeight_double_t TaskbarFrame_MaxHeight_double_Original;
+
+using TaskbarFrame_Height_double_t = void(WINAPI*)(void* pThis, double value);
+TaskbarFrame_Height_double_t TaskbarFrame_Height_double_Original;
+void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
+    Wh_Log(L">");
+
+    if (TaskbarFrame_MaxHeight_double_Original) {
+        TaskbarFrame_MaxHeight_double_Original(
+            pThis, std::numeric_limits<double>::infinity());
+    }
+
+    return TaskbarFrame_Height_double_Original(pThis, value);
 }
 
 using SystemTraySecondaryController_UpdateFrameSize_t =
@@ -1302,6 +1321,28 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 (void**)&SystemTrayController_UpdateFrameSize_SymbolAddress,
                 nullptr,  // Hooked manually, we need the symbol address.
                 true,     // Missing in older Windows 11 versions.
+            },
+            {
+                {
+                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::MaxHeight(double)const )",
+                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::MaxHeight(double)const __ptr64)",
+                },
+                (void**)&TaskbarFrame_MaxHeight_double_Original,
+                nullptr,
+                true,  // From Windows 11 version 22H2.
+            },
+            {
+                {
+                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::Height(double)const )",
+                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::Height(double)const __ptr64)",
+
+                    // Windows 11 version 21H2.
+                    LR"(public: void __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::Height(double)const )",
+                    LR"(public: void __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Taskbar::implementation::TaskbarFrame>::Height(double)const __ptr64)",
+                },
+                (void**)&TaskbarFrame_Height_double_Original,
+                (void*)TaskbarFrame_Height_double_Hook,
+                true,  // Gone in Windows 11 version 24H2.
             },
             {
                 {
