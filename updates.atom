@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-17T21:59:58.000Z</updated>
+    <updated>2024-08-18T16:37:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.11]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#68b57c0b24b7d2ef165ac7a4698ee8f2591fc445</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-08-18T16:37:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the taskbar getting pushed offscreen on some devices with touchscreens.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Conhost 1.0.3]]></title>
         <id>https://windhawk.net/mods/classic-conhost#688cd3ace4db50a66fc0952c94aff0f0d6ec5396</id>
@@ -203,21 +212,6 @@ The mod will immediately apply to those programs after you click "Save".</p>]]><
         <updated>2024-07-29T18:05:51.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Adjusted spacing for Windows 11 update KB5040527.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Disappearing Icon Fix for Windows 11 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11#329b6d6f4c8cbfbe7ee5aaafd53dc3922cd67a1c</id>
-        <link href="https://windhawk.net/mods/taskbar-disappearing-icon-fix-win11"/>
-        <updated>2024-07-29T08:55:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbardisappearingiconfixforwindows11">Taskbar Disappearing Icon Fix for Windows 11</h1>
-<p>Tries to fix disappearing icon bug in Windows 11 taskbar while switching virtual desktops.</p>
-<p>Since I cannot reproduce this bug very reliably, this mod may not have fixed the bug entirely. Let me know if it still persists.</p>
-<p>Takeaway message:</p>
-<ul>
-<li>It is observed that hiding (<code>Visibility: Collapsed</code>) the invisible icon and then making it visible after a while will fix it.</li>
-<li>However, hiding the icon for a while results in flickering.</li>
-<li>The mod tries to flicker the icon only when the system tries to change its display name, typically while switching virtual desktops, making the flicker hardly visible.</li>
 </ul>]]></content>
     </entry>
 </feed>

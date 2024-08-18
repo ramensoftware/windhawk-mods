@@ -1,3 +1,7 @@
+## 1.2.11 ([Aug 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/68b57c0b24b7d2ef165ac7a4698ee8f2591fc445/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed the taskbar getting pushed offscreen on some devices with touchscreens.
+
 ## 1.2.10 ([Aug 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/e3b2fcf725fb4688a56af83dd299f2605182cdcc/mods/taskbar-icon-size.wh.cpp))
 
 * Added support for Windows 11 version 24H2.
