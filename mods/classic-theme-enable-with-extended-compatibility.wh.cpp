@@ -121,13 +121,15 @@ Note, upon first start, the mod affects only programs started after enabling the
 * [Explorer Patcher](https://github.com/valinet/ExplorerPatcher) - Together with a couple of mods listed in next section improves the Taskbar appearance. Until you install all necessary mods, your Taskbar may become black. Do not let that disturb you.
 * [Open-Shell-Menu](https://open-shell.github.io/Open-Shell-Menu/) - Needed to show Start Button in classic theme.
 * [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/) - Allows adjusting various Taskbar features.
-* [Classic Notepad](https://win7games.com/#notepad) - (Win 11 only - works better than built-in Notepad in Win 11).
+* [Classic Notepad](https://win7games.com/#notepad) - (Win 11 only - works better than built-in Notepad under Win 11 in case of classic theme).
 
 You can set Process Hacker as Ctrl-Alt-Del handler with the following steps. The steps for System Informer are probably similar in nature, though the labels of items might be a bit different. `Open Process Hacker -> open "Hacker" menu -> Options -> Advanced -> check "Replace Task Manager with Process Hacker" -> OK`.
 
 
 
 ## 3. Needed changes in Windhawk settings
+
+**Note, enabling classic theme requires Windhawk to be installed, not just run as a portable version.** Portable version of Windhawk will have insufficient privileges to enable classic theme.
 
 Before you start installing the current mod and additional classic theme mods listed below, you need to update Windhawk process inclusion list, accessible via `Windhawk -> Settings -> Advanced settings -> More advanced settings -> Process inclusion list`. Add the following rows:
 ```
@@ -598,7 +600,7 @@ void Wh_ModAfterInit(void) {
 
         //Temporarily set the resolution to maximum until we poll in a separate thread. Maximum resolution is needed so that the mod can enable the classic theme at earliest suitable moment.Delay in enabling classic theme would result in some programs starting with no classic theme enabled.
 
-        //The mod needs to know the desired resolution set by the program. In order to avoid any race conditions, force timer resolution update only after the hook is activated. Else there might be a situation that the mod overrides the current resolution while hook is not yet set, and then the program changes it again before the hook is finally set, but the mod does not know that a new desired resolution was set by the program and therfore cannot restore it when init thread finishes.
+        //The mod needs to know the desired resolution set by the program. In order to avoid any race conditions, force timer resolution update only after the hook is activated. Else there might be a situation that the mod overrides the current resolution while hook is not yet set, and then the program changes it again before the hook is finally set, but the mod does not know that a new desired resolution was set by the program and therefore cannot restore it when init thread finishes.
 
         ULONG CurrentResolution;
         if (NT_SUCCESS(pOriginalNtSetTimerResolution(g_maximumResolution, TRUE, &CurrentResolution))) {
