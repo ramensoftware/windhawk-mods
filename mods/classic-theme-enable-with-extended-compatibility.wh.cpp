@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              classic-theme-enable-with-extended-compatibility
 // @name            Classic Theme Enable with extended compatibility
-// @description     Enables classic theme, supports RDP sessions, and is compatible with early / system start of Windhawk
+// @description     Enables classic theme. Supports RDP sessions and is compatible with early / system start of Windhawk.
 // @version         1.2
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
