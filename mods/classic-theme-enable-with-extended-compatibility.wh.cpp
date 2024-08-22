@@ -4,7 +4,7 @@
 // @description     Enables classic theme, supports RDP sessions, and is compatible with early / system start of Windhawk
 // @version         1.2
 // @author          Roland Pihlakas
-// @github          https://github.com/levitation-opensource/
+// @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
 // @include         winlogon.exe
 // @compilerOptions -lntdll -lkernel32 -lwtsapi32
