@@ -52,13 +52,14 @@ In summary, there are certain additional steps you need to do in order for your 
 4) Install the current mod.
 5) Additional Windhawk mods need to be installed.
 6) Configure system start of Windhawk.
-7) You may want to adjust the colours and fonts with a program mentioned in instructions.
+7) You may want to adjust the colours and fonts with a program mentioned in the instructions.
+8) Adjust Taskbar features.
 
 
 
 # Instructions for setting up the classic theme
 
-Note, upon first start, the mod affects only programs started after enabling the mod. **After you have finished the configuration steps below, you may want to restart your system.**
+Note, upon first start, the mod affects only programs started after enabling the mod. Therefore your system might look weird here and there during performing the following installation steps and until you reboot. **After you have finished the configuration steps below, you may want to restart your system.**
 
 
 
@@ -82,6 +83,9 @@ Note, upon first start, the mod affects only programs started after enabling the
 3. Import the following reg file:
     ```
     Windows Registry Editor Version 5.00
+    [HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics]
+    "BorderWidth"="-15"
+    "PaddedBorderWidth"="0"
     [HKEY_CURRENT_USER\Software\ExplorerPatcher]
     "OldTaskbar"=dword:00000001
     "SkinMenus"=dword:00000000
@@ -95,9 +99,11 @@ Note, upon first start, the mod affects only programs started after enabling the
     "TaskbarAl"=dword:00000000
     "TaskbarSD"=dword:00000001
     [HKEY_CURRENT_USER\Software\OpenShell\StartMenu\Settings]
-    "StartButtonType"="ClasicButton"
-    "CustomTaskbar"=dword:00000000
+    "StartButtonType"="ClasicButton"	; yes, Clasic should be here with one "s"
+    "CustomTaskbar"=dword:00000000    
     "SkinC1"="Classic skin"
+    "SkinW7"="Classic skin"
+    "EnableStartButton"=dword:00000001
     "StartButtonIcon"="%SystemRoot%\System32\slui.exe, 2"
     ```
 
@@ -105,16 +111,19 @@ Note, upon first start, the mod affects only programs started after enabling the
 
 ## 2. Additional needed software
 
-* [System Informer / former Process Hacker](https://systeminformer.sourceforge.io/) or alternatively, [Classic Task Manager](https://win7games.com/#taskmgr) - Classic theme is not compatible with built-in Windows Task Manager. I recommend Process Hacker / System Informer since Classic Task Manager can cause lagging of the system. Process Hacker / System Informer can be configured to handle Ctrl-Alt-Del as well.
-* [Explorer Patcher](https://github.com/valinet/ExplorerPatcher) - Together with a couple of mods listed in next section improves the Taskbar appearance.
+* [System Informer / former Process Hacker](https://systeminformer.sourceforge.io/) or alternatively, [Classic Task Manager](https://win7games.com/#taskmgr) - Classic theme is not compatible with built-in Windows Task Manager. I recommend Process Hacker / System Informer since Classic Task Manager can cause lagging of the system. Process Hacker / System Informer can be configured to handle Ctrl-Alt-Del as well. 
+* [Explorer Patcher](https://github.com/valinet/ExplorerPatcher) - Together with a couple of mods listed in next section improves the Taskbar appearance. Until you install all necessary mods, your Taskbar may become black. Do not let that disturb you.
 * [Open-Shell-Menu](https://open-shell.github.io/Open-Shell-Menu/) - Needed to show Start Button in classic theme.
+* [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/) - Allows adjusting various Taskbar features.
 * [Classic Notepad](https://win7games.com/#notepad) - (Win 11 only - works better than built-in Notepad in Win 11).
+
+You can set Process Hacker as Ctrl-Alt-Del handler with the following steps. The steps for System Informer are probably similar in nature, though the labels of items might be a bit different. `Open Process Hacker -> open "Hacker" menu -> Options -> Advanced -> check "Replace Task Manager with Process Hacker" -> OK`.
 
 
 
 ## 3. Needed changes in Windhawk settings
 
-Before you start installing the current mod and additional classic theme mods listed below, you need to update Windhawk process inclusion list, accessible via `Settings -> Advanced settings -> More advanced settings -> Process inclusion list`. Add the following rows:
+Before you start installing the current mod and additional classic theme mods listed below, you need to update Windhawk process inclusion list, accessible via `Windhawk -> Settings -> Advanced settings -> More advanced settings -> Process inclusion list`. Add the following rows:
 ```
 conhost.exe
 dllhost.exe
@@ -127,7 +136,7 @@ Then click `"Save and restart Windhawk"` button.
 
 ## 4. Install the current mod
 
-Click the "Install" button above.
+Click the "Install" button above the current mod's description.
 
 
 
@@ -162,12 +171,16 @@ Starting Windhawk early improves the probability that classic theme is enabled b
 Steps to enable system start of Windhawk:
 
 1. Start Task Scheduler
-2. Under "Task Scheduler Library" section find the row titled "WindhawkRunUITask", open it.
-3. Go to Triggers
-4. Click "New..." button
-5. Select Begin the task: "At startup"
-6. OK
+2. Open "Task Scheduler Library" section 
+3. Find the row titled "WindhawkRunUITask", open it by double clicking
+4. Go to Triggers
+5. Click "New..." button
+6. Select Begin the task: "At startup"
 7. OK
+8. Click "New..." button
+9. Select Begin the task: "At log on"
+10. OK
+11. OK
 
 
 
@@ -176,9 +189,34 @@ Steps to enable system start of Windhawk:
 For editing the colours and fonts I recommend the following program:\
 [Desktop Themes v1.87](https://archive.org/details/desktop_themes_v187_ZIP).
 
+In order to launch the program, right click on `Desktop Themes.exe` and select "Run as administrator". This program will not start if you do not launch it with elevated permissions.
+
+Go to "Edit Theme" section. Enter the username and serial.
+
+Edit fonts and colours.
+
+
+
+## 8. Adjust Taskbar features
+
+Open "7+ Taskbar Tweaker" and see what you want to change. 
+
+Under "Hovering" section I recommend changing the setting to "Tooltip" or "Nothing". The other options do not seem to work very well under classic theme.
+
 All done. Congratulations! 
 
-If this is the first time you installed classic theme, then you may want to reboot your computer now in order for the classic theme styles to be applied to all programs.
+If this is the first time you installed classic theme, then you may want to reboot your computer now in order for the classic theme styles to be fully updated and applied to all programs.
+
+
+
+# Troubleshooting
+
+In case the window borders become too thick or other dimensions of window elements become different than you prefer, then look under to the registry key\
+`HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics`
+
+You may want to import again the registry file provided in chapter ["Needed registry changes"](#1-needed-registry-changes), point (3) "Import the following reg file:".
+
+You may need to reboot the computer after changing these values in the registry.
 
 
 
