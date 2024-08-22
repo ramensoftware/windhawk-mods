@@ -592,7 +592,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit(void) {
 
-    if (g_retryInitInAThread) {   //Are we in the proces of creating the init thread? If g_initThreadStopSignal is NULL then we are not going to create init thread.
+    if (g_retryInitInAThread) {   //Are we in the process of creating the init thread?
 
         //Temporarily set the resolution to maximum until we poll in a separate thread. Maximum resolution is needed so that the mod can enable the classic theme at earliest suitable moment.Delay in enabling classic theme would result in some programs starting with no classic theme enabled.
 
