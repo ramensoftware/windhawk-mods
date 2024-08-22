@@ -32,6 +32,10 @@ Enables classic theme in Windows 10 and 11. **This mod version adds support for 
 [Click here](#6-how-to-configure-system-start-of-windhawk) if you want to see instructions for configuring system start of Windhawk. More technical details about the update can be found at the end of this document.
 
 
+## A screenshot
+
+![A screenshot](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/classic-theme-enable-with-extended-compatibility.png)
+
 
 ## General info about classic theme in Windows 10 and 11
 
@@ -159,6 +163,10 @@ I recommend installing the following classic theme related mods in order to get 
 * [Win32 Tray Clock Experience](https://windhawk.net/mods/win32-tray-clock-experience) (Win 10 only)
 
 There are other classic theme related mods in Windhawk which I did not list here for one or other reason. Your experience and preferences may differ. After getting set up with above and feeling like exploring more, you may want to try the other mods out.
+
+After installing the above mentioned mods, your Windhawk window should look similar to the following screenshot. Of course you may have other mods installed from before as well.
+
+![A Windhawk screenshot with classic theme mods](https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/classic-theme-mods-in-windhawk.png)
 
 
 
