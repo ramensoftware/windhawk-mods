@@ -96,6 +96,8 @@ Note, upon first start, the mod affects only programs started after enabling the
     "ToolbarSeparators"=dword:00000001
     "DisableImmersiveContextMenu"=dword:00000001
     "ClassicThemeMitigations"=dword:00000001
+    [HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer]
+    "AltTabSettings"=dword:00000001
     [HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
     "TaskbarGlomLevel"=dword:00000002
     "MMTaskbarGlomLevel"=dword:00000002
