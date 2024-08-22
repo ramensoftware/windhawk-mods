@@ -2,7 +2,7 @@
 // @id              classic-theme-enable-with-extended-compatibility
 // @name            Classic Theme Enable with extended compatibility
 // @description     Enables classic theme, supports RDP sessions, and is compatible with early / system start of Windhawk
-// @version         1.1
+// @version         1.2
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation-opensource/
 // @homepage        https://www.simplify.ee/
@@ -196,13 +196,16 @@ This mod has the following two capabilities built on top of previous classic the
 */
 // ==/WindhawkModReadme==
 
-#include <iostream>
-#include <sddl.h>
-#include <winnt.h>
+
+#include <windowsx.h>
+#include <windef.h>
 #include <winternl.h>
-#include <aclapi.h>
-#include <securitybaseapi.h>
+#include <ntstatus.h>
+#include <sddl.h>
 #include <wtsapi32.h>
+
+#include <mutex>
+#include <wchar.h>
 
 
 #ifndef WH_MOD
@@ -211,7 +214,19 @@ This mod has the following two capabilities built on top of previous classic the
 #endif
 
 
-// Define the prototype for the NtOpenSection function.
+bool g_retryInitInAThread = false;
+HANDLE g_initThread = NULL;
+HANDLE g_initThreadStopSignal = NULL;
+ULONG g_maximumResolution;
+ULONG g_originalTimerResolution;
+bool g_restoringOriginalResolution = false;
+bool g_hookIsDisabledAndOriginalResolutionRestored = false;
+std::mutex g_restoreTimerResolutionMutex;
+
+
+typedef NTSTATUS(NTAPI* NtSetTimerResolution_t)(ULONG, BOOLEAN, PULONG);
+NtSetTimerResolution_t pOriginalNtSetTimerResolution;
+
 extern "C" NTSTATUS NTAPI NtOpenSection(
     OUT PHANDLE SectionHandle,
     IN ACCESS_MASK DesiredAccess,
@@ -219,39 +234,53 @@ extern "C" NTSTATUS NTAPI NtOpenSection(
 );
 
 
-bool g_retryInitInAThread = false;
-HANDLE g_initThread = NULL;
-HANDLE g_initThreadStopSignal = NULL;
-ULONG g_maximumResolution;
-ULONG g_originalTimerResolution;
-
-
-typedef NTSTATUS(WINAPI* NtSetTimerResolution_t)(ULONG, BOOLEAN, PULONG);
-NtSetTimerResolution_t pOriginalNtSetTimerResolution;
-
 //this hook is needed to restore the resolution winlogon would have had if this mod would not have been installed
 NTSTATUS WINAPI NtSetTimerResolutionHook(ULONG DesiredResolution, BOOLEAN SetResolution, PULONG CurrentResolution)
 {
-    if (!SetResolution) {
+    if (
+        !SetResolution
+        || g_hookIsDisabledAndOriginalResolutionRestored    //when this stage is reached then g_restoreTimerResolutionMutex is not needed anymore
+    ) {
         return pOriginalNtSetTimerResolution(DesiredResolution, SetResolution, CurrentResolution);
     }
+    else if (g_restoringOriginalResolution) {     //the original resolution is being restored in a concurrent thread
 
-    g_originalTimerResolution = DesiredResolution;
+        //If NtSetTimerResolution is called after g_restoringOriginalResolution is set and before the mutex lock is taken in RestoreTimerResolution(), then the hook code here ensures that g_originalTimerResolution will still contain the updated value, so the latest timer resolution value will be set just twice, but with a correct value.
 
-    return pOriginalNtSetTimerResolution(DesiredResolution, SetResolution, CurrentResolution);
+        std::lock_guard<std::mutex> guard(g_restoreTimerResolutionMutex);
+
+        NTSTATUS result = pOriginalNtSetTimerResolution(DesiredResolution, SetResolution, CurrentResolution);  
+        if (NT_SUCCESS(result))
+            g_originalTimerResolution = DesiredResolution;  //NB! still save the desired resolution to global variable in order to avoid race condition in RestoreTimerResolution()
+
+        return result;
+    }
+    else {
+        g_originalTimerResolution = DesiredResolution;  //unfortunately cannot check for success here, so lets just overwrite the previous desired resolution value
+        return STATUS_SUCCESS;      //NB! lets keep the maximum timer resolution, do not actually change the timer resolution at the moment
+    }
 }
 
 BOOL TryInit(bool* abort) {
 
     // Retrieve the current session ID for the process.
     DWORD sessionId;
-    if (!ProcessIdToSessionId(GetCurrentProcessId(), &sessionId))
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &sessionId)) {     //GetCurrentProcessId() does not fail, no need to check for that
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+        Wh_Log(L"ProcessIdToSessionId failed");
+#endif
         return FALSE;     //retry
+    }
 
 
-    if (sessionId != WTSGetActiveConsoleSessionId()) {
+    if (sessionId == 0) {   //Interactive services session - This is rarely used in Win10+ but I have seen claims that it still happens. Microsoft has fully disabled Interactive Service Detection starting with Windows 10 Build 1803 and also from in Windows Server 2019 and above.
 
-        //TODO: if the session is service session then quit the init thread AND do not retry - set the abort flag to true
+        //if the session is service session then quit the init thread AND do not retry
+        Wh_Log(L"Interactive services session detected, not changing the theme");
+        *abort = true;
+        return FALSE;
+    }
+    else if (sessionId != WTSGetActiveConsoleSessionId()) {     //this function does not fail
 
         WTS_CONNECTSTATE_CLASS* pConnectState = NULL;
         DWORD bytesReturned;
@@ -268,7 +297,14 @@ BOOL TryInit(bool* abort) {
             && bytesReturned == sizeof(WTS_CONNECTSTATE_CLASS)
         ) {
             sessionConnected = (*pConnectState == WTSActive);
-            //Wh_Log(L"Session connected: %ls", sessionConnected ? L"Yes" : L"No");
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging by default
+            Wh_Log(L"Session connected: %ls", sessionConnected ? L"Yes" : L"No");
+#endif
+        }
+        else {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+            Wh_Log(L"WTSQuerySessionInformationW failed");
+#endif
         }
 
         if (pConnectState)
@@ -279,9 +315,19 @@ BOOL TryInit(bool* abort) {
     }
 
 
-    wchar_t sectionName[256];
-    if (swprintf_s(sectionName, _countof(sectionName), L"\\Sessions\\%lu\\Windows\\ThemeSection", sessionId) == -1)
+    wchar_t sectionName[sizeof("\\Sessions\\4294967295\\Windows\\ThemeSection")];
+    if (-1 == swprintf_s(sectionName, ARRAYSIZE(sectionName), L"\\Sessions\\%lu\\Windows\\ThemeSection", sessionId)) {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+        Wh_Log(L"swprintf failed");
+#endif
         return FALSE;     //retry
+    }
+    else {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging default
+        Wh_Log(L"Section name: %s", sectionName);
+#endif
+    }
+
 
     // Define the name of the section object.
     UNICODE_STRING sectionObjectName;
@@ -293,31 +339,44 @@ BOOL TryInit(bool* abort) {
 
     HANDLE hSection;
     NTSTATUS status = NtOpenSection(&hSection, WRITE_DAC, &objectAttributes);
-
-    Wh_Log("status: %u\n", status);
-    Wh_Log("%s", sectionName);
-
-    if (!NT_SUCCESS(status))
+    if (!NT_SUCCESS(status)) {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+        Wh_Log(L"NtOpenSection failed with: 0x%X", status);
+#endif
         return FALSE;     //retry
+    }
+
 
     // Define your SDDL string.
-    LPCWSTR sddl = L"O:BAG:SYD:(A;;RC;;;IU)(A;;DCSWRPSDRCWDWO;;;SY)";
+    PCWSTR sddl = L"O:BAG:SYD:(A;;RC;;;IU)(A;;DCSWRPSDRCWDWO;;;SY)";
     PSECURITY_DESCRIPTOR psd = NULL;
 
     // Convert the SDDL string to a security descriptor.
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &psd, NULL)) {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+        Wh_Log(L"ConvertStringSecurityDescriptorToSecurityDescriptorW failed");
+#endif
         CloseHandle(hSection);
         return FALSE;     //retry
     }
 
     // Set the security descriptor for the object.
-    BOOL result = SetKernelObjectSecurity(
+    BOOL result = SetKernelObjectSecurity
+    (
         hSection,
         DACL_SECURITY_INFORMATION,
         psd
     );
+    if (!result) {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+        Wh_Log(L"SetKernelObjectSecurity failed");
+#endif
+        //will retry after cleaning up current attempt's resources
+    }
+    else {
+        Wh_Log(L"SetKernelObjectSecurity successful, section name: %s", sectionName);
+    }
 
-    Wh_Log("result: %u\n", result);
 
     // Cleanup: free allocated security descriptor memory and close the handle.
     LocalFree(psd);
@@ -329,15 +388,29 @@ BOOL TryInit(bool* abort) {
 
 void RestoreTimerResolution() {
 
-    ULONG CurrentResolution;
-    if (NT_SUCCESS(pOriginalNtSetTimerResolution(g_originalTimerResolution, TRUE, &CurrentResolution))) {
-        Wh_Log(L"NtSetTimerResolution success");
-    }
-    else {
-        Wh_Log(L"NtSetTimerResolution failed");
+    Wh_Log(L"About to restore timer resolution...");
+
+    //If NtSetTimerResolution is called after g_restoringOriginalResolution is set and before the mutex lock is taken here, then the hook code in NtSetTimerResolutionHook() ensures that g_originalTimerResolution will still contain the updated value, so the latest timer resolution value will be set just twice, but with a correct value.
+
+    g_restoringOriginalResolution = true;   //first set the flag, then take mutex
+
+    {
+        std::lock_guard<std::mutex> guard(g_restoreTimerResolutionMutex);
+
+        ULONG CurrentResolution;
+        if (NT_SUCCESS(pOriginalNtSetTimerResolution(g_originalTimerResolution, TRUE, &CurrentResolution))) {
+            Wh_Log(L"NtSetTimerResolution success");
+        }
+        else {
+            Wh_Log(L"NtSetTimerResolution failed");
+        }
+
+        g_hookIsDisabledAndOriginalResolutionRestored = true;   //in my experiments there seemed to be issues with Wh_RemoveFunctionHook() so not using it for time being
     }
 
-    //TODO: call Wh_RemoveFunctionHook as well
+    g_restoringOriginalResolution = false;  //Setting this variable is not essential, but if it is set, then in order to not miss any resolution updates, it should be set after g_hookIsDisabledAndOriginalResolutionRestored is set. Therefore I am setting this variable outside of mutex block, that will ensure the correct write ordering without having to manually specify memory fence instructions here.
+
+    Wh_Log(L"Timer resolution restored");
 }
 
 DWORD WINAPI InitThreadFunc(LPVOID param) {
@@ -356,14 +429,13 @@ retry:  //If Windhawk loads the mod too early then the classic theme initialisat
     isRetry = true;
 
     bool abort = false;
-    BOOL result;
     if (TryInit(&abort)) {
         RestoreTimerResolution();
-        return TRUE;  //hooks done
+        return TRUE;    //classic theme enable done
     }
     else if (abort) {
         RestoreTimerResolution();
-        return FALSE;   //a service session?
+        return FALSE;   //a service session
     }
     else {      //If Windhawk loads the mod too early then the classic theme initialisation will fail. Therefore we need to loop until the initialisation succeeds. Also if the mod is loaded into a RDP session too early then for some reason that would block the RDP session from successfully connecting. So we need to wait for session "active" state in case of RDP sessions. This is another reason for having a loop here.
         goto retry;
@@ -377,14 +449,14 @@ BOOL Wh_ModInit() {
 
     bool abort = false;
     if (TryInit(&abort)) {
-        return TRUE;  //hooks done
+        return TRUE;    //classic theme enable done
     }
     else if (abort) {
-        return FALSE;   //a service session?
+        return FALSE;   //a service session
     }
     else {      //If Windhawk loads the mod too early then the classic theme initialisation will fail. Therefore we need to loop until the initialisation succeeds. Also if the mod is loaded into a RDP session too early then for some reason that would block the RDP session from successfully connecting. So we need to wait for session "active" state in case of RDP sessions. This is another reason for creating a separate thread with a loop.
 
-        HMODULE hNtdll = GetModuleHandle(L"ntdll.dll");
+        HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
         if (!hNtdll) {
             return FALSE;   //TODO: ignore this failure
         }
@@ -394,10 +466,11 @@ BOOL Wh_ModInit() {
         if (
             !pNtSetTimerResolution
             || !pNtQueryTimerResolution
-            ) {
+        ) {
             return FALSE;   //TODO: ignore this failure
         }
 
+        //Query original timer resolution since we will temporarily set the resolution to maximum until we poll in a separate thread. Maximum resolution is needed so that the mod can enable the classic theme at earliest suitable moment. Delay in enabling classic theme would result in some programs starting with no classic theme enabled.
         ULONG MinimumResolution;
         ULONG MaximumResolution;
         ULONG CurrentResolution;
@@ -415,10 +488,11 @@ BOOL Wh_ModInit() {
         g_maximumResolution = MaximumResolution;
         g_originalTimerResolution = CurrentResolution;
 
+        //set timer resolution hook so that if the program changes its desired resolution then we can 1) override that and 2) later restore the new desired resolution
         Wh_SetFunctionHook((void*)pNtSetTimerResolution, (void*)NtSetTimerResolutionHook, (void**)&pOriginalNtSetTimerResolution);  //NB! we do not check result of hooking, lets proceed with init thread creation in any case
 
 
-        g_initThreadStopSignal = CreateEvent(
+        g_initThreadStopSignal = CreateEventW(
             /*lpEventAttributes = */NULL,           // default security attributes
             /*bManualReset = */TRUE,				// manual-reset event
             /*bInitialState = */FALSE,              // initial state is nonsignaled
@@ -442,6 +516,16 @@ BOOL Wh_ModInit() {
         if (g_initThread) {
             Wh_Log(L"InitThread created");
             g_retryInitInAThread = true;
+
+            //Ensure that the high timer resolution has actual effect by also setting maximum thread priority
+            if (!SetThreadPriority(g_initThread, THREAD_PRIORITY_TIME_CRITICAL)) {
+                Wh_Log(L"SetThreadPriority failed, proceeding regardless");
+            }
+
+            if (!SetThreadPriorityBoost(g_initThread, /*disablePriorityBoost*/FALSE)) {
+                Wh_Log(L"SetThreadPriorityBoost failed, proceeding regardless");
+            }
+
             return TRUE;    //activate NtSetTimerResolution hook, then proceed activating the thread
         }
         else {
@@ -456,6 +540,8 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit(void) {
 
     if (g_retryInitInAThread) {   //Are we in the proces of creating the init thread? If g_initThreadStopSignal is NULL then we are not going to create init thread.
+
+        //Temporarily set the resolution to maximum until we poll in a separate thread. Maximum resolution is needed so that the mod can enable the classic theme at earliest suitable moment.Delay in enabling classic theme would result in some programs starting with no classic theme enabled.
 
         //The mod needs to know the desired resolution set by the program. In order to avoid any race conditions, force timer resolution update only after the hook is activated. Else there might be a situation that the mod overrides the current resolution while hook is not yet set, and then the program changes it again before the hook is finally set, but the mod does not know that a new desired resolution was set by the program and therfore cannot restore it when init thread finishes.
 
@@ -487,6 +573,8 @@ void Wh_ModUninit() {
         if (g_retryInitInAThread) {     //was the thread successfully resumed?
             if (ResumeThread(g_initThread))
                 g_retryInitInAThread = false;
+            else    //normally the thread itself calls RestoreTimerResolution()
+                RestoreTimerResolution();   
         }
 
         if (!g_retryInitInAThread) {     //was the thread successfully resumed?
@@ -498,9 +586,11 @@ void Wh_ModUninit() {
     }
 
     if (
-        g_initThreadStopSignal 
+        g_initThreadStopSignal
         && !g_retryInitInAThread     //was the thread successfully resumed?
     ) {
+        //we could close the signal handle regardless whether the thread was successfully resumed since if the thread resume failed then the program will crash anyway IF the mod is unloaded AND the thread is manually resumed later by somebody. But just in case hoping that maybe the mod DLL will not be unloaded as long as it has threads, then lets keep the signal handle alive as well.
+
         CloseHandle(g_initThreadStopSignal);
         g_initThreadStopSignal = NULL;
     }
