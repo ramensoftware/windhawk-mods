@@ -221,12 +221,6 @@ This mod has the following two capabilities built on top of previous classic the
 #include <wchar.h>
 
 
-#ifndef WH_MOD
-#define WH_MOD
-#include <mods_api.h>
-#endif
-
-
 bool g_retryInitInAThread = false;
 HANDLE g_initThread = NULL;
 HANDLE g_initThreadStopSignal = NULL;
