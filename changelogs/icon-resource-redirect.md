@@ -1,3 +1,7 @@
+## 1.1.5 ([Aug 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/84c3316ab38986a63b67f2dc50b44025989788ff/mods/icon-resource-redirect.wh.cpp))
+
+* Added information about icon themes to the mod description.
+
 ## 1.1.4 ([Jun 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5d1f12d1d984919a764556f139724d8eec004900/mods/icon-resource-redirect.wh.cpp))
 
 * Added support for using patterns for redirection, where '\*' matches any number characters and '?' matches any single character, for example: `C:\Programs\Firefox-Version-*\firefox.exe`.

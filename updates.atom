@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-22T17:10:56.000Z</updated>
+    <updated>2024-08-23T18:21:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.1.5]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#84c3316ab38986a63b67f2dc50b44025989788ff</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-08-23T18:21:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added information about icon themes to the mod description.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme Enable with extended compatibility 1.2]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility#576aabb72aee51fab4422be367c77d2ee1cfe884</id>
@@ -339,12 +348,5 @@ which you can start with command <code>shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b8
 <li>Another attempt at fixing multiple pinned items appearing for the same program.</li>
 <li>Added support for Windows 11 version 24H2.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic File Picker dialog 1.1.1]]></title>
-        <id>https://windhawk.net/mods/classic-file-picker-dialog#1b2a786aeb208e28f3aec941300c7710d20c403e</id>
-        <link href="https://windhawk.net/mods/classic-file-picker-dialog"/>
-        <updated>2024-08-04T10:23:27.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix reference to another mod</p>]]></content>
     </entry>
 </feed>
