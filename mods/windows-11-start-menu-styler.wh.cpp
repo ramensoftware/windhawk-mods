@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     Customize the start menu with themes contributed by others or create your own
-// @version         1.1.5
+// @version         1.1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -67,6 +67,10 @@ Windows10](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/
 [![Windows11_Metro10](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/Windows11_Metro10/screenshot-small.png)
 \
 Windows11_Metro10](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/Windows11_Metro10/README.md)
+
+[![Windows11_Metro10Minimal](https://raw.githubusercontent.com/ramensoftware/windows-11-start-menu-styling-guide/main/Themes/Windows11_Metro10Minimal/screenshot-small.png)
+\
+Windows11_Metro10Minimal](https://github.com/ramensoftware/windows-11-start-menu-styling-guide/blob/main/Themes/Windows11_Metro10Minimal/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 start menu
 styling
@@ -156,6 +160,7 @@ code from the **TranslucentTB** project.
   - Fluent2Inspired: Fluent2Inspired
   - Windows10: Windows10
   - Windows11_Metro10: Windows11_Metro10
+  - Windows11_Metro10Minimal: Windows11_Metro10Minimal
 - controlStyles:
   - - target: ""
       $name: Target
@@ -970,6 +975,76 @@ const Theme g_themeWindows11_Metro10 = {{
     ThemeTargetStyles{L"Rectangle[4]", {
         L"Margin=0,-20,0,0"}},
 }};
+
+const Theme g_themeWindows11_Metro10Minimal = {{
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#UndockedRoot", {
+        L"Visibility=Collapsed",
+        L"MaxWidth=0",
+        L"Margin=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AllAppsRoot", {
+        L"Visibility=Visible",
+        L"Width=540",
+        L"Transform3D:=<CompositeTransform3D TranslateX=\"-542\" />",
+        L"Margin=0"}},
+	ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#RootContent", {
+        L"MinWidth=460",
+        L"Margin=0"}},
+	ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#InnerContent", {
+        L"Margin=0,12,0,0"}},
+	ThemeTargetStyles{L"StartMenu.StartInnerFrame", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#CloseAllAppsButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.StartSizingFrame", {
+        L"MinWidth=460",
+        L"MaxWidth=460",
+        L"MaxHeight=670"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowAllAppsButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.AllAppsGridListView#AppsList", {
+        L"Padding=90,3,6,16"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AllAppsPaneHeader", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StartDocked.NavigationPaneView#NavigationPane", {
+        L"FlowDirection=0",
+        L"Margin=30,0,30,0"}},
+    ThemeTargetStyles{L"StartDocked.PowerOptionsView#PowerButton", {
+        L"FlowDirection=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ItemsStackPanel", {
+        L"FlowDirection=1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListViewItem", {
+        L"FlowDirection=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ItemsStackPanel > Windows.UI.Xaml.Controls.ListViewItem", {
+        L"FlowDirection=0"}},
+    ThemeTargetStyles{L"StartDocked.LauncherFrame > Windows.UI.Xaml.Controls.Grid#RootGrid > Windows.UI.Xaml.Controls.Grid#RootContent > Windows.UI.Xaml.Controls.Grid#MainContent > Windows.UI.Xaml.Controls.Grid#InnerContent > Windows.UI.Xaml.Shapes.Rectangle", {
+        L"Margin=67,7,0,21"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.SemanticZoom#ZoomControl", {
+        L"IsZoomOutButtonEnabled=False"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ZoomOutButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#ContentBorder > Windows.UI.Xaml.Controls.Grid#DroppedFlickerWorkaroundWrapper > Border@CommonStates", {
+        L"BorderBrush@Active:=<RevealBorderBrush Color=\"White\" TargetTheme=\"1\" Opacity=\"0.3\"/>",
+        L"Background:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.3\"/>\u0009",
+        L"Margin=1",
+        L"BorderBrush:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.8\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#ContentBorder > Windows.UI.Xaml.Controls.Grid#DroppedFlickerWorkaroundWrapper > Border#BackgroundBorder", {
+        L"Background:=<RevealBorderBrush Color=\"#646464\" TargetTheme=\"1\" Opacity=\".1\"/>\u0009",
+        L"Margin=2"}},
+    ThemeTargetStyles{L"Rectangle[4]", {
+        L"Margin=0,-20,0,0"}},
+	ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AcrylicBorder", {
+        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0\" TintLuminosityOpacity=\".85\" Opacity=\"1\"/>",
+		L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>",
+		L"BorderThickness=1"}},
+	ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#AppBorder", {
+        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource CardStrokeColorDefaultSolid}\"  FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" TintOpacity=\"0\" TintLuminosityOpacity=\".85\" Opacity=\"1\"/>",
+		L"BorderBrush:=<AcrylicBrush TintColor=\"{ThemeResource SurfaceStrokeColorDefault}\" FallbackColor=\"{ThemeResource SurfaceStrokeColorDefault}\" TintOpacity=\"0\" TintLuminosityOpacity=\".25\" Opacity=\"1\"/>"}},
+	ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#LayerBorder", {
+        L"Visibility=Visible"}},
+}};
+
 
 // clang-format on
 
