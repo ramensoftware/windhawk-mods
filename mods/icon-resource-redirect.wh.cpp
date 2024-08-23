@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. instead of icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.1.4
+// @version         1.1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -17,6 +17,18 @@
 
 Define alternative files for loading various resources (e.g. instead of icons in
 imageres.dll) for simple theming without having to modify system files.
+
+## Icon themes
+
+A collection of community contributed icon theme packs can be found in the
+[Resource Redirect icon
+themes](https://github.com/ramensoftware/resource-redirect-icon-themes)
+repository. An icon theme can be easily installed by downloading it and
+specifying its path in the mod's settings. For details, refer to the guide in
+the repository.
+
+A short demonstration can be found [here on
+YouTube](https://youtu.be/irzVmKHB83E).
 
 ## Theme folder
 
