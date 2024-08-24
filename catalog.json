@@ -78,7 +78,7 @@
                 "published": 1702982459000,
                 "rating": 10,
                 "ratingUsers": 6,
-                "updated": 1702982459000,
+                "updated": 1724502505000,
                 "users": 754
             },
             "metadata": {
@@ -86,7 +86,7 @@
                     "x86-64"
                 ],
                 "author": "aubymori",
-                "compilerOptions": "-lgdi32 -lshell32",
+                "compilerOptions": "-lgdi32 -lshell32 -luxtheme -ldwmapi",
                 "description": "Applies thick borders to legacy system flyouts and make them float",
                 "github": "https://github.com/aubymori",
                 "include": [
@@ -94,7 +94,7 @@
                     "SndVol.exe"
                 ],
                 "name": "Aero Flyout Fix",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "aero-tray": {

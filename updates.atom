@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-23T18:21:22.000Z</updated>
+    <updated>2024-08-24T12:28:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Flyout Fix 1.1.0]]></title>
+        <id>https://windhawk.net/mods/aero-flyout-fix#edaa3ee94174396da2885ef9e0bff3e5d5e841bd</id>
+        <link href="https://windhawk.net/mods/aero-flyout-fix"/>
+        <updated>2024-08-24T12:28:25.000Z</updated>
+        <content type="html"><![CDATA[<p>Add support for Windows 7's network flyout</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.1.5]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#84c3316ab38986a63b67f2dc50b44025989788ff</id>
@@ -338,15 +345,5 @@ and/or manipulated Windows features using vivetool utility.</p>
 <p>If you want to get rid of the cogwheel icon in the tray area, use the mod "Hide Action Center icon".
 You can restore the clock and set up the tray icons using legacy tray setup dialog,
 which you can start with command <code>shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}</code></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-grouping#32678e0ef871bf50c15cd8692b9317b869915542</id>
-        <link href="https://windhawk.net/mods/taskbar-grouping"/>
-        <updated>2024-08-09T17:18:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Another attempt at fixing multiple pinned items appearing for the same program.</li>
-<li>Added support for Windows 11 version 24H2.</li>
-</ul>]]></content>
     </entry>
 </feed>
