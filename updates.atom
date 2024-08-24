@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-24T12:28:25.000Z</updated>
+    <updated>2024-08-24T17:22:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#3a19d101477ac04951f6c533f92f137d0fdd048b</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2024-08-24T17:22:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startbuttonalwaysontheleft">Start button always on the left</h1>
+<p>Forces the start button to be on the left of the taskbar, even when taskbar
+icons are centered.</p>
+<p>Only Windows 11 is supported.</p>
+<p>Known limitations:</p>
+<ul>
+<li>There's a jumpy animation when a centered taskbar is animated.</li>
+<li>Secondary monitors aren't supported.</li>
+</ul>
+<p><img src="https://i.imgur.com/bEqvfOE.png" alt="Screenshot" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aero Flyout Fix 1.1.0]]></title>
         <id>https://windhawk.net/mods/aero-flyout-fix#edaa3ee94174396da2885ef9e0bff3e5d5e841bd</id>
@@ -332,18 +348,5 @@ You can force show/hide the menu bar in the mod settings. Forcing the menu bar t
         <updated>2024-08-10T13:47:02.000Z</updated>
         <content type="html"><![CDATA[<p>Enables legacy Alt+Tab dialog from Windows XP and Windows 2000</p>
 <p><img src="https://i.imgur.com/wdX9PW7.png" alt="Legacy Alt+Tab" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 taskbar on Windows 11 1.0]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11#fdcbbba78e2a2598fab384f47ca8751c0e1bb68d</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11"/>
-        <updated>2024-08-10T12:09:01.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod enables Windows 10 taskbar on Windows 11 versions 21H2 to 23H2 via registry method, without
-using Explorer Patcher. </p>
-<p>It may be useful also on later versions of Windows with Explorer.exe downgraded to previous versions
-and/or manipulated Windows features using vivetool utility.</p>
-<p>If you want to get rid of the cogwheel icon in the tray area, use the mod "Hide Action Center icon".
-You can restore the clock and set up the tray icons using legacy tray setup dialog,
-which you can start with command <code>shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}</code></p>]]></content>
     </entry>
 </feed>

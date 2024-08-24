@@ -2391,6 +2391,32 @@
                 "version": "1.0.1"
             }
         },
+        "taskbar-start-button-position": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1724520144000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1724520144000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Forces the start button to be on the left of the taskbar, even when taskbar icons are centered (Windows 11 only)",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Start button always on the left",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-thumbnail-reorder": {
             "details": {
                 "defaultSorting": 40870,
