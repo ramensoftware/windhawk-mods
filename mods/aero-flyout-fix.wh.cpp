@@ -2,13 +2,13 @@
 // @id              aero-flyout-fix
 // @name            Aero Flyout Fix
 // @description     Applies thick borders to legacy system flyouts and make them float
-// @version         1.0.0
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
 // @include         SndVol.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lshell32
+// @compilerOptions -lgdi32 -lshell32 -luxtheme -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,7 +29,8 @@ applicable.
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
-#include <winerror.h>
+#include <uxtheme.h>
+#include <dwmapi.h>
 
 #define RECTWIDTH(rect)  ((rect).right - (rect).left)
 #define RECTHEIGHT(rect) ((rect).bottom - (rect).top)
@@ -80,7 +81,7 @@ POINT AdjustWindowPosForTaskbar(HWND hWnd)
 #define CTrayClock_Window(pThis) *((HWND *)pThis + 2)
 
 /* Give clock the proper styles upon creation */
-HWND (* IsolationAwareCreateWindowExW_orig)(__int64, LPCWSTR, __int64, DWORD, int, int, int, int, HWND);
+HWND (*IsolationAwareCreateWindowExW_orig)(__int64, LPCWSTR, __int64, DWORD, int, int, int, int, HWND);
 HWND IsolationAwareCreateWindowExW_hook(
     __int64 i1,
     LPCWSTR lpClassName,
@@ -135,7 +136,7 @@ LRESULT CALLBACK CTrayClock_s_WndProc_hook(
             case HTBOTTOMLEFT:
             case HTLEFT:
             case HTTOPLEFT:
-                return HTCLIENT;
+                return HTBORDER;
             default:
                 return lr;
         }
@@ -146,7 +147,7 @@ LRESULT CALLBACK CTrayClock_s_WndProc_hook(
     );
 }
 
-const WindhawkUtils::SYMBOL_HOOK timedateHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK timedateCplHooks[] = {
     {
         {
             L"IsolationAwareCreateWindowExW"
@@ -164,6 +165,7 @@ const WindhawkUtils::SYMBOL_HOOK timedateHooks[] = {
         false
     }
 };
+
 #pragma endregion // "timedate.cpl hooks"
 
 #pragma region "user32.dll hooks"
@@ -221,7 +223,7 @@ HWND WINAPI CreateWindowInBand_hook(
 
 #pragma region "stobject.dll hooks"
 
-void (* UpdateFlyoutUI_orig)(void);
+void (*UpdateFlyoutUI_orig)(void);
 void UpdateFlyoutUI_hook(void)
 {
     UpdateFlyoutUI_orig();
@@ -236,7 +238,7 @@ void UpdateFlyoutUI_hook(void)
     }
 }
 
-const WindhawkUtils::SYMBOL_HOOK stobjectHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK stobjectDllHooks[] = {
     {
         {
             L"void __cdecl UpdateFlyoutUI(void)"
@@ -246,6 +248,7 @@ const WindhawkUtils::SYMBOL_HOOK stobjectHooks[] = {
         false
     }
 };
+
 #pragma endregion // "stobject.dll hooks"
 
 #pragma region "ActionCenter.dll hooks"
@@ -273,7 +276,7 @@ LRESULT CALLBACK CHCFlyoutWindow_CHCFlyoutSTAThread_s_WndProc_hook(
             case HTBOTTOMLEFT:
             case HTLEFT:
             case HTTOPLEFT:
-                return HTCLIENT;
+                return HTBORDER;
             default:
                 return lr;
         }
@@ -284,7 +287,7 @@ LRESULT CALLBACK CHCFlyoutWindow_CHCFlyoutSTAThread_s_WndProc_hook(
     );
 }
 
-const WindhawkUtils::SYMBOL_HOOK actioncenterHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK actionCenterDllHooks[] = {
     {
         {
             L"private: static __int64 __cdecl CHCFlyoutWindow::CHCFlyoutSTAThread::s_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
@@ -297,6 +300,161 @@ const WindhawkUtils::SYMBOL_HOOK actioncenterHooks[] = {
 
 #pragma endregion // "ActionCenter.dll hooks"
 
+#pragma region "VAN.dll hooks"
+
+RECT *g_rcAnchor = nullptr;
+HWND g_hWndVan = NULL;
+
+#define CListUiBase_hWnd(pThis) *((HWND *)pThis + 2)
+
+HWND GetVANWindow(void)
+{
+    if (!g_hWndVan || !IsWindow(g_hWndVan))
+        g_hWndVan = FindWindowExW(NULL, NULL, L"NativeHWNDHost", L"View Available Networks");
+
+    return g_hWndVan;
+}
+
+void (*CListUiBase_PositionVanUI_orig)(void *, bool, LPRECT, int, UINT, LPPOINT);
+void CListUiBase_PositionVanUI_hook(void *pThis, bool bThickFrames, LPRECT lprc, int swpFlags, UINT uFlags, LPPOINT pAnchorPt)
+{ 
+    int borderSize = 0;
+    HWND hWnd = CListUiBase_hWnd(pThis);
+    
+    HWND hWndVan = GetVANWindow();
+    if (hWndVan)
+    {
+        SetWindowLongPtrW(g_hWndVan, GWL_STYLE, GetWindowLongPtrW(hWnd, GWL_STYLE) | WS_THICKFRAME);
+    }
+
+    /* From this point on, this is a rewrite of the original function, with a
+       difference in the final SetWindowPos for the correct sizing. */
+  	if (bThickFrames)
+  	{
+  	  	BOOL bNcFrames = 0;
+        BOOL pfEnabled = FALSE;
+  	  	if ( DwmIsCompositionEnabled(&pfEnabled) >= 0
+  	  	  && DwmGetWindowAttribute(hWnd, DWMWA_NCRENDERING_ENABLED, &bNcFrames, sizeof(bNcFrames)) >= 0
+  	  	  && pfEnabled
+  	  	  && !bNcFrames )
+  	  	{
+  	  	  	DWMNCRENDERINGPOLICY pol = DWMNCRP_ENABLED;
+  	  	  	DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &pol, sizeof(pol));
+  	  	}
+
+  	  	pfEnabled = FALSE;
+  	  	if ( DwmIsCompositionEnabled(&pfEnabled) >= 0 )
+  	  	{
+  	  	  	if (pfEnabled)
+  	  	  	{
+                RECT rcAdjust = { 0 };
+  	  	  	  	if ( AdjustWindowRectEx(&rcAdjust, WS_THICKFRAME, 0, 0) )
+  	  	  	  	{
+  	  	  	  	  	borderSize = GetSystemMetrics(SM_CXSMICON) / 2 + ((rcAdjust.right - rcAdjust.left) / 2);
+  	  	  	  	}
+  	  	  	}
+  	  	}
+  	}
+
+    RECT rc;
+  	GetWindowRect(hWnd, &rc);
+  	InflateRect(&rc, borderSize, borderSize);
+
+    SIZE windowSize;
+  	windowSize.cx = rc.right - rc.left;
+  	windowSize.cy = rc.bottom - rc.top;
+  	if ( lprc )
+  	{
+  	  	windowSize.cx = 2 * borderSize + lprc->right - lprc->left;
+  	  	windowSize.cy = 2 * borderSize + lprc->bottom - lprc->top;
+  	}
+  	
+    POINT pt;
+  	pt.x = g_rcAnchor->left;
+  	pt.y = g_rcAnchor->top;
+    POINT *lpPoint = &pt;
+  	if (pAnchorPt)
+  	  	lpPoint = pAnchorPt;
+  	
+  	if (CalculatePopupWindowPosition(lpPoint, &windowSize, uFlags, g_rcAnchor, &rc) >= 0 )
+    {
+  	  	SetWindowPos(
+            hWnd,
+            NULL,
+            rc.left + (borderSize / 2),
+            rc.top+ (borderSize / 2),
+            windowSize.cx - borderSize,
+            windowSize.cy - borderSize,
+            swpFlags | SWP_NOCOPYBITS
+        );
+    }
+}
+
+SUBCLASSPROC CVanUI_TopWindowSubclassProc_orig;
+LRESULT CALLBACK CVanUI_TopWindowSubclassProc_hook(
+    HWND      hWnd,
+    UINT      uMsg,
+    WPARAM    wParam,
+    LPARAM    lParam,
+    UINT_PTR  uIdSubclass,
+    DWORD_PTR dwRefData
+)
+{
+    if (uMsg == WM_NCHITTEST)
+    {
+        LRESULT lr = CVanUI_TopWindowSubclassProc_orig(
+            hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData
+        );
+        switch (lr)
+        {
+            case HTTOP:
+            case HTTOPRIGHT:
+            case HTRIGHT:
+            case HTBOTTOMRIGHT:
+            case HTBOTTOM:
+            case HTBOTTOMLEFT:
+            case HTLEFT:
+            case HTTOPLEFT:
+                return HTBORDER;
+            default:
+                return lr;
+        }
+    }
+
+    return CVanUI_TopWindowSubclassProc_orig(
+        hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData
+    );
+}
+
+WindhawkUtils::SYMBOL_HOOK vanDllHooks[] = {
+    {
+        {
+            L"public: void __cdecl CListUiBase::PositionVanUI(bool,struct tagRECT *,unsigned int,unsigned int,struct tagPOINT *)"
+        },
+        &CListUiBase_PositionVanUI_orig,
+        CListUiBase_PositionVanUI_hook,
+        false
+    },
+    {
+        {
+            L"public: static __int64 __cdecl CVanUI::TopWindowSubclassProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,unsigned __int64,unsigned __int64)"
+        },
+        &CVanUI_TopWindowSubclassProc_orig,
+        CVanUI_TopWindowSubclassProc_hook,
+        false
+    },
+    {
+        {
+            L"struct tagRECT g_rcAnchor"
+        },
+        &g_rcAnchor,
+        nullptr,
+        false
+    }
+};
+
+#pragma endregion // "VAN.dll hooks"
+
 BOOL Wh_ModInit_Explorer(void)
 {
     HMODULE hTimedate = LoadLibraryW(L"timedate.cpl");
@@ -308,8 +466,8 @@ BOOL Wh_ModInit_Explorer(void)
 
     if (!WindhawkUtils::HookSymbols(
         hTimedate,
-        timedateHooks,
-        ARRAYSIZE(timedateHooks)
+        timedateCplHooks,
+        ARRAYSIZE(timedateCplHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in timedate.cpl");
@@ -342,8 +500,8 @@ BOOL Wh_ModInit_Explorer(void)
 
     if (!WindhawkUtils::HookSymbols(
         hStobject,
-        stobjectHooks,
-        ARRAYSIZE(stobjectHooks)
+        stobjectDllHooks,
+        ARRAYSIZE(stobjectDllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in stobject.dll");
@@ -357,16 +515,30 @@ BOOL Wh_ModInit_Explorer(void)
       * It is safe to skip hooking ActionCenter.dll since the flyout is
       * brought back via replacing it with Windows 8.1's version.
       */
-    HMODULE hActioncenter = LoadLibraryW(L"ActionCenter.dll");
-    if (hActioncenter)
+    HMODULE hActionCenter = LoadLibraryW(L"ActionCenter.dll");
+    if (hActionCenter)
     {
         if (!WindhawkUtils::HookSymbols(
-            hActioncenter,
-            actioncenterHooks,
-            ARRAYSIZE(actioncenterHooks)
+            hActionCenter,
+            actionCenterDllHooks,
+            ARRAYSIZE(actionCenterDllHooks)
         ))
         {
             Wh_Log(L"Failed to hook one or more symbol functions in ActionCenter.dll");
+        }
+    }
+
+    /* Ditto, but the 7 version instead. */
+    HMODULE hVan = LoadLibraryW(L"VAN.dll");
+    if (hVan)
+    {
+        if (!WindhawkUtils::HookSymbols(
+            hVan,
+            vanDllHooks,
+            ARRAYSIZE(vanDllHooks)
+        ))
+        {
+            Wh_Log(L"Failed to hook one or more symbol functions in VAN.dll");
         }
     }
 
@@ -380,13 +552,12 @@ BOOL Wh_ModInit_Explorer(void)
 #define CDlgSimpleVolumeHost_Window(pThis) *(HWND *)((char *)pThis + 8)
 
 /* Position volume flyout upon creation */
-BOOL (* CDlgSimpleVolumeHost_OnInitDialog_orig)(void *);
+BOOL (*CDlgSimpleVolumeHost_OnInitDialog_orig)(void *);
 BOOL CDlgSimpleVolumeHost_OnInitDialog_hook(
     void *pThis
 ) 
 {
     BOOL bRes = CDlgSimpleVolumeHost_OnInitDialog_orig(pThis);
-
     HWND hDlg = CDlgSimpleVolumeHost_Window(pThis);
     if (hDlg)
     {
@@ -402,7 +573,7 @@ BOOL CDlgSimpleVolumeHost_OnInitDialog_hook(
     return bRes;
 }
 
-const WindhawkUtils::SYMBOL_HOOK sndvolHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK sndvolExeHooks[] = {
     {
         {
             L"public: __int64 __cdecl CDlgSimpleVolumeHost::OnInitDialog(unsigned int,unsigned __int64,__int64,int &)"
@@ -417,8 +588,8 @@ BOOL Wh_ModInit_SndVol(void)
 {
     if (!WindhawkUtils::HookSymbols(
         GetModuleHandleW(NULL),
-        sndvolHooks,
-        ARRAYSIZE(sndvolHooks)
+        sndvolExeHooks,
+        ARRAYSIZE(sndvolExeHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in SndVol.exe");
@@ -453,6 +624,6 @@ BOOL Wh_ModInit(void)
         }
     }
 
-    Wh_Log(L"Aero Flyout Fix cannot hook into this program");
+    Wh_Log(L"Failed to get the path of the current process");
     return FALSE;
 }
