@@ -303,17 +303,28 @@ const WindhawkUtils::SYMBOL_HOOK actionCenterDllHooks[] = {
 #pragma region "VAN.dll hooks"
 
 RECT *g_rcAnchor = nullptr;
+HWND g_hWndVan = NULL;
 
 #define CListUiBase_hWnd(pThis) *((HWND *)pThis + 2)
+
+HWND GetVANWindow(void)
+{
+    if (!g_hWndVan || !IsWindow(g_hWndVan))
+        g_hWndVan = FindWindowExW(NULL, NULL, L"NativeHWNDHost", L"View Available Networks");
+
+    return g_hWndVan;
+}
 
 void (*CListUiBase_PositionVanUI_orig)(void *, bool, LPRECT, int, UINT, LPPOINT);
 void CListUiBase_PositionVanUI_hook(void *pThis, bool bThickFrames, LPRECT lprc, int swpFlags, UINT uFlags, LPPOINT pAnchorPt)
 { 
     int borderSize = 0;
     HWND hWnd = CListUiBase_hWnd(pThis);
-    if (hWnd)
+    
+    HWND hWndVan = GetVANWindow();
+    if (hWndVan)
     {
-        SetWindowLongPtrW(hWnd, GWL_STYLE, GetWindowLongPtrW(hWnd, GWL_STYLE) | WS_THICKFRAME);
+        SetWindowLongPtrW(g_hWndVan, GWL_STYLE, GetWindowLongPtrW(hWnd, GWL_STYLE) | WS_THICKFRAME);
     }
 
     /* From this point on, this is a rewrite of the original function, with a
@@ -562,7 +573,7 @@ BOOL CDlgSimpleVolumeHost_OnInitDialog_hook(
     return bRes;
 }
 
-const WindhawkUtils::SYMBOL_HOOK sndvolHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK sndvolExeHooks[] = {
     {
         {
             L"public: __int64 __cdecl CDlgSimpleVolumeHost::OnInitDialog(unsigned int,unsigned __int64,__int64,int &)"
@@ -577,8 +588,8 @@ BOOL Wh_ModInit_SndVol(void)
 {
     if (!WindhawkUtils::HookSymbols(
         GetModuleHandleW(NULL),
-        sndvolHooks,
-        ARRAYSIZE(sndvolHooks)
+        sndvolExeHooks,
+        ARRAYSIZE(sndvolExeHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in SndVol.exe");
