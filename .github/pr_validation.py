@@ -283,7 +283,7 @@ def validate_symbol_hooks(path: Path):
                 'Use either a comment or a variable name, not both. For example, you'
                 ' can rename the variable from "user32DllHooks" to "user32Hooks".'
             )
-            warnings += add_warning(path, line_num - 1, warning_msg)
+            warnings += add_warning(path, line_num, warning_msg)
         elif target_from_name or targets_from_comment:
             if target_from_name and not is_existing_windows_file_name(target_from_name):
                 warning_msg = (
