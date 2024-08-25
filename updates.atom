@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-24T17:22:24.000Z</updated>
+    <updated>2024-08-25T16:52:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.6.4]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#a5291e5c748ccaf5b11b04412683a5d23601b9fc</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2024-08-25T16:52:43.000Z</updated>
+        <content type="html"><![CDATA[<p>Seamless CPL transition without forcing separate process mode</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#3a19d101477ac04951f6c533f92f137d0fdd048b</id>
@@ -340,13 +347,5 @@ You can force show/hide the menu bar in the mod settings. Forcing the menu bar t
         <content type="html"><![CDATA[<ul>
 <li>Added support for Windows 11 version 24H2.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Legacy Alt+Tab dialog 1.0]]></title>
-        <id>https://windhawk.net/mods/legacy-alt-tab#00ded682e58440e653b80814a164723252f65c46</id>
-        <link href="https://windhawk.net/mods/legacy-alt-tab"/>
-        <updated>2024-08-10T13:47:02.000Z</updated>
-        <content type="html"><![CDATA[<p>Enables legacy Alt+Tab dialog from Windows XP and Windows 2000</p>
-<p><img src="https://i.imgur.com/wdX9PW7.png" alt="Legacy Alt+Tab" /></p>]]></content>
     </entry>
 </feed>
