@@ -2972,7 +2972,7 @@ BOOL Wh_ModInit(void)
     }
 
     // windows.storage.dll
-    const WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
         {
             {
                 L"public: long "
@@ -2987,8 +2987,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hStorage,
-        windowsStorageDllHooks,
-        ARRAYSIZE(windowsStorageDllHooks)
+        windowsStorageHooks,
+        ARRAYSIZE(windowsStorageHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in windows.storage.dll");
