@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.6.3
+// @version         1.6.4
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -73,8 +73,8 @@ Feel free to try it on other versions, but it may not work.
 // ==WindhawkModSettings==
 /*
 - alwayscpl: true
-  $name: Force Control Panel mode
-  $description: Make Explorer think it's always Control Panel. This will fix Control Panel reopening Explorer but it will also enable old search and may be buggy.
+  $name: Seamlessly switch to Control Panel
+  $description: Allow Explorer to switch to Control Panel without closing and reopening.
 - smalladdress: true
   $name: Small address bar
   $description: Reverts the address bar to the size it was before Windows 10, version 1909.
@@ -1915,22 +1915,44 @@ HRESULT STDCALL CShellBrowser_GetFolderFlags_hook(
 
 DEFINE_GUID(CLSID_ControlPanelProcessExplorerHost, 0x5BD95610, 0x9434, 0x43C2, 0x88,0x6C, 0x57,0x85,0x2C,0xC8,0xA1,0x20);
 
-/* Force Control Panel mode */
+/* Stop Explorer from relaunching on CPL enter */
+bool (STDCALL *UseSeparateProcess_orig)(IShellItem *);
+bool STDCALL UseSeparateProcess_hook(IShellItem *psi)
+{
+    SHELLSTATEW ss = { 0 };
+    SHGetSetSettings(&ss, SSF_SEPPROCESS, FALSE);
+    // For whatever reason, it gets set to -1 when this option is enabled
+    if (!settings.alwayscpl || ss.fSepProcess != 0)
+        return UseSeparateProcess_orig(psi);
+    return false;
+}
+
+/* Ditto, but for separate process mode. */
 GUID *(THISCALL *CExplorerLauncher_GetHostFromTarget_orig)(void *, GUID *, LPCITEMIDLIST) = nullptr;
 GUID *THISCALL CExplorerLauncher_GetHostFromTarget_hook(
     void          *pThis,
     GUID          *out,
-    LPCITEMIDLIST  pItemIds
+    LPCITEMIDLIST  pidl
 )
 {
     if (settings.alwayscpl)
     {
-        *out = CLSID_ControlPanelProcessExplorerHost;
-        return out;
+        IShellItem *psi = nullptr;
+        SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&psi));
+        if (psi)
+        {
+            if (UseSeparateProcess_hook(psi))
+            {
+                *out = CLSID_ControlPanelProcessExplorerHost;
+                psi->Release();
+                return out;
+            }
+            psi->Release();
+        }
     }
 
     return CExplorerLauncher_GetHostFromTarget_orig(
-        pThis, out, pItemIds
+        pThis, out, pidl
     );
 }
 
@@ -2558,6 +2580,16 @@ BOOL Wh_ModInit(void)
     const WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[] = {
         {
             {
+                L"bool "
+                SSTDCALL
+                L" UseSeparateProcess(struct IShellItem *)"
+            },
+            &UseSeparateProcess_orig,
+            UseSeparateProcess_hook,
+            false
+        },
+        {
+            {
                 L"private: struct _GUID "
                 STHISCALL
                 L" CExplorerLauncher::GetHostFromTarget(struct _ITEMIDLIST_ABSOLUTE const *)"
@@ -2940,7 +2972,7 @@ BOOL Wh_ModInit(void)
     }
 
     // windows.storage.dll
-    const WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
         {
             {
                 L"public: long "
@@ -2955,8 +2987,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hStorage,
-        windowsStorageDllHooks,
-        ARRAYSIZE(windowsStorageDllHooks)
+        windowsStorageHooks,
+        ARRAYSIZE(windowsStorageHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in windows.storage.dll");
