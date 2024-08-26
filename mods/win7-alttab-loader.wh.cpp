@@ -53,8 +53,6 @@ IsShellWindow_t IsShellManagedWindow = nullptr;
 typedef HWND(WINAPI *GhostWindowFromHungWindow_t)(HWND);
 GhostWindowFromHungWindow_t GhostWindowFromHungWindow = nullptr;
 
-#pragma region "Core functionality"
-
 /* Prevent background UWP windows from showing up */
 BOOL (WINAPI *IsWindowEnabled_orig)(HWND);
 BOOL WINAPI IsWindowEnabled_hook(HWND hWnd)
