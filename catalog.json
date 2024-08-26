@@ -2871,7 +2871,7 @@
                 "published": 1690590362000,
                 "rating": 10,
                 "ratingUsers": 6,
-                "updated": 1723628610000,
+                "updated": 1724657922000,
                 "users": 363
             },
             "metadata": {
@@ -2879,14 +2879,14 @@
                     "x86-64"
                 ],
                 "author": "aubymori",
-                "compilerOptions": "-lole32 -luuid -ldwmapi -luxtheme -ldbghelp",
+                "compilerOptions": "-ldwmapi -lcomctl32 -lgdi32",
                 "description": "Loads Windows 7 Alt+Tab on Windows 10.",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Windows 7 Alt+Tab Loader",
-                "version": "1.0.3"
+                "version": "2.0.0"
             }
         },
         "win7-command-bar": {

@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-25T16:52:43.000Z</updated>
+    <updated>2024-08-26T07:38:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 2.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-alttab-loader#a1ef83e2b24d3b147686d269bf92c7c37c7feaa0</id>
+        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
+        <updated>2024-08-26T07:38:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Complete rewrite</li>
+<li>Support for UWP app icons</li>
+<li>Aero Peek now works</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.6.4]]></title>
         <id>https://windhawk.net/mods/aerexplorer#a5291e5c748ccaf5b11b04412683a5d23601b9fc</id>
@@ -335,15 +346,6 @@ You can force show/hide the menu bar in the mod settings. Forcing the menu bar t
         <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#2efe8bfdd78e6d3aa282afe913543b2e6e0ac84b</id>
         <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
         <updated>2024-08-10T20:15:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for Windows 11 version 24H2.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.10]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#e3b2fcf725fb4688a56af83dd299f2605182cdcc</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-08-10T17:14:48.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added support for Windows 11 version 24H2.</li>
 </ul>]]></content>
