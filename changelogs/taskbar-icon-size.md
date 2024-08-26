@@ -1,3 +1,7 @@
+## 1.2.12 ([Aug 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7ad7264eae826e7b96ebb07e04770e175f5fee9e/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed the weather/news widget content sometimes disappearing when large icons are used.
+
 ## 1.2.11 ([Aug 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/68b57c0b24b7d2ef165ac7a4698ee8f2591fc445/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed the taskbar getting pushed offscreen on some devices with touchscreens.

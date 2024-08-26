@@ -2294,7 +2294,7 @@
                 "published": 1657984524000,
                 "rating": 10,
                 "ratingUsers": 636,
-                "updated": 1723999076000,
+                "updated": 1724703161000,
                 "users": 27025
             },
             "featured": true,
@@ -2312,7 +2312,7 @@
                 ],
                 "name": "Taskbar height and icon size",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.11"
+                "version": "1.2.12"
             }
         },
         "taskbar-labels": {
