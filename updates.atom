@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-26T20:12:41.000Z</updated>
+    <updated>2024-08-29T18:32:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Always show all taskbar tray icons 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-notification-icons-show-all#95ac5bad188ba63eaaa4f75de3f1578dc7c98b0a</id>
+        <link href="https://windhawk.net/mods/taskbar-notification-icons-show-all"/>
+        <updated>2024-08-29T18:32:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alwaysshowalltaskbartrayicons">Always show all taskbar tray icons</h1>
+<p>Restore the missing Windows option to always show all notification (tray) icons.</p>
+<p>Alternatively, just make sure that new icons are shown by default.</p>
+<p>Only Windows 11 is supported.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.12]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#7ad7264eae826e7b96ebb07e04770e175f5fee9e</id>
@@ -342,12 +352,5 @@ You can force show/hide the menu bar in the mod settings. Forcing the menu bar t
         <link href="https://windhawk.net/mods/win7-alttab-loader"/>
         <updated>2024-08-14T09:43:30.000Z</updated>
         <content type="html"><![CDATA[<p>Windows 7 Alt+Tab Loader 1.0.3: Remove dead WindhawkUtils namespace</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 taskbar on Windows 11 1.0.1]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11#6deadd9a1b7273347088f6ffe82459bca72b6c41</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11"/>
-        <updated>2024-08-12T14:10:59.000Z</updated>
-        <content type="html"><![CDATA[<p>More clarity in description</p>]]></content>
     </entry>
 </feed>
