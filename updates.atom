@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-31T12:49:44.000Z</updated>
+    <updated>2024-08-31T18:24:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#387771ec375561f49fffc1429b8b185f54feb5e4</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2024-08-31T18:24:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the start menu being covered by the taskbar, adjusted its position to
+always open near the start button.</li>
+<li>Adjusted the position of the notification flyout and quick settings flyout to
+open near the tray area and not on the opposite side of the screen.</li>
+<li>The clock is no longer rotated sideways.</li>
+<li>Some (hopefully all) system tray icons are no longer rotated sideways.</li>
+<li>The default taskbar width was increased to account for the rotated clock
+width.</li>
+<li>Fixed some cases of disappearing taskbar icons.</li>
+<li>Fixed the position of the Win+X menu (start button right click menu).</li>
+<li>Other small fixes and improvements.</li>
+<li>Fixed the start button, search button and tasks button becoming larger when
+the taskbar width is increased.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lines in MMC and Device Manager 1.0.1]]></title>
         <id>https://windhawk.net/mods/lines-in-mmc#3c610f47189a8abada7a1bc39a93e87de7d85af4</id>
@@ -341,14 +362,5 @@ You can force show/hide the menu bar in the mod settings. Forcing the menu bar t
 <p>Delay on navigation to a new folder when using SysListView32: this is caused by a extra erroneous message sent to the list view window. This mod supresses it, fixing the problem.</p>
 <p>Black artifacts briefly visible in new file explorer windows under Classic theme: this is caused by incorrect handling of WM_ERASEBKGND in CabinetWClass window procedure. This mod adds a option to correct this.</p>
 <p>Changes will be visible in new file explorer windows.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.3]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#1f573ac96e33fb6a48c81f1ab4068db7d39d7e11</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
-        <updated>2024-08-14T21:50:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with update KB5040527 for Windows 11 version 23H2.</li>
-</ul>]]></content>
     </entry>
 </feed>
