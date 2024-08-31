@@ -2,7 +2,7 @@
 // @id              lines-in-mmc
 // @name            Lines in MMC and Device Manager
 // @description     Adds dotted lines to the TreeView in Microsoft Management Console and Device Manager
-// @version         1.0
+// @version         1.0.1
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         mmc.exe
@@ -11,6 +11,7 @@
 // ==WindhawkModReadme==
 /*
 Adds dotted lines to the TreeView in Microsoft Management Console and Device Manager
+
 ![Screenshot](https://i.imgur.com/3ZBR2HD.png)
 */
 // ==/WindhawkModReadme==
