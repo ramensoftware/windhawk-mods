@@ -1397,6 +1397,26 @@
                 "version": "1.0.0"
             }
         },
+        "lines-in-mmc": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1725108288000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1725108288000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "anixx",
+                "description": "Adds dotted lines to the TreeView in Microsoft Management Console and Device Manager",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "mmc.exe"
+                ],
+                "name": "Lines in MMC and Device Manager",
+                "version": "1.0"
+            }
+        },
         "lm-close-windbg-file-changed": {
             "details": {
                 "defaultSorting": 162,

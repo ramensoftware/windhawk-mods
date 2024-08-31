@@ -2,12 +2,20 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-29T18:32:11.000Z</updated>
+    <updated>2024-08-31T12:44:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lines in MMC and Device Manager 1.0]]></title>
+        <id>https://windhawk.net/mods/lines-in-mmc#0662eabc9cfd455437ebfe9c6b0f9e3b5017b353</id>
+        <link href="https://windhawk.net/mods/lines-in-mmc"/>
+        <updated>2024-08-31T12:44:48.000Z</updated>
+        <content type="html"><![CDATA[<p>Adds dotted lines to the TreeView in Microsoft Management Console and Device Manager
+<img src="https://i.imgur.com/3ZBR2HD.png" alt="Screenshot" /></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Always show all taskbar tray icons 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icons-show-all#95ac5bad188ba63eaaa4f75de3f1578dc7c98b0a</id>
@@ -345,12 +353,5 @@ You can force show/hide the menu bar in the mod settings. Forcing the menu bar t
 <li>Fix issue with Explorer not hooking shell32 sometimes at startup</li>
 <li>Free ShellStyle module at uninit</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 1.0.3]]></title>
-        <id>https://windhawk.net/mods/win7-alttab-loader#c541b5650cd974bbbf77bfac89f9f12851d58dc0</id>
-        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
-        <updated>2024-08-14T09:43:30.000Z</updated>
-        <content type="html"><![CDATA[<p>Windows 7 Alt+Tab Loader 1.0.3: Remove dead WindhawkUtils namespace</p>]]></content>
     </entry>
 </feed>
