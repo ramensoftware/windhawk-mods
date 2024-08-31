@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-31T12:44:48.000Z</updated>
+    <updated>2024-08-31T12:49:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Lines in MMC and Device Manager 1.0.1]]></title>
+        <id>https://windhawk.net/mods/lines-in-mmc#3c610f47189a8abada7a1bc39a93e87de7d85af4</id>
+        <link href="https://windhawk.net/mods/lines-in-mmc"/>
+        <updated>2024-08-31T12:49:44.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix image alignment</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Lines in MMC and Device Manager 1.0]]></title>
         <id>https://windhawk.net/mods/lines-in-mmc#0662eabc9cfd455437ebfe9c6b0f9e3b5017b353</id>
@@ -342,16 +349,6 @@ You can force show/hide the menu bar in the mod settings. Forcing the menu bar t
         <updated>2024-08-14T21:50:22.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with update KB5040527 for Windows 11 version 23H2.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[UIFILE Override 1.0.1]]></title>
-        <id>https://windhawk.net/mods/uifile-override#632302ab902c1d9adb22ad003bb27e41897ca79e</id>
-        <link href="https://windhawk.net/mods/uifile-override"/>
-        <updated>2024-08-14T21:49:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix issue with Explorer not hooking shell32 sometimes at startup</li>
-<li>Free ShellStyle module at uninit</li>
 </ul>]]></content>
     </entry>
 </feed>

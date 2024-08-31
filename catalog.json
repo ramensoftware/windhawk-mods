@@ -1403,7 +1403,7 @@
                 "published": 1725108288000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1725108288000,
+                "updated": 1725108584000,
                 "users": 0
             },
             "metadata": {
@@ -1414,7 +1414,7 @@
                     "mmc.exe"
                 ],
                 "name": "Lines in MMC and Device Manager",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "lm-close-windbg-file-changed": {
