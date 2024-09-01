@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-01T11:55:08.000Z</updated>
+    <updated>2024-09-01T13:05:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fake Explorer path 1.0.1]]></title>
+        <id>https://windhawk.net/mods/fake-explorer-path#ebdfc3b11e6dedeb63bf66dd75ed00cc7a8ceb47</id>
+        <link href="https://windhawk.net/mods/fake-explorer-path"/>
+        <updated>2024-09-01T13:05:55.000Z</updated>
+        <content type="html"><![CDATA[<p>More clarity</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fake Explorer path 1.0]]></title>
         <id>https://windhawk.net/mods/fake-explorer-path#33f5a6e22ac4c2ac74ed28bbd5ecb9bcef0d7492</id>
@@ -341,25 +348,5 @@ that <code>winlogon.exe</code> is in the Process inclusion list.</p>
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2024-08-17T19:59:47.000Z</updated>
         <content type="html"><![CDATA[<p>Make compilable on Windhawk 1.5</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Taskbar background fix 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-taskbar-background-fix#069694253210b43492a520720b96abc9ebd0e48b</id>
-        <link href="https://windhawk.net/mods/classic-taskbar-background-fix"/>
-        <updated>2024-08-17T11:11:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classictaskbarbackgroundfix">Classic Taskbar background fix</h1>
-<p>Fixes Taskbar background in classic theme by replacing black background with a classic button face colour. </p>
-<p>Install this mod if you have issues with black background around taskbar buttons and tray icons, like illustrated in the pictures below.</p>
-<p><strong>When combined with some classic Taskbar buttons mod</strong>, then this Taskbar background mod can be considered as an alternative to installing the @valinet's modified version of OpenShell StartMenuDLL.dll.</p>
-<p>Before:</p>
-<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/before-classic-taskbar-background-fix.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-classic-taskbar-background-fix.png" alt="After" /> </p>
-<h2 id="notethismodrequiresacomplementarybuttonsmodtobeactivated">Note: This mod requires a complementary buttons mod to be activated</h2>
-<p><strong>This mod does not fix the buttons' appearance, for that purpose there are other mods available. This is by design, for you to be able to choose your favourite buttons mod.</strong> Currently known Windhawk buttons mods are "Classic Taskbar 3D buttons Lite" and "Classic Taskbar 3D buttons with extended compatibility". Both are 3D buttons mods. At the time of this mod's release, there is no flat buttons mod available, but hopefully there may appear such mod later.</p>
-<h2 id="modconfiguration">Mod configuration</h2>
-<p>If you use 'Classic Taskbar 3D buttons Lite' and you have issues with vertical black lines around buttons then go to the settings of the current Taskbar background mod and under "Compatibility with classic Taskbar buttons mods" choose "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'". Usually the presence of 'Classic Taskbar 3D buttons Lite' should be detected automatically, but if there will be forks which still have the same increased button spacing behaviour, but a different mod id, then you may need to set this setting manually.</p>
-<h2 id="acknowledgements">Acknowledgements</h2>
-<p>I would like to thank @Anixx and @OrthodoxWindows for testing the mod during its development and illustrating the issues found.</p>]]></content>
     </entry>
 </feed>

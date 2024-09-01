@@ -1080,7 +1080,7 @@
                 "published": 1725191708000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1725191708000,
+                "updated": 1725195955000,
                 "users": 0
             },
             "metadata": {
@@ -1091,7 +1091,7 @@
                     "explorer.exe"
                 ],
                 "name": "Fake Explorer path",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "fake-high-contrast": {
