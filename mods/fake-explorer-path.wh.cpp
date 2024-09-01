@@ -2,7 +2,7 @@
 // @id              fake-explorer-path
 // @name            Fake Explorer path
 // @description     Allows to run explorer.exe in taskbar mode from any location
-// @version         1.0
+// @version         1.0.1
 // @author 	    Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -11,12 +11,13 @@
 // ==WindhawkModReadme==
 /*
 Allows to run explorer.exe in taskbar mode from any location. This can be used to run another version of Explorer
-without replacing system files. The path to explorer.exe can be specified in the registry key
+without replacing system files. Explorer can be launched manually or, alternatively, installed as default shell
+by specifying the path to explorer.exe in the registry key
 HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Shell.
 For running taskbar in Windows 10 mode, the localization folder should be available
 at the location of explorer.exe. For Windows 11 taskbar mode, this is not required.
 
-The mod makes explorer.exe think that it has been launched from %Systemroot%\Windows.
+The mod makes explorer.exe think that it has been launched from the Windows folder.
 */
 // ==/WindhawkModReadme==
 
