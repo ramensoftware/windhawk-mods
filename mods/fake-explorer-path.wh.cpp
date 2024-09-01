@@ -1,4 +1,3 @@
-
 // ==WindhawkMod==
 // @id              fake-explorer-path
 // @name            Fake Explorer path
