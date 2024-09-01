@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-08-31T18:24:23.000Z</updated>
+    <updated>2024-09-01T11:55:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fake Explorer path 1.0]]></title>
+        <id>https://windhawk.net/mods/fake-explorer-path#33f5a6e22ac4c2ac74ed28bbd5ecb9bcef0d7492</id>
+        <link href="https://windhawk.net/mods/fake-explorer-path"/>
+        <updated>2024-09-01T11:55:08.000Z</updated>
+        <content type="html"><![CDATA[<p>Allows to run explorer.exe in taskbar mode from any location. This can be used to run another version of Explorer
+without replacing system files. The path to explorer.exe can be specified in the registry key
+HKEY<em>LOCAL</em>MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Shell.
+For running taskbar in Windows 10 mode, the localization folder should be available
+at the location of explorer.exe. For Windows 11 taskbar mode, this is not required.</p>
+<p>The mod makes explorer.exe think that it has been launched from %Systemroot%\Windows.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#387771ec375561f49fffc1429b8b185f54feb5e4</id>
@@ -349,18 +361,5 @@ that <code>winlogon.exe</code> is in the Process inclusion list.</p>
 <p>If you use 'Classic Taskbar 3D buttons Lite' and you have issues with vertical black lines around buttons then go to the settings of the current Taskbar background mod and under "Compatibility with classic Taskbar buttons mods" choose "Enhance compatibility with 'Classic Taskbar 3D buttons Lite'". Usually the presence of 'Classic Taskbar 3D buttons Lite' should be detected automatically, but if there will be forks which still have the same increased button spacing behaviour, but a different mod id, then you may need to set this setting manually.</p>
 <h2 id="acknowledgements">Acknowledgements</h2>
 <p>I would like to thank @Anixx and @OrthodoxWindows for testing the mod during its development and illustrating the issues found.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorerframe fixes for Win11 22H2+ 1.0]]></title>
-        <id>https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus#441cbdf65a82b86f878448b997fa6c9daeafd093</id>
-        <link href="https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus"/>
-        <updated>2024-08-15T12:47:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerframefixesforwin1122h2">Explorerframe fixes for Win11 22H2+</h1>
-<p>This mod fixes a couple of issues with File Explorer windows appearance in Windows 11 releases 22H2, 23H2 and 24H2.</p>
-<p>Unpredictable menu bar appearance: On Windows 11 22H2 and 23H2, the menu bar may appear unpredictably. This mod allows the user to disable the menu bar entirely, or have it be shown at all times.
-You can force show/hide the menu bar in the mod settings. Forcing the menu bar to be shown is intended for the Classic theme.</p>
-<p>Delay on navigation to a new folder when using SysListView32: this is caused by a extra erroneous message sent to the list view window. This mod supresses it, fixing the problem.</p>
-<p>Black artifacts briefly visible in new file explorer windows under Classic theme: this is caused by incorrect handling of WM_ERASEBKGND in CabinetWClass window procedure. This mod adds a option to correct this.</p>
-<p>Changes will be visible in new file explorer windows.</p>]]></content>
     </entry>
 </feed>
