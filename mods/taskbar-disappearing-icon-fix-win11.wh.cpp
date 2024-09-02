@@ -167,6 +167,10 @@ void HideAndShowIcon(FrameworkElement taskListButtonElement) {
             .as<Controls::Image>();
 
     if(iconElement) {
+        // @m417z: For some reason, translation is being set to a NaN.
+        iconElement.Translation(
+            winrt::Windows::Foundation::Numerics::float3::zero());
+
         iconElement.Visibility(Visibility::Collapsed);
         iconElement.Dispatcher().TryRunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [iconElement](){
             iconElement.Visibility(Visibility::Visible);
