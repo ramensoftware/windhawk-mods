@@ -235,7 +235,7 @@ def is_existing_windows_file_name(name: str):
 
 
 def get_target_module_from_symbol_block_name(symbol_block_name: str):
-    p = r'(.*?)_?(exe|dll)_?hooks?'
+    p = r'(.*?)_?(exe|dll|cpl)_?hooks?'
     match = re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE)
     if not match:
         return None
@@ -255,7 +255,7 @@ def get_target_modules_from_previous_line(previous_line: str):
         return []
 
     names = [x.strip() for x in comment.split(',')]
-    if not all(x.endswith('.dll') or x.endswith('.exe') for x in names):
+    if not all(re.search(r'\.(exe|dll|cpl)$', x) for x in names):
         return []
 
     return names
@@ -283,7 +283,7 @@ def validate_symbol_hooks(path: Path):
                 'Use either a comment or a variable name, not both. For example, you'
                 ' can rename the variable from "user32DllHooks" to "user32Hooks".'
             )
-            warnings += add_warning(path, line_num - 1, warning_msg)
+            warnings += add_warning(path, line_num, warning_msg)
         elif target_from_name or targets_from_comment:
             if target_from_name and not is_existing_windows_file_name(target_from_name):
                 warning_msg = (
