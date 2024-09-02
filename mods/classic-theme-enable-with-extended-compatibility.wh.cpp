@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              classic-theme-enable-with-extended-compatibility
 // @name            Classic Theme Enable with extended compatibility
-// @description     Enables classic theme. Supports RDP sessions and is compatible with early / system start of Windhawk.
-// @version         1.2
+// @description     Enables classic theme. Supports Remote Desktop sessions and is compatible with early / system start of Windhawk.
+// @version         1.2.1
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
@@ -27,9 +27,13 @@
 /*
 # Classic Theme Enable with extended compatibility
 
-Enables classic theme in Windows 10 and 11. **This mod version adds support for RDP sessions and compatibility with early / system start of Windhawk.**
+Enables classic theme in Windows 10 and 11. **This mod version adds support for Remote Desktop sessions and compatibility with early / system start of Windhawk.**
 
-[Click here](#6-how-to-configure-system-start-of-windhawk) if you want to see instructions for configuring system start of Windhawk. More technical details about the update can be found at the end of this document.
+[Click here](#6-how-to-configure-system-start-of-windhawk) if you want to see instructions for configuring system start of Windhawk. 
+
+If you already used Classic Theme Enable mod earlier then you do not need to read the ["Instructions for setting up the classic theme"](#instructions-for-setting-up-the-classic-theme) section below in order to use this mod. You can just replace the previous mod with the current version, and you will get Remote Desktop support and early / system start compatibility.
+
+More technical details about the update can be found at the end of this document.
 
 
 ## A screenshot
@@ -45,7 +49,7 @@ There are few programs that have minor visual glitches. Various Windhawk mods de
 
 The most important problematic program is Taskbar. Fortunately there are a couple of programs and a number of Windhawk mods, each fixing a different problem of classic theme in Taskbar. All these are mentioned together with links in the instructions below.
 
-The only totally problematic program uncompatible with classic theme is Task Manager. There exists alternative software which is able to handle Ctrl-Alt-Del as well, also mentioned below.
+The only totally problematic program incompatible with classic theme is Task Manager. There exists alternative software which is able to handle Ctrl-Alt-Del as well, also mentioned below.
 
 Other programs have been running fine, I have been using classic theme for about a few months. Right now my systems look entirely classic (except for programs that have their own built-in themes). I am quite intensive user using many different programs.
 
@@ -62,6 +66,8 @@ In summary, there are certain additional steps you need to do in order for your 
 
 
 # Instructions for setting up the classic theme
+
+If you already used Classic Theme Enable mod earlier then you do not need to read this section in order to use this mod. You can just replace the previous mod with the current version, and you will get Remote Desktop support and early / system start compatibility.
 
 Note, upon first start, the mod affects only programs started after enabling the mod. Therefore your system might look weird here and there during performing the following installation steps and until you reboot. **After you have finished the configuration steps below, you may want to restart your system.**
 
@@ -160,8 +166,9 @@ I recommend installing the following classic theme related mods in order to get 
 * [Classic theme transparency fix](https://windhawk.net/mods/classic-theme-transparency-fix)
 * [Classic UWP Fix](https://windhawk.net/mods/classic-uwp-fix)
 * [Clientedge Everywhere](https://windhawk.net/mods/clientedge-in-apps)
+* [Disable Immersive Context Menus](https://windhawk.net/mods/disable-immersive-context-menus)
 * [Disable rounded corners in Windows 11](https://windhawk.net/mods/disable-rounded-corners) (Win 11 only)
-* [DWM Ghost Mods](https://windhawk.net/mods/dwm-ghost-mods)
+* [DWM Ghost Mods](https://windhawk.net/mods/dwm-ghost-mods) - Under this mod's Settings enable `"Use classic theme"` option, then click `"Save settings"` button.
 * [Fix browsers for Windows Classic theme](https://windhawk.net/mods/classic-browser-fix)
 * [Fix Classic Theme Maximized Windows](https://windhawk.net/mods/classic-maximized-windows-fix)
 * [Win32 Tray Clock Experience](https://windhawk.net/mods/win32-tray-clock-experience) (Win 10 only)
@@ -180,19 +187,39 @@ Starting Windhawk early improves the probability that classic theme is enabled b
 
 *In contrast, when Windhawk is activated normally then there is increased chance that the Taskbar process starts before classic theme is enabled - then the Taskbar would not have classic appearance and the user needs to restart the Taskbar manually later in order to apply classic theme to Taskbar.*
 
-Steps to enable system start of Windhawk:
+Steps to configure system start of Windhawk service:
 
 1. Start Task Scheduler
-2. Open "Task Scheduler Library" section 
-3. Find the row titled "WindhawkRunUITask", open it by double clicking
-4. Go to Triggers
-5. Click "New..." button
-6. Select Begin the task: "At startup"
-7. OK
-8. Click "New..." button
-9. Select Begin the task: "At log on"
-10. OK
-11. OK
+2. Left click on "Task Scheduler Library" in the tree
+3. Then right click on it
+4. Choose "Create Task..."
+5. Enter to "Name" field: "Start Windhawk service" (without quotes)
+6. Under "Security options" choose "Run whether user is logged on or not"
+7. Go to "Triggers" section
+8. Press "New..." button
+9. Under "Begin the task:" choose "At startup"
+10. Press OK
+11. Go to "Actions" section
+12. Press "New..." button
+13. Enter to "Program/script" field: "net start windhawk" (without quotes)
+14. Press OK
+15. A popup appears with a question "It appears as though arguments have been included ..."
+16. Press "Yes" button
+17. Press OK
+18. Enter an username and password with admin permissions
+19. Press OK
+
+If this is not yet sufficient to get classic theme enabled by the right time during system boot, then there is one more thing you can try:
+
+1. Open the Settings app
+2. Search "Sign-in options"
+3. Click "Sign-in options" in the results list. Click "Show all results" to see all search results if necessary.
+4. Turn off the option which reads: 
+    * In Windows 10: "Use my sign-in info to automatically finish setting up my device after an update or restart".
+    * In Windows 11: "Use my sign-in info to automatically finish setting up after an update".
+   
+   The title of this option may vary across operation system versions.
+5. Each time you boot your computer and the password prompt appears, wait a little before you log in.
 
 
 
@@ -223,7 +250,7 @@ If this is the first time you installed classic theme, then you may want to rebo
 
 # Troubleshooting
 
-In case the window borders become too thick or other dimensions of window elements become different than you prefer, then look under to the registry key\
+In case the window borders become too thick or other dimensions of window elements become different than you prefer, then look under the registry key\
 `HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics`
 
 You may want to import again the registry file provided in chapter ["Needed registry changes"](#1-needed-registry-changes), point (3) "Import the following reg file:".
@@ -252,10 +279,16 @@ The mod injects only into the process winlogon.exe.
 
 ## Detailed description of the compatibility updates
 
-This mod has the following two capabilities built on top of previous classic theme mod [Enable Classic Theme by handle method by @Anixx](https://windhawk.net/mods/classic-theme-enable): Improved support for RDP sessions and code for handling early mod load, including during system start.
+This mod has the following two capabilities built on top of previous classic theme mod [Enable Classic Theme by handle method by @Anixx](https://windhawk.net/mods/classic-theme-enable): Improved support for Remote Desktop sessions and code for handling early mod load, including during system start.
 
 1) If Windhawk loads too early during system startup with the original mod, then the classic theme initialisation would fail. At the same time, starting Windhawk early (during system startup, not during user login) will improve the chances that the classic theme is applied as soon as possible and no programs need to be restarted later to get classic theme applied. In order for the classic theme enable to succeed in these conditions, the mod needs to check for conditions, and if needed, wait a bit in case the system is not yet ready to apply classic theme.
-2) With the original mod the RDP sessions often disconnected during connecting. This happened even if the session was already logged in and had classic theme already applied, but was currently in disconnected state. Each new RDP connection gets its own winlogon.exe process. The mod needs to wait for the session "active" state in case it is modding RDP session related winlogon.exe processes.
+2) With the original mod the Remote Desktop sessions often disconnected during connecting. This happened even if the session was already logged in and had classic theme already applied, but was currently in disconnected state. Each new Remote Desktop connection gets its own winlogon.exe process. The mod needs to wait for the session "active" state in case it is modding Remote Desktop session related winlogon.exe processes.
+
+
+
+## Acknowledgements
+
+I would like to mention @Anixx who is the author of the previous Classic Theme Enable mod. The current mod is built upon that work.
 */
 // ==/WindhawkModReadme==
 
