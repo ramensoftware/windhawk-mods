@@ -230,6 +230,37 @@ def get_existing_windows_file_names():
     return json.loads(response)
 
 
+def is_existing_windows_file_name(name: str):
+    return name.lower() in get_existing_windows_file_names()
+
+
+def get_target_module_from_symbol_block_name(symbol_block_name: str):
+    p = r'(.*?)_?(exe|dll|cpl)_?hooks?'
+    match = re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE)
+    if not match:
+        return None
+
+    base_name = match.group(1)
+    suffix = match.group(2)
+    return f'{base_name}.{suffix}'
+
+
+def get_target_modules_from_previous_line(previous_line: str):
+    previous_line = previous_line.lstrip()
+    if not previous_line.startswith('//'):
+        return []
+
+    comment = previous_line.removeprefix('//').strip()
+    if comment == '':
+        return []
+
+    names = [x.strip() for x in comment.split(',')]
+    if not all(re.search(r'\.(exe|dll|cpl)$', x) for x in names):
+        return []
+
+    return names
+
+
 def validate_symbol_hooks(path: Path):
     warnings = 0
 
@@ -242,35 +273,27 @@ def validate_symbol_hooks(path: Path):
 
         line_num = 1 + mod_source[: match.start()].count('\n')
 
-        p = r'(.*?)_?(exe|dll)_?hooks?'
-        if match := re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE):
-            base_name = match.group(1)
-            suffix = match.group(2)
-            full_name = f'{base_name}.{suffix}'.lower()
-            if full_name not in get_existing_windows_file_names():
-                warning_msg = f'"{full_name}" is not recognized as a Windows file name'
-                warnings += add_warning(path, line_num, warning_msg)
-            continue
+        target_from_name = get_target_module_from_symbol_block_name(symbol_block_name)
 
         previous_line = mod_source_lines[line_num - 2]
+        targets_from_comment = get_target_modules_from_previous_line(previous_line)
 
-        if previous_line.lstrip().startswith('//'):
-            comment = previous_line.lstrip().removeprefix('//').strip()
-            if comment == '':
+        if target_from_name and targets_from_comment:
+            warning_msg = (
+                'Use either a comment or a variable name, not both. For example, you'
+                ' can rename the variable from "user32DllHooks" to "user32Hooks".'
+            )
+            warnings += add_warning(path, line_num, warning_msg)
+        elif target_from_name or targets_from_comment:
+            if target_from_name and not is_existing_windows_file_name(target_from_name):
                 warning_msg = (
-                    'Empty comment. Specify all target modules in a comment above the'
-                    ' symbol hooks variable, separated with commas.'
+                    f'"{target_from_name}" is not recognized as a Windows file name'
                 )
                 warnings += add_warning(path, line_num, warning_msg)
-                continue
 
-            names = comment.split(',')
-            for name in names:
-                name = name.strip().lower()
-                if name not in get_existing_windows_file_names():
-                    warning_msg = (
-                        f'"{full_name}" is not recognized as a Windows file name'
-                    )
+            for target in targets_from_comment:
+                if not is_existing_windows_file_name(target):
+                    warning_msg = f'"{target}" is not recognized as a Windows file name'
                     warnings += add_warning(path, line_num - 1, warning_msg)
             continue
 
