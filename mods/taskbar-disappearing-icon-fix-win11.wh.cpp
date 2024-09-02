@@ -2,7 +2,7 @@
 // @id              taskbar-disappearing-icon-fix-win11
 // @name            Taskbar Disappearing Icon Fix for Windows 11
 // @description     Tries to fix disappearing icon in Windows 11 taskbar while switching virtual desktops.
-// @version         1.0
+// @version         1.1
 // @author          yezhiyi9670
 // @github          https://github.com/yezhiyi9670
 // @include         explorer.exe
