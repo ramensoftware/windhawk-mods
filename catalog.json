@@ -585,20 +585,20 @@
                 "published": 1724346656000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1724346656000,
+                "updated": 1725358029000,
                 "users": 24
             },
             "metadata": {
                 "author": "Roland Pihlakas",
                 "compilerOptions": "-lntdll -lkernel32 -lwtsapi32",
-                "description": "Enables classic theme. Supports RDP sessions and is compatible with early / system start of Windhawk.",
+                "description": "Enables classic theme. Supports Remote Desktop sessions and is compatible with early / system start of Windhawk.",
                 "github": "https://github.com/levitation",
                 "homepage": "https://www.simplify.ee/",
                 "include": [
                     "winlogon.exe"
                 ],
                 "name": "Classic Theme Enable with extended compatibility",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "classic-theme-explorer-lite": {

@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-01T13:05:55.000Z</updated>
+    <updated>2024-09-03T10:07:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Enable with extended compatibility 1.2.1]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility#1e62db06cc972d776be64ab8a0276348a8132b06</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility"/>
+        <updated>2024-09-03T10:07:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Updated the readme instruction for triggering early / system start of Windhawk service, which is necessary to ensure that classic theme is properly applied before any programs including Taskbar run. The mod code is same, only readme instruction has changed. Also added one more classic theme related mod to the recommended mods list in the readme.</p></li>
+<li><p>Added instruction for making a service dependent on Windhawk</p></li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fake Explorer path 1.0.1]]></title>
         <id>https://windhawk.net/mods/fake-explorer-path#ebdfc3b11e6dedeb63bf66dd75ed00cc7a8ceb47</id>
@@ -341,12 +351,5 @@ that <code>winlogon.exe</code> is in the Process inclusion list.</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/transparent-screensaver-fix-before.png" alt="Before" /></p>
 <p><strong>After</strong>:</p>
 <p><img src="https://raw.githubusercontent.com/aubymori/images/main/transparent-screensaver-fix-after.png" alt="After" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.6.3]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#f463da266f92aea2182a8be649b9b83c6fddbf3a</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2024-08-17T19:59:47.000Z</updated>
-        <content type="html"><![CDATA[<p>Make compilable on Windhawk 1.5</p>]]></content>
     </entry>
 </feed>
