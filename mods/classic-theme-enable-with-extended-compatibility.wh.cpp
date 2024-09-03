@@ -187,6 +187,9 @@ Starting Windhawk early improves the probability that classic theme is enabled b
 
 *In contrast, when Windhawk is activated normally then there is increased chance that the Taskbar process starts before classic theme is enabled - then the Taskbar would not have classic appearance and the user needs to restart the Taskbar manually later in order to apply classic theme to Taskbar.*
 
+
+### A safe method
+
 Steps to configure system start of Windhawk service:
 
 1. Start Task Scheduler
@@ -220,6 +223,28 @@ If this is not yet sufficient to get classic theme enabled by the right time dur
    
    The title of this option may vary across operation system versions.
 5. Each time you boot your computer and the password prompt appears, wait a little before you log in.
+
+
+### A more effective, but somewhat less safe method
+
+If you are not happy with the results from the above instructions then there is a final method that should provide you the timely start of Windhawk 100% of time. This method guarantees that Windhawk will start even earlier.
+
+This method sets Plug and Play service dependent on Windhawk service.
+
+But there is a slight risk related to this method. If an antivirus removes Windhawk then your computer will not be able to detect hardware changes. It will probably still boot though and you will still be able to log in, but use this method at your own risk and responsibility.
+
+Import the following registry file:
+
+```
+Windows Registry Editor Version 5.00
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\PlugPlay]
+; This is a REG_MULTI_SZ type with a value "Windhawk". This registry entry would not work with a REG_SZ type.
+"DependOnService"=hex(7):57,00,69,00,6e,00,64,00,68,00,61,00,77,00,6b,00,00,00,00,00
+```
+
+It does not matter whether Plug and Play service is configured to Manual start or Automatic start. It will start immediately at the system boot regardless. By default, it is configured as Manual start and you can keep it like that.
+
+If you ever uninstall Windhawk or your antivirus removes Windhawk, then remove/rename this `"DependOnService"` registry value from `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\PlugPlay`
 
 
 
