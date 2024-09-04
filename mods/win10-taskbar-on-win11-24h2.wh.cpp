@@ -16,7 +16,8 @@ Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and W
 If you are on Windows 11 version 21H2 to 23H2, you should not use this mod, but rather install the mod "Windows 10 taskbar on
 Windows 11".
 Important! Before enabling this mod, install the mod "Fake Explorer path".
-This mod downloads the Windows 10 taskbar from Microsoft's symbols server, it won't work in the portable version of Windhawk.
+Since this mod downloads the Windows 10 taskbar from Microsoft's symbols server and stores it in the Windhawk data directory, 
+it won't work in the portable version of Windhawk.
 If you are using Classic theme, you should also install mods "Classic Theme Explorer Lite" and "Non Immersive Taskbar Context Menu".
 The mod "Eradicate immersive menus" will not work.
 You also can use 7+ Taskbar Tweaker. 
