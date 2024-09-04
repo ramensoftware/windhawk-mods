@@ -12,8 +12,9 @@
 
 // ==WindhawkModReadme==
 /*
-Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
+Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024.
 Important! Before enabling this mod, install the mod "Fake Explorer path".
+This mod downloads the Windows 10 taskbar from Microsoft's symbols server, it won't work in the portable version of Windhawk.
 If you are using Classic theme, you should also install mods "Classic Theme Explorer Lite" and "Non Immersive Taskbar Context Menu".
 The mod "Eradicate immersive menus" will not work.
 You also can use 7+ Taskbar Tweaker. 
@@ -29,9 +30,6 @@ To customize the clock and tray area, launch legacy tray setup dialog:
 #include <windows.h>
 #include <iostream>
 #include <urlmon.h>
-
-// Define the maximum path length
-#define MAX_PATH_LENGTH 260
 
 typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
 
