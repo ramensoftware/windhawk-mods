@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-03T10:07:09.000Z</updated>
+    <updated>2024-09-04T10:47:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enables Win10 taskbar on Win11 24H2 0.1]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#15b8878e02343f715b24376701b5f15b5dfb2d33</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
+        <updated>2024-09-04T10:47:10.000Z</updated>
+        <content type="html"><![CDATA[<p>Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024.
+If you are on Windows 11 version 21H2 to 23H2, you should not use this mod, but rather install the mod "Windows 10 taskbar on
+Windows 11".
+Important! Before enabling this mod, install the mod "Fake Explorer path".
+Since this mod downloads the Windows 10 taskbar from Microsoft's symbols server and stores it in the Windhawk data directory, 
+it won't work in the portable version of Windhawk.
+If you are using Classic theme, you should also install mods "Classic Theme Explorer Lite" and "Non Immersive Taskbar Context Menu".
+The mod "Eradicate immersive menus" will not work.
+You also can use 7+ Taskbar Tweaker. 
+Explorer Patcher by default will have no effect, ask at EP forums for support.
+To customize the clock and tray area, launch legacy tray setup dialog:
+<code>explorer shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}</code></p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme Enable with extended compatibility 1.2.1]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility#1e62db06cc972d776be64ab8a0276348a8132b06</id>
@@ -334,22 +352,5 @@ winlogon.exe
         <link href="https://windhawk.net/mods/classic-taskbar-buttons-lite"/>
         <updated>2024-08-17T21:26:50.000Z</updated>
         <content type="html"><![CDATA[<p>Fix for artefacts</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Transparent Screensaver Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/transparent-screensaver-fix#5fab81d66f48d184df1ec72a61abb0cf98b89c40</id>
-        <link href="https://windhawk.net/mods/transparent-screensaver-fix"/>
-        <updated>2024-08-17T21:12:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="transparentscreensaverfix">Transparent Screensaver Fix</h1>
-<p>This mod allows transparent screensavers, such as the Bubbles screensaver, to see
-your desktop again, rather than displaying a solid color.</p>
-<h1 id="importantread">IMPORTANT: READ!</h1>
-<p>Windhawk needs to hook into <code>winlogon.exe</code> for this mod to work. Please navigate
-to Windhawk's Settings, Advanced settings, More advanced settings, and make sure
-that <code>winlogon.exe</code> is in the Process inclusion list.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/transparent-screensaver-fix-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/transparent-screensaver-fix-after.png" alt="After" /></p>]]></content>
     </entry>
 </feed>

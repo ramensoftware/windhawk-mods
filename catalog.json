@@ -2909,6 +2909,30 @@
                 "version": "1.0.1"
             }
         },
+        "win10-taskbar-on-win11-24h2": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1725446830000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1725446830000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Anixx",
+                "compilerOptions": "-lurlmon",
+                "description": "Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "userinit.exe"
+                ],
+                "name": "Enables Win10 taskbar on Win11 24H2",
+                "version": "0.1"
+            }
+        },
         "win32-tray-clock-experience": {
             "details": {
                 "defaultSorting": 5610,
