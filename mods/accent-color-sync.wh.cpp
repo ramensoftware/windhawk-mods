@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id                  accent-color-sync-fork
+// @id                  accent-color-sync
 // @name                Accent Color Sync
 // @description         Synchronises OpenGlass and Control Panel color settings
 // @description:fr-FR   Synchronisation des couleurs d'OpenGlass et du Panneau de configuration
