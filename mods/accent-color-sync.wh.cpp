@@ -10,7 +10,7 @@
 // @include             explorer.exe
 // @architecture        x86
 // @architecture        x86-64
-// @compilerOptions     -lcomdlg32
+// @compilerOptions     -lcomdlg32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
