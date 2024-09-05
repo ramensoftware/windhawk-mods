@@ -459,7 +459,7 @@
                 "published": 1723893068000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1724007695000,
+                "updated": 1725517602000,
                 "users": 28
             },
             "metadata": {
@@ -472,7 +472,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Taskbar background fix",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "classic-taskbar-buttons-lite": {
