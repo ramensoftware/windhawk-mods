@@ -65,11 +65,10 @@ If you are updating this mod from version 1.3, it is recommended to also enable 
 
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
-#include <versionhelpers.h>
-#include <winbase.h>
-#include <cstring>
+#include <string>
 #include <sstream>
 #include <iomanip>
+#include <winver.h>
 
 struct
 {
@@ -78,6 +77,17 @@ struct
     bool boolSyncDWM;
     bool boolEx7;
 } settings;
+
+enum class WinVersion {
+    None,
+    WinVista,
+    Win7,
+    Win8,
+    Win10,
+    Win11
+};
+
+WinVersion winVer;
 
 const std::wstring dwmKey = L"SOFTWARE\\Microsoft\\Windows\\DWM";
 const std::wstring opacityValue = L"og_Opacity";
@@ -540,6 +550,65 @@ WindhawkUtils::SYMBOL_HOOK themeuidll_hooks[] = {
     }
 };
 
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValueW(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen)
+        *puPtrLen = uPtrLen;
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+WinVersion getWinVer()
+{
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo)
+        return WinVersion::None;
+
+    WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD qfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    Wh_Log(L"Explorer version: %u.%u.%u.%u", major, minor, build, qfe);
+
+    switch (major) {
+        case 6:
+            if (minor == 0)
+                return WinVersion::WinVista;
+            else if (minor == 1)
+                return WinVersion::Win7;
+            else if (minor >= 2)
+                return WinVersion::Win8;
+            break;
+        case 10:
+            if (build < 22000)
+                return WinVersion::Win10;
+            else
+                return WinVersion::Win11;
+            break;
+    }
+
+    return WinVersion::None;
+}
+
 BOOL LoadSettings()
 {
     bool regSetup = FALSE;
@@ -598,10 +667,24 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!IsWindows10OrGreater() && Wh_GetIntSetting(L"ex7") == 0x00)
+    winVer = getWinVer();
+    if (winVer == WinVersion::None)
     {
-        Wh_Log(L"HALT: Cannot run on Windows 8.1 or earlier");
+        Wh_Log(L"HALT: Invalid OS version");
         return FALSE;
+    }
+
+    if (Wh_GetIntSetting(L"ex7") == 0x01) winVer = WinVersion::Win10;
+    switch (winVer)
+    {
+        case WinVersion::WinVista:
+        case WinVersion::Win7:
+        case WinVersion::Win8:
+            Wh_Log(L"HALT: Cannot run on Windows 8.1 or earlier");
+            return FALSE;
+
+        default:
+            break;
     }
 
     if (!LoadSettings())
