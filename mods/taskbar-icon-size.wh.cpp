@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.11
+// @version         1.2.12
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -570,8 +570,25 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
         Wh_Log(L"Processing %f x %f widget", panelGrid.Width(),
                panelGrid.Height());
 
+        double labelsTopBorderExtraMargin = 0;
+
         bool widePanel = panelGrid.Width() > panelGrid.Height();
         if (widePanel) {
+            auto margin = Thickness{3, 3, 3, 3};
+
+            if (!g_unloading && marginValue < 3) {
+                labelsTopBorderExtraMargin = 3 - marginValue;
+                margin.Left = marginValue;
+                margin.Top = marginValue;
+                margin.Right = marginValue;
+                margin.Bottom = marginValue;
+            }
+
+            Wh_Log(L"Setting Margin=%f,%f,%f,%f for panel", margin.Left,
+                   margin.Top, margin.Right, margin.Bottom);
+
+            panel.Margin(margin);
+
             panelGrid.VerticalAlignment(g_unloading
                                             ? VerticalAlignment::Stretch
                                             : VerticalAlignment::Center);
@@ -638,6 +655,16 @@ void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
 
             badgeLarge.MaxWidth(badgeMaxValue);
             badgeLarge.MaxHeight(badgeMaxValue);
+        }
+
+        FrameworkElement labelsBorder = tickerGrid;
+        if ((labelsBorder = FindChildByName(labelsBorder, L"LargeTicker2"))) {
+            auto margin = Thickness{0, labelsTopBorderExtraMargin, 0, 0};
+
+            Wh_Log(L"Setting Margin=%f,%f,%f,%f for labels border", margin.Left,
+                   margin.Top, margin.Right, margin.Bottom);
+
+            labelsBorder.Margin(margin);
         }
 
         return false;
