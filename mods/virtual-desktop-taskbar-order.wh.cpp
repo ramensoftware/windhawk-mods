@@ -2,7 +2,7 @@
 // @id              virtual-desktop-taskbar-order
 // @name            Virtual Desktop Preserve Taskbar Order
 // @description     The order on the taskbar isn't preserved between virtual desktop switches, this mod fixes it
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -55,7 +55,7 @@ HWND g_hTaskbarWnd;
 
 #pragma region offsets
 
-void* CTaskListWnd__GetRequiredCols;
+void* CTaskListWnd_GetFocusedBtn;
 void* CTaskBand__EnumExistingImmersiveApps;
 void* CApplicationViewManager__GetViewInFocus;
 
@@ -94,8 +94,7 @@ size_t OffsetFromAssembly(void* func,
 }
 
 HDPA* EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(LONG_PTR lp) {
-    static size_t offset =
-        OffsetFromAssembly(CTaskListWnd__GetRequiredCols, 0xE0);
+    static size_t offset = OffsetFromAssembly(CTaskListWnd_GetFocusedBtn, 0xE0);
 
     return (HDPA*)(lp + offset);
 }
@@ -582,7 +581,8 @@ struct SYMBOL_HOOK {
 
 bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
+                 size_t symbolHooksCount,
+                 bool cacheOnly = false) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'@';
     constexpr size_t cacheMaxSize = 10240;
@@ -724,7 +724,14 @@ bool HookSymbols(HMODULE module,
 
             if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
                 Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+
                 symbolResolved[i] = true;
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    newSystemCacheStr += cacheSep;
+                    newSystemCacheStr += hookSymbol;
+                    newSystemCacheStr += cacheSep;
+                }
             }
         }
 
@@ -735,6 +742,10 @@ bool HookSymbols(HMODULE module,
     }
 
     Wh_Log(L"Couldn't resolve all symbols from cache");
+
+    if (cacheOnly) {
+        return false;
+    }
 
     WH_FIND_SYMBOL findSymbol;
     HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
@@ -853,11 +864,12 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
                                         size_t symbolHooksCount) {
     constexpr WCHAR kModIdForCache[] = L"virtual-desktop-taskbar-order";
 
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+    if (HookSymbols(module, symbolHooks, symbolHooksCount,
+                    /*cacheOnly=*/true)) {
         return true;
     }
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
 
     WCHAR moduleFilePath[MAX_PATH];
     DWORD moduleFilePathLen =
@@ -912,12 +924,11 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
 
     auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
+    if (onlineCache) {
+        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    } else {
         Wh_Log(L"Failed to get online cache");
-        return false;
     }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
 
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
@@ -931,7 +942,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    SYMBOL_HOOK taskbarSymbolHooks[] = {
+    SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))"},
             (void**)&CTaskGroup_DoesWindowMatch_Original,
@@ -948,8 +959,8 @@ BOOL Wh_ModInit() {
         },
         // For offsets:
         {
-            {LR"(protected: int __cdecl CTaskListWnd::_GetRequiredCols(int))"},
-            (void**)&CTaskListWnd__GetRequiredCols,
+            {LR"(public: virtual long __cdecl CTaskListWnd::GetFocusedBtn(struct ITaskGroup * *,int *))"},
+            (void**)&CTaskListWnd_GetFocusedBtn,
         },
         {
             {LR"(protected: void __cdecl CTaskBand::_EnumExistingImmersiveApps(void))"},
@@ -963,11 +974,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!HookSymbolsWithOnlineCacheFallback(taskbarModule, taskbarSymbolHooks,
-                                            ARRAYSIZE(taskbarSymbolHooks))) {
+    if (!HookSymbolsWithOnlineCacheFallback(taskbarModule, taskbarDllHooks,
+                                            ARRAYSIZE(taskbarDllHooks))) {
         return FALSE;
     }
 
+    // twinui.pcshell.dll
     SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
         // For offsets:
         {
