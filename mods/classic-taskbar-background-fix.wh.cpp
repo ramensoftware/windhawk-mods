@@ -2,7 +2,7 @@
 // @id              classic-taskbar-background-fix
 // @name            Classic Taskbar background fix
 // @description     Fixes Taskbar background in classic theme by replacing black background with a classic button face colour
-// @version         1.0.2
+// @version         1.0.3
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
@@ -759,6 +759,7 @@ bool DrawThemeParentBackgroundInternal(HWND hwnd, HDC hdc) {
             }
             else {
                 FillRect(hdc, &rect, brush);
+                DeleteObject(brush);
 
                 SetLastError(originalError);    //reset the error code so that the hooked API does not appear to have errored in case any helper code above caused an error code to be set
                 return true;
