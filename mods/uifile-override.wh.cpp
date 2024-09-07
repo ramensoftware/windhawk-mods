@@ -2,7 +2,7 @@
 // @id              uifile-override
 // @name            UIFILE Override
 // @description     Override UIFILE resources
-// @version         1.0.1
+// @version         1.0.2
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -174,7 +174,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to load dui70.dll");
     }
 
-    if (lstrcmpiW(L"C:\\Windows\\explorer.exe", exePath)) {
+    if (lstrcmpiW(L"explorer.exe", PathFindFileNameW(exePath))) {
         return TRUE;
     }
 
