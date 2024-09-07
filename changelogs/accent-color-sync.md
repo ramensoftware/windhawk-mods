@@ -1,3 +1,9 @@
+## 1.4 ([Sep 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7292f722244cd19dc93c4438270bcc600b4bf2ec/mods/accent-color-sync.wh.cpp))
+
+* Replaced DWM Colorization Parameters calculation formula with [ALTaleX's method](https://github.com/ALTaleX531/dwm_colorization_calculator).
+* Compatibility check now returns the actual Windows version instead of the version returned from Explorer. This fixes the issue of the mod not being compatible with [explorer7](https://github.com/Erizur/explorer7-releases/).
+* Updated readme.
+
 ## 1.31 ([Jul 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/940c28ba0fb4ccebb782988516dd6bb5a7f23de0/mods/accent-color-sync.wh.cpp))
 
 * Set *Sync with DWM* option to enabled by default, and added notice for updating regarding this option in the readme.
