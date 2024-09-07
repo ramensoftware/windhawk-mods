@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center with themes contributed by others or create your own
-// @version         1.1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -41,35 +41,9 @@ mod and can be selected in the settings:
 \
 TranslucentShell](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/TranslucentShell/README.md)
 
-## Examples
-
-### Hide the focus assist section
-**Target**: `ActionCenter.FocusSessionControl` \
-**Style**: `Height=0`
-
-### Square the corners of the notification center
-**Target**: `Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid` \
-**Style**: `CornerRadius=0`
-
-### Square the corners of the calendar
-**Target**: `Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid` \
-**Style**: `CornerRadius=0`
-
-### Square the corners of the quick action center
-**Target**: `Windows.UI.Xaml.Controls.Grid#ControlCenterRegion` \
-**Style**: `CornerRadius=0`
-
-### Calendar and notification titlebars: titles on the right, buttons on the left
-**Target**: `Windows.UI.Xaml.Controls.Grid#RootContent` \
-**Style**: `FlowDirection=1`
-
-### Add accelerator key (ALT+X) to clear all notifications
-**Target**: `Windows.UI.Xaml.Controls.Button#ClearAll` \
-**Style**: `AccessKey=x`
-
-### Add accelerator key (ALT+E) to expand/collapse the calendar
-**Target**: `Windows.UI.Xaml.Controls.Button#ExpandCollapseButton` \
-**Style**: `AccessKey=e`
+[![Unified](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/Unified/screenshot-small.png)
+\
+Unified](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/Unified/README.md)
 
 ## Advanced styling
 
@@ -116,6 +90,36 @@ specified as following: `Style@VisualState=Value`, in which case the style will
 only apply when the visual state group specified in the target matches the
 specified visual state.
 
+A couple of practical examples:
+
+#### Hide the focus assist section
+**Target**: `ActionCenter.FocusSessionControl` \
+**Style**: `Height=0`
+
+#### Square the corners of the notification center
+**Target**: `Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid` \
+**Style**: `CornerRadius=0`
+
+#### Square the corners of the calendar
+**Target**: `Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid` \
+**Style**: `CornerRadius=0`
+
+#### Square the corners of the quick action center
+**Target**: `Windows.UI.Xaml.Controls.Grid#ControlCenterRegion` \
+**Style**: `CornerRadius=0`
+
+#### Calendar and notification titlebars: titles on the right, buttons on the left
+**Target**: `Windows.UI.Xaml.Controls.Grid#RootContent` \
+**Style**: `FlowDirection=1`
+
+#### Add accelerator key (ALT+X) to clear all notifications
+**Target**: `Windows.UI.Xaml.Controls.Button#ClearAll` \
+**Style**: `AccessKey=x`
+
+#### Add accelerator key (ALT+E) to expand/collapse the calendar
+**Target**: `Windows.UI.Xaml.Controls.Button#ExpandCollapseButton` \
+**Style**: `AccessKey=e`
+
 ### Resource variables
 
 Some variables, such as size and padding for various controls, are defined as
@@ -140,6 +144,7 @@ code from the **TranslucentTB** project.
   $options:
   - "": None
   - TranslucentShell: TranslucentShell
+  - Unified: Unified
 - controlStyles:
   - - target: ""
       $name: Target
@@ -238,6 +243,31 @@ const Theme g_themeTranslucentShell = {{
         L"CornerRadius=15"}},
 }};
 
+const Theme g_themeUnified = {{
+    ThemeTargetStyles{L"ActionCenter.FocusSessionControl", {
+        L"Height=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ControlCenterRegion", {
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid", {
+        L"CornerRadius=0",
+        L"Margin=0,0,0,12",
+        L"BorderThickness=1,0,1,1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid", {
+        L"CornerRadius=0",
+        L"BorderThickness=1,1,1,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem", {
+        L"CornerRadius=0",
+        L"Margin=1,1,1,1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem > Windows.UI.Xaml.Controls.Border", {
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
+        L"CornerRadius=0",
+        L"BorderThickness=1,1,1,0",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.FrameWithContentChanged#L2Frame", {
+        L"CornerRadius=0"}},
+}};
+
 // clang-format on
 
 std::atomic<bool> g_initialized;
@@ -333,7 +363,25 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
     m_XamlDiagnostics(site.as<IXamlDiagnostics>())
 {
     Wh_Log(L"Constructing VisualTreeWatcher");
-    winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
+    // winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
+
+    // Calling AdviseVisualTreeChange from the current thread causes the app to
+    // hang on Windows 10 in Advising::RunOnUIThread. Creating a new thread and
+    // calling it from there fixes it.
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParam) -> DWORD {
+            auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
+            HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
+            if (FAILED(hr)) {
+                Wh_Log(L"Error %08X", hr);
+            }
+            return 0;
+        },
+        this, 0, nullptr);
+    if (thread) {
+        CloseHandle(thread);
+    }
 }
 
 VisualTreeWatcher::~VisualTreeWatcher()
@@ -1584,6 +1632,8 @@ void ProcessAllStylesFromSettings() {
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"TranslucentShell") == 0) {
         theme = &g_themeTranslucentShell;
+    } else if (wcscmp(themeName, L"Unified") == 0) {
+        theme = &g_themeUnified;
     }
     Wh_FreeStringSetting(themeName);
 

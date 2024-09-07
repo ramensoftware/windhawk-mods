@@ -1,3 +1,8 @@
+## 1.1.2 ([Sep 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/bf5b0746e2cb9d22e109b664ca3a63c430199f18/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added a new theme: Unified.
+* Added a workaround for hanging the notification center process on Windows 10. Although the available themes and example styles are designed for Windows 11, it should now be possible to use the mod on Windows 10 too.
+
 ## 1.1.1 ([Jul 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/931b937d1cfa9782375c939c104de17bf0b5047a/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Updated the TranslucentShell theme.
