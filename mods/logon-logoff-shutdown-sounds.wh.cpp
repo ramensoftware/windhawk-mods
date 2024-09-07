@@ -95,6 +95,10 @@ LRESULT _OnSessionChange_hook(void* _this, WPARAM wParam, LPARAM lParam)
     return _OnSessionChange_orig(_this, wParam, lParam);
 }
 
+#ifndef SND_SYSTEM // because this is sometimes missing???
+#define SND_SYSTEM 0x00200000
+#endif
+
 DWORD WINAPI PlaySoundFileThreadProc( LPVOID lpParam ) 
 {
     PlaySoundW((WCHAR*)lpParam, 0, SND_NODEFAULT | SND_MEMORY | SND_SYSTEM);
@@ -236,7 +240,6 @@ STDAPI_(BOOL) SHRegisterClassW(const WNDCLASSW* pwc)
     }
     return TRUE;
 }
-
 
 HWND SHCreateWorkerWindowW(WNDPROC pfnWndProc, HWND hwndParent, DWORD dwExStyle, DWORD dwFlags, HMENU hmenu, void * p)
 {
