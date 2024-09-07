@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-07T11:41:08.000Z</updated>
+    <updated>2024-09-07T15:47:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Clock Button Behavior 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-clock-button-behavior#ce129c4525faef315041ebdba6cf363fd64fe991</id>
+        <link href="https://windhawk.net/mods/classic-clock-button-behavior"/>
+        <updated>2024-09-07T15:47:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicclockbuttonbehavior">Classic Clock Button Behavior</h1>
+<p>In Windows XP and before, the tray clock did nothing on single click, and opened
+the Date and Time CPL on double click. This mod makes the Windows 10 tray clock
+button do that.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.2]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#bf5b0746e2cb9d22e109b664ca3a63c430199f18</id>
@@ -208,161 +218,5 @@ icons are centered.</p>
         <content type="html"><![CDATA[<ul>
 <li>Added information about icon themes to the mod description.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme Enable with extended compatibility 1.2]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility#576aabb72aee51fab4422be367c77d2ee1cfe884</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility"/>
-        <updated>2024-08-22T17:10:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicthemeenablewithextendedcompatibility">Classic Theme Enable with extended compatibility</h1>
-<p>Enables classic theme in Windows 10 and 11. <strong>This mod version adds support for RDP sessions and compatibility with early / system start of Windhawk.</strong></p>
-<p><a href="#6-how-to-configure-system-start-of-windhawk">Click here</a> if you want to see instructions for configuring system start of Windhawk. More technical details about the update can be found at the end of this document.</p>
-<h2 id="ascreenshot">A screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/classic-theme-enable-with-extended-compatibility.png" alt="A screenshot" /></p>
-<h2 id="generalinfoaboutclassicthemeinwindows10and11">General info about classic theme in Windows 10 and 11</h2>
-<p>Classic theme still seems to be native to Windows. Essentially this mod disables themes, and this in turn reactivates the default behaviour of Windows, which is actually classic theme. </p>
-<p>There are few programs that have minor visual glitches. Various Windhawk mods deal with this and so these are solved as well.</p>
-<p>The most important problematic program is Taskbar. Fortunately there are a couple of programs and a number of Windhawk mods, each fixing a different problem of classic theme in Taskbar. All these are mentioned together with links in the instructions below.</p>
-<p>The only totally problematic program uncompatible with classic theme is Task Manager. There exists alternative software which is able to handle Ctrl-Alt-Del as well, also mentioned below.</p>
-<p>Other programs have been running fine, I have been using classic theme for about a few months. Right now my systems look entirely classic (except for programs that have their own built-in themes). I am quite intensive user using many different programs.</p>
-<p>In summary, there are certain additional steps you need to do in order for your computer to be fully adjusted for nicer classic theme UI appearance. See the next section <a href="#instructions-for-setting-up-the-classic-theme">"Instructions for setting up the classic theme"</a> for detailed instructions. Quick summary here:
-1) A few registry parameters that need to be adjusted.
-2) Some additional software needs to be installed.
-3) Windhawk process inclusion settings need updating.
-4) Install the current mod.
-5) Additional Windhawk mods need to be installed.
-6) Configure system start of Windhawk.
-7) You may want to adjust the colours and fonts with a program mentioned in the instructions.
-8) Adjust Taskbar features.</p>
-<h1 id="instructionsforsettinguptheclassictheme">Instructions for setting up the classic theme</h1>
-<p>Note, upon first start, the mod affects only programs started after enabling the mod. Therefore your system might look weird here and there during performing the following installation steps and until you reboot. <strong>After you have finished the configuration steps below, you may want to restart your system.</strong></p>
-<h2 id="1neededregistrychanges">1. Needed registry changes</h2>
-<ol>
-<li><p>If you want the 3D borders in menus, import the following reg file:</p>
-<pre><code>Windows Registry Editor Version 5.00
-[HKEY_CURRENT_USER\Control Panel\Desktop]
-"UserPreferencesMask"=hex:9E,1E,05,80,12,01,00,00
-</code></pre>
-<p>This registry file import is needed because it sets some bits that cannot be configured via Windows control panel settings. Importing this reg file may slightly change the rest of your visual experience as a side effect. You can later further adjust the visual experience affected by this registry entry change via <code>Advanced System Settings control panel -&gt; Performance -&gt; Settings -&gt; Visual Effects</code>. </p>
-<p><em>If you are curious, then the official though incomplete documentation of this registry entry <a href="https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-2000-server/cc957204%28v=technet.10%29">can be found here</a>. I have not found a more complete description, but the value provided above originates from the time-tested <a href="https://github.com/valinet/ExplorerPatcher/discussions/167">tutorial here</a> and according to my testing, the above reg file results in a reasonable initial visual appearance.</em></p></li>
-<li><p>Delete or rename this registry key:<br />
-<code>HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\DefaultColors</code><br />
-to prevent colour scheme change after pressing Ctrl-Alt-Del or going to the logon screen and back.</p></li>
-<li><p>Import the following reg file:
-<code>
-Windows Registry Editor Version 5.00
-[HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics]
-"BorderWidth"="-15"
-"PaddedBorderWidth"="0"
-[HKEY_CURRENT_USER\Software\ExplorerPatcher]
-"OldTaskbar"=dword:00000001
-"SkinMenus"=dword:00000000
-"ToolbarSeparators"=dword:00000001
-"DisableImmersiveContextMenu"=dword:00000001
-"ClassicThemeMitigations"=dword:00000001
-[HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer]
-"AltTabSettings"=dword:00000001
-[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
-"TaskbarGlomLevel"=dword:00000002
-"MMTaskbarGlomLevel"=dword:00000002
-"TaskbarSmallIcons"=dword:00000001
-"TaskbarAl"=dword:00000000
-"TaskbarSD"=dword:00000001
-[HKEY_CURRENT_USER\Software\OpenShell\StartMenu\Settings]
-"StartButtonType"="ClasicButton"    ; yes, Clasic should be here with one "s"
-"CustomTaskbar"=dword:00000000    
-"SkinC1"="Classic skin"
-"SkinW7"="Classic skin"
-"EnableStartButton"=dword:00000001
-"StartButtonIcon"="%SystemRoot%\System32\slui.exe, 2"
-</code></p></li>
-</ol>
-<h2 id="2additionalneededsoftware">2. Additional needed software</h2>
-<ul>
-<li><a href="https://systeminformer.sourceforge.io/">System Informer / former Process Hacker</a> or alternatively, <a href="https://win7games.com/#taskmgr">Classic Task Manager</a> - Classic theme is not compatible with built-in Windows Task Manager. I recommend Process Hacker / System Informer since Classic Task Manager can cause lagging of the system. Process Hacker / System Informer can be configured to handle Ctrl-Alt-Del as well. </li>
-<li><a href="https://github.com/valinet/ExplorerPatcher">Explorer Patcher</a> - Together with a couple of mods listed in next section improves the Taskbar appearance. Until you install all necessary mods, your Taskbar may become black. Do not let that disturb you.</li>
-<li><a href="https://open-shell.github.io/Open-Shell-Menu/">Open-Shell-Menu</a> - Needed to show Start Button in classic theme.</li>
-<li><a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a> - Allows adjusting various Taskbar features.</li>
-<li><a href="https://win7games.com/#notepad">Classic Notepad</a> - (Win 11 only - works better than built-in Notepad under Win 11 in case of classic theme).</li>
-</ul>
-<p>You can set Process Hacker as Ctrl-Alt-Del handler with the following steps. The steps for System Informer are probably similar in nature, though the labels of items might be a bit different. <code>Open Process Hacker -&gt; open "Hacker" menu -&gt; Options -&gt; Advanced -&gt; check "Replace Task Manager with Process Hacker" -&gt; OK</code>.</p>
-<h2 id="3neededchangesinwindhawksettings">3. Needed changes in Windhawk settings</h2>
-<p><strong>Note, enabling classic theme requires Windhawk to be installed, not just run as a portable version.</strong> Portable version of Windhawk will have insufficient privileges to enable classic theme.</p>
-<p>Before you start installing the current mod and additional classic theme mods listed below, you need to update Windhawk process inclusion list, accessible via <code>Windhawk -&gt; Settings -&gt; Advanced settings -&gt; More advanced settings -&gt; Process inclusion list</code>. Add the following rows:</p>
-<pre><code>conhost.exe
-dllhost.exe
-dwm.exe
-winlogon.exe
-</code></pre>
-<p>Then click <code>"Save and restart Windhawk"</code> button.</p>
-<h2 id="4installthecurrentmod">4. Install the current mod</h2>
-<p>Click the "Install" button above the current mod's description.</p>
-<h2 id="5additionalneededclassicthemerelatedmods">5. Additional needed classic theme related mods</h2>
-<p>I recommend installing the following classic theme related mods in order to get full classic theme experience.</p>
-<ul>
-<li><a href="https://windhawk.net/mods/aero-tray">Aero Tray</a></li>
-<li><a href="https://windhawk.net/mods/classic-conhost">Classic Conhost</a></li>
-<li><a href="https://windhawk.net/mods/classic-taskdlg-fix">Classic Task Dialog Fix</a></li>
-<li><a href="https://windhawk.net/mods/classic-taskbar-buttons-lite-vs-without-spacing">Classic Taskbar 3D buttons with extended compatibility</a> or alternatively, <a href="https://windhawk.net/mods/classic-taskbar-buttons-lite">Classic Taskbar 3D buttons Lite</a></li>
-<li><a href="https://windhawk.net/mods/classic-taskbar-background-fix">Classic Taskbar background fix</a> (simple to install) or alternatively, <a href="https://github.com/valinet/ExplorerPatcher/discussions/167#discussioncomment-1616107">@valinet's modified version of OpenShell StartMenuDLL.dll</a> (requires more manual work to install)</li>
-<li><a href="https://windhawk.net/mods/classic-theme-transparency-fix">Classic theme transparency fix</a></li>
-<li><a href="https://windhawk.net/mods/classic-uwp-fix">Classic UWP Fix</a></li>
-<li><a href="https://windhawk.net/mods/clientedge-in-apps">Clientedge Everywhere</a></li>
-<li><a href="https://windhawk.net/mods/disable-rounded-corners">Disable rounded corners in Windows 11</a> (Win 11 only)</li>
-<li><a href="https://windhawk.net/mods/dwm-ghost-mods">DWM Ghost Mods</a></li>
-<li><a href="https://windhawk.net/mods/classic-browser-fix">Fix browsers for Windows Classic theme</a></li>
-<li><a href="https://windhawk.net/mods/classic-maximized-windows-fix">Fix Classic Theme Maximized Windows</a></li>
-<li><a href="https://windhawk.net/mods/win32-tray-clock-experience">Win32 Tray Clock Experience</a> (Win 10 only)</li>
-</ul>
-<p>There are other classic theme related mods in Windhawk which I did not list here for one or other reason. Your experience and preferences may differ. After getting set up with above and feeling like exploring more, you may want to try the other mods out.</p>
-<p>After installing the above mentioned mods, your Windhawk window should look similar to the following screenshot. Of course you may have other mods installed from before as well.</p>
-<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/classic-theme-mods-in-windhawk.png" alt="A Windhawk screenshot with classic theme mods" /></p>
-<h2 id="6howtoconfiguresystemstartofwindhawk">6. How to configure system start of Windhawk</h2>
-<p>Starting Windhawk early improves the probability that classic theme is enabled by the time Taskbar process is launched during login. </p>
-<p><em>In contrast, when Windhawk is activated normally then there is increased chance that the Taskbar process starts before classic theme is enabled - then the Taskbar would not have classic appearance and the user needs to restart the Taskbar manually later in order to apply classic theme to Taskbar.</em></p>
-<p>Steps to enable system start of Windhawk:</p>
-<ol>
-<li>Start Task Scheduler</li>
-<li>Open "Task Scheduler Library" section </li>
-<li>Find the row titled "WindhawkRunUITask", open it by double clicking</li>
-<li>Go to Triggers</li>
-<li>Click "New…" button</li>
-<li>Select Begin the task: "At startup"</li>
-<li>OK</li>
-<li>Click "New…" button</li>
-<li>Select Begin the task: "At log on"</li>
-<li>OK</li>
-<li>OK</li>
-</ol>
-<h2 id="7adjustingthecoloursandfonts">7. Adjusting the colours and fonts</h2>
-<p>For editing the colours and fonts I recommend the following program:<br />
-<a href="https://archive.org/details/desktop_themes_v187_ZIP">Desktop Themes v1.87</a>.</p>
-<p>In order to launch the program, right click on <code>Desktop Themes.exe</code> and select "Run as administrator". This program will not start if you do not launch it with elevated permissions.</p>
-<p>Go to "Edit Theme" section. Enter the username and serial.</p>
-<p>Edit fonts and colours.</p>
-<h2 id="8adjusttaskbarfeatures">8. Adjust Taskbar features</h2>
-<p>Open "7+ Taskbar Tweaker" and see what you want to change. </p>
-<p>Under "Hovering" section I recommend changing the setting to "Tooltip" or "Nothing". The other options do not seem to work very well under classic theme.</p>
-<p>All done. Congratulations! </p>
-<p>If this is the first time you installed classic theme, then you may want to reboot your computer now in order for the classic theme styles to be fully updated and applied to all programs.</p>
-<h1 id="troubleshooting">Troubleshooting</h1>
-<p>In case the window borders become too thick or other dimensions of window elements become different than you prefer, then look under to the registry key<br />
-<code>HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics</code></p>
-<p>You may want to import again the registry file provided in chapter <a href="#1-needed-registry-changes">"Needed registry changes"</a>, point (3) "Import the following reg file:".</p>
-<p>You may need to reboot the computer after changing these values in the registry.</p>
-<h1 id="optionaladvancedreading">Optional advanced reading</h1>
-<h2 id="moreinfoaboutsettingupclassictheme">More info about setting up classic theme</h2>
-<p>If you want, you can investigate the following older webpages which provide somewhat alternate instructions for setting up classic theme. The current instructions were partially based on these sources:</p>
-<ul>
-<li><a href="https://windhawk.net/mods/classic-theme-enable">Enable Classic Theme by handle method</a></li>
-<li><a href="https://github.com/valinet/ExplorerPatcher/discussions/167">Tutorial: Use of Windows Classic theme with Windows 10, Windows 11 and Explorer Patcher</a></li>
-</ul>
-<h2 id="howthismodworks">How this mod works</h2>
-<p>The mod disables visual styles, effectively enabling the Windows Classic theme. This mod uses the method of closing access to the memory area where the theme is located. It is one of the multiple methods of enabling Windows classic theme.</p>
-<p>The mod injects only into the process winlogon.exe.</p>
-<h2 id="detaileddescriptionofthecompatibilityupdates">Detailed description of the compatibility updates</h2>
-<p>This mod has the following two capabilities built on top of previous classic theme mod <a href="https://windhawk.net/mods/classic-theme-enable">Enable Classic Theme by handle method by @Anixx</a>: Improved support for RDP sessions and code for handling early mod load, including during system start.</p>
-<p>1) If Windhawk loads too early during system startup with the original mod, then the classic theme initialisation would fail. At the same time, starting Windhawk early (during system startup, not during user login) will improve the chances that the classic theme is applied as soon as possible and no programs need to be restarted later to get classic theme applied. In order for the classic theme enable to succeed in these conditions, the mod needs to check for conditions, and if needed, wait a bit in case the system is not yet ready to apply classic theme.
-2) With the original mod the RDP sessions often disconnected during connecting. This happened even if the session was already logged in and had classic theme already applied, but was currently in disconnected state. Each new RDP connection gets its own winlogon.exe process. The mod needs to wait for the session "active" state in case it is modding RDP session related winlogon.exe processes.</p>]]></content>
     </entry>
 </feed>

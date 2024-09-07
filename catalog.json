@@ -288,6 +288,29 @@
                 "version": "1.2"
             }
         },
+        "classic-clock-button-behavior": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1725724030000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1725724030000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Makes the tray clock open the Date and Time CPL on double click",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Clock Button Behavior",
+                "version": "1.0.0"
+            }
+        },
         "classic-conhost": {
             "details": {
                 "defaultSorting": 1760,
