@@ -2,7 +2,7 @@
 // @id              old-this-pc-commands
 // @name            Old This PC Commands
 // @description     Makes "Open Settings", "System properties", etc. in This PC use Control Panel instead of Settings
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -28,40 +28,33 @@ to `ExplorerFrame.dll` takes place to remove the redirect.
 
 #include <initguid.h>
 #include <windhawk_utils.h>
-#include <shlobj.h>
 #include <shobjidl.h>
-#include <ocidl.h>
 
-DEFINE_GUID(IID_IUnknown,         0x00000000, 0x0000, 0x0000, 0xc0,0x00, 0x00,0x00,0x00,0x00,0x00,0x46);
-DEFINE_GUID(IID_OpenControlPanel, 0xD11AD862, 0x66DE, 0x4DF4, 0xBF,0x6C, 0x1F,0x56,0x21,0x99,0x6A,0xF1);
-DEFINE_GUID(IID_IServiceProvider, 0x6D5140C1, 0x7436, 0x11CE, 0x80,0x34, 0x00,0xAA,0x00,0x60,0x09,0xFA);
-DEFINE_GUID(SID_STopLevelBrowser, 0x4c96be40, 0x915C, 0x11CF, 0x99,0xD3, 0x00,0xAA,0x00,0x4A,0xE8,0x37);
-
-HRESULT (*COpenControlPanel_Open)(void *pThis, LPCWSTR lpPage, LPCWSTR lpSubPage, IUnknown *pu);
-
-HRESULT OpenCplPage(IUnknown *pu, LPCWSTR lpPage, LPCWSTR lpSubPage)
+HRESULT OpenCplPage(IUnknown *punk, LPCWSTR lpPage, LPCWSTR lpSubPage)
 {
     IObjectWithSite *pows;
-    HRESULT hr = pu->QueryInterface(IID_IObjectWithSite, (void **)&pows);
+    HRESULT hr = punk->QueryInterface(IID_IObjectWithSite, (void **)&pows);
     if (SUCCEEDED(hr))
     {
-        IUnknown *pu2;
-        hr = pows->GetSite(IID_IUnknown, (void **)&pu2);
+        IUnknown *punk2;
+        hr = pows->GetSite(IID_PPV_ARGS(&punk2));
         if (SUCCEEDED(hr))
         {
-            void *pocp;
+            IOpenControlPanel *pocp = nullptr;
             hr = CoCreateInstance(
                 CLSID_OpenControlPanel,
                 NULL,
                 CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER | CLSCTX_LOCAL_SERVER | CLSCTX_REMOTE_SERVER,
-                IID_OpenControlPanel,
-                &pocp
+                IID_PPV_ARGS(&pocp)
             );
             if (SUCCEEDED(hr))
             {
-                hr = COpenControlPanel_Open(pocp, lpPage, lpSubPage, pu2);
+                hr = pocp->Open(lpPage, lpSubPage, punk2);
+                pocp->Release();
             }
+            punk2->Release();
         }
+        pows->Release();
     }
     return hr;
 }
@@ -71,51 +64,78 @@ typedef HRESULT (*CDrivesViewCallback__OnEventPunkSite)(IUnknown *, IUnknown *, 
 
 CDrivesViewCallback__OnEventPunkSite CDrivesViewCallback__OnOpenSystemSettingsPunkSite_orig;
 HRESULT CDrivesViewCallback__OnOpenSystemSettingsPunkSite_hook(
-    IUnknown        *pu,
-    IUnknown        *pu2,
+    IUnknown        *punk,
+    IUnknown        *punkRibbon,
     IShellItemArray *psia,
     IBindCtx        *pbctx
 )
 {
-    HRESULT hr = OpenCplPage(pu, NULL, NULL);
+    HRESULT hr = OpenCplPage(punk, NULL, NULL);
     if (!SUCCEEDED(hr))
     {
-        hr = OpenCplPage(pu2, NULL, NULL);
+        hr = OpenCplPage(punkRibbon, NULL, NULL);
     }
     return hr;
 }
 
 CDrivesViewCallback__OnEventPunkSite CDrivesViewCallback__OnSystemPropertiesPunkSite_orig;
 HRESULT CDrivesViewCallback__OnSystemPropertiesPunkSite_hook(
-    IUnknown        *pu,
-    IUnknown        *pu2,
+    IUnknown        *punk,
+    IUnknown        *punkRibbon,
     IShellItemArray *psia,
     IBindCtx        *pbctx
 )
 {
-    HRESULT hr = OpenCplPage(pu, L"Microsoft.System", NULL);
+    HRESULT hr = OpenCplPage(punk, L"Microsoft.System", NULL);
     if (!SUCCEEDED(hr))
     {
-        hr = OpenCplPage(pu2, L"Microsoft.System", NULL);
+        hr = OpenCplPage(punkRibbon, L"Microsoft.System", NULL);
     }
     return hr;
 }
 
 CDrivesViewCallback__OnEventPunkSite CDrivesViewCallback__OnAddRemoveProgramsPunkSite_orig;
 HRESULT CDrivesViewCallback__OnAddRemoveProgramsPunkSite_hook(
-    IUnknown        *pu,
-    IUnknown        *pu2,
+    IUnknown        *punk,
+    IUnknown        *punkRibbon,
     IShellItemArray *psia,
     IBindCtx        *pbctx
 )
 {
-    HRESULT hr = OpenCplPage(pu, L"Microsoft.ProgramsAndFeatures", NULL);
+    HRESULT hr = OpenCplPage(punk, L"Microsoft.ProgramsAndFeatures", NULL);
     if (!SUCCEEDED(hr))
     {
-        hr = OpenCplPage(pu2, L"Microsoft.ProgramsAndFeatures", NULL);
+        hr = OpenCplPage(punkRibbon, L"Microsoft.ProgramsAndFeatures", NULL);
     }
     return hr;
 }
+
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+    {
+        {
+            L"public: static long __cdecl CDrivesViewCallback::_OnOpenSystemSettingsPunkSite(struct IUnknown *,struct IUnknown *,struct IShellItemArray *,struct IBindCtx *)"
+        },
+        &CDrivesViewCallback__OnOpenSystemSettingsPunkSite_orig,
+        CDrivesViewCallback__OnOpenSystemSettingsPunkSite_hook,
+        false
+    },
+    {
+        {
+            L"public: static long __cdecl CDrivesViewCallback::_OnSystemPropertiesPunkSite(struct IUnknown *,struct IUnknown *,struct IShellItemArray *,struct IBindCtx *)"
+        },
+        &CDrivesViewCallback__OnSystemPropertiesPunkSite_orig,
+        CDrivesViewCallback__OnSystemPropertiesPunkSite_hook,
+        false
+    },
+    {
+        {
+            L"public: static long __cdecl CDrivesViewCallback::_OnAddRemoveProgramsPunkSite(struct IUnknown *,struct IUnknown *,struct IShellItemArray *,struct IBindCtx *)"
+        },
+        &CDrivesViewCallback__OnAddRemoveProgramsPunkSite_orig,
+        CDrivesViewCallback__OnAddRemoveProgramsPunkSite_hook,
+        false
+    }
+};
 
 BOOL Wh_ModInit(void)
 {
@@ -126,45 +146,10 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {
-            {
-                L"public: virtual long __cdecl COpenControlPanel::Open(unsigned short const *,unsigned short const *,struct IUnknown *)"
-            },
-            &COpenControlPanel_Open,
-            nullptr,
-            false
-        },
-        {
-            {
-                L"public: static long __cdecl CDrivesViewCallback::_OnOpenSystemSettingsPunkSite(struct IUnknown *,struct IUnknown *,struct IShellItemArray *,struct IBindCtx *)"
-            },
-            &CDrivesViewCallback__OnOpenSystemSettingsPunkSite_orig,
-            CDrivesViewCallback__OnOpenSystemSettingsPunkSite_hook,
-            false
-        },
-        {
-            {
-                L"public: static long __cdecl CDrivesViewCallback::_OnSystemPropertiesPunkSite(struct IUnknown *,struct IUnknown *,struct IShellItemArray *,struct IBindCtx *)"
-            },
-            &CDrivesViewCallback__OnSystemPropertiesPunkSite_orig,
-            CDrivesViewCallback__OnSystemPropertiesPunkSite_hook,
-            false
-        },
-        {
-            {
-                L"public: static long __cdecl CDrivesViewCallback::_OnAddRemoveProgramsPunkSite(struct IUnknown *,struct IUnknown *,struct IShellItemArray *,struct IBindCtx *)"
-            },
-            &CDrivesViewCallback__OnAddRemoveProgramsPunkSite_orig,
-            CDrivesViewCallback__OnAddRemoveProgramsPunkSite_hook,
-            false
-        }
-    };
-
     if (!WindhawkUtils::HookSymbols(
         hShell32,
-        hooks,
-        ARRAYSIZE(hooks)
+        shell32DllHooks,
+        ARRAYSIZE(shell32DllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in shell32.dll");
