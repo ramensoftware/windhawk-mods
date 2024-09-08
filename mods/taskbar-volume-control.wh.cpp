@@ -71,8 +71,9 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $name: Volume change step
   $description: >-
     Allows to configure the volume change that will occur with each notch of
-    mouse wheel movement. This option has effect only for the Windows 11, None
-    control indicators. For the Windows 11 indicator, must be a multiple of 2.
+    mouse wheel movement. For the Windows 11 indicator, must be a multiple of 2.
+    For Windows 10 style indicator, the step-size is only respected before Volume
+    indicator appears, after that it has fixed `2` step-size (unforunately, no fix atm).
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
