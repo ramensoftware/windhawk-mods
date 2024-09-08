@@ -659,7 +659,7 @@ BOOL OpenScrollSndVol(WPARAM wParam, LPARAM lMousePosParam) {
     }
 
     if (CanUseModernIndicator()) {
-        if (!AdjustVolumeLevelWithMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam), 2))
+        if (!AdjustVolumeLevelWithMouseWheel(GET_WHEEL_DELTA_WPARAM(wParam), g_settings.volumeChangeStep))
             return FALSE;
 
         ShowSndVolModernIndicator();
