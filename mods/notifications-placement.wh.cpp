@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              notifications-placement
-// @name            Customize Windows 11 notifications placement
+// @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -23,11 +23,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Customize Windows 11 notifications placement
+# Customize Windows notifications placement
 
 Move notifications to another monitor or another corner of the screen.
 
-Only Windows 11 is supported.
+Only Windows 10 64-bit and Windows 11 are supported.
 
 ![Screenshot](https://i.imgur.com/4PxMvLg.png)
 */
@@ -60,6 +60,7 @@ Only Windows 11 is supported.
 
 #include <atomic>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 std::atomic<bool> g_unloading;
@@ -173,9 +174,57 @@ bool IsTargetCoreWindow(HWND hWnd) {
         return false;
     }
 
-    WCHAR szWindowText[32];
+    // The window title is locale-dependent, and unfortunately I didn't find a
+    // simpler way to identify the target window.
+    // String source: Windows.UI.ShellCommon.<locale>.pri
+    // String resource: \ActionCenter\AC_ToastCenter_Title
+    // The strings were collected from here:
+    // https://github.com/m417z/windows-language-files
+    static const std::unordered_set<std::wstring> newNotificationStrings = {
+        L"Jakinarazpen berria",
+        L"Jauns paziņojums",
+        L"Naujas pranešimas",
+        L"Neue Benachrichtigung",
+        L"New notification",
+        L"Nieuwe melding",
+        L"Notificació nova",
+        L"Notificación nueva",
+        L"Notificare nouă",
+        L"Nouvelle notification",
+        L"Nova notificação",
+        L"Nova notificación",
+        L"Nova obavijesti",
+        L"Nové oznámení",
+        L"Nové oznámenie",
+        L"Novo obaveštenje",
+        L"Novo obvestilo",
+        L"Nowe powiadomienie",
+        L"Nueva notificación",
+        L"Nuova notifica",
+        L"Ny meddelelse",
+        L"Ny varsling",
+        L"Nytt meddelande",
+        L"Pemberitahuan baru",
+        L"Thông báo mới",
+        L"Új értesítés",
+        L"Uus teatis",
+        L"Uusi ilmoitus",
+        L"Yeni bildirim",
+        L"Νέα ειδοποίηση",
+        L"Нове сповіщення",
+        L"Ново известие",
+        L"Новое уведомление",
+        L"הודעה חדשה",
+        L"\u200f\u200fإعلام جديد",
+        L"การแจ้งให้ทราบใหม่",
+        L"새 알림",
+        L"新しい通知",
+        L"新通知",
+    };
+
+    WCHAR szWindowText[256];
     if (GetWindowText(hWnd, szWindowText, ARRAYSIZE(szWindowText)) == 0 ||
-        wcscmp(szWindowText, L"New notification") != 0) {
+        !newNotificationStrings.contains(szWindowText)) {
         return false;
     }
 
