@@ -1875,7 +1875,7 @@
                 "published": 1725643905000,
                 "rating": 9,
                 "ratingUsers": 2,
-                "updated": 1725643905000,
+                "updated": 1725779296000,
                 "users": 44
             },
             "metadata": {
@@ -1891,9 +1891,9 @@
                     "explorer.exe",
                     "ShellExperienceHost.exe"
                 ],
-                "name": "Customize Windows 11 notifications placement",
+                "name": "Customize Windows notifications placement",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "old-this-pc-commands": {
