@@ -50,8 +50,11 @@ HRESULT OpenCplPage(IUnknown *punk, LPCWSTR lpPage, LPCWSTR lpSubPage)
             if (SUCCEEDED(hr))
             {
                 hr = pocp->Open(lpPage, lpSubPage, punk2);
+                pocp->Release();
             }
+            punk2->Release();
         }
+        pows->Release();
     }
     return hr;
 }
