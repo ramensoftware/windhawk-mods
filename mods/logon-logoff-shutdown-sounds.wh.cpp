@@ -76,9 +76,9 @@ STDAPI_(void) ExplorerPlaySound(LPCTSTR pszSound)
     }
 }
 
-typedef LRESULT (* _OnSessionChange_t)(void* _this, WPARAM wParam, LPARAM lParam);
+typedef LRESULT WINAPI (* _OnSessionChange_t)(void* _this, WPARAM wParam, LPARAM lParam);
 _OnSessionChange_t _OnSessionChange_orig;
-LRESULT _OnSessionChange_hook(void* _this, WPARAM wParam, LPARAM lParam)
+LRESULT WINAPI _OnSessionChange_hook(void* _this, WPARAM wParam, LPARAM lParam)
 {
     if ((WTS_SESSION_LOCK == wParam) || (WTS_SESSION_UNLOCK == wParam))
     {
@@ -241,7 +241,7 @@ STDAPI_(BOOL) SHRegisterClassW(const WNDCLASSW* pwc)
     return TRUE;
 }
 
-HWND SHCreateWorkerWindowW(WNDPROC pfnWndProc, HWND hwndParent, DWORD dwExStyle, DWORD dwFlags, HMENU hmenu, void * p)
+HWND WINAPI SHCreateWorkerWindowW(WNDPROC pfnWndProc, HWND hwndParent, DWORD dwExStyle, DWORD dwFlags, HMENU hmenu, void * p)
 {
     WNDCLASSW wc = {0};
 
@@ -273,29 +273,29 @@ HWND SHCreateWorkerWindowW(WNDPROC pfnWndProc, HWND hwndParent, DWORD dwExStyle,
 
 class CSoundWnd {
     public:
-        CSoundWnd();
+        WINAPI CSoundWnd();
         LONG m_refCount;
         HWND m_hwndSound;
         HANDLE m_thread;
-        BOOL __thiscall Init();
+        BOOL WINAPI Init();
         static DWORD CALLBACK s_ThreadProc(void* lpParam);
-        LONG __thiscall Release();
+        LONG WINAPI Release();
         static DWORD CALLBACK s_CreateWindow(void* lpParam);
         static LRESULT CALLBACK s_WndProc(HWND hWnd,
                                    UINT msg,
                                    WPARAM wParam,
                                    LPARAM lParam);
-        LRESULT v_WndProc(HWND hWnd, UINT mst, WPARAM wParam, LPARAM lParam);
+        LRESULT WINAPI v_WndProc(HWND hWnd, UINT mst, WPARAM wParam, LPARAM lParam);
 };
 
-CSoundWnd::CSoundWnd()
+WINAPI CSoundWnd::CSoundWnd()
     : m_refCount(1)
     , m_hwndSound(nullptr)
     , m_thread(nullptr)
 {
 }
 
-BOOL CSoundWnd::Init()
+BOOL WINAPI CSoundWnd::Init()
 {
     if (!SHCreateThread(s_ThreadProc, this, CTF_COINIT_STA | CTF_PROCESS_REF, s_CreateWindow)) {
         DWORD dwLastError = GetLastError();
@@ -353,7 +353,7 @@ LRESULT CALLBACK CSoundWnd::s_WndProc(HWND hWnd,
         return SHDefWindowProc(hWnd, msg, wParam, lParam);
 }
 
-LRESULT CSoundWnd::v_WndProc(HWND hWnd,
+LRESULT WINAPI CSoundWnd::v_WndProc(HWND hWnd,
                              UINT msg,
                              WPARAM wParam,
                              LPARAM lParam) {
@@ -390,7 +390,7 @@ LRESULT CSoundWnd::v_WndProc(HWND hWnd,
     }
 }
 
-LONG CSoundWnd::Release()
+LONG WINAPI CSoundWnd::Release()
 {
     LONG lRefCount = InterlockedDecrement(&this->m_refCount);
     if ( !lRefCount )
@@ -410,7 +410,7 @@ BOOL WINAPI InitSoundWindow()
     return bSuccess;
 }
 
-DWORD GetCurrentSessionId()
+DWORD WINAPI GetCurrentSessionId()
 {
     DWORD pSessionId;
     DWORD CurrentProcessId = GetCurrentProcessId();
@@ -522,10 +522,14 @@ BOOL Wh_ModInit() {
 
     g_hShlwapi = LoadLibrary(TEXT("shlwapi.dll"));
 
-    WindhawkUtils::SYMBOL_HOOK aHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
             {
+                #ifdef _WIN64
                 L"protected: __int64 __cdecl CTray::_OnSessionChange(unsigned __int64,__int64)"
+                #else
+                L"protected: long __thiscall CTray::_OnSessionChange(unsigned int,long)"
+                #endif
             },
             (void **)&_OnSessionChange_orig,
             (void *)_OnSessionChange_hook,
@@ -535,8 +539,8 @@ BOOL Wh_ModInit() {
 
     if (!WindhawkUtils::HookSymbols(
         g_hExplorer,
-        aHooks,
-        ARRAYSIZE(aHooks)
+        explorerExeHooks,
+        ARRAYSIZE(explorerExeHooks)
     ))
     {
         Wh_Log(L"Failed to hook _OnSessionChange");
