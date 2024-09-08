@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-08T10:42:30.000Z</updated>
+    <updated>2024-09-08T18:09:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Old This PC Commands 1.0.1]]></title>
+        <id>https://windhawk.net/mods/old-this-pc-commands#f00161757c50921c354688dd50fd0ef968fe36ac</id>
+        <link href="https://windhawk.net/mods/old-this-pc-commands"/>
+        <updated>2024-09-08T18:09:57.000Z</updated>
+        <content type="html"><![CDATA[<p>Codebase cleanup</p>
+<ul>
+<li>Remove unnecessary <code>#include</code> and <code>DEFINE_GUID</code> statements</li>
+<li>Rely on public <code>IOpenControlPanel</code> interface instead of finding <code>COpenControlPanel::Open</code> from symbols</li>
+<li>Move symbol hook definitions and update the name to match modern convention</li>
+<li>Properly free memory in <code>OpenCplPage</code></li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.0]]></title>
         <id>https://windhawk.net/mods/logon-logoff-shutdown-sounds#40c94993b0e85ef8ed053f5b5b0e06b16380e42d</id>
@@ -205,21 +218,5 @@ the taskbar width is increased.</li>
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2024-08-25T16:52:43.000Z</updated>
         <content type="html"><![CDATA[<p>Seamless CPL transition without forcing separate process mode</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#3a19d101477ac04951f6c533f92f137d0fdd048b</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2024-08-24T17:22:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startbuttonalwaysontheleft">Start button always on the left</h1>
-<p>Forces the start button to be on the left of the taskbar, even when taskbar
-icons are centered.</p>
-<p>Only Windows 11 is supported.</p>
-<p>Known limitations:</p>
-<ul>
-<li>There's a jumpy animation when a centered taskbar is animated.</li>
-<li>Secondary monitors aren't supported.</li>
-</ul>
-<p><img src="https://i.imgur.com/bEqvfOE.png" alt="Screenshot" /></p>]]></content>
     </entry>
 </feed>

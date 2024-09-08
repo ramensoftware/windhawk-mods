@@ -1924,7 +1924,7 @@
                 "published": 1702159772000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1702159772000,
+                "updated": 1725818997000,
                 "users": 537
             },
             "metadata": {
@@ -1939,7 +1939,7 @@
                     "explorer.exe"
                 ],
                 "name": "Old This PC Commands",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "pinned-items-double-click": {
