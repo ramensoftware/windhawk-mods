@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-08T07:08:16.000Z</updated>
+    <updated>2024-09-08T10:42:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.0]]></title>
+        <id>https://windhawk.net/mods/logon-logoff-shutdown-sounds#40c94993b0e85ef8ed053f5b5b0e06b16380e42d</id>
+        <link href="https://windhawk.net/mods/logon-logoff-shutdown-sounds"/>
+        <updated>2024-09-08T10:42:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="logonsoundsrestored">Logon Sounds Restored</h1>
+<p>Restores the logon, logoff and shutdown sounds from earlier versions of Windows, simple as.</p>
+<p>It is recommended to use <a href="https://www.howtogeek.com/wp-content/uploads/2016/09/Shutdown-Logoff-Logon-Sound-Hacks.zip">these reg files</a> to restore the sound events to the Sound control panel applet.</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows notifications placement 1.0.1]]></title>
         <id>https://windhawk.net/mods/notifications-placement#2914b84cba2528701e51fcb904fe379e9bfd982d</id>
@@ -212,12 +221,5 @@ icons are centered.</p>
 <li>Secondary monitors aren't supported.</li>
 </ul>
 <p><img src="https://i.imgur.com/bEqvfOE.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aero Flyout Fix 1.1.0]]></title>
-        <id>https://windhawk.net/mods/aero-flyout-fix#edaa3ee94174396da2885ef9e0bff3e5d5e841bd</id>
-        <link href="https://windhawk.net/mods/aero-flyout-fix"/>
-        <updated>2024-08-24T12:28:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Add support for Windows 7's network flyout</p>]]></content>
     </entry>
 </feed>

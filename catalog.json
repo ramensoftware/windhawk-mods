@@ -1589,6 +1589,28 @@
                 "version": "0.7"
             }
         },
+        "logon-logoff-shutdown-sounds": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1725792150000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1725792150000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Toru the Red Fox",
+                "compilerOptions": "-lcomdlg32 -lshlwapi -lwinmm -luser32",
+                "description": "Restores the logon, logoff and shutdown sounds from earlier versions of Windows",
+                "github": "https://github.com/TorutheRedFox",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Logon, Logoff & Shutdown Sounds Restored",
+                "twitter": "https://twitter.com/TorutheRedFox",
+                "version": "1.0.0"
+            }
+        },
         "maintain-flux-colour-temperature": {
             "details": {
                 "defaultSorting": 144,
