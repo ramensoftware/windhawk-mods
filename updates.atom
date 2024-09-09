@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-08T18:09:57.000Z</updated>
+    <updated>2024-09-09T18:32:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#d2ebc37c2e5b3b8c2cda9d391238b7ac3879fd63</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2024-09-09T18:32:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for Windows 11 version 24H2.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old This PC Commands 1.0.1]]></title>
         <id>https://windhawk.net/mods/old-this-pc-commands#f00161757c50921c354688dd50fd0ef968fe36ac</id>
@@ -211,12 +220,5 @@ the taskbar width is increased.</li>
 <li>Support for UWP app icons</li>
 <li>Aero Peek now works</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.6.4]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#a5291e5c748ccaf5b11b04412683a5d23601b9fc</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2024-08-25T16:52:43.000Z</updated>
-        <content type="html"><![CDATA[<p>Seamless CPL transition without forcing separate process mode</p>]]></content>
     </entry>
 </feed>

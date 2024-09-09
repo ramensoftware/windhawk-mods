@@ -1,3 +1,7 @@
+## 1.1.5 ([Sep 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d2ebc37c2e5b3b8c2cda9d391238b7ac3879fd63/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Added support for Windows 11 version 24H2.
+
 ## 1.1.4 ([Jul 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a480102c52e3cd16e1cea214913e1395155c82c0/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Fixed compatibility with update KB5040527.
