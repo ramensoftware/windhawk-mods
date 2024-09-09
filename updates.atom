@@ -2,12 +2,21 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-09T18:32:03.000Z</updated>
+    <updated>2024-09-09T19:23:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.4]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#89b7248389967e412f6de6213e320adbfee9ad89</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
+        <updated>2024-09-09T19:23:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for Windows 11 version 24H2.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#d2ebc37c2e5b3b8c2cda9d391238b7ac3879fd63</id>
@@ -208,17 +217,6 @@ the taskbar width is increased.</li>
         <updated>2024-08-26T20:12:41.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the weather/news widget content sometimes disappearing when large icons are used.</li>
-</ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Alt+Tab Loader 2.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-alttab-loader#a1ef83e2b24d3b147686d269bf92c7c37c7feaa0</id>
-        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
-        <updated>2024-08-26T07:38:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Complete rewrite</li>
-<li>Support for UWP app icons</li>
-<li>Aero Peek now works</li>
 </ul>]]></content>
     </entry>
 </feed>

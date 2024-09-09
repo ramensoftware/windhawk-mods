@@ -2846,7 +2846,7 @@
                 "published": 1677867923000,
                 "rating": 10,
                 "ratingUsers": 22,
-                "updated": 1723672222000,
+                "updated": 1725909793000,
                 "users": 727
             },
             "metadata": {
@@ -2863,7 +2863,7 @@
                 ],
                 "name": "Virtual Desktop Preserve Taskbar Order",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.3"
+                "version": "1.0.4"
             }
         },
         "visual-studio-anti-rich-header": {
