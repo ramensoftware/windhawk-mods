@@ -2,7 +2,7 @@
 // @id              virtual-desktop-taskbar-order
 // @name            Virtual Desktop Preserve Taskbar Order
 // @description     The order on the taskbar isn't preserved between virtual desktop switches, this mod fixes it
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -126,6 +126,15 @@ size_t* EV_APP_VIEW_MGR_APP_ARRAY_SIZE(LONG_PTR lp) {
 }
 
 #pragma endregion  // offsets
+
+using CTaskBtnGroup_GetGroup_t = void*(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup;
+
+using CTaskBtnGroup_GetNumItems_t = int(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetNumItems_t CTaskBtnGroup_GetNumItems;
+
+using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(void* pThis, int index);
+CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem;
 
 using CTaskGroup_DoesWindowMatch_t =
     HRESULT(WINAPI*)(LPVOID pThis,
@@ -283,32 +292,28 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
     LONG_PTR** button_groups = (LONG_PTR**)plp[1];
     LONG_PTR* button_group = button_groups[nButtonGroupIndex];
 
-    plp = (LONG_PTR*)button_group[7];
-    if (!plp)
+    int buttons_count = CTaskBtnGroup_GetNumItems(button_group);
+    if (buttons_count == 0) {
         return;
+    }
 
-    int buttons_count = (int)plp[0];
-    LONG_PTR** buttons = (LONG_PTR**)plp[1];
-    if (buttons_count == 0)
+    LONG_PTR* task_group = (LONG_PTR*)CTaskBtnGroup_GetGroup(button_group);
+    if (!task_group) {
         return;
+    }
 
-    LONG_PTR* task_group = (LONG_PTR*)button_group[4];
-    plp = (LONG_PTR*)task_group[4];
-    if (!plp)
+    LONG_PTR* first_task_item =
+        (LONG_PTR*)CTaskBtnGroup_GetTaskItem(button_group, 0);
+    if (!first_task_item) {
         return;
-
-    int task_items_count = (int)plp[0];
-    if (task_items_count == 0)
-        return;
-
-    LONG_PTR** task_items = (LONG_PTR**)plp[1];
+    }
 
     plp = *(LONG_PTR**)task_group;
     void** ppTaskGroupRelease = (void**)&plp[2];
     PointerRedirectionAdd(ppTaskGroupRelease, (void*)TaskGroupReleaseHook,
                           &prTaskGroupRelease);
 
-    plp = *(LONG_PTR**)task_items[0];
+    plp = *(LONG_PTR**)first_task_item;
     void** ppTaskItemRelease = (void**)&plp[2];
     PointerRedirectionAdd(ppTaskItemRelease, (void*)TaskItemReleaseHook,
                           &prTaskItemRelease);
@@ -352,8 +357,9 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
             break;
         }
 
-        if (!g_taskGroupVirtualDesktopReleased)
+        if (!g_taskGroupVirtualDesktopReleased) {
             continue;
+        }
 
         if (g_taskGroupVirtualDesktopReleased != task_group) {
             if (nRightNeighbourItemIndex == nArraySize) {
@@ -361,7 +367,7 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
                      j++) {
                     LONG_PTR* check_button_group = button_groups[j];
                     LONG_PTR* check_task_group =
-                        (LONG_PTR*)check_button_group[4];
+                        (LONG_PTR*)CTaskBtnGroup_GetGroup(check_button_group);
                     if (g_taskGroupVirtualDesktopReleased == check_task_group) {
                         // The current item in lpArray is from the same group
                         // of at least one of the items in button_groups to the
@@ -375,12 +381,13 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
             continue;
         }
 
-        if (!g_taskItemVirtualDesktopReleased)
+        if (!g_taskItemVirtualDesktopReleased) {
             continue;
+        }
 
         for (int j = 0; j < buttons_count; j++) {
-            LONG_PTR* button = buttons[j];
-            LONG_PTR* task_item = (LONG_PTR*)button[4];
+            LONG_PTR* task_item =
+                (LONG_PTR*)CTaskBtnGroup_GetTaskItem(button_group, j);
 
             if (g_taskItemVirtualDesktopReleased == task_item) {
                 // The current item in lpArray matches one of the
@@ -943,6 +950,18 @@ BOOL Wh_ModInit() {
     }
 
     SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))"},
+            (void**)&CTaskBtnGroup_GetGroup,
+        },
+        {
+            {LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void))"},
+            (void**)&CTaskBtnGroup_GetNumItems,
+        },
+        {
+            {LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))"},
+            (void**)&CTaskBtnGroup_GetTaskItem,
+        },
         {
             {LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))"},
             (void**)&CTaskGroup_DoesWindowMatch_Original,
