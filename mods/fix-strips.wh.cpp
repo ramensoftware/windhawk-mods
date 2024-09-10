@@ -12,9 +12,17 @@
 // ==WindhawkModReadme==
 /*
 ## NOTE:
-You might need to restart explorer for changes to take affect
 
-Credits to @Anixx for the original AHK Script
+This mod fixes the presence of the DWM window frame around the taskbar when using classic theme with [Explorer7](https://winclassic.net/thread/2588/explorer7-windows-explorer-10-11). You may need to restart explorer.exe when enabling the mod to see the changes take effect.
+
+
+## Before
+![Before](https://raw.githubusercontent.com/OliviaIsTyping/images/main/fixstrips-before.png)
+
+## After
+![After](https://raw.githubusercontent.com/OliviaIsTyping/images/main/fixstrips-after.png)
+
+Credits to [@Anixx](https://github.com/Anixx) for the original AHK Script
 */
 // ==/WindhawkModReadme==
 
