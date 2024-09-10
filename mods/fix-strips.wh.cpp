@@ -3,7 +3,7 @@
 // @name            FixStrips WH Port
 // @description     Port of the fixstrips AHK script that fixes some classic theme issues with Explorer7
 // @version         1.0
-// @author          OliveIsTyping + Anixx for the original script
+// @author          OliveIsTyping
 // @github          https://github.com/OliviaIsTyping
 // @include         explorer.exe
 // @compilerOptions -lcomdlg32
@@ -13,6 +13,8 @@
 /*
 ## NOTE:
 You might need to restart explorer for changes to take affect
+
+Credits to @Anixx for the original AHK Script
 */
 // ==/WindhawkModReadme==
 
