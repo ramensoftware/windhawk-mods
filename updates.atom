@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-09T19:23:13.000Z</updated>
+    <updated>2024-09-11T05:38:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[FixStrips WH Port 1.0]]></title>
+        <id>https://windhawk.net/mods/fix-strips#93793152290b764989cd5f1f1ae4f0dd156bee36</id>
+        <link href="https://windhawk.net/mods/fix-strips"/>
+        <updated>2024-09-11T05:38:25.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="note">NOTE:</h2>
+<p>This mod fixes the presence of the DWM window frame around the taskbar when using classic theme with <a href="https://winclassic.net/thread/2588/explorer7-windows-explorer-10-11">Explorer7</a>. You may need to restart explorer.exe when enabling the mod to see the changes take effect.</p>
+<h2 id="before">Before</h2>
+<p><img src="https://raw.githubusercontent.com/OliviaIsTyping/images/main/fixstrips-before.png" alt="Before" /></p>
+<h2 id="after">After</h2>
+<p><img src="https://raw.githubusercontent.com/OliviaIsTyping/images/main/fixstrips-after.png" alt="After" /></p>
+<p>Credits to <a href="https://github.com/Anixx">@Anixx</a> for the original AHK Script</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.4]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#89b7248389967e412f6de6213e320adbfee9ad89</id>
@@ -209,14 +222,5 @@ the taskbar width is increased.</li>
 <p>Restore the missing Windows option to always show all notification (tray) icons.</p>
 <p>Alternatively, just make sure that new icons are shown by default.</p>
 <p>Only Windows 11 is supported.</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.12]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#7ad7264eae826e7b96ebb07e04770e175f5fee9e</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-08-26T20:12:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the weather/news widget content sometimes disappearing when large icons are used.</li>
-</ul>]]></content>
     </entry>
 </feed>

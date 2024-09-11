@@ -1208,6 +1208,27 @@
                 "version": "1.0"
             }
         },
+        "fix-strips": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1726033105000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1726033105000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "OliveIsTyping",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Port of the fixstrips AHK script that fixes some classic theme issues with Explorer7",
+                "github": "https://github.com/OliviaIsTyping",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "FixStrips WH Port",
+                "version": "1.0"
+            }
+        },
         "flight-simulator-focus-helper": {
             "details": {
                 "defaultSorting": 126,
