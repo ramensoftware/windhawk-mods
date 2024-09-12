@@ -2,7 +2,7 @@
 // @id              logon-logoff-shutdown-sounds
 // @name            Logon, Logoff & Shutdown Sounds Restored
 // @description     Restores the logon, logoff and shutdown sounds from earlier versions of Windows
-// @version         1.0.0
+// @version         1.0.1
 // @author          Toru the Red Fox
 // @github          https://github.com/TorutheRedFox
 // @twitter         https://twitter.com/TorutheRedFox
@@ -37,6 +37,7 @@ It is recommended to use [these reg files](https://www.howtogeek.com/wp-content/
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <shlwapi.h>
+#include <winerror.h>
 #include <winuser.h>
 
 // settings
@@ -435,7 +436,7 @@ HRESULT WINAPI SHCreateSessionKey(REGSAM samDesired, PHKEY phKey)
  
     if(SUCCEEDED(hr))
     {
-        Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE, wszSessionKey, 0, NULL,
+        Error = RegCreateKeyEx(HKEY_CURRENT_USER, wszSessionKey, 0, NULL,
                                 REG_OPTION_VOLATILE, samDesired, NULL, phKey, NULL);
         if (Error != ERROR_SUCCESS)
             hr = HRESULT_FROM_WIN32(Error);
@@ -462,12 +463,12 @@ BOOL WINAPI HasPerLogonActionBeenDone(LPCWSTR lpSubKey, TRIBIT* out_tbDone)
     HKEY phkResult;
 
     *out_tbDone = TRIBIT_TRUE;
-    if ( (int)SHCreateSessionKey(131078, &hKey) >= 0 )
+    if ( SUCCEEDED(SHCreateSessionKey(KEY_WRITE, &hKey)) )
     {
-        if ( !RegCreateKeyExW(hKey, lpSubKey, 0, 0, 1u, 0x20006u, 0, &phkResult, &dwDisposition) )
+        if ( RegCreateKeyExW(hKey, lpSubKey, NULL, NULL, REG_OPTION_VOLATILE, KEY_WRITE, NULL, &phkResult, &dwDisposition) == ERROR_SUCCESS )
         {
             RegCloseKey(phkResult);
-            if ( dwDisposition == 1 )
+            if ( dwDisposition == REG_CREATED_NEW_KEY )
                 *out_tbDone = TRIBIT_FALSE;
         }
         RegCloseKey(hKey);
