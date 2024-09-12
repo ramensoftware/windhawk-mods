@@ -16,6 +16,8 @@
 Restores the logon, logoff and shutdown sounds from earlier versions of Windows, simple as.
 
 It is recommended to use [these reg files](https://www.howtogeek.com/wp-content/uploads/2016/09/Shutdown-Logoff-Logon-Sound-Hacks.zip) to restore the sound events to the Sound control panel applet.
+
+Note: Likely redundant with explorer7 due to 7's explorer having this code in it already.
 */
 // ==/WindhawkModReadme==
 
