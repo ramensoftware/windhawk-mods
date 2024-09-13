@@ -2,12 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-11T05:38:25.000Z</updated>
+    <updated>2024-09-13T07:50:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.1]]></title>
+        <id>https://windhawk.net/mods/logon-logoff-shutdown-sounds#e3bf280ec5e53bc81d83312320394e70bc7b9899</id>
+        <link href="https://windhawk.net/mods/logon-logoff-shutdown-sounds"/>
+        <updated>2024-09-13T07:50:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Fix bug where the logon sound needs user to have write access to HKLM in order to play</p></li>
+<li><p>State that it's likely redundant with explorer7</p></li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[FixStrips WH Port 1.0]]></title>
         <id>https://windhawk.net/mods/fix-strips#93793152290b764989cd5f1f1ae4f0dd156bee36</id>
@@ -212,15 +222,5 @@ the taskbar width is increased.</li>
         <updated>2024-08-31T12:44:48.000Z</updated>
         <content type="html"><![CDATA[<p>Adds dotted lines to the TreeView in Microsoft Management Console and Device Manager
 <img src="https://i.imgur.com/3ZBR2HD.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always show all taskbar tray icons 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icons-show-all#95ac5bad188ba63eaaa4f75de3f1578dc7c98b0a</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icons-show-all"/>
-        <updated>2024-08-29T18:32:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alwaysshowalltaskbartrayicons">Always show all taskbar tray icons</h1>
-<p>Restore the missing Windows option to always show all notification (tray) icons.</p>
-<p>Alternatively, just make sure that new icons are shown by default.</p>
-<p>Only Windows 11 is supported.</p>]]></content>
     </entry>
 </feed>
