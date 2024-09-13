@@ -2475,6 +2475,32 @@
                 "version": "1.2.5"
             }
         },
+        "taskbar-left-click-cycle": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1726228929000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1726228929000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Makes clicking on combined taskbar items cycle through windows instead of opening thumbnail previews",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Cycle through taskbar windows on click",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-notification-icon-spacing": {
             "details": {
                 "defaultSorting": 21490,
