@@ -52,6 +52,9 @@ WINUSERAPI BOOL WINAPI SystemParametersInfoForDpi(UINT uiAction, UINT uiParam, P
 typedef DWORD (NTAPI *NtUserCallOneParam_t)(DWORD Param, DWORD Routine);
 NtUserCallOneParam_t NtUserCallOneParam = nullptr;
 
+typedef DWORD (NTAPI *NtUserCallHwnd_t)(HWND Wnd, DWORD Routine);
+NtUserCallHwnd_t NtUserCallHwnd = nullptr;
+
 HFONT (__fastcall *GetMessageBoxFontForDpi_orig)(UINT);
 HFONT __fastcall GetMessageBoxFontForDpi_hook(
     UINT nDpi
@@ -100,6 +103,38 @@ typedef struct _MSGBOXDATA {
     DWORD   dwReserved[20];
 } MSGBOXDATA, *PMSGBOXDATA, *LPMSGBOXDATA;
 
+typedef struct _TEB64 {
+	UCHAR ignored[0x0800];
+	ULONG_PTR Win32ClientInfo[0x3E];
+} TEB64, *PTEB64;
+
+typedef struct _DESKTOPINFO
+{
+	DWORD ignored[12];
+	int cntMBox;
+} DESKTOPINFO, *PDESKTOPINFO;
+
+typedef struct _CLIENTINFO64 {
+	DWORD64 CI_flags;
+	DWORD64 cSpins;
+	DWORD dwExpWinVer;
+	DWORD dwCompatFlags;
+	DWORD dwCompatFlags2;
+	DWORD dwTIFlags;
+	PDESKTOPINFO pDeskInfo;
+} CLIENTINFO64, *PCLIENTINFO64;
+
+inline PCLIENTINFO64 GetClientInfo()
+{
+    PTEB64 teb = (PTEB64)NtCurrentTeb();
+// This breaks on real 32-bit Windows, it's WOW64 specific.
+// But literally nobody uses that anymore, so who cares.
+#ifndef _WIN64
+	teb = *(PTEB64 *)((LPBYTE)teb + 0x0F70);
+#endif
+    return (PCLIENTINFO64)teb->Win32ClientInfo;
+}
+
 static CONST WCHAR szEmpty[] = L"";
 
 // IDs and such
@@ -109,6 +144,7 @@ static CONST WCHAR szEmpty[] = L"";
 #define BUTTONCODE	  0x80
 #define STATICCODE	  0x82
 #define SFI_PLAYEVENTSOUND 57
+#define SFI_SETMSGBOX      89
 
 // Macros
 #define MAXUSHORT       (0xFFFF)
@@ -519,6 +555,8 @@ INT_PTR CALLBACK MB_DlgProc(
         lpmb = (LPMSGBOXDATA)lParam;
         SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (ULONG_PTR)lParam);
 
+        NtUserCallHwnd(hwndDlg, SFI_SETMSGBOX);
+
         if (lpmb->dwStyle & MB_TOPMOST) {
             SetWindowPos(hwndDlg,
                 HWND_TOPMOST,
@@ -591,8 +629,8 @@ INT_PTR CALLBACK MB_DlgProc(
             }
         }
 
-        // hack because xp's positioning code is broken on 10
-        // this centers it properly
+        // Hack because XP's positioning code is broken on 10
+        // This centers it properly
         HMONITOR hm = MonitorFromWindow(hwndT, MONITOR_DEFAULTTOPRIMARY);
         MONITORINFO mi;
         mi.cbSize = sizeof(mi);
@@ -603,6 +641,27 @@ INT_PTR CALLBACK MB_DlgProc(
         x -= (rc.right - rc.left) / 2;
         int y = (mi.rcWork.bottom - mi.rcWork.top) / 2;
         y -= (rc.bottom - rc.top) /2;
+
+        // Tile effect
+        int cntMBox = GetClientInfo()->pDeskInfo->cntMBox;
+        x += cntMBox * SYSMET(CXSIZE);
+        y += cntMBox * SYSMET(CYSIZE);
+
+        // Make sure it stays in the screen
+        if ((x + (rc.right - rc.left)) > mi.rcWork.right)
+        {
+            x = mi.rcWork.right - SYSMET(CXEDGE) - (rc.right - rc.left);
+        }
+
+        if (y + (rc.bottom - rc.top) > mi.rcWork.bottom)
+        {
+            y = mi.rcWork.bottom - SYSMET(CYEDGE) - (rc.bottom - rc.top);
+            if (y < mi.rcWork.top)
+            {
+                y = mi.rcMonitor.bottom - SYSMET(CYEDGE) - (rc.bottom - rc.top);
+            }
+        }
+
         SetWindowPos(
             hwndT,
             NULL,
@@ -878,8 +937,7 @@ ReSize:
     ReleaseDC(NULL, hdc);
 
     // Find the window position
-    // HELP: how the fuck do you get cntMBox in 10?
-    cntMBox = 0;// GetClientInfo()->pDeskInfo->cntMBox;
+    cntMBox = GetClientInfo()->pDeskInfo->cntMBox;
 
     xMB = (rcWork.left + rcWork.right - cxBox) / 2 + (cntMBox * SYSMET(CXSIZE));
     xMB = max(xMB, rcWork.left);
@@ -1110,6 +1168,13 @@ BOOL Wh_ModInit(void)
     if (!NtUserCallOneParam)
     {
         Wh_Log(L"Failed to find NtUserCallOneParam in win32u.dll");
+        return FALSE;
+    }
+
+    NtUserCallHwnd = (NtUserCallHwnd_t)GetProcAddress(hWin32U, "NtUserCallHwnd");
+    if (!NtUserCallHwnd)
+    {
+        Wh_Log(L"Failed to find NtUserCallHwnd in win32u.dll");
         return FALSE;
     }
 
