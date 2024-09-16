@@ -6,7 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -luser32 -lgdi32 -lcomctl32
+// @compilerOptions -luser32 -lgdi32 -lcomctl32 -DWINVER=0x0A00
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
