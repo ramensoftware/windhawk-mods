@@ -1703,19 +1703,19 @@
                 "published": 1693642476000,
                 "rating": 10,
                 "ratingUsers": 5,
-                "updated": 1703245739000,
+                "updated": 1726520140000,
                 "users": 692
             },
             "metadata": {
                 "author": "aubymori",
-                "compilerOptions": "-luser32 -lgdi32 -lcomctl32",
-                "description": "Fixes the MessageBox font size and background",
+                "compilerOptions": "-luser32 -lgdi32 -lcomctl32 -DWINVER=0x0A00",
+                "description": "Fixes the MessageBox font size and optionally make them like Windows XP",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
                 "name": "Message Box Fix",
-                "version": "1.5.0"
+                "version": "2.0.0"
             }
         },
         "mspaint-dark": {

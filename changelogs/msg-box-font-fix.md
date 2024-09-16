@@ -1,3 +1,14 @@
+## 2.0.0 ([Sep 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/e7a03d627c3bc66756e9748a987d484863153397/mods/msg-box-font-fix.wh.cpp))
+
+- Restructure code to match modern conventions
+- Remove option to fix the font and make it always fix it; there's
+  not much use to having it disabled.
+- Revamp "Remove background" option
+  - Renamed to "Classic style"
+  - Now shows message boxes with Windows XP positioning and scaling
+  - May break with per-monitor DPI, have not tested. Regardless, I don't
+    think anyone using a Windows XP/2000 theme would want per-monitor DPI.
+
 ## 1.5.0 ([Dec 22, 2023](https://github.com/ramensoftware/windhawk-mods/blob/dd8ab1339fb2b5208222b38f325f8bfc378da558/mods/msg-box-font-fix.wh.cpp))
 
 * DPI support improvements

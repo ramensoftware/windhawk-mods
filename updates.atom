@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-13T12:02:09.000Z</updated>
+    <updated>2024-09-16T20:55:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Fix 2.0.0]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#e7a03d627c3bc66756e9748a987d484863153397</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2024-09-16T20:55:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Restructure code to match modern conventions</li>
+<li>Remove option to fix the font and make it always fix it; there's
+not much use to having it disabled.</li>
+<li>Revamp "Remove background" option</li>
+<li>Renamed to "Classic style"</li>
+<li>Now shows message boxes with Windows XP positioning and scaling</li>
+<li>May break with per-monitor DPI, have not tested. Regardless, I don't
+think anyone using a Windows XP/2000 theme would want per-monitor DPI.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle through taskbar windows on click 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-left-click-cycle#2588c1bd9fb279ee7a7b982ee8a9e8405459299c</id>
@@ -222,12 +238,5 @@ width.</li>
 <li>Fixed the start button, search button and tasks button becoming larger when
 the taskbar width is increased.</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lines in MMC and Device Manager 1.0.1]]></title>
-        <id>https://windhawk.net/mods/lines-in-mmc#3c610f47189a8abada7a1bc39a93e87de7d85af4</id>
-        <link href="https://windhawk.net/mods/lines-in-mmc"/>
-        <updated>2024-08-31T12:49:44.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix image alignment</p>]]></content>
     </entry>
 </feed>
