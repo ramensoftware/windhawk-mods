@@ -6,6 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lgdi32 -DWINVER=0x0A00
 // ==/WindhawkMod==
 
@@ -166,6 +167,7 @@ void LoadSettings(void)
         bool title = Wh_GetIntSetting(L"lines[%i].title", i);
         WatermarkLine line = { lpszText, title };
         g_lines.push_back(line);
+        Wh_FreeStrintSetting(lpszText);
     }
 }
 
