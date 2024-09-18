@@ -162,12 +162,15 @@ void LoadSettings(void)
     for (int i = 0;; i++)
     {
         LPCWSTR lpszText = Wh_GetStringSetting(L"lines[%i].text", i);
-        if (!lpszText || !*lpszText)
+        if (!*lpszText)
+        {
+            Wh_FreeStringSetting(lpszText);
             break;
+        }
         bool title = Wh_GetIntSetting(L"lines[%i].title", i);
         WatermarkLine line = { lpszText, title };
         g_lines.push_back(line);
-        Wh_FreeStrintSetting(lpszText);
+        Wh_FreeStringSetting(lpszText);
     }
 }
 
