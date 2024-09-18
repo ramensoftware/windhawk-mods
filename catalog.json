@@ -713,6 +713,30 @@
                 "version": "1.1.0"
             }
         },
+        "custom-desktop-watermark": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1726697955000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1726697955000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -DWINVER=0x0A00",
+                "description": "Lets you set your own desktop watermark text",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Custom Desktop Watermark",
+                "version": "1.0.0"
+            }
+        },
         "custom-shutdown-dialog": {
             "details": {
                 "defaultSorting": 990,
