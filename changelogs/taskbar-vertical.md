@@ -1,3 +1,12 @@
+## 1.2 ([Sep 19, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0b018deaa9febe57c9ed85c1ad65aac49966d743/mods/taskbar-vertical.wh.cpp))
+
+* Added support for Windows 11 version 24H2.
+* Added an option to move the taskbar to the right.
+* Added an option for a custom start menu width, can be useful for custom start menu themes.
+* If taskbar labels are enabled, they're no longer rotated sideways.
+* The Copilot icon and widget icons are no longer rotated sideways.
+* Fixed thumbnails being cut off after closing an item.
+
 ## 1.1 ([Aug 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/387771ec375561f49fffc1429b8b185f54feb5e4/mods/taskbar-vertical.wh.cpp))
 
 * Fixed the start menu being covered by the taskbar, adjusted its position to
