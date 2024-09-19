@@ -42,7 +42,6 @@ putting in your own lines of text.
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
-#include <windows.h>
 #include <vector>
 
 #define RECTWIDTH(rc)   ((rc).right - (rc).left)
