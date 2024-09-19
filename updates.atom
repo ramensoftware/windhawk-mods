@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-18T22:19:15.000Z</updated>
+    <updated>2024-09-19T05:23:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Desktop Watermark 1.0.1]]></title>
+        <id>https://windhawk.net/mods/custom-desktop-watermark#7b9cc220e6128fbdbd9f95e8588b674f98e407e7</id>
+        <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
+        <updated>2024-09-19T05:23:09.000Z</updated>
+        <content type="html"><![CDATA[<p>Ensure transparent text background</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Desktop Watermark 1.0.0]]></title>
         <id>https://windhawk.net/mods/custom-desktop-watermark#5caa900cecb8fd17107363c40fdc102d6f68c512</id>
@@ -219,17 +226,5 @@ To customize the clock and tray area, launch legacy tray setup dialog:
         <link href="https://windhawk.net/mods/fake-explorer-path"/>
         <updated>2024-09-01T13:05:55.000Z</updated>
         <content type="html"><![CDATA[<p>More clarity</p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fake Explorer path 1.0]]></title>
-        <id>https://windhawk.net/mods/fake-explorer-path#33f5a6e22ac4c2ac74ed28bbd5ecb9bcef0d7492</id>
-        <link href="https://windhawk.net/mods/fake-explorer-path"/>
-        <updated>2024-09-01T11:55:08.000Z</updated>
-        <content type="html"><![CDATA[<p>Allows to run explorer.exe in taskbar mode from any location. This can be used to run another version of Explorer
-without replacing system files. The path to explorer.exe can be specified in the registry key
-HKEY<em>LOCAL</em>MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\Shell.
-For running taskbar in Windows 10 mode, the localization folder should be available
-at the location of explorer.exe. For Windows 11 taskbar mode, this is not required.</p>
-<p>The mod makes explorer.exe think that it has been launched from %Systemroot%\Windows.</p>]]></content>
     </entry>
 </feed>

@@ -719,7 +719,7 @@
                 "published": 1726697955000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1726697955000,
+                "updated": 1726723389000,
                 "users": 2
             },
             "metadata": {
@@ -734,7 +734,7 @@
                     "explorer.exe"
                 ],
                 "name": "Custom Desktop Watermark",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "custom-shutdown-dialog": {
