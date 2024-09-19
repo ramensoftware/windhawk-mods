@@ -3038,7 +3038,7 @@
                 "published": 1723291741000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1723471859000,
+                "updated": 1726745627000,
                 "users": 28
             },
             "metadata": {
@@ -3049,7 +3049,7 @@
                     "explorer.exe"
                 ],
                 "name": "Windows 10 taskbar on Windows 11",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "win10-taskbar-on-win11-24h2": {

@@ -2,12 +2,19 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-19T05:23:09.000Z</updated>
+    <updated>2024-09-19T11:33:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 taskbar on Windows 11 1.0.2]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11#2ed0cde47915e2af9f136673ff1f10a36484acb1</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11"/>
+        <updated>2024-09-19T11:33:47.000Z</updated>
+        <content type="html"><![CDATA[<p>Simplified description</p>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Desktop Watermark 1.0.1]]></title>
         <id>https://windhawk.net/mods/custom-desktop-watermark#7b9cc220e6128fbdbd9f95e8588b674f98e407e7</id>
@@ -219,12 +226,5 @@ To customize the clock and tray area, launch legacy tray setup dialog:
 <li><p>Updated the readme instruction for triggering early / system start of Windhawk service, which is necessary to ensure that classic theme is properly applied before any programs including Taskbar run. The mod code is same, only readme instruction has changed. Also added one more classic theme related mod to the recommended mods list in the readme.</p></li>
 <li><p>Added instruction for making a service dependent on Windhawk</p></li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fake Explorer path 1.0.1]]></title>
-        <id>https://windhawk.net/mods/fake-explorer-path#ebdfc3b11e6dedeb63bf66dd75ed00cc7a8ceb47</id>
-        <link href="https://windhawk.net/mods/fake-explorer-path"/>
-        <updated>2024-09-01T13:05:55.000Z</updated>
-        <content type="html"><![CDATA[<p>More clarity</p>]]></content>
     </entry>
 </feed>
