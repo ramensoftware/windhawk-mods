@@ -2,7 +2,7 @@
 // @id              custom-desktop-watermark
 // @name            Custom Desktop Watermark
 // @description     Lets you set your own desktop watermark text
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -42,7 +42,6 @@ putting in your own lines of text.
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
-#include <windows.h>
 #include <vector>
 
 #define RECTWIDTH(rc)   ((rc).right - (rc).left)
@@ -104,6 +103,7 @@ void CDesktopWatermark_s_DesktopBuildPaint_hook(
 )
 {
     COLORREF cr = SetTextColor(hDC, RGB(255, 255, 255));
+    int bk = SetBkMode(hDC, TRANSPARENT);
     int offset = 0;
 
     NONCLIENTMETRICSW ncm = { sizeof(ncm) };
@@ -132,6 +132,7 @@ void CDesktopWatermark_s_DesktopBuildPaint_hook(
         ) + padding;
     }
 
+    SetBkMode(hDC, bk);
     SetTextColor(hDC, cr);
 }
 
