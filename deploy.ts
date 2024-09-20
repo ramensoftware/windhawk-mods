@@ -208,6 +208,10 @@ function generateRssFeed() {
         content: string;
         url: string;
         date: Date;
+        author: {
+            name?: string;
+            link?: string;
+        };
     };
 
     let feedItems: FeedItem[] = [];
@@ -275,6 +279,10 @@ function generateRssFeed() {
             content,
             url: `https://windhawk.net/mods/${modId}`,
             date: new Date(commitTime * 1000),
+            author: {
+                name: metadata.author,
+                link: metadata.github,
+            },
         });
 
         if (feedItems.length >= 20) {
@@ -309,6 +317,7 @@ function generateRssFeed() {
             link: feedItem.url,
             content: markdownToHtml(feedItem.content),
             date: feedItem.date,
+            author: [feedItem.author],
         });
     }
 
