@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11!
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -13,7 +13,7 @@
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0605 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -DWINVER=0x0605 -lole32 -loleaut32 -lruntimeobject -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -537,6 +537,15 @@ LRESULT TaskbarWndProcPostProcess(HWND hWnd,
             }
             break;
         }
+
+        case WM_ERASEBKGND: {
+            Wh_Log(L"WM_ERASEBKGND: %08X", (DWORD)(ULONG_PTR)hWnd);
+
+            // Calling CreateRectRgn posts window size change events which cause
+            // element sizes and positions to be recalculated.
+            SetWindowRgn(hWnd, nullptr, TRUE);
+            break;
+        }
     }
 
     return result;
@@ -644,6 +653,13 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
 
     // Move a bit lower to vertically center the cursor on the close item.
     point->Y += MulDiv(30, monitorDpiY, 96);
+
+    // Avoid returning a point too close to the top of the monitor which causes
+    // the menu to be cut off.
+    int minY = rc.top + MulDiv(130, monitorDpiY, 96);
+    if (point->Y < minY) {
+        point->Y = minY;
+    }
 
     *verticalAlignment = VerticalAlignment::Center;
 
@@ -889,7 +905,15 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
     // Set the width/height to NaN (Auto) to always match the parent
     // width/height.
     taskbarFrameElement.Width(std::numeric_limits<double>::quiet_NaN());
-    taskbarFrameElement.Height(std::numeric_limits<double>::quiet_NaN());
+
+    // Setting the height right away can result in ellipsis.
+    // https://github.com/ramensoftware/windhawk-mods/issues/981
+    taskbarFrameElement.Dispatcher().TryRunAsync(
+        winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+        [taskbarFrameElement]() {
+            taskbarFrameElement.Height(
+                std::numeric_limits<double>::quiet_NaN());
+        });
 }
 
 using SystemTraySecondaryController_UpdateFrameSize_t =
@@ -1964,25 +1988,6 @@ void WINAPI CopilotIcon_ToggleEdgeCopilot_Hook(void* pThis) {
         });
 }
 
-using SHAppBarMessage_t = decltype(&SHAppBarMessage);
-SHAppBarMessage_t SHAppBarMessage_Original;
-auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
-    auto ret = SHAppBarMessage_Original(dwMessage, pData);
-
-    // This is used to position secondary taskbars.
-    if (dwMessage == ABM_QUERYPOS && ret && !g_unloading && pData->hWnd) {
-        HMONITOR monitor =
-            MonitorFromWindow(pData->hWnd, MONITOR_DEFAULTTONEAREST);
-
-        RECT monitorRect;
-        GetMonitorRect(monitor, &monitorRect);
-
-        pData->rc.top = monitorRect.top;
-    }
-
-    return ret;
-}
-
 BOOL WINAPI GetWindowRect_Hook(HWND hWnd, LPRECT lpRect) {
     BOOL ret = GetWindowRect_Original(hWnd, lpRect);
     if (ret && !g_unloading &&
@@ -2840,9 +2845,6 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
     }
-
-    Wh_SetFunctionHook((void*)SHAppBarMessage, (void*)SHAppBarMessage_Hook,
-                       (void**)&SHAppBarMessage_Original);
 
     Wh_SetFunctionHook((void*)GetWindowRect, (void*)GetWindowRect_Hook,
                        (void**)&GetWindowRect_Original);
