@@ -1,3 +1,10 @@
+## 1.2.2 ([Sep 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a90c4ab676b14803b36ae376b63928dc6b483b51/mods/taskbar-vertical.wh.cpp))
+
+* Fixed a possible crash loop on mod initialization with multiple monitors.
+* Fixed the taskbar becoming blank after changing the settings.
+* Fixed all taskbar items hidden in an overflow view after enabling the mod.
+* Improved handling of the right click menu on the top of the taskbar, reducing the chance of the menu being cut off.
+
 ## 1.2.1 ([Sep 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/824532afd6f3568f26b5676f950ef0557602df99/mods/taskbar-vertical.wh.cpp))
 
 * Improved core implementation, which improves compatibility with other mods and programs.

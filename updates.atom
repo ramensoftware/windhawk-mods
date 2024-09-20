@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-20T11:43:35.000Z</updated>
+    <updated>2024-09-20T19:20:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#a90c4ab676b14803b36ae376b63928dc6b483b51</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2024-09-20T19:20:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a possible crash loop on mod initialization with multiple monitors.</li>
+<li>Fixed the taskbar becoming blank after changing the settings.</li>
+<li>Fixed all taskbar items hidden in an overflow view after enabling the mod.</li>
+<li>Improved handling of the right click menu on the top of the taskbar, reducing the chance of the menu being cut off.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#824532afd6f3568f26b5676f950ef0557602df99</id>
@@ -214,14 +226,5 @@ button do that.</p>]]></content>
 <p>Move notifications to another monitor or another corner of the screen.</p>
 <p>Only Windows 11 is supported.</p>
 <p><img src="https://i.imgur.com/4PxMvLg.png" alt="Screenshot" /></p>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Taskbar background fix 1.0.3]]></title>
-        <id>https://windhawk.net/mods/classic-taskbar-background-fix#fc6e85e377c3948bcf182bd71fe74f5f0afea3b5</id>
-        <link href="https://windhawk.net/mods/classic-taskbar-background-fix"/>
-        <updated>2024-09-05T06:26:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a small resource leak related to the "Show desktop" button</li>
-</ul>]]></content>
     </entry>
 </feed>
