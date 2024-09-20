@@ -2658,7 +2658,7 @@
                 "published": 1718190574000,
                 "rating": 10,
                 "ratingUsers": 10,
-                "updated": 1726774474000,
+                "updated": 1726832615000,
                 "users": 664
             },
             "metadata": {
@@ -2679,7 +2679,7 @@
                 ],
                 "name": "Vertical Taskbar for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "taskbar-volume-control": {

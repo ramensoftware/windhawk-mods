@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-19T19:34:34.000Z</updated>
+    <updated>2024-09-20T11:43:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#824532afd6f3568f26b5676f950ef0557602df99</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2024-09-20T11:43:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved core implementation, which improves compatibility with other mods and programs.</li>
+<li>Fixed overflow tray icons cut off when the taskbar is on the right.</li>
+<li>Fixed copilot opening behind the taskbar when it's on the right.</li>
+</ul>]]></content>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#0b018deaa9febe57c9ed85c1ad65aac49966d743</id>
@@ -212,23 +223,5 @@ button do that.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a small resource leak related to the "Show desktop" button</li>
 </ul>]]></content>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enables Win10 taskbar on Win11 24H2 0.1]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#15b8878e02343f715b24376701b5f15b5dfb2d33</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
-        <updated>2024-09-04T10:47:10.000Z</updated>
-        <content type="html"><![CDATA[<p>Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024.
-If you are on Windows 11 version 21H2 to 23H2, you should not use this mod, but rather install the mod "Windows 10 taskbar on
-Windows 11".
-Important! Before enabling this mod, install the mod "Fake Explorer path".
-Since this mod downloads the Windows 10 taskbar from Microsoft's symbols server and stores it in the Windhawk data directory, 
-it won't work in the portable version of Windhawk.
-If you are using Classic theme, you should also install mods "Classic Theme Explorer Lite" and "Non Immersive Taskbar Context Menu".
-The mod "Eradicate immersive menus" will not work.
-You also can use 7+ Taskbar Tweaker. 
-Explorer Patcher by default will have no effect, ask at EP forums for support.
-To customize the clock and tray area, launch legacy tray setup dialog:
-<code>explorer shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}</code></p>]]></content>
     </entry>
 </feed>

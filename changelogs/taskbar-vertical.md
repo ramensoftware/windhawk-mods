@@ -1,3 +1,9 @@
+## 1.2.1 ([Sep 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/824532afd6f3568f26b5676f950ef0557602df99/mods/taskbar-vertical.wh.cpp))
+
+* Improved core implementation, which improves compatibility with other mods and programs.
+* Fixed overflow tray icons cut off when the taskbar is on the right.
+* Fixed copilot opening behind the taskbar when it's on the right.
+
 ## 1.2 ([Sep 19, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0b018deaa9febe57c9ed85c1ad65aac49966d743/mods/taskbar-vertical.wh.cpp))
 
 * Added support for Windows 11 version 24H2.
