@@ -19,6 +19,10 @@
 <li>Fixed all taskbar items hidden in an overflow view after enabling the mod.</li>
 <li>Improved handling of the right click menu on the top of the taskbar, reducing the chance of the menu being cut off.</li>
 </ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.1]]></title>
@@ -30,6 +34,10 @@
 <li>Fixed overflow tray icons cut off when the taskbar is on the right.</li>
 <li>Fixed copilot opening behind the taskbar when it's on the right.</li>
 </ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2]]></title>
@@ -44,6 +52,10 @@
 <li>The Copilot icon and widget icons are no longer rotated sideways.</li>
 <li>Fixed thumbnails being cut off after closing an item.</li>
 </ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 taskbar on Windows 11 1.0.2]]></title>
@@ -51,6 +63,10 @@
         <link href="https://windhawk.net/mods/win10-taskbar-on-win11"/>
         <updated>2024-09-19T11:33:47.000Z</updated>
         <content type="html"><![CDATA[<p>Simplified description</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Custom Desktop Watermark 1.0.1]]></title>
@@ -58,6 +74,10 @@
         <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
         <updated>2024-09-19T05:23:09.000Z</updated>
         <content type="html"><![CDATA[<p>Ensure transparent text background</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Custom Desktop Watermark 1.0.0]]></title>
@@ -72,6 +92,10 @@ putting in your own lines of text.</p>
 <img src="https://raw.githubusercontent.com/aubymori/images/main/custom-desktop-watermark-win7.png" alt="Windows 7 (not genuine)" /></p>
 <p><strong>Windows XP Professional x64 Edition</strong>:
 <img src="https://raw.githubusercontent.com/aubymori/images/main/custom-desktop-watermark-winxp.png" alt="Windows XP Professional x64 Edition" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Fix 2.0.0]]></title>
@@ -88,6 +112,10 @@ not much use to having it disabled.</li>
 <li>May break with per-monitor DPI, have not tested. Regardless, I don't
 think anyone using a Windows XP/2000 theme would want per-monitor DPI.</li>
 </ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Cycle through taskbar windows on click 1.0]]></title>
@@ -103,6 +131,10 @@ check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a>.</
 <p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.</p>
 <p><img src="https://i.imgur.com/ecYYtGU.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.1]]></title>
@@ -113,6 +145,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
 <li><p>Fix bug where the logon sound needs user to have write access to HKLM in order to play</p></li>
 <li><p>State that it's likely redundant with explorer7</p></li>
 </ul>]]></content>
+        <author>
+            <name>Toru the Red Fox</name>
+            <uri>https://github.com/TorutheRedFox</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[FixStrips WH Port 1.0]]></title>
@@ -126,6 +162,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
 <h2 id="after">After</h2>
 <p><img src="https://raw.githubusercontent.com/OliviaIsTyping/images/main/fixstrips-after.png" alt="After" /></p>
 <p>Credits to <a href="https://github.com/Anixx">@Anixx</a> for the original AHK Script</p>]]></content>
+        <author>
+            <name>OliveIsTyping</name>
+            <uri>https://github.com/OliviaIsTyping</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.4]]></title>
@@ -135,6 +175,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <content type="html"><![CDATA[<ul>
 <li>Added support for Windows 11 version 24H2.</li>
 </ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.5]]></title>
@@ -144,6 +188,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <content type="html"><![CDATA[<ul>
 <li>Added support for Windows 11 version 24H2.</li>
 </ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Old This PC Commands 1.0.1]]></title>
@@ -157,6 +205,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
 <li>Move symbol hook definitions and update the name to match modern convention</li>
 <li>Properly free memory in <code>OpenCplPage</code></li>
 </ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.0]]></title>
@@ -166,6 +218,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <content type="html"><![CDATA[<h1 id="logonsoundsrestored">Logon Sounds Restored</h1>
 <p>Restores the logon, logoff and shutdown sounds from earlier versions of Windows, simple as.</p>
 <p>It is recommended to use <a href="https://www.howtogeek.com/wp-content/uploads/2016/09/Shutdown-Logoff-Logon-Sound-Hacks.zip">these reg files</a> to restore the sound events to the Sound control panel applet.</p>]]></content>
+        <author>
+            <name>Toru the Red Fox</name>
+            <uri>https://github.com/TorutheRedFox</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows notifications placement 1.0.1]]></title>
@@ -176,6 +232,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
 <li>The mod was tested on Windows 10 and was found to be working correctly. The mod name and description were updated accordingly.</li>
 <li>Made the mod work on non-English Windows versions.</li>
 </ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Classic Clock Button Behavior 1.0.0]]></title>
@@ -186,6 +246,10 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
 <p>In Windows XP and before, the tray clock did nothing on single click, and opened
 the Date and Time CPL on double click. This mod makes the Windows 10 tray clock
 button do that.</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.2]]></title>
@@ -196,6 +260,10 @@ button do that.</p>]]></content>
 <li>Added a new theme: Unified.</li>
 <li>Added a workaround for hanging the notification center process on Windows 10. Although the available themes and example styles are designed for Windows 11, it should now be possible to use the mod on Windows 10 too.</li>
 </ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[UIFILE Override 1.0.2]]></title>
@@ -205,6 +273,10 @@ button do that.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Check executable name instead of full path for explorer hooking</li>
 </ul>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Accent Color Sync 1.4]]></title>
@@ -216,6 +288,10 @@ button do that.</p>]]></content>
 <li>Compatibility check now returns the actual Windows version instead of the version returned from Explorer. This fixes the issue of the mod not being compatible with <a href="https://github.com/Erizur/explorer7-releases/">explorer7</a>.</li>
 <li>Updated readme.</li>
 </ul>]]></content>
+        <author>
+            <name>CatmanFan / Mr._Lechkar</name>
+            <uri>https://github.com/CatmanFan</uri>
+        </author>
     </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows 11 notifications placement 1.0]]></title>
@@ -226,5 +302,9 @@ button do that.</p>]]></content>
 <p>Move notifications to another monitor or another corner of the screen.</p>
 <p>Only Windows 11 is supported.</p>
 <p><img src="https://i.imgur.com/4PxMvLg.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
     </entry>
 </feed>
