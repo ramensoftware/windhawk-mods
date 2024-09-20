@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11!
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -137,7 +137,6 @@ std::atomic<bool> g_unloading;
 std::atomic<int> g_hookCallCounter;
 
 int g_originalTaskbarHeight;
-bool g_windowRgnChanging;
 bool g_inSystemTrayController_UpdateFrameSize;
 bool g_inAugmentedEntryPointButton_UpdateButtonPadding;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
@@ -151,6 +150,9 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
 
 std::list<FrameworkElementLoadedEventRevoker> g_notifyIconAutoRevokerList;
+
+int g_copilotPosTimerCounter;
+UINT_PTR g_copilotPosTimer;
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 typedef enum MONITOR_DPI_TYPE {
@@ -353,25 +355,28 @@ DWORD WINAPI TrayUI_GetDockedRect_Hook(void* pThis, RECT* rect, BOOL param2) {
     RECT monitorRect;
     GetMonitorRect(monitor, &monitorRect);
 
+    UINT monitorDpiX = 96;
+    UINT monitorDpiY = 96;
+    GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
     if (!g_unloading) {
+        int taskbarWidthScaled =
+            MulDiv(g_settings.taskbarWidth, monitorDpiX, 96);
+
         rect->top = monitorRect.top;
 
         switch (GetTaskbarLocationForMonitor(monitor)) {
             case TaskbarLocation::left:
                 rect->left = monitorRect.left;
-                rect->right = rect->left + (rect->bottom - rect->top);
+                rect->right = rect->left + taskbarWidthScaled;
                 break;
 
             case TaskbarLocation::right:
                 rect->right = monitorRect.right;
-                rect->left = rect->right - (rect->bottom - rect->top);
+                rect->left = rect->right - taskbarWidthScaled;
                 break;
         }
     } else {
-        UINT monitorDpiX = 96;
-        UINT monitorDpiY = 96;
-        GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
-
         int taskbarOriginalHeightScaled =
             MulDiv(g_originalTaskbarHeight, monitorDpiY, 96);
 
@@ -446,6 +451,16 @@ void WINAPI TrayUI_MakeStuckRect_Hook(void* pThis,
 using GetWindowRect_t = decltype(&GetWindowRect);
 GetWindowRect_t GetWindowRect_Original;
 
+bool IsTaskbarWindow(HWND hWnd) {
+    WCHAR szClassName[32];
+    if (!GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
+        return false;
+    }
+
+    return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 ||
+           _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+}
+
 HWND GetTaskbarWnd();
 
 LRESULT TaskbarWndProcPostProcess(HWND hWnd,
@@ -453,73 +468,36 @@ LRESULT TaskbarWndProcPostProcess(HWND hWnd,
                                   WPARAM wParam,
                                   LPARAM lParam,
                                   LRESULT result) {
-    // Calling CreateRectRgn has two reasons: To actually set the region, and to
-    // post window size change events which cause element sizes and positions to
-    // be recalculated.
-    auto updateWindowRgn = [](HMONITOR monitor, HWND hWnd, int width,
-                              int height, int windowWidth) {
-        // Avoid handling this recursively as SetWindowRgn triggers
-        // WM_WINDOWPOSCHANGED again.
-        if (g_windowRgnChanging) {
-            return;
-        }
-
-        g_windowRgnChanging = true;
-
-        if (!g_unloading) {
-            HRGN windowRegion;
-            switch (GetTaskbarLocationForMonitor(monitor)) {
-                case TaskbarLocation::left:
-                    windowRegion = CreateRectRgn(0, 0, width, height);
-                    break;
-
-                case TaskbarLocation::right:
-                    windowRegion = CreateRectRgn(windowWidth - width, 0,
-                                                 windowWidth, height);
-                    break;
-            }
-
-            if (windowRegion) {
-                SetWindowRgn(hWnd, windowRegion, TRUE);
-            }
-        } else {
-            SetWindowRgn(hWnd, nullptr, TRUE);
-        }
-
-        g_windowRgnChanging = false;
-    };
-
     switch (Msg) {
         case WM_SIZING: {
             Wh_Log(L"WM_SIZING: %08X", (DWORD)(ULONG_PTR)hWnd);
 
-            RECT* rect = (RECT*)lParam;
-
-            HMONITOR monitor = MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
-
             if (!g_unloading) {
+                RECT* rect = (RECT*)lParam;
+
+                HMONITOR monitor =
+                    MonitorFromRect(rect, MONITOR_DEFAULTTONEAREST);
+
                 RECT monitorRect;
                 GetMonitorRect(monitor, &monitorRect);
+
+                int taskbarWidthScaled =
+                    MulDiv(g_settings.taskbarWidth, GetDpiForWindow(hWnd), 96);
 
                 rect->top = monitorRect.top;
 
                 switch (GetTaskbarLocationForMonitor(monitor)) {
                     case TaskbarLocation::left:
                         rect->left = monitorRect.left;
-                        rect->right = rect->left + (rect->bottom - rect->top);
+                        rect->right = rect->left + taskbarWidthScaled;
                         break;
 
                     case TaskbarLocation::right:
                         rect->right = monitorRect.right;
-                        rect->left = rect->right - (rect->bottom - rect->top);
+                        rect->left = rect->right - taskbarWidthScaled;
                         break;
                 }
             }
-
-            updateWindowRgn(
-                monitor, hWnd,
-                MulDiv(g_settings.taskbarWidth, GetDpiForWindow(hWnd), 96),
-                rect->bottom - rect->top, rect->right - rect->left);
             break;
         }
 
@@ -530,18 +508,21 @@ LRESULT TaskbarWndProcPostProcess(HWND hWnd,
                 Wh_Log(L"WM_WINDOWPOSCHANGING (size or move): %08X",
                        (DWORD)(ULONG_PTR)hWnd);
 
-                RECT rect{
-                    .left = windowpos->x,
-                    .top = windowpos->y,
-                    .right = windowpos->x + windowpos->cx,
-                    .bottom = windowpos->y + windowpos->cy,
-                };
-                HMONITOR monitor =
-                    MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
-
                 if (!g_unloading) {
+                    RECT rect{
+                        .left = windowpos->x,
+                        .top = windowpos->y,
+                        .right = windowpos->x + windowpos->cx,
+                        .bottom = windowpos->y + windowpos->cy,
+                    };
+                    HMONITOR monitor =
+                        MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
+
                     if (!(windowpos->flags & SWP_NOSIZE)) {
-                        windowpos->cx = windowpos->cy;
+                        int taskbarWidthScaled = MulDiv(
+                            g_settings.taskbarWidth, GetDpiForWindow(hWnd), 96);
+
+                        windowpos->cx = taskbarWidthScaled;
                     }
 
                     if (!(windowpos->flags & SWP_NOMOVE) &&
@@ -553,47 +534,7 @@ LRESULT TaskbarWndProcPostProcess(HWND hWnd,
                         windowpos->x = monitorRect.right - windowpos->cx;
                     }
                 }
-
-                updateWindowRgn(
-                    monitor, hWnd,
-                    MulDiv(g_settings.taskbarWidth, GetDpiForWindow(hWnd), 96),
-                    windowpos->cy, windowpos->cx);
             }
-            break;
-        }
-
-        case WM_WINDOWPOSCHANGED: {
-            auto* windowpos = (WINDOWPOS*)lParam;
-            if ((windowpos->flags & (SWP_NOSIZE | SWP_NOMOVE)) !=
-                (SWP_NOSIZE | SWP_NOMOVE)) {
-                Wh_Log(L"WM_WINDOWPOSCHANGED (size or move): %08X",
-                       (DWORD)(ULONG_PTR)hWnd);
-
-                RECT rect{
-                    .left = windowpos->x,
-                    .top = windowpos->y,
-                    .right = windowpos->x + windowpos->cx,
-                    .bottom = windowpos->y + windowpos->cy,
-                };
-                HMONITOR monitor =
-                    MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
-
-                updateWindowRgn(
-                    monitor, hWnd,
-                    MulDiv(g_settings.taskbarWidth, GetDpiForWindow(hWnd), 96),
-                    windowpos->cy, windowpos->cx);
-            }
-            break;
-        }
-
-        case WM_PAINT: {
-            RECT rc;
-            GetWindowRect_Original(hWnd, &rc);
-
-            updateWindowRgn(
-                MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), hWnd,
-                MulDiv(g_settings.taskbarWidth, GetDpiForWindow(hWnd), 96),
-                rc.bottom - rc.top, rc.right - rc.left);
             break;
         }
     }
@@ -785,12 +726,13 @@ ResourceDictionary_Lookup_Hook(void* pThis,
     switch (g_settings.taskbarLocation) {
         case TaskbarLocation::left:
             valueThickness->Bottom -=
-                MulDiv(rc.right - rc.left, 96, GetDpiForWindow(hTaskbarWnd));
+                MulDiv(rc.bottom - rc.top, 96, GetDpiForWindow(hTaskbarWnd));
             valueThickness->Bottom += g_settings.taskbarWidth;
             break;
 
         case TaskbarLocation::right:
-            valueThickness->Bottom -= g_settings.taskbarWidth;
+            valueThickness->Bottom -=
+                MulDiv(rc.bottom - rc.top, 96, GetDpiForWindow(hTaskbarWnd));
             valueThickness->Bottom -= 230;
             break;
     }
@@ -944,7 +886,9 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
 
     TaskbarController_UpdateFrameHeight_Original(pThis);
 
-    // Set the height to NaN (Auto) to always match the parent height.
+    // Set the width/height to NaN (Auto) to always match the parent
+    // width/height.
+    taskbarFrameElement.Width(std::numeric_limits<double>::quiet_NaN());
     taskbarFrameElement.Height(std::numeric_limits<double>::quiet_NaN());
 }
 
@@ -981,16 +925,16 @@ bool UpdateNotifyIconsIfNeeded(XamlRoot xamlRoot);
 
 bool ApplyStyle(FrameworkElement taskbarFrame,
                 const winrt::Windows::Foundation::Size& size) {
-    auto rootGrid =
+    auto contentGrid =
         Media::VisualTreeHelper::GetParent(taskbarFrame).as<Controls::Grid>();
 
     double angle = g_unloading ? 0 : 90;
     Media::RotateTransform transform;
     transform.Angle(angle);
-    rootGrid.RenderTransform(transform);
+    contentGrid.RenderTransform(transform);
 
     float origin = g_unloading ? 0 : 0.5;
-    rootGrid.RenderTransformOrigin({origin, origin});
+    contentGrid.RenderTransformOrigin({origin, origin});
 
     Thickness margin{};
     if (!g_unloading) {
@@ -1000,13 +944,13 @@ bool ApplyStyle(FrameworkElement taskbarFrame,
         }
     }
 
-    FrameworkElement child = rootGrid;
+    FrameworkElement child = contentGrid;
     if (child && (child = FindChildByName(child, L"TaskbarFrame")) &&
         (child = FindChildByName(child, L"RootGrid"))) {
         child.Margin(margin);
     }
 
-    child = rootGrid;
+    child = contentGrid;
     if (child &&
         (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
         (child = FindChildByName(child, L"SystemTrayFrameGrid"))) {
@@ -1374,17 +1318,20 @@ bool ApplyStyleIfNeeded(XamlRoot xamlRoot) {
         return true;
     }
 
-    FrameworkElement rootGrid = xamlRoot.Content().try_as<FrameworkElement>();
+    FrameworkElement contentGrid =
+        xamlRoot.Content().try_as<FrameworkElement>();
 
-    FrameworkElement taskbarFrame = nullptr;
-
-    FrameworkElement child = rootGrid;
-    if (child && (child = FindChildByName(child, L"TaskbarFrame"))) {
-        taskbarFrame = child;
+    auto taskbarFrame = FindChildByName(contentGrid, L"TaskbarFrame");
+    if (!taskbarFrame) {
+        return true;
     }
 
-    if (!taskbarFrame ||
-        taskbarFrame.ActualHeight() == g_settings.taskbarWidth) {
+    FrameworkElement rootGrid = FindChildByName(taskbarFrame, L"RootGrid");
+    if (!rootGrid) {
+        return true;
+    }
+
+    if (rootGrid.ActualHeight() == g_settings.taskbarWidth) {
         return true;
     }
 
@@ -1905,6 +1852,118 @@ void WINAPI CopilotIcon_UpdateVisualStates_Hook(void* pThis) {
     }
 }
 
+std::wstring GetProcessFileName(DWORD dwProcessId) {
+    HANDLE hProcess =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
+    if (!hProcess) {
+        return std::wstring{};
+    }
+
+    WCHAR processPath[MAX_PATH];
+
+    DWORD dwSize = ARRAYSIZE(processPath);
+    if (!QueryFullProcessImageName(hProcess, 0, processPath, &dwSize)) {
+        CloseHandle(hProcess);
+        return std::wstring{};
+    }
+
+    CloseHandle(hProcess);
+
+    PCWSTR processFileNameUpper = wcsrchr(processPath, L'\\');
+    if (!processFileNameUpper) {
+        return std::wstring{};
+    }
+
+    processFileNameUpper++;
+    return processFileNameUpper;
+}
+
+bool UpdateCopilotPosition() {
+    bool updatedPosition = false;
+
+    auto enumWindowProc = [&](HWND hWnd, LPARAM lParam) -> BOOL {
+        DWORD style = GetWindowStyle(hWnd);
+        if (style & WS_CAPTION) {
+            return TRUE;
+        }
+
+        DWORD exStyle = GetWindowExStyle(hWnd);
+        if (!(exStyle & WS_EX_TOOLWINDOW)) {
+            return TRUE;
+        }
+
+        DWORD dwProcessId = 0;
+        if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+            _wcsicmp(GetProcessFileName(dwProcessId).c_str(), L"msedge.exe") !=
+                0) {
+            return TRUE;
+        }
+
+        RECT rc{};
+        GetWindowRect_Original(hWnd, &rc);
+
+        HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo{
+            .cbSize = sizeof(MONITORINFO),
+        };
+        GetMonitorInfo(monitor, &monitorInfo);
+
+        if (rc.top != monitorInfo.rcWork.top ||
+            rc.bottom != monitorInfo.rcWork.bottom ||
+            rc.right != monitorInfo.rcMonitor.right) {
+            return TRUE;
+        }
+
+        if (monitorInfo.rcWork.right != monitorInfo.rcMonitor.right) {
+            int x = rc.left - monitorInfo.rcMonitor.right +
+                    monitorInfo.rcWork.right;
+            int y = rc.top;
+            SetWindowPos(hWnd, nullptr, x, y, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+
+        updatedPosition = true;
+        return FALSE;
+    };
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(enumWindowProc)*>(lParam);
+            return proc(hWnd, lParam);
+        },
+        reinterpret_cast<LPARAM>(&enumWindowProc));
+
+    return updatedPosition;
+}
+
+using CopilotIcon_ToggleEdgeCopilot_t = void(WINAPI*)(void* pThis);
+CopilotIcon_ToggleEdgeCopilot_t CopilotIcon_ToggleEdgeCopilot_Original;
+void WINAPI CopilotIcon_ToggleEdgeCopilot_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    CopilotIcon_ToggleEdgeCopilot_Original(pThis);
+
+    if (g_settings.taskbarLocation != TaskbarLocation::right) {
+        return;
+    }
+
+    g_copilotPosTimerCounter = 0;
+    g_copilotPosTimer = SetTimer(
+        nullptr, g_copilotPosTimer, 100,
+        [](HWND hwnd,         // handle of window for timer messages
+           UINT uMsg,         // WM_TIMER message
+           UINT_PTR idEvent,  // timer identifier
+           DWORD dwTime       // current system time
+           ) WINAPI {
+            g_copilotPosTimerCounter++;
+            if (UpdateCopilotPosition() || g_copilotPosTimerCounter >= 10) {
+                KillTimer(nullptr, g_copilotPosTimer);
+                g_copilotPosTimer = 0;
+            }
+        });
+}
+
 using SHAppBarMessage_t = decltype(&SHAppBarMessage);
 SHAppBarMessage_t SHAppBarMessage_Original;
 auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
@@ -1926,27 +1985,22 @@ auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
 
 BOOL WINAPI GetWindowRect_Hook(HWND hWnd, LPRECT lpRect) {
     BOOL ret = GetWindowRect_Original(hWnd, lpRect);
-    if (ret && !g_unloading && hWnd == GetTaskbarWnd()) {
-        if (GetCurrentThreadId() == GetWindowThreadProcessId(hWnd, nullptr) &&
-            (g_inCTaskListThumbnailWnd_DisplayUI ||
-             g_inCTaskListThumbnailWnd_LayoutThumbnails)) {
-            Wh_Log(L"Adjusting taskbar rect for TaskListThumbnailWnd");
+    if (ret && !g_unloading &&
+        (g_inCTaskListThumbnailWnd_DisplayUI ||
+         g_inCTaskListThumbnailWnd_LayoutThumbnails) &&
+        IsTaskbarWindow(hWnd) &&
+        GetCurrentThreadId() == GetWindowThreadProcessId(hWnd, nullptr)) {
+        Wh_Log(L"Adjusting taskbar rect for TaskListThumbnailWnd");
 
-            // Fix thumbnails always displaying as list.
-            HMONITOR monitor =
-                MonitorFromRect(lpRect, MONITOR_DEFAULTTONEAREST);
+        // Fix thumbnails always displaying as list.
+        HMONITOR monitor = MonitorFromRect(lpRect, MONITOR_DEFAULTTONEAREST);
 
-            MONITORINFO monitorInfo{
-                .cbSize = sizeof(MONITORINFO),
-            };
-            GetMonitorInfo(monitor, &monitorInfo);
+        MONITORINFO monitorInfo{
+            .cbSize = sizeof(MONITORINFO),
+        };
+        GetMonitorInfo(monitor, &monitorInfo);
 
-            CopyRect(lpRect, &monitorInfo.rcWork);
-        } else {
-            // Adjust rect so that desktop icons will be positioned correctly.
-            lpRect->right = lpRect->left + MulDiv(g_settings.taskbarWidth,
-                                                  GetDpiForWindow(hWnd), 96);
-        }
+        CopyRect(lpRect, &monitorInfo.rcWork);
     }
 
     return ret;
@@ -2067,25 +2121,17 @@ BOOL WINAPI MoveWindow_Hook(HWND hWnd,
         return original();
     }
 
-    Wh_Log(L">");
-
-    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-
-    if (GetTaskbarLocationForMonitor(monitor) == TaskbarLocation::right) {
-        UINT monitorDpiX = 96;
-        UINT monitorDpiY = 96;
-        GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
-
-        int taskbarWidthScaled =
-            MulDiv(g_settings.taskbarWidth, monitorDpiX, 96);
-
-        X = nWidth - taskbarWidthScaled;
+    if (!IsTaskbarWindow(GetAncestor(hWnd, GA_ROOT))) {
+        return original();
     }
 
-    return original();
+    Wh_Log(L">");
+
+    return MoveWindow_Original(hWnd, X, Y, nHeight, nHeight, bRepaint);
 }
 
 namespace CoreWindowUI {
+
 bool IsTargetCoreWindow(HWND hWnd, int* extraXAdjustment) {
     DWORD threadId = 0;
     DWORD processId = 0;
@@ -2479,6 +2525,24 @@ void ApplySettings(bool waitForApply = true) {
         }
     }
 
+    // Calling CreateRectRgn posts window size change events which cause element
+    // sizes and positions to be recalculated.
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+                dwProcessId != GetCurrentProcessId()) {
+                return TRUE;
+            }
+
+            if (IsTaskbarWindow(hWnd)) {
+                SetWindowRgn(hWnd, nullptr, TRUE);
+            }
+
+            return TRUE;
+        },
+        0);
+
     g_applyingSettings = false;
 }
 
@@ -2654,6 +2718,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&CopilotIcon_UpdateVisualStates_Original,
                 (void*)CopilotIcon_UpdateVisualStates_Hook,
+            },
+            {
+                {
+                    LR"(private: void __cdecl winrt::SystemTray::implementation::CopilotIcon::ToggleEdgeCopilot(void))",
+                },
+                (void**)&CopilotIcon_ToggleEdgeCopilot_Original,
+                (void*)CopilotIcon_ToggleEdgeCopilot_Hook,
             },
         };
 
