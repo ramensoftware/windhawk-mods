@@ -28,18 +28,10 @@ that functionality.
 #include <uxtheme.h>
 #include <windhawk_utils.h>
 
-//protected: static int __cdecl CThemeMenu::Attach(struct HWND__ *,struct HMENU__ *,int,bool,class CThemeMenu * *)
 int (__fastcall *CThemeMenu_Attach_orig)(HWND, HMENU, int, bool, void **);
 int __fastcall CThemeMenu_Attach_hook(HWND, HMENU, int, bool, void **)
 {
     return 0;
-}
-
-//public: int __thiscall CThemeWnd::IsCompositedFrame(void)
-BOOL (__thiscall *CThemeWnd_IsCompositedFrame_orig)(void *);
-BOOL __thiscall CThemeWnd_IsCompositedFrame_hook(void *)
-{
-    return FALSE;
 }
 
 WindhawkUtils::SYMBOL_HOOK uxThemeDllHooks[] = {
