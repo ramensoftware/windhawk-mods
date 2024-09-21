@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-20T19:20:38.000Z</updated>
+    <updated>2024-09-21T11:11:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#e522fbec2bacd951c355649004aea1927462851f</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2024-09-21T11:11:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The start menu is now positioned on the left too. Can be disabled in the mod settings.</li>
+<li>Added support for multiple monitors.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#a90c4ab676b14803b36ae376b63928dc6b483b51</id>
@@ -291,20 +305,6 @@ button do that.</p>]]></content>
         <author>
             <name>CatmanFan / Mr._Lechkar</name>
             <uri>https://github.com/CatmanFan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Customize Windows 11 notifications placement 1.0]]></title>
-        <id>https://windhawk.net/mods/notifications-placement#2bc5971618b258d5d262c1327fba3491bdf9798b</id>
-        <link href="https://windhawk.net/mods/notifications-placement"/>
-        <updated>2024-09-06T17:31:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="customizewindows11notificationsplacement">Customize Windows 11 notifications placement</h1>
-<p>Move notifications to another monitor or another corner of the screen.</p>
-<p>Only Windows 11 is supported.</p>
-<p><img src="https://i.imgur.com/4PxMvLg.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
