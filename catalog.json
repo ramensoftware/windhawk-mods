@@ -461,7 +461,7 @@
                 "published": 1699156598000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1699156598000,
+                "updated": 1726951327000,
                 "users": 352
             },
             "metadata": {
@@ -473,7 +473,7 @@
                     "*"
                 ],
                 "name": "Classic Menus",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "classic-taskbar-background-fix": {

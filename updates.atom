@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-21T11:11:06.000Z</updated>
+    <updated>2024-09-21T20:42:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Menus 1.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-menus#98a5f9617e14032ec6156a90ddbd2959f3deb4db</id>
+        <link href="https://windhawk.net/mods/classic-menus"/>
+        <updated>2024-09-21T20:42:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>This fixes third party applications which render their own menus with UXTheme
+data from incorrectly rendering or even crashing</li>
+<li>This also makes the changes instantly apply without restarting programs</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#e522fbec2bacd951c355649004aea1927462851f</id>
@@ -290,21 +305,6 @@ button do that.</p>]]></content>
         <author>
             <name>xalejandro</name>
             <uri>https://github.com/tetawaves</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.4]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#7292f722244cd19dc93c4438270bcc600b4bf2ec</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2024-09-07T00:32:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Replaced DWM Colorization Parameters calculation formula with <a href="https://github.com/ALTaleX531/dwm_colorization_calculator">ALTaleX's method</a>.</li>
-<li>Compatibility check now returns the actual Windows version instead of the version returned from Explorer. This fixes the issue of the mod not being compatible with <a href="https://github.com/Erizur/explorer7-releases/">explorer7</a>.</li>
-<li>Updated readme.</li>
-</ul>]]></content>
-        <author>
-            <name>CatmanFan / Mr._Lechkar</name>
-            <uri>https://github.com/CatmanFan</uri>
         </author>
     </entry>
 </feed>
