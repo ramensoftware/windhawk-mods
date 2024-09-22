@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              alt-tab-per-monitor
 // @name            Alt tab per monitor
-// @description     When you press the Alt+Tab combination, the window switcher will appear on the primary display, showing all open windows across all monitors. This mod customizes the behavior to display the switcher on the monitor where the cursor is currently located, showing only the windows present on that specific monitor.
+// @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
 // @version         1.0.0
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
@@ -87,14 +87,11 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
     HWND windowHandle = nullptr;
     HRESULT hr = E_FAIL;
     if (vtable == CWin32ApplicationView_vtable) {
-        Wh_Log(L"vtable is CWin32!!");
         hr = CWin32ApplicationView_v_GetNativeWindow(applicationView,
                                                      &windowHandle);
-        Wh_Log(L"Window handle is: %x, HRESULT is: %x", windowHandle, hr);
     } else if (vtable == CWinRTApplicationView_vtable) {
         hr = CWinRTApplicationView_v_GetNativeWindow(applicationView,
                                                      &windowHandle);
-        Wh_Log(L"WINRT Window handle is: %x, HRESULT is: %x", windowHandle, hr);
     }
     if (FAILED(hr) || !windowHandle) {
         return ret;
