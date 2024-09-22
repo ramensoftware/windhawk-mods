@@ -185,8 +185,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
-                                   &ShowWindow_Original);
+    WindhawkUtils::Wh_SetFunctionHookT(ShowWindow, ShowWindow_Hook,
+                                       &ShowWindow_Original);
 
     return TRUE;
 }
