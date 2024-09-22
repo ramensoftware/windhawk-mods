@@ -4,31 +4,16 @@
 // @description     TODO
 // @version         1.0.0
 // @author          L3r0y
-// @github          https://github.com/m417z
-// @twitter         https://twitter.com/m417z
-// @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
 
-// Source code is published under The GNU General Public License v3.0.
-//
-// For bug reports and feature requests, please open an issue here:
-// https://github.com/ramensoftware/windhawk-mods/issues
-//
-// For pull requests, development takes place here:
-// https://github.com/m417z/my-windhawk-mods
-
 // ==WindhawkModReadme==
 /*
-# Alt tab per monitor
-
 When you press the Alt+Tab combination, the window switcher will appear on the
 primary display, showing all open windows across all monitors. This mod
 customizes the behavior to display the switcher on the monitor where the cursor
 is currently located, showing only the windows present on that specific monitor.
-
-![Demonstration](https://i.imgur.com/ie8Q9cl.gif)
 */
 // ==/WindhawkModReadme==
 
