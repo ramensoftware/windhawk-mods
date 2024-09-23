@@ -6,7 +6,7 @@
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -loleaut32 -lole32 -lversion
+// @compilerOptions -DWINVER=0x0A00 -lcomctl32 -loleaut32 -lole32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -178,16 +178,6 @@ using bstr_ptr = _bstr_t;
 
 // following block is to keep compatibility with pre Windhawk 1.5 versions
 #ifndef __IUIAutomationElement_INTERFACE_DEFINED__
-
-#if !defined(WINVER) || (WINVER < 0x0602)
-#define WM_POINTERDOWN 0x0246
-#define POINTER_MESSAGE_FLAG_FIRSTBUTTON 0x00000010
-#define POINTER_MESSAGE_FLAG_THIRDBUTTON 0x00000040
-#define GET_POINTERID_WPARAM(wParam) (LOWORD (wParam))
-#define IS_POINTER_FLAG_SET_WPARAM(wParam, flag) (((DWORD)HIWORD (wParam) &(flag)) == (flag))
-#define IS_POINTER_FIRSTBUTTON_WPARAM(wParam) IS_POINTER_FLAG_SET_WPARAM (wParam, POINTER_MESSAGE_FLAG_FIRSTBUTTON)
-#define IS_POINTER_THIRDBUTTON_WPARAM(wParam) IS_POINTER_FLAG_SET_WPARAM (wParam, POINTER_MESSAGE_FLAG_THIRDBUTTON)
-#endif
 
 // following include are taken from Qt project since builtin compiler is missing those definitions
 #pragma region uiautomation_includes
