@@ -2,11 +2,11 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.3
+// @version         1.4
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
-// @compilerOptions -DWINVER=0x0602 -D_WIN32_WINNT=0x0602 -lcomctl32 -loleaut32 -lole32 -lversion
+// @compilerOptions -DWINVER=0x0A00 -lcomctl32 -loleaut32 -lole32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -138,8 +138,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 */
 // ==/WindhawkModSettings==
 
-// Note: If intellisense is giving you a trouble, add -DWINVER=0x0602 -D_WIN32_WINNT=0x0602 flags to compile_flags.txt (Ctrl+E).
-
+#include <initguid.h>
 #include <commctrl.h>
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
@@ -175,10 +174,11 @@ using bstr_ptr = _bstr_t;
 
 // =====================================================================
 
+// following block is to keep compatibility with pre Windhawk 1.5 versions
+#ifndef __IUIAutomationElement_INTERFACE_DEFINED__
+
 // following include are taken from Qt project since builtin compiler is missing those definitions
 #pragma region uiautomation_includes
-
-#include <initguid.h>
 
 // Pasted below and commented duplicate definitions:
 // https://github.com/qt/qtbase/blob/dev/src/gui/accessible/windows/apisupport/uiatypes_p.h
@@ -666,6 +666,8 @@ typedef class CUIAutomation CUIAutomation;
 
 #pragma endregion
 
+#endif
+
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
@@ -846,7 +848,7 @@ public:
     {
         if (!initialized)
         {
-            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_MULTITHREADED));
+            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
         }
         return initialized;
     }
