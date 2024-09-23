@@ -138,8 +138,6 @@ If you have request for new functions, suggestions or you are experiencing some 
 */
 // ==/WindhawkModSettings==
 
-// Note: If intellisense is giving you a trouble, add -DWINVER=0x0602 -D_WIN32_WINNT=0x0602 flags to compile_flags.txt (Ctrl+E).
-
 #include <initguid.h>
 #include <commctrl.h>
 #include <endpointvolume.h>
