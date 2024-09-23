@@ -2403,19 +2403,19 @@
                 "published": 1704123810000,
                 "rating": 10,
                 "ratingUsers": 40,
-                "updated": 1707334808000,
+                "updated": 1727106989000,
                 "users": 1589
             },
             "metadata": {
                 "author": "m1lhaus",
-                "compilerOptions": "-DWINVER=0x0602 -D_WIN32_WINNT=0x0602 -lcomctl32 -loleaut32 -lole32 -lversion",
+                "compilerOptions": "-DWINVER=0x0A00 -lcomctl32 -loleaut32 -lole32 -lversion",
                 "description": "Trigger custom action when empty space on a taskbar is double/middle clicked",
                 "github": "https://github.com/m1lhaus",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Click on empty taskbar space",
-                "version": "1.3"
+                "version": "1.4"
             }
         },
         "taskbar-grouping": {
