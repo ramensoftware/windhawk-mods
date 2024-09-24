@@ -20,22 +20,17 @@ is currently located, showing only the windows present on that specific monitor.
 */
 // ==/WindhawkModReadme==
 
-#include <processthreadsapi.h>
-#include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-#include <commctrl.h>
-#include <windows.h>
-#include <winerror.h>
-#include <wininet.h>
-#include <winnt.h>
+#include <winrt/windows.foundation.collections.h>
 
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
+std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
 
-void HandleAltTabWindow(HWND hWnd) {
+bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
     POINT pt;
     if (!GetCursorPos(&pt)) {
-        return;
+        return false;
     }
 
     auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
@@ -43,13 +38,15 @@ void HandleAltTabWindow(HWND hWnd) {
     MONITORINFO monInfo;
     monInfo.cbSize = sizeof(MONITORINFO);
     if (!GetMonitorInfo(hMon, &monInfo)) {
-        return;
+        return false;
     }
 
-    SetWindowPos(hWnd, nullptr, monInfo.rcWork.left, monInfo.rcWork.top,
-                 monInfo.rcWork.right - monInfo.rcWork.left,
-                 monInfo.rcWork.bottom - monInfo.rcWork.top,
-                 SWP_NOACTIVATE | SWP_NOZORDER);
+    rect->Height = monInfo.rcWork.bottom - monInfo.rcWork.top;
+    rect->Width = monInfo.rcWork.right - monInfo.rcWork.left;
+    rect->X = monInfo.rcWork.left;
+    rect->Y = monInfo.rcWork.top;
+
+    return true;
 }
 
 void* CWin32ApplicationView_vtable;
@@ -76,7 +73,8 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
 
     auto ret = CVirtualDesktop_IsViewVisible_Original(pThis, applicationView,
                                                       isVisible);
-    if (FAILED(ret)) {
+    if (FAILED(ret) || g_threadIdForXamlAltTabViewHost_CreateInstance !=
+                           GetCurrentThreadId()) {
         return ret;
     }
 
@@ -116,27 +114,59 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
     return ret;
 }
 
-using XamlAltTabViewHost_DisplayAltTab_t = void(WINAPI*)(void* pThis);
-XamlAltTabViewHost_DisplayAltTab_t XamlAltTabViewHost_DisplayAltTab_Original;
-void XamlAltTabViewHost_DisplayAltTab_Hook(void* pThis) {
+using XamlAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
+                                                   void* param1,
+                                                   int param2,
+                                                   void* param3);
+XamlAltTabViewHost_Show_t XamlAltTabViewHost_Show_Original;
+HRESULT XamlAltTabViewHost_Show_Hook(void* pThis,
+                                     void* param1,
+                                     int param2,
+                                     void* param3) {
     g_threadIdForAltTabShowWindow = GetCurrentThreadId();
-    XamlAltTabViewHost_DisplayAltTab_Original(pThis);
+    HRESULT ret =
+        XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
     g_threadIdForAltTabShowWindow = 0;
+    return ret;
 }
 
-using ShowWindow_t = decltype(&ShowWindow);
-ShowWindow_t ShowWindow_Original;
-BOOL ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+using ITaskGroupWindowInformation_Position_t =
+    HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect* rect);
+ITaskGroupWindowInformation_Position_t
+    ITaskGroupWindowInformation_Position_Original;
+HRESULT ITaskGroupWindowInformation_Position_Hook(
+    void* pThis,
+    winrt::Windows::Foundation::Rect* rect) {
     if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
-        return ShowWindow_Original(hWnd, nCmdShow);
+        return ITaskGroupWindowInformation_Position_Original(pThis, rect);
     }
-
-    if (nCmdShow != SW_HIDE) {
-        HandleAltTabWindow(hWnd);
-    }
-
     g_threadIdForAltTabShowWindow = 0;
-    return ShowWindow_Original(hWnd, nCmdShow);
+
+    winrt::Windows::Foundation::Rect newRect;
+    if (!HandleAltTabWindow(&newRect)) {
+        return ITaskGroupWindowInformation_Position_Original(pThis, rect);
+    }
+
+    HRESULT ret =
+        ITaskGroupWindowInformation_Position_Original(pThis, &newRect);
+
+    return ret;
+}
+
+using XamlAltTabViewHost_CreateInstance_t = HRESULT(WINAPI*)(void* pThis,
+                                                             void* param1,
+                                                             void* param2,
+                                                             void* param3);
+XamlAltTabViewHost_CreateInstance_t XamlAltTabViewHost_CreateInstance_Original;
+HRESULT XamlAltTabViewHost_CreateInstance_Hook(void* pThis,
+                                               void* param1,
+                                               void* param2,
+                                               void* param3) {
+    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    HRESULT ret = XamlAltTabViewHost_CreateInstance_Original(pThis, param1,
+                                                             param2, param3);
+    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
+    return ret;
 }
 
 BOOL Wh_ModInit() {
@@ -166,11 +196,20 @@ BOOL Wh_ModInit() {
             &CWinRTApplicationView_v_GetNativeWindow,
         },
         {
-            {LR"(private: void __cdecl XamlAltTabViewHost::DisplayAltTab(void))"},
-            &XamlAltTabViewHost_DisplayAltTab_Original,
-            XamlAltTabViewHost_DisplayAltTab_Hook,
+            {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+            &XamlAltTabViewHost_Show_Original,
+            XamlAltTabViewHost_Show_Hook,
         },
-
+        {
+            {LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const )"},
+            &ITaskGroupWindowInformation_Position_Original,
+            ITaskGroupWindowInformation_Position_Hook,
+        },
+        {
+            {LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"},
+            &XamlAltTabViewHost_CreateInstance_Original,
+            XamlAltTabViewHost_CreateInstance_Hook,
+        },
     };
 
     HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
@@ -183,9 +222,6 @@ BOOL Wh_ModInit() {
                      ARRAYSIZE(twinuiPcshellSymbolHooks))) {
         return FALSE;
     }
-
-    WindhawkUtils::Wh_SetFunctionHookT(ShowWindow, ShowWindow_Hook,
-                                       &ShowWindow_Original);
 
     return TRUE;
 }
