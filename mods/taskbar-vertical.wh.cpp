@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11!
-// @version         1.2.2
+// @version         1.2.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -13,7 +13,7 @@
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0605 -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -66,6 +66,9 @@ With labels:
   $name: Taskbar width
   $description: >-
     The width, in pixels, of the taskbar
+
+    Note: If the clock is too wide for the taskbar width you prefer, you can use
+    the "Taskbar Clock Customization" mod to customize the taskbar clock format
 - taskbarLocationSecondary: sameAsPrimary
   $name: Taskbar location on secondary monitors
   $options:
@@ -142,6 +145,7 @@ bool g_inAugmentedEntryPointButton_UpdateButtonPadding;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
 bool g_inCTaskListThumbnailWnd_LayoutThumbnails;
 bool g_inChevronSystemTrayIconDataModel2_OnIconClicked;
+bool g_inOverflowFlyoutModel_Show;
 
 std::vector<winrt::weak_ref<XamlRoot>> g_notifyIconsUpdated;
 
@@ -538,8 +542,9 @@ LRESULT TaskbarWndProcPostProcess(HWND hWnd,
             break;
         }
 
+        case WM_PAINT:
         case WM_ERASEBKGND: {
-            Wh_Log(L"WM_ERASEBKGND: %08X", (DWORD)(ULONG_PTR)hWnd);
+            Wh_Log(L"%04X: %08X", Msg, (DWORD)(ULONG_PTR)hWnd);
 
             // Calling CreateRectRgn posts window size change events which cause
             // element sizes and positions to be recalculated.
@@ -700,6 +705,56 @@ void WINAPI CTaskListThumbnailWnd_LayoutThumbnails_Hook(void* pThis) {
     CTaskListThumbnailWnd_LayoutThumbnails_Original(pThis);
 
     g_inCTaskListThumbnailWnd_LayoutThumbnails = false;
+}
+
+using XamlExplorerHostWindow_XamlExplorerHostWindow_t =
+    void*(WINAPI*)(void* pThis,
+                   unsigned int param1,
+                   winrt::Windows::Foundation::Rect* rect,
+                   unsigned int param3);
+XamlExplorerHostWindow_XamlExplorerHostWindow_t
+    XamlExplorerHostWindow_XamlExplorerHostWindow_Original;
+void* WINAPI XamlExplorerHostWindow_XamlExplorerHostWindow_Hook(
+    void* pThis,
+    unsigned int param1,
+    winrt::Windows::Foundation::Rect* rect,
+    unsigned int param3) {
+    Wh_Log(L">");
+
+    if (g_inOverflowFlyoutModel_Show) {
+        RECT rc{
+            .left = static_cast<LONG>(rect->X),
+            .top = static_cast<LONG>(rect->Y),
+            .right = static_cast<LONG>(rect->X + rect->Width),
+            .bottom = static_cast<LONG>(rect->Y + rect->Height),
+        };
+
+        HMONITOR monitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo{
+            .cbSize = sizeof(MONITORINFO),
+        };
+        GetMonitorInfo(monitor, &monitorInfo);
+
+        winrt::Windows::Foundation::Rect rectNew = *rect;
+        rectNew.Width = 72;
+
+        switch (GetTaskbarLocationForMonitor(monitor)) {
+            case TaskbarLocation::left:
+                rectNew.X = monitorInfo.rcWork.left;
+                break;
+
+            case TaskbarLocation::right:
+                rectNew.X = monitorInfo.rcWork.right - rectNew.Width;
+                break;
+        }
+
+        return XamlExplorerHostWindow_XamlExplorerHostWindow_Original(
+            pThis, param1, &rectNew, param3);
+    }
+
+    return XamlExplorerHostWindow_XamlExplorerHostWindow_Original(pThis, param1,
+                                                                  rect, param3);
 }
 
 using ResourceDictionary_Lookup_t = winrt::Windows::Foundation::IInspectable*(
@@ -966,6 +1021,11 @@ bool ApplyStyle(FrameworkElement taskbarFrame,
         if (marginValue > 0) {
             margin.Top = marginValue;
         }
+
+        // Fix the edge of the taskbar being non-clickable by moving the edge
+        // pixel out of the screen.
+        margin.Top += 1;
+        margin.Bottom -= 1;
     }
 
     FrameworkElement child = contentGrid;
@@ -1283,6 +1343,37 @@ void ApplySystemTrayIconStyle(FrameworkElement systemTrayIconElement) {
     }
 }
 
+void ApplySystemTrayChevronIconViewStyle(
+    FrameworkElement systemTrayChevronIconViewElement) {
+    if (g_settings.taskbarLocation != TaskbarLocation::right) {
+        return;
+    }
+
+    FrameworkElement baseTextBlock = nullptr;
+
+    FrameworkElement child = systemTrayChevronIconViewElement;
+    if ((child = FindChildByName(child, L"ContainerGrid")) &&
+        (child = FindChildByName(child, L"ContentPresenter")) &&
+        (child = FindChildByName(child, L"ContentGrid")) &&
+        (child = FindChildByClassName(child, L"SystemTray.TextIconContent")) &&
+        (child = FindChildByName(child, L"ContainerGrid")) &&
+        (child = FindChildByName(child, L"Base"))) {
+        baseTextBlock = child;
+    }
+
+    if (!baseTextBlock) {
+        return;
+    }
+
+    double angle = g_unloading ? 0 : 180;
+    Media::RotateTransform transform;
+    transform.Angle(angle);
+    baseTextBlock.RenderTransform(transform);
+
+    float origin = g_unloading ? 0 : 0.5;
+    baseTextBlock.RenderTransformOrigin({origin, origin});
+}
+
 using IconView_IconView_t = void(WINAPI*)(PVOID pThis);
 IconView_IconView_t IconView_IconView_Original;
 void WINAPI IconView_IconView_Hook(PVOID pThis) {
@@ -1331,6 +1422,10 @@ void WINAPI IconView_IconView_Hook(PVOID pThis) {
                      IsChildOfElementByName(iconView,
                                             L"NotificationCenterButton"))) {
                     ApplySystemTrayIconStyle(iconView);
+                }
+            } else if (className == L"SystemTray.ChevronIconView") {
+                if (IsChildOfElementByName(iconView, L"NotifyIconStack")) {
+                    ApplySystemTrayChevronIconViewStyle(iconView);
                 }
             }
         });
@@ -1452,8 +1547,9 @@ bool UpdateNotifyIconsIfNeeded(XamlRoot xamlRoot) {
     }
 
     for (PCWSTR containerName :
-         {L"MainStack", L"NonActivatableStack", L"SecondaryClockStack",
-          L"ControlCenterButton", L"NotificationCenterButton"}) {
+         {L"NotifyIconStack", L"MainStack", L"NonActivatableStack",
+          L"SecondaryClockStack", L"ControlCenterButton",
+          L"NotificationCenterButton"}) {
         FrameworkElement container =
             FindChildByName(systemTrayFrameGrid, containerName);
         if (!container) {
@@ -1490,7 +1586,7 @@ bool UpdateNotifyIconsIfNeeded(XamlRoot xamlRoot) {
             continue;
         }
 
-        EnumChildElements(stackPanel, [](FrameworkElement child) {
+        EnumChildElements(stackPanel, [containerName](FrameworkElement child) {
             auto childClassName = winrt::get_class_name(child);
             if (childClassName !=
                 L"Windows.UI.Xaml.Controls.ContentPresenter") {
@@ -1499,14 +1595,28 @@ bool UpdateNotifyIconsIfNeeded(XamlRoot xamlRoot) {
                 return false;
             }
 
-            FrameworkElement systemTrayIconElement =
-                FindChildByName(child, L"SystemTrayIcon");
-            if (!systemTrayIconElement) {
-                Wh_Log(L"Failed to get SystemTrayIcon of child");
-                return false;
+            if (wcscmp(containerName, L"NotifyIconStack") == 0) {
+                FrameworkElement systemTrayChevronIconViewElement =
+                    FindChildByClassName(child, L"SystemTray.ChevronIconView");
+                if (!systemTrayChevronIconViewElement) {
+                    Wh_Log(
+                        L"Failed to get SystemTray.ChevronIconView of child");
+                    return false;
+                }
+
+                ApplySystemTrayChevronIconViewStyle(
+                    systemTrayChevronIconViewElement);
+            } else {
+                FrameworkElement systemTrayIconElement =
+                    FindChildByName(child, L"SystemTrayIcon");
+                if (!systemTrayIconElement) {
+                    Wh_Log(L"Failed to get SystemTrayIcon of child");
+                    return false;
+                }
+
+                ApplySystemTrayIconStyle(systemTrayIconElement);
             }
 
-            ApplySystemTrayIconStyle(systemTrayIconElement);
             return false;
         });
     }
@@ -1572,21 +1682,28 @@ void UpdateTaskListButton(FrameworkElement taskListButtonElement) {
     }
     iconElement.Margin(margin);
 
-    auto overlayIconElement = FindChildByName(iconPanelElement, L"OverlayIcon");
-    if (overlayIconElement) {
-        double angle = g_unloading ? 0 : -90;
-        Media::RotateTransform transform;
-        transform.Angle(angle);
-        overlayIconElement.RenderTransform(transform);
+    for (PCWSTR badgeElementName : {
+             // Badge for non-UWP apps.
+             L"OverlayIcon",
+             // Badge for UWP apps.
+             L"BadgeControl",
+         }) {
+        auto badgeElement = FindChildByName(iconPanelElement, badgeElementName);
+        if (badgeElement) {
+            double angle = g_unloading ? 0 : -90;
+            Media::RotateTransform transform;
+            transform.Angle(angle);
+            badgeElement.RenderTransform(transform);
 
-        winrt::Windows::Foundation::Point origin{};
-        if (!g_unloading) {
-            origin.Y = labelControlElement ? 1.25 : 0.75;
+            winrt::Windows::Foundation::Point origin{};
+            if (!g_unloading) {
+                origin.Y = labelControlElement ? 1.25 : 0.75;
+            }
+
+            badgeElement.RenderTransformOrigin(origin);
+
+            badgeElement.Margin(margin);
         }
-
-        overlayIconElement.RenderTransformOrigin(origin);
-
-        overlayIconElement.Margin(margin);
     }
 }
 
@@ -1986,6 +2103,18 @@ void WINAPI CopilotIcon_ToggleEdgeCopilot_Hook(void* pThis) {
                 g_copilotPosTimer = 0;
             }
         });
+}
+
+using OverflowFlyoutModel_Show_t = void(WINAPI*)(void* pThis);
+OverflowFlyoutModel_Show_t OverflowFlyoutModel_Show_Original;
+void WINAPI OverflowFlyoutModel_Show_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    g_inOverflowFlyoutModel_Show = true;
+
+    OverflowFlyoutModel_Show_Original(pThis);
+
+    g_inOverflowFlyoutModel_Show = false;
 }
 
 BOOL WINAPI GetWindowRect_Hook(HWND hWnd, LPRECT lpRect) {
@@ -2731,6 +2860,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 (void**)&CopilotIcon_ToggleEdgeCopilot_Original,
                 (void*)CopilotIcon_ToggleEdgeCopilot_Hook,
             },
+            {
+                {
+                    LR"(public: void __cdecl winrt::Taskbar::implementation::OverflowFlyoutModel::Show(void))",
+                },
+                (void**)&OverflowFlyoutModel_Show_Original,
+                (void*)OverflowFlyoutModel_Show_Hook,
+            },
         };
 
         if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
@@ -2831,6 +2967,13 @@ bool HookTaskbarDllSymbols() {
             },
             (void**)&CTaskListThumbnailWnd_LayoutThumbnails_Original,
             (void*)CTaskListThumbnailWnd_LayoutThumbnails_Hook,
+        },
+        {
+            {
+                LR"(public: __cdecl winrt::Windows::Internal::Shell::XamlExplorerHost::XamlExplorerHostWindow::XamlExplorerHostWindow(unsigned int,struct winrt::Windows::Foundation::Rect const &,unsigned int))",
+            },
+            (void**)&XamlExplorerHostWindow_XamlExplorerHostWindow_Original,
+            (void*)XamlExplorerHostWindow_XamlExplorerHostWindow_Hook,
         },
     };
 
