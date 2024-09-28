@@ -1,3 +1,11 @@
+## 1.2.3 ([Sep 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3065efada7b6b5dd413a165287b76560ff0c0210/mods/taskbar-vertical.wh.cpp))
+
+* Fixed rotated badges (e.g. unread counters) for some programs.
+* Fixed the edge of the taskbar being non-clickable in some cases.
+* Fixed the taskbar not showing up at startup in some cases.
+* Fixed the tray icons flyout arrow being reversed when the taskbar is on the right.
+* Fixed taskbar overflow flyout opening on the left of the monitor when the taskbar is on the right.
+
 ## 1.2.2 ([Sep 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a90c4ab676b14803b36ae376b63928dc6b483b51/mods/taskbar-vertical.wh.cpp))
 
 * Fixed a possible crash loop on mod initialization with multiple monitors.

@@ -2660,7 +2660,7 @@
                 "published": 1718190574000,
                 "rating": 9,
                 "ratingUsers": 19,
-                "updated": 1726860038000,
+                "updated": 1727549748000,
                 "users": 814
             },
             "metadata": {
@@ -2668,7 +2668,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0605 -lole32 -loleaut32 -lruntimeobject -lshcore",
+                "compilerOptions": "-DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore",
                 "description": "Finally, the missing vertical taskbar option for Windows 11!",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -2681,7 +2681,7 @@
                 ],
                 "name": "Vertical Taskbar for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.2"
+                "version": "1.2.3"
             }
         },
         "taskbar-volume-control": {
