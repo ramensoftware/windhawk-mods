@@ -1,3 +1,14 @@
+## 1.3 ([Sep 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/18d85f2bce2e5fbb27499f93281a2d79b13c6670/mods/taskbar-labels.wh.cpp))
+
+* Added four modes, last two of which weren't possible before:
+  * Show labels, don't combine taskbar buttons
+  * Hide labels, combine taskbar buttons
+  * Show labels, combine taskbar buttons
+  * Hide labels, don't combine taskbar buttons
+* Added an option to show or hide labels for specific programs.
+* Improved custom indicator compatibility with adaptive width labels. Previously, it could break the layout or in rare cases cause a crash.
+* Fixed the "Minimum taskbar item width" option in newer Windows 11 versions.
+
 ## 1.2.5 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/386a0d9c151361b9c9695a67658d9ffadc2df51c/mods/taskbar-labels.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
