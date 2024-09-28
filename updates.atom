@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-28T18:55:48.000Z</updated>
+    <updated>2024-09-28T21:01:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Background Helper 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-background-helper#8feb509bfbeb74b97aa1f3cd2c36b67b40efad29</id>
+        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
+        <updated>2024-09-28T21:01:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarbackgroundhelper">Taskbar Background Helper</h1>
+<p>Sets the taskbar background for the transparent parts, always or only when
+there's a maximized window, designed to be used with <a href="https://windhawk.net/mods/windows-11-taskbar-styler">Windows 11 Taskbar
+Styler</a>.</p>
+<p>Also, Windows 11 Taskbar Styler has <a href="https://github.com/ramensoftware/windhawk-mods/issues/742">a known
+limitation</a> which
+makes some styles only work if there's a single monitor. This mod can be used as
+a workaround.</p>
+<p><img src="https://i.imgur.com/lMp8OLp.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.3]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#3065efada7b6b5dd413a165287b76560ff0c0210</id>
@@ -301,20 +320,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <author>
             <name>Toru the Red Fox</name>
             <uri>https://github.com/TorutheRedFox</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Customize Windows notifications placement 1.0.1]]></title>
-        <id>https://windhawk.net/mods/notifications-placement#2914b84cba2528701e51fcb904fe379e9bfd982d</id>
-        <link href="https://windhawk.net/mods/notifications-placement"/>
-        <updated>2024-09-08T07:08:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The mod was tested on Windows 10 and was found to be working correctly. The mod name and description were updated accordingly.</li>
-<li>Made the mod work on non-English Windows versions.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

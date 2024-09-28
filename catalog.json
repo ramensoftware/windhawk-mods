@@ -2293,6 +2293,31 @@
                 "version": "1.2"
             }
         },
+        "taskbar-background-helper": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1727557304000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1727557304000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "description": "Sets the taskbar background for the transparent parts, always or only when there's a maximized window, designed to be used with Windows 11 Taskbar Styler",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Background Helper",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-button-click": {
             "details": {
                 "defaultSorting": 52000,
