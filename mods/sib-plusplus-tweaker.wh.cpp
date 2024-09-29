@@ -2,12 +2,12 @@
 // @id              sib-plusplus-tweaker
 // @name            StartIsBack++ Tweaker
 // @description     Modify StartIsBack++'s features (2.9.20)
-// @version         0.7
+// @version         0.7.1
 // @author          Erizur
 // @github          https://github.com/Erizur
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomdlg32 -luser32 -lole32 -lgdi32 -lshell32
+// @compilerOptions -lcomdlg32 -luser32 -lole32 -lgdi32 -lshell32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -73,19 +73,19 @@ Tries to match as close as possible the Start Menu Links used in Windows 7's def
 - DisableCDSB: false
   $name: Disable Custom Drawn Scrollbar
   $description: Enable this to draw the Start Menu scrollbar natively.
-- DisableCustomOrb: FALSE
+- DisableCustomOrb: false
   $name: Disable Custom Orb
   $description: Enable this to make SIB++ not hook into the Start Button.
-- RestoreAPPadding: FALSE
+- RestoreAPPadding: false
   $name: Fix "All Programs" Menu Padding
   $description: Windows 7 has smaller buttons for the "All Programs" menu. Use this to restore the old padding.
-- MatchSevenFolders: FALSE
+- MatchSevenFolders: false
   $name: Match Windows 7 Start Menu Links
   $description: Enable this to replace some of the start menu links to match Windows 7's Start Menu. (Swaps Computer's placement, Replace Connect To with Games, Replace Command Prompt with Help & Support)
-- FixUserFolders: FALSE
+- FixUserFolders: false
   $name: Fix User Folders On Corrupted Namespace
   $description: Based on a patch originally made by YukisCoffee. Fixes the User Folders from opening up in a corrupted namespace if you used Aerexplorer or a registry hack to move them back from "This PC".
-- DisableImmersiveCPL: FALSE
+- DisableImmersiveCPL: false
   $name: Hide UWP Settings results
   $description: Enable this to remove UWP settings from search results.
 */
@@ -110,6 +110,8 @@ Tries to match as close as possible the Start Menu Links used in Windows 7's def
 #include <processthreadsapi.h>
 #include <psapi.h>
 #include <shlobj.h>
+#include <uxtheme.h>
+#include <vector>
 
 struct _settings {
     LPCWSTR SIBPath = L"%PROGRAMFILES(X86)%\\StartIsBack\\StartIsBack64.dll";
@@ -543,7 +545,7 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Exiting SIB++ Tweaker.");
 
-    system("taskkill /F /IM explorer.exe & start explorer");
+    //system("taskkill /F /IM explorer.exe & start explorer");
 }
 
 // The mod setting were changed, reload them.
