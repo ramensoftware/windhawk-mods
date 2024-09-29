@@ -7,7 +7,7 @@
 // @github          https://github.com/Erizur
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomdlg32 -luser32 -lole32 -lgdi32 -lshell32 -luxtheme
+// @compilerOptions -lcomctl32 -lcomdlg32 -luser32 -lole32 -lgdi32 -lshell32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -150,6 +150,15 @@ struct __declspec(align(4)) FOLDERDEFINITION
   unsigned int resTipId;
   wchar_t fontImage;
 };
+
+HANDLE g_restartExplorerPromptThread;
+std::atomic<HWND> g_restartExplorerPromptWindow;
+
+constexpr WCHAR kRestartExplorerPromptTitle[] =
+    L"StartIsBack++ Tweaker - Windhawk";
+constexpr WCHAR kRestartExplorerPromptText[] =
+    L"Explorer needs to be restarted to apply the new changes. "
+    L"Restart now?";
 
 HMODULE g_hStartIsBackModule = nullptr;
 ULONGLONG g_StartIsBackSize = 0;
@@ -438,6 +447,70 @@ BOOL WINAPI InflateRect_hook(
     );
 }
 
+// Taken from Taskbar height and icon size mod by Ramen Software (m417z)
+// https://github.com/ramensoftware/windhawk-mods/blob/7e0bd27ae1d12ae639497fbc9b48bb791f98b078/mods/taskbar-icon-size.wh.cpp#L723
+void PromptForExplorerRestart() {
+    if (g_restartExplorerPromptThread) {
+        if (WaitForSingleObject(g_restartExplorerPromptThread, 0) !=
+            WAIT_OBJECT_0) {
+            return;
+        }
+
+        CloseHandle(g_restartExplorerPromptThread);
+    }
+
+    g_restartExplorerPromptThread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParameter) WINAPI -> DWORD {
+            TASKDIALOGCONFIG taskDialogConfig{
+                .cbSize = sizeof(taskDialogConfig),
+                .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
+                .dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON,
+                .pszWindowTitle = kRestartExplorerPromptTitle,
+                .pszMainIcon = TD_INFORMATION_ICON,
+                .pszContent = kRestartExplorerPromptText,
+                .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam,
+                                 LPARAM lParam, LONG_PTR lpRefData)
+                                  WINAPI -> HRESULT {
+                    switch (msg) {
+                        case TDN_CREATED:
+                            g_restartExplorerPromptWindow = hwnd;
+                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE);
+                            break;
+
+                        case TDN_DESTROYED:
+                            g_restartExplorerPromptWindow = nullptr;
+                            break;
+                    }
+
+                    return S_OK;
+                },
+            };
+
+            int button;
+            if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button,
+                                             nullptr, nullptr)) &&
+                button == IDYES) {
+                WCHAR commandLine[] =
+                    L"cmd.exe /c "
+                    L"\"taskkill /F /IM explorer.exe & start explorer\"";
+                STARTUPINFO si = {
+                    .cb = sizeof(si),
+                };
+                PROCESS_INFORMATION pi{};
+                if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE,
+                                  0, nullptr, nullptr, &si, &pi)) {
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
+                }
+            }
+
+            return 0;
+        },
+        nullptr, 0, nullptr);
+}
+
 void LoadSettings(void)
 {
     mod_settings.SIBPath = Wh_GetStringSetting(L"SIBPath");
@@ -484,17 +557,6 @@ BOOL CheckForStartIsBack()
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit() {
-    #ifdef _WIN64
-        const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
-    #else
-        const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
-    #endif
-        bool isInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
-        if (!isInitialThread) {
-            system("taskkill /F /IM explorer.exe & start explorer");
-            return FALSE;
-        }
-
     Wh_Log(L"Initalize SIB++ Tweaker.");
 
     LoadSettings();
@@ -545,12 +607,21 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Exiting SIB++ Tweaker.");
 
-    //system("taskkill /F /IM explorer.exe & start explorer");
+    HWND restartExplorerPromptWindow = g_restartExplorerPromptWindow;
+    if (restartExplorerPromptWindow) {
+        PostMessage(restartExplorerPromptWindow, WM_CLOSE, 0, 0);
+    }
+
+    if (g_restartExplorerPromptThread) {
+        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
+        CloseHandle(g_restartExplorerPromptThread);
+        g_restartExplorerPromptThread = nullptr;
+    }
 }
 
 // The mod setting were changed, reload them.
 void Wh_ModSettingsChanged() {
     Wh_Log(L"SIB++ Tweaker settings changed. Attempting to restart explorer.");
 
-    system("taskkill /F /IM explorer.exe & start explorer");
+    PromptForExplorerRestart();
 }
