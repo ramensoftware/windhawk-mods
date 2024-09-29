@@ -1,3 +1,8 @@
+## 1.3.1 ([Sep 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/984a75a743bba52a247387158c47db2ede70f31a/mods/taskbar-labels.wh.cpp))
+
+* Improved badge placement (e.g. unread counters) in some cases.
+* Fixed the "Centered, fixed size" indicator not being always centered.
+
 ## 1.3 ([Sep 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/18d85f2bce2e5fbb27499f93281a2d79b13c6670/mods/taskbar-labels.wh.cpp))
 
 * Added four modes, last two of which weren't possible before:

@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -905,10 +905,27 @@ void UpdateTaskListButtonWithLabelStyle(
 
     auto iconMargin = iconElement.Margin();
     iconMargin.Left = (g_unloading || !labelControlElement)
-                          ? 0
+                          ? 0.0
                           : g_settings.leftAndRightPaddingSize;
     iconMargin.Right = 0;
     iconElement.Margin(iconMargin);
+
+    for (PCWSTR badgeElementName : {
+             // Badge for non-UWP apps.
+             L"OverlayIcon",
+             // Badge for UWP apps.
+             L"BadgeControl",
+         }) {
+        auto badgeElement = FindChildByName(iconPanelElement, badgeElementName);
+        if (badgeElement) {
+            badgeElement.Margin(Thickness{
+                .Right = (g_unloading || !labelControlElement)
+                             ? 0.0
+                             : 16 - g_settings.leftAndRightPaddingSize +
+                                   (24 - iconWidth),
+            });
+        }
+    }
 
     PCWSTR indicatorClassNames[] = {
         L"RunningIndicator",
@@ -940,7 +957,10 @@ void UpdateTaskListButtonWithLabelStyle(
 
         double minWidth = 0;
 
-        if (indicatorStyle == IndicatorStyle::centerDynamic) {
+        if (indicatorStyle == IndicatorStyle::centerFixed) {
+            // Without this, the indicator isn't centered.
+            minWidth = indicatorElement.Width();
+        } else if (indicatorStyle == IndicatorStyle::centerDynamic) {
             if (firstColumnWidthPixels > 0) {
                 minWidth = indicatorElement.Width() * taskListButtonWidth /
                            firstColumnWidthPixels;

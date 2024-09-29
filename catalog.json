@@ -2503,7 +2503,7 @@
                 "published": 1661149953000,
                 "rating": 10,
                 "ratingUsers": 118,
-                "updated": 1727533420000,
+                "updated": 1727592655000,
                 "users": 6357
             },
             "featured": true,
@@ -2521,7 +2521,7 @@
                 ],
                 "name": "Taskbar Labels for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3"
+                "version": "1.3.1"
             }
         },
         "taskbar-left-click-cycle": {
