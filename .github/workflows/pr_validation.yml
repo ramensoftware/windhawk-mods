@@ -6,11 +6,12 @@ on:
       - main
 
 jobs:
-  build:
+  run:
     runs-on: ubuntu-latest
     name: Test changed files
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5

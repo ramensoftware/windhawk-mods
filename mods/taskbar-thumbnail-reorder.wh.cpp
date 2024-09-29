@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.0.7
+// @version         1.0.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -51,6 +51,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 #include <wininet.h>
 
 #include <algorithm>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -93,8 +94,9 @@ using CTaskListWnd__GetTBGroupFromGroup_t =
     void*(WINAPI*)(void* pThis, void* pTaskGroup, int* pTaskBtnGroupIndex);
 CTaskListWnd__GetTBGroupFromGroup_t CTaskListWnd__GetTBGroupFromGroup;
 
-void* CTaskListThumbnailWnd_SetSite;
+void* CTaskListThumbnailWnd_Dismiss;
 void* CTaskListThumbnailWnd_GetTaskGroup;
+void* CTaskListThumbnailWnd__RegisterThumbBars;
 void* CTaskListThumbnailWnd_GetHoverIndex;
 
 using CTaskListThumbnailWnd_GetHwnd_t = HWND(WINAPI*)(void* pThis);
@@ -104,6 +106,18 @@ using CTaskListWnd_TaskInclusionChanged_t = HRESULT(WINAPI*)(void* pThis,
                                                              void* pTaskGroup,
                                                              void* pTaskItem);
 CTaskListWnd_TaskInclusionChanged_t CTaskListWnd_TaskInclusionChanged;
+
+using CTaskThumbnail_GetTaskItem_t = void*(WINAPI*)(void* pThis);
+CTaskThumbnail_GetTaskItem_t CTaskThumbnail_GetTaskItem;
+
+using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType;
+
+using CTaskBtnGroup_GetNumItems_t = int(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetNumItems_t CTaskBtnGroup_GetNumItems;
+
+using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(void* pThis, int index);
+CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem;
 
 using TaskItemFilter_IsTaskAllowed_t = bool(WINAPI*)(void* pThis,
                                                      void* pTaskItem);
@@ -120,17 +134,103 @@ bool WINAPI TaskItemFilter_IsTaskAllowed_Hook(void* pThis, void* pTaskItem) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void* SkipFirstBranch(void* func,
+                      std::string jumpToTake,
+                      std::string jumpToSkip,
+                      int limit = 30) {
+    jumpToTake += ' ';
+    jumpToSkip += ' ';
+
+    BYTE* p = (BYTE*)func;
+    for (int i = 0; i < limit; i++) {
+        WH_DISASM_RESULT result;
+        if (!Wh_Disasm(p, &result)) {
+            break;
+        }
+
+        p += result.length;
+        std::string_view s = result.text;
+        if (s == "ret") {
+            break;
+        }
+
+        if (s.starts_with(jumpToSkip)) {
+            return p;
+        }
+
+        if (s.starts_with(jumpToTake)) {
+            return (void*)std::stoull(result.text + jumpToTake.size(), nullptr,
+                                      16);
+        }
+
+        if (s.starts_with('j')) {
+            break;
+        }
+    }
+
+    Wh_Log(L"Failed for %p", func);
+    return nullptr;
+}
+
+size_t OffsetFromAssemblyAndRegexPattern(void* func,
+                                         size_t defValue,
+                                         std::string regexPattern,
+                                         int limit = 30) {
+    std::regex regex(regexPattern);
+
+    BYTE* p = (BYTE*)func;
+    for (int i = 0; i < limit; i++) {
+        WH_DISASM_RESULT result;
+        if (!Wh_Disasm(p, &result)) {
+            break;
+        }
+
+        p += result.length;
+        std::string_view s = result.text;
+        if (s == "ret") {
+            break;
+        }
+
+        std::match_results<std::string_view::const_iterator> match;
+        if (std::regex_match(s.begin(), s.end(), match, regex)) {
+            // Wh_Log(L"%S", result.text);
+            return std::stoull(match[1], nullptr, 16);
+        }
+    }
+
+    Wh_Log(L"Failed for %p", func);
+    return defValue;
+}
+
+size_t OffsetFromAssembly(void* func,
+                          size_t defValue = 0,
+                          std::string opcode = "mov",
+                          int limit = 30) {
+    // Example: mov rax, [rcx+0xE0]
+    std::string regexPattern =
+        opcode +
+        R"( r(?:[a-z]{2}|\d{1,2}), \[r(?:[a-z]{2}|\d{1,2})\+(0x[0-9A-F]+)\])";
+    return OffsetFromAssemblyAndRegexPattern(func, defValue,
+                                             std::move(regexPattern), limit);
+}
+
+size_t OffsetFromAssembly32(void* func,
+                            size_t defValue = 0,
+                            std::string opcode = "mov",
+                            int limit = 30) {
+    // Example: mov eax, [rcx+0xE0]
+    std::string regexPattern =
+        opcode +
+        R"( (?:e[a-z]{2}|r\d{1,2}d), \[r(?:[a-z]{2}|\d{1,2})\+(0x[0-9A-F]+)\])";
+    return OffsetFromAssemblyAndRegexPattern(func, defValue,
+                                             std::move(regexPattern), limit);
+}
+
 struct {
-    // Reference: CTaskListThumbnailWnd::SetSite.
-    size_t taskListPtr;  // 10.0.22621.2792: 0x48
-
-    // Reference: CTaskListThumbnailWnd::GetTaskGroup.
-    size_t taskGroup;  // 10.0.22621.2792: 0x140
-
-    // Reference: CTaskListThumbnailWnd::_RegisterThumbBars.
+    size_t taskListPtr;     // 10.0.22621.2792: 0x48
+    size_t taskGroup;       // 10.0.22621.2792: 0x140
     size_t thumbnailArray;  // 10.0.22621.2792: 0x150
 
-    // Reference: CTaskListThumbnailWnd::SetActiveItem.
     // A base address for thumbnail index values.
     // 0: Active index
     // 1: Something about keyboard focus
@@ -162,6 +262,14 @@ int* ThumbnailTrackedIndex(LONG_PTR lpMMThumbnailLongPtr) {
 
 int* ThumbnailPressedIndex(LONG_PTR lpMMThumbnailLongPtr) {
     return (int*)(lpMMThumbnailLongPtr + g_thumbnailOffsets.indexValues) + 3;
+}
+
+struct {
+    size_t buttonArray;  // 10.0.22621.3880: 0x38
+} g_taskBrnGroupOffsets;
+
+HDPA TaskBtnGroupButtonArray(LONG_PTR* taskBtnGroup) {
+    return *(HDPA*)((BYTE*)taskBtnGroup + g_taskBrnGroupOffsets.buttonArray);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -217,39 +325,32 @@ bool MoveTaskInTaskList(LONG_PTR lpMMTaskListLongPtr,
         return false;
     }
 
-    int taskBtnGroupType = (int)taskBtnGroup[8];
+    int taskBtnGroupType = CTaskBtnGroup_GetGroupType(taskBtnGroup);
     if (taskBtnGroupType != 1 && taskBtnGroupType != 3) {
         return false;
     }
 
-    HDPA buttonsArray = (HDPA)taskBtnGroup[7];
-
-    int buttonsCount = buttonsArray->cpItems;
-    LONG_PTR** buttons = (LONG_PTR**)buttonsArray->pArray;
-
     int indexFrom = -1;
-    for (int i = 0; i < buttonsCount; i++) {
-        if ((LONG_PTR*)buttons[i][4] == taskItemFrom) {
-            indexFrom = i;
-            break;
-        }
-    }
-
-    if (indexFrom == -1) {
-        return false;
-    }
-
     int indexTo = -1;
-    for (int i = 0; i < buttonsCount; i++) {
-        if ((LONG_PTR*)buttons[i][4] == taskItemTo) {
+    int numItems = CTaskBtnGroup_GetNumItems(taskBtnGroup);
+    for (int i = 0; i < numItems && (indexFrom == -1 || indexTo == -1); i++) {
+        LONG_PTR* taskItem =
+            (LONG_PTR*)CTaskBtnGroup_GetTaskItem(taskBtnGroup, i);
+
+        if (taskItem == taskItemFrom) {
+            indexFrom = i;
+        }
+
+        if (taskItem == taskItemTo) {
             indexTo = i;
-            break;
         }
     }
 
-    if (indexTo == -1) {
+    if (indexFrom == -1 || indexTo == -1) {
         return false;
     }
+
+    HDPA buttonsArray = TaskBtnGroupButtonArray(taskBtnGroup);
 
     LONG_PTR* button = (LONG_PTR*)DPA_DeletePtr(buttonsArray, indexFrom);
     if (!button) {
@@ -361,8 +462,8 @@ bool MoveItemsFromThumbnail(LONG_PTR lpMMThumbnailLongPtr,
     LONG_PTR* from = (LONG_PTR*)thumbnailArray->pArray[indexFrom];
     LONG_PTR* to = (LONG_PTR*)thumbnailArray->pArray[indexTo];
 
-    LONG_PTR* taskItemFrom = (LONG_PTR*)from[3];
-    LONG_PTR* taskItemTo = (LONG_PTR*)to[3];
+    LONG_PTR* taskItemFrom = (LONG_PTR*)CTaskThumbnail_GetTaskItem(from);
+    LONG_PTR* taskItemTo = (LONG_PTR*)CTaskThumbnail_GetTaskItem(to);
 
     if (!MoveThumbnail(lpMMThumbnailLongPtr, indexFrom, indexTo)) {
         return false;
@@ -640,79 +741,62 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
 }
 
 bool InitOffsets() {
-    const BYTE* p;
-
-    /*
-        Expected implementation:
-        48:895C24 10              | mov qword ptr ss:[rsp+10],rbx
-        48:896C24 18              | mov qword ptr ss:[rsp+18],rbp
-        48:897424 20              | mov qword ptr ss:[rsp+20],rsi
-        57                        | push rdi
-        41:56                     | push r14
-        41:57                     | push r15
-        48:83EC 60                | sub rsp,60
-        4C:8D71 48                | lea r14,qword ptr ds:[rcx+48]
-
-        Last command can also be:
-        4C:8D79 50                | lea r15,qword ptr ds:[rcx+50]
-    */
-    p = (const BYTE*)CTaskListThumbnailWnd_SetSite;
-    while (p[0] == 0x48 && p[1] == 0x89 &&
-           (p[2] == 0x5c || p[2] == 0x6c || p[2] == 0x74) && p[3] == 0x24) {
-        p += 5;
+    // Expected implementation:
+    // 48:895C24 10              | mov qword ptr ss:[rsp+10],rbx
+    // 48:896C24 18              | mov qword ptr ss:[rsp+18],rbp
+    // 48:897424 20              | mov qword ptr ss:[rsp+20],rsi
+    // 57                        | push rdi
+    // 41:56                     | push r14
+    // 41:57                     | push r15
+    // 48:83EC 60                | sub rsp,60
+    // 4C:8D71 48                | lea r14,qword ptr ds:[rcx+48]
+    void* p = SkipFirstBranch(CTaskListThumbnailWnd_Dismiss, "jnz", "jz");
+    if (p) {
+        g_thumbnailOffsets.taskListPtr = OffsetFromAssembly(p);
     }
 
-    while (p[0] == 0x55 || p[0] == 0x56 || p[0] == 0x57 ||
-           (p[0] == 0x41 && (p[1] == 0x56 || p[1] == 0x57))) {
-        p += p[0] == 0x41 ? 2 : 1;
-    }
-
-    if (p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xec) {
-        p += 4;
-    } else if (p[0] == 0x48 && p[1] == 0x81 && p[2] == 0xec) {
-        p += 7;
-    }
-
-    if (p[0] == 0x4c && p[1] == 0x8d && (p[2] == 0x71 || p[2] == 0x79)) {
-        g_thumbnailOffsets.taskListPtr = p[3];
-    } else {
-        Wh_Log(L"Unexpected SetSite implementation");
-        // Try last known offset.
-        g_thumbnailOffsets.taskListPtr =
-            g_explorerVersion <= WinVersion::Win10 ? 0x50 : 0x48;
-    }
-
-    /*
-        Expected implementation:
-        180044250 48 8b 81        MOV        RAX,qword ptr [this + 0x148]
-                  48 01 00 00
-        180044257 c3              RET
-    */
-    p = (const BYTE*)CTaskListThumbnailWnd_GetTaskGroup;
-    if (p[0] == 0x48 && p[1] == 0x8b && p[2] == 0x81) {
-        g_thumbnailOffsets.taskGroup = *(DWORD*)(p + 3);
-    } else {
-        Wh_Log(L"Unexpected GetTaskGroup implementation");
+    if (!g_thumbnailOffsets.taskListPtr) {
+        Wh_Log(L"Unexpected implementation");
         return false;
     }
 
-    // This worked since the first Windows 10 version, let's hope it will keep
-    // working.
-    g_thumbnailOffsets.thumbnailArray = g_thumbnailOffsets.taskGroup + 0x10;
+    // Expected implementation:
+    // 180044250 48 8b 81        MOV        RAX,qword ptr [this + 0x148]
+    //           48 01 00 00
+    // 180044257 c3              RET
+    g_thumbnailOffsets.taskGroup =
+        OffsetFromAssembly(CTaskListThumbnailWnd_GetTaskGroup);
+    if (!g_thumbnailOffsets.taskGroup) {
+        Wh_Log(L"Unexpected implementation");
+        return false;
+    }
 
-    /*
-        Expected implementation:
-        180046e40 8b 81 78        MOV        EAX,dword ptr [this + 0x278]
-                  02 00 00
-        180046e46 c3              RET
-    */
-    p = (const BYTE*)CTaskListThumbnailWnd_GetHoverIndex;
-    if (p[0] == 0x8b && p[1] == 0x81) {
-        DWORD offset = *(DWORD*)(p + 2);
-        offset += 0x10;  // extra vtables
-        g_thumbnailOffsets.indexValues = offset - 0x08;
-    } else {
-        Wh_Log(L"Unexpected GetHoverIndex implementation");
+    g_thumbnailOffsets.thumbnailArray =
+        OffsetFromAssembly(CTaskListThumbnailWnd__RegisterThumbBars);
+    if (!g_thumbnailOffsets.taskGroup) {
+        Wh_Log(L"Unexpected implementation");
+        return false;
+    }
+
+    // Expected implementation:
+    // 180046e40 8b 81 78        MOV        EAX,dword ptr [this + 0x278]
+    //           02 00 00
+    // 180046e46 c3              RET
+    g_thumbnailOffsets.indexValues =
+        OffsetFromAssembly32(CTaskListThumbnailWnd_GetHoverIndex);
+    if (!g_thumbnailOffsets.indexValues) {
+        Wh_Log(L"Unexpected implementation");
+        return false;
+    }
+
+    // Adjust vtables.
+    g_thumbnailOffsets.indexValues += 0x10;
+    g_thumbnailOffsets.indexValues -= 0x08;
+
+    g_taskBrnGroupOffsets.buttonArray =
+        OffsetFromAssembly((void*)CTaskBtnGroup_GetNumItems);
+    if (!g_taskBrnGroupOffsets.buttonArray) {
+        Wh_Log(L"Unexpected implementation");
         return false;
     }
 
@@ -778,7 +862,8 @@ struct SYMBOL_HOOK {
 
 bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
+                 size_t symbolHooksCount,
+                 bool cacheOnly = false) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'@';
     constexpr size_t cacheMaxSize = 10240;
@@ -920,7 +1005,14 @@ bool HookSymbols(HMODULE module,
 
             if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
                 Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+
                 symbolResolved[i] = true;
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    newSystemCacheStr += cacheSep;
+                    newSystemCacheStr += hookSymbol;
+                    newSystemCacheStr += cacheSep;
+                }
             }
         }
 
@@ -931,6 +1023,10 @@ bool HookSymbols(HMODULE module,
     }
 
     Wh_Log(L"Couldn't resolve all symbols from cache");
+
+    if (cacheOnly) {
+        return false;
+    }
 
     WH_FIND_SYMBOL findSymbol;
     HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
@@ -1049,11 +1145,12 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
                                         size_t symbolHooksCount) {
     constexpr WCHAR kModIdForCache[] = L"taskbar-thumbnail-reorder";
 
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+    if (HookSymbols(module, symbolHooks, symbolHooksCount,
+                    /*cacheOnly=*/true)) {
         return true;
     }
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
 
     WCHAR moduleFilePath[MAX_PATH];
     DWORD moduleFilePathLen =
@@ -1108,12 +1205,11 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
 
     auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
+    if (onlineCache) {
+        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    } else {
         Wh_Log(L"Failed to get online cache");
-        return false;
     }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
 
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
@@ -1138,6 +1234,7 @@ BOOL Wh_ModInit() {
         g_explorerVersion = WinVersion::Win10;
     }
 
+    // Taskbar.dll, explorer.exe
     SYMBOL_HOOK symbolHooks[] = {
         {
             {
@@ -1155,10 +1252,10 @@ BOOL Wh_ModInit() {
         },
         {
             {
-                LR"(public: virtual long __cdecl CTaskListThumbnailWnd::SetSite(struct IUnknown * __ptr64) __ptr64)",
-                LR"(public: virtual long __cdecl CTaskListThumbnailWnd::SetSite(struct IUnknown *))",
+                LR"(public: virtual void __cdecl CTaskListThumbnailWnd::Dismiss(int,int) __ptr64)",
+                LR"(public: virtual void __cdecl CTaskListThumbnailWnd::Dismiss(int,int))",
             },
-            (void**)&CTaskListThumbnailWnd_SetSite,
+            (void**)&CTaskListThumbnailWnd_Dismiss,
         },
         {
             {
@@ -1166,6 +1263,13 @@ BOOL Wh_ModInit() {
                 LR"(public: virtual struct ITaskGroup * __cdecl CTaskListThumbnailWnd::GetTaskGroup(void)const )",
             },
             (void**)&CTaskListThumbnailWnd_GetTaskGroup,
+        },
+        {
+            {
+                LR"(private: void __cdecl CTaskListThumbnailWnd::_RegisterThumbBars(void) __ptr64)",
+                LR"(private: void __cdecl CTaskListThumbnailWnd::_RegisterThumbBars(void))",
+            },
+            (void**)&CTaskListThumbnailWnd__RegisterThumbBars,
         },
         {
             {
@@ -1187,6 +1291,34 @@ BOOL Wh_ModInit() {
                 LR"(public: virtual long __cdecl CTaskListWnd::TaskInclusionChanged(struct ITaskGroup *,struct ITaskItem *))",
             },
             (void**)&CTaskListWnd_TaskInclusionChanged,
+        },
+        {
+            {
+                LR"(public: virtual struct ITaskItem * __ptr64 __cdecl CTaskThumbnail::GetTaskItem(void) __ptr64)",
+                LR"(public: virtual struct ITaskItem * __cdecl CTaskThumbnail::GetTaskItem(void))",
+            },
+            (void**)&CTaskThumbnail_GetTaskItem,
+        },
+        {
+            {
+                LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void) __ptr64)",
+                LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))",
+            },
+            (void**)&CTaskBtnGroup_GetGroupType,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void) __ptr64)",
+                LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void))",
+            },
+            (void**)&CTaskBtnGroup_GetNumItems,
+        },
+        {
+            {
+                LR"(public: virtual struct ITaskItem * __ptr64 __cdecl CTaskBtnGroup::GetTaskItem(int) __ptr64)",
+                LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))",
+            },
+            (void**)&CTaskBtnGroup_GetTaskItem,
         },
         {
             {

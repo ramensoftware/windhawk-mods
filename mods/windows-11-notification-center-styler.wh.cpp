@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
-// @description     An advanced mod to override style attributes of the Notification Center
-// @version         1.1
+// @description     Customize the Notification Center with themes contributed by others or create your own
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -24,10 +24,8 @@
 /*
 # Windows 11 Notification Center Styler
 
-An advanced mod to override style attributes of the notification center and
-calendar. Starting with version 1.0.2, all elements that are part of
-ShellExperienceHost.exe can be customized, including taskbar jump lists and
-notification popups.
+Customize the Notification Center with themes contributed by others or create
+your own.
 
 **Note**: This mod requires Windhawk v1.4 or later.
 
@@ -43,35 +41,9 @@ mod and can be selected in the settings:
 \
 TranslucentShell](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/TranslucentShell/README.md)
 
-## Examples
-
-### Hide the focus assist section
-**Target**: `ActionCenter.FocusSessionControl` \
-**Style**: `Height=0`
-
-### Square the corners of the notification center
-**Target**: `Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid` \
-**Style**: `CornerRadius=0`
-
-### Square the corners of the calendar
-**Target**: `Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid` \
-**Style**: `CornerRadius=0`
-
-### Square the corners of the quick action center
-**Target**: `Windows.UI.Xaml.Controls.Grid#ControlCenterRegion` \
-**Style**: `CornerRadius=0`
-
-### Calendar and notification titlebars: titles on the right, buttons on the left
-**Target**: `Windows.UI.Xaml.Controls.Grid#RootContent` \
-**Style**: `FlowDirection=1`
-
-### Add accelerator key (ALT+X) to clear all notifications
-**Target**: `Windows.UI.Xaml.Controls.Button#ClearAll` \
-**Style**: `AccessKey=x`
-
-### Add accelerator key (ALT+E) to expand/collapse the calendar
-**Target**: `Windows.UI.Xaml.Controls.Button#ExpandCollapseButton` \
-**Style**: `AccessKey=e`
+[![Unified](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/Unified/screenshot-small.png)
+\
+Unified](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/Unified/README.md)
 
 ## Advanced styling
 
@@ -118,6 +90,36 @@ specified as following: `Style@VisualState=Value`, in which case the style will
 only apply when the visual state group specified in the target matches the
 specified visual state.
 
+A couple of practical examples:
+
+#### Hide the focus assist section
+**Target**: `ActionCenter.FocusSessionControl` \
+**Style**: `Height=0`
+
+#### Square the corners of the notification center
+**Target**: `Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid` \
+**Style**: `CornerRadius=0`
+
+#### Square the corners of the calendar
+**Target**: `Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid` \
+**Style**: `CornerRadius=0`
+
+#### Square the corners of the quick action center
+**Target**: `Windows.UI.Xaml.Controls.Grid#ControlCenterRegion` \
+**Style**: `CornerRadius=0`
+
+#### Calendar and notification titlebars: titles on the right, buttons on the left
+**Target**: `Windows.UI.Xaml.Controls.Grid#RootContent` \
+**Style**: `FlowDirection=1`
+
+#### Add accelerator key (ALT+X) to clear all notifications
+**Target**: `Windows.UI.Xaml.Controls.Button#ClearAll` \
+**Style**: `AccessKey=x`
+
+#### Add accelerator key (ALT+E) to expand/collapse the calendar
+**Target**: `Windows.UI.Xaml.Controls.Button#ExpandCollapseButton` \
+**Style**: `AccessKey=e`
+
 ### Resource variables
 
 Some variables, such as size and padding for various controls, are defined as
@@ -142,6 +144,7 @@ code from the **TranslucentTB** project.
   $options:
   - "": None
   - TranslucentShell: TranslucentShell
+  - Unified: Unified
 - controlStyles:
   - - target: ""
       $name: Target
@@ -176,135 +179,96 @@ struct Theme {
     std::vector<ThemeTargetStyles> targetStyles;
 };
 
-/*
-JSON settings to C++ theme conversion code, quick'n'dirty & AI-generated:
+// clang-format off
 
-json_str = R"""
-{...}
-"""
-
-def json_to_cpp(json_data):
-    def cmp(x):
-        key_prefix = x[0].removeprefix("controlStyles[")
-        index1 = int(key_prefix.split("]")[0])
-        if ".target" in key_prefix:
-            index2 = -1
-        elif ".styles" in key_prefix:
-            index2 = int(key_prefix.split("[")[1].split("]")[0])
-        else:
-            assert False
-        return index1, index2
-
-    cpp_code = "{{\n"
-    for key, value in sorted(json_data.items(), key=cmp):
-        value_escaped = re.sub(
-            r'[^ -~]',
-            lambda m: f'\\u{ord(m[0]):04X}',
-            value.replace('"', '\\"'))
-        if ".target" in key:
-            if cpp_code != "{{\n":
-                cpp_code = cpp_code.removesuffix(", ")
-                cpp_code += "}},\n"
-            cpp_code += "    ThemeTargetStyles{\n"
-            cpp_code += f"        L\"{value_escaped}\",\n"
-            cpp_code += "        {"
-        elif ".styles" in key:
-            cpp_code += f"L\"{value_escaped}\", "
-        else:
-            assert False
-    cpp_code = cpp_code.removesuffix(", ")
-    cpp_code += "}},\n"
-    cpp_code += "}};"
-    return cpp_code
-
-json_input = json.loads(json_str)
-
-cpp_output = json_to_cpp(json_input)
-print(cpp_output)
-*/
-
-// Author: Undisputed00x
 const Theme g_themeTranslucentShell = {{
-    ThemeTargetStyles{L"Grid#NotificationCenterGrid",
-                      {L"Background:=<AcrylicBrush TintOpacity=\"0\" "
-                       L"TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" "
-                       L"Opacity=\"1\"/>",
-                       L"BorderThickness=0,0,0,0", L"CornerRadius=15"}},
-    ThemeTargetStyles{L"Grid#CalendarCenterGrid",
-                      {L"Background:=<AcrylicBrush TintOpacity=\"0\" "
-                       L"TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" "
-                       L"Opacity=\"1\"/>",
-                       L"BorderThickness=0,0,0,0", L"CornerRadius=15"}},
-    ThemeTargetStyles{L"ScrollViewer#CalendarControlScrollViewer",
-                      {L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
-    ThemeTargetStyles{L"Border#CalendarHeaderMinimizedOverlay",
-                      {L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
-    ThemeTargetStyles{L"ActionCenter.FocusSessionControl#FocusSessionControl > "
-                      L"Grid#FocusGrid",
-                      {L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
-    ThemeTargetStyles{
-        L"MenuFlyoutPresenter",
-        {L"Background:=<AcrylicBrush TintOpacity=\"0\" "
-         L"TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" "
-         L"Opacity=\"1\"/>",
-         L"BorderThickness=0,0,0,0", L"CornerRadius=15", L"Padding=2,4,2,4"}},
-    ThemeTargetStyles{L"Border#JumpListRestyledAcrylic",
-                      {L"Background:=<AcrylicBrush TintOpacity=\"0\" "
-                       L"TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" "
-                       L"Opacity=\"1\"/>",
-                       L"BorderThickness=0,0,0,0", L"CornerRadius=15",
-                       L"Margin=-2,-2,-2,-2"}},
-    ThemeTargetStyles{L"Grid#ControlCenterRegion",
-                      {L"Background:=<AcrylicBrush TintOpacity=\"0\" "
-                       L"TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" "
-                       L"Opacity=\"1\"/>",
-                       L"BorderThickness=0,0,0,0", L"CornerRadius=15"}},
-    ThemeTargetStyles{
-        L"Windows.UI.Xaml.Controls.Grid#L1Grid > Border",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{
-        L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion",
-        {L"Background:=<AcrylicBrush TintOpacity=\"0\" "
-         L"TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" "
-         L"Opacity=\"1\"/>",
-         L"BorderThickness=0,0,0,0", L"CornerRadius=15"}},
-    ThemeTargetStyles{
-        L"Grid#MediaTransportControlsRoot",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{
-        L"ContentPresenter#PageContent",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{
-        L"ContentPresenter#PageContent > Grid > Border",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{
-        L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > "
-        L"ContentPresenter > Grid#FullScreenPageRoot",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{
-        L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > "
-        L"ContentPresenter > Grid#FullScreenPageRoot > "
-        L"ContentPresenter#PageHeader",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{
-        L"ScrollViewer#ListContent",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{
-        L"ActionCenter.FlexibleToastView#FlexibleNormalToastView",
-        {L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{L"Border#ToastBackgroundBorder2",
-                      {L"Background:=<AcrylicBrush TintOpacity=\"0\" "
-                       L"TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" "
-                       L"Opacity=\"1\"/>",
-                       L"BorderThickness=0,0,0,0"}},
-    ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > "
-                      L"Border#BackgroundBorder",
-                      {L"FocusVisualPrimaryThickness=0,0,0,0",
-                       L"FocusVisualSecondaryThickness=0,0,0,0"}},
-    ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Grid#LayoutRoot > "
-                      L"Border#BackgroundBorder",
-                      {L"FocusVisualPrimaryThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"Grid#NotificationCenterGrid", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Grid#CalendarCenterGrid", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"ScrollViewer#CalendarControlScrollViewer", {
+        L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
+    ThemeTargetStyles{L"Border#CalendarHeaderMinimizedOverlay", {
+        L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
+    ThemeTargetStyles{L"ActionCenter.FocusSessionControl#FocusSessionControl > Grid#FocusGrid", {
+        L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15",
+        L"Padding=2,4,2,4"}},
+    ThemeTargetStyles{L"Border#JumpListRestyledAcrylic", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15",
+        L"Margin=-2,-2,-2,-2"}},
+    ThemeTargetStyles{L"Grid#ControlCenterRegion", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#L1Grid > Border", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"Grid#MediaTransportControlsRoot", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent > Grid > Border", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot > ContentPresenter#PageHeader", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"ScrollViewer#ListContent", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"ActionCenter.FlexibleToastView#FlexibleNormalToastView", {
+        L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Transparent\" TintLuminosityOpacity=\"0\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=15"}},
+    ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
+        L"FocusVisualPrimaryThickness=0,0,0,0",
+        L"FocusVisualSecondaryThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
+        L"FocusVisualPrimaryThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ActionCenter.FlexibleItemView", {
+        L"CornerRadius=15"}},
 }};
+
+const Theme g_themeUnified = {{
+    ThemeTargetStyles{L"ActionCenter.FocusSessionControl", {
+        L"Height=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ControlCenterRegion", {
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid", {
+        L"CornerRadius=0",
+        L"Margin=0,0,0,12",
+        L"BorderThickness=1,0,1,1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid", {
+        L"CornerRadius=0",
+        L"BorderThickness=1,1,1,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem", {
+        L"CornerRadius=0",
+        L"Margin=1,1,1,1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem > Windows.UI.Xaml.Controls.Border", {
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
+        L"CornerRadius=0",
+        L"BorderThickness=1,1,1,0",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.FrameWithContentChanged#L2Frame", {
+        L"CornerRadius=0"}},
+}};
+
+// clang-format on
 
 std::atomic<bool> g_initialized;
 thread_local bool g_initializedForThread;
@@ -399,7 +363,25 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
     m_XamlDiagnostics(site.as<IXamlDiagnostics>())
 {
     Wh_Log(L"Constructing VisualTreeWatcher");
-    winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
+    // winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
+
+    // Calling AdviseVisualTreeChange from the current thread causes the app to
+    // hang on Windows 10 in Advising::RunOnUIThread. Creating a new thread and
+    // calling it from there fixes it.
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParam) -> DWORD {
+            auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
+            HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
+            if (FAILED(hr)) {
+                Wh_Log(L"Error %08X", hr);
+            }
+            return 0;
+        },
+        this, 0, nullptr);
+    if (thread) {
+        CloseHandle(thread);
+    }
 }
 
 VisualTreeWatcher::~VisualTreeWatcher()
@@ -1650,6 +1632,8 @@ void ProcessAllStylesFromSettings() {
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"TranslucentShell") == 0) {
         theme = &g_themeTranslucentShell;
+    } else if (wcscmp(themeName, L"Unified") == 0) {
+        theme = &g_themeUnified;
     }
     Wh_FreeStringSetting(themeName);
 

@@ -4,7 +4,7 @@ The official collection of Windhawk mods. The mods can be viewed on the [online 
 
 ## Discussing Mods
 
-You're welcome to participate in [GitHub Discussions](https://github.com/ramensoftware/windhawk-mods/discussions) or join [the Discord channel](https://discord.gg/WZgXScMud7) for a live discussion.
+You're welcome to participate in [GitHub Discussions](https://github.com/ramensoftware/windhawk-mods/discussions) or join [the Discord channel](https://discord.com/servers/windhawk-923944342991818753) for a live discussion.
 
 ## Creating a New Mod
 

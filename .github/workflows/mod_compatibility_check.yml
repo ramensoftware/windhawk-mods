@@ -1,0 +1,53 @@
+name: Mod compatibility check
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  run:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [
+          # '1.3',  # Same compiler as 1.3.1.
+          '1.3.1',
+          '1.4',
+          '1.4.1',
+          # '1.5',  # Same compiler as 1.5.1.
+          '1.5.1',
+        ]
+        exclude:
+          # Exclude 1.3.1, which is quite old, for everyone but m417z.
+          - version: ${{ github.event.pull_request.user.login != 'm417z' && '1.3.1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install Python dependencies
+        run: python -m pip install pywin32
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+      - name: Validate the changes
+        env:
+          ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
+          MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
+          ALL_CHANGED_AND_MODIFIED_FILES: ${{ steps.changed-files.outputs.all_changed_and_modified_files }}
+          ALL_CHANGED_AND_MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.all_changed_and_modified_files_count }}
+        run: |
+          a=ADDED_FILES_COUNT
+          b=MODIFIED_FILES_COUNT
+          c=ALL_CHANGED_AND_MODIFIED_FILES_COUNT
+          if [[ ( ($a -eq 0 && $b -eq 1) || ($a -eq 1 && $b -eq 0) ) && $c -eq 1 ]]; then
+            python -u .github/mod_compatibility_checker.py -v "${{ matrix.version }}" -f "$ALL_CHANGED_AND_MODIFIED_FILES"
+          fi

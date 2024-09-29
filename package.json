@@ -1,7 +1,8 @@
 {
   "devDependencies": {
     "@types/node": "^17.0.13",
-    "@types/showdown": "^2.0.0"
+    "@types/showdown": "^2.0.0",
+    "tsx": "^4.19.0"
   },
   "dependencies": {
     "feed": "^4.2.2",
