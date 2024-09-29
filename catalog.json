@@ -2164,7 +2164,7 @@
                 "published": 1719611831000,
                 "rating": 10,
                 "ratingUsers": 4,
-                "updated": 1719729928000,
+                "updated": 1727647480000,
                 "users": 200
             },
             "metadata": {
@@ -2172,14 +2172,14 @@
                     "x86-64"
                 ],
                 "author": "Erizur",
-                "compilerOptions": "-lcomdlg32 -luser32 -lole32 -lgdi32 -lshell32",
+                "compilerOptions": "-lcomctl32 -lcomdlg32 -luser32 -lole32 -lgdi32 -lshell32 -luxtheme",
                 "description": "Modify StartIsBack++'s features (2.9.20)",
                 "github": "https://github.com/Erizur",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "StartIsBack++ Tweaker",
-                "version": "0.7"
+                "version": "0.7.1"
             }
         },
         "slick-window-arrangement": {
