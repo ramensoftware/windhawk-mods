@@ -2,7 +2,7 @@
 // @id              virtual-desktop-taskbar-order
 // @name            Virtual Desktop Preserve Taskbar Order
 // @description     The order on the taskbar isn't preserved between virtual desktop switches, this mod fixes it
-// @version         1.0.2
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -55,7 +55,7 @@ HWND g_hTaskbarWnd;
 
 #pragma region offsets
 
-void* CTaskListWnd__GetRequiredCols;
+void* CTaskListWnd_GetFocusedBtn;
 void* CTaskBand__EnumExistingImmersiveApps;
 void* CApplicationViewManager__GetViewInFocus;
 
@@ -94,8 +94,7 @@ size_t OffsetFromAssembly(void* func,
 }
 
 HDPA* EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(LONG_PTR lp) {
-    static size_t offset =
-        OffsetFromAssembly(CTaskListWnd__GetRequiredCols, 0xE0);
+    static size_t offset = OffsetFromAssembly(CTaskListWnd_GetFocusedBtn, 0xE0);
 
     return (HDPA*)(lp + offset);
 }
@@ -127,6 +126,15 @@ size_t* EV_APP_VIEW_MGR_APP_ARRAY_SIZE(LONG_PTR lp) {
 }
 
 #pragma endregion  // offsets
+
+using CTaskBtnGroup_GetGroup_t = void*(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup;
+
+using CTaskBtnGroup_GetNumItems_t = int(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetNumItems_t CTaskBtnGroup_GetNumItems;
+
+using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(void* pThis, int index);
+CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem;
 
 using CTaskGroup_DoesWindowMatch_t =
     HRESULT(WINAPI*)(LPVOID pThis,
@@ -284,32 +292,28 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
     LONG_PTR** button_groups = (LONG_PTR**)plp[1];
     LONG_PTR* button_group = button_groups[nButtonGroupIndex];
 
-    plp = (LONG_PTR*)button_group[7];
-    if (!plp)
+    int buttons_count = CTaskBtnGroup_GetNumItems(button_group);
+    if (buttons_count == 0) {
         return;
+    }
 
-    int buttons_count = (int)plp[0];
-    LONG_PTR** buttons = (LONG_PTR**)plp[1];
-    if (buttons_count == 0)
+    LONG_PTR* task_group = (LONG_PTR*)CTaskBtnGroup_GetGroup(button_group);
+    if (!task_group) {
         return;
+    }
 
-    LONG_PTR* task_group = (LONG_PTR*)button_group[4];
-    plp = (LONG_PTR*)task_group[4];
-    if (!plp)
+    LONG_PTR* first_task_item =
+        (LONG_PTR*)CTaskBtnGroup_GetTaskItem(button_group, 0);
+    if (!first_task_item) {
         return;
-
-    int task_items_count = (int)plp[0];
-    if (task_items_count == 0)
-        return;
-
-    LONG_PTR** task_items = (LONG_PTR**)plp[1];
+    }
 
     plp = *(LONG_PTR**)task_group;
     void** ppTaskGroupRelease = (void**)&plp[2];
     PointerRedirectionAdd(ppTaskGroupRelease, (void*)TaskGroupReleaseHook,
                           &prTaskGroupRelease);
 
-    plp = *(LONG_PTR**)task_items[0];
+    plp = *(LONG_PTR**)first_task_item;
     void** ppTaskItemRelease = (void**)&plp[2];
     PointerRedirectionAdd(ppTaskItemRelease, (void*)TaskItemReleaseHook,
                           &prTaskItemRelease);
@@ -353,8 +357,9 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
             break;
         }
 
-        if (!g_taskGroupVirtualDesktopReleased)
+        if (!g_taskGroupVirtualDesktopReleased) {
             continue;
+        }
 
         if (g_taskGroupVirtualDesktopReleased != task_group) {
             if (nRightNeighbourItemIndex == nArraySize) {
@@ -362,7 +367,7 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
                      j++) {
                     LONG_PTR* check_button_group = button_groups[j];
                     LONG_PTR* check_task_group =
-                        (LONG_PTR*)check_button_group[4];
+                        (LONG_PTR*)CTaskBtnGroup_GetGroup(check_button_group);
                     if (g_taskGroupVirtualDesktopReleased == check_task_group) {
                         // The current item in lpArray is from the same group
                         // of at least one of the items in button_groups to the
@@ -376,12 +381,13 @@ void OnButtonGroupInserted(LONG_PTR lpTaskSwLongPtr,
             continue;
         }
 
-        if (!g_taskItemVirtualDesktopReleased)
+        if (!g_taskItemVirtualDesktopReleased) {
             continue;
+        }
 
         for (int j = 0; j < buttons_count; j++) {
-            LONG_PTR* button = buttons[j];
-            LONG_PTR* task_item = (LONG_PTR*)button[4];
+            LONG_PTR* task_item =
+                (LONG_PTR*)CTaskBtnGroup_GetTaskItem(button_group, j);
 
             if (g_taskItemVirtualDesktopReleased == task_item) {
                 // The current item in lpArray matches one of the
@@ -582,7 +588,8 @@ struct SYMBOL_HOOK {
 
 bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
+                 size_t symbolHooksCount,
+                 bool cacheOnly = false) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'@';
     constexpr size_t cacheMaxSize = 10240;
@@ -724,7 +731,14 @@ bool HookSymbols(HMODULE module,
 
             if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
                 Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+
                 symbolResolved[i] = true;
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    newSystemCacheStr += cacheSep;
+                    newSystemCacheStr += hookSymbol;
+                    newSystemCacheStr += cacheSep;
+                }
             }
         }
 
@@ -735,6 +749,10 @@ bool HookSymbols(HMODULE module,
     }
 
     Wh_Log(L"Couldn't resolve all symbols from cache");
+
+    if (cacheOnly) {
+        return false;
+    }
 
     WH_FIND_SYMBOL findSymbol;
     HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
@@ -853,11 +871,12 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
                                         size_t symbolHooksCount) {
     constexpr WCHAR kModIdForCache[] = L"virtual-desktop-taskbar-order";
 
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+    if (HookSymbols(module, symbolHooks, symbolHooksCount,
+                    /*cacheOnly=*/true)) {
         return true;
     }
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
 
     WCHAR moduleFilePath[MAX_PATH];
     DWORD moduleFilePathLen =
@@ -912,12 +931,11 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
 
     auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
+    if (onlineCache) {
+        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    } else {
         Wh_Log(L"Failed to get online cache");
-        return false;
     }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
 
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
@@ -931,7 +949,19 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    SYMBOL_HOOK taskbarSymbolHooks[] = {
+    SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))"},
+            (void**)&CTaskBtnGroup_GetGroup,
+        },
+        {
+            {LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void))"},
+            (void**)&CTaskBtnGroup_GetNumItems,
+        },
+        {
+            {LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))"},
+            (void**)&CTaskBtnGroup_GetTaskItem,
+        },
         {
             {LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))"},
             (void**)&CTaskGroup_DoesWindowMatch_Original,
@@ -948,8 +978,8 @@ BOOL Wh_ModInit() {
         },
         // For offsets:
         {
-            {LR"(protected: int __cdecl CTaskListWnd::_GetRequiredCols(int))"},
-            (void**)&CTaskListWnd__GetRequiredCols,
+            {LR"(public: virtual long __cdecl CTaskListWnd::GetFocusedBtn(struct ITaskGroup * *,int *))"},
+            (void**)&CTaskListWnd_GetFocusedBtn,
         },
         {
             {LR"(protected: void __cdecl CTaskBand::_EnumExistingImmersiveApps(void))"},
@@ -963,11 +993,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!HookSymbolsWithOnlineCacheFallback(taskbarModule, taskbarSymbolHooks,
-                                            ARRAYSIZE(taskbarSymbolHooks))) {
+    if (!HookSymbolsWithOnlineCacheFallback(taskbarModule, taskbarDllHooks,
+                                            ARRAYSIZE(taskbarDllHooks))) {
         return FALSE;
     }
 
+    // twinui.pcshell.dll
     SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
         // For offsets:
         {

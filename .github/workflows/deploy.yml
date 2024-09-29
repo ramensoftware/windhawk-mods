@@ -22,10 +22,8 @@ jobs:
           fetch-depth: 0
       - name: Install dependencies
         run: npm install
-      - name: Install global dependencies
-        run: npm install -g ts-node
       - name: Prepare static content
-        run: ts-node deploy.ts
+        run: npx tsx deploy.ts
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         with:

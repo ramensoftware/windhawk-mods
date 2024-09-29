@@ -2,11 +2,12 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.2.1
+// @version         1.3.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
 // @compilerOptions -luser32 -luxtheme -lcomctl32
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -53,8 +54,88 @@ struct
     BOOL noselect;
 } settings;
 
-HWND hDesktop = NULL;
-BOOL bSubclassed = FALSE;
+HWND g_hWndDesktop = NULL;
+BOOL g_bSubclassed = FALSE;
+
+// Cheap hack:
+void *g_pReportDisabledDoubleBufferingListView = nullptr;
+
+bool (*CListView__IsDoubleBuffer_orig)(void *pThis) = nullptr;
+bool CListView__IsDoubleBuffer_hook(void *pThis)
+{
+    if (g_pReportDisabledDoubleBufferingListView == pThis)
+    {
+        return false;
+    }
+
+    return CListView__IsDoubleBuffer_orig(pThis);
+}
+
+void (*CLVSelectionManager__DragSelect_orig)(void *pThis, LONG a2, LONG a3) = nullptr;
+void CLVSelectionManager__DragSelect_hook(void *pThis, LONG a2, LONG a3)
+{
+    bool disableMarquee = false;
+
+    size_t *pListView = *((size_t **)pThis + 6);
+    HWND hWnd = *((HWND *)pListView + 12);
+
+    if (hWnd == g_hWndDesktop && settings.noselect)
+    {
+        disableMarquee = true;
+    }
+
+    if (disableMarquee)
+    {
+        // I decided to cheaply store a pointer to the list view to force
+        // IsDoubleBuffer to return false, since it was really simple to
+        // implement.
+        g_pReportDisabledDoubleBufferingListView = pListView;
+    }
+
+    CLVSelectionManager__DragSelect_orig(pThis, a2, a3);
+
+    if (disableMarquee)
+    {
+        // This doesn't have to be cleared at all (in fact, the address probably never
+        // changes during the desktop's lifetime), but again, just being safe.
+        g_pReportDisabledDoubleBufferingListView = nullptr;
+    }
+}
+
+void (*CLVDrawManager___PaintWorkArea_orig)(void *pThis, HDC hdcTarget, RECT *pRect) = nullptr;
+void CLVDrawManager___PaintWorkArea_hook(void *pThis, HDC hdcTarget, RECT *pRect)
+{
+    bool disableMarquee = false;
+
+    HWND hWnd = WindowFromDC(hdcTarget);
+
+    if (hWnd == g_hWndDesktop && settings.noselect)
+    {
+        disableMarquee = true;
+    }
+
+    DWORD *pListView = (DWORD *)*((size_t **)pThis + 3);
+    bool oldBit = 0;
+
+    if (disableMarquee)
+    {
+        // I have no idea what this flag does, but setting it on the list view disables
+        // the marquee selection effect (leaving nothing).
+        oldBit = (*((DWORD *)pListView + 42)) & 0x40000;
+        *((DWORD *)pListView + 42) &= ~0x40000;
+    }
+
+    CLVDrawManager___PaintWorkArea_orig(pThis, hdcTarget, pRect);
+
+    if (disableMarquee)
+    {
+        // Just to be safe, I'll restore the old value if it was set.
+        if (oldBit)
+        {
+            *((DWORD *)pListView + 42) |= 0x40000;
+        }
+    }
+}
 
 /**
   * UpdateDesktop references DesktopSubclassProc
@@ -81,38 +162,27 @@ LRESULT CALLBACK DesktopSubclassProc(
 
 void UpdateDesktop(void)
 {
-    if (hDesktop != NULL)
+    if (g_hWndDesktop != NULL)
     {
         /* Untheme the desktop */
-        SetWindowTheme(hDesktop, NULL, NULL);
-        SendMessageW(hDesktop, WM_THEMECHANGED, 0, 0);
+        SetWindowTheme(g_hWndDesktop, NULL, NULL);
+        SendMessageW(g_hWndDesktop, WM_THEMECHANGED, 0, 0);
 
         /* Apply the desktop background color */
         if (settings.background)
         {
             SendMessageW(
-                hDesktop,
+                g_hWndDesktop,
                 LVM_SETTEXTBKCOLOR,
                 NULL,
                 GetSysColor(COLOR_BACKGROUND)
             );
         }
 
-        /* Force non-translucent selection rectangle */
-        if (settings.noselect)
-        {
-            SendMessageW(
-                hDesktop,
-                LVM_SETEXTENDEDLISTVIEWSTYLE,
-                LVS_EX_DOUBLEBUFFER,
-                FALSE
-            );
-        }
-
         /* Subclass to update label backgrounds (they get removed normally) */
-        if (!bSubclassed)
+        if (!g_bSubclassed)
         {
-            bSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc, NULL);
+            g_bSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hWndDesktop, DesktopSubclassProc, NULL);
         }
     }
 }
@@ -169,7 +239,7 @@ HWND WINAPI CreateWindowExW_hook(
       * - The window's class name is "SysListView32"
       * - The window's parent's class name is "SHELLDLL_DefView"
       */
-    if (hDesktop == NULL
+    if (g_hWndDesktop == NULL
     && hWndParent != NULL
     && lpClassName != NULL
     && TextualClassName(lpClassName))
@@ -181,7 +251,7 @@ HWND WINAPI CreateWindowExW_hook(
 
             if (0 == wcscmp(lpPrntCls, L"SHELLDLL_DefView"))
             {
-                hDesktop = hRes;
+                g_hWndDesktop = hRes;
                 UpdateDesktop();
             }
         }
@@ -196,14 +266,99 @@ void LoadSettings(void)
     settings.noselect = Wh_GetIntSetting(L"noselect");
 }
 
+#ifdef _WIN64
+#   define PATHCACHE_VALNAME L"last-comctl32-v6-path"
+#else
+#   define PATHCACHE_VALNAME L"last-comctl32-v6-path-wow64"
+#endif
+
+#define COMCTL_582_SEARCH    L"microsoft.windows.common-controls_6595b64144ccf1df_5.82"
+
+/* Load the ComCtl32 module */
+HMODULE LoadComCtlModule(void)
+{
+    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+    if (!hComCtl)
+    {
+        return NULL;
+    }
+
+    WCHAR szPath[MAX_PATH];
+    GetModuleFileNameW(hComCtl, szPath, MAX_PATH);
+
+    WCHAR szv6Path[MAX_PATH];
+    BOOL bNoCache = FALSE;
+    if (!Wh_GetStringValue(PATHCACHE_VALNAME, szv6Path, MAX_PATH))
+    {
+        bNoCache = TRUE;
+    }
+
+    /**
+      * the !bNoCache check here is nested because we only want to fall through
+      * to the cacher if the current comctl32 path is NOT 5.82.
+      */
+    if (wcsstr(szPath, COMCTL_582_SEARCH)
+    || wcsstr(szPath, L"\\Windows\\System32")
+    || wcsstr(szPath, L"\\Windows\\SysWOW64"))
+    {
+        if (!bNoCache)
+        {
+            hComCtl = LoadLibraryW(szv6Path);
+        }
+    }
+    else if (bNoCache || wcsicmp(szPath, szv6Path))
+    {
+        Wh_SetStringValue(PATHCACHE_VALNAME, szPath);
+    }
+
+    return hComCtl;
+}
+
+// Hooks used for removing the transparent selection ("marquee") rectangle
+// on only the desktop window.
+const WindhawkUtils::SYMBOL_HOOK marqueeHooks[] = {
+    {
+        // Manages drawing of the marquee selection, needs to be disabled
+        {
+            L"private: void __cdecl CLVDrawManager::_PaintWorkArea(struct HDC__ *,struct tagRECT const *)"
+        },
+        &CLVDrawManager___PaintWorkArea_orig,
+        CLVDrawManager___PaintWorkArea_hook
+    },
+    {
+        // Manages drawing of the classic rectangle, needs to be enabled (see IsDoubleBuffer)
+        {
+            L"public: void __cdecl CLVSelectionManager::DragSelect(int,int)"
+        },
+        &CLVSelectionManager__DragSelect_orig,
+        CLVSelectionManager__DragSelect_hook
+    },
+    {
+        // Technically unrelated, but hooked in order to change branching of DragSelect
+        // without reassembling
+        {
+            L"public: bool __cdecl CListView::IsDoubleBuffer(void)const "
+        },
+        &CListView__IsDoubleBuffer_orig,
+        CListView__IsDoubleBuffer_hook
+    }
+};
+
 BOOL Wh_ModInit(void) 
 {
-    Wh_Log(L"Initializing Classic Desktop Icons");
     LoadSettings();
 
+    HMODULE hComCtl = LoadComCtlModule();
+
+    if (!hComCtl)
+    {
+        Wh_Log(L"Failed to load comctl32.dll");
+        return FALSE;
+    }
+
     /* Initially update the desktop if it already exists. */
-    hDesktop = FindDesktopWindow();
-    if (hDesktop != NULL)
+    g_hWndDesktop = FindDesktopWindow();
+    if (g_hWndDesktop != NULL)
     {
         UpdateDesktop();
     }
@@ -214,39 +369,40 @@ BOOL Wh_ModInit(void)
         (void **)&CreateWindowExW_orig
     );
 
-    Wh_Log(L"Done initializing Classic Desktop Icons");
+    if (settings.noselect)
+    {
+        if (!WindhawkUtils::HookSymbols(
+            hComCtl,
+            marqueeHooks,
+            ARRAYSIZE(marqueeHooks)
+        ))
+        {
+            Wh_Log(L"Failed to hook one or more symbol functions in comctl32.dll");
+            return FALSE;
+        };
+    }
+
     return TRUE;
 }
 
 void Wh_ModUninit(void)
 {
-    /* Remove subclass*/
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc);
+    /* Remove subclass */
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hWndDesktop, DesktopSubclassProc);
 
     /* Remove desktop background color */
     if (settings.background)
     {
         SendMessageW(
-            hDesktop,
+            g_hWndDesktop,
             LVM_SETTEXTBKCOLOR,
             NULL,
             CLR_NONE
         );
     }
 
-    /* Make selection rectangle translucent again */
-    if (settings.noselect)
-    {
-        SendMessageW(
-            hDesktop,
-            LVM_SETEXTENDEDLISTVIEWSTYLE,
-            LVS_EX_DOUBLEBUFFER,
-            TRUE
-        );
-    }
-
     /* Retheme desktop */
-    SetWindowTheme(hDesktop, L"Desktop", NULL);
+    SetWindowTheme(g_hWndDesktop, L"Desktop", NULL);
     Wh_Log(L"Unloaded Classic Desktop Icons");
 }
 

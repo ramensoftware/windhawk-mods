@@ -2,7 +2,7 @@
 // @id              basic-themer
 // @name            Basic Themer
 // @description     Applies the Windows Basic theme to desktop windows
-// @version         1.0.0
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         dwm.exe
@@ -41,6 +41,8 @@ basic frames. To circumvent this, use the "DWM Unextend Frames" mod.
 **Secure Desktop only (with classic UAC and Windows 7 Style UAC Dim mod)**:
 
 ![Secure Desktop only](https://raw.githubusercontent.com/aubymori/images/main/basic-themer-secure-desktop.png)
+
+*Original mod by xalejandro.*
 */
 // ==/WindhawkModReadme==
 
@@ -90,16 +92,14 @@ void ApplyBasicThemeInternal(HWND hWnd, BOOL bEnable)
     DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &bNoAnims, sizeof(BOOL));
 }
 
-void ApplyBasicTheme(HWND hWnd)
+void ApplyAnimsInternal(HWND hWnd, BOOL bDisable)
 {
-    /* Running this function on windows without WS_CAPTION
-       (menus) will mess them up */
-    DWORD dwStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
-    if ((dwStyle & WS_CAPTION) != WS_CAPTION)
-    {
-        return;
-    }
+    BOOL bNoAnims = bDisable && settings.noanims;
+    DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &bNoAnims, sizeof(BOOL));
+}
 
+bool ShouldUseBasicTheme(HWND hWnd)
+{
     DWORD pid = 0;
     DWORD threadId = GetWindowThreadProcessId(hWnd, &pid);
 
@@ -119,8 +119,7 @@ void ApplyBasicTheme(HWND hWnd)
             {
                 if (0 != wcsicmp(szDeskName, L"winlogon"))
                 {
-                    ApplyBasicThemeInternal(hWnd, FALSE);
-                    return;
+                    return false;
                 }
             }
         }
@@ -128,14 +127,14 @@ void ApplyBasicTheme(HWND hWnd)
 
     if (settings.blacklist.empty() && !settings.whitelistmode)
     {
-        ApplyBasicThemeInternal(hWnd, TRUE);
+        return true;
     }
 
     WTS_PROCESS_INFOW *processes = nullptr;
     DWORD processCount = 0;
     if (!WTSEnumerateProcessesW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &processes, &processCount))
     {
-        return;
+        return false;
     }
 
     for (DWORD i = 0; i < processCount; i++)
@@ -146,9 +145,8 @@ void ApplyBasicTheme(HWND hWnd)
             {
                 if (!path.find(processes[i].pProcessName))
                 {
-                    ApplyBasicThemeInternal(hWnd, FALSE);
                     WTSFreeMemory(processes);
-                    return;
+                    return false;
                 }
             }
 
@@ -156,23 +154,39 @@ void ApplyBasicTheme(HWND hWnd)
             {
                 if (!path.find(processes[i].pProcessName))
                 {
-                    ApplyBasicThemeInternal(hWnd, TRUE);
+                    WTSFreeMemory(processes);
+                    return true;
                 }
             }
         }
     }
 
-    if (!settings.whitelistmode)
+    WTSFreeMemory(processes);
+    return (!settings.whitelistmode);
+}
+
+void ApplyBasicTheme(HWND hWnd)
+{
+    /* Modifying DWMWA_NCRENDERING_POLICY on captionless windows
+       messes stuff up */
+    DWORD dwStyle = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if ((dwStyle & WS_CAPTION) != WS_CAPTION)
     {
-        ApplyBasicThemeInternal(hWnd, TRUE);
+        return;
     }
 
-    WTSFreeMemory(processes);
+    ApplyBasicThemeInternal(hWnd, ShouldUseBasicTheme(hWnd));
+}
+
+void ApplyAnims(HWND hWnd)
+{
+    ApplyAnimsInternal(hWnd, ShouldUseBasicTheme(hWnd));
 }
 
 BOOL CALLBACK BasicEnumProc(HWND hWnd, LPARAM lParam)
 {
     ApplyBasicTheme(hWnd);
+    ApplyAnims(hWnd);
     return TRUE;
 }
 
@@ -190,6 +204,34 @@ DWORD WINAPI ApplyBasicThreadProc(LPVOID lpParam)
     return 0;
 }
 
+DWORD WINAPI ApplyAnimsThreadProc(LPVOID lpParam)
+{
+    ApplyAnims((HWND)lpParam);
+    return 0;
+}
+
+HRESULT (*CWindowList_GetSyncedWindowDataByHwnd_orig)(void *, HWND hWnd, void **);
+HRESULT CWindowList_GetSyncedWindowDataByHwnd_hook(
+    void  *pThis,
+    HWND   hWnd,
+    void **ppWindowData
+)
+{
+    if (hWnd)
+    {
+        HANDLE hThread = CreateThread(
+            NULL,
+            0,
+            ApplyBasicThreadProc,
+            hWnd,
+            0,
+            nullptr
+        );
+        CloseHandle(hThread);
+    }
+    return CWindowList_GetSyncedWindowDataByHwnd_orig(pThis, hWnd, ppWindowData);
+}
+
 HRESULT (*CWindowList_SyncWindowData_orig)(void *, void *, void *);
 HRESULT CWindowList_SyncWindowData_hook(
     void *pThis,
@@ -200,12 +242,11 @@ HRESULT CWindowList_SyncWindowData_hook(
     HWND hWnd = CWindowData_Window(pWindowData);
     if (hWnd)
     {
-        /* This must be run in a separate thread or else some windows will
-           have their frames go completely white */
+        /* Animation attribute doesn't get in time on the other function */
         HANDLE hThread = CreateThread(
             NULL,
             0,
-            ApplyBasicThreadProc,
+            ApplyAnimsThreadProc,
             hWnd,
             0,
             nullptr
@@ -246,6 +287,14 @@ void LoadSettings(void)
 }
 
 const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    {
+        {
+            L"public: long __cdecl CWindowList::GetSyncedWindowDataByHwnd(struct HWND__ *,class CWindowData * *)"
+        },
+        &CWindowList_GetSyncedWindowDataByHwnd_orig,
+        CWindowList_GetSyncedWindowDataByHwnd_hook,
+        false
+    },
     {
         {
             L"public: long __cdecl CWindowList::SyncWindowData(struct IDwmWindow *,class CWindowData *)"

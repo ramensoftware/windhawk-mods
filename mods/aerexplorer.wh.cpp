@@ -2,11 +2,11 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.6.2
+// @version         1.6.4
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi
+// @compilerOptions -lgdi32 -lcomctl32 -lole32 -loleaut32 -luxtheme -ldwmapi -DWINVER=0x0A00
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -73,8 +73,8 @@ Feel free to try it on other versions, but it may not work.
 // ==WindhawkModSettings==
 /*
 - alwayscpl: true
-  $name: Force Control Panel mode
-  $description: Make Explorer think it's always Control Panel. This will fix Control Panel reopening Explorer but it will also enable old search and may be buggy.
+  $name: Seamlessly switch to Control Panel
+  $description: Allow Explorer to switch to Control Panel without closing and reopening.
 - smalladdress: true
   $name: Small address bar
   $description: Reverts the address bar to the size it was before Windows 10, version 1909.
@@ -104,7 +104,7 @@ Feel free to try it on other versions, but it may not work.
   $description: Use the native list view control instead of the DirectUI ItemsView, like Windows Vista and before. This will break with dark mode enabled.
 - colheaders: false
   $name: Always show column headers
-  $description: Always show the column headers that normally only show in Details view, like Windows Vista. Use native list view must be enabled for this to work.
+  $description: Always show the column headers that normally only show in Details view, like Windows Vista.
 - npst: seven
   $name: Navigation pane style
   $description: Determines the style of the tree view on the left of the window.
@@ -145,10 +145,6 @@ Feel free to try it on other versions, but it may not work.
 */
 // ==/WindhawkModSettings==
 
-// Defines data shared by all instances of the library, even across processes.
-#define SHARED_SECTION __attribute__((section(".shared")))
-asm(".section .shared,\"dws\"\n");
-
 #include <windhawk_utils.h>
 #include <initguid.h>
 #include <propvarutil.h>
@@ -157,6 +153,7 @@ asm(".section .shared,\"dws\"\n");
 #include <shlobj.h>
 #include <dwmapi.h>
 #include <vssym32.h>
+#include <vector>
 
 /* Defines */
 #ifdef _WIN64
@@ -810,14 +807,9 @@ LPCDRIVEGROUPI18N GetCurrentDriveLocale(void)
 }
 
 /* Only available in Windows 10, version 1607 and later. */
-typedef UINT (WINAPI *GetDpiForSystem_t)(void);
-GetDpiForSystem_t GetDpiForSystem = nullptr;
-
-typedef UINT (WINAPI *GetDpiForWindow_t)(HWND);
-GetDpiForWindow_t GetDpiForWindow = nullptr;
-
-typedef int (WINAPI *GetSystemMetricsForDpi_t)(int, UINT);
-GetSystemMetricsForDpi_t GetSystemMetricsForDpi = nullptr;
+WINUSERAPI UINT WINAPI GetDpiForSystem(void);
+WINUSERAPI UINT WINAPI GetDpiForWindow(HWND);
+WINUSERAPI int WINAPI GetSystemMetricsForDpi(int, UINT);
 
 #define ScaleForDPI(n) MulDiv(n, GetDpiForSystem(), 96)
 #define IsHighDPI() (GetDpiForSystem() >= 120)
@@ -828,7 +820,6 @@ GetSystemMetricsForDpi_t GetSystemMetricsForDpi = nullptr;
 
 #pragma region "Old search box"
 /* Old search box */
-void *CUniversalSearchBand_IsModernSearchBoxEnabled_addr SHARED_SECTION = nullptr;
 bool (__fastcall *CUniversalSearchBand_IsModernSearchBoxEnabled_orig)(void *) = nullptr;
 bool __fastcall CUniversalSearchBand_IsModernSearchBoxEnabled_hook(
     void *pThis
@@ -842,7 +833,6 @@ bool __fastcall CUniversalSearchBand_IsModernSearchBoxEnabled_hook(
 }
 
 /* Fix placeholder blanking */
-void *CSearchEditBox_HideSuggestions_addr SHARED_SECTION = nullptr;
 HRESULT (THISCALL *CSearchEditBox_HideSuggestions_orig)(void *) = nullptr;
 HRESULT THISCALL CSearchEditBox_HideSuggestions_hook(
     void *pThis
@@ -855,7 +845,6 @@ HRESULT THISCALL CSearchEditBox_HideSuggestions_hook(
 #pragma endregion // "Old search box"
 
 /* Windows Vista search box placeholder */
-void *CSearchBox_SetCueAndTooltipText_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CSearchBox_SetCueAndTooltipText_orig)(void *, LPCWSTR, LPCWSTR) = nullptr;
 HRESULT STDCALL CSearchBox_SetCueAndTooltipText_hook(
     void    *pThis,
@@ -877,7 +866,6 @@ HRESULT STDCALL CSearchBox_SetCueAndTooltipText_hook(
 #define CAddressBand_Window(pThis) *((HWND *)pThis + 9)
 
 /* Fix address bar position and toolbar size */
-void *CAddressBand__PositionChildWindows_addr SHARED_SECTION = nullptr;
 void (THISCALL *CAddressBand__PositionChildWindows_orig)(void *) = nullptr;
 void THISCALL CAddressBand__PositionChildWindows_hook(
     void *pThis
@@ -943,7 +931,7 @@ void THISCALL CAddressBand__PositionChildWindows_hook(
     return CAddressBand__PositionChildWindows_orig(pThis);
 }
 
-DWORD g_dwSubBuild SHARED_SECTION = 0;
+DWORD g_dwSubBuild = 0;
 
 bool ModernSearchFeatureEnabled(void)
 {
@@ -980,7 +968,6 @@ bool ModernSearchFeatureEnabled(void)
     return (g_dwSubBuild < 3754);
 }
 
-void *CAddressBand__AddressBandWndProc_addr SHARED_SECTION = nullptr;
 LRESULT (THISCALL *CAddressBand__AddressBandWndProc_orig)(void *, HWND, UINT, WPARAM, LPARAM) = nullptr;
 LRESULT THISCALL CAddressBand__AddressBandWndProc_hook(
     void   *pThis,
@@ -1015,7 +1002,6 @@ LRESULT THISCALL CAddressBand__AddressBandWndProc_hook(
 #   define CAddressList_ComboBox(pThis) *((HWND *)pThis + 4)
 #endif
 
-void *CAddressList__InitCombobox_addr SHARED_SECTION = nullptr;
 void (THISCALL *CAddressList__InitCombobox_orig)(void *) = nullptr;
 void THISCALL CAddressList__InitCombobox_hook(
     void *pThis
@@ -1034,7 +1020,6 @@ void THISCALL CAddressList__InitCombobox_hook(
 #pragma endregion // "Small address bar"
 
 /* Disable ribbon */
-void *CShellBrowser__ShouldShowRibbon_addr SHARED_SECTION = nullptr;
 bool (THISCALL *CShellBrowser__ShouldShowRibbon_orig)(void *, void *) = nullptr;
 bool THISCALL CShellBrowser__ShouldShowRibbon_hook(
     void *pThis,
@@ -1080,7 +1065,6 @@ bool ExplorerHasRibbon(HWND hWnd)
 #pragma region "Old navigation pane sizing"
 
 /* Allow non-even heights */
-void *CNscTree__CreateTreeview_addr SHARED_SECTION = nullptr;
 HWND (THISCALL *CNscTree__CreateTreeview_orig)(void *, HWND) = nullptr;
 HWND THISCALL CNscTree__CreateTreeview_hook(
     void *pThis,
@@ -1148,7 +1132,6 @@ void HandleTvItem(HWND hTreeView, LPTVITEMEXW lptvi)
 }
 
 /* Set old height */
-void *CNscTree_s_SubClassTreeWndProc_addr SHARED_SECTION = nullptr;
 SUBCLASSPROC CNscTree_s_SubClassTreeWndProc_orig = nullptr;
 LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
     HWND      hWnd, 
@@ -1230,7 +1213,6 @@ LRESULT CALLBACK CNscTree_s_SubClassTreeWndProc_hook(
 #   define CNscTree_Indent(pThis)  *((DWORD *)pThis + 75)
 #endif
 
-void *CNscTree_ScaleAndSetIndent_addr SHARED_SECTION = nullptr;
 void (THISCALL *CNscTree_ScaleAndSetIndent_orig)(void *);
 void THISCALL CNscTree_ScaleAndSetIndent_hook(
     void *pThis
@@ -1298,7 +1280,6 @@ void CNavBar__UpdateGlass(void *pThis)
     }
 }
 
-void *CNavBar__SetTheme_addr SHARED_SECTION = nullptr;
 void (THISCALL *CNavBar__SetTheme_orig)(void *) = nullptr;
 void THISCALL CNavBar__SetTheme_hook(
     void *pThis
@@ -1311,7 +1292,6 @@ void THISCALL CNavBar__SetTheme_hook(
     }
 }
 
-void *CSeparatorBand_GetBandInfo_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CSeparatorBand_GetBandInfo_orig)(void *, DWORD, DWORD, DESKBANDINFO *) = nullptr;
 HRESULT STDCALL CSeparatorBand_GetBandInfo_hook(
     void         *pThis,
@@ -1345,7 +1325,6 @@ HRESULT STDCALL CSeparatorBand_GetBandInfo_hook(
     return hr;
 }
 
-void *CNavBar_s_SizableWndProc_addr SHARED_SECTION = nullptr;
 WNDPROC CNavBar_s_SizableWndProc_orig = nullptr;
 LRESULT CALLBACK CNavBar_s_SizableWndProc_hook(
     HWND   hWnd,
@@ -1434,7 +1413,6 @@ LRESULT CALLBACK RebarSubclassWndProc(
 
 #define CNavBar_CNavBandSite_Window(pThis) *((HWND *)pThis + 17)
 
-void *CNavBar_CNavBandSite__Initialize_addr SHARED_SECTION = nullptr;
 HRESULT (THISCALL *CNavBar_CNavBandSite__Initialize_orig)(void *, HWND) = nullptr;
 HRESULT THISCALL CNavBar_CNavBandSite__Initialize_hook(
     void *pThis,
@@ -1460,7 +1438,6 @@ HRESULT THISCALL CNavBar_CNavBandSite__Initialize_hook(
     return hr;
 }
 
-void *CNavBar__OnFrameStateChanged_addr SHARED_SECTION = nullptr;
 void (THISCALL *CNavBar__OnFrameStateChanged_orig)(void *, DWORD) = nullptr;
 void THISCALL CNavBar__OnFrameStateChanged_hook(
     void  *pThis,
@@ -1479,7 +1456,6 @@ void THISCALL CNavBar__OnFrameStateChanged_hook(
 /* Hide window icon and caption */
 #define CExplorerFrame_Window(pThis) *((HWND *)pThis + 1)
 
-void *CExplorerFrame__UpdateFrameState_addr SHARED_SECTION = nullptr;
 void (THISCALL *CExplorerFrame__UpdateFrameState_orig)(void *) = nullptr;
 void THISCALL CExplorerFrame__UpdateFrameState_hook(
     void *pThis
@@ -1502,7 +1478,6 @@ void THISCALL CExplorerFrame__UpdateFrameState_hook(
     }
 }
 
-void *CNavBar_ConstructNavBarThemeClassName_addr SHARED_SECTION = nullptr;
 HRESULT (THISCALL *CNavBar_ConstructNavBarThemeClassName_orig)(void *, WCHAR **) = nullptr;
 HRESULT THISCALL CNavBar_ConstructNavBarThemeClassName_hook(
     void   *pThis,
@@ -1572,7 +1547,6 @@ HRESULT THISCALL CNavBar_ConstructNavBarThemeClassName_hook(
 #pragma endregion // "Navbar glass"
 
 /* Disable Up button */
-void *CUpBand_GetBandInfo_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CUpBand_GetBandInfo_orig)(void *, DWORD, DWORD, DESKBANDINFO *) = nullptr;
 HRESULT STDCALL CUpBand_GetBandInfo_hook(
     void         *pThis,
@@ -1721,7 +1695,6 @@ LRESULT CALLBACK DrawTravelBackground(
     return 0;
 }
 
-void *CTravelBand_s_TravelWndProc_addr SHARED_SECTION = nullptr;
 WNDPROC CTravelBand_s_TravelWndProc_orig = nullptr;
 LRESULT CALLBACK CTravelBand_s_TravelWndProc_hook(
     HWND   hWnd,
@@ -1778,7 +1751,6 @@ LRESULT CALLBACK TravelBandToolbarSubclassProc(
 }
 
 /* Subclass toolbar */
-void *CTravelBand__CreateTravelButtons_addr SHARED_SECTION = nullptr;
 void (THISCALL *CTravelBand__CreateTravelButtons_orig)(void *) = nullptr;
 void THISCALL CTravelBand__CreateTravelButtons_hook(
     void *pThis
@@ -1796,7 +1768,6 @@ void THISCALL CTravelBand__CreateTravelButtons_hook(
 }
 
 /* Fix position and add pressed state for aero travel buttons */
-void *CTravelBand__SetButtonImagesClassicMode_addr SHARED_SECTION = nullptr;
 void (THISCALL *CTravelBand__SetButtonImagesClassicMode_orig)(void *) = nullptr;
 void THISCALL CTravelBand__SetButtonImagesClassicMode_hook(
     void *pThis
@@ -1850,7 +1821,6 @@ void THISCALL CTravelBand__SetButtonImagesClassicMode_hook(
     }
 }
 
-void *CTravelBand_GetBandInfo_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CTravelBand_GetBandInfo_orig)(void *, DWORD, DWORD, DESKBANDINFO *) = nullptr;
 HRESULT STDCALL CTravelBand_GetBandInfo_hook(
     void *pThis,
@@ -1893,7 +1863,6 @@ HRESULT STDCALL CTravelBand_GetBandInfo_hook(
 #   define CTravelBand_OpeningMenu(pThis) *((DWORD *)pThis + 39)
 #endif
 
-void *CTravelBand__SetControlState_addr SHARED_SECTION = nullptr;
 void (THISCALL *CTravelBand__SetControlState_orig)(void *, int) = nullptr;
 void THISCALL CTravelBand__SetControlState_hook(
     void *pThis,
@@ -1911,7 +1880,6 @@ void THISCALL CTravelBand__SetControlState_hook(
 }
 
 /* Remove pins from Quick access */
-void *CNscTree_SetStateImageList_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CNscTree_SetStateImageList_orig)(void *, HIMAGELIST) = nullptr;
 HRESULT STDCALL CNscTree_SetStateImageList_hook(
     void       *pThis,
@@ -1926,7 +1894,6 @@ HRESULT STDCALL CNscTree_SetStateImageList_hook(
 }
 
 /* Always show column headers (ItemsView) */
-void *CShellBrowser_GetFolderFlags_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CShellBrowser_GetFolderFlags_orig)(void *, FOLDERFLAGS *, FOLDERFLAGS *);
 HRESULT STDCALL CShellBrowser_GetFolderFlags_hook(
     void        *pThis,
@@ -1948,23 +1915,44 @@ HRESULT STDCALL CShellBrowser_GetFolderFlags_hook(
 
 DEFINE_GUID(CLSID_ControlPanelProcessExplorerHost, 0x5BD95610, 0x9434, 0x43C2, 0x88,0x6C, 0x57,0x85,0x2C,0xC8,0xA1,0x20);
 
-/* Force Control Panel mode */
-void *CExplorerLauncher_GetHostFromTarget_addr SHARED_SECTION = nullptr;
+/* Stop Explorer from relaunching on CPL enter */
+bool (STDCALL *UseSeparateProcess_orig)(IShellItem *);
+bool STDCALL UseSeparateProcess_hook(IShellItem *psi)
+{
+    SHELLSTATEW ss = { 0 };
+    SHGetSetSettings(&ss, SSF_SEPPROCESS, FALSE);
+    // For whatever reason, it gets set to -1 when this option is enabled
+    if (!settings.alwayscpl || ss.fSepProcess != 0)
+        return UseSeparateProcess_orig(psi);
+    return false;
+}
+
+/* Ditto, but for separate process mode. */
 GUID *(THISCALL *CExplorerLauncher_GetHostFromTarget_orig)(void *, GUID *, LPCITEMIDLIST) = nullptr;
 GUID *THISCALL CExplorerLauncher_GetHostFromTarget_hook(
     void          *pThis,
     GUID          *out,
-    LPCITEMIDLIST  pItemIds
+    LPCITEMIDLIST  pidl
 )
 {
     if (settings.alwayscpl)
     {
-        *out = CLSID_ControlPanelProcessExplorerHost;
-        return out;
+        IShellItem *psi = nullptr;
+        SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&psi));
+        if (psi)
+        {
+            if (UseSeparateProcess_hook(psi))
+            {
+                *out = CLSID_ControlPanelProcessExplorerHost;
+                psi->Release();
+                return out;
+            }
+            psi->Release();
+        }
     }
 
     return CExplorerLauncher_GetHostFromTarget_orig(
-        pThis, out, pItemIds
+        pThis, out, pidl
     );
 }
 
@@ -1980,7 +1968,6 @@ static BOOL CALLBACK Aerexplorer_InvalidateAllChildren(HWND hWnd, LPARAM lParam)
     return TRUE;
 }
 /* Hook Ribbon visibility change to fix backgrounds. */
-void *CShellBrowser___OnRibbonVisibilityChange_addr SHARED_SECTION = nullptr;
 void (STDCALL *CShellBrowser___OnRibbonVisibilityChange_orig)(void *pThis, int newState) = nullptr;
 void STDCALL CShellBrowser___OnRibbonVisibilityChange_hook(void *pThis, int newState)
 {
@@ -2030,7 +2017,6 @@ void STDCALL CShellBrowser___OnRibbonVisibilityChange_hook(void *pThis, int newS
 #endif
 
 /* Enable native list view */
-void *CDefView__UseItemsView_addr SHARED_SECTION = nullptr;
 BOOL (THISCALL *CDefView__UseItemsView_orig)(void *) = nullptr;
 BOOL THISCALL CDefView__UseItemsView_hook(
     void *pThis
@@ -2062,7 +2048,6 @@ case n:                           \
 
 /* Redirect UIFILEs for details pane alignment */
 #ifdef _WIN64
-void *DUI_LoadUIFileFromResources_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *DUI_LoadUIFileFromResources_orig)(HINSTANCE, UINT, LPWSTR *) = nullptr;
 HRESULT STDCALL DUI_LoadUIFileFromResources_hook(
     HINSTANCE  hInstance,
@@ -2125,7 +2110,6 @@ const struct { DWORD dwDescId; UINT uResId; } g_categoryMap[] = {
     { SHDID_MOBILE_DEVICE,       DG_PORTABLE }
 };
 
-void *CStorageSystemTypeCategorizer_GetCategory_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CStorageSystemTypeCategorizer_GetCategory_orig)(ICategorizer *, UINT, PCUITEMID_CHILD_ARRAY, DWORD *) = nullptr;
 HRESULT STDCALL CStorageSystemTypeCategorizer_GetCategory_hook(
     ICategorizer          *pThis,
@@ -2178,7 +2162,6 @@ HRESULT STDCALL CStorageSystemTypeCategorizer_GetCategory_hook(
     return hr;
 }
 
-void *CStorageSystemTypeCategorizer_CompareCategory_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CStorageSystemTypeCategorizer_CompareCategory_orig)(ICategorizer *, CATSORT_FLAGS, DWORD, DWORD) = nullptr;
 HRESULT STDCALL CStorageSystemTypeCategorizer_CompareCategory_hook(
     ICategorizer *pThis,
@@ -2225,7 +2208,6 @@ HRESULT STDCALL CStorageSystemTypeCategorizer_CompareCategory_hook(
     return diff > 0;
 }
 
-void *CStorageSystemTypeCategorizer_GetCategoryInfo_addr SHARED_SECTION = nullptr;
 HRESULT (STDCALL *CStorageSystemTypeCategorizer_GetCategoryInfo_orig)(ICategorizer *, DWORD, CATEGORY_INFO *) = nullptr;
 HRESULT STDCALL CStorageSystemTypeCategorizer_GetCategoryInfo_hook(
     ICategorizer  *pThis,
@@ -2275,7 +2257,6 @@ HRESULT STDCALL CStorageSystemTypeCategorizer_GetCategoryInfo_hook(
 }
 
 /* Always show column headers (SysListView32) */
-void *IViewSettings_GetFolderFlags_addr SHARED_SECTION = nullptr;
 FOLDERFLAGS (THISCALL *IViewSettings_GetFolderFlags_orig)(void *) = nullptr;
 FOLDERFLAGS THISCALL IViewSettings_GetFolderFlags_hook(
     void *pThis
@@ -2296,7 +2277,6 @@ FOLDERFLAGS THISCALL IViewSettings_GetFolderFlags_hook(
 #pragma region "windows.storage.dll hooks"
 
 /* Remove This PC folders */
-void *CObjectArray_AddItemsFromKeySkip_addr SHARED_SECTION = nullptr;
 HRESULT (THISCALL *CObjectArray_AddItemsFromKeySkip_orig)(void *, HKEY, LPCWSTR, UINT, GUID *) = nullptr;
 HRESULT THISCALL CObjectArray_AddItemsFromKeySkip_hook(
     void    *pThis,
@@ -2574,126 +2554,6 @@ HMODULE LoadComCtlModule(void)
     return hComCtl;
 }
 
-struct CMWF_SYMBOL_HOOK {
-    std::vector<std::wstring> symbols;
-    void** pOriginalFunction;
-    void* hookFunction = nullptr;
-    bool optional = false;
-    void **pSharedMemoryCache = nullptr;
-
-    template <typename Prototype>
-    CMWF_SYMBOL_HOOK(
-            std::vector<std::wstring> symbols,
-            Prototype **originalFunction,
-            std::type_identity_t<Prototype *> hookFunction = nullptr,
-            bool optional = false,
-            void *pSharedMemoryCache = nullptr
-    ) : symbols(std::move(symbols)),
-        pOriginalFunction((void **)originalFunction),
-        hookFunction((void *)hookFunction),
-        optional(optional),
-        pSharedMemoryCache((void **)pSharedMemoryCache) {}
-
-    CMWF_SYMBOL_HOOK() = default;
-};
-
-/*
- * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
- *                  module's shared memory for faster access.
- */
-bool CmwfHookSymbols(
-        HMODULE module,
-        const CMWF_SYMBOL_HOOK *symbolHooks,
-        size_t symbolHooksCount
-)
-{
-    bool anyUncachedHooks = false;
-    std::vector<void **> proxyAddresses(symbolHooksCount);
-    std::vector<WindhawkUtils::SYMBOL_HOOK> proxyHooks;
-    
-    for (size_t i = 0; i < symbolHooksCount; i++)
-    {
-        // Just gotta ensure the memory is initialized as null :P
-        proxyAddresses[i] = nullptr;
-
-        void *address = nullptr;
-        if (symbolHooks[i].pSharedMemoryCache && *(symbolHooks[i].pSharedMemoryCache) != NULL)
-        {
-            address = *(symbolHooks[i].pSharedMemoryCache);
-            if (address == nullptr)
-            {
-                continue;
-            }
-            Wh_Log(
-                L"CmwfHookSymbols: Hooking symbol %.*s from in-memory cache.",
-                symbolHooks[i].symbols[0].length(),
-                symbolHooks[i].symbols[0].data()
-            );
-            Wh_SetFunctionHook(
-                address,
-                symbolHooks[i].hookFunction,
-                symbolHooks[i].pOriginalFunction
-            );
-        }
-        else
-        {
-            address = nullptr;
-            anyUncachedHooks = true;
-
-            WindhawkUtils::SYMBOL_HOOK hook = {
-                symbolHooks[i].symbols,
-                &proxyAddresses[i],
-                NULL,
-                symbolHooks[i].optional
-            };
-
-            proxyHooks.push_back(hook);
-        }
-    }
-
-    if (anyUncachedHooks)
-    {
-        if (!WindhawkUtils::HookSymbols(module, proxyHooks.data(), proxyHooks.size()))
-        {
-            return false;
-        }
-
-        int curProxyHook = 0;
-        for (void *address : proxyAddresses)
-        {
-            if (address == NULL)
-            {
-                // WARNING: You must increment this value before every next
-                // iteration, or else it will crash.
-                curProxyHook++;
-                continue;
-            }
-
-            if (
-                symbolHooks[curProxyHook].pSharedMemoryCache && 
-                *(symbolHooks[curProxyHook].pSharedMemoryCache) == NULL
-            )
-            {
-                *(symbolHooks[curProxyHook].pSharedMemoryCache) = address;
-            }
-
-            if (symbolHooks[curProxyHook].hookFunction && symbolHooks[curProxyHook].pOriginalFunction)
-            {
-                Wh_SetFunctionHook(
-                    address,
-                    symbolHooks[curProxyHook].hookFunction,
-                    symbolHooks[curProxyHook].pOriginalFunction
-                );
-            }
-
-            // Make sure to increment before the next iteration.
-            curProxyHook++;
-        }
-    }
-
-    return true;
-}
-
 BOOL Wh_ModInit(void)
 {
     LoadSettings();
@@ -2717,7 +2577,17 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    const CMWF_SYMBOL_HOOK efHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK explorerframeDllHooks[] = {
+        {
+            {
+                L"bool "
+                SSTDCALL
+                L" UseSeparateProcess(struct IShellItem *)"
+            },
+            &UseSeparateProcess_orig,
+            UseSeparateProcess_hook,
+            false
+        },
         {
             {
                 L"private: struct _GUID "
@@ -2726,8 +2596,7 @@ BOOL Wh_ModInit(void)
             },
             &CExplorerLauncher_GetHostFromTarget_orig,
             CExplorerLauncher_GetHostFromTarget_hook,
-            false,
-            &CExplorerLauncher_GetHostFromTarget_addr
+            false
         },
         {
             {
@@ -2737,8 +2606,7 @@ BOOL Wh_ModInit(void)
             },
             &CUniversalSearchBand_IsModernSearchBoxEnabled_orig,
             CUniversalSearchBand_IsModernSearchBoxEnabled_hook,
-            true,
-            &CUniversalSearchBand_IsModernSearchBoxEnabled_addr
+            true
         },
         {
             {
@@ -2748,8 +2616,7 @@ BOOL Wh_ModInit(void)
             },
             &CSearchEditBox_HideSuggestions_orig,
             CSearchEditBox_HideSuggestions_hook,
-            false,
-            &CSearchEditBox_HideSuggestions_addr
+            false
         },
         {
             {
@@ -2759,8 +2626,7 @@ BOOL Wh_ModInit(void)
             },
             &CSearchBox_SetCueAndTooltipText_orig,
             CSearchBox_SetCueAndTooltipText_hook,
-            false,
-            &CSearchBox_SetCueAndTooltipText_addr
+            false
         },
         {
             {
@@ -2770,8 +2636,7 @@ BOOL Wh_ModInit(void)
             },
             &CAddressBand__PositionChildWindows_orig,
             CAddressBand__PositionChildWindows_hook,
-            false,
-            &CAddressBand__PositionChildWindows_addr
+            false
         },
         {
             {
@@ -2783,8 +2648,7 @@ BOOL Wh_ModInit(void)
             },
             &CAddressBand__AddressBandWndProc_orig,
             CAddressBand__AddressBandWndProc_hook,
-            false,
-            &CAddressBand__AddressBandWndProc_addr
+            false
         },
         {
             {
@@ -2794,8 +2658,7 @@ BOOL Wh_ModInit(void)
             },
             &CAddressList__InitCombobox_orig,
             CAddressList__InitCombobox_hook,
-            false,
-            &CAddressList__InitCombobox_addr
+            false
         },
         {
             {
@@ -2805,8 +2668,7 @@ BOOL Wh_ModInit(void)
             },
             &CShellBrowser__ShouldShowRibbon_orig,
             CShellBrowser__ShouldShowRibbon_hook,
-            false,
-            &CShellBrowser__ShouldShowRibbon_addr
+            false
         },
         {
             {
@@ -2816,8 +2678,7 @@ BOOL Wh_ModInit(void)
             },
             &CNscTree__CreateTreeview_orig,
             CNscTree__CreateTreeview_hook,
-            false,
-            &CNscTree__CreateTreeview_addr
+            false
         },
         {
             {
@@ -2829,8 +2690,7 @@ BOOL Wh_ModInit(void)
             },
             &CNscTree_s_SubClassTreeWndProc_orig,
             CNscTree_s_SubClassTreeWndProc_hook,
-            false,
-            &CNscTree_s_SubClassTreeWndProc_addr
+            false
         },
         {
             {
@@ -2840,8 +2700,7 @@ BOOL Wh_ModInit(void)
             },
             &CNscTree_ScaleAndSetIndent_orig,
             CNscTree_ScaleAndSetIndent_hook,
-            false,
-            &CNscTree_ScaleAndSetIndent_addr
+            false
         },
         {
             {
@@ -2851,8 +2710,7 @@ BOOL Wh_ModInit(void)
             },
             &CNavBar__SetTheme_orig,
             CNavBar__SetTheme_hook,
-            false,
-            &CNavBar__SetTheme_addr
+            false
         },
         {
             {
@@ -2862,8 +2720,7 @@ BOOL Wh_ModInit(void)
             },
             &CSeparatorBand_GetBandInfo_orig,
             CSeparatorBand_GetBandInfo_hook,
-            false,
-            &CSeparatorBand_GetBandInfo_addr
+            false
         },
         {
             {
@@ -2875,8 +2732,7 @@ BOOL Wh_ModInit(void)
             },
             &CNavBar_s_SizableWndProc_orig,
             CNavBar_s_SizableWndProc_hook,
-            false,
-            &CNavBar_s_SizableWndProc_addr
+            false
         },
         {
             {
@@ -2886,8 +2742,7 @@ BOOL Wh_ModInit(void)
             },
             &CNavBar__OnFrameStateChanged_orig,
             CNavBar__OnFrameStateChanged_hook,
-            false,
-            &CNavBar__OnFrameStateChanged_addr
+            false
         },
         {
             {
@@ -2897,8 +2752,7 @@ BOOL Wh_ModInit(void)
             },
             &CNavBar_CNavBandSite__Initialize_orig,
             CNavBar_CNavBandSite__Initialize_hook,
-            false,
-            &CNavBar_CNavBandSite__Initialize_addr
+            false
         },
         {
             {
@@ -2908,8 +2762,7 @@ BOOL Wh_ModInit(void)
             },
             &CUpBand_GetBandInfo_orig,
             CUpBand_GetBandInfo_hook,
-            false,
-            &CUpBand_GetBandInfo_addr
+            false
         },
         {
             {
@@ -2919,8 +2772,7 @@ BOOL Wh_ModInit(void)
             },
             &CExplorerFrame__UpdateFrameState_orig,
             CExplorerFrame__UpdateFrameState_hook,
-            false,
-            &CExplorerFrame__UpdateFrameState_addr
+            false
         },
         {
             {
@@ -2930,8 +2782,7 @@ BOOL Wh_ModInit(void)
             },
             &CNavBar_ConstructNavBarThemeClassName_orig,
             CNavBar_ConstructNavBarThemeClassName_hook,
-            false,
-            &CNavBar_ConstructNavBarThemeClassName_addr
+            false
         },
         {
             {
@@ -2943,8 +2794,7 @@ BOOL Wh_ModInit(void)
             },
             &CTravelBand_s_TravelWndProc_orig,
             CTravelBand_s_TravelWndProc_hook,
-            false,
-            &CTravelBand_s_TravelWndProc_addr
+            false
         },
         {
             {
@@ -2954,8 +2804,7 @@ BOOL Wh_ModInit(void)
             },
             &CTravelBand__CreateTravelButtons_orig,
             CTravelBand__CreateTravelButtons_hook,
-            false,
-            &CTravelBand__CreateTravelButtons_addr
+            false
         },
         {
             {
@@ -2965,8 +2814,7 @@ BOOL Wh_ModInit(void)
             },
             &CTravelBand__SetButtonImagesClassicMode_orig,
             CTravelBand__SetButtonImagesClassicMode_hook,
-            false,
-            &CTravelBand__SetButtonImagesClassicMode_addr
+            false
         },
         {
             {
@@ -2976,8 +2824,7 @@ BOOL Wh_ModInit(void)
             },
             &CTravelBand_GetBandInfo_orig,
             CTravelBand_GetBandInfo_hook,
-            false,
-            &CTravelBand_GetBandInfo_addr
+            false
         },
         {
             {
@@ -2987,8 +2834,7 @@ BOOL Wh_ModInit(void)
             },
             &CTravelBand__SetControlState_orig,
             CTravelBand__SetControlState_hook,
-            false,
-            &CTravelBand__SetControlState_addr
+            false
         },
         {
             {
@@ -2998,8 +2844,7 @@ BOOL Wh_ModInit(void)
             },
             &CNscTree_SetStateImageList_orig,
             CNscTree_SetStateImageList_hook,
-            false,
-            &CNscTree_SetStateImageList_addr
+            false
         },
         {
             {
@@ -3009,8 +2854,7 @@ BOOL Wh_ModInit(void)
             },
             &CShellBrowser_GetFolderFlags_orig,
             CShellBrowser_GetFolderFlags_hook,
-            false,
-            &CShellBrowser_GetFolderFlags_addr
+            false
         },
 #ifdef _WIN64
         {
@@ -3021,16 +2865,15 @@ BOOL Wh_ModInit(void)
             },
             &CShellBrowser___OnRibbonVisibilityChange_orig,
             CShellBrowser___OnRibbonVisibilityChange_hook,
-            false,
-            &CShellBrowser___OnRibbonVisibilityChange_addr
+            false
         }
 #endif
     };
 
-    if (!CmwfHookSymbols(
+    if (!WindhawkUtils::HookSymbols(
         hExplorerFrame,
-        efHooks,
-        ARRAYSIZE(efHooks)
+        explorerframeDllHooks,
+        ARRAYSIZE(explorerframeDllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in ExplorerFrame.dll");
@@ -3044,7 +2887,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    const CMWF_SYMBOL_HOOK shHooks[] = {
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         {
             {
                 L"private: int "
@@ -3053,8 +2896,7 @@ BOOL Wh_ModInit(void)
             },
             &CDefView__UseItemsView_orig,
             CDefView__UseItemsView_hook,
-            false,
-            &CDefView__UseItemsView_addr
+            false
         },
 #ifdef _WIN64
         {
@@ -3063,8 +2905,7 @@ BOOL Wh_ModInit(void)
             },
             &DUI_LoadUIFileFromResources_orig,
             DUI_LoadUIFileFromResources_hook,
-            false,
-            &DUI_LoadUIFileFromResources_addr
+            false
         },
 #endif
         {
@@ -3079,8 +2920,7 @@ BOOL Wh_ModInit(void)
             },
             &CStorageSystemTypeCategorizer_GetCategory_orig,
             CStorageSystemTypeCategorizer_GetCategory_hook,
-            false,
-            &CStorageSystemTypeCategorizer_GetCategory_addr
+            false
         },
         {
             {
@@ -3090,8 +2930,7 @@ BOOL Wh_ModInit(void)
             },
             &CStorageSystemTypeCategorizer_CompareCategory_orig,
             CStorageSystemTypeCategorizer_CompareCategory_hook,
-            false,
-            &CStorageSystemTypeCategorizer_CompareCategory_addr
+            false
         },
         {
             {
@@ -3101,8 +2940,7 @@ BOOL Wh_ModInit(void)
             },
             &CStorageSystemTypeCategorizer_GetCategoryInfo_orig,
             CStorageSystemTypeCategorizer_GetCategoryInfo_hook,
-            false,
-            &CStorageSystemTypeCategorizer_GetCategoryInfo_addr
+            false
         },
         {
             {
@@ -3112,15 +2950,14 @@ BOOL Wh_ModInit(void)
             },
             &IViewSettings_GetFolderFlags_orig,
             IViewSettings_GetFolderFlags_hook,
-            false,
-            &IViewSettings_GetFolderFlags_addr
+            false
         }
     };
 
-    if (!CmwfHookSymbols(
+    if (!WindhawkUtils::HookSymbols(
         hShell32,
-        shHooks,
-        ARRAYSIZE(shHooks)
+        shell32DllHooks,
+        ARRAYSIZE(shell32DllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in shell32.dll");
@@ -3130,11 +2967,12 @@ BOOL Wh_ModInit(void)
     HMODULE hStorage = LoadLibraryW(L"windows.storage.dll");
     if (!hStorage)
     {
-        Wh_Log(L"Failed to load windwos.storage.dll");
+        Wh_Log(L"Failed to load windows.storage.dll");
         return FALSE;
     }
 
-    const CMWF_SYMBOL_HOOK storageHooks[] = {
+    // windows.storage.dll
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
         {
             {
                 L"public: long "
@@ -3143,31 +2981,19 @@ BOOL Wh_ModInit(void)
             },
             &CObjectArray_AddItemsFromKeySkip_orig,
             CObjectArray_AddItemsFromKeySkip_hook,
-            false,
-            &CObjectArray_AddItemsFromKeySkip_addr
+            false
         }
     };
 
-    if (!CmwfHookSymbols(
+    if (!WindhawkUtils::HookSymbols(
         hStorage,
-        storageHooks,
-        ARRAYSIZE(storageHooks)
+        windowsStorageHooks,
+        ARRAYSIZE(windowsStorageHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in windows.storage.dll");
         return FALSE;
     }
-
-    HMODULE hUser32 = LoadLibraryW(L"user32.dll");
-    if (!hUser32)
-    {
-        Wh_Log(L"Failed to load user32.dll");
-        return FALSE;
-    }
-
-    GetDpiForSystem = (GetDpiForSystem_t)GetProcAddress(hUser32, "GetDpiForSystem");
-    GetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
-    GetSystemMetricsForDpi = (GetSystemMetricsForDpi_t)GetProcAddress(hUser32, "GetSystemMetricsForDpi");
 
     HMODULE hComCtl = LoadComCtlModule();
     if (!hComCtl)
@@ -3187,7 +3013,7 @@ BOOL Wh_ModInit(void)
     }
 
     if (!WindhawkUtils::Wh_SetFunctionHookT(
-        (GetSystemMetricsForDpi_t)GetProcAddress(hUser32, "GetSystemMetricsForDpi"),
+        GetSystemMetricsForDpi,
         GetSystemMetricsForDpi_hook,
         &GetSystemMetricsForDpi_orig
     ))
