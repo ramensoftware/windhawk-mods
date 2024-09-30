@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-position
 // @name            Start button always on the left
 // @description     Forces the start button to be on the left of the taskbar, even when taskbar icons are centered (Windows 11 only)
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -183,7 +183,7 @@ void UpdateStartButtonPosition(XamlRoot xamlRoot,
     startButton.RenderTransform(transform);
 }
 
-void ResetStartButtonPosition(FrameworkElement startButton) {
+void ResetStartButtonStyles(FrameworkElement startButton) {
     Wh_Log(L">");
 
     Media::TranslateTransform transform;
@@ -194,6 +194,10 @@ void ResetStartButtonPosition(FrameworkElement startButton) {
 
     transform.X(0);
     startButton.RenderTransform(transform);
+
+    Thickness startButtonMargin = startButton.Margin();
+    startButtonMargin.Right = 0;
+    startButton.Margin(startButtonMargin);
 }
 
 void ScheduleUpdateStartButtonPosition() {
@@ -266,12 +270,8 @@ bool ApplyStyle(XamlRoot xamlRoot) {
 
     double startButtonWidth = startButton.ActualWidth();
 
-    Thickness taskbarFrameRepeaterMargin = taskbarFrameRepeater.Margin();
-    taskbarFrameRepeaterMargin.Left = g_unloading ? 0 : startButtonWidth;
-    taskbarFrameRepeater.Margin(taskbarFrameRepeaterMargin);
-
     Thickness startButtonMargin = startButton.Margin();
-    startButtonMargin.Left = g_unloading ? 0 : -startButtonWidth;
+    startButtonMargin.Right = -startButtonWidth;
     startButton.Margin(startButtonMargin);
 
     g_taskbarData.push_back({
@@ -458,7 +458,7 @@ void ApplySettings(HWND hTaskbarWnd) {
                 for (const auto& item : g_taskbarData) {
                     if (auto startButtonElement =
                             item.startButtonElement.get()) {
-                        ResetStartButtonPosition(startButtonElement);
+                        ResetStartButtonStyles(startButtonElement);
                     }
                 }
 
