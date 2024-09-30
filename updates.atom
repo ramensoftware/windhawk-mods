@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-29T22:04:40.000Z</updated>
+    <updated>2024-09-30T18:37:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#d4c63c187231bcd43dc7c476269b6377a89f9827</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2024-09-30T18:37:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed taskbar buttons not being completely centered.</li>
+<li>Fixed restoring styles on unload.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[StartIsBack++ Tweaker 0.7.1]]></title>
         <id>https://windhawk.net/mods/sib-plusplus-tweaker#e95b757e0e4e00850e4c62aab675955ab393b44f</id>
@@ -298,19 +312,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#89b7248389967e412f6de6213e320adbfee9ad89</id>
         <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
         <updated>2024-09-09T19:23:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for Windows 11 version 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#d2ebc37c2e5b3b8c2cda9d391238b7ac3879fd63</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2024-09-09T18:32:03.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added support for Windows 11 version 24H2.</li>
 </ul>]]></content>
