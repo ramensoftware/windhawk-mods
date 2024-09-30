@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11!
-// @version         1.2.3
+// @version         1.2.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1024,7 +1024,6 @@ bool ApplyStyle(FrameworkElement taskbarFrame,
 
         // Fix the edge of the taskbar being non-clickable by moving the edge
         // pixel out of the screen.
-        margin.Top += 1;
         margin.Bottom -= 1;
     }
 
@@ -2419,7 +2418,9 @@ void AdjustCoreWindowPos(int* x, int* y, int width, int height) {
             break;
     }
 
-    *y = rc.top;
+    if (g_target == Target::StartMenu || g_target == Target::SearchHost) {
+        *y = rc.top;
+    }
 }
 
 void ApplySettings() {
