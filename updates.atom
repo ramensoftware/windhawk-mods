@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-30T18:37:22.000Z</updated>
+    <updated>2024-09-30T19:32:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#056d7c496f105eecebcf9527d06841b5a923e384</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2024-09-30T19:32:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a single pixel of the background not aligning with maximized windows.</li>
+<li>Fixed notifications being moved to the top of the screen.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#d4c63c187231bcd43dc7c476269b6377a89f9827</id>
@@ -305,19 +319,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <author>
             <name>OliveIsTyping</name>
             <uri>https://github.com/OliviaIsTyping</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Preserve Taskbar Order 1.0.4]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-taskbar-order#89b7248389967e412f6de6213e320adbfee9ad89</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-taskbar-order"/>
-        <updated>2024-09-09T19:23:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for Windows 11 version 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

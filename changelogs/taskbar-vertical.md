@@ -1,3 +1,8 @@
+## 1.2.4 ([Sep 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/056d7c496f105eecebcf9527d06841b5a923e384/mods/taskbar-vertical.wh.cpp))
+
+* Fixed a single pixel of the background not aligning with maximized windows.
+* Fixed notifications being moved to the top of the screen.
+
 ## 1.2.3 ([Sep 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3065efada7b6b5dd413a165287b76560ff0c0210/mods/taskbar-vertical.wh.cpp))
 
 * Fixed rotated badges (e.g. unread counters) for some programs.
