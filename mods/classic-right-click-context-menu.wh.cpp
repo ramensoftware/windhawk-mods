@@ -1,10 +1,10 @@
 // ==WindhawkMod==
-// @id              use-windows-10-right-click-context-menu
+// @id              classic-right-click-context-menu
 // @name            Switch Windows 11 right-click context menu to Windows 10 style
 // @description     This simplest mod will switch Win11 style right-click context menu in explorer into classic (Win 10) style
 // @version         0.1
 // @author          Puvox Software
-// @github          https://github.com/puvox
+// @github          https://github.com/ttodua
 // @homepage        https://puvox.software/
 // @include         explorer.exe
 // @compilerOptions -lcomdlg32
