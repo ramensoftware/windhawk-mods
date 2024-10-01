@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-09-30T19:32:30.000Z</updated>
+    <updated>2024-10-01T06:04:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Slick Window Arrangement 1.0.2]]></title>
+        <id>https://windhawk.net/mods/slick-window-arrangement#97ef7cd2031fef8f112ae3de6cfea173bbda0975</id>
+        <link href="https://windhawk.net/mods/slick-window-arrangement"/>
+        <updated>2024-10-01T06:04:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed snapping frame being stuck in some cases.</li>
+<li>Fixed windows jumping to the top left corner of the screen while moving in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.4]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#056d7c496f105eecebcf9527d06841b5a923e384</id>
@@ -302,23 +316,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <author>
             <name>Toru the Red Fox</name>
             <uri>https://github.com/TorutheRedFox</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[FixStrips WH Port 1.0]]></title>
-        <id>https://windhawk.net/mods/fix-strips#93793152290b764989cd5f1f1ae4f0dd156bee36</id>
-        <link href="https://windhawk.net/mods/fix-strips"/>
-        <updated>2024-09-11T05:38:25.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="note">NOTE:</h2>
-<p>This mod fixes the presence of the DWM window frame around the taskbar when using classic theme with <a href="https://winclassic.net/thread/2588/explorer7-windows-explorer-10-11">Explorer7</a>. You may need to restart explorer.exe when enabling the mod to see the changes take effect.</p>
-<h2 id="before">Before</h2>
-<p><img src="https://raw.githubusercontent.com/OliviaIsTyping/images/main/fixstrips-before.png" alt="Before" /></p>
-<h2 id="after">After</h2>
-<p><img src="https://raw.githubusercontent.com/OliviaIsTyping/images/main/fixstrips-after.png" alt="After" /></p>
-<p>Credits to <a href="https://github.com/Anixx">@Anixx</a> for the original AHK Script</p>]]></content>
-        <author>
-            <name>OliveIsTyping</name>
-            <uri>https://github.com/OliviaIsTyping</uri>
         </author>
     </entry>
 </feed>
