@@ -1,3 +1,7 @@
+## 1.1.3 ([Oct 2, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dd2309b76c8963fe5a2949677725025be7fd0f84/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added support for the action center (Win+A) in Windows 11 version 24H2.
+
 ## 1.1.2 ([Sep 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/bf5b0746e2cb9d22e109b664ca3a63c430199f18/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added a new theme: Unified.
