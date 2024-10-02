@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-01T06:04:04.000Z</updated>
+    <updated>2024-10-02T07:49:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Color Sync 1.41]]></title>
+        <id>https://windhawk.net/mods/accent-color-sync#4ab0994ab79cb76e217a4b658639f98875959b4a</id>
+        <link href="https://windhawk.net/mods/accent-color-sync"/>
+        <updated>2024-10-02T07:49:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hotfix to account for new OpenGlass registry values as announced in the <a href="https://github.com/ALTaleX531/OpenGlass/releases/tag/v1.2-legacy">latest update</a>.</li>
+<li>Updated readme.</li>
+</ul>]]></content>
+        <author>
+            <name>CatmanFan / Mr._Lechkar</name>
+            <uri>https://github.com/CatmanFan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Slick Window Arrangement 1.0.2]]></title>
         <id>https://windhawk.net/mods/slick-window-arrangement#97ef7cd2031fef8f112ae3de6cfea173bbda0975</id>
@@ -302,20 +316,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.1]]></title>
-        <id>https://windhawk.net/mods/logon-logoff-shutdown-sounds#e3bf280ec5e53bc81d83312320394e70bc7b9899</id>
-        <link href="https://windhawk.net/mods/logon-logoff-shutdown-sounds"/>
-        <updated>2024-09-13T07:50:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Fix bug where the logon sound needs user to have write access to HKLM in order to play</p></li>
-<li><p>State that it's likely redundant with explorer7</p></li>
-</ul>]]></content>
-        <author>
-            <name>Toru the Red Fox</name>
-            <uri>https://github.com/TorutheRedFox</uri>
         </author>
     </entry>
 </feed>

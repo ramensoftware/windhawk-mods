@@ -1,3 +1,8 @@
+## 1.41 ([Oct 2, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4ab0994ab79cb76e217a4b658639f98875959b4a/mods/accent-color-sync.wh.cpp))
+
+* Hotfix to account for new OpenGlass registry values as announced in the [latest update](https://github.com/ALTaleX531/OpenGlass/releases/tag/v1.2-legacy).
+* Updated readme.
+
 ## 1.4 ([Sep 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7292f722244cd19dc93c4438270bcc600b4bf2ec/mods/accent-color-sync.wh.cpp))
 
 * Replaced DWM Colorization Parameters calculation formula with [ALTaleX's method](https://github.com/ALTaleX531/dwm_colorization_calculator).

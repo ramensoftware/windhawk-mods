@@ -4,7 +4,7 @@
 // @description         Synchronises OpenGlass and Control Panel color settings
 // @description:fr-FR   Synchronisation des couleurs d'OpenGlass et du Panneau de configuration
 // @description:es-ES   Sincroniza los colores de OpenGlass y del Panel de control
-// @version             1.4
+// @version             1.41
 // @author              CatmanFan / Mr._Lechkar
 // @github              https://github.com/CatmanFan
 // @include             explorer.exe
@@ -17,18 +17,16 @@
 /*
 Brings back the functionality of the 'Color intensity' slider to Windows 10 using OpenGlass. The mod synchronises OpenGlass's Aero settings with the slider value.
 
-----
 
-## ⚠️ To use this mod, you will need [kfh83](https://github.com/kfh83)'s OpenGlass-legacy fork.
+## **⚠️ To use this mod, you will need [kfh83](https://github.com/kfh83)'s OpenGlass-legacy fork.**
+### It is generally recommended to compile the source code from *[the official repo](https://github.com/ALTaleX531/OpenGlass/tree/legacy)*, but a list of OpenGlass-legacy downloads is also available *[here](https://github.com/ALTaleX531/OpenGlass/releases)*.
 
-To get this mod to function fully, perform the following steps:
-1. Install the OpenGlass-legacy fork; this can be done by compiling the source code from **[the official repo](https://github.com/ALTaleX531/OpenGlass/tree/legacy)**, or by getting an existing binary version from **[this GitHub post](https://github.com/ALTaleX531/OpenGlass/pull/14#issue-2415161314)**.
-   * If you are updating this mod from version 1.0, it is required to disable or uninstall any other existing DWM shader software (such as regular OpenGlass or DWMBlurGlass).
-2. Afterwards, go to *HKCU\SOFTWARE\Microsoft\Windows\DWM* in the registry and add any one of the three DWORD values of **og_ColorizationColorBalance**, **og_ColorizationAfterglowBalance** and **og_ColorizationBlurBalance** before enabling this mod. These registry values will be handled automatically.
-
-If you are updating this mod from version 1.3, it is recommended to also enable the *Sync with DWM* option from the mod's settings, although this can have some minor bugs (see below).
-
-You may need to try changing the accent color manually if changes do not automatically take effect.
+### *Additional tips:*
+* If you are updating this mod from any prior versions, you must rename the three colorization values in the DWM registry starting with "***og_**(name)*" to "*(name)**Override***"; for example, ***og_**ColorizationColorBalance* to *ColorizationColorBalance**Override***. This is required so that the mod will be able to read the new values.
+  * Do **not** touch the "*og_Opacity*" value, as that is only used by this mod and is thus left unchanged.
+* If you are updating this mod from version 1.0, it is required to disable or uninstall any other existing DWM shader software (such as regular OpenGlass or DWMBlurGlass).
+* If you are updating this mod from version 1.3, it is recommended to also enable the *Sync with DWM* option from the mod's settings, although this can have some minor bugs (see below).
+* You may need to try changing the accent color manually if changes do not automatically take effect.
 
 ----
 
@@ -564,9 +562,9 @@ void writeColorizationBalance(bool bruteforce = FALSE)
     // *********************************************
     // Actually do the registry editing
     // *********************************************
-    set_DWORD(dwmKey, L"og_ColorizationColorBalance", dwmSettings.color_balance);
-    set_DWORD(dwmKey, L"og_ColorizationAfterglowBalance", dwmSettings.afterglow_balance);
-    set_DWORD(dwmKey, L"og_ColorizationBlurBalance", dwmSettings.blur_balance);
+    set_DWORD(dwmKey, L"ColorizationColorBalanceOverride", dwmSettings.color_balance);
+    set_DWORD(dwmKey, L"ColorizationAfterglowBalanceOverride", dwmSettings.afterglow_balance);
+    set_DWORD(dwmKey, L"ColorizationBlurBalanceOverride", dwmSettings.blur_balance);
 
     // Other registry values
     set_DWORD(dwmKey, L"GlassOpacity", 0); // settings.boolTransparency ? 0 : 100);
@@ -761,8 +759,8 @@ WinVersion getWinVer()
 
 BOOL isOpenGlassInstalled(bool strict = FALSE)
 {
-    return strict ? exists_DWORD(dwmKey, L"og_ColorizationColorBalance") && exists_DWORD(dwmKey, L"og_ColorizationAfterglowBalance") && exists_DWORD(dwmKey, L"og_ColorizationBlurBalance")
-                  : exists_DWORD(dwmKey, L"og_ColorizationColorBalance") || exists_DWORD(dwmKey, L"og_ColorizationAfterglowBalance") || exists_DWORD(dwmKey, L"og_ColorizationBlurBalance");
+    return strict ? exists_DWORD(dwmKey, L"ColorizationColorBalanceOverride") && exists_DWORD(dwmKey, L"ColorizationAfterglowBalanceOverride") && exists_DWORD(dwmKey, L"ColorizationBlurBalanceOverride")
+                  : exists_DWORD(dwmKey, L"ColorizationColorBalanceOverride") || exists_DWORD(dwmKey, L"ColorizationAfterglowBalanceOverride") || exists_DWORD(dwmKey, L"ColorizationBlurBalanceOverride");
 }
 
 BOOL LoadSettings()
@@ -794,9 +792,9 @@ BOOL LoadSettings()
         Wh_Log(L"Setting up registry");
 		
         settings.opacity = 42;
-        set_DWORD(dwmKey, L"og_ColorizationColorBalance", 0x08);
-        set_DWORD(dwmKey, L"og_ColorizationAfterglowBalance", 0x2b);
-        set_DWORD(dwmKey, L"og_ColorizationBlurBalance", 0x31);
+        set_DWORD(dwmKey, L"ColorizationColorBalanceOverride", 0x08);
+        set_DWORD(dwmKey, L"ColorizationAfterglowBalanceOverride", 0x2b);
+        set_DWORD(dwmKey, L"ColorizationBlurBalanceOverride", 0x31);
 
         if (!set_DWORD(dwmKey, opacityValue, settings.opacity))
             return FALSE;
