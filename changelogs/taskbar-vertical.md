@@ -1,3 +1,9 @@
+## 1.2.5 ([Oct 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/31cb0bda3c0d239f220fad072bd4a2be53c6ff05/mods/taskbar-vertical.wh.cpp))
+
+* Improved tray overflow position, now it's vertically centered to the mouse position and isn't shown far away from the taskbar.
+* Fixed right click menu location for some tray icons.
+* Fixed jump list width on high DPIs.
+
 ## 1.2.4 ([Sep 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/056d7c496f105eecebcf9527d06841b5a923e384/mods/taskbar-vertical.wh.cpp))
 
 * Fixed a single pixel of the background not aligning with maximized windows.
