@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-04T15:33:22.000Z</updated>
+    <updated>2024-10-04T18:02:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Background Helper 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-background-helper#4fd49be3b9999e5243d74bb2b79162f39039bcf3</id>
+        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
+        <updated>2024-10-04T18:02:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an optional configuration for dark mode.</li>
+<li>Improved maximized window detection.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#b43269d44eb047e3f27c015faca6fd365b0960d1</id>
@@ -285,24 +299,6 @@ data from incorrectly rendering or even crashing</li>
         <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
         <updated>2024-09-19T05:23:09.000Z</updated>
         <content type="html"><![CDATA[<p>Ensure transparent text background</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Desktop Watermark 1.0.0]]></title>
-        <id>https://windhawk.net/mods/custom-desktop-watermark#5caa900cecb8fd17107363c40fdc102d6f68c512</id>
-        <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
-        <updated>2024-09-18T22:19:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="customdesktopwatermark">Custom Desktop Watermark</h1>
-<p>This mod allows you to completely customize the desktop watermark,
-putting in your own lines of text.</p>
-<h2 id="examples">Examples</h2>
-<p><strong>Windows 7 (not genuine)</strong>:
-<img src="https://raw.githubusercontent.com/aubymori/images/main/custom-desktop-watermark-win7.png" alt="Windows 7 (not genuine)" /></p>
-<p><strong>Windows XP Professional x64 Edition</strong>:
-<img src="https://raw.githubusercontent.com/aubymori/images/main/custom-desktop-watermark-winxp.png" alt="Windows XP Professional x64 Edition" /></p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
