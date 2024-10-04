@@ -2,13 +2,14 @@
 // @id              taskbar-background-helper
 // @name            Taskbar Background Helper
 // @description     Sets the taskbar background for the transparent parts, always or only when there's a maximized window, designed to be used with Windows 11 Taskbar Styler
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -ldwmapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -46,18 +47,46 @@ a workaround.
   - color: Color
 - color:
   - red: 255
+    $name: Red
   - green: 127
+    $name: Green
   - blue: 39
+    $name: Blue
   - transparency: 128
+    $name: Transparency
   $name: Custom color
   $description: Values are between 0 and 255
 - onlyWhenMaximized: true
   $name: Only when maximized
   $description: >-
     Only apply the style when there's a maximized window on the monitor
+- styleForDarkMode:
+  - use: false
+    $name: Use a separate background for dark mode
+  - backgroundStyle: blur
+    $name: Background style
+    $options:
+    - blur: Blur
+    - acrylicBlur: Acrylic blur
+    - color: Color
+  - color:
+    - red: 255
+      $name: Red
+    - green: 127
+      $name: Green
+    - blue: 39
+      $name: Blue
+    - transparency: 128
+      $name: Transparency
+    $name: Custom color
+    $description: Values are between 0 and 255
+  $name: Dark mode
 */
 // ==/WindhawkModSettings==
 
+#include <dwmapi.h>
+
+#include <optional>
 #include <unordered_set>
 
 enum class BackgroundStyle {
@@ -66,10 +95,15 @@ enum class BackgroundStyle {
     color,
 };
 
-struct {
+struct TaskbarStyle {
     BackgroundStyle backgroundStyle;
     COLORREF color;
+};
+
+struct {
+    TaskbarStyle style;
     bool onlyWhenMaximized;
+    std::optional<TaskbarStyle> darkModeStyle;
 } g_settings;
 
 HANDLE g_winObjectLocationChangeThread;
@@ -107,7 +141,15 @@ enum WINDOWCOMPOSITIONATTRIB {
     WCA_CORNER_STYLE = 27,
     WCA_PART_COLOR = 28,
     WCA_DISABLE_MOVESIZE_FEEDBACK = 29,
-    WCA_LAST = 30
+    WCA_SYSTEMBACKDROP_TYPE = 30,
+    WCA_SET_TAGGED_WINDOW_RECT = 31,
+    WCA_CLEAR_TAGGED_WINDOW_RECT = 32,
+    WCA_REMOTEAPP_POLICY = 33,
+    WCA_HAS_ACCENT_POLICY = 34,
+    WCA_REDIRECTIONBITMAP_FILL_COLOR = 35,
+    WCA_REDIRECTIONBITMAP_ALPHA = 36,
+    WCA_BORDER_MARGINS = 37,
+    WCA_LAST = 38,
 };
 
 // Affects the rendering of the background of a window.
@@ -145,9 +187,40 @@ using SetWindowCompositionAttribute_t =
     BOOL(WINAPI*)(HWND hWnd, const WINDOWCOMPOSITIONATTRIBDATA* pAttrData);
 SetWindowCompositionAttribute_t SetWindowCompositionAttribute_Original;
 
+// https://stackoverflow.com/a/51336913
+bool IsWindowsDarkModeEnabled() {
+    constexpr WCHAR kSubKeyPath[] =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+
+    DWORD value = 0;
+    DWORD valueSize = sizeof(value);
+    LONG result =
+        RegGetValue(HKEY_CURRENT_USER, kSubKeyPath, L"AppsUseLightTheme",
+                    RRF_RT_REG_DWORD, nullptr, &value, &valueSize);
+    if (result != ERROR_SUCCESS) {
+        return false;
+    }
+
+    return value == 0;
+}
+
+// https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
+BOOL IsWindowCloaked(HWND hwnd) {
+    BOOL isCloaked = FALSE;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked,
+                                           sizeof(isCloaked))) &&
+           isCloaked;
+}
+
 BOOL SetTaskbarStyle(HWND hWnd) {
+    TaskbarStyle& style =
+        (g_settings.darkModeStyle && IsWindowsDarkModeEnabled())
+            ? *g_settings.darkModeStyle
+            : g_settings.style;
+
     ACCENT_STATE accentState;
-    switch (g_settings.backgroundStyle) {
+    UINT accentFlags = 0;
+    switch (style.backgroundStyle) {
         case BackgroundStyle::blur:
             accentState = ACCENT_ENABLE_BLURBEHIND;
             break;
@@ -158,10 +231,11 @@ BOOL SetTaskbarStyle(HWND hWnd) {
 
         case BackgroundStyle::color:
             accentState = ACCENT_ENABLE_TRANSPARENTGRADIENT;
+            accentFlags = 0x13;
             break;
     }
 
-    ACCENTPOLICY policy = {accentState, 0, g_settings.color, 0};
+    ACCENTPOLICY policy = {accentState, accentFlags, style.color, 0};
 
     WINDOWCOMPOSITIONATTRIBDATA data = {WCA_ACCENT_POLICY, &policy,
                                         sizeof(policy)};
@@ -231,6 +305,15 @@ bool DoesMonitorHaveMaximizedWindow(HMONITOR monitor) {
 
     auto enumWindowsProc = [monitor, &hasMaximized](HWND hWnd) -> BOOL {
         if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
+            return TRUE;
+        }
+
+        if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
+            return TRUE;
+        }
+
+        if (GetWindowLong(hWnd, GWL_EXSTYLE) &
+            (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)) {
             return TRUE;
         }
 
@@ -392,11 +475,11 @@ void AdjustAllTaskbarStyles() {
 
 void LoadSettings() {
     PCWSTR backgroundStyle = Wh_GetStringSetting(L"backgroundStyle");
-    g_settings.backgroundStyle = BackgroundStyle::blur;
+    g_settings.style.backgroundStyle = BackgroundStyle::blur;
     if (wcscmp(backgroundStyle, L"acrylicBlur") == 0) {
-        g_settings.backgroundStyle = BackgroundStyle::acrylicBlur;
+        g_settings.style.backgroundStyle = BackgroundStyle::acrylicBlur;
     } else if (wcscmp(backgroundStyle, L"color") == 0) {
-        g_settings.backgroundStyle = BackgroundStyle::color;
+        g_settings.style.backgroundStyle = BackgroundStyle::color;
     }
     Wh_FreeStringSetting(backgroundStyle);
 
@@ -405,11 +488,39 @@ void LoadSettings() {
     int blue = Wh_GetIntSetting(L"color.blue");
     int transparency = Wh_GetIntSetting(L"color.transparency");
 
-    g_settings.color = (COLORREF)((BYTE)red | ((WORD)((BYTE)green) << 8) |
-                                  (((DWORD)(BYTE)blue) << 16) |
-                                  (((DWORD)(BYTE)transparency) << 24));
+    g_settings.style.color = (COLORREF)((BYTE)red | ((WORD)((BYTE)green) << 8) |
+                                        (((DWORD)(BYTE)blue) << 16) |
+                                        (((DWORD)(BYTE)transparency) << 24));
 
     g_settings.onlyWhenMaximized = Wh_GetIntSetting(L"onlyWhenMaximized");
+
+    if (Wh_GetIntSetting(L"styleForDarkMode.use")) {
+        TaskbarStyle style;
+
+        PCWSTR backgroundStyle =
+            Wh_GetStringSetting(L"styleForDarkMode.backgroundStyle");
+        style.backgroundStyle = BackgroundStyle::blur;
+        if (wcscmp(backgroundStyle, L"acrylicBlur") == 0) {
+            style.backgroundStyle = BackgroundStyle::acrylicBlur;
+        } else if (wcscmp(backgroundStyle, L"color") == 0) {
+            style.backgroundStyle = BackgroundStyle::color;
+        }
+        Wh_FreeStringSetting(backgroundStyle);
+
+        int red = Wh_GetIntSetting(L"styleForDarkMode.color.red");
+        int green = Wh_GetIntSetting(L"styleForDarkMode.color.green");
+        int blue = Wh_GetIntSetting(L"styleForDarkMode.color.blue");
+        int transparency =
+            Wh_GetIntSetting(L"styleForDarkMode.color.transparency");
+
+        style.color = (COLORREF)((BYTE)red | ((WORD)((BYTE)green) << 8) |
+                                 (((DWORD)(BYTE)blue) << 16) |
+                                 (((DWORD)(BYTE)transparency) << 24));
+
+        g_settings.darkModeStyle = std::move(style);
+    } else {
+        g_settings.darkModeStyle.reset();
+    }
 }
 
 BOOL Wh_ModInit() {
