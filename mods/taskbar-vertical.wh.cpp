@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11!
-// @version         1.2.4
+// @version         1.2.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -144,7 +144,6 @@ bool g_inSystemTrayController_UpdateFrameSize;
 bool g_inAugmentedEntryPointButton_UpdateButtonPadding;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
 bool g_inCTaskListThumbnailWnd_LayoutThumbnails;
-bool g_inChevronSystemTrayIconDataModel2_OnIconClicked;
 bool g_inOverflowFlyoutModel_Show;
 
 std::vector<winrt::weak_ref<XamlRoot>> g_notifyIconsUpdated;
@@ -638,19 +637,13 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
     UINT monitorDpiY = 96;
     GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
 
-    RECT rc;
-    GetMonitorRect(monitor, &rc);
-
-    int taskbarWidthScaled = MulDiv(g_settings.taskbarWidth, monitorDpiX, 96);
-
     switch (GetTaskbarLocationForMonitor(monitor)) {
         case TaskbarLocation::left:
-            point->X = rc.left + taskbarWidthScaled;
+            point->X = monitorInfo.rcWork.left;
             break;
 
         case TaskbarLocation::right:
-            point->X = rc.right - taskbarWidthScaled;
-            point->X -= 159;
+            point->X = monitorInfo.rcWork.right - MulDiv(159, monitorDpiX, 96);
             break;
     }
 
@@ -661,12 +654,10 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
 
     // Avoid returning a point too close to the top of the monitor which causes
     // the menu to be cut off.
-    int minY = rc.top + MulDiv(130, monitorDpiY, 96);
+    int minY = monitorInfo.rcWork.top + MulDiv(130, monitorDpiY, 96);
     if (point->Y < minY) {
         point->Y = minY;
     }
-
-    *verticalAlignment = VerticalAlignment::Center;
 
     return ret;
 }
@@ -1901,68 +1892,6 @@ void WINAPI OverflowFlyoutList_OnApplyTemplate_Hook(LPVOID pThis) {
     }
 }
 
-using ChevronSystemTrayIconDataModel2_OnIconClicked_t =
-    void(WINAPI*)(void* pThis, void* param1);
-ChevronSystemTrayIconDataModel2_OnIconClicked_t
-    ChevronSystemTrayIconDataModel2_OnIconClicked_Original;
-void WINAPI ChevronSystemTrayIconDataModel2_OnIconClicked_Hook(void* pThis,
-                                                               void* param1) {
-    Wh_Log(L">");
-
-    g_inChevronSystemTrayIconDataModel2_OnIconClicked = true;
-
-    ChevronSystemTrayIconDataModel2_OnIconClicked_Original(pThis, param1);
-
-    g_inChevronSystemTrayIconDataModel2_OnIconClicked = false;
-}
-
-using OverflowXamlIslandManager_Show_t = void(WINAPI*)(void* pThis,
-                                                       POINT point,
-                                                       void* param2);
-OverflowXamlIslandManager_Show_t OverflowXamlIslandManager_Show_Original;
-void WINAPI OverflowXamlIslandManager_Show_Hook(void* pThis,
-                                                POINT point,
-                                                void* param2) {
-    Wh_Log(L">");
-
-    if (g_inChevronSystemTrayIconDataModel2_OnIconClicked) {
-        DWORD messagePos = GetMessagePos();
-        point = POINT{
-            GET_X_LPARAM(messagePos),
-            GET_Y_LPARAM(messagePos),
-        };
-
-        HMONITOR monitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        GetMonitorInfo(monitor, &monitorInfo);
-        UINT monitorDpiX = 96;
-        UINT monitorDpiY = 96;
-        GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
-
-        if (point.x < monitorInfo.rcWork.left) {
-            point.x = monitorInfo.rcWork.left;
-        } else if (point.x > monitorInfo.rcWork.right) {
-            point.x = monitorInfo.rcWork.right;
-        }
-
-        switch (GetTaskbarLocationForMonitor(monitor)) {
-            case TaskbarLocation::left:
-                point.x += MulDiv(104 + 12, monitorDpiX, 96);
-                break;
-
-            case TaskbarLocation::right:
-                point.x -= MulDiv(104 + 12, monitorDpiX, 96);
-                break;
-        }
-
-        point.y += MulDiv(28, monitorDpiY, 96);
-    }
-
-    OverflowXamlIslandManager_Show_Original(pThis, point, param2);
-}
-
 using CopilotIcon_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 CopilotIcon_UpdateVisualStates_t CopilotIcon_UpdateVisualStates_Original;
 void WINAPI CopilotIcon_UpdateVisualStates_Hook(void* pThis) {
@@ -2116,6 +2045,44 @@ void WINAPI OverflowFlyoutModel_Show_Hook(void* pThis) {
     g_inOverflowFlyoutModel_Show = false;
 }
 
+using IPointerPoint_RawPosition_t = winrt::Windows::Foundation::Point*(
+    WINAPI*)(void* pThis, winrt::Windows::Foundation::Point* point);
+IPointerPoint_RawPosition_t IPointerPoint_RawPosition_Original;
+winrt::Windows::Foundation::Point* WINAPI
+IPointerPoint_RawPosition_Hook(void* pThis,
+                               winrt::Windows::Foundation::Point* point) {
+    Wh_Log(L">");
+
+    auto original = [=]() {
+        return IPointerPoint_RawPosition_Original(pThis, point);
+    };
+
+    HWND hTaskbarWnd = GetTaskbarWnd();
+    if (!hTaskbarWnd) {
+        return original();
+    }
+
+    RECT taskbarRectNative;
+    if (!GetWindowRect_Original(hTaskbarWnd, &taskbarRectNative)) {
+        return original();
+    }
+
+    UINT taskbarDpi = GetDpiForWindow(hTaskbarWnd);
+
+    int taskbarHeight = MulDiv(taskbarRectNative.bottom - taskbarRectNative.top,
+                               96, taskbarDpi);
+
+    auto* ret = IPointerPoint_RawPosition_Original(pThis, point);
+
+    // Adjust to account for the taskbar rotation. Used for tray icon events.
+    *ret = winrt::Windows::Foundation::Point{
+        taskbarHeight - ret->Y,
+        ret->X,
+    };
+
+    return ret;
+}
+
 BOOL WINAPI GetWindowRect_Hook(HWND hWnd, LPRECT lpRect) {
     BOOL ret = GetWindowRect_Original(hWnd, lpRect);
     if (ret && !g_unloading &&
@@ -2148,84 +2115,130 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
                               int cx,
                               int cy,
                               UINT uFlags) {
-    auto original = [&]() {
+    auto original = [=]() {
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy,
                                      uFlags);
     };
 
-    if ((uFlags & (SWP_NOSIZE | SWP_NOMOVE)) ||
-        (!g_inCTaskListThumbnailWnd_DisplayUI &&
-         !g_inCTaskListThumbnailWnd_LayoutThumbnails)) {
+    if (uFlags & (SWP_NOSIZE | SWP_NOMOVE)) {
         return original();
     }
 
-    WCHAR szClassName[32];
+    WCHAR szClassName[64];
     if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
         return original();
     }
 
-    if (_wcsicmp(szClassName, L"TaskListThumbnailWnd") != 0) {
+    if (_wcsicmp(szClassName, L"TaskListThumbnailWnd") == 0) {
+        if (!g_inCTaskListThumbnailWnd_DisplayUI &&
+            !g_inCTaskListThumbnailWnd_LayoutThumbnails) {
+            return original();
+        }
+
+        DWORD messagePos = GetMessagePos();
+        POINT pt{
+            GET_X_LPARAM(messagePos),
+            GET_Y_LPARAM(messagePos),
+        };
+
+        HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+        RECT rc{};
+        if (g_inCTaskListThumbnailWnd_DisplayUI) {
+            const int distance = MulDiv(12, GetDpiForWindow(hWnd), 96);
+
+            SIZE sz{
+                .cx = cx + distance * 2,
+                .cy = cy + distance * 2,
+            };
+
+            UINT alignment;
+            switch (GetTaskbarLocationForMonitor(monitor)) {
+                case TaskbarLocation::left:
+                    alignment = TPM_LEFTALIGN;
+                    break;
+
+                case TaskbarLocation::right:
+                    alignment = TPM_RIGHTALIGN;
+                    break;
+            }
+
+            CalculatePopupWindowPosition(
+                &pt, &sz, alignment | TPM_VCENTERALIGN | TPM_WORKAREA, nullptr,
+                &rc);
+
+            rc.left += distance;
+            rc.right -= distance;
+            rc.top += distance;
+            rc.bottom -= distance;
+        } else {
+            // Keep current position.
+            GetWindowRect_Original(hWnd, &rc);
+            rc.bottom = rc.top + cy;
+
+            switch (GetTaskbarLocationForMonitor(monitor)) {
+                case TaskbarLocation::left:
+                    rc.right = rc.left + cx;
+                    break;
+
+                case TaskbarLocation::right:
+                    rc.left = rc.right - cx;
+                    break;
+            }
+        }
+
+        X = rc.left;
+        Y = rc.top;
+        cx = rc.right - rc.left;
+        cy = rc.bottom - rc.top;
+    } else if (_wcsicmp(szClassName, L"TopLevelWindowForOverflowXamlIsland") ==
+               0) {
+        DWORD messagePos = GetMessagePos();
+        POINT pt{
+            GET_X_LPARAM(messagePos),
+            GET_Y_LPARAM(messagePos),
+        };
+
+        HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo{
+            .cbSize = sizeof(MONITORINFO),
+        };
+        GetMonitorInfo(monitor, &monitorInfo);
+
+        switch (GetTaskbarLocationForMonitor(monitor)) {
+            case TaskbarLocation::left:
+                X = monitorInfo.rcWork.left;
+                break;
+
+            case TaskbarLocation::right:
+                X = monitorInfo.rcWork.right - cx;
+                break;
+        }
+
+        if (!IsWindowVisible(hWnd)) {
+            Y = pt.y - cy / 2;
+        } else {
+            // Keep current position.
+            RECT rc;
+            GetWindowRect_Original(hWnd, &rc);
+            int prevCenterY = rc.top + (rc.bottom - rc.top) / 2;
+            Y = prevCenterY - cy / 2;
+        }
+
+        if (Y < monitorInfo.rcWork.top) {
+            Y = monitorInfo.rcWork.top;
+        } else if (Y > monitorInfo.rcWork.bottom - cy) {
+            Y = monitorInfo.rcWork.bottom - cy;
+        }
+    } else {
         return original();
     }
 
-    DWORD messagePos = GetMessagePos();
-    POINT pt{
-        GET_X_LPARAM(messagePos),
-        GET_Y_LPARAM(messagePos),
-    };
+    Wh_Log(L"Adjusting pos for %s: %dx%d, %dx%d", szClassName, X, Y, X + cx,
+           Y + cy);
 
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-
-    RECT rc{};
-    if (g_inCTaskListThumbnailWnd_DisplayUI) {
-        const int distance = MulDiv(12, GetDpiForWindow(hWnd), 96);
-
-        SIZE sz{
-            .cx = cx + distance * 2,
-            .cy = cy + distance * 2,
-        };
-
-        UINT alignment;
-        switch (GetTaskbarLocationForMonitor(monitor)) {
-            case TaskbarLocation::left:
-                alignment = TPM_LEFTALIGN;
-                break;
-
-            case TaskbarLocation::right:
-                alignment = TPM_RIGHTALIGN;
-                break;
-        }
-
-        CalculatePopupWindowPosition(
-            &pt, &sz, alignment | TPM_VCENTERALIGN | TPM_WORKAREA, nullptr,
-            &rc);
-
-        rc.left += distance;
-        rc.right -= distance;
-        rc.top += distance;
-        rc.bottom -= distance;
-    } else {
-        // Keep current position.
-        GetWindowRect_Original(hWnd, &rc);
-        rc.bottom = rc.top + cy;
-
-        switch (GetTaskbarLocationForMonitor(monitor)) {
-            case TaskbarLocation::left:
-                rc.right = rc.left + cx;
-                break;
-
-            case TaskbarLocation::right:
-                rc.left = rc.right - cx;
-                break;
-        }
-    }
-
-    Wh_Log(L"Adjusting pos for TaskListThumbnailWnd: %dx%d, %dx%d", rc.left,
-           rc.right, rc.top, rc.bottom);
-
-    return SetWindowPos_Original(hWnd, hWndInsertAfter, rc.left, rc.top,
-                                 rc.right - rc.left, rc.bottom - rc.top,
-                                 uFlags);
+    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 
 using MoveWindow_t = decltype(&MoveWindow);
@@ -2835,20 +2848,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             {
                 {
-                    LR"(public: void __cdecl winrt::SystemTray::implementation::ChevronSystemTrayIconDataModel2::OnIconClicked(struct winrt::SystemTray::IconClickedEventArgs const &))",
-                },
-                (void**)&ChevronSystemTrayIconDataModel2_OnIconClicked_Original,
-                (void*)ChevronSystemTrayIconDataModel2_OnIconClicked_Hook,
-            },
-            {
-                {
-                    LR"(public: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::Show(struct tagPOINT,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))",
-                },
-                (void**)&OverflowXamlIslandManager_Show_Original,
-                (void*)OverflowXamlIslandManager_Show_Hook,
-            },
-            {
-                {
                     LR"(private: void __cdecl winrt::SystemTray::implementation::CopilotIcon::UpdateVisualStates(void))",
                 },
                 (void**)&CopilotIcon_UpdateVisualStates_Original,
@@ -2867,6 +2866,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&OverflowFlyoutModel_Show_Original,
                 (void*)OverflowFlyoutModel_Show_Hook,
+            },
+            {
+                {
+                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Input_IPointerPoint<struct winrt::Windows::UI::Input::IPointerPoint>::RawPosition(void)const )",
+                },
+                (void**)&IPointerPoint_RawPosition_Original,
+                (void*)IPointerPoint_RawPosition_Hook,
             },
         };
 
