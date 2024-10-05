@@ -1532,12 +1532,11 @@
                 "published": 1664663103000,
                 "rating": 10,
                 "ratingUsers": 5,
-                "updated": 1664663103000,
+                "updated": 1728139542000,
                 "users": 251
             },
             "metadata": {
                 "author": "Mark Jansen",
-                "compilerOptions": "-luuid -lole32",
                 "description": "Fix the Media 'play' key being suppressed in Explorer when a file is selected.",
                 "github": "https://github.com/learn-more",
                 "include": [
@@ -1545,7 +1544,7 @@
                 ],
                 "name": "Play-Media-Key fix in Explorer",
                 "twitter": "https://twitter.com/learn_more",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "lm-ppee-wow64": {

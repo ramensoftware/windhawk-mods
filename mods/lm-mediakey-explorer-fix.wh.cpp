@@ -2,12 +2,11 @@
 // @id           lm-mediakey-explorer-fix
 // @name         Play-Media-Key fix in Explorer
 // @description  Fix the Media 'play' key being suppressed in Explorer when a file is selected.
-// @version      1.0
+// @version      1.1
 // @author       Mark Jansen
 // @github       https://github.com/learn-more
 // @twitter      https://twitter.com/learn_more
 // @include      explorer.exe
-// @compilerOptions -luuid -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,11 +17,11 @@ the play event never reaches a media player like Spotify.
 This mod makes sure that the play event is not sent to the file, but to the media player instead.
 */
 // ==/WindhawkModReadme==
-#include <shlobj.h>
+#include <windhawk_utils.h>
+
 
 
 WNDPROC pSHELLDLL_DefViewProc = NULL;
-
 LRESULT CALLBACK SHELLDLL_DefViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (uMsg == WM_APPCOMMAND && GET_APPCOMMAND_LPARAM(lParam) == APPCOMMAND_MEDIA_PLAY_PAUSE)
@@ -33,6 +32,22 @@ LRESULT CALLBACK SHELLDLL_DefViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
     return pSHELLDLL_DefViewProc(hWnd, uMsg, wParam, lParam);
 }
 
+#define IS_ATOM(x) (((ULONG_PTR)(x) > 0x0) && ((ULONG_PTR)(x) < 0x10000))
+static ATOM (WINAPI *pSHELL32_RegisterClassW) (CONST WNDCLASSW *lpWndClass) = 0;
+ATOM WINAPI SHELL32_RegisterClassW (CONST WNDCLASSW *lpWndClass)
+{
+    if (pSHELLDLL_DefViewProc == NULL &&
+        lpWndClass &&
+        !IS_ATOM(lpWndClass->lpszClassName) &&
+        !wcsicmp(lpWndClass->lpszClassName, L"SHELLDLL_DefView"))
+    {
+        Wh_Log(L"Got SHELLDLL_DefView, hooking it!");
+        Wh_SetFunctionHook((VOID*)lpWndClass->lpfnWndProc, (void*)SHELLDLL_DefViewProc, (void**)&pSHELLDLL_DefViewProc);
+        Wh_ApplyHookOperations();
+    }
+    return pSHELL32_RegisterClassW(lpWndClass);
+}
+
 
 BOOL Wh_ModInit()
 {
@@ -41,60 +56,13 @@ BOOL Wh_ModInit()
     BOOL bRet;
     if (!(bRet = GetClassInfoW(GetModuleHandleW(L"shell32.dll"), L"SHELLDLL_DefView", &SHELLDLL_DefView)))
     {
-        Wh_Log(L"SHELLDLL_DefView not available yet, trying to register it..");
-        // Initialize COM and open an apartment
-        HRESULT hrInit = CoInitialize(NULL);
-        if (SUCCEEDED(hrInit) || hrInit == RPC_E_CHANGED_MODE)
-        {
-            IExplorerBrowser* pExplorerBrowser;
-            // Create a browser object
-            HRESULT hr = SHCoCreateInstance(NULL, &CLSID_ExplorerBrowser, NULL, IID_PPV_ARGS(&pExplorerBrowser));
-            if (SUCCEEDED(hr))
-            {
-                RECT rc = {};
-                FOLDERSETTINGS fs = { FVM_DETAILS };
-                hr = pExplorerBrowser->Initialize(GetDesktopWindow(), &rc, &fs);
-                if (SUCCEEDED(hr))
-                {
-                    ITEMIDLIST desktop = {};
-                    // Browsing to a folder will create the view
-                    hr = pExplorerBrowser->BrowseToIDList(&desktop, SBSP_ABSOLUTE);
-                    if (SUCCEEDED(hr))
-                    {
-                        // Now the class should be registered!
-                        bRet = GetClassInfoW(GetModuleHandleW(L"shell32.dll"), L"SHELLDLL_DefView", &SHELLDLL_DefView);
-                    }
-                    else
-                    {
-                        Wh_Log(L"BrowseToIDList failed with 0x%p", hr);
-                    }
-                }
-                else
-                {
-                    Wh_Log(L"Initialize failed with 0x%p", hr);
-                }
-                pExplorerBrowser->Destroy();
-                pExplorerBrowser->Release();
-            }
-            else
-            {
-                Wh_Log(L"SHCoCreateInstance failed with 0x%p", hr);
-            }
-            if (hrInit != RPC_E_CHANGED_MODE)
-            {
-                CoUninitialize();
-            }
-        }
-        else
-        {
-            Wh_Log(L"SHCoCreateInstance failed with 0x%p", hrInit);
-        }
+        Wh_Log(L"SHELLDLL_DefView not available yet, hooking SHELL32!RegisterClassW instead");
+        WindhawkUtils::Wh_SetFunctionHookT(RegisterClassW, SHELL32_RegisterClassW, &pSHELL32_RegisterClassW);
     }
-
-    if (bRet)
+    else
     {
         Wh_Log(L"Hook WndProc");
-        Wh_SetFunctionHook((VOID*)SHELLDLL_DefView.lpfnWndProc, (void*)SHELLDLL_DefViewProc, (void**)&pSHELLDLL_DefViewProc);
+        WindhawkUtils::Wh_SetFunctionHookT(SHELLDLL_DefView.lpfnWndProc, SHELLDLL_DefViewProc, &pSHELLDLL_DefViewProc);
     }
 
     return TRUE;

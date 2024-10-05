@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-05T14:21:28.000Z</updated>
+    <updated>2024-10-05T14:45:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Play-Media-Key fix in Explorer 1.1]]></title>
+        <id>https://windhawk.net/mods/lm-mediakey-explorer-fix#6b0109c8f0d35deb6b81a0440bc637dc8e0f0fe3</id>
+        <link href="https://windhawk.net/mods/lm-mediakey-explorer-fix"/>
+        <updated>2024-10-05T14:45:42.000Z</updated>
+        <content type="html"><![CDATA[<p>Simplify initialization to prevent the explorer process hanging</p>]]></content>
+        <author>
+            <name>Mark Jansen</name>
+            <uri>https://github.com/learn-more</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#2fb9f53e0e636376c07c33fa9a861345c4572e1a</id>
@@ -288,24 +299,6 @@ data from incorrectly rendering or even crashing</li>
 <li>Improved core implementation, which improves compatibility with other mods and programs.</li>
 <li>Fixed overflow tray icons cut off when the taskbar is on the right.</li>
 <li>Fixed copilot opening behind the taskbar when it's on the right.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#0b018deaa9febe57c9ed85c1ad65aac49966d743</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2024-09-19T19:34:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for Windows 11 version 24H2.</li>
-<li>Added an option to move the taskbar to the right.</li>
-<li>Added an option for a custom start menu width, can be useful for custom start menu themes.</li>
-<li>If taskbar labels are enabled, they're no longer rotated sideways.</li>
-<li>The Copilot icon and widget icons are no longer rotated sideways.</li>
-<li>Fixed thumbnails being cut off after closing an item.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
