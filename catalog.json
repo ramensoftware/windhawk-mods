@@ -630,7 +630,7 @@
                 "published": 1707344115000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1708969630000,
+                "updated": 1728198395000,
                 "users": 39
             },
             "metadata": {
@@ -642,7 +642,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Theme Explorer Lite",
-                "version": "1.1.1"
+                "version": "1.1.2"
             }
         },
         "classic-theme-transparency-fix": {

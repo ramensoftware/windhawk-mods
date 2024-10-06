@@ -1,3 +1,7 @@
+## 1.1.2 ([Oct 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4e8186fedde55e38422264383447bbb570fde161/mods/classic-theme-explorer-lite.wh.cpp))
+
+Add additional check to the ClientEdge adder at suggestion of @aubymori
+
 ## 1.1.1 ([Feb 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/18d5efea01fa89ff790e60cfaa923698a2374ee8/mods/classic-theme-explorer-lite.wh.cpp))
 
 Fix pointer verification

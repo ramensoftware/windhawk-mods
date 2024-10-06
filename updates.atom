@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-05T14:45:42.000Z</updated>
+    <updated>2024-10-06T07:06:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Explorer Lite 1.1.2]]></title>
+        <id>https://windhawk.net/mods/classic-theme-explorer-lite#4e8186fedde55e38422264383447bbb570fde161</id>
+        <link href="https://windhawk.net/mods/classic-theme-explorer-lite"/>
+        <updated>2024-10-06T07:06:35.000Z</updated>
+        <content type="html"><![CDATA[<p>Add additional check to the ClientEdge adder at suggestion of @aubymori</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Play-Media-Key fix in Explorer 1.1]]></title>
         <id>https://windhawk.net/mods/lm-mediakey-explorer-fix#6b0109c8f0d35deb6b81a0440bc637dc8e0f0fe3</id>
@@ -284,21 +295,6 @@ data from incorrectly rendering or even crashing</li>
 <li>Fixed the taskbar becoming blank after changing the settings.</li>
 <li>Fixed all taskbar items hidden in an overflow view after enabling the mod.</li>
 <li>Improved handling of the right click menu on the top of the taskbar, reducing the chance of the menu being cut off.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#824532afd6f3568f26b5676f950ef0557602df99</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2024-09-20T11:43:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved core implementation, which improves compatibility with other mods and programs.</li>
-<li>Fixed overflow tray icons cut off when the taskbar is on the right.</li>
-<li>Fixed copilot opening behind the taskbar when it's on the right.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
