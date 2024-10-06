@@ -2080,10 +2080,13 @@
                 "published": 1713423953000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1713423953000,
+                "updated": 1728231790000,
                 "users": 71
             },
             "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
                 "author": "Waldemar",
                 "description": "Removes the Command Bar from file explorer.",
                 "github": "https://github.com/CyprinusCarpio",
@@ -2091,7 +2094,7 @@
                     "explorer.exe"
                 ],
                 "name": "Remove Command Bar",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "remove-ms-store-open-with": {
