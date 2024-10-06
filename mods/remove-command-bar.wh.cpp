@@ -2,10 +2,11 @@
 // @id              remove-command-bar
 // @name            Remove Command Bar
 // @description     Removes the Command Bar from file explorer.
-// @version         1.0
+// @version         1.0.1
 // @author          Waldemar
 // @github          https://github.com/CyprinusCarpio
 // @include         explorer.exe
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -38,21 +39,13 @@ For issue reports, contact waldemar3194 on Discord, or file a report at my [gith
 #include <string>
 #include <windhawk_utils.h>
 
-#ifdef _WIN64
-#define CALCON __cdecl
-#define SCALCON L"__cdecl"
-#else
-#define CALCON __stdcall
-#define SCALCON L"__stdcall"
-#endif
-
 const std::wstring toLookFor = L"<style resid=\"FolderBandStyle\">";
 
 int g_offsetSetting;
 
-typedef HRESULT(* CALCON DUILoadUIFileFromResources_t)(HINSTANCE, unsigned int, LPWSTR*);
+typedef HRESULT(* __cdecl DUILoadUIFileFromResources_t)(HINSTANCE, unsigned int, LPWSTR*);
 DUILoadUIFileFromResources_t DUILoadUIFileFromResourcesOriginal;
-HRESULT CALCON DUILoadUIFileFromResourcesHook(HINSTANCE hInstance, unsigned int uResId, LPWSTR *pszOut)
+HRESULT __cdecl DUILoadUIFileFromResourcesHook(HINSTANCE hInstance, unsigned int uResId, LPWSTR *pszOut)
 {
     // We don't check the module name, only the resource id. It seems that the only resource with the id 1
     // that explorer loads is the one we want, and even if that's not true the wstring::find function prevents
@@ -90,10 +83,10 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] =
+    WindhawkUtils::SYMBOL_HOOK shell32_dll_hooks[] =
     {
         {   {
-                L"long " SCALCON " DUI_LoadUIFileFromResources(struct HINSTANCE__ *,unsigned int,unsigned short * *)"
+                L"long __cdecl DUI_LoadUIFileFromResources(struct HINSTANCE__ *,unsigned int,unsigned short * *)"
             },
             (void**)&DUILoadUIFileFromResourcesOriginal,
             (void*)DUILoadUIFileFromResourcesHook,
@@ -101,7 +94,7 @@ BOOL Wh_ModInit() {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(hShell32, hooks, 1))
+    if (!WindhawkUtils::HookSymbols(hShell32, shell32_dll_hooks, 1))
     {
         Wh_Log(L"Failed to hook the member function.");
         return FALSE;
