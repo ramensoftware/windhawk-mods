@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-06T07:06:35.000Z</updated>
+    <updated>2024-10-06T16:02:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Treeview 1.1.1]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-treeview#5d24a3a59980affaff8b2e34006a3a3d788e006c</id>
+        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
+        <updated>2024-10-06T16:02:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a option to draw a gradient background for the header for XP-like looks</li>
+<li>Added a context menu for the header like in real InfoBands</li>
+<li>A theme-accurate button frame is now drawn for the X button</li>
+</ul>]]></content>
+        <author>
+            <name>Waldemar</name>
+            <uri>https://github.com/CyprinusCarpio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme Explorer Lite 1.1.2]]></title>
         <id>https://windhawk.net/mods/classic-theme-explorer-lite#4e8186fedde55e38422264383447bbb570fde161</id>
@@ -279,22 +294,6 @@ data from incorrectly rendering or even crashing</li>
         <content type="html"><![CDATA[<ul>
 <li>The start menu is now positioned on the left too. Can be disabled in the mod settings.</li>
 <li>Added support for multiple monitors.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#a90c4ab676b14803b36ae376b63928dc6b483b51</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2024-09-20T19:20:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a possible crash loop on mod initialization with multiple monitors.</li>
-<li>Fixed the taskbar becoming blank after changing the settings.</li>
-<li>Fixed all taskbar items hidden in an overflow view after enabling the mod.</li>
-<li>Improved handling of the right click menu on the top of the taskbar, reducing the chance of the menu being cut off.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
