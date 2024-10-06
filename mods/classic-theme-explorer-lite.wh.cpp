@@ -2,7 +2,7 @@
 // @id              classic-theme-explorer-lite
 // @name            Classic Theme Explorer Lite
 // @description     Classic Theme mitigations for Explorer ported from Explorer Patcher
-// @version         1.1.1
+// @version         1.1.2
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -35,10 +35,14 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,LPCWSTR lpClassName,LPCWSTR lpW
 //  Disable this block if you don't want 3D borders in folders
     if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysListView32"))
     {
-        GetClassNameW(GetParent(hWndParent), wszClassName, 200);
-        if (wcscmp(wszClassName, L"Progman"))
+        GetClassNameW(hWndParent, wszClassName, 200);
+        if (!wcscmp(wszClassName, L"SHELLDLL_DefView"))
         {
-            dwExStyle |= WS_EX_CLIENTEDGE;
+            GetClassNameW(GetParent(hWndParent), wszClassName, 200);
+            if (wcscmp(wszClassName, L"Progman"))
+            {
+                dwExStyle |= WS_EX_CLIENTEDGE;
+            }
         }
     }
 
