@@ -2708,6 +2708,32 @@
                 "version": "1.0.8"
             }
         },
+        "taskbar-thumbnails": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1728339473000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1728339473000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Disable taskbar thumbnails on hover, or replace them with a list",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Disable Taskbar Thumbnails",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-vertical": {
             "details": {
                 "defaultSorting": 10270,
