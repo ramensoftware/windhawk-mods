@@ -407,19 +407,19 @@
                 "published": 1710657910000,
                 "rating": 6,
                 "ratingUsers": 1,
-                "updated": 1710657910000,
+                "updated": 1728376730000,
                 "users": 38
             },
             "metadata": {
                 "author": "aubymori",
                 "compilerOptions": "-lgdi32",
-                "description": "Fixes the appearance of list group headers in classic theme.",
+                "description": "Makes the appearance of list group headers in classic theme like Windows XP.",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
                 "name": "Classic List Group Fix",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "classic-maximized-windows-fix": {

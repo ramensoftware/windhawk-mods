@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-07T22:17:53.000Z</updated>
+    <updated>2024-10-08T08:38:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic List Group Fix 1.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-list-group-fix#733d035afe561ca4d014aa436c66d536a2702696</id>
+        <link href="https://windhawk.net/mods/classic-list-group-fix"/>
+        <updated>2024-10-08T08:38:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add option to visually hide the collapse button</li>
+<li>Correct header font</li>
+<li>Adapt header height to font, fonts larger than 8pt will look correct now</li>
+<li>General code cleanup, match modern Windhawk standards</li>
+<li>Refine mod description and README</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnails#bf56fb745178ebecf2476f56ab57e0ab98c034f4</id>
@@ -283,20 +300,6 @@ a workaround.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#24a59b390771c24436afc2ef3b64c145f8547082</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2024-09-23T15:56:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Fixed build errors introduced with latest version of Windhawk 1.5x</p></li>
-<li><p>Use CoInitializeEx with COINIT_APARTMENTTHREADED (fixes issue #12: Can't Restart Explorer While this Mod is Enabled)</p></li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>
