@@ -61,10 +61,12 @@ bool GetIconFont(LOGFONTW *lplf)
         return false;
 
     DWORD cbData = sizeof(LOGFONTW);
-    return ERROR_SUCCESS == RegQueryValueExW(
+    bool bSuccess ERROR_SUCCESS == RegQueryValueExW(
         hKey, L"IconFont", NULL, NULL,
         (BYTE *)lplf, &cbData
     );
+    RegCloseKey(hKey);
+    return bSuccess;
 }
 
 INT_PTR (__thiscall *CListGroup_GetGroupRect_orig)(void *, LPRECT);
