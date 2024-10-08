@@ -34,7 +34,6 @@ This mod makes list group headers in classic theme look as they did in Windows X
 
 #include <commctrl.h>
 #include <windhawk_utils.h>
-#include <winreg.h>
 
 #ifdef _WIN64
 #    define STHISCALL L"__cdecl"
@@ -177,6 +176,49 @@ HMODULE LoadComCtlModule(void)
     return hComCtl;
 }
 
+const WindhawkUtils::SYMBOL_HOOK comctl32DllHooks[] = {
+    {
+        {
+            L"public: int "
+            STHISCALL
+            L" CListGroup::GetGroupRect(struct tagRECT *)const "
+        },
+        &CListGroup_GetGroupRect_orig,
+        CListGroup_GetGroupRect_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CListGroup::_PaintHeader(unsigned long,struct tagNMLVCUSTOMDRAW *)"
+        },
+        &CListGroup__PaintHeader_orig,
+        CListGroup__PaintHeader_hook,
+        false
+    },
+    {
+        {
+            L"public: int "
+            STHISCALL
+            L" CListGroup::HeaderHeight(void)const "
+        },
+        &CListGroup_HeaderHeight_orig,
+        CListGroup_HeaderHeight_hook,
+        false
+    },
+    {
+        {
+            L"private: void "
+            STHISCALL
+            L" CListGroup::_PaintCollapse(struct tagNMLVCUSTOMDRAW *)"
+        },
+        &CListGroup__PaintCollapse_orig,
+        CListGroup__PaintCollapse_hook,
+        false
+    }
+};
+
 void Wh_ModSettingsChanged(void)
 {
     g_fHideCollapse = Wh_GetIntSetting(L"hidecollapse");
@@ -194,53 +236,10 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {
-            {
-                L"public: int "
-                STHISCALL
-                L" CListGroup::GetGroupRect(struct tagRECT *)const "
-            },
-            &CListGroup_GetGroupRect_orig,
-            CListGroup_GetGroupRect_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CListGroup::_PaintHeader(unsigned long,struct tagNMLVCUSTOMDRAW *)"
-            },
-            &CListGroup__PaintHeader_orig,
-            CListGroup__PaintHeader_hook,
-            false
-        },
-        {
-            {
-                L"public: int "
-                STHISCALL
-                L" CListGroup::HeaderHeight(void)const "
-            },
-            &CListGroup_HeaderHeight_orig,
-            CListGroup_HeaderHeight_hook,
-            false
-        },
-        {
-            {
-                L"private: void "
-                STHISCALL
-                L" CListGroup::_PaintCollapse(struct tagNMLVCUSTOMDRAW *)"
-            },
-            &CListGroup__PaintCollapse_orig,
-            CListGroup__PaintCollapse_hook,
-            false
-        }
-    };
-
     if (!WindhawkUtils::HookSymbols(
         hComCtl,
-        hooks,
-        ARRAYSIZE(hooks)
+        comctl32DllHooks,
+        ARRAYSIZE(comctl32DllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions");
