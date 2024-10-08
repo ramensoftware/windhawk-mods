@@ -61,7 +61,7 @@ bool GetIconFont(LOGFONTW *lplf)
         return false;
 
     DWORD cbData = sizeof(LOGFONTW);
-    bool bSuccess ERROR_SUCCESS == RegQueryValueExW(
+    bool bSuccess = ERROR_SUCCESS == RegQueryValueExW(
         hKey, L"IconFont", NULL, NULL,
         (BYTE *)lplf, &cbData
     );
