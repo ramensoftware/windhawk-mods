@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-11T21:16:55.000Z</updated>
+    <updated>2024-10-11T21:32:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#b2f3b382fc4b9699326678d9440c6164ead46fae</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2024-10-11T21:32:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed support for the ExplorerPatcher taskbar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.7]]></title>
         <id>https://windhawk.net/mods/taskbar-button-click#d190ad2c0e8b24bd6b46292507fceaad45472d8f</id>
@@ -273,19 +286,6 @@ versions weren't tested and are probably not compatible.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[StartIsBack++ Tweaker 0.7.1]]></title>
-        <id>https://windhawk.net/mods/sib-plusplus-tweaker#e95b757e0e4e00850e4c62aab675955ab393b44f</id>
-        <link href="https://windhawk.net/mods/sib-plusplus-tweaker"/>
-        <updated>2024-09-29T22:04:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a restart loop fix</li>
-</ul>]]></content>
-        <author>
-            <name>Erizur</name>
-            <uri>https://github.com/Erizur</uri>
         </author>
     </entry>
 </feed>

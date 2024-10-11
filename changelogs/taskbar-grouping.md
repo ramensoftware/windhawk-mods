@@ -1,3 +1,7 @@
+## 1.3.7 ([Oct 11, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b2f3b382fc4b9699326678d9440c6164ead46fae/mods/taskbar-grouping.wh.cpp))
+
+* Fixed support for the ExplorerPatcher taskbar.
+
 ## 1.3.6 ([Oct 11, 2024](https://github.com/ramensoftware/windhawk-mods/blob/46afafc524f2b7c879702a798e74e11f7fcfd70b/mods/taskbar-grouping.wh.cpp))
 
 * Fixed multiple pinned items sometimes appearing for the same program when using multiple monitors.
