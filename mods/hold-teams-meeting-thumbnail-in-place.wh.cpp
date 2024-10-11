@@ -38,12 +38,6 @@ Current mod lets the user change the location of the minimised meeting thumbnail
 #include <string>
 
 
-#ifndef WH_MOD
-#define WH_MOD
-#include <mods_api.h>
-#endif
-
-
 template <typename T>
 BOOL Wh_SetFunctionHookT(
     FARPROC targetFunction,
