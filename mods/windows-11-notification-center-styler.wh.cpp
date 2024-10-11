@@ -2,12 +2,13 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center with themes contributed by others or create your own
-// @version         1.1.1
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         ShellExperienceHost.exe
+// @include         ShellHost.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
 // ==/WindhawkMod==
@@ -41,35 +42,9 @@ mod and can be selected in the settings:
 \
 TranslucentShell](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/TranslucentShell/README.md)
 
-## Examples
-
-### Hide the focus assist section
-**Target**: `ActionCenter.FocusSessionControl` \
-**Style**: `Height=0`
-
-### Square the corners of the notification center
-**Target**: `Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid` \
-**Style**: `CornerRadius=0`
-
-### Square the corners of the calendar
-**Target**: `Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid` \
-**Style**: `CornerRadius=0`
-
-### Square the corners of the quick action center
-**Target**: `Windows.UI.Xaml.Controls.Grid#ControlCenterRegion` \
-**Style**: `CornerRadius=0`
-
-### Calendar and notification titlebars: titles on the right, buttons on the left
-**Target**: `Windows.UI.Xaml.Controls.Grid#RootContent` \
-**Style**: `FlowDirection=1`
-
-### Add accelerator key (ALT+X) to clear all notifications
-**Target**: `Windows.UI.Xaml.Controls.Button#ClearAll` \
-**Style**: `AccessKey=x`
-
-### Add accelerator key (ALT+E) to expand/collapse the calendar
-**Target**: `Windows.UI.Xaml.Controls.Button#ExpandCollapseButton` \
-**Style**: `AccessKey=e`
+[![Unified](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/Unified/screenshot-small.png)
+\
+Unified](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/Unified/README.md)
 
 ## Advanced styling
 
@@ -79,7 +54,8 @@ the target elements. Resource variables allow to override predefined variables.
 For a more detailed explanation and examples, refer to the sections below.
 
 The [UWPSpy](https://ramensoftware.com/uwpspy) tool can be used to inspect the
-notification center control elements in real time, and experiment with various styles.
+notification center control elements in real time, and experiment with various
+styles.
 
 For a collection of commonly requested notification center styling
 customizations, check out [The Windows 11 notification center styling
@@ -91,9 +67,9 @@ Each entry has a target control and a list of styles.
 
 The target control is written as `Class` or `Class#Name`, i.e. the target
 control class name (the tag name in XAML resource files), such as
-`ActionCenter.FocusSessionControl` or `Rectangle`, optionally followed by `#` and the
-target control's name (`x:Name` attribute in XAML resource files). The target
-control can also include:
+`ActionCenter.FocusSessionControl` or `Rectangle`, optionally followed by `#`
+and the target control's name (`x:Name` attribute in XAML resource files). The
+target control can also include:
 * Child control index, for example: `Class#Name[2]` will only match the relevant
   control that's also the second child among all of its parent's child controls.
 * Control properties, for example:
@@ -115,6 +91,36 @@ property value, for example: `Fill:=`. In addition, a visual state can be
 specified as following: `Style@VisualState=Value`, in which case the style will
 only apply when the visual state group specified in the target matches the
 specified visual state.
+
+A couple of practical examples:
+
+#### Hide the focus assist section
+**Target**: `ActionCenter.FocusSessionControl` \
+**Style**: `Height=0`
+
+#### Square the corners of the notification center
+**Target**: `Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid` \
+**Style**: `CornerRadius=0`
+
+#### Square the corners of the calendar
+**Target**: `Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid` \
+**Style**: `CornerRadius=0`
+
+#### Square the corners of the quick action center
+**Target**: `Windows.UI.Xaml.Controls.Grid#ControlCenterRegion` \
+**Style**: `CornerRadius=0`
+
+#### Calendar and notification titlebars: titles on the right, buttons on the left
+**Target**: `Windows.UI.Xaml.Controls.Grid#RootContent` \
+**Style**: `FlowDirection=1`
+
+#### Add accelerator key (ALT+X) to clear all notifications
+**Target**: `Windows.UI.Xaml.Controls.Button#ClearAll` \
+**Style**: `AccessKey=x`
+
+#### Add accelerator key (ALT+E) to expand/collapse the calendar
+**Target**: `Windows.UI.Xaml.Controls.Button#ExpandCollapseButton` \
+**Style**: `AccessKey=e`
 
 ### Resource variables
 
@@ -140,6 +146,7 @@ code from the **TranslucentTB** project.
   $options:
   - "": None
   - TranslucentShell: TranslucentShell
+  - Unified: Unified
 - controlStyles:
   - - target: ""
       $name: Target
@@ -238,6 +245,31 @@ const Theme g_themeTranslucentShell = {{
         L"CornerRadius=15"}},
 }};
 
+const Theme g_themeUnified = {{
+    ThemeTargetStyles{L"ActionCenter.FocusSessionControl", {
+        L"Height=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ControlCenterRegion", {
+        L"CornerRadius=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#CalendarCenterGrid", {
+        L"CornerRadius=0",
+        L"Margin=0,0,0,12",
+        L"BorderThickness=1,0,1,1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NotificationCenterGrid", {
+        L"CornerRadius=0",
+        L"BorderThickness=1,1,1,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem", {
+        L"CornerRadius=0",
+        L"Margin=1,1,1,1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem > Windows.UI.Xaml.Controls.Border", {
+        L"CornerRadius=3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
+        L"CornerRadius=0",
+        L"BorderThickness=1,1,1,0",
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.FrameWithContentChanged#L2Frame", {
+        L"CornerRadius=0"}},
+}};
+
 // clang-format on
 
 std::atomic<bool> g_initialized;
@@ -333,7 +365,25 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
     m_XamlDiagnostics(site.as<IXamlDiagnostics>())
 {
     Wh_Log(L"Constructing VisualTreeWatcher");
-    winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
+    // winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
+
+    // Calling AdviseVisualTreeChange from the current thread causes the app to
+    // hang on Windows 10 in Advising::RunOnUIThread. Creating a new thread and
+    // calling it from there fixes it.
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParam) -> DWORD {
+            auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
+            HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
+            if (FAILED(hr)) {
+                Wh_Log(L"Error %08X", hr);
+            }
+            return 0;
+        },
+        this, 0, nullptr);
+    if (thread) {
+        CloseHandle(thread);
+    }
 }
 
 VisualTreeWatcher::~VisualTreeWatcher()
@@ -610,6 +660,13 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <winrt/Windows.UI.Xaml.h>
 
 using namespace winrt::Windows::UI::Xaml;
+
+enum class Target {
+    ShellExperienceHost,
+    ShellHost,  // Win11 24H2.
+};
+
+Target g_target;
 
 // https://stackoverflow.com/a/51274008
 template <auto fn>
@@ -1584,6 +1641,8 @@ void ProcessAllStylesFromSettings() {
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"TranslucentShell") == 0) {
         theme = &g_themeTranslucentShell;
+    } else if (wcscmp(themeName, L"Unified") == 0) {
+        theme = &g_themeUnified;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -1719,102 +1778,6 @@ void InitializeSettingsAndTap() {
     }
 }
 
-using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
-                                           LPCWSTR lpClassName,
-                                           LPCWSTR lpWindowName,
-                                           DWORD dwStyle,
-                                           int X,
-                                           int Y,
-                                           int nWidth,
-                                           int nHeight,
-                                           HWND hWndParent,
-                                           HMENU hMenu,
-                                           HINSTANCE hInstance,
-                                           PVOID lpParam,
-                                           DWORD dwBand);
-CreateWindowInBand_t CreateWindowInBand_Original;
-HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
-                                    LPCWSTR lpClassName,
-                                    LPCWSTR lpWindowName,
-                                    DWORD dwStyle,
-                                    int X,
-                                    int Y,
-                                    int nWidth,
-                                    int nHeight,
-                                    HWND hWndParent,
-                                    HMENU hMenu,
-                                    HINSTANCE hInstance,
-                                    PVOID lpParam,
-                                    DWORD dwBand) {
-    HWND hWnd = CreateWindowInBand_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (!hWnd) {
-        return hWnd;
-    }
-
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
-
-    if (bTextualClassName &&
-        _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-        Wh_Log(L"Initializing - Created core window: %08X",
-               (DWORD)(ULONG_PTR)hWnd);
-        InitializeForCurrentThread();
-        InitializeSettingsAndTap();
-    }
-
-    return hWnd;
-}
-
-using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
-                                             LPCWSTR lpClassName,
-                                             LPCWSTR lpWindowName,
-                                             DWORD dwStyle,
-                                             int X,
-                                             int Y,
-                                             int nWidth,
-                                             int nHeight,
-                                             HWND hWndParent,
-                                             HMENU hMenu,
-                                             HINSTANCE hInstance,
-                                             PVOID lpParam,
-                                             DWORD dwBand,
-                                             DWORD dwTypeFlags);
-CreateWindowInBandEx_t CreateWindowInBandEx_Original;
-HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
-                                      LPCWSTR lpClassName,
-                                      LPCWSTR lpWindowName,
-                                      DWORD dwStyle,
-                                      int X,
-                                      int Y,
-                                      int nWidth,
-                                      int nHeight,
-                                      HWND hWndParent,
-                                      HMENU hMenu,
-                                      HINSTANCE hInstance,
-                                      PVOID lpParam,
-                                      DWORD dwBand,
-                                      DWORD dwTypeFlags) {
-    HWND hWnd = CreateWindowInBandEx_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
-    if (!hWnd) {
-        return hWnd;
-    }
-
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
-
-    if (bTextualClassName &&
-        _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-        Wh_Log(L"Initializing - Created core window: %08X",
-               (DWORD)(ULONG_PTR)hWnd);
-        InitializeForCurrentThread();
-        InitializeSettingsAndTap();
-    }
-
-    return hWnd;
-}
-
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
 bool RunFromWindowThread(HWND hWnd,
@@ -1867,6 +1830,176 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
+bool RunFromWindowThreadViaPostMessage(HWND hWnd,
+                                       RunFromWindowThreadProc_t proc,
+                                       PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsgViaPostMessage =
+        RegisterWindowMessage(
+            L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+        HHOOK hook;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_GETMESSAGE,
+        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
+            if (nCode == HC_ACTION && wParam == PM_REMOVE) {
+                MSG* msg = (MSG*)lParam;
+                if (msg->message ==
+                    runFromWindowThreadRegisteredMsgViaPostMessage) {
+                    auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)msg->lParam;
+                    if (param) {
+                        param->proc(param->procParam);
+                        UnhookWindowsHookEx(param->hook);
+                        delete param;
+                        msg->lParam = 0;
+                    }
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    auto* param = new RUN_FROM_WINDOW_THREAD_PARAM{
+        .proc = proc,
+        .procParam = procParam,
+        .hook = hook,
+    };
+    if (!PostMessage(hWnd, runFromWindowThreadRegisteredMsgViaPostMessage, 0,
+                     (LPARAM)param)) {
+        UnhookWindowsHookEx(hook);
+        delete param;
+        return false;
+    }
+
+    return true;
+}
+
+void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+    switch (g_target) {
+        case Target::ShellExperienceHost:
+            if (bTextualClassName &&
+                _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+                Wh_Log(L"Initializing - Created core window: %08X via %S",
+                       (DWORD)(ULONG_PTR)hWnd, funcName);
+                InitializeForCurrentThread();
+                InitializeSettingsAndTap();
+            }
+            break;
+
+        case Target::ShellHost:
+            if (bTextualClassName &&
+                _wcsicmp(lpClassName, L"ControlCenterWindow") == 0) {
+                Wh_Log(
+                    L"Initializing - Created ControlCenterWindow: %08X via %S",
+                    (DWORD)(ULONG_PTR)hWnd, funcName);
+                // Initializing at this point is too early and doesn't work.
+                RunFromWindowThreadViaPostMessage(
+                    hWnd,
+                    [](PVOID) WINAPI {
+                        InitializeForCurrentThread();
+                        InitializeSettingsAndTap();
+                    },
+                    nullptr);
+            }
+            break;
+    }
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           PVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    PVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName, __FUNCTION__);
+
+    return hWnd;
+}
+
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                             LPCWSTR lpClassName,
+                                             LPCWSTR lpWindowName,
+                                             DWORD dwStyle,
+                                             int X,
+                                             int Y,
+                                             int nWidth,
+                                             int nHeight,
+                                             HWND hWndParent,
+                                             HMENU hMenu,
+                                             HINSTANCE hInstance,
+                                             PVOID lpParam,
+                                             DWORD dwBand,
+                                             DWORD dwTypeFlags);
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
+                                      LPCWSTR lpClassName,
+                                      LPCWSTR lpWindowName,
+                                      DWORD dwStyle,
+                                      int X,
+                                      int Y,
+                                      int nWidth,
+                                      int nHeight,
+                                      HWND hWndParent,
+                                      HMENU hMenu,
+                                      HINSTANCE hInstance,
+                                      PVOID lpParam,
+                                      DWORD dwBand,
+                                      DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName, __FUNCTION__);
+
+    return hWnd;
+}
+
 std::vector<HWND> GetCoreWnds() {
     struct ENUM_WINDOWS_PARAM {
         std::vector<HWND>* hWnds;
@@ -1889,8 +2022,19 @@ std::vector<HWND> GetCoreWnds() {
                 return TRUE;
             }
 
-            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-                param.hWnds->push_back(hWnd);
+            switch (g_target) {
+                case Target::ShellExperienceHost:
+                    if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") ==
+                        0) {
+                        param.hWnds->push_back(hWnd);
+                    }
+                    break;
+
+                case Target::ShellHost:
+                    if (_wcsicmp(szClassName, L"ControlCenterWindow") == 0) {
+                        param.hWnds->push_back(hWnd);
+                    }
+                    break;
             }
 
             return TRUE;
@@ -1902,6 +2046,28 @@ std::vector<HWND> GetCoreWnds() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    g_target = Target::ShellExperienceHost;
+
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            Wh_Log(L"GetModuleFileName failed");
+            break;
+
+        default:
+            if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
+                moduleFileName++;
+                if (_wcsicmp(moduleFileName, L"ShellHost.exe") == 0) {
+                    g_target = Target::ShellHost;
+                }
+            } else {
+                Wh_Log(L"GetModuleFileName returned an unsupported path");
+            }
+            break;
+    }
 
     HMODULE user32Module = LoadLibrary(L"user32.dll");
     if (user32Module) {
