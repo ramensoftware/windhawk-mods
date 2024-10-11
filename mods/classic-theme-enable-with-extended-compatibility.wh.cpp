@@ -2,7 +2,7 @@
 // @id              classic-theme-enable-with-extended-compatibility
 // @name            Classic Theme Enable with extended compatibility
 // @description     Enables classic theme. Supports Remote Desktop sessions and is compatible with early / system start of Windhawk.
-// @version         1.2.1
+// @version         1.3.0
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
@@ -395,7 +395,9 @@ BOOL TryInit(bool* abort) {
         *abort = true;
         return FALSE;
     }
-    else if (sessionId != WTSGetActiveConsoleSessionId()) {     //this function does not fail
+    else {
+        //NB! apply this check for the physical console session as well, else some video drivers may fail when Windhawk is loaded early during system start.
+        //These functions here work even when TermService service is disabled.
 
         WTS_CONNECTSTATE_CLASS* pConnectState = NULL;
         DWORD bytesReturned;
@@ -476,8 +478,7 @@ BOOL TryInit(bool* abort) {
     }
 
     // Set the security descriptor for the object.
-    BOOL result = SetKernelObjectSecurity
-    (
+    BOOL result = SetKernelObjectSecurity(
         hSection,
         DACL_SECURITY_INFORMATION,
         psd
@@ -535,7 +536,12 @@ DWORD WINAPI InitThreadFunc(LPVOID param) {
     bool isRetry = false;
 retry:  //If Windhawk loads the mod too early then the classic theme initialisation will fail. Therefore we need to loop until the initialisation succeeds. Also if the mod is loaded into a RDP session too early then for some reason that would block the RDP session from successfully connecting. So we need to wait for session "active" state in case of RDP sessions. This is another reason for having a loop here.
     if (isRetry) {
-        if (WaitForSingleObject(g_initThreadStopSignal, 1) != WAIT_TIMEOUT) {
+#ifdef _DEBUG
+        DWORD waitInterval = 1000;
+#else 
+        DWORD waitInterval = 1;
+#endif
+        if (WaitForSingleObject(g_initThreadStopSignal, waitInterval) != WAIT_TIMEOUT) {
             Wh_Log(L"Shutting down InitThreadFunc before success");
             RestoreTimerResolution();
             return FALSE;
@@ -596,10 +602,12 @@ BOOL Wh_ModInit() {
             return FALSE;   //TODO: ignore this failure
         }
 
-        Wh_Log(L"NtQueryTimerResolution: min=%f, max=%f, current=%f",
+        Wh_Log(
+            L"NtQueryTimerResolution: min=%f, max=%f, current=%f",
             (double)MinimumResolution / 10000.0,
             (double)MaximumResolution / 10000.0,
-            (double)CurrentResolution / 10000.0);
+            (double)CurrentResolution / 10000.0
+        );
         g_maximumResolution = MaximumResolution;
         g_originalTimerResolution = CurrentResolution;
 
