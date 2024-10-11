@@ -1340,6 +1340,29 @@
                 "version": "1.0.2"
             }
         },
+        "hold-teams-meeting-thumbnail-in-place": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1728664619000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1728664619000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Roland Pihlakas",
+                "compilerOptions": "-lkernel32 -luser32",
+                "description": "Prevent Teams from periodically rearranging the meeting thumbnail window",
+                "github": "https://github.com/levitation",
+                "homepage": "https://www.simplify.ee/",
+                "include": [
+                    "ms-teams.exe",
+                    "msteams.exe"
+                ],
+                "name": "Hold Teams meeting thumbnail in place",
+                "version": "1.0"
+            }
+        },
         "icon-resource-redirect": {
             "details": {
                 "defaultSorting": 4140,
