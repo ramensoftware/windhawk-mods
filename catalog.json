@@ -608,7 +608,7 @@
                 "published": 1724346656000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1725358029000,
+                "updated": 1728671811000,
                 "users": 44
             },
             "metadata": {
@@ -621,7 +621,7 @@
                     "winlogon.exe"
                 ],
                 "name": "Classic Theme Enable with extended compatibility",
-                "version": "1.2.1"
+                "version": "1.3.0"
             }
         },
         "classic-theme-explorer-lite": {

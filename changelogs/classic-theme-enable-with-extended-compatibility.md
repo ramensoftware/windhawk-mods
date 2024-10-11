@@ -1,3 +1,7 @@
+## 1.3.0 ([Oct 11, 2024](https://github.com/ramensoftware/windhawk-mods/blob/551d89834d61b09d3f43e53f3b03055c9b9b57dd/mods/classic-theme-enable-with-extended-compatibility.wh.cpp))
+
+* Fixed issue of video drivers not starting properly in some computers when Windhawk with Classic theme mod is started very early during system start.
+
 ## 1.2.1 ([Sep 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1e62db06cc972d776be64ab8a0276348a8132b06/mods/classic-theme-enable-with-extended-compatibility.wh.cpp))
 
 * Updated the readme instruction for triggering early / system start of Windhawk service, which is necessary to ensure that classic theme is properly applied before any programs including Taskbar run. The mod code is same, only readme instruction has changed. Also added one more classic theme related mod to the recommended mods list in the readme.
