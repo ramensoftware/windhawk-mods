@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.6
+// @version         1.3.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -170,6 +170,9 @@ constexpr WCHAR kCustomGroupPrefix[] = L"Windhawk_Group_";
 constexpr size_t kCustomGroupPrefixLen = ARRAYSIZE(kCustomGroupPrefix) - 1;
 
 WinVersion g_winVersion;
+
+std::atomic<bool> g_initialized;
+std::atomic<bool> g_explorerPatcherInitialized;
 
 bool g_inTaskBandLaunch;
 bool g_inUpdateItemIcon;
@@ -1689,15 +1692,19 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
 
-bool HookExplorerPatcherSymbols(HMODULE epModule) {
-    struct EP_HOOK {
+bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
+    if (g_explorerPatcherInitialized.exchange(true)) {
+        return true;
+    }
+
+    struct EXPLORER_PATCHER_HOOK {
         PCSTR symbol;
         void** pOriginalFunction;
         void* hookFunction = nullptr;
         bool optional = false;
     };
 
-    EP_HOOK hooks[] = {
+    EXPLORER_PATCHER_HOOK hooks[] = {
         {R"(?GetNumItems@CTaskGroup@@UEAAHXZ)",
          (void**)&CTaskGroup_GetNumItems_Original},
         {R"(?SetAppID@CTaskGroup@@UEAAJPEBG@Z)",
@@ -1797,9 +1804,9 @@ bool HookExplorerPatcherSymbols(HMODULE epModule) {
     bool succeeded = true;
 
     for (const auto& hook : hooks) {
-        void* ptr = (void*)GetProcAddress(epModule, hook.symbol);
+        void* ptr = (void*)GetProcAddress(explorerPatcherModule, hook.symbol);
         if (!ptr) {
-            Wh_Log(L"EP symbol%s doesn't exist: %S",
+            Wh_Log(L"ExplorerPatcher symbol%s doesn't exist: %S",
                    hook.optional ? L" (optional)" : L"", hook.symbol);
             if (!hook.optional) {
                 succeeded = false;
@@ -1812,6 +1819,10 @@ bool HookExplorerPatcherSymbols(HMODULE epModule) {
         } else {
             *hook.pOriginalFunction = ptr;
         }
+    }
+
+    if (g_initialized) {
+        Wh_ApplyHookOperations();
     }
 
     return succeeded;
@@ -1859,7 +1870,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module && !((ULONG_PTR)module & 3)) {
+    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
         HandleModuleIfExplorerPatcher(module);
     }
 
@@ -2174,7 +2185,7 @@ bool HookTaskbarSymbols() {
         module = LoadLibrary(L"taskbar.dll");
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
-            return FALSE;
+            return false;
         }
     }
 
@@ -2284,19 +2295,23 @@ BOOL Wh_ModInit() {
     }
 
     if (g_settings.oldTaskbarOnWin11) {
+        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
+
         if (g_winVersion >= WinVersion::Win11) {
             g_winVersion = WinVersion::Win10;
         }
 
-        if (g_winVersion < WinVersion::Win11_24H2) {
-            if (!HookTaskbarSymbols()) {
-                return FALSE;
-            }
+        if (hasWin10Taskbar && !HookTaskbarSymbols()) {
+            return FALSE;
         }
 
         HandleLoadedExplorerPatcher();
 
-        Wh_SetFunctionHook((void*)LoadLibraryExW, (void*)LoadLibraryExW_Hook,
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        FARPROC pKernelBaseLoadLibraryExW =
+            GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+        Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
+                           (void*)LoadLibraryExW_Hook,
                            (void**)&LoadLibraryExW_Original);
     } else {
         if (!HookTaskbarSymbols()) {
@@ -2318,6 +2333,16 @@ BOOL Wh_ModInit() {
                        (void**)&DPA_DeletePtr_Original);
 
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    // Try again in case there's a race between the previous attempt and the
+    // LoadLibraryExW hook.
+    if (g_settings.oldTaskbarOnWin11 && !g_explorerPatcherInitialized) {
+        HandleLoadedExplorerPatcher();
+    }
 }
 
 void Wh_ModUninit() {
