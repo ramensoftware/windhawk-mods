@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-11T16:36:59.000Z</updated>
+    <updated>2024-10-11T17:45:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.6]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#46afafc524f2b7c879702a798e74e11f7fcfd70b</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2024-10-11T17:45:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed multiple pinned items sometimes appearing for the same program when using multiple monitors.</li>
+<li>Fixed pinned items getting an incorrect icon in some cases.</li>
+<li>Added support for the ExplorerPatcher taskbar. Versions newer than 22621.3880.66.6 are supported. The "Customize the old taskbar on Windows 11" option must be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hold Teams meeting thumbnail in place 1.0]]></title>
         <id>https://windhawk.net/mods/hold-teams-meeting-thumbnail-in-place#3066a5a0c615f74915594ade1ef7c421a1dd5e6a</id>
@@ -274,23 +289,6 @@ limitation</a> which
 makes some styles only work if there's a single monitor. This mod can be used as
 a workaround.</p>
 <p><img src="https://i.imgur.com/lMp8OLp.gif" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#3065efada7b6b5dd413a165287b76560ff0c0210</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2024-09-28T18:55:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed rotated badges (e.g. unread counters) for some programs.</li>
-<li>Fixed the edge of the taskbar being non-clickable in some cases.</li>
-<li>Fixed the taskbar not showing up at startup in some cases.</li>
-<li>Fixed the tray icons flyout arrow being reversed when the taskbar is on the right.</li>
-<li>Fixed taskbar overflow flyout opening on the left of the monitor when the taskbar is on the right.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

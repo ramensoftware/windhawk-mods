@@ -1,3 +1,9 @@
+## 1.3.6 ([Oct 11, 2024](https://github.com/ramensoftware/windhawk-mods/blob/46afafc524f2b7c879702a798e74e11f7fcfd70b/mods/taskbar-grouping.wh.cpp))
+
+* Fixed multiple pinned items sometimes appearing for the same program when using multiple monitors.
+* Fixed pinned items getting an incorrect icon in some cases.
+* Added support for the ExplorerPatcher taskbar. Versions newer than 22621.3880.66.6 are supported. The "Customize the old taskbar on Windows 11" option must be enabled for the mod to work with the ExplorerPatcher taskbar.
+
 ## 1.3.5 ([Aug 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/32678e0ef871bf50c15cd8692b9317b869915542/mods/taskbar-grouping.wh.cpp))
 
 * Another attempt at fixing multiple pinned items appearing for the same program.
