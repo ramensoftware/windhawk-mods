@@ -1026,6 +1026,32 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-context-menu-classic": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1728722786000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1728722786000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lshlwapi",
+                "description": "Always show the classic context menu without having to select \"Show More Options\" or hold Shift",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic context menu on Windows 11",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "explorer-frame-classic": {
             "details": {
                 "defaultSorting": 24920,
