@@ -516,7 +516,10 @@ BOOL TryInit(bool* abort, DWORD* retryInterval) {
         if (pConnectState)
             WTSFreeMemory(pConnectState);
 
-        if (!sessionConnected) {  //Modify RDP sessions only when they reach active state else RDP connections will fail
+        //Modify RDP sessions only when they reach active state else RDP connections will fail.
+        //Console sessions will not fail, but video driver might fail if the session is modified too early. 
+        //Therefore console sessions should also be modified only when they reach active state.
+        if (!sessionConnected) {  
 
             if (sessionId == WTSGetActiveConsoleSessionId()) {
 
@@ -657,9 +660,16 @@ DWORD WINAPI InitThreadFunc(LPVOID param) {
 #ifdef _DEBUG
     DWORD retryInterval = 1000;
 #else 
-    DWORD retryInterval = 1;     //TODO!!! use low poll rate in console session while an RDP session is active
+    DWORD retryInterval = 1;
 #endif
-retry:  //If Windhawk loads the mod too early then the classic theme initialisation will fail. Therefore we need to loop until the initialisation succeeds. Also if the mod is loaded into a RDP session too early then for some reason that would block the RDP session from successfully connecting. So we need to wait for session "active" state in case of RDP sessions. This is another reason for having a loop here.
+    //If Windhawk loads the mod too early then the classic theme initialisation will fail. 
+    //Therefore we need to loop until the initialisation succeeds. Also if the mod is loaded 
+    //into a RDP session too early then for some reason that would block the RDP session from 
+    //successfully connecting. So we need to wait for session "active" state in case of RDP 
+    //sessions. This is another reason for having a loop here.
+    //Console sessions will not fail, but video driver might fail if the session is modified 
+    //too early. Waiting for the session active state helps with that as well.
+retry:  
     if (isRetry) {
         if (WaitForSingleObject(g_initThreadStopSignal, retryInterval) != WAIT_TIMEOUT) {
             Wh_Log(L"Shutting down InitThreadFunc before success");
