@@ -2,7 +2,7 @@
 // @id              classic-theme-enable-with-extended-compatibility
 // @name            Classic Theme Enable with extended compatibility
 // @description     Enables classic theme. Supports Remote Desktop sessions and is compatible with early / system start of Windhawk.
-// @version         1.3.0
+// @version         1.3.1
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
@@ -376,7 +376,96 @@ NTSTATUS WINAPI NtSetTimerResolutionHook(ULONG DesiredResolution, BOOLEAN SetRes
     }
 }
 
-BOOL TryInit(bool* abort) {
+bool IsAutomaticLogonEnabled() {
+
+    //automatic logon settings are stored here:
+    //HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+    //AutoAdminLogon: Should be set to "1" for automatic logon to be enabled.
+    //DefaultUserName: Specifies the username to log on automatically.
+    
+    /*
+    NB! no need to check for DefaultPassword registry value:
+    In earlier versions of Windows(prior to Windows XP), the DefaultPassword registry value
+    was required for automatic logon to function. This value stores the password in plain text, 
+    which poses a significant security risk. In more recent versions of Windows (Windows Vista 
+    and later), Microsoft introduced a more secure method where the password is stored in the 
+    Local Security Authority (LSA) secrets, and the DefaultPassword registry value might not be 
+    populated even if automatic logon is enabled.
+    */
+
+    HKEY hKey;
+    LONG lResult = RegOpenKeyExW(
+        HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+        0,
+        KEY_READ | KEY_WOW64_64KEY, //KEY_WOW64_64KEY - This flag is ignored by 32-bit Windows
+        &hKey
+    );
+
+    if (lResult != ERROR_SUCCESS) {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+        Wh_Log(L"Failed to open registry key, error code: %u", lResult);
+#endif
+        return false;
+    }
+
+
+    DWORD dwType = REG_SZ;
+
+    //check if AutoAdminLogon is set to "1"
+    wchar_t szValue[2];
+    DWORD dwSize = sizeof(szValue);
+    lResult = RegQueryValueExW(
+        hKey,
+        L"AutoAdminLogon",
+        NULL,   //lpReserved
+        &dwType,
+        (LPBYTE)szValue,
+        &dwSize     //size of the buffer pointed to by the lpData parameter, in bytes.
+    );
+
+    if (
+        lResult != ERROR_SUCCESS 
+        || szValue[0] != L'1'
+    ) {
+        RegCloseKey(hKey);
+        return false;
+    }
+
+
+    //check if DefaultUserName is specified
+    wchar_t szUserName[256];
+    dwSize = sizeof(szUserName);
+    lResult = RegQueryValueExW(
+        hKey,
+        L"DefaultUserName",
+        NULL,   //lpReserved
+        &dwType,
+        (LPBYTE)szUserName,
+        &dwSize     //size of the buffer pointed to by the lpData parameter, in bytes.
+    );
+
+    RegCloseKey(hKey);
+
+    if (
+        lResult != ERROR_SUCCESS 
+        || szUserName[0] == L'\0'
+    ) {
+        return false;
+    }
+
+    //AutoAdminLogon is "1" and DefaultUserName is specified
+    return true;
+}
+
+BOOL TryInit(bool* abort, DWORD* retryInterval) {
+
+#ifdef _DEBUG
+    *retryInterval = 1000;
+#else
+    *retryInterval = 1;
+#endif
+
 
     // Retrieve the current session ID for the process.
     DWORD sessionId;
@@ -396,7 +485,7 @@ BOOL TryInit(bool* abort) {
         return FALSE;
     }
     else {
-        //NB! apply this check for the physical console session as well, else some video drivers may fail when Windhawk is loaded early during system start.
+        //NB! apply this check for the physical console session as well, else some video drivers may fail when Windhawk is loaded very early during system start.
         //These functions here work even when TermService service is disabled.
 
         WTS_CONNECTSTATE_CLASS* pConnectState = NULL;
@@ -427,8 +516,42 @@ BOOL TryInit(bool* abort) {
         if (pConnectState)
             WTSFreeMemory(pConnectState);
 
-        if (!sessionConnected)  //Modify RDP sessions only when they reach active state else RDP connections will fail
+        //Modify RDP sessions only when they reach active state else RDP connections will fail.
+        //Console sessions will not fail, but video driver might fail if the session is modified too early. 
+        //Therefore console sessions should also be modified only when they reach active state.
+        if (!sessionConnected) {  
+
+            if (sessionId == WTSGetActiveConsoleSessionId()) {
+
+                //do not waste CPU cycles for quick polling in the console session when the user is not about to log in
+
+                if (!IsAutomaticLogonEnabled()) {       //if automatic logon is enabled then we should not wait for the user to become active
+
+                    //WTSINFOW.LastInputTime is not updated when the user is active in the logon screen, but GetLastInputInfo is updated
+                    LASTINPUTINFO lastInputInfo;
+                    lastInputInfo.cbSize = sizeof(LASTINPUTINFO);
+                    if (GetLastInputInfo(&lastInputInfo)) {
+
+                        DWORD lastInputTime = lastInputInfo.dwTime;
+                        DWORD currentTime = GetTickCount();
+
+                        DWORD timeSinceLastInputMs = currentTime - lastInputTime;
+                        if (timeSinceLastInputMs >= 60 * 1000) {  //Windows empties the login password field in about 30 seconds
+
+                            //lets assume that the user needs more than 1 second to type their password
+                            *retryInterval = 1000;  
+                        }
+                    }
+                    else {
+#ifdef _DEBUG   //this function will run in a fast loop, therefore not logging failures by default
+                        Wh_Log(L"GetLastInputInfo failed");
+#endif
+                    }
+                }
+            }
+
             return FALSE;     //retry
+        }
     }
 
 
@@ -534,14 +657,21 @@ DWORD WINAPI InitThreadFunc(LPVOID param) {
     Wh_Log(L"InitThreadFunc enter");
 
     bool isRetry = false;
-retry:  //If Windhawk loads the mod too early then the classic theme initialisation will fail. Therefore we need to loop until the initialisation succeeds. Also if the mod is loaded into a RDP session too early then for some reason that would block the RDP session from successfully connecting. So we need to wait for session "active" state in case of RDP sessions. This is another reason for having a loop here.
-    if (isRetry) {
 #ifdef _DEBUG
-        DWORD waitInterval = 1000;
+    DWORD retryInterval = 1000;
 #else 
-        DWORD waitInterval = 1;
+    DWORD retryInterval = 1;
 #endif
-        if (WaitForSingleObject(g_initThreadStopSignal, waitInterval) != WAIT_TIMEOUT) {
+    //If Windhawk loads the mod too early then the classic theme initialisation will fail. 
+    //Therefore we need to loop until the initialisation succeeds. Also if the mod is loaded 
+    //into a RDP session too early then for some reason that would block the RDP session from 
+    //successfully connecting. So we need to wait for session "active" state in case of RDP 
+    //sessions. This is another reason for having a loop here.
+    //Console sessions will not fail, but video driver might fail if the session is modified 
+    //too early. Waiting for the session active state helps with that as well.
+retry:  
+    if (isRetry) {
+        if (WaitForSingleObject(g_initThreadStopSignal, retryInterval) != WAIT_TIMEOUT) {
             Wh_Log(L"Shutting down InitThreadFunc before success");
             RestoreTimerResolution();
             return FALSE;
@@ -550,7 +680,7 @@ retry:  //If Windhawk loads the mod too early then the classic theme initialisat
     isRetry = true;
 
     bool abort = false;
-    if (TryInit(&abort)) {
+    if (TryInit(&abort, &retryInterval)) {
         RestoreTimerResolution();
         return TRUE;    //classic theme enable done
     }
@@ -569,7 +699,8 @@ BOOL Wh_ModInit() {
 
 
     bool abort = false;
-    if (TryInit(&abort)) {
+    DWORD unusedRetryInterval;
+    if (TryInit(&abort, &unusedRetryInterval)) {
         return TRUE;    //classic theme enable done
     }
     else if (abort) {
