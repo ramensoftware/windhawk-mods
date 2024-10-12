@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-12T13:48:06.000Z</updated>
+    <updated>2024-10-12T16:41:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar classic context menu 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-classic-menu#eb7a7948afa4a9c28ddab5b6437d61abb001017d</id>
+        <link href="https://windhawk.net/mods/taskbar-classic-menu"/>
+        <updated>2024-10-12T16:41:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarclassiccontextmenu">Taskbar classic context menu</h1>
+<p>Show the classic context menu when right-clicking on taskbar items. You can hold
+the Shift key to show the default jump list.</p>
+<p>Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
+check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a>.</p>
+<p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
+or a similar tool), enable the relevant option in the mod's settings.</p>
+<p><img src="https://i.imgur.com/lQEHQyR.png" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Treeview 1.1.2]]></title>
         <id>https://windhawk.net/mods/classic-explorer-treeview#e5a77cad35db119b7a798eb68597cead108a76a2</id>
@@ -271,20 +289,6 @@ versions weren't tested and are probably not compatible.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.41]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#4ab0994ab79cb76e217a4b658639f98875959b4a</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2024-10-02T07:49:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hotfix to account for new OpenGlass registry values as announced in the <a href="https://github.com/ALTaleX531/OpenGlass/releases/tag/v1.2-legacy">latest update</a>.</li>
-<li>Updated readme.</li>
-</ul>]]></content>
-        <author>
-            <name>CatmanFan / Mr._Lechkar</name>
-            <uri>https://github.com/CatmanFan</uri>
         </author>
     </entry>
 </feed>

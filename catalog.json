@@ -2423,6 +2423,32 @@
                 "version": "1.0.6"
             }
         },
+        "taskbar-classic-menu": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1728751303000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1728751303000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Show the classic context menu when right-clicking on taskbar items",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar classic context menu",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-clock-customization": {
             "details": {
                 "defaultSorting": 99150,
