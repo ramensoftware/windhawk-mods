@@ -1,3 +1,8 @@
+## 1.1.6 ([Oct 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1db804f1cdc96957d8e71132cf1378fc19d94ea2/mods/icon-resource-redirect.wh.cpp))
+
+* Improved DirectUI resources redirection (usually `UIFILE` and `XML`) to not affect sub resources such as strings, which are now loaded from the original file.
+* Improved icon cache invalidation when settings change and when the mod is unloaded.
+
 ## 1.1.5 ([Aug 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/84c3316ab38986a63b67f2dc50b44025989788ff/mods/icon-resource-redirect.wh.cpp))
 
 * Added information about icon themes to the mod description.

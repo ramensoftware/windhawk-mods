@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-12T21:00:31.000Z</updated>
+    <updated>2024-10-12T21:10:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.1.6]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#1db804f1cdc96957d8e71132cf1378fc19d94ea2</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-10-12T21:10:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved DirectUI resources redirection (usually <code>UIFILE</code> and <code>XML</code>) to not affect sub resources such as strings, which are now loaded from the original file.</li>
+<li>Improved icon cache invalidation when settings change and when the mod is unloaded.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.6]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#02ba0666ef1b78f2462215089a2a29834143aecf</id>
@@ -271,22 +285,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
 <li>Added an optional configuration for dark mode.</li>
 <li>Improved maximized window detection.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#b43269d44eb047e3f27c015faca6fd365b0960d1</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2024-10-04T15:33:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarontopforwindows11">Taskbar on top for Windows 11</h1>
-<p>Moves the Windows 11 taskbar to the top of the screen.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod was designed for up-to-date Windows 11 versions 22H2 to 24H2. Other
-versions weren't tested and are probably not compatible.</p>
-<p><img src="https://i.imgur.com/dCABsum.png" alt="Screenshot" /></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

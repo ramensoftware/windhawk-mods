@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. instead of icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.1.5
+// @version         1.1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,6 +10,14 @@
 // @include         *
 // @compilerOptions -lshlwapi
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
 
 // ==WindhawkModReadme==
 /*
@@ -1174,6 +1182,37 @@ HRESULT WINAPI SHCreateStreamOnModuleResourceW_Hook(HMODULE hModule,
                                                     ppStream);
 }
 
+void DirectUI_DUIXmlParser_SetDefaultHInstance(void* pThis, HMODULE hModule) {
+    using DirectUI_DUIXmlParser_SetDefaultHInstance_t =
+        void(__thiscall*)(void* pThis, HMODULE hModule);
+    static DirectUI_DUIXmlParser_SetDefaultHInstance_t pSetDefaultHInstance = []() {
+        HMODULE duiModule = LoadLibrary(L"dui70.dll");
+        if (duiModule) {
+            PCSTR procName =
+#ifdef _WIN64
+                R"(?SetDefaultHInstance@DUIXmlParser@DirectUI@@QEAAXPEAUHINSTANCE__@@@Z)";
+#else
+                R"(?SetDefaultHInstance@DUIXmlParser@DirectUI@@QAEXPAUHINSTANCE__@@@Z)";
+#endif
+            FARPROC pSetXMLFromResource = GetProcAddress(duiModule, procName);
+            if (pSetXMLFromResource) {
+                return (DirectUI_DUIXmlParser_SetDefaultHInstance_t)
+                    pSetXMLFromResource;
+            } else {
+                Wh_Log(L"Couldn't find SetDefaultHInstance");
+            }
+        } else {
+            Wh_Log(L"Couldn't load dui70.dll");
+        }
+
+        return (DirectUI_DUIXmlParser_SetDefaultHInstance_t) nullptr;
+    }();
+
+    if (pSetDefaultHInstance) {
+        pSetDefaultHInstance(pThis, hModule);
+    }
+}
+
 using SetXMLFromResource_t = HRESULT(__thiscall*)(void* pThis,
                                                   PCWSTR lpName,
                                                   PCWSTR lpType,
@@ -1222,6 +1261,12 @@ HRESULT __thiscall SetXMLFromResource_Hook(void* pThis,
             return false;
         });
     if (redirected) {
+        // By using a redirected module, its handle will be saved by
+        // DUIXmlParser and will be used for loading additional resources, such
+        // as strings. This might be undesirable, so set the original module. An
+        // example for why setting the original module is sometimes preferable:
+        // https://github.com/ramensoftware/windhawk-mods/issues/639
+        DirectUI_DUIXmlParser_SetDefaultHInstance(pThis, hModule);
         return result;
     }
 
@@ -1444,10 +1489,25 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+bool DoesTaskbarBelongToCurrentProcess() {
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+    DWORD dwProcessId;
+    return hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) &&
+           dwProcessId == GetCurrentProcessId();
+}
+
 void Wh_ModUninit() {
     Wh_Log(L">");
 
     FreeAndClearRedirectedModules();
+
+    if (DoesTaskbarBelongToCurrentProcess()) {
+        // Let other processes some time to unload the mod.
+        Sleep(400);
+
+        // Invalidate icon cache.
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -1457,6 +1517,11 @@ void Wh_ModSettingsChanged() {
 
     FreeAndClearRedirectedModules();
 
-    // Invalidate icon cache.
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    if (DoesTaskbarBelongToCurrentProcess()) {
+        // Let other processes some time to load the new config.
+        Sleep(400);
+
+        // Invalidate icon cache.
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    }
 }
