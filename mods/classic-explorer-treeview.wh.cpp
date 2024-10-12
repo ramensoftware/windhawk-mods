@@ -2,7 +2,7 @@
 // @id              classic-explorer-treeview
 // @name            Classic Explorer Treeview
 // @description     Modifies Folder Treeview in file explorer so as to make it look more classic.
-// @version         1.1.1
+// @version         1.1.2
 // @author          Waldemar
 // @github          https://github.com/CyprinusCarpio
 // @include         explorer.exe
@@ -18,6 +18,9 @@
 - DrawLines: true
   $name: Draw Dotted Lines
   $description: Use TVS_HASLINES style. Disable for a more XP-like look.
+- HotTracking: false
+  $name: Item Hot Tracking
+  $description: Use TVS_TRACKSELECT style. Enable for a more XP-like look.
 - LinesAtRoot: false
   $name: Lines At Root
   $description: Use TVS_LINESATROOT style.
@@ -63,6 +66,9 @@ For issue reports, contact waldemar3194 on Discord, or file a report at my [gith
 
 
 # Changelog:
+## 1.1.2
+- Added a option to enable item hot tracking
+
 ## 1.1.1
 - Added a option to draw a gradient background for the header for XP-like looks
 - Added a context menu for the header like in real InfoBands
@@ -165,6 +171,7 @@ bool g_settingDrawDottedLines = true;
 bool g_settingLinesAtRoot = false;
 bool g_settingDrawButtons = true;
 bool g_settingsGradientBackground = false;
+bool g_settingsHotTracking = false;
 WindhawkUtils::StringSetting g_settingLineColorOption;
 WindhawkUtils::StringSetting g_settingFoldersPaneText;
 int g_settingCloseButtonXOffset = 0;
@@ -1061,6 +1068,8 @@ HWND __cdecl NSCCreateTreeviewHook(void* pThis, HWND hWnd)
                 dwStyle |= TVS_LINESATROOT;
             if(g_settingDrawDottedLines)
                 dwStyle |= TVS_HASLINES;
+            if(g_settingsHotTracking)
+                dwStyle |= TVS_TRACKSELECT;
 
             SetWindowLongPtrW(treeview, GWL_STYLE, dwStyle);
 
@@ -1232,6 +1241,7 @@ BOOL Wh_ModInit()
     g_settingLinesAtRoot = Wh_GetIntSetting(L"LinesAtRoot");
     g_settingDrawButtons = Wh_GetIntSetting(L"DrawButtons");
     g_settingsGradientBackground = Wh_GetIntSetting(L"GradientBackground");
+    g_settingsHotTracking = Wh_GetIntSetting(L"HotTracking");
     g_settingLineColorOption =
         WindhawkUtils::StringSetting::make(L"AlternateLineColor");
     g_settingFoldersPaneText =
@@ -1311,6 +1321,7 @@ void Wh_ModSettingsChanged()
     g_settingLinesAtRoot = Wh_GetIntSetting(L"LinesAtRoot");
     g_settingDrawButtons = Wh_GetIntSetting(L"DrawButtons");
     g_settingsGradientBackground = Wh_GetIntSetting(L"GradientBackground");
+    g_settingsHotTracking = Wh_GetIntSetting(L"HotTracking");
     g_settingLineColorOption =
         WindhawkUtils::StringSetting::make(L"AlternateLineColor");
     g_settingFoldersPaneText =

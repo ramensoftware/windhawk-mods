@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-12T08:46:26.000Z</updated>
+    <updated>2024-10-12T13:48:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Treeview 1.1.2]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-treeview#e5a77cad35db119b7a798eb68597cead108a76a2</id>
+        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
+        <updated>2024-10-12T13:48:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a option to enable item hot tracking</li>
+</ul>]]></content>
+        <author>
+            <name>Waldemar</name>
+            <uri>https://github.com/CyprinusCarpio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic context menu on Windows 11 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-context-menu-classic#2f13948e7bb608a46585e61523aebc0c9a283b20</id>
@@ -272,20 +285,6 @@ versions weren't tested and are probably not compatible.</p>
         <author>
             <name>CatmanFan / Mr._Lechkar</name>
             <uri>https://github.com/CatmanFan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Slick Window Arrangement 1.0.2]]></title>
-        <id>https://windhawk.net/mods/slick-window-arrangement#97ef7cd2031fef8f112ae3de6cfea173bbda0975</id>
-        <link href="https://windhawk.net/mods/slick-window-arrangement"/>
-        <updated>2024-10-01T06:04:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed snapping frame being stuck in some cases.</li>
-<li>Fixed windows jumping to the top left corner of the screen while moving in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

@@ -363,7 +363,7 @@
                 "published": 1708354597000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1728230545000,
+                "updated": 1728740886000,
                 "users": 258
             },
             "metadata": {
@@ -378,7 +378,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Explorer Treeview",
-                "version": "1.1.1"
+                "version": "1.1.2"
             }
         },
         "classic-file-picker-dialog": {

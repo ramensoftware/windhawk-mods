@@ -1,3 +1,7 @@
+## 1.1.2 ([Oct 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/e5a77cad35db119b7a798eb68597cead108a76a2/mods/classic-explorer-treeview.wh.cpp))
+
+- Added a option to enable item hot tracking
+
 ## 1.1.1 ([Oct 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5d24a3a59980affaff8b2e34006a3a3d788e006c/mods/classic-explorer-treeview.wh.cpp))
 
 - Added a option to draw a gradient background for the header for XP-like looks
