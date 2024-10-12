@@ -1,3 +1,8 @@
+## 1.1.6 ([Oct 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/02ba0666ef1b78f2462215089a2a29834143aecf/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Added a workaround for keyboard shortcuts not working after sleep.
+* Improved keyboard handling to use the monitor with the mouse cursor instead of always using the primary monitor.
+
 ## 1.1.5 ([Sep 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d2ebc37c2e5b3b8c2cda9d391238b7ac3879fd63/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Added support for Windows 11 version 24H2.
