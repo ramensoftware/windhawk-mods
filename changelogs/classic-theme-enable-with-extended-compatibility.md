@@ -1,3 +1,7 @@
+## 1.3.1 ([Oct 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3934b846909350ae091ae036a3756d10298aa106/mods/classic-theme-enable-with-extended-compatibility.wh.cpp))
+
+* CPU usage optimization for the console session, which may wait for the session activation for a long time.
+
 ## 1.3.0 ([Oct 11, 2024](https://github.com/ramensoftware/windhawk-mods/blob/551d89834d61b09d3f43e53f3b03055c9b9b57dd/mods/classic-theme-enable-with-extended-compatibility.wh.cpp))
 
 * Fixed issue of video drivers not starting properly in some computers when Windhawk with Classic theme mod is started very early during system start.
