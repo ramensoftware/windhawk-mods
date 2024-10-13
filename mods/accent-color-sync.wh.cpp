@@ -71,11 +71,11 @@ Brings back the functionality of the Control Panel's "Color intensity" slider to
   $name: Sync with DWM
   $name:fr-FR: Synchroniser avec DWM
   $name:es-ES: Sincronizar con DWM
-  $name:ja-JP: ＤＷＭと同期する
+  $name:ja-JP: DWMと同期する
   $description: Writes the opacity value to DWM's color and afterglow variables. This makes it so that the opacity is also written to the theme alongside the color's RGB. Otherwise, Windows automatically sets it to remain stationary at 0xc4 (196 of 255).
   $description:fr-FR: Sauvegarder la valeur d'opacité aux options de DWM. Cela permet de définir également l'opacité dans le thème simultanément avec les valeurs du RVB. Sinon, Windows le définit en permanence à 0xc4 (196 sur 255).
   $description:es-ES: Guarda el valor de opacidad de OpenGlass en DWM. Esto lo permite guardar la opacidad del tema que Windows normalmente siempre establece en 0xc4, o 196 de 255, simultáneamente con los valores RGB.
-  $description:ja-JP: 不透明度の値をＤＷＭ設定に保存します。
+  $description:ja-JP: 不透明度の値をDWM設定に保存します。
 - glassSoftware: og2
   $options:
   - og2: OpenGlass
