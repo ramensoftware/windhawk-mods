@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-13T13:20:11.000Z</updated>
+    <updated>2024-10-13T17:04:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar language indicator layout control 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-language-indicator-layout-control#1aa590d6687dbcebbb6ff928534fe15b3a0881ea</id>
+        <link href="https://windhawk.net/mods/taskbar-language-indicator-layout-control"/>
+        <updated>2024-10-13T17:04:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarlanguageindicatorlayoutcontrol">Taskbar language indicator layout control</h1>
+<p>By default, Windows has a distracting feature: When language indicator is enabled and the user opens a Remote Desktop client window, the language bar is hidden, causing a jump in the taskbar layout. When the user switches to another program, the taskbar jumps again as the language indicator is reshown.</p>
+<p>Moreover, the language indicator configuration in Windows Settings is buggy even in a number of ways: Disabling the language indicator via Windows Settings does not "stick", after a reboot the indicator is visible again and needs to be turned off once more. As a smaller additional bug, the language indicator checkbox in acts weird, requiring the user to click the checkbox twice before it has effect. To confuse things even further, the checkbox description is reversed from what it should be.</p>
+<p>This mod is targeted at solving the language indicator problems once and for all.</p>
+<p>Under current mod's Settings you find four options to choose from for the language indicator layout:
+1) Make it visible except when Windows wants to hide it temporarily. At the same time, the layout is fixed by the mod. This means that when Windows hides the language indicator temporarily while a Remote Desktop window is in foreground, then the space for the indicator is preserved by the mod, thereby avoiding the tray area from jumping around - there will be an empty space preserving the place of the language indicator.
+2) Hide the language indicator persistently. This option is useful considering that after a reboot, Windows itself normally "forgets" the system setting to hide the language indicator. With this option, the mod overrides whatever Windows is trying to do to the language indicator.
+3) Make it always visible, including when a Remote Desktop window is in foreground. This option again prevents the tray area from jumping around. Note that when Remote Desktop window is in foreground, then the language choice visible in the language indicator has no real effect - it is there just to avoid visual distractions.
+4) Let Windows manage it. This option is conceptually equivalent to disabling this mod. But compared to mod disabling, choosing this option for temporary purposes might work faster and provides better Taskbar stability guarantees. If you do not need this mod anymore at all, then of course disable it.</p>]]></content>
+        <author>
+            <name>Roland Pihlakas</name>
+            <uri>https://github.com/levitation</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent Color Sync 1.51]]></title>
         <id>https://windhawk.net/mods/accent-color-sync#b4fd17a79d7d27a688c194d2e85d2df6da981df4</id>
@@ -273,21 +292,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <author>
             <name>Mark Jansen</name>
             <uri>https://github.com/learn-more</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#2fb9f53e0e636376c07c33fa9a861345c4572e1a</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2024-10-05T14:21:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved jump list size and position handling.</li>
-<li>Adjusted the 1px taskbar border to be at the bottom of the taskbar.</li>
-<li>Fixed the start menu disappearing or being positioned incorrectly sometimes.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
