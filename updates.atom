@@ -32,7 +32,12 @@
         <id>https://windhawk.net/mods/accent-color-sync#b4fd17a79d7d27a688c194d2e85d2df6da981df4</id>
         <link href="https://windhawk.net/mods/accent-color-sync"/>
         <updated>2024-10-13T13:20:11.000Z</updated>
-        <content type="html"><![CDATA[<p>Update Accent Color Sync to v1.51</p>]]></content>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Hotfixes</strong></li>
+<li>Fixed a minor bug in which the "Fixed opacity" option in the mod settings was accidentally left enabled. Please disable the option manually if you are not planning on using the feature.</li>
+<li>Fixed a bug in which the OpenGlass options were incorrectly swapped.</li>
+<li>Updated readme to correct some things.</li>
+</ul>]]></content>
         <author>
             <name>CatmanFan / Mr._Lechkar</name>
             <uri>https://github.com/CatmanFan</uri>
