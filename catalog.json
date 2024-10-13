@@ -9,7 +9,7 @@
                 "published": 1721392103000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1727855397000,
+                "updated": 1728800197000,
                 "users": 159
             },
             "metadata": {
@@ -19,13 +19,13 @@
                 ],
                 "author": "CatmanFan / Mr._Lechkar",
                 "compilerOptions": "-lcomdlg32 -lversion",
-                "description": "Synchronises OpenGlass and Control Panel color settings",
+                "description": "Restores Control Panel color opacity functionality",
                 "github": "https://github.com/CatmanFan",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Accent Color Sync",
-                "version": "1.41"
+                "version": "1.5"
             }
         },
         "acrylic-effect-radius-changer": {

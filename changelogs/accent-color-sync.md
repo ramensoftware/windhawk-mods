@@ -1,3 +1,12 @@
+## 1.5 ([Oct 13, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b788c556e80d06c9ae315e53830396ff92ee1d59/mods/accent-color-sync.wh.cpp))
+
+* Fixed margins of error with the DWM colorization calculator formula, making it more accurate to ALTaleX's original Python code.
+* OpenGlass: Add option to toggle between using the old registry value name (i.e. "og_{xxx}") and the current one ("{xxx}Override") in mod settings
+* Add (experimental) support for [legacy Glass8](https://archive.org/details/full-glass8-archive)
+* Add option to set permanent fixed opacity (useful for automatic desktop background color!)
+* Add Japanese translation
+* Updated readme, settings and mod description
+
 ## 1.41 ([Oct 2, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4ab0994ab79cb76e217a4b658639f98875959b4a/mods/accent-color-sync.wh.cpp))
 
 * Hotfix to account for new OpenGlass registry values as announced in the [latest update](https://github.com/ALTaleX531/OpenGlass/releases/tag/v1.2-legacy).
