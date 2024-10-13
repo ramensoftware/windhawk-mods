@@ -22,7 +22,8 @@ Brings back the functionality of the Control Panel's "Color intensity" slider to
 **This mod requires that *one* of the following supported DWM shader applications is installed and running:**
 * **[Legacy OpenGlass](https://github.com/ALTaleX531/OpenGlass/tree/legacy)**, supports Windows 10 1809 ― Windows 11 23H2;
   * It is generally recommended to compile the source code from the official repo, but a list of OpenGlass-legacy downloads is also available *[here](https://github.com/ALTaleX531/OpenGlass/releases)*.
-* **[Glass8](https://archive.org/details/full-glass8-archive)**, supports Windows 10 RTM to 1909 builds. Please note that the shader used by this software is not accurate to the original.
+* **[Glass8](https://archive.org/details/full-glass8-archive)**, supports Windows 10 RTM to 1909 builds.
+  * Please note that the shader used by this software is not accurate to the original.
 
 ### **Additional tips:**
 * If you are updating this mod from version 1.0, it is required to disable or uninstall any unsupported DWM shader software (e.g. regular OpenGlass or DWMBlurGlass).
