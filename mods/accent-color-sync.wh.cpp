@@ -5,7 +5,7 @@
 // @description:fr-FR   Retour de la fonctionnalité d'opacité des couleurs du Panneau de configuration
 // @description:es-ES   Recuperar la funcionalidad de opacidad de colores del Panel de control
 // @description:ja-JP   コントロールパネルの色の不透明度機能を復元する
-// @version             1.5
+// @version             1.51
 // @author              CatmanFan / Mr._Lechkar
 // @github              https://github.com/CatmanFan
 // @include             explorer.exe
@@ -26,10 +26,10 @@ Brings back the functionality of the Control Panel's "Color intensity" slider to
   * Please note that the shader used by this software is not accurate to the original.
 
 ### **Additional tips:**
+* If you are updating this mod from version 1.3, it is recommended to also enable the *Sync with DWM* option in the mod settings, although this can have some minor bugs (see below).
 * If you are updating this mod from version 1.0, it is required to disable or uninstall any unsupported DWM shader software (e.g. regular OpenGlass or DWMBlurGlass).
-* If you are updating this mod from version 1.3, it is recommended to also enable the *Sync with DWM* option from the mod's settings, although this can have some minor bugs (see below).
 * You may need to try changing the accent color manually if changes do not automatically take effect.
-* If one of the OpenGlass options in the *'DWM customization software'* section of the mod settings (i.e. the options labelled "OpenGlass" or "OpenGlass (old registry name)") is not working, try setting it to the other one. This is because while official builds of OpenGlass now use the registry value name template "{xxx}Override" instead of the older "og_{xxx}", this is not the case for some separately-compiled builds, or ports such as [Tech Stuff](https://teknixstuff.com/)'s "OpenGlass Legacy - Windhawk edition".
+* If one of the OpenGlass options in the *'DWM customization software'* section of the mod settings (i.e. the options labelled "OpenGlass" or "OpenGlass (old registry name)") is not working, try setting it to the other one. This is because while official builds of OpenGlass now use the registry value name template "{xxx}Override" instead of the older "og_{xxx}", this is not the case for older separately-compiled builds.
 
 ----
 
@@ -49,7 +49,7 @@ Brings back the functionality of the Control Panel's "Color intensity" slider to
 // ==WindhawkModSettings==
 /*
 - fixedOpacity:
-  - enable: TRUE
+  - enable: FALSE
     $name: Enabled
     $name:fr-FR: Activer l'option
     $name:es-ES: Habilitada
@@ -895,12 +895,12 @@ void setValueNames()
 
     DWORD value;
 
-    std::wstring old1 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationColorBalance"     : L"ColorizationColorBalanceOverride";
-    std::wstring old2 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationAfterglowBalance" : L"ColorizationAfterglowBalanceOverride";
-    std::wstring old3 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationBlurBalance"      : L"ColorizationBlurBalanceOverride";
-    std::wstring new1 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationColorBalance"     : L"ColorizationColorBalanceOverride";
-    std::wstring new2 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationAfterglowBalance" : L"ColorizationAfterglowBalanceOverride";
-    std::wstring new3 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationBlurBalance"      : L"ColorizationBlurBalanceOverride";
+    std::wstring old1 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationColorBalance"     : L"ColorizationColorBalanceOverride";
+    std::wstring old2 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationAfterglowBalance" : L"ColorizationAfterglowBalanceOverride";
+    std::wstring old3 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationBlurBalance"      : L"ColorizationBlurBalanceOverride";
+    std::wstring new1 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationColorBalance"     : L"ColorizationColorBalanceOverride";
+    std::wstring new2 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationAfterglowBalance" : L"ColorizationAfterglowBalanceOverride";
+    std::wstring new3 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationBlurBalance"      : L"ColorizationBlurBalanceOverride";
 
     balanceColor = new1;
     balanceAfterglow = new2;

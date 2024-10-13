@@ -9,7 +9,7 @@
                 "published": 1721392103000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1728800197000,
+                "updated": 1728825611000,
                 "users": 159
             },
             "metadata": {
@@ -25,7 +25,7 @@
                     "explorer.exe"
                 ],
                 "name": "Accent Color Sync",
-                "version": "1.5"
+                "version": "1.51"
             }
         },
         "acrylic-effect-radius-changer": {

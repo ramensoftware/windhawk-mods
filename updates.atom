@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-13T06:16:37.000Z</updated>
+    <updated>2024-10-13T13:20:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Color Sync 1.51]]></title>
+        <id>https://windhawk.net/mods/accent-color-sync#b4fd17a79d7d27a688c194d2e85d2df6da981df4</id>
+        <link href="https://windhawk.net/mods/accent-color-sync"/>
+        <updated>2024-10-13T13:20:11.000Z</updated>
+        <content type="html"><![CDATA[<p>Update Accent Color Sync to v1.51</p>]]></content>
+        <author>
+            <name>CatmanFan / Mr._Lechkar</name>
+            <uri>https://github.com/CatmanFan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent Color Sync 1.5]]></title>
         <id>https://windhawk.net/mods/accent-color-sync#b788c556e80d06c9ae315e53830396ff92ee1d59</id>
@@ -273,21 +284,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
 <li>Improved jump list size and position handling.</li>
 <li>Adjusted the 1px taskbar border to be at the bottom of the taskbar.</li>
 <li>Fixed the start menu disappearing or being positioned incorrectly sometimes.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.2.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#31cb0bda3c0d239f220fad072bd4a2be53c6ff05</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2024-10-04T23:25:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved tray overflow position, now it's vertically centered to the mouse position and isn't shown far away from the taskbar.</li>
-<li>Fixed right click menu location for some tray icons.</li>
-<li>Fixed jump list width on high DPIs.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
