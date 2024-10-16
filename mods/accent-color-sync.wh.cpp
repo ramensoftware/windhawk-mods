@@ -671,7 +671,6 @@ void setColorizationBalance(bool bruteforce = FALSE)
     writeColorizationBalance(dwmSettings.color_balance, dwmSettings.afterglow_balance, dwmSettings.blur_balance);
     
     // Other registry values
-    // set_DWORD(dwmKey, L"GlassOpacity", 0); // settings.boolTransparency ? 0 : 100);
     set_DWORD(dwmKey, L"GlassType", 1);    // settings.boolTransparency ? 1 : 0);
 
     if (bruteforce)
@@ -898,42 +897,40 @@ void setValueNames()
     {
         balanceColor = L"ColorizationColorBalance";
         balanceBlur = L"ColorizationBlurBalance";
-        return;
     }
+    
     else
     {
-        
-    }
+        DWORD value;
 
-    DWORD value;
+        std::wstring old1 = L"og_ColorizationColorBalance";
+        std::wstring old2 = L"og_ColorizationAfterglowBalance";
+        std::wstring old3 = L"og_ColorizationBlurBalance";
+        std::wstring new1 = L"ColorizationColorBalanceOverride";
+        std::wstring new2 = L"ColorizationAfterglowBalanceOverride";
+        std::wstring new3 = L"ColorizationBlurBalanceOverride";
 
-    std::wstring old1 = L"og_ColorizationColorBalance";
-    std::wstring old2 = L"og_ColorizationAfterglowBalance";
-    std::wstring old3 = L"og_ColorizationBlurBalance";
-    std::wstring new1 = L"ColorizationColorBalanceOverride";
-    std::wstring new2 = L"ColorizationAfterglowBalanceOverride";
-    std::wstring new3 = L"ColorizationBlurBalanceOverride";
+        balanceColor = new1;
+        balanceAfterglow = new2;
+        balanceBlur = new3;
 
-    balanceColor = new1;
-    balanceAfterglow = new2;
-    balanceBlur = new3;
+        if (exists_DWORD(dwmKey, old1)) {
+            value = read_DWORD(dwmKey, old1);
+            set_DWORD(dwmKey, new1, value);
+            set_DWORD(dwmKey, old1, value, TRUE);
+        }
 
-    if (exists_DWORD(dwmKey, old1)) {
-        value = read_DWORD(dwmKey, old1);
-        set_DWORD(dwmKey, new1, value);
-        set_DWORD(dwmKey, old1, value, TRUE);
-    }
+        if (exists_DWORD(dwmKey, old2)) {
+            value = read_DWORD(dwmKey, old2);
+            set_DWORD(dwmKey, new2, value);
+            set_DWORD(dwmKey, old2, value, TRUE);
+        }
 
-    if (exists_DWORD(dwmKey, old2)) {
-        value = read_DWORD(dwmKey, old2);
-        set_DWORD(dwmKey, new2, value);
-        set_DWORD(dwmKey, old2, value, TRUE);
-    }
-
-    if (exists_DWORD(dwmKey, old3)) {
-        value = read_DWORD(dwmKey, old3);
-        set_DWORD(dwmKey, new3, value);
-        set_DWORD(dwmKey, old3, value, TRUE);
+        if (exists_DWORD(dwmKey, old3)) {
+            value = read_DWORD(dwmKey, old3);
+            set_DWORD(dwmKey, new3, value);
+            set_DWORD(dwmKey, old3, value, TRUE);
+        }
     }
 }
 
