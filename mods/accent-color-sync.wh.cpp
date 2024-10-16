@@ -5,7 +5,7 @@
 // @description:fr-FR   Retour de la fonctionnalité d'opacité des couleurs du Panneau de configuration
 // @description:es-ES   Recuperar la funcionalidad de opacidad de colores del Panel de control
 // @description:ja-JP   コントロールパネルの色の不透明度機能を復元する
-// @version             1.51
+// @version             1.52
 // @author              CatmanFan / Mr._Lechkar
 // @github              https://github.com/CatmanFan
 // @include             explorer.exe
@@ -76,22 +76,9 @@ Brings back the functionality of the Control Panel's "Color intensity" slider to
   $description:fr-FR: Sauvegarder la valeur d'opacité aux options de DWM. Cela permet de définir également l'opacité dans le thème simultanément avec les valeurs du RVB. Sinon, Windows le définit en permanence à 0xc4 (196 sur 255).
   $description:es-ES: Guarda el valor de opacidad de OpenGlass en DWM. Esto lo permite guardar la opacidad del tema que Windows normalmente siempre establece en 0xc4, o 196 de 255, simultáneamente con los valores RGB.
   $description:ja-JP: 不透明度の値をDWM設定に保存します。
-- glassSoftware: og2
+- glassSoftware: openglass
   $options:
-  - og2: OpenGlass
-  - og1: OpenGlass (old registry name)
-  - glass8: Glass8
-  $options:fr-FR:
-  - og2: OpenGlass
-  - og1: OpenGlass (anciennes valeurs de registre)
-  - glass8: Glass8
-  $options:es-ES:
-  - og2: OpenGlass
-  - og1: OpenGlass (nombres antiguos de valores de registro)
-  - glass8: Glass8
-  $options:ja-JP:
-  - og2: OpenGlass
-  - og1: OpenGlass（レジストリ値の古い名前）
+  - openglass: OpenGlass
   - glass8: Glass8
   $name: DWM customization software
   $name:fr-FR: Logiciel de modification du gestionnaire des fenêtres (DWM)
@@ -131,8 +118,8 @@ Brings back the functionality of the Control Panel's "Color intensity" slider to
 const std::wstring dwmKey = L"SOFTWARE\\Microsoft\\Windows\\DWM";
 const std::wstring opacityValue = L"og_Opacity";
 
-enum class GlassSoftware { OpenGlass2, OpenGlass1, Glass8 };
-enum class WinVersion { None, Unsupported, Win10, Win11 };
+enum class GlassSoftware { OpenGlass, Glass8 };
+enum class WinVersion { None, Unsupported, Win10Legacy, Win10, Win11 };
 WinVersion winVer;
 
 struct {
@@ -684,7 +671,6 @@ void setColorizationBalance(bool bruteforce = FALSE)
     writeColorizationBalance(dwmSettings.color_balance, dwmSettings.afterglow_balance, dwmSettings.blur_balance);
     
     // Other registry values
-    set_DWORD(dwmKey, L"GlassOpacity", 0); // settings.boolTransparency ? 0 : 100);
     set_DWORD(dwmKey, L"GlassType", 1);    // settings.boolTransparency ? 1 : 0);
 
     if (bruteforce)
@@ -790,15 +776,30 @@ enum DWMPGLASSATTRIBUTE : INT {
  * Function for setting DWM colorization when the theme is changed from the Control Panel
  * -------------------------
  */
-long (*STDCALL SetDwmColorizationColor)(unsigned long, enum DWMPGLASSATTRIBUTE, int);
-long STDCALL SetDwmColorizationColor_hook(unsigned long color, enum DWMPGLASSATTRIBUTE attribute, int integer)
+void SetDwmColorizationColor_hookFunction(unsigned long color, enum DWMPGLASSATTRIBUTE attribute)
 {
     settings.opacity = opacity = round(argb(color).get_a() / 255.0 * 100.0);
     old = colorization_color(color);
 	loadColorValues(old.value);
     setColorizationBalance();
-
+}
+ 
+// WINDOWS 10 MODERN
+// -------------------------
+long (*STDCALL SetDwmColorizationColor)(unsigned long, enum DWMPGLASSATTRIBUTE, int);
+long STDCALL SetDwmColorizationColor_hook(unsigned long color, enum DWMPGLASSATTRIBUTE attribute, int integer)
+{
+    SetDwmColorizationColor_hookFunction(color, attribute);
     return SetDwmColorizationColor(color, attribute, integer);
+}
+
+// WINDOWS 10 CLASSIC (1709)
+// -------------------------
+long (*STDCALL SetDwmColorizationColor_legacy)(unsigned long, enum DWMPGLASSATTRIBUTE);
+long STDCALL SetDwmColorizationColor_legacy_hook(unsigned long color, enum DWMPGLASSATTRIBUTE attribute)
+{
+    SetDwmColorizationColor_hookFunction(color, attribute);
+    return SetDwmColorizationColor_legacy(color, attribute);
 }
 #pragma endregion
 
@@ -834,9 +835,13 @@ WindhawkUtils::SYMBOL_HOOK dui70dll_hooks[] = {
 
 WindhawkUtils::SYMBOL_HOOK themeuidll_hooks[] = {
     {
-        {L"long " SSTDCALL " SetDwmColorizationColor(unsigned long,enum DWMPGLASSATTRIBUTE,int)"},
-        (void**)&SetDwmColorizationColor,
-        (void*)SetDwmColorizationColor_hook
+        {
+            winVer == WinVersion::Win10Legacy
+            ? L"long " SSTDCALL " SetDwmColorizationColor(unsigned long,enum DWMPGLASSATTRIBUTE)"
+            : L"long " SSTDCALL " SetDwmColorizationColor(unsigned long,enum DWMPGLASSATTRIBUTE,int)"
+        },
+        winVer == WinVersion::Win10Legacy ? (void**)&SetDwmColorizationColor_legacy : (void**)&SetDwmColorizationColor,
+        winVer == WinVersion::Win10Legacy ? (void*)SetDwmColorizationColor_legacy_hook : (void*)SetDwmColorizationColor_hook
     }
 };
 
@@ -861,7 +866,9 @@ WinVersion getWinVer()
 
         switch (major) {
 			case 10:
-				if (build < 22000)
+				if (build < 17000)
+					return WinVersion::Win10Legacy;
+				else if (build < 22000)
 					return WinVersion::Win10;
 				else
 					return WinVersion::Win11;
@@ -890,47 +897,50 @@ void setValueNames()
     {
         balanceColor = L"ColorizationColorBalance";
         balanceBlur = L"ColorizationBlurBalance";
-        return;
     }
+    
+    else
+    {
+        DWORD value;
 
-    DWORD value;
+        std::wstring old1 = L"og_ColorizationColorBalance";
+        std::wstring old2 = L"og_ColorizationAfterglowBalance";
+        std::wstring old3 = L"og_ColorizationBlurBalance";
+        std::wstring new1 = L"ColorizationColorBalanceOverride";
+        std::wstring new2 = L"ColorizationAfterglowBalanceOverride";
+        std::wstring new3 = L"ColorizationBlurBalanceOverride";
 
-    std::wstring old1 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationColorBalance"     : L"ColorizationColorBalanceOverride";
-    std::wstring old2 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationAfterglowBalance" : L"ColorizationAfterglowBalanceOverride";
-    std::wstring old3 = settings.glassApp == GlassSoftware::OpenGlass2 ? L"og_ColorizationBlurBalance"      : L"ColorizationBlurBalanceOverride";
-    std::wstring new1 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationColorBalance"     : L"ColorizationColorBalanceOverride";
-    std::wstring new2 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationAfterglowBalance" : L"ColorizationAfterglowBalanceOverride";
-    std::wstring new3 = settings.glassApp == GlassSoftware::OpenGlass1 ? L"og_ColorizationBlurBalance"      : L"ColorizationBlurBalanceOverride";
+        balanceColor = new1;
+        balanceAfterglow = new2;
+        balanceBlur = new3;
 
-    balanceColor = new1;
-    balanceAfterglow = new2;
-    balanceBlur = new3;
+        if (exists_DWORD(dwmKey, old1)) {
+            value = read_DWORD(dwmKey, old1);
+            set_DWORD(dwmKey, new1, value);
+            set_DWORD(dwmKey, old1, value, TRUE);
+        }
 
-    if (exists_DWORD(dwmKey, old1)) {
-        value = read_DWORD(dwmKey, old1);
-        set_DWORD(dwmKey, new1, value);
-        set_DWORD(dwmKey, old1, value, TRUE);
-    }
+        if (exists_DWORD(dwmKey, old2)) {
+            value = read_DWORD(dwmKey, old2);
+            set_DWORD(dwmKey, new2, value);
+            set_DWORD(dwmKey, old2, value, TRUE);
+        }
 
-    if (exists_DWORD(dwmKey, old2)) {
-        value = read_DWORD(dwmKey, old2);
-        set_DWORD(dwmKey, new2, value);
-        set_DWORD(dwmKey, old2, value, TRUE);
-    }
-
-    if (exists_DWORD(dwmKey, old3)) {
-        value = read_DWORD(dwmKey, old3);
-        set_DWORD(dwmKey, new3, value);
-        set_DWORD(dwmKey, old3, value, TRUE);
+        if (exists_DWORD(dwmKey, old3)) {
+            value = read_DWORD(dwmKey, old3);
+            set_DWORD(dwmKey, new3, value);
+            set_DWORD(dwmKey, old3, value, TRUE);
+        }
     }
 }
 
 BOOL LoadSettings()
 {
 	LPCWSTR glassAppName = Wh_GetStringSetting(L"glassSoftware");
-    if (lstrcmpW(glassAppName, L"glass8") == 0)     settings.glassApp = GlassSoftware::Glass8;
-    else if (lstrcmpW(glassAppName, L"og1") == 0)   settings.glassApp = GlassSoftware::OpenGlass1;
-    else                                            settings.glassApp = GlassSoftware::OpenGlass2;
+    if (lstrcmpW(glassAppName, L"glass8") == 0)
+        settings.glassApp = GlassSoftware::Glass8;
+    else
+        settings.glassApp = GlassSoftware::OpenGlass;
     Wh_FreeStringSetting(glassAppName);
 
     settings.fixedOpacity = -1;
