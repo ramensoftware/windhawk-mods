@@ -1,3 +1,7 @@
+## 1.5 ([Oct 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7f0e516d77c2e3f4f8ce32e6d2eee126d5456af6/mods/taskbar-empty-space-clicks.wh.cpp))
+
+* Fixed execution of task manager on Windows 11 24H2
+
 ## 1.4 ([Sep 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/24a59b390771c24436afc2ef3b64c145f8547082/mods/taskbar-empty-space-clicks.wh.cpp))
 
 * Fixed build errors introduced with latest version of Windhawk 1.5x
