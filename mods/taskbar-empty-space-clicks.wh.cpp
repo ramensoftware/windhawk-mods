@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.4
+// @version         1.5
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -1754,12 +1754,26 @@ void OpenTaskManager(HWND taskbarhWnd)
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending OpenTaskManager message");
-    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
-    if (SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0) != 0)
-    {
-        LOG_ERROR(L"Failed to send OpenTaskManager message");
-    }
+    LOG_INFO(L"Opening Taskmgr.exe using ShellExecuteEx");
+
+    WCHAR szWindowsDirectory[MAX_PATH];
+    GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory));
+    std::wstring taskmgrPath = szWindowsDirectory;
+    taskmgrPath += L"\\System32\\Taskmgr.exe";  
+
+    SHELLEXECUTEINFO sei = { sizeof(sei) };  
+    sei.lpVerb = L"open";   // Use "runas" to explicitly request elevation  
+    sei.lpFile = taskmgrPath.c_str();  
+    sei.nShow = SW_SHOW;  
+
+    if (!ShellExecuteEx(&sei))  
+    {  
+        DWORD error = GetLastError();  
+        if (error != ERROR_CANCELLED)   // User declined the elevation.
+        {  
+            LOG_ERROR(L"Failed to start process taskmgr.exe with error code: %d", error);
+        }  
+    } 
 }
 
 void ToggleVolMuted()
@@ -1912,7 +1926,8 @@ void StartProcess(const std::wstring &command)
 
     if (!CreateProcess(NULL, (LPWSTR)command.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
     {
-        LOG_ERROR(L"Failed to start process - CreateProcess failed!");
+        DWORD error = GetLastError();  
+        LOG_ERROR(L"Failed to start process - CreateProcess failed with error code: %d", error);
     }
     else
     {
