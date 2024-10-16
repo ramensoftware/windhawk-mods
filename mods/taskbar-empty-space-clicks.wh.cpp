@@ -1755,7 +1755,11 @@ void OpenTaskManager(HWND taskbarhWnd)
     LOG_TRACE();
 
     LOG_INFO(L"Opening Taskmgr.exe using ShellExecuteEx");
-    std::wstring taskmgrPath = L"C:\\Windows\\System32\\Taskmgr.exe";  
+
+    WCHAR szWindowsDirectory[MAX_PATH];
+    GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory));
+    std::wstring taskmgrPath = szWindowsDirectory;
+    taskmgrPath += L"\\System32\\Taskmgr.exe";  
 
     SHELLEXECUTEINFO sei = { sizeof(sei) };  
     sei.lpVerb = L"open";   // Use "runas" to explicitly request elevation  
