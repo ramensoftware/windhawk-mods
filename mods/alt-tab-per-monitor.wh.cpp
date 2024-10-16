@@ -25,7 +25,10 @@ is currently located, showing only the windows present on that specific monitor.
 #include <winrt/windows.foundation.collections.h>
 
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
+std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
+ULONGLONG g_CreateInstance_TickCount;
+constexpr ULONGLONG kDeltaThreshold = 10;
 
 bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
     POINT pt;
@@ -70,11 +73,22 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
                                                   void* applicationView,
                                                   BOOL* isVisible) {
     Wh_Log(L">");
-
     auto ret = CVirtualDesktop_IsViewVisible_Original(pThis, applicationView,
                                                       isVisible);
-    if (FAILED(ret) || g_threadIdForXamlAltTabViewHost_CreateInstance !=
-                           GetCurrentThreadId()) {
+    if (FAILED(ret)) {
+        return ret;
+    }
+
+    if (g_threadIdForXamlAltTabViewHost_CreateInstance !=
+        GetCurrentThreadId()) {
+        // A focused window might be added after a short period, so don't show
+        // any new window after some time.
+        if ((GetTickCount() - g_CreateInstance_TickCount) > kDeltaThreshold &&
+            g_lastThreadIdForXamlAltTabViewHost_CreateInstance ==
+                GetCurrentThreadId()) {
+            g_CreateInstance_TickCount = 0;
+            *isVisible = FALSE;
+        }
         return ret;
     }
 
@@ -163,6 +177,8 @@ HRESULT XamlAltTabViewHost_CreateInstance_Hook(void* pThis,
                                                void* param2,
                                                void* param3) {
     g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_CreateInstance_TickCount = GetTickCount();
     HRESULT ret = XamlAltTabViewHost_CreateInstance_Original(pThis, param1,
                                                              param2, param3);
     g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
