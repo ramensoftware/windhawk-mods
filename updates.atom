@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-16T18:56:15.000Z</updated>
+    <updated>2024-10-17T18:39:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.1.7]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#951ca39188471a50c458d2ba5cded4f96a03e392</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-10-17T18:39:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved DirectUI string redirection.</li>
+<li>Improved string redirection to apply in more cases.</li>
+<li>Added an experimental option to redirect all resources, not only the supported resources that are listed in the description.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#7f0e516d77c2e3f4f8ce32e6d2eee126d5456af6</id>
@@ -285,21 +300,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <link href="https://windhawk.net/mods/remove-command-bar"/>
         <updated>2024-10-06T16:23:10.000Z</updated>
         <content type="html"><![CDATA[<p>Limit to 64bit architecture.</p>]]></content>
-        <author>
-            <name>Waldemar</name>
-            <uri>https://github.com/CyprinusCarpio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Treeview 1.1.1]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-treeview#5d24a3a59980affaff8b2e34006a3a3d788e006c</id>
-        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
-        <updated>2024-10-06T16:02:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a option to draw a gradient background for the header for XP-like looks</li>
-<li>Added a context menu for the header like in real InfoBands</li>
-<li>A theme-accurate button frame is now drawn for the X button</li>
-</ul>]]></content>
         <author>
             <name>Waldemar</name>
             <uri>https://github.com/CyprinusCarpio</uri>

@@ -1,3 +1,9 @@
+## 1.1.7 ([Oct 17, 2024](https://github.com/ramensoftware/windhawk-mods/blob/951ca39188471a50c458d2ba5cded4f96a03e392/mods/icon-resource-redirect.wh.cpp))
+
+* Improved DirectUI string redirection.
+* Improved string redirection to apply in more cases.
+* Added an experimental option to redirect all resources, not only the supported resources that are listed in the description.
+
 ## 1.1.6 ([Oct 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1db804f1cdc96957d8e71132cf1378fc19d94ea2/mods/icon-resource-redirect.wh.cpp))
 
 * Improved DirectUI resources redirection (usually `UIFILE` and `XML`) to not affect sub resources such as strings, which are now loaded from the original file.
