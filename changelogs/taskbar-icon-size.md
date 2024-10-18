@@ -1,3 +1,8 @@
+## 1.2.13 ([Oct 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/15a36d25f1e1d553934030cd6f4e0263a7eec31c/mods/taskbar-icon-size.wh.cpp))
+
+* The small 16x16 icons are now used for small icons. Previously the larger 32x32 icons were downscaled in some cases.
+* Improved tablet mode support and have the height applied in more cases.
+
 ## 1.2.12 ([Aug 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7ad7264eae826e7b96ebb07e04770e175f5fee9e/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed the weather/news widget content sometimes disappearing when large icons are used.

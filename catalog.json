@@ -2554,7 +2554,7 @@
                 "published": 1657984524000,
                 "rating": 10,
                 "ratingUsers": 771,
-                "updated": 1724703161000,
+                "updated": 1729242114000,
                 "users": 38513
             },
             "featured": true,
@@ -2563,7 +2563,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0605 -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshcore -lwininet",
+                "compilerOptions": "-DWINVER=0x0A00 -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshcore -lwininet",
                 "description": "Control the taskbar height and icon size, improve icon quality (Windows 11 only)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -2572,7 +2572,7 @@
                 ],
                 "name": "Taskbar height and icon size",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.12"
+                "version": "1.2.13"
             }
         },
         "taskbar-labels": {

@@ -2,14 +2,14 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.12
+// @version         1.2.13
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0605 -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshcore -lwininet
+// @compilerOptions -DWINVER=0x0A00 -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshcore -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -250,6 +250,57 @@ void WINAPI TrayUI_GetMinSize_Hook(void* pThis, HMONITOR monitor, SIZE* size) {
     }
 }
 
+using CIconLoadingFunctions_GetClassLongPtrW_t = ULONG_PTR(WINAPI*)(void* pThis,
+                                                                    HWND hWnd,
+                                                                    int nIndex);
+CIconLoadingFunctions_GetClassLongPtrW_t
+    CIconLoadingFunctions_GetClassLongPtrW_Original;
+ULONG_PTR WINAPI CIconLoadingFunctions_GetClassLongPtrW_Hook(void* pThis,
+                                                             HWND hWnd,
+                                                             int nIndex) {
+    Wh_Log(L">");
+
+    if (!g_unloading && nIndex == GCLP_HICON && g_settings.iconSize <= 16) {
+        nIndex = GCLP_HICONSM;
+    }
+
+    ULONG_PTR ret =
+        CIconLoadingFunctions_GetClassLongPtrW_Original(pThis, hWnd, nIndex);
+
+    return ret;
+}
+
+using CIconLoadingFunctions_SendMessageCallbackW_t =
+    BOOL(WINAPI*)(void* pThis,
+                  HWND hWnd,
+                  UINT Msg,
+                  WPARAM wParam,
+                  LPARAM lParam,
+                  SENDASYNCPROC lpResultCallBack,
+                  ULONG_PTR dwData);
+CIconLoadingFunctions_SendMessageCallbackW_t
+    CIconLoadingFunctions_SendMessageCallbackW_Original;
+BOOL WINAPI
+CIconLoadingFunctions_SendMessageCallbackW_Hook(void* pThis,
+                                                HWND hWnd,
+                                                UINT Msg,
+                                                WPARAM wParam,
+                                                LPARAM lParam,
+                                                SENDASYNCPROC lpResultCallBack,
+                                                ULONG_PTR dwData) {
+    Wh_Log(L">");
+
+    if (!g_unloading && Msg == WM_GETICON && wParam == ICON_BIG &&
+        g_settings.iconSize <= 16) {
+        wParam = ICON_SMALL2;
+    }
+
+    BOOL ret = CIconLoadingFunctions_SendMessageCallbackW_Original(
+        pThis, hWnd, Msg, wParam, lParam, lpResultCallBack, dwData);
+
+    return ret;
+}
+
 using TrayUI__StuckTrayChange_t = void(WINAPI*)(void* pThis);
 TrayUI__StuckTrayChange_t TrayUI__StuckTrayChange_Original;
 
@@ -316,7 +367,9 @@ TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_t
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Hook(
     int enumTaskbarSize) {
-    if (enumTaskbarSize == 1 && !g_unloading) {
+    Wh_Log(L"> %d", enumTaskbarSize);
+
+    if (!g_unloading && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_settings.iconSize;
     }
 
@@ -343,9 +396,9 @@ using SystemTrayController_GetFrameSize_t =
 SystemTrayController_GetFrameSize_t SystemTrayController_GetFrameSize_Original;
 double WINAPI SystemTrayController_GetFrameSize_Hook(void* pThis,
                                                      int enumTaskbarSize) {
-    Wh_Log(L">");
+    Wh_Log(L"> %d", enumTaskbarSize);
 
-    if (enumTaskbarSize == 1 && g_taskbarHeight) {
+    if (g_taskbarHeight && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_taskbarHeight;
     }
 
@@ -359,9 +412,9 @@ SystemTraySecondaryController_GetFrameSize_t
 double WINAPI
 SystemTraySecondaryController_GetFrameSize_Hook(void* pThis,
                                                 int enumTaskbarSize) {
-    Wh_Log(L">");
+    Wh_Log(L"> %d", enumTaskbarSize);
 
-    if (enumTaskbarSize == 1 && g_taskbarHeight) {
+    if (g_taskbarHeight && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_taskbarHeight;
     }
 
@@ -373,14 +426,15 @@ using TaskbarConfiguration_GetFrameSize_t =
     double(WINAPI*)(int enumTaskbarSize);
 TaskbarConfiguration_GetFrameSize_t TaskbarConfiguration_GetFrameSize_Original;
 double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int enumTaskbarSize) {
-    Wh_Log(L">");
+    Wh_Log(L"> %d", enumTaskbarSize);
 
-    if (enumTaskbarSize == 1 && !g_originalTaskbarHeight) {
+    if (!g_originalTaskbarHeight &&
+        (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         g_originalTaskbarHeight =
             TaskbarConfiguration_GetFrameSize_Original(enumTaskbarSize);
     }
 
-    if (enumTaskbarSize == 1 && g_taskbarHeight) {
+    if (g_taskbarHeight && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_taskbarHeight;
     }
 
@@ -396,7 +450,7 @@ void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
     Wh_Log(L">");
 
     static LONG lastHeightOffset = []() -> LONG {
-        // Find the last height offset and reset the height value.
+        // Find the last height offset to reset the height value.
         //
         // 66 0f 2e b3 b0 00 00 00 UCOMISD    uVar4,qword ptr [RBX + 0xb0]
         // 7a 4c                   JP         LAB_180075641
@@ -445,6 +499,73 @@ void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
     return TaskbarFrame_Height_double_Original(pThis, value);
 }
 
+void* TaskbarController_OnGroupingModeChanged;
+
+using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
+TaskbarController_UpdateFrameHeight_t
+    TaskbarController_UpdateFrameHeight_Original;
+void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    static LONG taskbarFrameOffset = []() -> LONG {
+        // 48:83EC 28               | sub rsp,28
+        // 48:8B81 88020000         | mov rax,qword ptr ds:[rcx+288]
+        // or
+        // 4C:8B81 80020000         | mov r8,qword ptr ds:[rcx+280]
+        const BYTE* p = (const BYTE*)TaskbarController_OnGroupingModeChanged;
+        if (p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xEC &&
+            (p[4] == 0x48 || p[4] == 0x4C) && p[5] == 0x8B &&
+            (p[6] & 0xC0) == 0x80) {
+            LONG offset = *(LONG*)(p + 7);
+            Wh_Log(L"taskbarFrameOffset=0x%X", offset);
+            return offset;
+        }
+
+        Wh_Log(L"taskbarFrameOffset not found");
+        return 0;
+    }();
+
+    if (taskbarFrameOffset <= 0) {
+        Wh_Log(L"taskbarFrameOffset <= 0");
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
+
+    void* taskbarFrame = *(void**)((BYTE*)pThis + taskbarFrameOffset);
+    if (!taskbarFrame) {
+        Wh_Log(L"!taskbarFrame");
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
+
+    FrameworkElement taskbarFrameElement = nullptr;
+    ((IUnknown**)taskbarFrame)[1]->QueryInterface(
+        winrt::guid_of<FrameworkElement>(),
+        winrt::put_abi(taskbarFrameElement));
+    if (!taskbarFrameElement) {
+        Wh_Log(L"!taskbarFrameElement");
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
+
+    taskbarFrameElement.MaxHeight(std::numeric_limits<double>::infinity());
+
+    TaskbarController_UpdateFrameHeight_Original(pThis);
+
+    // Adjust parent grid height if needed.
+    auto contentGrid = Media::VisualTreeHelper::GetParent(taskbarFrameElement)
+                           .try_as<FrameworkElement>();
+    if (contentGrid) {
+        double height = taskbarFrameElement.Height();
+        double contentGridHeight = contentGrid.Height();
+        if (contentGridHeight > 0 && contentGridHeight != height) {
+            Wh_Log(L"Adjusting contentGrid.Height: %f->%f", contentGridHeight,
+                   height);
+            contentGrid.Height(height);
+        }
+    }
+}
+
 using SystemTraySecondaryController_UpdateFrameSize_t =
     void(WINAPI*)(void* pThis);
 SystemTraySecondaryController_UpdateFrameSize_t
@@ -486,14 +607,6 @@ int WINAPI TaskbarFrame_MeasureOverride_Hook(
     g_hookCallCounter++;
 
     Wh_Log(L">");
-
-    FrameworkElement taskbarFrameElement = nullptr;
-    ((IUnknown*)pThis)
-        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                         winrt::put_abi(taskbarFrameElement));
-    if (taskbarFrameElement) {
-        taskbarFrameElement.MaxHeight(std::numeric_limits<double>::infinity());
-    }
 
     int ret = TaskbarFrame_MeasureOverride_Original(pThis, param1, resultSize);
 
@@ -1373,6 +1486,24 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             {
                 {
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnGroupingModeChanged(void))",
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnGroupingModeChanged(void) __ptr64)",
+                },
+                (void**)&TaskbarController_OnGroupingModeChanged,
+                nullptr,
+                true,  // Missing in older Windows 11 versions.
+            },
+            {
+                {
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::UpdateFrameHeight(void))",
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::UpdateFrameHeight(void) __ptr64)",
+                },
+                (void**)&TaskbarController_UpdateFrameHeight_Original,
+                (void*)TaskbarController_UpdateFrameHeight_Hook,
+                true,  // Missing in older Windows 11 versions.
+            },
+            {
+                {
                     LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void))",
                     LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void) __ptr64)",
                 },
@@ -1463,6 +1594,22 @@ bool HookTaskbarDllSymbols() {
             (void**)&TrayUI_GetMinSize_Original,
             (void*)TrayUI_GetMinSize_Hook,
             true,
+        },
+        {
+            {
+                LR"(public: virtual unsigned __int64 __cdecl CIconLoadingFunctions::GetClassLongPtrW(struct HWND__ *,int))",
+                LR"(public: virtual unsigned __int64 __cdecl CIconLoadingFunctions::GetClassLongPtrW(struct HWND__ * __ptr64,int) __ptr64)",
+            },
+            (void**)&CIconLoadingFunctions_GetClassLongPtrW_Original,
+            (void*)CIconLoadingFunctions_GetClassLongPtrW_Hook,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl CIconLoadingFunctions::SendMessageCallbackW(struct HWND__ *,unsigned int,unsigned __int64,__int64,void (__cdecl*)(struct HWND__ *,unsigned int,unsigned __int64,__int64),unsigned __int64))",
+                LR"(public: virtual int __cdecl CIconLoadingFunctions::SendMessageCallbackW(struct HWND__ * __ptr64,unsigned int,unsigned __int64,__int64,void (__cdecl*)(struct HWND__ * __ptr64,unsigned int,unsigned __int64,__int64),unsigned __int64) __ptr64)",
+            },
+            (void**)&CIconLoadingFunctions_SendMessageCallbackW_Original,
+            (void*)CIconLoadingFunctions_SendMessageCallbackW_Hook,
         },
         {
             {
