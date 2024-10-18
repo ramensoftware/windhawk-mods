@@ -1,3 +1,7 @@
+## 1.2.14 ([Oct 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f467a936801ea310cbb3cb2b28c6dc161ad8b035/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed a crash in old builds of Windows 11 version 22H2.
+
 ## 1.2.13 ([Oct 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/15a36d25f1e1d553934030cd6f4e0263a7eec31c/mods/taskbar-icon-size.wh.cpp))
 
 * The small 16x16 icons are now used for small icons. Previously the larger 32x32 icons were downscaled in some cases.

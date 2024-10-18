@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-18T11:52:15.000Z</updated>
+    <updated>2024-10-18T14:18:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.14]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#f467a936801ea310cbb3cb2b28c6dc161ad8b035</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-10-18T14:18:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a crash in old builds of Windows 11 version 22H2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic context menu on Windows 11 1.0.1]]></title>
         <id>https://windhawk.net/mods/explorer-context-menu-classic#c8eadfbaf090fe07d59e1bc6f599654d14aab3a8</id>
@@ -285,23 +298,6 @@ Options" or hold Shift.</p>
         <author>
             <name>Roland Pihlakas</name>
             <uri>https://github.com/levitation</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic List Group Fix 1.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-list-group-fix#733d035afe561ca4d014aa436c66d536a2702696</id>
-        <link href="https://windhawk.net/mods/classic-list-group-fix"/>
-        <updated>2024-10-08T08:38:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add option to visually hide the collapse button</li>
-<li>Correct header font</li>
-<li>Adapt header height to font, fonts larger than 8pt will look correct now</li>
-<li>General code cleanup, match modern Windhawk standards</li>
-<li>Refine mod description and README</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
