@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.13
+// @version         1.2.14
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -513,7 +513,7 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
         // or
         // 4C:8B81 80020000         | mov r8,qword ptr ds:[rcx+280]
         const BYTE* p = (const BYTE*)TaskbarController_OnGroupingModeChanged;
-        if (p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xEC &&
+        if (p && p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xEC &&
             (p[4] == 0x48 || p[4] == 0x4C) && p[5] == 0x8B &&
             (p[6] & 0xC0) == 0x80) {
             LONG offset = *(LONG*)(p + 7);
