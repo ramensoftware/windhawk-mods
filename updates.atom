@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-18T09:01:54.000Z</updated>
+    <updated>2024-10-18T11:52:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic context menu on Windows 11 1.0.1]]></title>
+        <id>https://windhawk.net/mods/explorer-context-menu-classic#c8eadfbaf090fe07d59e1bc6f599654d14aab3a8</id>
+        <link href="https://windhawk.net/mods/explorer-context-menu-classic"/>
+        <updated>2024-10-18T11:52:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed explorer navigation pane still showing the new menu.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.13]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#15a36d25f1e1d553934030cd6f4e0263a7eec31c</id>
@@ -289,23 +302,6 @@ Options" or hold Shift.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnails#bf56fb745178ebecf2476f56ab57e0ab98c034f4</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
-        <updated>2024-10-07T22:17:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disabletaskbarthumbnails">Disable Taskbar Thumbnails</h1>
-<p>Disable taskbar thumbnails on hover, or replace them with a list.</p>
-<p>Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
-check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a>.</p>
-<p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.</p>
-<p><img src="https://i.imgur.com/62DSgxs.png" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

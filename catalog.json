@@ -1032,7 +1032,7 @@
                 "published": 1728722786000,
                 "rating": 10,
                 "ratingUsers": 7,
-                "updated": 1728722786000,
+                "updated": 1729252335000,
                 "users": 104
             },
             "metadata": {
@@ -1040,7 +1040,6 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lshlwapi",
                 "description": "Always show the classic context menu without having to select \"Show More Options\" or hold Shift",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -1049,7 +1048,7 @@
                 ],
                 "name": "Classic context menu on Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "explorer-frame-classic": {
