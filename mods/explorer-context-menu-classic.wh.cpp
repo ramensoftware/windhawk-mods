@@ -2,14 +2,13 @@
 // @id              explorer-context-menu-classic
 // @name            Classic context menu on Windows 11
 // @description     Always show the classic context menu without having to select "Show More Options" or hold Shift
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -34,6 +33,8 @@ You can hold the Ctrl key to temporarily disable the mod and open the new menu.
     open the new menu
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <shlwapi.h>
 
@@ -76,6 +77,41 @@ HRESULT WINAPI IUnknown_QueryService_Hook(IUnknown* punk,
     return IUnknown_QueryService_Original(punk, guidService, riid, ppvOut);
 }
 
+using CNscTree_ShouldShowMiniMenu_t = bool(WINAPI*)(void* pThis, void* param1);
+CNscTree_ShouldShowMiniMenu_t CNscTree_ShouldShowMiniMenu_Original;
+bool WINAPI CNscTree_ShouldShowMiniMenu_Hook(void* pThis, void* param1) {
+    Wh_Log(L">");
+
+    if (g_settings.overrideWithCtrl && GetKeyState(VK_CONTROL) < 0) {
+        // Temporarily off.
+    } else {
+        Wh_Log(L"Disallowing new menu");
+        return false;
+    }
+
+    return CNscTree_ShouldShowMiniMenu_Original(pThis, param1);
+}
+
+bool HookExplorerFrameSymbols() {
+    HMODULE module = LoadLibrary(L"explorerframe.dll");
+    if (!module) {
+        Wh_Log(L"Couldn't load explorerframe.dll");
+        return FALSE;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
+        {
+            {LR"(private: bool __cdecl CNscTree::ShouldShowMiniMenu(struct _TREEITEM *))"},
+            &CNscTree_ShouldShowMiniMenu_Original,
+            CNscTree_ShouldShowMiniMenu_Hook,
+            true,
+        },
+    };
+
+    return HookSymbols(module, explorerFrameDllHooks,
+                       ARRAYSIZE(explorerFrameDllHooks));
+}
+
 void LoadSettings() {
     g_settings.overrideWithCtrl = Wh_GetIntSetting(L"overrideWithCtrl");
 }
@@ -85,12 +121,28 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    HMODULE shcoreModule = GetModuleHandle(L"shcore.dll");
-    FARPROC pIUnknown_QueryService =
-        GetProcAddress(shcoreModule, "IUnknown_QueryService");
-    Wh_SetFunctionHook((void*)pIUnknown_QueryService,
-                       (void*)IUnknown_QueryService_Hook,
-                       (void**)&IUnknown_QueryService_Original);
+    if (!HookExplorerFrameSymbols()) {
+        Wh_Log(L"Error hooking explorer frame symbols");
+        return FALSE;
+    }
+
+    HMODULE shcoreModule = LoadLibrary(L"shcore.dll");
+    if (!shcoreModule) {
+        Wh_Log(L"Error loading shcore.dll");
+        return FALSE;
+    }
+
+    IUnknown_QueryService_t pIUnknown_QueryService =
+        (IUnknown_QueryService_t)GetProcAddress(shcoreModule,
+                                                "IUnknown_QueryService");
+    if (!pIUnknown_QueryService) {
+        Wh_Log(L"Error getting IUnknown_QueryService");
+        return FALSE;
+    }
+
+    WindhawkUtils::Wh_SetFunctionHookT(pIUnknown_QueryService,
+                                       IUnknown_QueryService_Hook,
+                                       &IUnknown_QueryService_Original);
 
     return TRUE;
 }
