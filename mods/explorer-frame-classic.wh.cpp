@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -537,6 +537,26 @@ bool HandleNavigationBarControl(IUnknown* navigationBarControl) {
     return true;
 }
 
+using XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_t =
+    int(WINAPI*)(PVOID pThis);
+XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_t
+    XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Original;
+int WINAPI
+XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Hook(PVOID pThis) {
+    Wh_Log(L">");
+
+    int ret =
+        XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Original(pThis);
+
+    if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
+        int retNew = MulDiv(ret, 96, 136);
+        Wh_Log(L"%d -> %d", ret, retNew);
+        return retNew;
+    }
+
+    return ret;
+}
+
 using Feature_NavigationBarControl_OnApplyTemplate_t =
     HRESULT(WINAPI*)(PVOID pThis);
 Feature_NavigationBarControl_OnApplyTemplate_t
@@ -607,8 +627,6 @@ HRESULT WINAPI CoCreateInstance_Hook(REFCLSID rclsid,
                                      DWORD dwClsContext,
                                      REFIID riid,
                                      LPVOID* ppv) {
-    Wh_Log(L">");
-
     constexpr winrt::guid CLSID_XamlIslandViewAdapter{
         0x6480100B,
         0x5A83,
@@ -617,6 +635,8 @@ HRESULT WINAPI CoCreateInstance_Hook(REFCLSID rclsid,
 
     if (IsEqualCLSID(rclsid, CLSID_XamlIslandViewAdapter) &&
         g_settings.explorerStyle == ExplorerStyle::classicRibbonUI) {
+        Wh_Log(L">");
+
         return REGDB_E_CLASSNOTREG;
     }
 
@@ -628,7 +648,7 @@ bool HookExplorerFrameSymbols() {
     HMODULE module = LoadLibrary(L"explorerframe.dll");
     if (!module) {
         Wh_Log(L"Couldn't load explorerframe.dll");
-        return FALSE;
+        return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
@@ -648,6 +668,26 @@ bool HookExplorerFrameSymbols() {
 
     return HookSymbols(module, explorerFrameDllHooks,
                        ARRAYSIZE(explorerFrameDllHooks));
+}
+
+bool HookWindowsUIFileExplorerSymbols() {
+    HMODULE module = LoadLibrary(L"Windows.UI.FileExplorer.dll");
+    if (!module) {
+        Wh_Log(L"Couldn't load Windows.UI.FileExplorer.dll");
+        return false;
+    }
+
+    // Windows.UI.FileExplorer.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(private: int __cdecl XamlIslandViewAdapter::GetScaledXamlIslandLogicalHeight(void))"},
+            (void**)&XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Original,
+            (void*)XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Hook,
+            true,
+        },
+    };
+
+    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 bool HookFileExplorerExtensionsSymbols() {
@@ -699,6 +739,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!HookExplorerFrameSymbols()) {
+        return FALSE;
+    }
+
+    if (!HookWindowsUIFileExplorerSymbols()) {
         return FALSE;
     }
 
