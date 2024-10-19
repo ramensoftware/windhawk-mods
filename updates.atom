@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-18T14:18:36.000Z</updated>
+    <updated>2024-10-19T00:01:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.5]]></title>
+        <id>https://windhawk.net/mods/explorer-frame-classic#6abf544f133985c4183a91922242030087e3cb5d</id>
+        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
+        <updated>2024-10-19T00:01:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed incorrect height if the <code>FileExplorerTabLineFix</code> (51960011) Windows flag is set.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.14]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#f467a936801ea310cbb3cb2b28c6dc161ad8b035</id>
@@ -284,20 +297,6 @@ Options" or hold Shift.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hold Teams meeting thumbnail in place 1.0]]></title>
-        <id>https://windhawk.net/mods/hold-teams-meeting-thumbnail-in-place#3066a5a0c615f74915594ade1ef7c421a1dd5e6a</id>
-        <link href="https://windhawk.net/mods/hold-teams-meeting-thumbnail-in-place"/>
-        <updated>2024-10-11T16:36:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="maintainteamsmeetingthumbnailwindowposition">Maintain Teams meeting thumbnail window position</h1>
-<p>By default, Teams has an annoying feature. When Teams meeting window is minimised into a small overlay, and the user manually places that overlay into some location, then Teams later moves the overlay window into another location. If the user moves it back to their desired location, then after some time Teams overrides that again. This obviously interferes with usage of other programs.</p>
-<p>Lets stop the micromanagement!</p>
-<p>Current mod lets the user change the location of the minimised meeting thumbnail window as usual, but prevents Teams from moving the thumbnail window around on its own.</p>]]></content>
-        <author>
-            <name>Roland Pihlakas</name>
-            <uri>https://github.com/levitation</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,7 @@
+## 1.0.5 ([Oct 19, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6abf544f133985c4183a91922242030087e3cb5d/mods/explorer-frame-classic.wh.cpp))
+
+* Fixed incorrect height if the `FileExplorerTabLineFix` (51960011) Windows flag is set.
+
 ## 1.0.4 ([Jul 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/8c10530a488a7c65b7b0815ee9c19131faece5b9/mods/explorer-frame-classic.wh.cpp))
 
 * Adjusted spacing for Windows 11 update KB5040527.
