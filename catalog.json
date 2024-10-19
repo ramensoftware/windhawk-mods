@@ -760,6 +760,32 @@
                 "version": "1.0.0"
             }
         },
+        "desktop-icons-view": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1729369429000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1729369429000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Change desktop icons view to list, details, small icons, or tiles",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Desktop icons view",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "desktop-watermark-tweaks": {
             "details": {
                 "defaultSorting": 1560,

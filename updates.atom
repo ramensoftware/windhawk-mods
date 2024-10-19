@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-19T13:43:31.000Z</updated>
+    <updated>2024-10-19T20:23:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop icons view 1.0]]></title>
+        <id>https://windhawk.net/mods/desktop-icons-view#d66d37820e212b023e90d78be46d47e0d806cd21</id>
+        <link href="https://windhawk.net/mods/desktop-icons-view"/>
+        <updated>2024-10-19T20:23:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconsview">Desktop icons view</h1>
+<p>Change desktop icons view to list, details, small icons, or tiles.</p>
+<p>Based on <a href="https://github.com/deanm/lvd">List view desktop</a>.</p>
+<h3 id="acknowledgements">Acknowledgements</h3>
+<ul>
+<li><strong>nvhhr</strong>: Coming up with the mod idea, testing.</li>
+</ul>
+<h3 id="screenshots">Screenshots</h3>
+<p><img src="https://i.imgur.com/51q6OKl.png" alt="List" /><br />
+<em>List</em></p>
+<p><img src="https://i.imgur.com/a5qBigL.png" alt="Details" /><br />
+<em>Details</em></p>
+<p><img src="https://i.imgur.com/PM4MfMs.png" alt="Small icons" /><br />
+<em>Small icons</em></p>
+<p><img src="https://i.imgur.com/gqTawuD.png" alt="Tiles" /><br />
+<em>Tiles</em></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.3]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#ab4920afd69b029af1091d6f9598dd1c1c90eed8</id>
@@ -280,20 +306,6 @@ Options" or hold Shift.</p>
         <updated>2024-10-11T21:32:20.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed support for the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-click#d190ad2c0e8b24bd6b46292507fceaad45472d8f</id>
-        <link href="https://windhawk.net/mods/taskbar-button-click"/>
-        <updated>2024-10-11T21:16:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Holding Ctrl while middle clicking will end the running task. The key combination can be configured or disabled in the mod settings.</li>
-<li>Added support for the ExplorerPatcher taskbar. Versions newer than 22621.3880.66.6 are supported. The "Customize the old taskbar on Windows 11" option must be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
