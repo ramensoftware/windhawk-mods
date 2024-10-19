@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -30,6 +30,16 @@ Moves the Windows 11 taskbar to the top of the screen.
 
 The mod was designed for up-to-date Windows 11 versions 22H2 to 24H2. Other
 versions weren't tested and are probably not compatible.
+
+## Known limitations
+
+* The Action Center (Win+A) stays on the bottom. For now, you can use [this
+  alternative
+  solution](https://github.com/ramensoftware/windhawk-mods/issues/1053#issuecomment-2405461863).
+* For some devices, mostly tablets and touchscreen devices, the taskbar may
+  appear in the wrong location after enabling the mod. An explorer restart
+  usually fixes it.
+* The option to automatically hide the taskbar isn't supported.
 
 ![Screenshot](https://i.imgur.com/LqBwGVn.png)
 */
@@ -577,6 +587,75 @@ void ApplyTaskbarFrameStyle(FrameworkElement taskbarFrame) {
     backgroundStroke.VerticalAlignment(VerticalAlignment::Bottom);
 }
 
+void* TaskbarController_OnGroupingModeChanged;
+
+using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
+TaskbarController_UpdateFrameHeight_t
+    TaskbarController_UpdateFrameHeight_Original;
+void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    static LONG taskbarFrameOffset = []() -> LONG {
+        // 48:83EC 28               | sub rsp,28
+        // 48:8B81 88020000         | mov rax,qword ptr ds:[rcx+288]
+        // or
+        // 4C:8B81 80020000         | mov r8,qword ptr ds:[rcx+280]
+        const BYTE* p = (const BYTE*)TaskbarController_OnGroupingModeChanged;
+        if (p && p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xEC &&
+            (p[4] == 0x48 || p[4] == 0x4C) && p[5] == 0x8B &&
+            (p[6] & 0xC0) == 0x80) {
+            LONG offset = *(LONG*)(p + 7);
+            Wh_Log(L"taskbarFrameOffset=0x%X", offset);
+            return offset;
+        }
+
+        Wh_Log(L"taskbarFrameOffset not found");
+        return 0;
+    }();
+
+    if (taskbarFrameOffset <= 0) {
+        Wh_Log(L"taskbarFrameOffset <= 0");
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
+
+    void* taskbarFrame = *(void**)((BYTE*)pThis + taskbarFrameOffset);
+    if (!taskbarFrame) {
+        Wh_Log(L"!taskbarFrame");
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
+
+    FrameworkElement taskbarFrameElement = nullptr;
+    ((IUnknown**)taskbarFrame)[1]->QueryInterface(
+        winrt::guid_of<FrameworkElement>(),
+        winrt::put_abi(taskbarFrameElement));
+    if (!taskbarFrameElement) {
+        Wh_Log(L"!taskbarFrameElement");
+        TaskbarController_UpdateFrameHeight_Original(pThis);
+        return;
+    }
+
+    // A workaround to issues related to tablet mode.
+    // https://github.com/ramensoftware/windhawk-mods/issues/529#issuecomment-2419371239
+    taskbarFrameElement.MaxHeight(std::numeric_limits<double>::infinity());
+
+    TaskbarController_UpdateFrameHeight_Original(pThis);
+
+    // Adjust parent grid height if needed.
+    auto contentGrid = Media::VisualTreeHelper::GetParent(taskbarFrameElement)
+                           .try_as<FrameworkElement>();
+    if (contentGrid) {
+        double height = taskbarFrameElement.Height();
+        double contentGridHeight = contentGrid.Height();
+        if (contentGridHeight > 0 && contentGridHeight != height) {
+            Wh_Log(L"Adjusting contentGrid.Height: %f->%f", contentGridHeight,
+                   height);
+            contentGrid.Height(height);
+        }
+    }
+}
+
 using TaskbarFrame_TaskbarFrame_t = void*(WINAPI*)(void* pThis);
 TaskbarFrame_TaskbarFrame_t TaskbarFrame_TaskbarFrame_Original;
 void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
@@ -598,7 +677,7 @@ void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
     *autoRevokerIt = taskbarFrame.Loaded(
         winrt::auto_revoke_t{},
         [autoRevokerIt](winrt::Windows::Foundation::IInspectable const& sender,
-                        winrt::Windows::UI::Xaml::RoutedEventArgs const& e) {
+                        RoutedEventArgs const& e) {
             Wh_Log(L">");
 
             g_elementLoadedAutoRevokerList.erase(autoRevokerIt);
@@ -674,7 +753,7 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
     *autoRevokerIt = iconView.Loaded(
         winrt::auto_revoke_t{},
         [autoRevokerIt](winrt::Windows::Foundation::IInspectable const& sender,
-                        winrt::Windows::UI::Xaml::RoutedEventArgs const& e) {
+                        RoutedEventArgs const& e) {
             Wh_Log(L">");
 
             g_elementLoadedAutoRevokerList.erase(autoRevokerIt);
@@ -763,6 +842,57 @@ MenuFlyout_ShowAt_Hook(void* pThis,
     }
 
     return MenuFlyout_ShowAt_Original(pThis, placementTarget, showOptions);
+}
+
+bool HandleSystemTrayContextMenu(FrameworkElement element) {
+    Wh_Log(L">");
+
+    FrameworkElement childElement = FindChildByName(element, L"ContainerGrid");
+    if (!childElement) {
+        Wh_Log(L"No child element");
+        return false;
+    }
+
+    auto flyout =
+        Controls::Primitives::FlyoutBase::GetAttachedFlyout(childElement);
+    if (!flyout) {
+        Wh_Log(L"No flyout");
+        return false;
+    }
+
+    Controls::Primitives::FlyoutShowOptions options;
+    options.Position(winrt::Windows::Foundation::Point{
+        static_cast<float>(childElement.ActualWidth()),
+        static_cast<float>(childElement.ActualHeight())});
+    flyout.ShowAt(childElement, options);
+    return true;
+}
+
+using TextIconContent_ShowContextMenu_t = void(WINAPI*)(void* pThis);
+TextIconContent_ShowContextMenu_t TextIconContent_ShowContextMenu_Original;
+void WINAPI TextIconContent_ShowContextMenu_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    FrameworkElement element = nullptr;
+    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(element));
+    if (!element || !HandleSystemTrayContextMenu(element)) {
+        TextIconContent_ShowContextMenu_Original(pThis);
+    }
+}
+
+using DateTimeIconContent_ShowContextMenu_t = void(WINAPI*)(void* pThis);
+DateTimeIconContent_ShowContextMenu_t
+    DateTimeIconContent_ShowContextMenu_Original;
+void WINAPI DateTimeIconContent_ShowContextMenu_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    FrameworkElement element = nullptr;
+    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(element));
+    if (!element || !HandleSystemTrayContextMenu(element)) {
+        DateTimeIconContent_ShowContextMenu_Original(pThis);
+    }
 }
 
 using SetWindowPos_t = decltype(&SetWindowPos);
@@ -880,11 +1010,8 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
             return original();
         }
 
-        DWORD messagePos = GetMessagePos();
-        POINT pt{
-            GET_X_LPARAM(messagePos),
-            GET_Y_LPARAM(messagePos),
-        };
+        POINT pt;
+        GetCursorPos(&pt);
 
         HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
         if (GetTaskbarLocationForMonitor(monitor) == TaskbarLocation::bottom) {
@@ -1118,6 +1245,22 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
             {
                 {
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnGroupingModeChanged(void))",
+                },
+                (void**)&TaskbarController_OnGroupingModeChanged,
+                nullptr,
+                true,  // Missing in older Windows 11 versions.
+            },
+            {
+                {
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::UpdateFrameHeight(void))",
+                },
+                (void**)&TaskbarController_UpdateFrameHeight_Original,
+                (void*)TaskbarController_UpdateFrameHeight_Hook,
+                true,  // Missing in older Windows 11 versions.
+            },
+            {
+                {
                     LR"(public: __cdecl winrt::Taskbar::implementation::TaskbarFrame::TaskbarFrame(void))",
                 },
                 (void**)&TaskbarFrame_TaskbarFrame_Original,
@@ -1143,6 +1286,20 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&MenuFlyout_ShowAt_Original,
                 (void*)MenuFlyout_ShowAt_Hook,
+            },
+            {
+                {
+                    LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContent::ShowContextMenu(void))",
+                },
+                (void**)&TextIconContent_ShowContextMenu_Original,
+                (void*)TextIconContent_ShowContextMenu_Hook,
+            },
+            {
+                {
+                    LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::ShowContextMenu(void))",
+                },
+                (void**)&DateTimeIconContent_ShowContextMenu_Original,
+                (void*)DateTimeIconContent_ShowContextMenu_Hook,
             },
         };
 
