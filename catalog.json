@@ -2706,7 +2706,7 @@
                 "published": 1728056002000,
                 "rating": 10,
                 "ratingUsers": 17,
-                "updated": 1729297073000,
+                "updated": 1729345411000,
                 "users": 455
             },
             "metadata": {
@@ -2723,7 +2723,7 @@
                 ],
                 "name": "Taskbar on top for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "taskbar-scroll-actions": {
