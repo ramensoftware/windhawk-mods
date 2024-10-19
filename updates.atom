@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-19T00:01:55.000Z</updated>
+    <updated>2024-10-19T00:17:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#8d4c428d099ef834d8f616a0c78157a58b4ac458</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2024-10-19T00:17:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed tray icon context menu not being clickable.</li>
+<li>Improved compatibility with some devices, mostly tablets and touchscreen devices.</li>
+<li>Fixed jump list position for multiple monitors in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.5]]></title>
         <id>https://windhawk.net/mods/explorer-frame-classic#6abf544f133985c4183a91922242030087e3cb5d</id>
@@ -282,21 +297,6 @@ Options" or hold Shift.</p>
         <author>
             <name>Roland Pihlakas</name>
             <uri>https://github.com/levitation</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-grouping#46afafc524f2b7c879702a798e74e11f7fcfd70b</id>
-        <link href="https://windhawk.net/mods/taskbar-grouping"/>
-        <updated>2024-10-11T17:45:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed multiple pinned items sometimes appearing for the same program when using multiple monitors.</li>
-<li>Fixed pinned items getting an incorrect icon in some cases.</li>
-<li>Added support for the ExplorerPatcher taskbar. Versions newer than 22621.3880.66.6 are supported. The "Customize the old taskbar on Windows 11" option must be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
