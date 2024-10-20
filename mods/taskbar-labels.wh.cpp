@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.3.1
+// @version         1.3.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -110,6 +110,14 @@ Labels can also be shown or hidden per-program in the settings.
     will be shown for these programs
 
     If another mode is used, this list is ignored
+
+    Entries can be process names, paths or application IDs, for example:
+
+    mspaint.exe
+
+    C:\Windows\System32\notepad.exe
+
+    Microsoft.WindowsCalculator_8wekyb3d8bbwe!App
 - minimumTaskbarItemWidth: 50
   $name: Minimum taskbar item width
   $description: >-
@@ -221,6 +229,13 @@ double g_initialTaskbarItemWidth;
 UINT_PTR g_invalidateTaskListButtonTimer;
 std::unordered_set<FrameworkElement> g_taskListButtonsWithLabelMissing;
 
+#if __cplusplus < 202302L
+// Missing in older MinGW headers.
+DECLARE_HANDLE(CO_MTA_USAGE_COOKIE);
+WINOLEAPI CoIncrementMTAUsage(CO_MTA_USAGE_COOKIE* pCookie);
+WINOLEAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE Cookie);
+#endif
+
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
@@ -276,6 +291,69 @@ HWND GetTaskbarWnd() {
     }
 
     return hTaskbarWnd;
+}
+
+// https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
+std::wstring GetWindowAppId(HWND hWnd) {
+    // {c8900b66-a973-584b-8cae-355b7f55341b}
+    constexpr winrt::guid CLSID_StartMenuCacheAndAppResolver{
+        0x660b90c8,
+        0x73a9,
+        0x4b58,
+        {0x8c, 0xae, 0x35, 0x5b, 0x7f, 0x55, 0x34, 0x1b}};
+
+    // {de25675a-72de-44b4-9373-05170450c140}
+    constexpr winrt::guid IID_IAppResolver_8{
+        0xde25675a,
+        0x72de,
+        0x44b4,
+        {0x93, 0x73, 0x05, 0x17, 0x04, 0x50, 0xc1, 0x40}};
+
+    struct IAppResolver_8 : public IUnknown {
+       public:
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcut() = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcutObject() = 0;
+        virtual HRESULT STDMETHODCALLTYPE
+        GetAppIDForWindow(HWND hWnd,
+                          WCHAR** pszAppId,
+                          void* pUnknown1,
+                          void* pUnknown2,
+                          void* pUnknown3) = 0;
+        virtual HRESULT STDMETHODCALLTYPE
+        GetAppIDForProcess(DWORD dwProcessId,
+                           WCHAR** pszAppId,
+                           void* pUnknown1,
+                           void* pUnknown2,
+                           void* pUnknown3) = 0;
+    };
+
+    HRESULT hr;
+    std::wstring result;
+
+    CO_MTA_USAGE_COOKIE cookie;
+    bool mtaUsageIncreased = SUCCEEDED(CoIncrementMTAUsage(&cookie));
+
+    winrt::com_ptr<IAppResolver_8> appResolver;
+    hr = CoCreateInstance(CLSID_StartMenuCacheAndAppResolver, nullptr,
+                          CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER,
+                          IID_IAppResolver_8, appResolver.put_void());
+    if (SUCCEEDED(hr)) {
+        WCHAR* pszAppId;
+        hr = appResolver->GetAppIDForWindow(hWnd, &pszAppId, nullptr, nullptr,
+                                            nullptr);
+        if (SUCCEEDED(hr)) {
+            result = pszAppId;
+            CoTaskMemFree(pszAppId);
+        }
+    }
+
+    appResolver = nullptr;
+
+    if (mtaUsageIncreased) {
+        CoDecrementMTAUsage(cookie);
+    }
+
+    return result;
 }
 
 void RecalculateLabels() {
@@ -1339,16 +1417,17 @@ DWORD WINAPI TaskbarSettings_GroupingMode_Hook(void* pThis) {
     return ret;
 }
 
-using TaskListButton_MinScalableWidth_t = float(WINAPI*)(void* pThis);
-TaskListButton_MinScalableWidth_t TaskListButton_MinScalableWidth_Original;
-// RDX is expected to be preserved.
-[[clang::preserve_most]]
-float TaskListButton_MinScalableWidth_Hook(void* pThis) {
+using ITaskbarButton_get_MinScalableWidth_t = HRESULT(WINAPI*)(void* pThis,
+                                                               float* minWidth);
+ITaskbarButton_get_MinScalableWidth_t
+    ITaskbarButton_get_MinScalableWidth_Original;
+HRESULT ITaskbarButton_get_MinScalableWidth_Hook(void* pThis, float* minWidth) {
     Wh_Log(L">");
 
-    float ret = TaskListButton_MinScalableWidth_Original(pThis);
+    HRESULT ret = ITaskbarButton_get_MinScalableWidth_Original(pThis, minWidth);
 
-    if (!g_unloading && g_hasNativeLabelsImplementation && ret > 0) {
+    if (SUCCEEDED(ret) && !g_unloading && g_hasNativeLabelsImplementation &&
+        *minWidth > 0) {
         // Allow to create many taskbar items before overflow appears.
         int minimumTaskbarItemWidth = g_settings.minimumTaskbarItemWidth;
         if (minimumTaskbarItemWidth < 44) {
@@ -1357,11 +1436,11 @@ float TaskListButton_MinScalableWidth_Hook(void* pThis) {
                    minimumTaskbarItemWidth);
         }
 
-        if (ret >= minimumTaskbarItemWidth) {
-            ret = minimumTaskbarItemWidth;
+        if (*minWidth >= minimumTaskbarItemWidth) {
+            *minWidth = minimumTaskbarItemWidth;
         } else {
             Wh_Log(L"minimumTaskbarItemWidth too large, using default (%f)",
-                   ret);
+                   *minWidth);
         }
     }
 
@@ -1490,6 +1569,16 @@ TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
                             programFileNameUpper)) {
                         excluded = true;
                     }
+                }
+            }
+
+            if (!excluded) {
+                std::wstring appId = GetWindowAppId(hWnd);
+                LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                              appId.data(), appId.length(), appId.data(),
+                              appId.length(), nullptr, nullptr, 0);
+                if (g_settings.excludedPrograms.contains(appId.c_str())) {
+                    excluded = true;
                 }
             }
 
@@ -2111,11 +2200,11 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             {
                 {
-                    LR"(public: float __cdecl winrt::Taskbar::implementation::TaskListButton::MinScalableWidth(void))",
-                    LR"(public: float __cdecl winrt::Taskbar::implementation::TaskListButton::MinScalableWidth(void) __ptr64)",
+                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskbarButton>::get_MinScalableWidth(float *))",
+                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskbarButton>::get_MinScalableWidth(float * __ptr64) __ptr64)",
                 },
-                (void**)&TaskListButton_MinScalableWidth_Original,
-                (void*)TaskListButton_MinScalableWidth_Hook,
+                (void**)&ITaskbarButton_get_MinScalableWidth_Original,
+                (void*)ITaskbarButton_get_MinScalableWidth_Hook,
                 true,
             },
             {
