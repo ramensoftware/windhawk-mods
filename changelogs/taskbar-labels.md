@@ -1,3 +1,8 @@
+## 1.3.2 ([Oct 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0951986351d82332cd99a2335f16f6fbcb22033b/mods/taskbar-labels.wh.cpp))
+
+* Added an option exclude programs by application ids.
+* Fixed the "Minimum taskbar item width" option that stopped working after a recent update of Windows 11 version 23H2.
+
 ## 1.3.1 ([Sep 29, 2024](https://github.com/ramensoftware/windhawk-mods/blob/984a75a743bba52a247387158c47db2ede70f31a/mods/taskbar-labels.wh.cpp))
 
 * Improved badge placement (e.g. unread counters) in some cases.
