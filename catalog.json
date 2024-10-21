@@ -2282,6 +2282,26 @@
                 "version": "1.0.2"
             }
         },
+        "small-tray-icons-on-touch": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1729521551000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1729521551000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Reduces the size of tray icons on touch screens",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Small Tray Icons on Touch",
+                "version": "1.0.0"
+            }
+        },
         "start-menu-all-apps": {
             "details": {
                 "defaultSorting": 19210,
