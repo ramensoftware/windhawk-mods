@@ -2,7 +2,7 @@
 // @id              taskbar-classic-menu
 // @name            Taskbar classic context menu
 // @description     Show the classic context menu when right-clicking on taskbar items
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -71,6 +71,26 @@ std::atomic<bool> g_explorerPatcherInitialized;
 
 std::atomic<DWORD> g_CTaskListWnd__HandleContextMenuThreadId;
 std::atomic<DWORD> g_TaskbarResources_OnTaskListButtonContextRequestedThreadId;
+DWORD g_lastContextRequestedTickCount;
+
+void* CTaskListWnd_vftable_CImpWndProc;
+void* CTaskListWnd_vftable_ITaskListSite;
+
+void* QueryViaVtable(void* object, void* vtable) {
+    void* ptr = object;
+    while (*(void**)ptr != vtable) {
+        ptr = (void**)ptr + 1;
+    }
+    return ptr;
+}
+
+void* QueryViaVtableBackwards(void* object, void* vtable) {
+    void* ptr = object;
+    while (*(void**)ptr != vtable) {
+        ptr = (void**)ptr - 1;
+    }
+    return ptr;
+}
 
 using CTaskListWnd__HandleContextMenu_t = void(WINAPI*)(void* pThis,
                                                         int param1,
@@ -124,24 +144,33 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
     Wh_Log(L">");
 
     if (g_TaskbarResources_OnTaskListButtonContextRequestedThreadId ==
-        GetCurrentThreadId()) {
+            GetCurrentThreadId() ||
+        GetTickCount() - g_lastContextRequestedTickCount <= 200) {
+        g_lastContextRequestedTickCount = 0;
+        Wh_Log(L"Showing classic context menu");
+
         POINT pt{};
         GetCursorPos(&pt);
 
-        void* pThis2 = (void**)pThis + 1;
-        HWND hTaskListWnd = CTaskListWnd_GetWindow_Original(pThis2);
+        void* pThis_CImpWndProc =
+            QueryViaVtableBackwards(pThis, CTaskListWnd_vftable_CImpWndProc);
+        void* pThis_ITaskListSite = QueryViaVtable(
+            pThis_CImpWndProc, CTaskListWnd_vftable_ITaskListSite);
+
+        HWND hTaskListWnd =
+            CTaskListWnd_GetWindow_Original(pThis_ITaskListSite);
 
         if (!taskItem && taskGroup) {
             void* taskBtnGroup = CTaskListWnd__GetTBGroupFromGroup_Original(
-                (void**)pThis - 5, taskGroup, nullptr);
+                pThis_CImpWndProc, taskGroup, nullptr);
             if (taskBtnGroup &&
                 CTaskBtnGroup_GetGroupType_Original(taskBtnGroup) == 1) {
                 taskItem = CTaskBtnGroup_GetTaskItem_Original(taskBtnGroup, 0);
             }
         }
 
-        CTaskListWnd_OnContextMenu_Original(pThis2, pt, hTaskListWnd, false,
-                                            taskGroup, taskItem);
+        CTaskListWnd_OnContextMenu_Original(
+            pThis_ITaskListSite, pt, hTaskListWnd, false, taskGroup, taskItem);
         return S_OK;
     }
 
@@ -186,6 +215,12 @@ TaskbarResources_OnTaskListButtonContextRequested_Hook(void* pThis,
                                                        void* param1,
                                                        void* param2) {
     Wh_Log(L">");
+
+    // Normally, CTaskListWnd::HandleClick is called synchronously and this flag
+    // isn't necessary, but if the TaskbarShiftRightClickCrash feature flag is
+    // enabled, then it's dispatched asynchronously. Use this flag to be able to
+    // show the context menu in that case as well.
+    g_lastContextRequestedTickCount = GetTickCount();
 
     g_TaskbarResources_OnTaskListButtonContextRequestedThreadId =
         GetCurrentThreadId();
@@ -271,6 +306,10 @@ WinVersion GetExplorerVersion() {
 bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
     if (g_explorerPatcherInitialized.exchange(true)) {
         return true;
+    }
+
+    if (g_winVersion >= WinVersion::Win11) {
+        g_winVersion = WinVersion::Win10;
     }
 
     struct EXPLORER_PATCHER_HOOK {
@@ -418,6 +457,14 @@ bool HookWin11TaskbarSymbols() {
             {LR"(public: virtual void __cdecl CTaskListWnd::OnContextMenu(struct tagPOINT,struct HWND__ *,bool,struct ITaskGroup *,struct ITaskItem *))"},
             &CTaskListWnd_OnContextMenu_Original,
         },
+        {
+            {LR"(const CTaskListWnd::`vftable'{for `CImpWndProc'})"},
+            &CTaskListWnd_vftable_CImpWndProc,
+        },
+        {
+            {LR"(const CTaskListWnd::`vftable'{for `ITaskListSite'})"},
+            &CTaskListWnd_vftable_ITaskListSite,
+        },
     };
 
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
@@ -478,15 +525,6 @@ BOOL Wh_ModInit() {
         if (hasWin10Taskbar && !HookWin10TaskbarSymbols()) {
             return FALSE;
         }
-
-        HandleLoadedExplorerPatcher();
-
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        FARPROC pKernelBaseLoadLibraryExW =
-            GetProcAddress(kernelBaseModule, "LoadLibraryExW");
-        Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
-                           (void*)LoadLibraryExW_Hook,
-                           (void**)&LoadLibraryExW_Original);
     } else if (g_winVersion >= WinVersion::Win11) {
         if (!HookWin11TaskbarSymbols()) {
             return FALSE;
@@ -501,6 +539,15 @@ BOOL Wh_ModInit() {
         }
     }
 
+    HandleLoadedExplorerPatcher();
+
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    FARPROC pKernelBaseLoadLibraryExW =
+        GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+    Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
+                       (void*)LoadLibraryExW_Hook,
+                       (void**)&LoadLibraryExW_Original);
+
     Wh_SetFunctionHook((void*)GetKeyState, (void*)GetKeyState_Hook,
                        (void**)&GetKeyState_Original);
 
@@ -514,7 +561,7 @@ void Wh_ModAfterInit() {
 
     // Try again in case there's a race between the previous attempt and the
     // LoadLibraryExW hook.
-    if (g_settings.oldTaskbarOnWin11 && !g_explorerPatcherInitialized) {
+    if (!g_explorerPatcherInitialized) {
         HandleLoadedExplorerPatcher();
     }
 }
