@@ -2474,7 +2474,7 @@
                 "published": 1728751303000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1728751303000,
+                "updated": 1729619174000,
                 "users": 45
             },
             "metadata": {
@@ -2491,7 +2491,7 @@
                 ],
                 "name": "Taskbar classic context menu",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-clock-customization": {

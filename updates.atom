@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-22T09:20:26.000Z</updated>
+    <updated>2024-10-22T17:46:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar classic context menu 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-classic-menu#5edf7a5636ee40a9517e7034918c8e5c0a32f9bf</id>
+        <link href="https://windhawk.net/mods/taskbar-classic-menu"/>
+        <updated>2024-10-22T17:46:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the mod not working in some cases. Specifically, if the Windows TaskbarShiftRightClickCrash feature flag was enabled, right click acted as a left click instead of showing the classic context menu.</li>
+<li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle through taskbar windows on click 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-left-click-cycle#c04dfbc63407803920ca0699c8b2a160e23d757b</id>
@@ -298,24 +312,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
 <li>Added a workaround for keyboard shortcuts not working after sleep.</li>
 <li>Improved keyboard handling to use the monitor with the mouse cursor instead of always using the primary monitor.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar classic context menu 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-classic-menu#eb7a7948afa4a9c28ddab5b6437d61abb001017d</id>
-        <link href="https://windhawk.net/mods/taskbar-classic-menu"/>
-        <updated>2024-10-12T16:41:43.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarclassiccontextmenu">Taskbar classic context menu</h1>
-<p>Show the classic context menu when right-clicking on taskbar items. You can hold
-the Shift key to show the default jump list.</p>
-<p>Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
-check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a>.</p>
-<p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.</p>
-<p><img src="https://i.imgur.com/lQEHQyR.png" alt="Demonstration" /></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
