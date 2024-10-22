@@ -2675,7 +2675,7 @@
                 "published": 1726228929000,
                 "rating": 10,
                 "ratingUsers": 12,
-                "updated": 1726228929000,
+                "updated": 1729580939000,
                 "users": 283
             },
             "metadata": {
@@ -2692,7 +2692,7 @@
                 ],
                 "name": "Cycle through taskbar windows on click",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "taskbar-notification-icon-spacing": {

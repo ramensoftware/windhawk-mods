@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-21T14:39:11.000Z</updated>
+    <updated>2024-10-22T07:08:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle through taskbar windows on click 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-left-click-cycle#8453e019ee77e74f2025ed5a247755d8cdd78f07</id>
+        <link href="https://windhawk.net/mods/taskbar-left-click-cycle"/>
+        <updated>2024-10-22T07:08:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for cycling with Win+# hotkeys (Win+1, Win+2, etc.).</li>
+<li>Added support for the ExplorerPatcher taskbar. Versions newer than 66.7 are supported. The "Customize the old taskbar on Windows 11" option must be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Small Tray Icons on Touch 1.0.0]]></title>
         <id>https://windhawk.net/mods/small-tray-icons-on-touch#b0de62a9c187168ae36e6315fada01230a844706</id>
@@ -304,21 +318,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <author>
             <name>Waldemar</name>
             <uri>https://github.com/CyprinusCarpio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic context menu on Windows 11 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-context-menu-classic#2f13948e7bb608a46585e61523aebc0c9a283b20</id>
-        <link href="https://windhawk.net/mods/explorer-context-menu-classic"/>
-        <updated>2024-10-12T08:46:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classiccontextmenuonwindows11">Classic context menu on Windows 11</h1>
-<p>Always show the classic context menu without having to select "Show More
-Options" or hold Shift.</p>
-<p>You can hold the Ctrl key to temporarily disable the mod and open the new menu.</p>
-<p><img src="https://i.imgur.com/GIdzI5V.png" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
