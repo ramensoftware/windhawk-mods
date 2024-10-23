@@ -1,3 +1,8 @@
+## 1.53 ([Oct 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0bf9b7f52bcb88beaf0efa0e464fa4e53863d032/mods/accent-color-sync.wh.cpp))
+
+* Re-added 'older OpenGlass' option to DWM modification software selection.
+* Updated readme and made instructions clearer.
+
 ## 1.52 ([Oct 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/eb6dedd8df15020401723ccc9e1a82ed0246c9ce/mods/accent-color-sync.wh.cpp))
 
 * OpenGlass: Removed old registry name option as it's redundant for the latest versions.

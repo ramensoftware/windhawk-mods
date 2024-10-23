@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-22T17:46:14.000Z</updated>
+    <updated>2024-10-23T07:19:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Accent Color Sync 1.53]]></title>
+        <id>https://windhawk.net/mods/accent-color-sync#0bf9b7f52bcb88beaf0efa0e464fa4e53863d032</id>
+        <link href="https://windhawk.net/mods/accent-color-sync"/>
+        <updated>2024-10-23T07:19:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Re-added 'older OpenGlass' option to DWM modification software selection.</li>
+<li>Updated readme and made instructions clearer.</li>
+</ul>]]></content>
+        <author>
+            <name>CatmanFan / Mr._Lechkar</name>
+            <uri>https://github.com/CatmanFan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar classic context menu 1.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-classic-menu#5edf7a5636ee40a9517e7034918c8e5c0a32f9bf</id>
@@ -297,20 +311,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
         <content type="html"><![CDATA[<ul>
 <li>Improved DirectUI resources redirection (usually <code>UIFILE</code> and <code>XML</code>) to not affect sub resources such as strings, which are now loaded from the original file.</li>
 <li>Improved icon cache invalidation when settings change and when the mod is unloaded.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#02ba0666ef1b78f2462215089a2a29834143aecf</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2024-10-12T21:00:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a workaround for keyboard shortcuts not working after sleep.</li>
-<li>Improved keyboard handling to use the monitor with the mouse cursor instead of always using the primary monitor.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
