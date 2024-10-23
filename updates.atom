@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-23T07:19:44.000Z</updated>
+    <updated>2024-10-23T15:13:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray icon spacing 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#a7c329d411e81a6e0b20c90efc77c36fca9fec5a</id>
+        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
+        <updated>2024-10-23T15:13:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed from "Taskbar notification icon spacing" to "Taskbar tray icon spacing", as tray is the more familiar term.</li>
+<li>Added support for more system icons, including the chevron icon, microphone, keyboard, language, and others.</li>
+<li>Added two options to customize the tray overflow: "Tray overflow icon width" and "Tray overflow icons per row".</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Accent Color Sync 1.53]]></title>
         <id>https://windhawk.net/mods/accent-color-sync#0bf9b7f52bcb88beaf0efa0e464fa4e53863d032</id>
@@ -301,20 +316,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
         <author>
             <name>CatmanFan / Mr._Lechkar</name>
             <uri>https://github.com/CatmanFan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1.6]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#1db804f1cdc96957d8e71132cf1378fc19d94ea2</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-10-12T21:10:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved DirectUI resources redirection (usually <code>UIFILE</code> and <code>XML</code>) to not affect sub resources such as strings, which are now loaded from the original file.</li>
-<li>Improved icon cache invalidation when settings change and when the mod is unloaded.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
