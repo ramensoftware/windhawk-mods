@@ -1,15 +1,15 @@
 // ==WindhawkMod==
 // @id              taskbar-notification-icon-spacing
-// @name            Taskbar notification icon spacing
-// @description     Reduce or increase the spacing between notification (tray) icons on the taskbar (Windows 11 only)
-// @version         1.0.2
+// @name            Taskbar tray icon spacing
+// @description     Reduce or increase the spacing between tray icons on the taskbar (Windows 11 only)
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lwininet
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -22,29 +22,42 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar notification icon spacing
+# Taskbar tray icon spacing
 
-Reduce or increase the spacing between notification (tray) icons on the taskbar.
+Reduce or increase the spacing between tray icons on the taskbar.
 
 Only Windows 11 version 22H2 or newer is currently supported. For older Windows
 versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
-![Notification icon width: 32](https://i.imgur.com/78eRcAJ.png) \
-*Notification icon width: 32 (Windows 11 default)*
+![Tray icon width: 32](https://i.imgur.com/78eRcAJ.png) \
+*Tray icon width: 32 (Windows 11 default)*
 
-![Notification icon width: 24](https://i.imgur.com/4hgxHJ0.png) \
-*Notification icon width: 24*
+![Tray icon width: 24](https://i.imgur.com/4hgxHJ0.png) \
+*Tray icon width: 24*
 
-![Notification icon width: 18](https://i.imgur.com/cErw24I.png) \
-*Notification icon width: 18*
+![Tray icon width: 18](https://i.imgur.com/cErw24I.png) \
+*Tray icon width: 18*
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - notificationIconWidth: 24
-  $name: Notification icon width
+  $name: Tray icon width
   $description: 'Windows 11 default: 32'
+- overflowIconWidth: 32
+  $name: Tray overflow icon width
+  $description: >-
+    The width of icons that appear in the overflow popup when clicking on the
+    chevron icon
+
+    Windows 11 default: 40
+- overflowIconsPerRow: 5
+  $name: Tray overflow icons per row
+  $description: >-
+    The maximum amount of icons per row in the overflow popup
+
+    Windows 11 default: 5
 */
 // ==/WindhawkModSettings==
 
@@ -52,8 +65,6 @@ versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 #include <functional>
 #include <list>
-
-#include <wininet.h>
 
 #undef GetCurrentTime
 
@@ -66,6 +77,8 @@ using namespace winrt::Windows::UI::Xaml;
 
 struct {
     int notificationIconWidth;
+    int overflowIconWidth;
+    int overflowIconsPerRow;
 } g_settings;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
@@ -73,6 +86,8 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
 
 std::list<FrameworkElementLoadedEventRevoker> g_autoRevokerList;
+
+bool g_overflowApplied;
 
 HWND GetTaskbarWnd() {
     static HWND hTaskbarWnd;
@@ -100,6 +115,21 @@ bool IsChildOfElementByName(FrameworkElement element, PCWSTR name) {
         }
 
         if (parent.Name() == name) {
+            return true;
+        }
+    }
+}
+
+bool IsChildOfElementByClassName(FrameworkElement element, PCWSTR className) {
+    auto parent = element;
+    while (true) {
+        parent = Media::VisualTreeHelper::GetParent(parent)
+                     .try_as<FrameworkElement>();
+        if (!parent) {
+            return false;
+        }
+
+        if (winrt::get_class_name(parent) == className) {
             return true;
         }
     }
@@ -139,6 +169,37 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     });
 }
 
+void ApplyNotifyIconViewOverflowStyle(FrameworkElement notifyIconViewElement,
+                                      int width) {
+    Wh_Log(L"Setting MinWidth=%d for NotifyIconView (overflow)", width);
+    notifyIconViewElement.MinWidth(width);
+
+    Wh_Log(L"Setting Height=%d for NotifyIconView (overflow)", width);
+    notifyIconViewElement.Height(width);
+
+    FrameworkElement child = notifyIconViewElement;
+    if ((child = FindChildByName(child, L"ContainerGrid")) &&
+        (child = FindChildByName(child, L"ContentPresenter")) &&
+        (child = FindChildByName(child, L"ContentGrid"))) {
+        EnumChildElements(child, [](FrameworkElement child) {
+            auto className = winrt::get_class_name(child);
+            if (className == L"SystemTray.ImageIconContent") {
+                auto containerGrid = FindChildByName(child, L"ContainerGrid")
+                                         .try_as<Controls::Grid>();
+                if (containerGrid) {
+                    Wh_Log(L"Setting Padding=0 for ContainerGrid");
+                    containerGrid.Padding(Thickness{});
+                }
+            } else {
+                Wh_Log(L"Unsupported class name %s of child",
+                       className.c_str());
+            }
+
+            return false;
+        });
+    }
+}
+
 void ApplyNotifyIconViewStyle(FrameworkElement notifyIconViewElement,
                               int width) {
     Wh_Log(L"Setting MinWidth=%d for NotifyIconView", width);
@@ -147,14 +208,33 @@ void ApplyNotifyIconViewStyle(FrameworkElement notifyIconViewElement,
     FrameworkElement child = notifyIconViewElement;
     if ((child = FindChildByName(child, L"ContainerGrid")) &&
         (child = FindChildByName(child, L"ContentPresenter")) &&
-        (child = FindChildByName(child, L"ContentGrid")) &&
-        (child = FindChildByClassName(child, L"SystemTray.ImageIconContent")) &&
-        (child = FindChildByName(child, L"ContainerGrid"))) {
-        auto childControl = child.try_as<Controls::Grid>();
-        if (childControl) {
-            Wh_Log(L"Setting Padding=0 for ContainerGrid");
-            childControl.Padding(Thickness{});
-        }
+        (child = FindChildByName(child, L"ContentGrid"))) {
+        EnumChildElements(child, [width](FrameworkElement child) {
+            auto className = winrt::get_class_name(child);
+            if (className == L"SystemTray.TextIconContent" ||
+                className == L"SystemTray.ImageIconContent") {
+                auto containerGrid = FindChildByName(child, L"ContainerGrid")
+                                         .try_as<Controls::Grid>();
+                if (containerGrid) {
+                    Wh_Log(L"Setting Padding=0 for ContainerGrid");
+                    containerGrid.Padding(Thickness{});
+                }
+            } else if (className == L"SystemTray.LanguageTextIconContent") {
+                child.Width(std::numeric_limits<double>::quiet_NaN());
+
+                // Every language has a different width. ENG is 24. Default
+                // width is 44.
+                double minWidth = width + 12;
+                Wh_Log(L"Setting MinWidth=%f for LanguageTextIconContent",
+                       minWidth);
+                child.MinWidth(minWidth);
+            } else {
+                Wh_Log(L"Unsupported class name %s of child",
+                       className.c_str());
+            }
+
+            return false;
+        });
     }
 }
 
@@ -267,6 +347,60 @@ bool ApplyControlCenterButtonStyle(FrameworkElement controlCenterButton,
     return true;
 }
 
+bool ApplyIconStackStyle(PCWSTR containerName,
+                         FrameworkElement container,
+                         int width) {
+    FrameworkElement stackPanel = nullptr;
+
+    FrameworkElement child = container;
+    if ((child = FindChildByName(child, L"Content")) &&
+        (child = FindChildByName(child, L"IconStack")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.ItemsPresenter")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.StackPanel"))) {
+        stackPanel = child;
+    }
+
+    if (!stackPanel) {
+        return false;
+    }
+
+    EnumChildElements(stackPanel, [containerName,
+                                   width](FrameworkElement child) {
+        auto childClassName = winrt::get_class_name(child);
+        if (childClassName != L"Windows.UI.Xaml.Controls.ContentPresenter") {
+            Wh_Log(L"Unsupported class name %s of child",
+                   childClassName.c_str());
+            return false;
+        }
+
+        if (wcscmp(containerName, L"NotifyIconStack") == 0) {
+            FrameworkElement systemTrayChevronIconViewElement =
+                FindChildByClassName(child, L"SystemTray.ChevronIconView");
+            if (!systemTrayChevronIconViewElement) {
+                Wh_Log(L"Failed to get SystemTray.ChevronIconView of child");
+                return false;
+            }
+
+            ApplyNotifyIconViewStyle(systemTrayChevronIconViewElement, width);
+        } else {
+            FrameworkElement systemTrayIconElement =
+                FindChildByName(child, L"SystemTrayIcon");
+            if (!systemTrayIconElement) {
+                Wh_Log(L"Failed to get SystemTrayIcon of child");
+                return false;
+            }
+
+            ApplyNotifyIconViewStyle(systemTrayIconElement, width);
+        }
+
+        return false;
+    });
+
+    return true;
+}
+
 bool ApplyStyle(XamlRoot xamlRoot, int width) {
     FrameworkElement systemTrayFrameGrid = nullptr;
 
@@ -284,17 +418,30 @@ bool ApplyStyle(XamlRoot xamlRoot, int width) {
     bool somethingSucceeded = false;
 
     FrameworkElement notificationAreaIcons =
-        FindChildByName(child, L"NotificationAreaIcons");
+        FindChildByName(systemTrayFrameGrid, L"NotificationAreaIcons");
     if (notificationAreaIcons) {
         somethingSucceeded |=
             ApplyNotifyIconsStyle(notificationAreaIcons, width);
     }
 
     FrameworkElement controlCenterButton =
-        FindChildByName(child, L"ControlCenterButton");
+        FindChildByName(systemTrayFrameGrid, L"ControlCenterButton");
     if (controlCenterButton) {
         somethingSucceeded |=
             ApplyControlCenterButtonStyle(controlCenterButton, width);
+    }
+
+    for (PCWSTR containerName : {
+             L"NotifyIconStack",
+             L"MainStack",
+             L"NonActivatableStack",
+         }) {
+        FrameworkElement container =
+            FindChildByName(systemTrayFrameGrid, containerName);
+        if (container) {
+            somethingSucceeded |=
+                ApplyIconStackStyle(containerName, container, width);
+        }
     }
 
     return somethingSucceeded;
@@ -321,7 +468,7 @@ void WINAPI IconView_IconView_Hook(PVOID pThis) {
     *autoRevokerIt = iconView.Loaded(
         winrt::auto_revoke_t{},
         [autoRevokerIt](winrt::Windows::Foundation::IInspectable const& sender,
-                        winrt::Windows::UI::Xaml::RoutedEventArgs const& e) {
+                        RoutedEventArgs const& e) {
             Wh_Log(L">");
 
             g_autoRevokerList.erase(autoRevokerIt);
@@ -335,16 +482,101 @@ void WINAPI IconView_IconView_Hook(PVOID pThis) {
             Wh_Log(L"className: %s", className.c_str());
 
             if (className == L"SystemTray.NotifyIconView") {
-                ApplyNotifyIconViewStyle(iconView,
-                                         g_settings.notificationIconWidth);
-            } else if (className == L"SystemTray.IconView" &&
-                       iconView.Name() == L"SystemTrayIcon" &&
-                       IsChildOfElementByName(iconView,
-                                              L"ControlCenterButton")) {
-                ApplySystemTrayIconStyle(iconView,
-                                         g_settings.notificationIconWidth);
+                if (IsChildOfElementByClassName(
+                        iconView, L"SystemTray.NotificationAreaOverflow")) {
+                    ApplyNotifyIconViewOverflowStyle(
+                        iconView, g_settings.overflowIconWidth);
+                } else {
+                    ApplyNotifyIconViewStyle(iconView,
+                                             g_settings.notificationIconWidth);
+                }
+            } else if (className == L"SystemTray.IconView") {
+                if (iconView.Name() == L"SystemTrayIcon") {
+                    if (IsChildOfElementByName(iconView,
+                                               L"ControlCenterButton")) {
+                        ApplySystemTrayIconStyle(
+                            iconView, g_settings.notificationIconWidth);
+                    } else if (IsChildOfElementByName(iconView, L"MainStack") ||
+                               IsChildOfElementByName(iconView,
+                                                      L"NonActivatableStack") ||
+                               IsChildOfElementByName(iconView,
+                                                      L"ControlCenterButton")) {
+                        ApplyNotifyIconViewStyle(
+                            iconView, g_settings.notificationIconWidth);
+                    }
+                }
+            } else if (className == L"SystemTray.ChevronIconView") {
+                if (IsChildOfElementByName(iconView, L"NotifyIconStack")) {
+                    ApplyNotifyIconViewStyle(iconView,
+                                             g_settings.notificationIconWidth);
+                }
             }
         });
+}
+
+using OverflowXamlIslandManager_ShowWindow_t =
+    void(WINAPI*)(void* pThis, POINT pt, int inputDeviceKind);
+OverflowXamlIslandManager_ShowWindow_t
+    OverflowXamlIslandManager_ShowWindow_Original;
+void WINAPI OverflowXamlIslandManager_ShowWindow_Hook(void* pThis,
+                                                      POINT pt,
+                                                      int inputDeviceKind) {
+    Wh_Log(L">");
+
+    OverflowXamlIslandManager_ShowWindow_Original(pThis, pt, inputDeviceKind);
+
+    if (g_overflowApplied) {
+        return;
+    }
+
+    g_overflowApplied = true;
+
+    FrameworkElement overflowRootGrid = nullptr;
+    ((IUnknown**)pThis)[5]->QueryInterface(winrt::guid_of<Controls::Grid>(),
+                                           winrt::put_abi(overflowRootGrid));
+    if (!overflowRootGrid) {
+        return;
+    }
+
+    Controls::WrapGrid wrapGrid = nullptr;
+
+    FrameworkElement child = overflowRootGrid;
+    if ((child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.ItemsControl")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.ItemsPresenter")) &&
+        (child = FindChildByClassName(child,
+                                      L"Windows.UI.Xaml.Controls.WrapGrid"))) {
+        wrapGrid = child.try_as<Controls::WrapGrid>();
+    }
+
+    if (!wrapGrid) {
+        return;
+    }
+
+    int width = g_settings.overflowIconWidth;
+
+    Wh_Log(L"Setting ItemWidth, ItemWidth=%d for WrapGrid", width);
+    wrapGrid.ItemWidth(width);
+    wrapGrid.ItemHeight(width);
+
+    wrapGrid.MaximumRowsOrColumns(g_settings.overflowIconsPerRow);
+
+    EnumChildElements(wrapGrid, [width](FrameworkElement child) {
+        auto className = winrt::get_class_name(child);
+        if (className != L"Windows.UI.Xaml.Controls.ContentPresenter") {
+            Wh_Log(L"Unsupported class name %s of child", className.c_str());
+            return false;
+        }
+
+        auto notifyIconView =
+            FindChildByClassName(child, L"SystemTray.NotifyIconView");
+        if (notifyIconView) {
+            ApplyNotifyIconViewOverflowStyle(notifyIconView, width);
+        }
+
+        return false;
+    });
 }
 
 void* CTaskBand_ITaskListWndSite_vftable;
@@ -363,8 +595,13 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 
     PVOID taskBand = (PVOID)GetWindowLongPtr(hTaskSwWnd, 0);
     PVOID taskBandForTaskListWndSite = taskBand;
-    while (*(PVOID*)taskBandForTaskListWndSite !=
-           CTaskBand_ITaskListWndSite_vftable) {
+    for (int i = 0; *(PVOID*)taskBandForTaskListWndSite !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
         taskBandForTaskListWndSite = (PVOID*)taskBandForTaskListWndSite + 1;
     }
 
@@ -448,6 +685,8 @@ bool RunFromWindowThread(HWND hWnd,
 void LoadSettings() {
     g_settings.notificationIconWidth =
         Wh_GetIntSetting(L"notificationIconWidth");
+    g_settings.overflowIconWidth = Wh_GetIntSetting(L"overflowIconWidth");
+    g_settings.overflowIconsPerRow = Wh_GetIntSetting(L"overflowIconsPerRow");
 }
 
 void ApplySettings(int width) {
@@ -475,6 +714,7 @@ void ApplySettings(int width) {
             ApplySettingsParam& param = *(ApplySettingsParam*)pParam;
 
             g_autoRevokerList.clear();
+            g_overflowApplied = false;
 
             auto xamlRoot = GetTaskbarXamlRoot(param.hTaskbarWnd);
             if (!xamlRoot) {
@@ -489,187 +729,16 @@ void ApplySettings(int width) {
         &param);
 }
 
-std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
-    HINTERNET hOpenHandle = InternetOpen(
-        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hOpenHandle) {
-        return std::nullopt;
-    }
-
-    HINTERNET hUrlHandle =
-        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
-                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
-                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
-                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
-                        0);
-    if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwStatusCode = 0;
-    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
-    if (!HttpQueryInfo(hUrlHandle,
-                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
-                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
-        dwStatusCode != 200) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
-    if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
-    DWORD dwLength = dwNumberOfBytesRead;
-
-    while (dwNumberOfBytesRead) {
-        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
-            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
-        if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
-            HeapFree(GetProcessHeap(), 0, pUrlContent);
-            return std::nullopt;
-        }
-
-        pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
-        dwLength += dwNumberOfBytesRead;
-    }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
-
-    // Assume UTF-8.
-    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
-                                          dwLength, nullptr, 0);
-    std::wstring unicodeContent(charsNeeded, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
-                        unicodeContent.data(), unicodeContent.size());
-
-    HeapFree(GetProcessHeap(), 0, pUrlContent);
-
-    return unicodeContent;
-}
-
-bool HookSymbolsWithOnlineCacheFallback(
-    HMODULE module,
-    const WindhawkUtils::SYMBOL_HOOK* symbolHooks,
-    size_t symbolHooksCount) {
-    constexpr WCHAR kModIdForCache[] = L"taskbar-notification-icon-spacing";
-
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
-        return true;
-    }
-
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
-
-    WCHAR moduleFilePath[MAX_PATH];
-    DWORD moduleFilePathLen =
-        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
-    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    DWORD moduleFileNameLen =
-        moduleFilePathLen - (moduleFileName - moduleFilePath);
-
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
-                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
-                  nullptr, 0);
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    std::wstring cacheStrKey =
-#if defined(_M_IX86)
-        L"symbol-x86-cache-";
-#elif defined(_M_X64)
-        L"symbol-cache-";
-#else
-#error "Unsupported architecture"
-#endif
-    cacheStrKey += moduleFileName;
-
-    std::wstring onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
-    onlineCacheUrl += kModIdForCache;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += cacheStrKey;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += timeStamp;
-    onlineCacheUrl += L'-';
-    onlineCacheUrl += imageSize;
-    onlineCacheUrl += L".txt";
-
-    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
-
-    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
-        Wh_Log(L"Failed to get online cache");
-        return false;
-    }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
-
-    return HookSymbols(module, symbolHooks, symbolHooksCount);
-}
-
-bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
-    WCHAR szWindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectory(szWindowsDirectory,
-                             ARRAYSIZE(szWindowsDirectory))) {
+bool HookTaskbarViewDllSymbols() {
+    WCHAR dllPath[MAX_PATH];
+    if (!GetWindowsDirectory(dllPath, ARRAYSIZE(dllPath))) {
         Wh_Log(L"GetWindowsDirectory failed");
         return false;
     }
 
-    // Windows 11 version 22H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
     wcscat_s(
-        path, MAX_PATH,
+        dllPath, MAX_PATH,
         LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    // Windows 11 version 21H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(
-        path, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    return false;
-}
-
-bool HookTaskbarViewDllSymbols() {
-    WCHAR dllPath[MAX_PATH];
-    if (!GetTaskbarViewDllPath(dllPath)) {
-        Wh_Log(L"Taskbar view module not found");
-        return false;
-    }
 
     HMODULE module =
         LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -678,16 +747,21 @@ bool HookTaskbarViewDllSymbols() {
         return false;
     }
 
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
             &IconView_IconView_Original,
             IconView_IconView_Hook,
         },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::ShowWindow(struct tagPOINT,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
+            &OverflowXamlIslandManager_ShowWindow_Original,
+            OverflowXamlIslandManager_ShowWindow_Hook,
+        },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 
 BOOL HookTaskbarDllSymbols() {
@@ -697,7 +771,7 @@ BOOL HookTaskbarDllSymbols() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             (void**)&CTaskBand_ITaskListWndSite_vftable,
@@ -712,8 +786,7 @@ BOOL HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 BOOL Wh_ModInit() {
