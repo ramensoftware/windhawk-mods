@@ -1,3 +1,13 @@
+## 1.3 ([Oct 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b43bd5d00887601ed297b2366631494080f0dd3e/mods/taskbar-vertical.wh.cpp))
+
+* Fixed jump lists being cut off when opened near the edge of the screen.
+* Added a vertical alignment option for jump lists.
+* Adjusted jump list animations to slide from the correct direction.
+* Fixed tooltips overlapping with the taskbar in Windows 11 version 24H2.
+* Improved support for some devices, mostly tablets and devices with a touchscreen.
+* Improved compatibility with some programs which query the taskbar location, such as EarTrumpet.
+* This update requires Windhawk 1.5 or newer. If you're using an older Windhawk version, please update.
+
 ## 1.2.5 ([Oct 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/31cb0bda3c0d239f220fad072bd4a2be53c6ff05/mods/taskbar-vertical.wh.cpp))
 
 * Improved tray overflow position, now it's vertically centered to the mouse position and isn't shown far away from the taskbar.

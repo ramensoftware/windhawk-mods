@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-23T15:13:37.000Z</updated>
+    <updated>2024-10-23T18:39:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#b43bd5d00887601ed297b2366631494080f0dd3e</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2024-10-23T18:39:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed jump lists being cut off when opened near the edge of the screen.</li>
+<li>Added a vertical alignment option for jump lists.</li>
+<li>Adjusted jump list animations to slide from the correct direction.</li>
+<li>Fixed tooltips overlapping with the taskbar in Windows 11 version 24H2.</li>
+<li>Improved support for some devices, mostly tablets and devices with a touchscreen.</li>
+<li>Improved compatibility with some programs which query the taskbar location, such as EarTrumpet.</li>
+<li>This update requires Windhawk 1.5 or newer. If you're using an older Windhawk version, please update.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray icon spacing 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#a7c329d411e81a6e0b20c90efc77c36fca9fec5a</id>
@@ -294,24 +313,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
 <li>Fixed a minor bug in which the "Fixed opacity" option in the mod settings was accidentally left enabled. Please disable the option manually if you are not planning on using the feature.</li>
 <li>Fixed a bug in which the OpenGlass options were incorrectly swapped.</li>
 <li>Updated readme to correct some things.</li>
-</ul>]]></content>
-        <author>
-            <name>CatmanFan / Mr._Lechkar</name>
-            <uri>https://github.com/CatmanFan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.5]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#b788c556e80d06c9ae315e53830396ff92ee1d59</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2024-10-13T06:16:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed margins of error with the DWM colorization calculator formula, making it more accurate to ALTaleX's original Python code.</li>
-<li>OpenGlass: Add option to toggle between using the old registry value name (i.e. "og_{xxx}") and the current one ("{xxx}Override") in mod settings</li>
-<li>Add (experimental) support for <a href="https://archive.org/details/full-glass8-archive">legacy Glass8</a></li>
-<li>Add option to set permanent fixed opacity (useful for automatic desktop background color!)</li>
-<li>Add Japanese translation</li>
-<li>Updated readme, settings and mod description</li>
 </ul>]]></content>
         <author>
             <name>CatmanFan / Mr._Lechkar</name>
