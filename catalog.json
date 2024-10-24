@@ -1713,7 +1713,7 @@
                 "published": 1725792150000,
                 "rating": 10,
                 "ratingUsers": 9,
-                "updated": 1726213801000,
+                "updated": 1729806251000,
                 "users": 360
             },
             "metadata": {
@@ -1726,7 +1726,7 @@
                 ],
                 "name": "Logon, Logoff & Shutdown Sounds Restored",
                 "twitter": "https://twitter.com/TorutheRedFox",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "maintain-flux-colour-temperature": {

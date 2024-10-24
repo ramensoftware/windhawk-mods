@@ -2,7 +2,7 @@
 // @id              logon-logoff-shutdown-sounds
 // @name            Logon, Logoff & Shutdown Sounds Restored
 // @description     Restores the logon, logoff and shutdown sounds from earlier versions of Windows
-// @version         1.0.1
+// @version         1.0.2
 // @author          Toru the Red Fox
 // @github          https://github.com/TorutheRedFox
 // @twitter         https://twitter.com/TorutheRedFox
@@ -16,8 +16,6 @@
 Restores the logon, logoff and shutdown sounds from earlier versions of Windows, simple as.
 
 It is recommended to use [these reg files](https://www.howtogeek.com/wp-content/uploads/2016/09/Shutdown-Logoff-Logon-Sound-Hacks.zip) to restore the sound events to the Sound control panel applet.
-
-Note: Likely redundant with explorer7 due to 7's explorer having this code in it already.
 */
 // ==/WindhawkModReadme==
 
@@ -367,7 +365,7 @@ LRESULT WINAPI CSoundWnd::v_WndProc(HWND hWnd,
             if ((lParam & ENDSESSION_CRITICAL) == FALSE) {
                 LoadString(GetModuleHandle(NULL), 0x2DBu, szShutdownReason, ARRAYSIZE(szShutdownReason));
                 ShutdownBlockReasonCreate(this->m_hwndSound, szShutdownReason);
-                PlayLogonLogoffSound(&this->m_thread, (lParam & ENDSESSION_LOGOFF) != 0 ? ST_LOGOFF : ST_EXIT);
+                PlayLogonLogoffSound(&this->m_thread, (lParam & ENDSESSION_LOGOFF && settings.bXpMode == false) != 0 ? ST_LOGOFF : ST_EXIT);
                 if (this->m_thread) {
                     g_hSoundThread = this->m_thread;
                     WaitForSingleObject(this->m_thread, INFINITE);
