@@ -1265,7 +1265,7 @@
                 "published": 1722712367000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1722712367000,
+                "updated": 1729865391000,
                 "users": 37
             },
             "metadata": {
@@ -1280,7 +1280,7 @@
                 ],
                 "name": "Fix Qt scrollbar grippers",
                 "twitter": "https://twitter.com/kawaipure",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "fix-strips": {
