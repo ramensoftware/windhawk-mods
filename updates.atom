@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-25T17:20:05.000Z</updated>
+    <updated>2024-10-25T18:47:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#df4eb62db86a415c8ee319727521a15a36216661</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
+        <updated>2024-10-25T18:47:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarautohidewhenmaximized">Taskbar auto-hide when maximized</h1>
+<p>Automatically hides the taskbar when a window is maximized, and brings it back
+when there are no maximized windows.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.1.8]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#5c313117215b4ad4452f3c15a7e1378cd2eb3a00</id>
@@ -290,21 +303,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
         <content type="html"><![CDATA[<ul>
 <li>The small 16x16 icons are now used for small icons. Previously the larger 32x32 icons were downscaled in some cases.</li>
 <li>Improved tablet mode support and have the height applied in more cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1.7]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#951ca39188471a50c458d2ba5cded4f96a03e392</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-10-17T18:39:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved DirectUI string redirection.</li>
-<li>Improved string redirection to apply in more cases.</li>
-<li>Added an experimental option to redirect all resources, not only the supported resources that are listed in the description.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

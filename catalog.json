@@ -2367,6 +2367,32 @@
                 "version": "1.0.2"
             }
         },
+        "taskbar-auto-hide-when-maximized": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1729882023000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1729882023000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-ldwmapi",
+                "description": "Automatically hides the taskbar when a window is maximized, and brings it back when there are no maximized windows",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar auto-hide when maximized",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-autohide-better": {
             "details": {
                 "defaultSorting": 13160,
