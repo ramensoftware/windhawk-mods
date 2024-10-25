@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-25T14:09:51.000Z</updated>
+    <updated>2024-10-25T16:44:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.15]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#08efbf944927215f3f73bceca8389a9eccd6659b</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-10-25T16:44:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Applying changes to the taskbar button width option no longer requires restarting explorer.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Qt scrollbar grippers 1.1]]></title>
         <id>https://windhawk.net/mods/fix-qt-scrollbar-grippers#32c17fb5a213cf117d1cb8d3722d01ec18c9a04d</id>
@@ -294,21 +307,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.52]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#eb6dedd8df15020401723ccc9e1a82ed0246c9ce</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2024-10-16T12:51:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>OpenGlass: Removed old registry name option as it's redundant for the latest versions.</li>
-<li>OpenGlass: Fixed incompatibility with OpenGlass DComp (a registry value had been fixed at zero, which caused a visual bug on that version).</li>
-<li>Fixed compatibility for legacy versions of Windows 10 (1709 and below).</li>
-</ul>]]></content>
-        <author>
-            <name>CatmanFan / Mr._Lechkar</name>
-            <uri>https://github.com/CatmanFan</uri>
         </author>
     </entry>
 </feed>

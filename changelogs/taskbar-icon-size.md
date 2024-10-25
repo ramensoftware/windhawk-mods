@@ -1,3 +1,7 @@
+## 1.2.15 ([Oct 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/08efbf944927215f3f73bceca8389a9eccd6659b/mods/taskbar-icon-size.wh.cpp))
+
+* Applying changes to the taskbar button width option no longer requires restarting explorer.
+
 ## 1.2.14 ([Oct 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f467a936801ea310cbb3cb2b28c6dc161ad8b035/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed a crash in old builds of Windows 11 version 22H2.
