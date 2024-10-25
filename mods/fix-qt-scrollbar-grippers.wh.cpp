@@ -24,6 +24,13 @@ that.
 
 These were removed in Qt [because the developers thought that these changes wouldn't affect Windows 10](https://github.com/qt/qtbase/commit/5f5c342924a0d9a2856b2f2d6db373e25723f2b0).
 They were wrong.
+
+## How to enable the mod for a program
+This mod targets the Interactive Disassembler (IDA) by default. Other applications must be manually specified
+for injection.
+In Windhawk, go to the "Advanced" tab and scroll down to 
+"Custom process inclusion list". In that box, put the filename of the `.exe`. 
+The mod will immediately apply to those programs after you click "Save". 
 */
 // ==/WindhawkModReadme==
 
