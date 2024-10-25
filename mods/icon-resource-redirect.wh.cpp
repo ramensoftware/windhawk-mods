@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.1.7
+// @version         1.1.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -82,7 +82,7 @@ The mod supports the following resource types and loading methods:
       $name: The original resource file
       $description: >-
         The original file from which resources are loaded, can be a pattern
-        where '*' matches any number characters and '?' matches any single
+        where '*' matches any number of characters and '?' matches any single
         character
     - redirect: 'C:\my-themes\theme-1\imageres.dll'
       $name: The custom resource file
@@ -203,15 +203,17 @@ auto StrToW(PCSTR str) {
         PCWSTR p;
     } result;
 
-    int strLen = static_cast<int>(strlen(str));
-    int sizeNeeded = MultiByteToWideChar(CP_ACP, 0, str, strLen, nullptr, 0);
-    if (sizeNeeded <= 0) {
-        throw std::runtime_error("MultiByteToWideChar() failed: " +
-                                 std::to_string(sizeNeeded));
+    if (*str) {
+        int strLen = static_cast<int>(strlen(str));
+        int sizeNeeded =
+            MultiByteToWideChar(CP_ACP, 0, str, strLen, nullptr, 0);
+        if (sizeNeeded) {
+            result.wstr.resize(sizeNeeded);
+            MultiByteToWideChar(CP_ACP, 0, str, strLen, result.wstr.data(),
+                                sizeNeeded);
+        }
     }
 
-    result.wstr.resize(sizeNeeded);
-    MultiByteToWideChar(CP_ACP, 0, str, strLen, result.wstr.data(), sizeNeeded);
     result.p = result.wstr.c_str();
     return result;
 }
@@ -1167,19 +1169,20 @@ HRSRC FindResourceExAW_Hook(HMODULE hModule,
     WCHAR prefix[64];
     swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
 
-    std::wstring logType;
-    if (IS_INTRESOURCE(lpType)) {
-        logType = std::to_wstring((DWORD)(ULONG_PTR)lpType);
-    } else {
-        logType = StrToW(lpType).p;
-    }
+    auto logType = [lpType]() -> std::wstring {
+        if (IS_INTRESOURCE(lpType)) {
+            return std::to_wstring((DWORD)(ULONG_PTR)lpType);
+        } else {
+            return StrToW(lpType).p;
+        }
+    };
 
     if (IS_INTRESOURCE(lpName)) {
         Wh_Log(L"%s, resource type: %s, number: %u, language: 0x%04X", prefix,
-               logType.c_str(), (DWORD)(ULONG_PTR)lpName, wLanguage);
+               logType().c_str(), (DWORD)(ULONG_PTR)lpName, wLanguage);
     } else {
         Wh_Log(L"%s, resource type: %s, name: %s, language: 0x%04X", prefix,
-               logType.c_str(), StrToW(lpName).p, wLanguage);
+               logType().c_str(), StrToW(lpName).p, wLanguage);
     }
 
     HRSRC result;
@@ -1283,6 +1286,61 @@ DWORD WINAPI SizeofResource_Hook(HMODULE hModule, HRSRC hResInfo) {
     }
 
     return SizeofResource_Original(hModule, hResInfo);
+}
+
+// https://ntdoc.m417z.com/rtlloadstring
+using RtlLoadString_t = NTSTATUS(NTAPI*)(_In_ PVOID DllHandle,
+                                         _In_ ULONG StringId,
+                                         _In_opt_ PCWSTR StringLanguage,
+                                         _In_ ULONG Flags,
+                                         _Out_ PCWSTR* ReturnString,
+                                         _Out_opt_ PUSHORT ReturnStringLen,
+                                         _Out_writes_(ReturnLanguageLen)
+                                             PWSTR ReturnLanguageName,
+                                         _Inout_opt_ PULONG ReturnLanguageLen);
+RtlLoadString_t RtlLoadString_Original;
+HRESULT NTAPI RtlLoadString_Hook(_In_ PVOID DllHandle,
+                                 _In_ ULONG StringId,
+                                 _In_opt_ PCWSTR StringLanguage,
+                                 _In_ ULONG Flags,
+                                 _Out_ PCWSTR* ReturnString,
+                                 _Out_opt_ PUSHORT ReturnStringLen,
+                                 _Out_writes_(ReturnLanguageLen)
+                                     PWSTR ReturnLanguageName,
+                                 _Inout_opt_ PULONG ReturnLanguageLen) {
+    DWORD c = ++g_operationCounter;
+
+    Wh_Log(L"[%u] > string number: %u", StringId);
+
+    NTSTATUS result;
+
+    bool redirected = RedirectModule(
+        c, (HINSTANCE)DllHandle, []() {},
+        [&](HINSTANCE hInstanceRedirect) {
+            result = RtlLoadString_Original(hInstanceRedirect, StringId,
+                                            StringLanguage, Flags, ReturnString,
+                                            ReturnStringLen, ReturnLanguageName,
+                                            ReturnLanguageLen);
+            if (result != 0) {
+                Wh_Log(L"[%u] RtlLoadString failed with error %08X", c, result);
+                return false;
+            }
+
+            if (!*ReturnString) {
+                Wh_Log(L"[%u] RtlLoadString returned an empty string", c);
+                return false;
+            }
+
+            Wh_Log(L"[%u] Redirected successfully", c);
+            return true;
+        });
+    if (redirected) {
+        return result;
+    }
+
+    return RtlLoadString_Original(DllHandle, StringId, StringLanguage, Flags,
+                                  ReturnString, ReturnStringLen,
+                                  ReturnLanguageName, ReturnLanguageLen);
 }
 
 using SHCreateStreamOnModuleResourceW_t = HRESULT(WINAPI*)(HMODULE hModule,
@@ -1632,12 +1690,12 @@ BOOL Wh_ModInit() {
                                   originalFunction);
     };
 
-    // All of these end up calling FindResourceEx, LoadResource, SizeofResource.
-    if (!g_settings.allResourceRedirect) {
-        Wh_SetFunctionHook((void*)PrivateExtractIconsW,
-                           (void*)PrivateExtractIconsW_Hook,
-                           (void**)&PrivateExtractIconsW_Original);
+    Wh_SetFunctionHook((void*)PrivateExtractIconsW,
+                       (void*)PrivateExtractIconsW_Hook,
+                       (void**)&PrivateExtractIconsW_Original);
 
+    if (!g_settings.allResourceRedirect) {
+        // The functions below use FindResourceEx, LoadResource, SizeofResource.
         Wh_SetFunctionHook((void*)LoadImageA, (void*)LoadImageA_Hook,
                            (void**)&LoadImageA_Original);
 
@@ -1681,19 +1739,20 @@ BOOL Wh_ModInit() {
         Wh_SetFunctionHook((void*)CreateDialogParamW,
                            (void*)CreateDialogParamW_Hook,
                            (void**)&CreateDialogParamW_Original);
+
+        // The functions below use RtlLoadString.
+        Wh_SetFunctionHook((void*)LoadStringA, (void*)LoadStringA_u_Hook,
+                           (void**)&LoadStringA_u_Original);
+
+        Wh_SetFunctionHook((void*)LoadStringW, (void*)LoadStringW_u_Hook,
+                           (void**)&LoadStringW_u_Original);
+
+        setKernelFunctionHook("LoadStringA", (void*)LoadStringA_k_Hook,
+                              (void**)&LoadStringA_k_Original);
+
+        setKernelFunctionHook("LoadStringW", (void*)LoadStringA_k_Hook,
+                              (void**)&LoadStringA_k_Original);
     }
-
-    Wh_SetFunctionHook((void*)LoadStringA, (void*)LoadStringA_u_Hook,
-                       (void**)&LoadStringA_u_Original);
-
-    Wh_SetFunctionHook((void*)LoadStringW, (void*)LoadStringW_u_Hook,
-                       (void**)&LoadStringW_u_Original);
-
-    setKernelFunctionHook("LoadStringA", (void*)LoadStringA_k_Hook,
-                          (void**)&LoadStringA_k_Original);
-
-    setKernelFunctionHook("LoadStringW", (void*)LoadStringA_k_Hook,
-                          (void**)&LoadStringA_k_Original);
 
     if (g_settings.allResourceRedirect) {
         setKernelFunctionHook("FindResourceExA", (void*)FindResourceExA_Hook,
@@ -1704,6 +1763,13 @@ BOOL Wh_ModInit() {
                               (void**)&LoadResource_Original);
         setKernelFunctionHook("SizeofResource", (void*)SizeofResource_Hook,
                               (void**)&SizeofResource_Original);
+
+        void* pRtlLoadString = (void*)GetProcAddress(
+            GetModuleHandle(L"ntdll.dll"), "RtlLoadString");
+        if (pRtlLoadString) {
+            Wh_SetFunctionHook(pRtlLoadString, (void*)RtlLoadString_Hook,
+                               (void**)&RtlLoadString_Original);
+        }
     }
 
     // All of these end up calling FindResourceEx, LoadResource, SizeofResource.
