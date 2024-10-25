@@ -26,8 +26,10 @@ These were removed in Qt [because the developers thought that these changes woul
 They were wrong.
 
 ## How to enable the mod for a program
+
 This mod targets the Interactive Disassembler (IDA) by default. Other applications must be manually specified
 for injection.
+
 In Windhawk, go to the "Advanced" tab and scroll down to 
 "Custom process inclusion list". In that box, put the filename of the `.exe`. 
 The mod will immediately apply to those programs after you click "Save". 
