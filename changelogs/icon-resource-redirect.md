@@ -1,3 +1,9 @@
+## 1.1.8 ([Oct 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5c313117215b4ad4452f3c15a7e1378cd2eb3a00/mods/icon-resource-redirect.wh.cpp))
+
+* "Redirect all loaded resources" mode: Fixed icon loading in case the redirection module has different icon formats.
+* "Redirect all loaded resources" mode: String resources are now redirected in more cases.
+* Fixed a rare crash that could occur if logging is enabled or if the "Redirect all loaded resources (experimental)" option is enabled.
+
 ## 1.1.7 ([Oct 17, 2024](https://github.com/ramensoftware/windhawk-mods/blob/951ca39188471a50c458d2ba5cded4f96a03e392/mods/icon-resource-redirect.wh.cpp))
 
 * Improved DirectUI string redirection.

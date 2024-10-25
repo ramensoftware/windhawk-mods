@@ -1420,7 +1420,7 @@
                 "published": 1713005692000,
                 "rating": 9,
                 "ratingUsers": 13,
-                "updated": 1729190374000,
+                "updated": 1729876805000,
                 "users": 539
             },
             "metadata": {
@@ -1434,7 +1434,7 @@
                 ],
                 "name": "Resource Redirect",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.7"
+                "version": "1.1.8"
             }
         },
         "icon16bitfix": {
