@@ -2,7 +2,7 @@
 // @id              fix-qt-scrollbar-grippers
 // @name            Fix Qt scrollbar grippers
 // @description     Fixes scrollbar grippers in Qt 6.1+
-// @version         1.0
+// @version         1.1
 // @author          kawapure
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
@@ -40,6 +40,36 @@ The mod will immediately apply to those programs after you click "Save".
 #include <windhawk_utils.h>
 #include <uxtheme.h>
 #include <vsstyle.h>
+#include <vector>
+#include <algorithm>
+
+std::vector<HTHEME> g_hScrollbarThemes;
+
+using OpenThemeData_t = decltype(&OpenThemeData);
+OpenThemeData_t OpenThemeData_orig;
+HTHEME OpenThemeData_hook(HWND hwnd, LPCWSTR pszClassList)
+{
+    HTHEME result = OpenThemeData_orig(hwnd, pszClassList);
+
+    if (pszClassList && wcscmp(pszClassList, L"SCROLLBAR") == 0)
+    {
+        g_hScrollbarThemes.push_back(result);
+    }
+
+    return result;
+}
+
+using CloseThemeData_t = decltype(&CloseThemeData);
+CloseThemeData_t CloseThemeData_orig;
+HRESULT CloseThemeData_hook(HTHEME hTheme)
+{
+    if (std::find(g_hScrollbarThemes.begin(), g_hScrollbarThemes.end(), hTheme) != g_hScrollbarThemes.end())
+    {
+        g_hScrollbarThemes.erase(std::remove(g_hScrollbarThemes.begin(), g_hScrollbarThemes.end(), hTheme), g_hScrollbarThemes.end());
+    }
+
+    return CloseThemeData_orig(hTheme);
+}
 
 using DrawThemeBackgroundEx_t = decltype(&DrawThemeBackgroundEx);
 DrawThemeBackgroundEx_t DrawThemeBackgroundEx_orig;
@@ -47,12 +77,18 @@ HRESULT WINAPI DrawThemeBackgroundEx_hook(HTHEME hTheme, HDC hdc, int iPartId, i
 {
     HRESULT result = DrawThemeBackgroundEx_orig(hTheme, hdc, iPartId, iStateId, pRect, pOptions);
 
-    if (iPartId == SBP_THUMBBTNHORZ || iPartId == SBP_THUMBBTNVERT)
+    if (
+        !g_hScrollbarThemes.empty() &&
+        std::find(g_hScrollbarThemes.begin(), g_hScrollbarThemes.end(), hTheme) != g_hScrollbarThemes.end() &&
+        (iPartId == SBP_THUMBBTNHORZ || iPartId == SBP_THUMBBTNVERT)
+    )
     {
         if (iPartId == SBP_THUMBBTNHORZ)
             Wh_Log(L"dtb: is SBP_THUMBBTNHORZ");
         else if (iPartId == SBP_THUMBBTNVERT)
             Wh_Log(L"dtb: is SBP_THUMBBTNVERT");
+
+        Wh_Log(L"iStateId: %d", iStateId);
 
         int gripperPart = iPartId == SBP_THUMBBTNHORZ
                 ? SBP_GRIPPERHORZ
@@ -67,6 +103,7 @@ HRESULT WINAPI DrawThemeBackgroundEx_hook(HTHEME hTheme, HDC hdc, int iPartId, i
         )
         {
             Wh_Log(L"drawing gripper");
+            Wh_Log(L"is dimensions %dx%d", pRect->right - pRect->left, pRect->bottom - pRect->top);
 
             DrawThemeBackground(hTheme, hdc, gripperPart, iStateId, pRect, nullptr);
         }
@@ -80,6 +117,18 @@ HRESULT WINAPI DrawThemeBackgroundEx_hook(HTHEME hTheme, HDC hdc, int iPartId, i
 BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
+
+    Wh_SetFunctionHook(
+        (void *)OpenThemeData,
+        (void *)OpenThemeData_hook,
+        (void **)&OpenThemeData_orig
+    );
+
+    Wh_SetFunctionHook(
+        (void *)CloseThemeData,
+        (void *)CloseThemeData_hook,
+        (void **)&CloseThemeData_orig
+    );
 
     Wh_SetFunctionHook(
         (void *)DrawThemeBackgroundEx,
