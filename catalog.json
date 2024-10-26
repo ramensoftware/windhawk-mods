@@ -2928,6 +2928,32 @@
                 "version": "1.0"
             }
         },
+        "taskbar-tray-system-icon-tweaks": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1729973006000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1729973006000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the \"Show desktop\" button (Windows 11 only)",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar tray system icon tweaks",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-vertical": {
             "details": {
                 "defaultSorting": 12861,
