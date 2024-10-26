@@ -1,3 +1,7 @@
+## 1.1.4 ([Oct 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6f54b0820eb9261a690c18fc396760e82890975b/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Updated the TranslucentShell theme to make the text more readable when on a light background.
+
 ## 1.1.3 ([Oct 2, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dd2309b76c8963fe5a2949677725025be7fd0f84/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added support for the action center (Win+A) in Windows 11 version 24H2.

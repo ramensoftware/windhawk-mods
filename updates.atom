@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-26T10:58:57.000Z</updated>
+    <updated>2024-10-26T11:03:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.4]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#6f54b0820eb9261a690c18fc396760e82890975b</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2024-10-26T11:03:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated the TranslucentShell theme to make the text more readable when on a light background.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.8]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#fde2dd9c8dafbf68a126fb25ec1b3f9587efd18b</id>
@@ -297,19 +310,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
 <li>Fixed tray icon context menu not being clickable.</li>
 <li>Improved compatibility with some devices, mostly tablets and touchscreen devices.</li>
 <li>Fixed jump list position for multiple monitors in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.5]]></title>
-        <id>https://windhawk.net/mods/explorer-frame-classic#6abf544f133985c4183a91922242030087e3cb5d</id>
-        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
-        <updated>2024-10-19T00:01:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed incorrect height if the <code>FileExplorerTabLineFix</code> (51960011) Windows flag is set.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
