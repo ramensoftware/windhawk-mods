@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-26T20:03:26.000Z</updated>
+    <updated>2024-10-26T22:51:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.16]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#dfade00e1c4f9d0047b6b040ed8a08860b2421fe</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2024-10-26T22:51:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a bug introduced in version 1.2.15, which mistakenly changes the width of elements such as the taskbar search box and the weather widget.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#ce2e4aca78ea32ba11a7e7883c01d552a767d5ca</id>
@@ -285,32 +298,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
 <li>Added an option exclude programs by application ids.</li>
 <li>Fixed the "Minimum taskbar item width" option that stopped working after a recent update of Windows 11 version 23H2.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop icons view 1.0]]></title>
-        <id>https://windhawk.net/mods/desktop-icons-view#d66d37820e212b023e90d78be46d47e0d806cd21</id>
-        <link href="https://windhawk.net/mods/desktop-icons-view"/>
-        <updated>2024-10-19T20:23:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconsview">Desktop icons view</h1>
-<p>Change desktop icons view to list, details, small icons, or tiles.</p>
-<p>Based on <a href="https://github.com/deanm/lvd">List view desktop</a>.</p>
-<h3 id="acknowledgements">Acknowledgements</h3>
-<ul>
-<li><strong>nvhhr</strong>: Coming up with the mod idea, testing.</li>
-</ul>
-<h3 id="screenshots">Screenshots</h3>
-<p><img src="https://i.imgur.com/51q6OKl.png" alt="List" /><br />
-<em>List</em></p>
-<p><img src="https://i.imgur.com/a5qBigL.png" alt="Details" /><br />
-<em>Details</em></p>
-<p><img src="https://i.imgur.com/PM4MfMs.png" alt="Small icons" /><br />
-<em>Small icons</em></p>
-<p><img src="https://i.imgur.com/gqTawuD.png" alt="Tiles" /><br />
-<em>Tiles</em></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

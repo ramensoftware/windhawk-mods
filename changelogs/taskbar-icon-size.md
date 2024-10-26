@@ -1,3 +1,7 @@
+## 1.2.16 ([Oct 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dfade00e1c4f9d0047b6b040ed8a08860b2421fe/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed a bug introduced in version 1.2.15, which mistakenly changes the width of elements such as the taskbar search box and the weather widget.
+
 ## 1.2.15 ([Oct 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/08efbf944927215f3f73bceca8389a9eccd6659b/mods/taskbar-icon-size.wh.cpp))
 
 * Applying changes to the taskbar button width option no longer requires restarting explorer.
