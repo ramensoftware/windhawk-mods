@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-25T20:12:14.000Z</updated>
+    <updated>2024-10-26T09:44:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar hung windows rearrangement fix 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-hung-rearrangement-fix#4e7609fd4bd447ba0c8b5bdf2043af661ab20ac8</id>
+        <link href="https://windhawk.net/mods/taskbar-hung-rearrangement-fix"/>
+        <updated>2024-10-26T09:44:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarhungwindowsrearrangementfix">Taskbar hung windows rearrangement fix</h1>
+<p>Fixes a taskbar bug which causes taskbar items of hung windows to move to the
+end of the taskbar. For more details about the bug, check out the following blog
+post: <a href="https://ramensoftware.com/hung-windows-and-taskbar-buttons-rearrangement">Hung windows and taskbar buttons
+rearrangement</a>.</p>
+<p>Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
+check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a>.</p>
+<p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
+or a similar tool), enable the relevant option in the mod's settings.</p>
+<p><img src="https://i.imgur.com/8WU4YCX.png" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.6]]></title>
         <id>https://windhawk.net/mods/explorer-frame-classic#3e436653f3acb9c679349057fec39842957d448d</id>
@@ -289,19 +309,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
         <updated>2024-10-18T14:18:36.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a crash in old builds of Windows 11 version 22H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic context menu on Windows 11 1.0.1]]></title>
-        <id>https://windhawk.net/mods/explorer-context-menu-classic#c8eadfbaf090fe07d59e1bc6f599654d14aab3a8</id>
-        <link href="https://windhawk.net/mods/explorer-context-menu-classic"/>
-        <updated>2024-10-18T11:52:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed explorer navigation pane still showing the new menu.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

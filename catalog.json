@@ -2619,6 +2619,32 @@
                 "version": "1.3.7"
             }
         },
+        "taskbar-hung-rearrangement-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1729935848000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1729935848000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Fixes a taskbar bug which causes taskbar items of hung windows to move to the end of the taskbar",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar hung windows rearrangement fix",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-icon-size": {
             "details": {
                 "defaultSorting": 403610,
