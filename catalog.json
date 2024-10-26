@@ -3499,7 +3499,7 @@
                 "published": 1703013948000,
                 "rating": 10,
                 "ratingUsers": 440,
-                "updated": 1722190006000,
+                "updated": 1729943904000,
                 "users": 39676
             },
             "featured": true,
@@ -3517,7 +3517,7 @@
                 ],
                 "name": "Windows 11 Start Menu Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.5"
+                "version": "1.1.6"
             }
         },
         "windows-11-taskbar-styler": {

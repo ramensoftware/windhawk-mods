@@ -1,3 +1,9 @@
+## 1.1.6 ([Oct 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/31cc7d1150a2953dfb1897f13678dcd70f74fa47/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added themes: RosePine, Windows11_Metro10Minimal.
+* Updated existing themes.
+* Added a workaround for hanging the start menu process on Windows 10. Although the available themes and example styles are designed for Windows 11, it should now be possible to use the mod on Windows 10 too.
+
 ## 1.1.5 ([Jul 28, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b6c907a723f18b738c615933ec1834ef9009f18d/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Updated SideBySide2 theme with several fixes.
