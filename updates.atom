@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-26T09:44:08.000Z</updated>
+    <updated>2024-10-26T10:58:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.3.8]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#fde2dd9c8dafbf68a126fb25ec1b3f9587efd18b</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2024-10-26T10:58:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added themes: CleanSlate, Lucent.</li>
+<li>Updated existing themes.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar hung windows rearrangement fix 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-hung-rearrangement-fix#4e7609fd4bd447ba0c8b5bdf2043af661ab20ac8</id>
@@ -296,19 +310,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
         <updated>2024-10-19T00:01:55.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed incorrect height if the <code>FileExplorerTabLineFix</code> (51960011) Windows flag is set.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.14]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#f467a936801ea310cbb3cb2b28c6dc161ad8b035</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-10-18T14:18:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash in old builds of Windows 11 version 22H2.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
