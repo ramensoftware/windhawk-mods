@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.2.15
+// @version         1.2.16
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -707,6 +707,21 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
         return;
     }
 
+    auto className = winrt::get_class_name(toggleButtonElement);
+    if (className == L"Taskbar.ExperienceToggleButton") {
+        // OK.
+    } else if (className == L"Taskbar.SearchBoxButton") {
+        // Only if search icon and not a search box.
+        auto searchBoxTextBlock =
+            FindChildByName(panelElement, L"SearchBoxTextBlock");
+        if (searchBoxTextBlock &&
+            searchBoxTextBlock.Visibility() != Visibility::Collapsed) {
+            return;
+        }
+    } else {
+        return;
+    }
+
     double buttonWidth = panelElement.Width();
     if (!(buttonWidth > 0)) {
         return;
@@ -716,10 +731,8 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     double newWidth = (g_unloading ? 44 : g_settings.taskbarButtonWidth) - 4 +
                       (buttonPadding.Left + buttonPadding.Right);
     if (newWidth != buttonWidth) {
-        Wh_Log(
-            L"Updating MediumTaskbarButtonExtent for ExperienceToggleButton: "
-            L"%f->%f",
-            buttonWidth, newWidth);
+        Wh_Log(L"Updating MediumTaskbarButtonExtent for %s: %f->%f",
+               className.c_str(), buttonWidth, newWidth);
         panelElement.Width(newWidth);
     }
 }
