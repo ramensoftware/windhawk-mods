@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-27T19:26:52.000Z</updated>
+    <updated>2024-10-27T22:08:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#8195a025df8ce6bfbd9a3dab732811619d75d205</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2024-10-27T22:08:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the start menu opening on the left side of the screen, even if the icons on the taskbar are centered. The bug was caused by the attempt to change the incorrect jump list animation in version 1.0.3. As a result, if icons are centered, jump list animation will be incorrect again. This affects only Windows 11 23H2, there's no such issue on Windows 11 24H2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop icons view 1.0.1]]></title>
         <id>https://windhawk.net/mods/desktop-icons-view#5f36d030a1fab275a16ce39e9cdf9eebcd231e74</id>
@@ -280,27 +293,6 @@ Previously, we attempted to draw the gripper overlay for any control that existe
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Small Tray Icons on Touch 1.0.0]]></title>
-        <id>https://windhawk.net/mods/small-tray-icons-on-touch#b0de62a9c187168ae36e6315fada01230a844706</id>
-        <link href="https://windhawk.net/mods/small-tray-icons-on-touch"/>
-        <updated>2024-10-21T14:39:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="smalltrayiconsontouch">Small Tray Icons on Touch</h1>
-<p>The Windows 10 taskbar has increased tray icon size on touch screens.
-This mod disables that functionality.</p>
-<h1 id="importantread">IMPORTANT: READ!</h1>
-<p>Windhawk needs to hook into <code>winlogon.exe</code> to successfully capture Explorer starting. Please
-navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
-<code>winlogon.exe</code> is in the Process inclusion list.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/small-tray-icons-on-touch-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/small-tray-icons-on-touch-after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

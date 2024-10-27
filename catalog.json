@@ -2804,7 +2804,7 @@
                 "published": 1728056002000,
                 "rating": 10,
                 "ratingUsers": 23,
-                "updated": 1729345411000,
+                "updated": 1730066930000,
                 "users": 614
             },
             "metadata": {
@@ -2812,7 +2812,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore",
+                "compilerOptions": "-DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lversion",
                 "description": "Moves the Windows 11 taskbar to the top of the screen",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -2821,7 +2821,7 @@
                 ],
                 "name": "Taskbar on top for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.3"
+                "version": "1.0.4"
             }
         },
         "taskbar-scroll-actions": {
