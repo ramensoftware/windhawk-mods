@@ -2,14 +2,14 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -106,6 +106,7 @@ std::atomic<int> g_hookCallCounter;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
 bool g_inCTaskListThumbnailWnd_LayoutThumbnails;
 bool g_inOverflowFlyoutModel_Show;
+int g_lastTaskbarAlignment;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
@@ -129,6 +130,60 @@ STDAPI GetDpiForMonitor(HMONITOR hmonitor,
 using GetThreadDescription_t =
     WINBASEAPI HRESULT(WINAPI*)(HANDLE hThread, PWSTR* ppszThreadDescription);
 GetThreadDescription_t pGetThreadDescription;
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+    static VS_FIXEDFILEINFO* fixedFileInfo =
+        GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return false;
+    }
+
+    WORD moduleMajor = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleMinor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleBuild = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD moduleQfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    if (moduleMajor != major) {
+        return moduleMajor > major;
+    }
+
+    if (moduleMinor != minor) {
+        return moduleMinor > minor;
+    }
+
+    if (moduleBuild != build) {
+        return moduleBuild > build;
+    }
+
+    return moduleQfe >= qfe;
+}
 
 bool GetMonitorRect(HMONITOR monitor, RECT* rc) {
     MONITORINFO monitorInfo{
@@ -331,7 +386,15 @@ void WINAPI TrayUI_GetStuckInfo_Hook(void* pThis,
 
     TrayUI_GetStuckInfo_Original(pThis, rect, taskbarPos);
 
-    *taskbarPos = ABE_TOP;
+    switch (g_settings.taskbarLocation) {
+        case TaskbarLocation::top:
+            *taskbarPos = ABE_TOP;
+            break;
+
+        case TaskbarLocation::bottom:
+            *taskbarPos = ABE_BOTTOM;
+            break;
+    }
 }
 
 void TaskbarWndProcPreProcess(HWND hWnd,
@@ -340,6 +403,16 @@ void TaskbarWndProcPreProcess(HWND hWnd,
                               LPARAM* lParam) {
     switch (Msg) {
         case 0x5C3: {
+            // On Windows 11 23H2, setting the taskbar location here also causes
+            // the start menu to be opened on the left of the screen, even if
+            // the icons on the taskbar are centered. Therefore, only set it if
+            // the icons are aligned to left, not centered. The drawback is that
+            // the jump list animations won't be correct in this case.
+            if (g_lastTaskbarAlignment == 1 &&
+                !IsVersionAtLeast(10, 0, 26100, 0)) {
+                break;
+            }
+
             // The taskbar location that affects the jump list animations.
             if (*wParam == ABE_BOTTOM) {
                 HMONITOR monitor = (HMONITOR)lParam;
@@ -594,6 +667,22 @@ void* WINAPI XamlExplorerHostWindow_XamlExplorerHostWindow_Hook(
 
     return XamlExplorerHostWindow_XamlExplorerHostWindow_Original(pThis, param1,
                                                                   rect, param3);
+}
+
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                          int* alignment);
+ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,
+                                                   int* alignment) {
+    Wh_Log(L">");
+
+    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        Wh_Log(L"alignment=%d", *alignment);
+        g_lastTaskbarAlignment = *alignment;
+    }
+
+    return ret;
 }
 
 void ApplyTaskbarFrameStyle(FrameworkElement taskbarFrame) {
@@ -1441,6 +1530,13 @@ bool HookTaskbarDllSymbols() {
             },
             (void**)&XamlExplorerHostWindow_XamlExplorerHostWindow_Original,
             (void*)XamlExplorerHostWindow_XamlExplorerHostWindow_Hook,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))",
+            },
+            (void**)&ITaskbarSettings_get_Alignment_Original,
+            (void*)ITaskbarSettings_get_Alignment_Hook,
         },
     };
 
