@@ -766,7 +766,7 @@
                 "published": 1729369429000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1730057212000,
+                "updated": 1730069661000,
                 "users": 14
             },
             "metadata": {
@@ -783,7 +783,7 @@
                 ],
                 "name": "Desktop icons view",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "desktop-watermark-tweaks": {

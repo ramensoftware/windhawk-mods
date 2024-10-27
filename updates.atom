@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-27T22:08:50.000Z</updated>
+    <updated>2024-10-27T22:54:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop icons view 1.0.2]]></title>
+        <id>https://windhawk.net/mods/desktop-icons-view#4accdef47703c83eb2afc92ce30a1c7589910f1c</id>
+        <link href="https://windhawk.net/mods/desktop-icons-view"/>
+        <updated>2024-10-27T22:54:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed applying the mod on startup on Windows 10.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.4]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#8195a025df8ce6bfbd9a3dab732811619d75d205</id>
@@ -275,20 +288,6 @@ Previously, we attempted to draw the gripper overlay for any control that existe
         <content type="html"><![CDATA[<ul>
 <li>Fixed initialization with the ExplorerPatcher taskbar. ExplorerPatcher 66.7 or newer is supported.</li>
 <li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle through taskbar windows on click 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-left-click-cycle#8453e019ee77e74f2025ed5a247755d8cdd78f07</id>
-        <link href="https://windhawk.net/mods/taskbar-left-click-cycle"/>
-        <updated>2024-10-22T07:08:59.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for cycling with Win+# hotkeys (Win+1, Win+2, etc.).</li>
-<li>Added support for the ExplorerPatcher taskbar. Versions newer than 66.7 are supported. The "Customize the old taskbar on Windows 11" option must be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
