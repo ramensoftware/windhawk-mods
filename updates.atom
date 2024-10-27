@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-26T22:51:27.000Z</updated>
+    <updated>2024-10-27T19:26:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop icons view 1.0.1]]></title>
+        <id>https://windhawk.net/mods/desktop-icons-view#5f36d030a1fab275a16ce39e9cdf9eebcd231e74</id>
+        <link href="https://windhawk.net/mods/desktop-icons-view"/>
+        <updated>2024-10-27T19:26:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to select monitor number to have the desktop icons on.</li>
+<li>Fixed the mod trying to customize folder lists and other lists which aren't part of the desktop.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.16]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#dfade00e1c4f9d0047b6b040ed8a08860b2421fe</id>
@@ -287,20 +301,6 @@ navigate to Windhawk's Settings, Advanced settings, More advanced settings, and 
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.3.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#0951986351d82332cd99a2335f16f6fbcb22033b</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2024-10-20T18:54:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option exclude programs by application ids.</li>
-<li>Fixed the "Minimum taskbar item width" option that stopped working after a recent update of Windows 11 version 23H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
