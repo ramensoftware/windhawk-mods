@@ -2,7 +2,7 @@
 // @id              desktop-icons-view
 // @name            Desktop icons view
 // @description     Change desktop icons view to list, details, small icons, or tiles
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -101,7 +101,13 @@ bool IsFolderViewWnd(HWND hWnd) {
     }
 
     HWND hParentWnd2 = GetAncestor(hParentWnd, GA_PARENT);
-    if (!hParentWnd2 || hParentWnd2 != GetShellWindow()) {
+    if (!hParentWnd2) {
+        return false;
+    }
+
+    if ((!GetClassName(hParentWnd2, buffer, ARRAYSIZE(buffer)) ||
+         _wcsicmp(buffer, L"Progman")) &&
+        hParentWnd2 != GetShellWindow()) {
         return false;
     }
 
