@@ -115,7 +115,7 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
         // using our monitor rules if the alt tab window was just opened.
         // Otherwise, don't play with the filter anymore, as it's also used by
         // other components such as Win+Tab and the taskbar.
-        if ((GetTickCount() - g_CreateInstance_TickCount) > kDeltaThreshold ||
+        if ((GetTickCount64() - g_CreateInstance_TickCount) > kDeltaThreshold ||
             g_lastThreadIdForXamlAltTabViewHost_CreateInstance !=
                 GetCurrentThreadId()) {
             return ret;
