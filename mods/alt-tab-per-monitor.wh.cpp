@@ -191,7 +191,7 @@ HRESULT XamlAltTabViewHost_CreateInstance_Hook(void* pThis,
                                                void* param3) {
     g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
     g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
-    g_CreateInstance_TickCount = GetTickCount();
+    g_CreateInstance_TickCount = GetTickCount64();
     HRESULT ret = XamlAltTabViewHost_CreateInstance_Original(pThis, param1,
                                                              param2, param3);
     g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
