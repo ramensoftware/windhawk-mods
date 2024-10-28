@@ -28,7 +28,7 @@ std::atomic<DWORD> g_threadIdForAltTabShowWindow;
 std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
 ULONGLONG g_CreateInstance_TickCount;
-constexpr ULONGLONG kDeltaThreshold = 10;
+constexpr ULONGLONG kDeltaThreshold = 200;
 
 bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
     POINT pt;
@@ -65,6 +65,36 @@ using CWinRTApplicationView_v_GetNativeWindow_t =
 CWinRTApplicationView_v_GetNativeWindow_t
     CWinRTApplicationView_v_GetNativeWindow;
 
+HRESULT GetWindowHandleFromApplicationView(void* applicationView,
+                                           HWND* windowHandle) {
+    *windowHandle = nullptr;
+    void* vtable = *(void**)applicationView;
+    HRESULT hr = E_FAIL;
+
+    if (vtable == CWin32ApplicationView_vtable) {
+        hr = CWin32ApplicationView_v_GetNativeWindow(applicationView,
+                                                     windowHandle);
+    } else if (vtable == CWinRTApplicationView_vtable) {
+        hr = CWinRTApplicationView_v_GetNativeWindow(applicationView,
+                                                     windowHandle);
+    }
+
+    return hr;
+}
+
+bool IsWindowOnCursorMonitor(HWND windowHandle) {
+    POINT pt;
+    if (!GetCursorPos(&pt)) {
+        return false;
+    }
+
+    auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    auto hMonFromWindow =
+        MonitorFromWindow(windowHandle, MONITOR_DEFAULTTONEAREST);
+
+    return hMon == hMonFromWindow;
+}
+
 using CVirtualDesktop_IsViewVisible_t = HRESULT(WINAPI*)(void* pThis,
                                                          void* applicationView,
                                                          BOOL* isVisible);
@@ -81,47 +111,30 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
 
     if (g_threadIdForXamlAltTabViewHost_CreateInstance !=
         GetCurrentThreadId()) {
-        // A focused window might be added after a short period, so don't show
-        // any new window after some time.
-        if ((GetTickCount() - g_CreateInstance_TickCount) > kDeltaThreshold &&
-            g_lastThreadIdForXamlAltTabViewHost_CreateInstance ==
+        // A focused window might be added after a short period. Filter windows
+        // using our monitor rules if the alt tab window was just opened.
+        // Otherwise, don't play with the filter anymore, as it's also used by
+        // other components such as Win+Tab and the taskbar.
+        if ((GetTickCount() - g_CreateInstance_TickCount) > kDeltaThreshold ||
+            g_lastThreadIdForXamlAltTabViewHost_CreateInstance !=
                 GetCurrentThreadId()) {
-            g_CreateInstance_TickCount = 0;
-            *isVisible = FALSE;
+            return ret;
         }
-        return ret;
     }
 
     if (!*isVisible) {
         return ret;
     }
 
-    void* vtable = *(void**)applicationView;
+    HWND windowHandle;
+    HRESULT hr =
+        GetWindowHandleFromApplicationView(applicationView, &windowHandle);
 
-    HWND windowHandle = nullptr;
-    HRESULT hr = E_FAIL;
-    if (vtable == CWin32ApplicationView_vtable) {
-        hr = CWin32ApplicationView_v_GetNativeWindow(applicationView,
-                                                     &windowHandle);
-    } else if (vtable == CWinRTApplicationView_vtable) {
-        hr = CWinRTApplicationView_v_GetNativeWindow(applicationView,
-                                                     &windowHandle);
-    }
     if (FAILED(hr) || !windowHandle) {
         return ret;
     }
 
-    POINT pt;
-    if (!GetCursorPos(&pt)) {
-        return ret;
-    }
-
-    auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-
-    auto hMonFromWindow =
-        MonitorFromWindow(windowHandle, MONITOR_DEFAULTTONEAREST);
-
-    if (hMon != hMonFromWindow) {
+    if (!IsWindowOnCursorMonitor(windowHandle)) {
         *isVisible = FALSE;
     }
 
