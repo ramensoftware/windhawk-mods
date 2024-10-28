@@ -121,6 +121,30 @@
                 "version": "1.0.2"
             }
         },
+        "alt-tab-per-monitor": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1730148779000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1730148779000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "L3r0y",
+                "compilerOptions": "-lole32 -loleaut32",
+                "description": "Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.",
+                "github": "https://github.com/L3r0yThingz",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Alt+Tab per monitor",
+                "version": "1.0.0"
+            }
+        },
         "basic-themer": {
             "details": {
                 "defaultSorting": 2295,
