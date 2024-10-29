@@ -1101,6 +1101,29 @@
                 "version": "1.0.1"
             }
         },
+        "explorer-details-better-file-sizes": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1730231151000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1730231151000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "compilerOptions": "-lpropsys",
+                "description": "Explorer always shows file sizes in KBs in details, make it show MB/GB (or, optionally, KiB/MiB/GiB) when appropriate",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Better file sizes in Explorer details",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "explorer-frame-classic": {
             "details": {
                 "defaultSorting": 26210,

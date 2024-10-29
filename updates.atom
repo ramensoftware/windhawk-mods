@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-29T14:25:47.000Z</updated>
+    <updated>2024-10-29T19:45:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#244c09ae0f58a664e6590bcce385b7f99cc2305a</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-10-29T19:45:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="betterfilesizesinexplorerdetails">Better file sizes in Explorer details</h1>
+<p>Explorer always shows file sizes in KBs in details, make it show MB/GB when
+appropriate.</p>
+<p>Also, optionally make use the International Electronic Commission terms (e.g.
+KiB instead of KB). See also: <a href="https://devblogs.microsoft.com/oldnewthing/20090611-00/?p=17933">Why does Explorer use the term KB instead of
+KiB?</a>.</p>
+<p><img src="https://i.imgur.com/5d28APb.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Version Spoof 1.0.0]]></title>
         <id>https://windhawk.net/mods/version-spoof#05f7239097b0b03335b27ce8619f5c2b22f883b6</id>
@@ -279,20 +296,6 @@ Previously, we attempted to draw the gripper overlay for any control that existe
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.53]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#0bf9b7f52bcb88beaf0efa0e464fa4e53863d032</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2024-10-23T07:19:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Re-added 'older OpenGlass' option to DWM modification software selection.</li>
-<li>Updated readme and made instructions clearer.</li>
-</ul>]]></content>
-        <author>
-            <name>CatmanFan / Mr._Lechkar</name>
-            <uri>https://github.com/CatmanFan</uri>
         </author>
     </entry>
 </feed>
