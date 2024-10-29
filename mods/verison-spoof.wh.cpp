@@ -155,19 +155,6 @@ NTSTATUS __thiscall SwitchedRtlGetVersion_hook(
     return lStatus;
 }
 
-const wchar_t *wcsistr(const wchar_t *string, const wchar_t *search)
-{
-    while (*string)
-    {
-        if (wcsicmp(string, search) == 0)
-        {
-            return string;
-        }
-        string++;
-    }
-    return nullptr;
-}
-
 void UpdateSpoofInfo(void)
 {
     g_bSpoofVersion = false;
@@ -188,9 +175,10 @@ void UpdateSpoofInfo(void)
             break;
         }
 
-        // Does the current application path end with this spoof's path?
-        LPCWSTR szSearch = wcsistr(szAppPath, szPath);
-        if (szSearch && *szSearch && 0 == wcsicmp(szSearch, szPath))
+        // Does the current application path or name match the spoof?
+        WCHAR *pBackslash = wcsrchr(szAppPath, L'\\');
+        if (0 == wcsicmp(szAppPath, szPath)
+        || (pBackslash && 0 == wcsicmp(pBackslash + 1, szPath)))
         {
             g_bSpoofVersion = true;
             g_osSpoofInfo.dwMajorVersion = Wh_GetIntSetting(L"spoofs[%d].major", i);
@@ -242,7 +230,7 @@ if (!Wh_SetFunctionHook(              \
     (void **)&func ## _orig           \
 ))                                    \
 {                                     \
-    Wh_Log(L"Failed to hook" #func);  \
+    Wh_Log(L"Failed to hook " #func); \
     return FALSE;                     \
 }
 
