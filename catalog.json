@@ -3238,6 +3238,30 @@
                 "version": "1.1"
             }
         },
+        "version-spoof": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1730211947000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1730211947000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "description": "Fakes the Windows version reported to applications",
+                "exclude": [
+                    "winlogon.exe",
+                    "dwm.exe"
+                ],
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Version Spoof",
+                "version": "1.0.0"
+            }
+        },
         "virtual-desktop-taskbar-order": {
             "details": {
                 "defaultSorting": 9060,

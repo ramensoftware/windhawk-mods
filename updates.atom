@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-28T20:52:59.000Z</updated>
+    <updated>2024-10-29T14:25:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Version Spoof 1.0.0]]></title>
+        <id>https://windhawk.net/mods/version-spoof#05f7239097b0b03335b27ce8619f5c2b22f883b6</id>
+        <link href="https://windhawk.net/mods/version-spoof"/>
+        <updated>2024-10-29T14:25:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="versionspoof">Version Spoof</h1>
+<p>This mod fakes the Windows version reported to applications. This is mainly useful
+if you want an application to look how it did on an earlier Windows version, such as
+using a native styled titlebar.</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab per monitor 1.0.0]]></title>
         <id>https://windhawk.net/mods/alt-tab-per-monitor#1b53ec6de6072aae622f18e895fedd349521136c</id>
@@ -279,20 +293,6 @@ Previously, we attempted to draw the gripper overlay for any control that existe
         <author>
             <name>CatmanFan / Mr._Lechkar</name>
             <uri>https://github.com/CatmanFan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar classic context menu 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-classic-menu#5edf7a5636ee40a9517e7034918c8e5c0a32f9bf</id>
-        <link href="https://windhawk.net/mods/taskbar-classic-menu"/>
-        <updated>2024-10-22T17:46:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod not working in some cases. Specifically, if the Windows TaskbarShiftRightClickCrash feature flag was enabled, right click acted as a left click instead of showing the classic context menu.</li>
-<li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
