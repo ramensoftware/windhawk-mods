@@ -2,7 +2,7 @@
 // @id              taskbar-tray-system-icon-tweaks
 // @name            Taskbar tray system icon tweaks
 // @description     Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the "Show desktop" button (Windows 11 only)
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -41,6 +41,10 @@ there are no new notifications), and the "Show desktop" button.
   $name: Hide battery icon
 - hideMicrophoneIcon: false
   $name: Hide microphone icon
+- hideGeolocationIcon: false
+  $name: Hide location (e.g. GPS) icon
+- hideLanguageBar: false
+  $name: Hide language bar
 - hideBellIcon: never
   $name: Hide bell icon
   $options:
@@ -78,6 +82,8 @@ struct {
     bool hideNetworkIcon;
     bool hideBatteryIcon;
     bool hideMicrophoneIcon;
+    bool hideGeolocationIcon;
+    bool hideLanguageBar;
     HideBellIcon hideBellIcon;
     int showDesktopButtonWidth;
 } g_settings;
@@ -89,6 +95,9 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
 
 std::list<FrameworkElementLoadedEventRevoker> g_autoRevokerList;
+
+winrt::weak_ref<Controls::TextBlock> g_mainStackInnerTextBlock;
+int64_t g_mainStackTextChangedToken;
 
 winrt::weak_ref<Controls::TextBlock> g_bellInnerTextBlock;
 int64_t g_bellTextChangedToken;
@@ -204,15 +213,27 @@ std::wstring StringToHex(std::wstring_view input) {
 
 enum class SystemTrayIconIdent {
     kUnknown,
+    kNone,
     kVolume,
     kNetwork,
     kBattery,
     kMicrophone,
+    kGeolocation,
+    kMicrophoneAndGeolocation,
+    kBellEmpty,
+    kBellFull,
 };
 
 SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
-    if (text.length() != 1) {
-        return SystemTrayIconIdent::kUnknown;
+    switch (text.length()) {
+        case 0:
+            return SystemTrayIconIdent::kNone;
+
+        case 1:
+            break;
+
+        default:
+            return SystemTrayIconIdent::kUnknown;
     }
 
     switch (text[0]) {
@@ -222,6 +243,7 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         case L'\uE994':  // Volume2
         case L'\uE995':  // Volume3
         case L'\uEA85':  // VolumeDisabled
+        case L'\uEBC5':  // VolumeBars
             return SystemTrayIconIdent::kVolume;
 
         case L'\uE709':  // Airplane
@@ -259,6 +281,7 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         case L'\uF8CC':  // SysNetworkOffline
             return SystemTrayIconIdent::kNetwork;
 
+        // Charging levels.
         case L'\uE3C1':  // Private Use
         case L'\uE3C2':  // Private Use
         case L'\uE3C3':  // Private Use
@@ -325,18 +348,36 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         case L'\uEBBE':  // MobBatterySaver8
         case L'\uEBBF':  // MobBatterySaver9
         case L'\uEBC0':  // MobBatterySaver10
+        // Misc.
+        case L'\uEB17':
+        case L'\uEC02':
+        case L'\uF1E8':
             return SystemTrayIconIdent::kBattery;
 
         case L'\uE361':  // Private Use
         case L'\uE720':  // Microphone
         case L'\uEC71':  // MicOn
             return SystemTrayIconIdent::kMicrophone;
+
+        case L'\uE37A':
+            return SystemTrayIconIdent::kGeolocation;
+
+        case L'\uF47F':
+            return SystemTrayIconIdent::kMicrophoneAndGeolocation;
+
+        case L'\uF285':  // Empty bell, Do Not Disturb
+        case L'\uF2A3':  // Empty bell
+            return SystemTrayIconIdent::kBellEmpty;
+
+        case L'\uF2A5':  // Full bell
+        case L'\uF2A8':  // Full bell, Do Not Disturb
+            return SystemTrayIconIdent::kBellFull;
     }
 
     return SystemTrayIconIdent::kUnknown;
 }
 
-void ApplyNotifyIconViewStyle(FrameworkElement notifyIconViewElement) {
+void ApplyMainStackIconViewStyle(FrameworkElement notifyIconViewElement) {
     FrameworkElement systemTrayTextIconContent = nullptr;
 
     FrameworkElement child = notifyIconViewElement;
@@ -362,30 +403,102 @@ void ApplyNotifyIconViewStyle(FrameworkElement notifyIconViewElement) {
         return;
     }
 
-    auto text = innerTextBlock.Text();
+    auto shouldHide = [](Controls::TextBlock innerTextBlock) {
+        auto text = innerTextBlock.Text();
+        auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
 
-    bool hide = false;
+        bool hide = false;
+        if (!g_unloading) {
+            switch (systemTrayIconIdent) {
+                case SystemTrayIconIdent::kMicrophone:
+                    hide = g_settings.hideMicrophoneIcon;
+                    break;
 
-    auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
-    switch (systemTrayIconIdent) {
-        case SystemTrayIconIdent::kMicrophone: {
-            hide = !g_unloading && g_settings.hideMicrophoneIcon;
-            Wh_Log(L"Microphone system tray icon, hide=%d", hide);
-            break;
+                case SystemTrayIconIdent::kGeolocation:
+                    hide = g_settings.hideGeolocationIcon;
+                    break;
+
+                case SystemTrayIconIdent::kMicrophoneAndGeolocation:
+                    hide = g_settings.hideMicrophoneIcon &&
+                           g_settings.hideGeolocationIcon;
+                    break;
+
+                case SystemTrayIconIdent::kNone:
+                    // Happens when the icon is about to disappear.
+                    break;
+
+                default:
+                    Wh_Log(L"Failed");
+                    break;
+            }
         }
 
-        default: {
-            Wh_Log(L"Unknown system tray icon (%d, %s)",
-                   (int)systemTrayIconIdent, StringToHex(text).c_str());
-            return;
-        }
+        Wh_Log(L"Main stack icon %d (%s), hide=%d", (int)systemTrayIconIdent,
+               StringToHex(text).c_str(), hide);
+
+        return hide;
+    };
+
+    bool hide = shouldHide(innerTextBlock);
+
+    notifyIconViewElement.Visibility(hide ? Visibility::Collapsed
+                                          : Visibility::Visible);
+
+    if (!g_unloading && !g_mainStackInnerTextBlock.get()) {
+        auto notifyIconViewElementWeakRef =
+            winrt::make_weak(notifyIconViewElement);
+        g_mainStackInnerTextBlock = innerTextBlock;
+        g_mainStackTextChangedToken =
+            innerTextBlock.RegisterPropertyChangedCallback(
+                Controls::TextBlock::TextProperty(),
+                [notifyIconViewElementWeakRef, &shouldHide](
+                    DependencyObject sender, DependencyProperty property) {
+                    auto innerTextBlock = sender.try_as<Controls::TextBlock>();
+                    if (!innerTextBlock) {
+                        return;
+                    }
+
+                    auto notifyIconViewElement =
+                        notifyIconViewElementWeakRef.get();
+                    if (!notifyIconViewElement) {
+                        return;
+                    }
+
+                    bool hide = shouldHide(innerTextBlock);
+
+                    Wh_Log(L"Main stack icon, hide=%d", hide);
+
+                    notifyIconViewElement.Visibility(
+                        hide ? Visibility::Collapsed : Visibility::Visible);
+                });
     }
+}
+
+void ApplyNonActivatableStackIconViewStyle(
+    FrameworkElement notifyIconViewElement) {
+    FrameworkElement systemTrayLanguageTextIconContent = nullptr;
+
+    FrameworkElement child = notifyIconViewElement;
+    if ((child = FindChildByName(child, L"ContainerGrid")) &&
+        (child = FindChildByName(child, L"ContentPresenter")) &&
+        (child = FindChildByName(child, L"ContentGrid")) &&
+        (child = FindChildByClassName(child,
+                                      L"SystemTray.LanguageTextIconContent"))) {
+        systemTrayLanguageTextIconContent = child;
+    } else {
+        Wh_Log(L"Failed to get SystemTray.LanguageTextIconContent");
+        return;
+    }
+
+    bool hide = !g_unloading && g_settings.hideLanguageBar;
+
+    Wh_Log(L"Language bar, hide=%d", hide);
 
     notifyIconViewElement.Visibility(hide ? Visibility::Collapsed
                                           : Visibility::Visible);
 }
 
-void ApplySystemTrayIconStyle(FrameworkElement systemTrayIconElement) {
+void ApplyControlCenterButtonIconStyle(FrameworkElement systemTrayIconElement) {
     FrameworkElement systemTrayTextIconContent = nullptr;
 
     FrameworkElement child = systemTrayIconElement;
@@ -411,35 +524,31 @@ void ApplySystemTrayIconStyle(FrameworkElement systemTrayIconElement) {
     }
 
     auto text = innerTextBlock.Text();
+    auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
 
     bool hide = false;
+    if (!g_unloading) {
+        switch (systemTrayIconIdent) {
+            case SystemTrayIconIdent::kVolume:
+                hide = g_settings.hideVolumeIcon;
+                break;
 
-    auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
-    switch (systemTrayIconIdent) {
-        case SystemTrayIconIdent::kVolume: {
-            hide = !g_unloading && g_settings.hideVolumeIcon;
-            Wh_Log(L"Volume system tray icon, hide=%d", hide);
-            break;
-        }
+            case SystemTrayIconIdent::kNetwork:
+                hide = g_settings.hideNetworkIcon;
+                break;
 
-        case SystemTrayIconIdent::kNetwork: {
-            hide = !g_unloading && g_settings.hideNetworkIcon;
-            Wh_Log(L"Network system tray icon, hide=%d", hide);
-            break;
-        }
+            case SystemTrayIconIdent::kBattery:
+                hide = g_settings.hideBatteryIcon;
+                break;
 
-        case SystemTrayIconIdent::kBattery: {
-            hide = !g_unloading && g_settings.hideBatteryIcon;
-            Wh_Log(L"Battery system tray icon, hide=%d", hide);
-            break;
-        }
-
-        default: {
-            Wh_Log(L"Unknown system tray icon (%d, %s)",
-                   (int)systemTrayIconIdent, StringToHex(text).c_str());
-            return;
+            default:
+                Wh_Log(L"Failed");
+                break;
         }
     }
+
+    Wh_Log(L"System tray icon %d (%s), hide=%d", (int)systemTrayIconIdent,
+           StringToHex(text).c_str(), hide);
 
     bool hidden =
         systemTrayTextIconContent.Visibility() == Visibility::Collapsed;
@@ -455,6 +564,7 @@ void ApplySystemTrayIconStyle(FrameworkElement systemTrayIconElement) {
         Wh_Log(L"Failed");
     }
 
+    // If all icons are hidden, hide container as well.
     FrameworkElement parent = systemTrayIconElement;
     if ((parent = Media::VisualTreeHelper::GetParent(parent)
                       .try_as<FrameworkElement>()) &&
@@ -530,19 +640,34 @@ void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
                 return;
             }
 
-            bool isEmptyBell = innerTextBlock.Text() == L"\uF2A3";
-            if (isEmptyBell) {
-                hide = true;
-            }
+            auto shouldHide = [](Controls::TextBlock innerTextBlock) {
+                auto text = innerTextBlock.Text();
+                auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
+                switch (systemTrayIconIdent) {
+                    case SystemTrayIconIdent::kBellEmpty:
+                        return true;
 
-            if (!g_bellInnerTextBlock) {
+                    case SystemTrayIconIdent::kBellFull:
+                        return false;
+
+                    default:
+                        Wh_Log(L"Unknown bell icon %d (%s)",
+                               (int)systemTrayIconIdent,
+                               StringToHex(text).c_str());
+                        return false;
+                }
+            };
+
+            hide = shouldHide(innerTextBlock);
+
+            if (!g_bellInnerTextBlock.get()) {
                 auto systemTrayTextIconContentWeakRef =
                     winrt::make_weak(systemTrayTextIconContent);
                 g_bellInnerTextBlock = innerTextBlock;
                 g_bellTextChangedToken =
                     innerTextBlock.RegisterPropertyChangedCallback(
                         Controls::TextBlock::TextProperty(),
-                        [systemTrayTextIconContentWeakRef](
+                        [systemTrayTextIconContentWeakRef, &shouldHide](
                             DependencyObject sender,
                             DependencyProperty property) {
                             auto innerTextBlock =
@@ -557,9 +682,7 @@ void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
                                 return;
                             }
 
-                            bool isEmptyBell =
-                                innerTextBlock.Text() == L"\uF2A3";
-                            bool hide = isEmptyBell;
+                            bool hide = shouldHide(innerTextBlock);
 
                             Wh_Log(L"Bell icon, hide=%d", hide);
 
@@ -578,9 +701,6 @@ void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
 }
 
 void ApplyShowDesktopStyle(FrameworkElement systemTrayIconElement) {
-    int width = g_settings.showDesktopButtonWidth;
-    Wh_Log(L"Show desktop button, width=%d", width);
-
     auto showDesktopStack =
         GetParentElementByName(systemTrayIconElement, L"ShowDesktopStack");
     if (!showDesktopStack) {
@@ -589,17 +709,22 @@ void ApplyShowDesktopStyle(FrameworkElement systemTrayIconElement) {
     }
 
     if (g_unloading) {
+        Wh_Log(L"Show desktop button, setting default width");
+
         auto systemTrayIconElementDP =
             systemTrayIconElement.as<DependencyObject>();
         systemTrayIconElementDP.ClearValue(
-            FrameworkElement::MinHeightProperty());
+            FrameworkElement::MinWidthProperty());
         systemTrayIconElementDP.ClearValue(
-            FrameworkElement::MaxHeightProperty());
+            FrameworkElement::MaxWidthProperty());
 
         auto showDesktopStackDP = showDesktopStack.as<DependencyObject>();
-        showDesktopStackDP.ClearValue(FrameworkElement::MinHeightProperty());
-        showDesktopStackDP.ClearValue(FrameworkElement::MaxHeightProperty());
+        showDesktopStackDP.ClearValue(FrameworkElement::MinWidthProperty());
+        showDesktopStackDP.ClearValue(FrameworkElement::MaxWidthProperty());
     } else {
+        int width = g_settings.showDesktopButtonWidth;
+        Wh_Log(L"Show desktop button, width=%d", width);
+
         systemTrayIconElement.MinWidth(width);
         systemTrayIconElement.MaxWidth(width);
         showDesktopStack.MinWidth(width);
@@ -607,7 +732,7 @@ void ApplyShowDesktopStyle(FrameworkElement systemTrayIconElement) {
     }
 }
 
-bool ApplyIconStackStyle(FrameworkElement container) {
+bool ApplyMainStackStyle(FrameworkElement container) {
     FrameworkElement stackPanel = nullptr;
 
     FrameworkElement child = container;
@@ -639,7 +764,46 @@ bool ApplyIconStackStyle(FrameworkElement container) {
             return false;
         }
 
-        ApplyNotifyIconViewStyle(systemTrayIconElement);
+        ApplyMainStackIconViewStyle(systemTrayIconElement);
+        return false;
+    });
+
+    return true;
+}
+
+bool ApplyNonActivatableStackStyle(FrameworkElement container) {
+    FrameworkElement stackPanel = nullptr;
+
+    FrameworkElement child = container;
+    if ((child = FindChildByName(child, L"Content")) &&
+        (child = FindChildByName(child, L"IconStack")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.ItemsPresenter")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.StackPanel"))) {
+        stackPanel = child;
+    }
+
+    if (!stackPanel) {
+        return false;
+    }
+
+    EnumChildElements(stackPanel, [](FrameworkElement child) {
+        auto childClassName = winrt::get_class_name(child);
+        if (childClassName != L"Windows.UI.Xaml.Controls.ContentPresenter") {
+            Wh_Log(L"Unsupported class name %s of child",
+                   childClassName.c_str());
+            return false;
+        }
+
+        FrameworkElement systemTrayIconElement =
+            FindChildByName(child, L"SystemTrayIcon");
+        if (!systemTrayIconElement) {
+            Wh_Log(L"Failed to get SystemTrayIcon of child");
+            return false;
+        }
+
+        ApplyNonActivatableStackIconViewStyle(systemTrayIconElement);
         return false;
     });
 
@@ -679,7 +843,7 @@ bool ApplyControlCenterButtonStyle(FrameworkElement controlCenterButton) {
             return false;
         }
 
-        ApplySystemTrayIconStyle(systemTrayIconElement);
+        ApplyControlCenterButtonIconStyle(systemTrayIconElement);
         return false;
     });
 
@@ -784,7 +948,14 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     FrameworkElement mainStack =
         FindChildByName(systemTrayFrameGrid, L"MainStack");
     if (mainStack) {
-        somethingSucceeded |= ApplyIconStackStyle(mainStack);
+        somethingSucceeded |= ApplyMainStackStyle(mainStack);
+    }
+
+    FrameworkElement nonActivatableStack =
+        FindChildByName(systemTrayFrameGrid, L"NonActivatableStack");
+    if (nonActivatableStack) {
+        somethingSucceeded |=
+            ApplyNonActivatableStackStyle(nonActivatableStack);
     }
 
     FrameworkElement controlCenterButton =
@@ -847,10 +1018,13 @@ void WINAPI IconView_IconView_Hook(PVOID pThis) {
             if (className == L"SystemTray.IconView") {
                 if (iconView.Name() == L"SystemTrayIcon") {
                     if (IsChildOfElementByName(iconView, L"MainStack")) {
-                        ApplyNotifyIconViewStyle(iconView);
+                        ApplyMainStackIconViewStyle(iconView);
+                    } else if (IsChildOfElementByName(iconView,
+                                                      L"NonActivatableStack")) {
+                        ApplyNonActivatableStackIconViewStyle(iconView);
                     } else if (IsChildOfElementByName(iconView,
                                                       L"ControlCenterButton")) {
-                        ApplySystemTrayIconStyle(iconView);
+                        ApplyControlCenterButtonIconStyle(iconView);
                     } else if (IsChildOfElementByName(
                                    iconView, L"NotificationCenterButton")) {
                         ApplyBellIconStyle(iconView);
@@ -971,6 +1145,8 @@ void LoadSettings() {
     g_settings.hideNetworkIcon = Wh_GetIntSetting(L"hideNetworkIcon");
     g_settings.hideBatteryIcon = Wh_GetIntSetting(L"hideBatteryIcon");
     g_settings.hideMicrophoneIcon = Wh_GetIntSetting(L"hideMicrophoneIcon");
+    g_settings.hideGeolocationIcon = Wh_GetIntSetting(L"hideGeolocationIcon");
+    g_settings.hideLanguageBar = Wh_GetIntSetting(L"hideLanguageBar");
 
     PCWSTR hideBellIcon = Wh_GetStringSetting(L"hideBellIcon");
     g_settings.hideBellIcon = HideBellIcon::never;
@@ -1015,6 +1191,15 @@ void ApplySettings() {
                     g_bellTextChangedToken);
                 g_bellInnerTextBlock = nullptr;
                 g_bellTextChangedToken = 0;
+            }
+
+            if (auto mainStackInnerTextBlock =
+                    g_mainStackInnerTextBlock.get()) {
+                mainStackInnerTextBlock.UnregisterPropertyChangedCallback(
+                    Controls::TextBlock::TextProperty(),
+                    g_mainStackTextChangedToken);
+                g_mainStackInnerTextBlock = nullptr;
+                g_mainStackTextChangedToken = 0;
             }
 
             auto xamlRoot = GetTaskbarXamlRoot(param.hTaskbarWnd);
