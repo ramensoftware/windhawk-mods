@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-29T19:45:51.000Z</updated>
+    <updated>2024-10-29T20:44:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#12ffb0bf8c2ba14d3197b454ade055c1cdc66af1</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
+        <updated>2024-10-29T20:44:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to hide the location (e.g. GPS) icon.</li>
+<li>Added an option to hide the language bar.</li>
+<li>Fixed the notification bell not hiding in Do Not Disturb mode.</li>
+<li>Minor fixes and improvements.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#244c09ae0f58a664e6590bcce385b7f99cc2305a</id>
@@ -277,21 +293,6 @@ Previously, we attempted to draw the gripper overlay for any control that existe
 <li>Improved support for some devices, mostly tablets and devices with a touchscreen.</li>
 <li>Improved compatibility with some programs which query the taskbar location, such as EarTrumpet.</li>
 <li>This update requires Windhawk 1.5 or newer. If you're using an older Windhawk version, please update.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray icon spacing 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#a7c329d411e81a6e0b20c90efc77c36fca9fec5a</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
-        <updated>2024-10-23T15:13:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed from "Taskbar notification icon spacing" to "Taskbar tray icon spacing", as tray is the more familiar term.</li>
-<li>Added support for more system icons, including the chevron icon, microphone, keyboard, language, and others.</li>
-<li>Added two options to customize the tray overflow: "Tray overflow icon width" and "Tray overflow icons per row".</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
