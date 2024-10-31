@@ -1107,13 +1107,13 @@
                 "published": 1730231151000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1730231151000,
+                "updated": 1730333378000,
                 "users": 4
             },
             "metadata": {
                 "author": "m417z",
-                "compilerOptions": "-lpropsys",
-                "description": "Explorer always shows file sizes in KBs in details, make it show MB/GB (or, optionally, KiB/MiB/GiB) when appropriate",
+                "compilerOptions": "-lole32 -loleaut32 -lpropsys",
+                "description": "Explorer always shows file sizes in KBs in details, make it show MB/GB (or, optionally, KiB/MiB/GiB) when appropriate, and optionally show folder sizes too",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -1121,7 +1121,7 @@
                 ],
                 "name": "Better file sizes in Explorer details",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "explorer-frame-classic": {
