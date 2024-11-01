@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-10-31T00:09:38.000Z</updated>
+    <updated>2024-11-01T17:26:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#5b7ec49beb4c159ddfdef8481427a56992c0cb05</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2024-11-01T17:26:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the widget overlapping with the start button.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.1]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#0948b033c97db8abadfab78beffec4628a3924e0</id>
@@ -278,19 +291,6 @@ Previously, we attempted to draw the gripper overlay for any control that existe
         <author>
             <name>kawapure</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.2]]></title>
-        <id>https://windhawk.net/mods/logon-logoff-shutdown-sounds#4bff79462b7f9726d32933f94bcec37e9ec82022</id>
-        <link href="https://windhawk.net/mods/logon-logoff-shutdown-sounds"/>
-        <updated>2024-10-24T21:44:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved XP mode accuracy per @aubymori's suggestion</li>
-</ul>]]></content>
-        <author>
-            <name>Toru the Red Fox</name>
-            <uri>https://github.com/TorutheRedFox</uri>
         </author>
     </entry>
 </feed>

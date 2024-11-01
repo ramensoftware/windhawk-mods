@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-position
 // @name            Start button always on the left
 // @description     Forces the start button to be on the left of the taskbar, even when taskbar icons are centered (Windows 11 only)
-// @version         1.1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -88,6 +88,7 @@ int g_updateStartButtonPositionTimerCounter;
 struct TaskbarData {
     winrt::weak_ref<XamlRoot> xamlRoot;
     winrt::weak_ref<FrameworkElement> startButtonElement;
+    winrt::weak_ref<FrameworkElement> widgetElement;
 };
 
 std::vector<TaskbarData> g_taskbarData;
@@ -153,13 +154,51 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     });
 }
 
-void UpdateStartButtonPosition(XamlRoot xamlRoot,
-                               FrameworkElement startButton) {
+void UpdateStartButtonPosition(TaskbarData& taskbarData) {
     Wh_Log(L">");
+
+    auto xamlRoot = taskbarData.xamlRoot.get();
+    if (!xamlRoot) {
+        return;
+    }
+
+    auto startButton = taskbarData.startButtonElement.get();
+    if (!startButton) {
+        return;
+    }
 
     if (startButton.XamlRoot() != xamlRoot) {
         Wh_Log(L"XamlRoot mismatch");
         return;
+    }
+
+    auto widgetElement = taskbarData.widgetElement.get();
+    if (!widgetElement) {
+        auto itemsRepeater = Media::VisualTreeHelper::GetParent(startButton)
+                                 .try_as<FrameworkElement>();
+        if (itemsRepeater) {
+            widgetElement =
+                EnumChildElements(itemsRepeater, [](FrameworkElement child) {
+                    if (child.Name() != L"AugmentedEntryPointButton") {
+                        return false;
+                    }
+
+                    auto offset = child.ActualOffset();
+                    if (offset.x != 0 || offset.y != 0) {
+                        return false;
+                    }
+
+                    return true;
+                });
+
+            if (widgetElement) {
+                taskbarData.widgetElement = winrt::make_weak(widgetElement);
+
+                auto margin = widgetElement.Margin();
+                margin.Left += 34;
+                widgetElement.Margin(margin);
+            }
+        }
     }
 
     FrameworkElement xamlRootContent =
@@ -183,8 +222,13 @@ void UpdateStartButtonPosition(XamlRoot xamlRoot,
     startButton.RenderTransform(transform);
 }
 
-void ResetStartButtonStyles(FrameworkElement startButton) {
+void ResetStartButtonStyles(const TaskbarData& taskbarData) {
     Wh_Log(L">");
+
+    auto startButton = taskbarData.startButtonElement.get();
+    if (!startButton) {
+        return;
+    }
 
     Media::TranslateTransform transform;
     if (auto prevTransform =
@@ -198,32 +242,35 @@ void ResetStartButtonStyles(FrameworkElement startButton) {
     Thickness startButtonMargin = startButton.Margin();
     startButtonMargin.Right = 0;
     startButton.Margin(startButtonMargin);
+
+    if (auto widgetElement = taskbarData.widgetElement.get()) {
+        auto margin = widgetElement.Margin();
+        margin.Left -= 34;
+        if (margin.Left >= 0) {
+            widgetElement.Margin(margin);
+        }
+    }
 }
 
 void ScheduleUpdateStartButtonPosition() {
     g_updateStartButtonPositionTimerCounter = 0;
-    g_updateStartButtonPositionTimer = SetTimer(
-        nullptr, g_updateStartButtonPositionTimer, 100,
-        [](HWND hwnd,         // handle of window for timer messages
-           UINT uMsg,         // WM_TIMER message
-           UINT_PTR idEvent,  // timer identifier
-           DWORD dwTime       // current system time
-           ) WINAPI {
-            g_updateStartButtonPositionTimerCounter++;
-            if (g_updateStartButtonPositionTimerCounter >= 30) {
-                KillTimer(nullptr, g_updateStartButtonPositionTimer);
-                g_updateStartButtonPositionTimer = 0;
-            }
+    g_updateStartButtonPositionTimer =
+        SetTimer(nullptr, g_updateStartButtonPositionTimer, 100,
+                 [](HWND hwnd,         // handle of window for timer messages
+                    UINT uMsg,         // WM_TIMER message
+                    UINT_PTR idEvent,  // timer identifier
+                    DWORD dwTime       // current system time
+                    ) WINAPI {
+                     g_updateStartButtonPositionTimerCounter++;
+                     if (g_updateStartButtonPositionTimerCounter >= 30) {
+                         KillTimer(nullptr, g_updateStartButtonPositionTimer);
+                         g_updateStartButtonPositionTimer = 0;
+                     }
 
-            for (const auto& item : g_taskbarData) {
-                if (auto xamlRoot = item.xamlRoot.get()) {
-                    if (auto startButtonElement =
-                            item.startButtonElement.get()) {
-                        UpdateStartButtonPosition(xamlRoot, startButtonElement);
-                    }
-                }
-            }
-        });
+                     for (auto& item : g_taskbarData) {
+                         UpdateStartButtonPosition(item);
+                     }
+                 });
 }
 
 bool ApplyStyle(XamlRoot xamlRoot) {
@@ -456,10 +503,7 @@ void ApplySettings(HWND hTaskbarWnd) {
                 ScheduleUpdateStartButtonPosition();
             } else {
                 for (const auto& item : g_taskbarData) {
-                    if (auto startButtonElement =
-                            item.startButtonElement.get()) {
-                        ResetStartButtonStyles(startButtonElement);
-                    }
+                    ResetStartButtonStyles(item);
                 }
 
                 if (g_updateStartButtonPositionTimer) {
@@ -484,11 +528,11 @@ HRESULT WINAPI CPearl_SetBounds_Hook(void* pThis, void* param1) {
     return CPearl_SetBounds_Original(pThis, param1);
 }
 
-BOOL HookTaskbarDllSymbols() {
+bool HookTaskbarDllSymbols() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
-        return FALSE;
+        return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {

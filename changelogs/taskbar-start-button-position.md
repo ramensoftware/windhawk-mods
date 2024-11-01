@@ -1,3 +1,7 @@
+## 1.1.2 ([Nov 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5b7ec49beb4c159ddfdef8481427a56992c0cb05/mods/taskbar-start-button-position.wh.cpp))
+
+* Fixed the widget overlapping with the start button.
+
 ## 1.1.1 ([Sep 30, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d4c63c187231bcd43dc7c476269b6377a89f9827/mods/taskbar-start-button-position.wh.cpp))
 
 * Fixed taskbar buttons not being completely centered.
