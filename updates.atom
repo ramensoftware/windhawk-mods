@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-01T17:26:41.000Z</updated>
+    <updated>2024-11-01T19:14:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#f44455ff44bcaa2a31f0d6aca46b8bd22fe2dae1</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2024-11-01T19:14:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the jumpy animation that occurred when the taskbar is animated.</li>
+<li>Fixed taskbar items overlapping with the start button when the taskbar is full.</li>
+<li>Fixed the mod when the "Start menu on the left" option is disabled.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#5b7ec49beb4c159ddfdef8481427a56992c0cb05</id>
@@ -277,20 +292,6 @@ when there are no maximized windows.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Qt scrollbar grippers 1.1]]></title>
-        <id>https://windhawk.net/mods/fix-qt-scrollbar-grippers#32c17fb5a213cf117d1cb8d3722d01ec18c9a04d</id>
-        <link href="https://windhawk.net/mods/fix-qt-scrollbar-grippers"/>
-        <updated>2024-10-25T14:09:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix control detection. \
-Previously, we attempted to draw the gripper overlay for any control that existed, not just scrollbars. This is because the control theme opened by the HTHEME was not checked. Now, we only try drawing scrollbar grippers if we know the control itself is a scrollbar.</li>
-</ul>]]></content>
-        <author>
-            <name>kawapure</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>

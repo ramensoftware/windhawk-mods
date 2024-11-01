@@ -1,3 +1,9 @@
+## 1.2 ([Nov 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f44455ff44bcaa2a31f0d6aca46b8bd22fe2dae1/mods/taskbar-start-button-position.wh.cpp))
+
+* Fixed the jumpy animation that occurred when the taskbar is animated.
+* Fixed taskbar items overlapping with the start button when the taskbar is full.
+* Fixed the mod when the "Start menu on the left" option is disabled.
+
 ## 1.1.2 ([Nov 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5b7ec49beb4c159ddfdef8481427a56992c0cb05/mods/taskbar-start-button-position.wh.cpp))
 
 * Fixed the widget overlapping with the start button.
