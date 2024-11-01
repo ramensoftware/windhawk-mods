@@ -2468,7 +2468,7 @@
                 "published": 1727557304000,
                 "rating": 10,
                 "ratingUsers": 5,
-                "updated": 1728064921000,
+                "updated": 1730496483000,
                 "users": 265
             },
             "metadata": {
@@ -2485,7 +2485,7 @@
                 ],
                 "name": "Taskbar Background Helper",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-button-click": {

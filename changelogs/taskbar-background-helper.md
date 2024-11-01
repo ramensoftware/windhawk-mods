@@ -1,3 +1,8 @@
+## 1.0.2 ([Nov 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/177e874ef97df111d87fd05d4e65d792bcc062b6/mods/taskbar-background-helper.wh.cpp))
+
+* Fixed the background not updating in some cases, e.g. when exiting Firefox.
+* Added support for Win+Tab and other fullscreen windows.
+
 ## 1.0.1 ([Oct 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4fd49be3b9999e5243d74bb2b79162f39039bcf3/mods/taskbar-background-helper.wh.cpp))
 
 * Added an optional configuration for dark mode.

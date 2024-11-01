@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-01T19:14:09.000Z</updated>
+    <updated>2024-11-01T21:28:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Background Helper 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-background-helper#177e874ef97df111d87fd05d4e65d792bcc062b6</id>
+        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
+        <updated>2024-11-01T21:28:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the background not updating in some cases, e.g. when exiting Firefox.</li>
+<li>Added support for Win+Tab and other fullscreen windows.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#f44455ff44bcaa2a31f0d6aca46b8bd22fe2dae1</id>
@@ -275,19 +289,6 @@ when there are no maximized windows.</p>]]></content>
 <li>"Redirect all loaded resources" mode: Fixed icon loading in case the redirection module has different icon formats.</li>
 <li>"Redirect all loaded resources" mode: String resources are now redirected in more cases.</li>
 <li>Fixed a rare crash that could occur if logging is enabled or if the "Redirect all loaded resources (experimental)" option is enabled.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.15]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#08efbf944927215f3f73bceca8389a9eccd6659b</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-10-25T16:44:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Applying changes to the taskbar button width option no longer requires restarting explorer.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
