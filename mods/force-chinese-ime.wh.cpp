@@ -100,10 +100,3 @@ void ModInit() {
 
     Wh_Log(L"Force Chinese IME Mode mod initialized.");
 }
-
-// Module cleanup
-void ModUninit() {
-    // Remove the hook
-    Wh_RemoveFunctionHook((void*)ImmSetConversionStatus);
-    Wh_Log(L"Force Chinese IME Mode mod uninitialized.");
-}
