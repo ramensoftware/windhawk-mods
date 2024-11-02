@@ -1374,6 +1374,28 @@
                 "version": "1.1"
             }
         },
+        "force-chinese-ime": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1730564952000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1730564952000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "u3l6",
+                "compilerOptions": "-limm32",
+                "description": "Forces Microsoft Pinyin IME to stay in Chinese mode",
+                "github": "https://github.com/u3l6",
+                "include": [
+                    "*"
+                ],
+                "name": "Force Chinese IME Mode",
+                "twitter": "https://x.com/u_3l6",
+                "version": "1.0"
+            }
+        },
         "force-thick-frames": {
             "details": {
                 "defaultSorting": 6201,

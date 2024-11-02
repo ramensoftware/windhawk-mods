@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-01T21:28:03.000Z</updated>
+    <updated>2024-11-02T16:29:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Force Chinese IME Mode 1.0]]></title>
+        <id>https://windhawk.net/mods/force-chinese-ime#3fc41a9016398426c18543edb7d1af15293f6a0c</id>
+        <link href="https://windhawk.net/mods/force-chinese-ime"/>
+        <updated>2024-11-02T16:29:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="forcechineseimemode">Force Chinese IME Mode | 强制中文输入法</h1>
+<h2 id="feature">Feature | 功能</h2>
+<p>This mod forces the Microsoft Pinyin IME to stay in Chinese input mode, preventing unwanted mode switches.<br />
+这个 mod 强制微软拼音输入法保持在中文输入模式，防止出现不必要的模式切换。</p>
+<h3 id="before">Before | 使用前</h3>
+<p>The input mode often switches irregular while using Microsoft Pinyin IME.<br />
+使用微软拼音输入法时输入模式经常无规则切换。
+<img src="https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/Before.png" alt="before" /></p>
+<h3 id="after">After | 使用后</h3>
+<p>It can ensure that when using the Microsoft Pinyin IME, English will never be entered using the input box.<br />
+可以确保在微软拼音输入法的时候，使用输入框永远不会输入英文。
+<img src="https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/After.png" alt="after" /></p>]]></content>
+        <author>
+            <name>u3l6</name>
+            <uri>https://github.com/u3l6</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Background Helper 1.0.2]]></title>
         <id>https://windhawk.net/mods/taskbar-background-helper#177e874ef97df111d87fd05d4e65d792bcc062b6</id>
@@ -275,21 +297,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>
         <content type="html"><![CDATA[<h1 id="taskbarautohidewhenmaximized">Taskbar auto-hide when maximized</h1>
 <p>Automatically hides the taskbar when a window is maximized, and brings it back
 when there are no maximized windows.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1.8]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#5c313117215b4ad4452f3c15a7e1378cd2eb3a00</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-10-25T17:20:05.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>"Redirect all loaded resources" mode: Fixed icon loading in case the redirection module has different icon formats.</li>
-<li>"Redirect all loaded resources" mode: String resources are now redirected in more cases.</li>
-<li>Fixed a rare crash that could occur if logging is enabled or if the "Redirect all loaded resources (experimental)" option is enabled.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
