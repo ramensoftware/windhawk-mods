@@ -2,7 +2,7 @@
 // @id              taskbar-background-helper
 // @name            Taskbar Background Helper
 // @description     Sets the taskbar background for the transparent parts, always or only when there's a maximized window, designed to be used with Windows 11 Taskbar Styler
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -216,7 +216,7 @@ bool IsWindowsDarkModeEnabled() {
 }
 
 // https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
-BOOL IsWindowCloaked(HWND hwnd) {
+bool IsWindowCloaked(HWND hwnd) {
     BOOL isCloaked = FALSE;
     return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked,
                                            sizeof(isCloaked))) &&
@@ -319,13 +319,15 @@ bool DoesMonitorHaveMaximizedWindow(HMONITOR monitor) {
     };
     GetMonitorInfo(monitor, &monitorInfo);
 
-    auto enumWindowsProc = [monitor, &monitorInfo,
-                            &hasMaximized](HWND hWnd) -> BOOL {
+    HWND hShellWindow = GetShellWindow();
+
+    auto enumWindowsProc = [&](HWND hWnd) -> BOOL {
         if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
             return TRUE;
         }
 
-        if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
+        if (hWnd == hShellWindow || GetProp(hWnd, L"DesktopWindow") ||
+            !IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
             return TRUE;
         }
 
@@ -369,11 +371,17 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
                            LONG idChild,
                            DWORD dwEventThread,
                            DWORD dwmsEventTime) {
-    if (idObject != OBJID_WINDOW) {
+    if (idObject != OBJID_WINDOW ||
+        (GetWindowLong(hWnd, GWL_STYLE) & WS_CHILD)) {
         return;
     }
 
-    Wh_Log(L">");
+    HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
+    if (hParentWnd && hParentWnd != GetDesktopWindow()) {
+        return;
+    }
+
+    Wh_Log(L"> %08X", (DWORD)(ULONG_PTR)hWnd);
 
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     g_pendingMonitors.insert(monitor);

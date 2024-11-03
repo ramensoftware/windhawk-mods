@@ -1,3 +1,7 @@
+## 1.0.3 ([Nov 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ec00d6753b2fb4d370071ec57abe7481eb30aa95/mods/taskbar-background-helper.wh.cpp))
+
+* Fixed the mod always thinking there's a maximized window in some cases.
+
 ## 1.0.2 ([Nov 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/177e874ef97df111d87fd05d4e65d792bcc062b6/mods/taskbar-background-helper.wh.cpp))
 
 * Fixed the background not updating in some cases, e.g. when exiting Firefox.
