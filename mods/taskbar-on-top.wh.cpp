@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.0.4
+// @version         1.0.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -782,13 +782,13 @@ TaskbarFrame_TaskbarFrame_t TaskbarFrame_TaskbarFrame_Original;
 void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
     Wh_Log(L">");
 
-    pThis = TaskbarFrame_TaskbarFrame_Original(pThis);
+    void* ret = TaskbarFrame_TaskbarFrame_Original(pThis);
 
     FrameworkElement taskbarFrame = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(taskbarFrame));
     if (!taskbarFrame) {
-        return pThis;
+        return ret;
     }
 
     g_elementLoadedAutoRevokerList.emplace_back();
@@ -819,7 +819,7 @@ void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
             }
         });
 
-    return pThis;
+    return ret;
 }
 
 void ApplySystemTrayChevronIconViewStyle(
@@ -858,13 +858,13 @@ IconView_IconView_t IconView_IconView_Original;
 void* WINAPI IconView_IconView_Hook(void* pThis) {
     Wh_Log(L">");
 
-    pThis = IconView_IconView_Original(pThis);
+    void* ret = IconView_IconView_Original(pThis);
 
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
     if (!iconView) {
-        return pThis;
+        return ret;
     }
 
     g_elementLoadedAutoRevokerList.emplace_back();
@@ -894,7 +894,7 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
             }
         });
 
-    return pThis;
+    return ret;
 }
 
 using OverflowFlyoutModel_Show_t = void(WINAPI*)(void* pThis);
