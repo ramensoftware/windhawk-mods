@@ -1,3 +1,7 @@
+## 1.0.5 ([Nov 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/25345e441de9f8b292d8a2d316c06ac6869e3ced/mods/taskbar-on-top.wh.cpp))
+
+* Fixed an incompatibility with the following mods which could lead to a crash: Taskbar tray icon spacing, Taskbar tray system icon tweaks.
+
 ## 1.0.4 ([Oct 27, 2024](https://github.com/ramensoftware/windhawk-mods/blob/8195a025df8ce6bfbd9a3dab732811619d75d205/mods/taskbar-on-top.wh.cpp))
 
 * Fixed the start menu opening on the left side of the screen, even if the icons on the taskbar are centered. The bug was caused by the attempt to change the incorrect jump list animation in version 1.0.3. As a result, if icons are centered, jump list animation will be incorrect again. This affects only Windows 11 23H2, there's no such issue on Windows 11 24H2.

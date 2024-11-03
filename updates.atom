@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-03T00:05:25.000Z</updated>
+    <updated>2024-11-03T00:21:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#25345e441de9f8b292d8a2d316c06ac6869e3ced</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2024-11-03T00:21:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with the following mods which could lead to a crash: Taskbar tray icon spacing, Taskbar tray system icon tweaks.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#350f82b7f5076ccb9a1070a8da3f149cfb900af9</id>
@@ -286,19 +299,6 @@ check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar Tweaker</a>.</
 <p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.</p>
 <p><img src="https://i.imgur.com/8WU4YCX.png" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.6]]></title>
-        <id>https://windhawk.net/mods/explorer-frame-classic#3e436653f3acb9c679349057fec39842957d448d</id>
-        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
-        <updated>2024-10-25T20:12:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The fix from version 1.0.5 only worked for Windows 11 version 24H2 (incorrect height if the FileExplorerTabLineFix Windows flag is set). Now the fix works for Windows 11 version 23H2 as well.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
