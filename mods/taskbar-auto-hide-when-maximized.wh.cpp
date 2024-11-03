@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     When auto-hide is enabled, makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -106,6 +106,9 @@ enum {
 #ifndef EVENT_OBJECT_UNCLOAKED
 #define EVENT_OBJECT_UNCLOAKED 0x8018
 #endif
+
+using IsWindowArranged_t = BOOL(WINAPI*)(HWND hwnd);
+IsWindowArranged_t pIsWindowArranged;
 
 // https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
 bool IsWindowCloaked(HWND hwnd) {
@@ -223,6 +226,11 @@ bool ShouldAlwaysShowTaskbar(HWND hMMTaskbarWnd, HMONITOR monitor) {
                 return FALSE;
             }
 
+            return TRUE;
+        }
+
+        if (pIsWindowArranged && pIsWindowArranged(hWnd) &&
+            MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
             return TRUE;
         }
 
@@ -816,6 +824,12 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
+
+    HMODULE hUser32Module = LoadLibrary(L"user32.dll");
+    if (hUser32Module) {
+        pIsWindowArranged = (IsWindowArranged_t)GetProcAddress(
+            hUser32Module, "IsWindowArranged");
+    }
 
     g_winVersion = GetExplorerVersion();
     if (g_winVersion == WinVersion::Unsupported) {

@@ -1,3 +1,7 @@
+## 1.1.1 ([Nov 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1819258d37a06f57310f9ab3c9f6538d808317f4/mods/taskbar-auto-hide-when-maximized.wh.cpp))
+
+* Fixed spanned windows (e.g. Win+right) affecting the sibling monitor taskbar.
+
 ## 1.1 ([Nov 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/350f82b7f5076ccb9a1070a8da3f149cfb900af9/mods/taskbar-auto-hide-when-maximized.wh.cpp))
 
 * Most code was rewritten, and the mod works in a slightly different way now - instead of switching auto-hide on and off, it's always left on, but the mod prevents the taskbar from hiding in certain conditions. That has benefits like a smoother transition between the states.
