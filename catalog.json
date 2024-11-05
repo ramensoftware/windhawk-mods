@@ -767,7 +767,7 @@
                 "published": 1699159361000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1699159361000,
+                "updated": 1730806745000,
                 "users": 124
             },
             "metadata": {
@@ -781,7 +781,7 @@
                     "explorer.exe"
                 ],
                 "name": "Custom Shutdown Dialog",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "desktop-icons-view": {
