@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.5
+// @version         1.6
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -888,7 +888,7 @@ static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
 
 // since the mod can't be split to multiple files, the definition order becomes somehow complicated
 bool IsTaskbarWindow(HWND hWnd);
-bool isMouseDoubleClick(LPARAM lParam);
+bool isMouseDoubleClick(LPARAM lParam, HWND hWnd);
 bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction);
 
 // =====================================================================
@@ -1029,7 +1029,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             {
                 action = g_settings.middleClickTaskbarAction;
             }
-            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam))
+            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam, hWnd))
             {
                 action = g_settings.doubleClickTaskbarAction;
             }
@@ -1276,7 +1276,7 @@ bool IsTaskbarWindow(HWND hWnd)
     }
 }
 
-bool isMouseDoubleClick(LPARAM lParam)
+bool isMouseDoubleClick(LPARAM lParam, HWND hWnd)
 {
     LOG_TRACE();
 
@@ -1288,10 +1288,18 @@ bool isMouseDoubleClick(LPARAM lParam)
     currentLocation.x = GET_X_LPARAM(lParam);
     currentLocation.y = GET_Y_LPARAM(lParam);
 
+    UINT dpi = GetDpiForWindow(hWnd);  
+    float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor 
+
+    // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
+    const int MAX_POS_OFFSET_PX = 15;   
+    // if user has hires screen, every slight movement result in bigger pixel offset
+    const int MAX_POS_OFFSET_PX_SCALED = dpiScale*MAX_POS_OFFSET_PX;     
+
     // Check if the current event is within the double-click time and distance
     bool result = false;
-    if (abs(currentLocation.x - lastPointerDownLocation.x) <= GetSystemMetrics(SM_CXDOUBLECLK) &&
-        abs(currentLocation.y - lastPointerDownLocation.y) <= GetSystemMetrics(SM_CYDOUBLECLK) &&
+    if (abs(currentLocation.x - lastPointerDownLocation.x) <= MAX_POS_OFFSET_PX_SCALED &&
+        abs(currentLocation.y - lastPointerDownLocation.y) <= MAX_POS_OFFSET_PX_SCALED &&
         ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
     {
         result = true;
