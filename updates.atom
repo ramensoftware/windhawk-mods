@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-05T11:39:05.000Z</updated>
+    <updated>2024-11-05T11:52:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Force Chinese IME Mode 1.0.1]]></title>
+        <id>https://windhawk.net/mods/force-chinese-ime#a9fe3e8c0a2e81543a4cb42777d6112000e4288b</id>
+        <link href="https://windhawk.net/mods/force-chinese-ime"/>
+        <updated>2024-11-05T11:52:31.000Z</updated>
+        <content type="html"><![CDATA[<p>Add warning message for force-chinese-ime</p>]]></content>
+        <author>
+            <name>u3l6</name>
+            <uri>https://github.com/u3l6</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Shutdown Dialog 1.0.1]]></title>
         <id>https://windhawk.net/mods/custom-shutdown-dialog#283efe79823953bacbe87532d0ade644bcbd8f62</id>
@@ -277,21 +288,6 @@ is currently located, showing only the windows present on that specific monitor.
 <p>Allows hiding system icons (volume, network, battery), the bell (always or when
 there are no new notifications), and the "Show desktop" button.</p>
 <p><img src="https://i.imgur.com/YfO676m.gif" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.1.6]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#31cc7d1150a2953dfb1897f13678dcd70f74fa47</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2024-10-26T11:58:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added themes: RosePine, Windows11_Metro10Minimal.</li>
-<li>Updated existing themes.</li>
-<li>Added a workaround for hanging the start menu process on Windows 10. Although the available themes and example styles are designed for Windows 11, it should now be possible to use the mod on Windows 10 too.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

@@ -1380,7 +1380,7 @@
                 "published": 1730564952000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1730564952000,
+                "updated": 1730807551000,
                 "users": 0
             },
             "metadata": {
@@ -1393,7 +1393,7 @@
                 ],
                 "name": "Force Chinese IME Mode",
                 "twitter": "https://x.com/u_3l6",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "force-thick-frames": {
