@@ -2,7 +2,7 @@
 // @id              custom-shutdown-dialog
 // @name            Custom Shutdown Dialog
 // @description     Override the classic shutdown dialog in Explorer with your own
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -14,8 +14,6 @@
 # Custom Shutdown Dialog
 Override the classic shutdown dialog in Explorer
 which is invoked with `ALT`+`F4` with your own program.
-
-**This mod will only work on Windows 10 or greater and Windhawk v1.4 or greater.**
 */
 // ==/WindhawkModReadme==
 
@@ -31,12 +29,10 @@ which is invoked with `ALT`+`F4` with your own program.
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
-#include <versionhelpers.h>
 
 WindhawkUtils::StringSetting g_szExe, g_szArgs;
 
-typedef __int64 (* _ShutdownDialogEx_t)(HWND, int, int, UINT);
-_ShutdownDialogEx_t _ShutdownDialogEx_orig;
+__int64 (*_ShutdownDialogEx_orig)(HWND, int, int, UINT);
 __int64 _ShutdownDialogEx_hook(
     HWND hWndParent,
     int  i1,
@@ -55,6 +51,17 @@ __int64 _ShutdownDialogEx_hook(
     return 0;
 }
 
+WindhawkUtils::SYMBOL_HOOK shutdownuxDllHooks[] = {
+    {
+        {
+            L"static  _ShutdownDialogEx()"
+        },
+        &_ShutdownDialogEx_orig,
+        _ShutdownDialogEx_hook,
+        false
+    }
+};
+
 void LoadSettings(void)
 {
     g_szExe = WindhawkUtils::StringSetting::make(L"exe");
@@ -63,12 +70,6 @@ void LoadSettings(void)
 
 BOOL Wh_ModInit(void)
 {
-    if (!IsWindows10OrGreater())
-    {
-        Wh_Log(L"This mod was designed for Windows 10 and up.");
-        return FALSE;
-    }
-
     LoadSettings();
 
     HMODULE hShutdownUx = LoadLibraryW(L"shutdownux.dll");
@@ -78,15 +79,11 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hook = {
-        {
-            L"static  _ShutdownDialogEx()"
-        },
-        &_ShutdownDialogEx_orig,
-        _ShutdownDialogEx_hook
-    };
-
-    if (!HookSymbols(hShutdownUx, &hook, 1))
+    if (!WindhawkUtils::HookSymbols(
+        hShutdownUx,
+        shutdownuxDllHooks,
+        ARRAYSIZE(shutdownuxDllHooks)
+    ))
     {
         Wh_Log(L"Failed to hook _ShutdownDialogEx");
         return FALSE;
