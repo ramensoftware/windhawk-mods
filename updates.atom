@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-05T11:52:31.000Z</updated>
+    <updated>2024-11-06T21:11:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.2]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#b789eaa75dec0f1005f0c08b8657a9901bbb910d</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-11-06T21:11:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option for getting folder sizes via "Everything" integration, which results in immediate folder sizes without having to calculate them manually.</li>
+<li>Improved the performance of sorting folders by size.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Force Chinese IME Mode 1.0.1]]></title>
         <id>https://windhawk.net/mods/force-chinese-ime#a9fe3e8c0a2e81543a4cb42777d6112000e4288b</id>
@@ -274,20 +288,6 @@ is currently located, showing only the windows present on that specific monitor.
         <content type="html"><![CDATA[<ul>
 <li>Fixed a bug introduced in version 1.2.15, which mistakenly changes the width of elements such as the taskbar search box and the weather widget.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#ce2e4aca78ea32ba11a7e7883c01d552a767d5ca</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
-        <updated>2024-10-26T20:03:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbartraysystemicontweaks">Taskbar tray system icon tweaks</h1>
-<p>Allows hiding system icons (volume, network, battery), the bell (always or when
-there are no new notifications), and the "Show desktop" button.</p>
-<p><img src="https://i.imgur.com/YfO676m.gif" alt="Demonstration" /></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
