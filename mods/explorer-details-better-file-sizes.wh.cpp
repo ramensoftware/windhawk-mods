@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -519,12 +519,12 @@ static thread_local BOOL _Everything_GotChangeWindowMessageFilterEx = FALSE;
 
 static void _Everything_Lock(void)
 {
-    // Unnecessary since everything is thread-local.
+	// Unnecessary since everything is thread-local.
 }
 
 static void _Everything_Unlock(void)
 {
-    // Unnecessary since everything is thread-local.
+	// Unnecessary since everything is thread-local.
 }
 
 // avoid other libs
@@ -758,6 +758,11 @@ static BOOL _Everything_SendIPCQuery(void)
 
 	// find the everything ipc window.
 	everything_hwnd = FindWindow(EVERYTHING_IPC_WNDCLASS, 0);
+
+	if (!everything_hwnd) {
+		everything_hwnd = FindWindow(L"EVERYTHING_TASKBAR_NOTIFICATION_(1.5a)", 0);
+	}
+
 	if (everything_hwnd)
 	{
 		_Everything_QueryVersion = 2;
@@ -1061,7 +1066,7 @@ std::vector<BYTE> PIDLToVector(const ITEMIDLIST* pidl) {
 thread_local winrt::com_ptr<IShellFolder2> g_everything4Wh_cacheShellFolder;
 thread_local std::map<std::vector<BYTE>, std::optional<ULONGLONG>>
     g_everything4Wh_cache;
-thread_local DWORD g_everything4Wh_cacheUpdatedTickCount;
+thread_local DWORD g_everything4Wh_cacheUsedTickCount;
 
 // custom window proc
 LRESULT WINAPI Everything4Wh_window_proc(HWND hwnd,
@@ -1395,14 +1400,12 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
         return S_OK;
     }
 
-    DWORD tickCount = GetTickCount();
     if (shellFolder2 != g_everything4Wh_cacheShellFolder ||
-        tickCount - g_everything4Wh_cacheUpdatedTickCount > 1000) {
+        GetTickCount() - g_everything4Wh_cacheUsedTickCount > 1000) {
         g_everything4Wh_cache.clear();
     }
 
     g_everything4Wh_cacheShellFolder = shellFolder2;
-    g_everything4Wh_cacheUpdatedTickCount = tickCount;
 
     auto [cacheIt, cacheMissing] = g_everything4Wh_cache.try_emplace(
         PIDLToVector(itemidChild), std::nullopt);
@@ -1413,11 +1416,8 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
                                         IID_PPV_ARGS(childFolder.put()));
         if (FAILED(hr) || !childFolder) {
             Wh_Log(L"Failed: %08X", hr);
-            return S_OK;
-        }
-
-        if (g_settings.calculateFolderSizes ==
-            CalculateFolderSizes::everything) {
+        } else if (g_settings.calculateFolderSizes ==
+                   CalculateFolderSizes::everything) {
             WCHAR path[MAX_PATH];
             if (GetFolderPathFromIShellFolder(childFolder.get(), path)) {
                 LARGE_INTEGER size;
@@ -1435,6 +1435,8 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
     } else {
         Wh_Log(L"Using cached size");
     }
+
+    g_everything4Wh_cacheUsedTickCount = GetTickCount();
 
     std::optional<ULONGLONG> folderSize = cacheIt->second;
     if (folderSize) {
