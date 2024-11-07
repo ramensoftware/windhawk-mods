@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-06T21:11:33.000Z</updated>
+    <updated>2024-11-07T00:56:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.2.1]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#2d7a490c8540c53e5c97f7b8f96789c2a96d5fd4</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-11-07T00:56:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for Everything 1.5 alpha.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.2]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#b789eaa75dec0f1005f0c08b8657a9901bbb910d</id>
@@ -274,19 +287,6 @@ is currently located, showing only the windows present on that specific monitor.
         <content type="html"><![CDATA[<ul>
 <li>Added an option to select monitor number to have the desktop icons on.</li>
 <li>Fixed the mod trying to customize folder lists and other lists which aren't part of the desktop.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.2.16]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#dfade00e1c4f9d0047b6b040ed8a08860b2421fe</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2024-10-26T22:51:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a bug introduced in version 1.2.15, which mistakenly changes the width of elements such as the taskbar search box and the weather widget.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

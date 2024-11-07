@@ -1,3 +1,7 @@
+## 1.2.1 ([Nov 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2d7a490c8540c53e5c97f7b8f96789c2a96d5fd4/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Added support for Everything 1.5 alpha.
+
 ## 1.2 ([Nov 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b789eaa75dec0f1005f0c08b8657a9901bbb910d/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Added an option for getting folder sizes via "Everything" integration, which results in immediate folder sizes without having to calculate them manually.
