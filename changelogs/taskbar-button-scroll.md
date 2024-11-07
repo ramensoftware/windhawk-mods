@@ -1,3 +1,9 @@
+## 1.0.7 ([Nov 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/88f7a3c83a0d67d032d94c18d438fa0f0f407a30/mods/taskbar-button-scroll.wh.cpp))
+
+* Fixed all group items minimizing/restoring on scroll even when the group is not combined.
+* Fixed compatibility with the `ExtendedUIXamlRefresh` Windows feature flag.
+* Fixed thumbnails sometimes being stuck in an inconsistent state when scrolling over them.
+
 ## 1.0.6 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3a87f5e12b5f2c6778b4256c45c8124c38fad2cc/mods/taskbar-button-scroll.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
