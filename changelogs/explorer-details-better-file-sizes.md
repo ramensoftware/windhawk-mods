@@ -1,3 +1,7 @@
+## 1.4 ([Nov 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/8a97216088069321df239b51174247ec6342138c/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Added an option to mix files and folders when sorting by size.
+
 ## 1.3 ([Nov 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/404f046ed97d3f4f50c777b774419268c318de7a/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * The integration with Everything was rewritten and is now faster (about x6 speedup), more stable (occasional hangs were fixed), and more robust overall.

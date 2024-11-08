@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-08T18:05:33.000Z</updated>
+    <updated>2024-11-08T23:35:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#8a97216088069321df239b51174247ec6342138c</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-11-08T23:35:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to mix files and folders when sorting by size.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.3]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#404f046ed97d3f4f50c777b774419268c318de7a</id>
@@ -279,19 +292,6 @@ is currently located, showing only the windows present on that specific monitor.
         <author>
             <name>L3r0y</name>
             <uri>https://github.com/L3r0yThingz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop icons view 1.0.2]]></title>
-        <id>https://windhawk.net/mods/desktop-icons-view#4accdef47703c83eb2afc92ce30a1c7589910f1c</id>
-        <link href="https://windhawk.net/mods/desktop-icons-view"/>
-        <updated>2024-10-27T22:54:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed applying the mod on startup on Windows 10.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
