@@ -1,3 +1,7 @@
+## 1.3 ([Nov 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/404f046ed97d3f4f50c777b774419268c318de7a/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* The integration with Everything was rewritten and is now faster (about x6 speedup), more stable (occasional hangs were fixed), and more robust overall.
+
 ## 1.2.1 ([Nov 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2d7a490c8540c53e5c97f7b8f96789c2a96d5fd4/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Added support for Everything 1.5 alpha.
