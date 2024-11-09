@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Enable Classic Theme by handle method
 // @description     Disables theming by closing the handle
-// @version         1.0.3
+// @version         1.0.4
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -30,6 +30,9 @@ Enabling the mod will make UWP apps to hang. Install the *Classic UWP Fix* mod t
 Some windows will manifest unwanted transparency. 
 To fix this, install the *Classic theme transparency fix* mod.
 
+On Windows 11 22H2 and later it is recommended to install the mod "Explorerframe fixes for Win11 22H2+" and
+enable all options in its settings.
+
 Windows Classic theme is not compatible with Windows 11 and Windows 10 taskbars
 out of the box. It is recommended to use [Explorer Patcher](https://github.com/valinet/ExplorerPatcher) 
 utility, which includes the necessary fixes. A complete guide on setting up Windows Classic
@@ -48,7 +51,7 @@ Windows Registry Editor Version 5.00
 "UserPreferencesMask"=hex:9E,1E,05,80,12,01,00,00
 ```
 Delete or rename this registry key:
-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\DefaultColors
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\DefaultColors\Standard
 to prevent color scheme change after pressing Ctrl+Alt+Del or going to the logon screen and back.
 
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
