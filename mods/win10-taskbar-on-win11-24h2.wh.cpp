@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win10-taskbar-on-win11-24h2
-// @name            Enables Win10 taskbar on Win11 24H2
+// @name            Enable Win10 taskbar on Win11 24H2
 // @description     Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
-// @version         0.1
+// @version         0.1.1
 // @architecture    x86-64
 // @author          Anixx
 // @github          https://github.com/Anixx
@@ -15,14 +15,22 @@
 Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024.
 If you are on Windows 11 version 21H2 to 23H2, you should not use this mod, but rather install the mod "Windows 10 taskbar on
 Windows 11".
-Important! Before enabling this mod, install the mod "Fake Explorer path".
+
+**Important! Before enabling this mod, install the mod "Fake Explorer path".**
+
+You also should remove the critical system processes from the exclusion list in Windhawk settings.
+
 Since this mod downloads the Windows 10 taskbar from Microsoft's symbols server and stores it in the Windhawk data directory, 
 it won't work in the portable version of Windhawk.
+
 If you are using Classic theme, you should also install mods "Classic Theme Explorer Lite" and "Non Immersive Taskbar Context Menu".
 The mod "Eradicate immersive menus" will not work.
+
 You also can use 7+ Taskbar Tweaker. 
+
 Explorer Patcher by default will have no effect, ask at EP forums for support.
 To customize the clock and tray area, launch legacy tray setup dialog:
+
 `explorer shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}`
 */
 // ==/WindhawkModReadme==
