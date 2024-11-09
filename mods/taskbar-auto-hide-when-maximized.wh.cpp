@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     When auto-hide is enabled, makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -273,6 +273,35 @@ void* QueryViaVtableBackwards(void* object, void* vtable) {
     return ptr;
 }
 
+DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter);
+
+void AdjustTaskbar(HWND hMMTaskbarWnd) {
+    if (g_settings.mode != Mode::never) {
+        if (!g_winEventHookThread) {
+            std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
+
+            if (!g_winEventHookThread) {
+                g_winEventHookThread = CreateThread(
+                    nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
+            }
+        }
+    }
+
+    PostMessage(hMMTaskbarWnd, g_updateTaskbarStateRegisteredMsg, 0, 0);
+}
+
+void AdjustAllTaskbars() {
+    std::unordered_set<HWND> secondaryTaskbarWindows;
+    HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
+    if (hWnd) {
+        AdjustTaskbar(hWnd);
+    }
+
+    for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
+        AdjustTaskbar(hSecondaryWnd);
+    }
+}
+
 void* TrayUI_vftable_IInspectable;
 void* TrayUI_vftable_ITrayComponentHost;
 void* CSecondaryTray_vftable_ISecondaryTray;
@@ -345,7 +374,10 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                                    WPARAM wParam,
                                    LPARAM lParam,
                                    bool* flag) {
-    if (Msg == g_getTaskbarRectRegisteredMsg) {
+    if (Msg == WM_NCCREATE) {
+        Wh_Log(L"WM_NCCREATE: %08X", (DWORD)(ULONG_PTR)hWnd);
+        AdjustTaskbar(hWnd);
+    } else if (Msg == g_getTaskbarRectRegisteredMsg) {
         HMONITOR monitor = (HMONITOR)wParam;
         RECT* rect = (RECT*)lParam;
         if (TrayUI_GetStuckRectForMonitor_Original) {
@@ -397,7 +429,10 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
                                              UINT Msg,
                                              WPARAM wParam,
                                              LPARAM lParam) {
-    if (Msg == g_updateTaskbarStateRegisteredMsg) {
+    if (Msg == WM_NCCREATE) {
+        Wh_Log(L"WM_NCCREATE: %08X", (DWORD)(ULONG_PTR)hWnd);
+        AdjustTaskbar(hWnd);
+    } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
         void* pCSecondaryTray_ISecondaryTray =
             QueryViaVtable(pThis, CSecondaryTray_vftable_ISecondaryTray);
 
@@ -427,35 +462,6 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
         CSecondaryTray_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
 
     return ret;
-}
-
-DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter);
-
-void AdjustTaskbar(HWND hMMTaskbarWnd) {
-    if (g_settings.mode != Mode::never) {
-        if (!g_winEventHookThread) {
-            std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
-
-            if (!g_winEventHookThread) {
-                g_winEventHookThread = CreateThread(
-                    nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
-            }
-        }
-    }
-
-    PostMessage(hMMTaskbarWnd, g_updateTaskbarStateRegisteredMsg, 0, 0);
-}
-
-void AdjustAllTaskbars() {
-    std::unordered_set<HWND> secondaryTaskbarWindows;
-    HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
-    if (hWnd) {
-        AdjustTaskbar(hWnd);
-    }
-
-    for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
-        AdjustTaskbar(hSecondaryWnd);
-    }
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
@@ -627,23 +633,28 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
          (void**)&TrayUI_vftable_IInspectable},
         {R"(??_7TrayUI@@6BITrayComponentHost@@@)",
          (void**)&TrayUI_vftable_ITrayComponentHost},
-        // {R"(TODO)", (void**)&CSecondaryTray_vftable_ISecondaryTray},
+        {R"(??_7CSecondaryTray@@6BISecondaryTray@@@)",
+         (void**)&CSecondaryTray_vftable_ISecondaryTray},
         {R"(?GetStuckMonitor@TrayUI@@UEAAPEAUHMONITOR__@@XZ)",
          (void**)&TrayUI_GetStuckMonitor_Original},
-        // {R"(TODO)", (void**)&CSecondaryTray_GetMonitor_Original},
+        {R"(?GetMonitor@CSecondaryTray@@UEAAPEAUHMONITOR__@@XZ)",
+         (void**)&CSecondaryTray_GetMonitor_Original},
         {R"(?GetStuckRectForMonitor@TrayUI@@UEAA_NPEAUHMONITOR__@@PEAUtagRECT@@@Z)",
          (void**)&TrayUI_GetStuckRectForMonitor_Original},
         {R"(?_Hide@TrayUI@@QEAAXXZ)", (void**)&TrayUI__Hide_Original,
          (void*)TrayUI__Hide_Hook},
-        // {R"(TODO)", (void**)&CSecondaryTray__AutoHide_Original,
-        //  (void*)CSecondaryTray__AutoHide_Hook},
+        {R"(?_AutoHide@CSecondaryTray@@AEAAX_N@Z)",
+         (void**)&CSecondaryTray__AutoHide_Original,
+         (void*)CSecondaryTray__AutoHide_Hook},
         {R"(?Unhide@TrayUI@@UEAAXW4TrayUnhideFlags@TrayCommon@@W4UnhideRequest@3@@Z)",
          (void**)&TrayUI_Unhide_Original},
-        // {R"(TODO)", (void**)&CSecondaryTray__Unhide_Original},
+        {R"(?_Unhide@CSecondaryTray@@AEAAXW4TrayUnhideFlags@TrayCommon@@W4UnhideRequest@3@@Z)",
+         (void**)&CSecondaryTray__Unhide_Original},
         {R"(?WndProc@TrayUI@@UEAA_JPEAUHWND__@@I_K_JPEA_N@Z)",
          (void**)&TrayUI_WndProc_Original, (void*)TrayUI_WndProc_Hook},
-        // {R"(TODO)", (void**)&CSecondaryTray_v_WndProc_Original,
-        //  (void*)CSecondaryTray_v_WndProc_Hook},
+        {R"(?v_WndProc@CSecondaryTray@@EEAA_JPEAUHWND__@@I_K_J@Z)",
+         (void**)&CSecondaryTray_v_WndProc_Original,
+         (void*)CSecondaryTray_v_WndProc_Hook},
     };
 
     bool succeeded = true;
