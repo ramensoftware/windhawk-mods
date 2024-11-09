@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-09T11:31:25.000Z</updated>
+    <updated>2024-11-09T13:12:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enable Win10 taskbar on Win11 24H2 0.1.1]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#600ca01b89c43f72648b31189da1e87a9b5fdebe</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
+        <updated>2024-11-09T13:12:58.000Z</updated>
+        <content type="html"><![CDATA[<p>Rename and fix readme</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enable Classic Theme by handle method 1.0.4]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#93a4f6716925c46ae06d6f8d074d01fbede704c1</id>
@@ -262,22 +273,6 @@
         <updated>2024-10-31T00:09:38.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added an option to show folder sizes too.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#12ffb0bf8c2ba14d3197b454ade055c1cdc66af1</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
-        <updated>2024-10-29T20:44:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to hide the location (e.g. GPS) icon.</li>
-<li>Added an option to hide the language bar.</li>
-<li>Fixed the notification bell not hiding in Do Not Disturb mode.</li>
-<li>Minor fixes and improvements.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

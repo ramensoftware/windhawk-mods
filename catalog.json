@@ -3454,7 +3454,7 @@
                 "published": 1725446830000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1725446830000,
+                "updated": 1731157978000,
                 "users": 77
             },
             "metadata": {
@@ -3468,8 +3468,8 @@
                 "include": [
                     "userinit.exe"
                 ],
-                "name": "Enables Win10 taskbar on Win11 24H2",
-                "version": "0.1"
+                "name": "Enable Win10 taskbar on Win11 24H2",
+                "version": "0.1.1"
             }
         },
         "win32-tray-clock-experience": {
