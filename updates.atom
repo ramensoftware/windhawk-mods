@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-09T13:12:58.000Z</updated>
+    <updated>2024-11-09T15:24:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.2]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#319700c1152b5e0d664b6832eff4bb003d92dfee</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-11-09T15:24:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the mod interfering with file size calculation in operations such as copying folders.</li>
+<li>Added a workaround to the error message that says "Runtime Error - Not Enough space for thread Data". The error could occur when a process is shutting down due to a somewhat specific incompatibility between the Microsoft C++ runtime library and Windhawk's C++ library. It's not really harmful, as the process is shutting down anyway, but it can be annoying.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enable Win10 taskbar on Win11 24H2 0.1.1]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#600ca01b89c43f72648b31189da1e87a9b5fdebe</id>
@@ -260,19 +274,6 @@
         <updated>2024-11-01T17:26:41.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the widget overlapping with the start button.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#0948b033c97db8abadfab78beffec4628a3924e0</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-10-31T00:09:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to show folder sizes too.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.1
+// @version         1.4.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -154,6 +154,8 @@ struct {
 
 HMODULE g_propsysModule;
 std::atomic<int> g_hookRefCount;
+
+thread_local bool g_inCDefItem_GetValue;
 
 auto hookRefCountScope() {
     g_hookRefCount++;
@@ -611,7 +613,7 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
 
     HRESULT ret = CFSFolder__GetSize_Original(pCFSFolder, itemidChild, idFolder,
                                               propVariant);
-    if (ret != S_OK || propVariant->vt != VT_EMPTY) {
+    if (!g_inCDefItem_GetValue || ret != S_OK || propVariant->vt != VT_EMPTY) {
         return ret;
     }
 
@@ -689,6 +691,29 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
     }
 
     return S_OK;
+}
+
+using CDefItem_GetValue_t = HRESULT(WINAPI*)(void* pCFSFolder,
+                                             void* param1,
+                                             void* param2,
+                                             void* param3,
+                                             void* param4);
+CDefItem_GetValue_t CDefItem_GetValue_Original;
+HRESULT WINAPI CDefItem_GetValue_Hook(void* pCFSFolder,
+                                      void* param1,
+                                      void* param2,
+                                      void* param3,
+                                      void* param4) {
+    auto hookScope = hookRefCountScope();
+
+    g_inCDefItem_GetValue = true;
+
+    HRESULT ret =
+        CDefItem_GetValue_Original(pCFSFolder, param1, param2, param3, param4);
+
+    g_inCDefItem_GetValue = false;
+
+    return ret;
 }
 
 using CFSFolder_MapColumnToSCID_t = HRESULT(WINAPI*)(void* pCFSFolder,
@@ -888,6 +913,17 @@ bool HookWindowsStorageSymbols() {
         {
             {
 #ifdef _WIN64
+                LR"(public: virtual long __cdecl CDefItem::GetValue(enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *))",
+#else
+                LR"(public: virtual long __stdcall CDefItem::GetValue(enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *))",
+#endif
+            },
+            &CDefItem_GetValue_Original,
+            CDefItem_GetValue_Hook,
+        },
+        {
+            {
+#ifdef _WIN64
                 LR"(public: virtual long __cdecl CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
 #else
                 LR"(public: virtual long __stdcall CFSFolder::MapColumnToSCID(unsigned int,struct _tagpropertykey *))",
@@ -921,6 +957,140 @@ bool HookWindowsStorageSymbols() {
     return HookSymbols(windowsStorageModule, windowsStorageHooks,
                        ARRAYSIZE(windowsStorageHooks));
 }
+
+// A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
+// Separate mod implementation:
+// https://gist.github.com/m417z/f0cdf071868a6f31210e84dd0d444055.
+// This workaround will be included in Windhawk in future versions.
+namespace ProcessShutdownMessageBoxFix {
+
+using _errno_t = decltype(&_errno);
+
+HMODULE g_libCpp;
+void** g_ppSetlocale;
+HMODULE g_msvcrtModule;
+_errno_t g_msvcrtErrno;
+bool g_msvcrtSetLocalePatched;
+
+void** FindImportPtr(HMODULE hFindInModule,
+                     PCSTR pModuleName,
+                     PCSTR pImportName) {
+    IMAGE_DOS_HEADER* pDosHeader;
+    IMAGE_NT_HEADERS* pNtHeader;
+    ULONG_PTR ImageBase;
+    IMAGE_IMPORT_DESCRIPTOR* pImportDescriptor;
+    ULONG_PTR* pOriginalFirstThunk;
+    ULONG_PTR* pFirstThunk;
+    ULONG_PTR ImageImportByName;
+
+    // Init
+    pDosHeader = (IMAGE_DOS_HEADER*)hFindInModule;
+    pNtHeader = (IMAGE_NT_HEADERS*)((char*)pDosHeader + pDosHeader->e_lfanew);
+
+    if (!pNtHeader->OptionalHeader.DataDirectory[1].VirtualAddress)
+        return nullptr;
+
+    ImageBase = (ULONG_PTR)hFindInModule;
+    pImportDescriptor =
+        (IMAGE_IMPORT_DESCRIPTOR*)(ImageBase +
+                                   pNtHeader->OptionalHeader.DataDirectory[1]
+                                       .VirtualAddress);
+
+    // Search!
+    while (pImportDescriptor->OriginalFirstThunk) {
+        if (lstrcmpiA((char*)(ImageBase + pImportDescriptor->Name),
+                      pModuleName) == 0) {
+            pOriginalFirstThunk =
+                (ULONG_PTR*)(ImageBase + pImportDescriptor->OriginalFirstThunk);
+            ImageImportByName = *pOriginalFirstThunk;
+
+            pFirstThunk =
+                (ULONG_PTR*)(ImageBase + pImportDescriptor->FirstThunk);
+
+            while (ImageImportByName) {
+                if (!(ImageImportByName & IMAGE_ORDINAL_FLAG)) {
+                    if ((ULONG_PTR)pImportName & ~0xFFFF) {
+                        ImageImportByName += sizeof(WORD);
+
+                        if (lstrcmpA((char*)(ImageBase + ImageImportByName),
+                                     pImportName) == 0)
+                            return (void**)pFirstThunk;
+                    }
+                } else {
+                    if (((ULONG_PTR)pImportName & ~0xFFFF) == 0)
+                        if ((ImageImportByName & 0xFFFF) ==
+                            (ULONG_PTR)pImportName)
+                            return (void**)pFirstThunk;
+                }
+
+                pOriginalFirstThunk++;
+                ImageImportByName = *pOriginalFirstThunk;
+
+                pFirstThunk++;
+            }
+        }
+
+        pImportDescriptor++;
+    }
+
+    return nullptr;
+}
+
+using SetLocale_t = char*(__cdecl*)(int category, const char* locale);
+SetLocale_t SetLocale_Original;
+char* __cdecl SetLocale_Wrapper(int category, const char* locale) {
+    // A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
+    errno_t* err = g_msvcrtErrno();
+    HMODULE module;
+    if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          (PCWSTR)err, &module) &&
+        module == g_msvcrtModule) {
+        // Getting a process-wide errno from the module section instead of the
+        // thread errno from the heap means we have no PTD (Per-thread data) and
+        // setlocale will fail, likely with a message box and abort. Return NULL
+        // instead to let the caller handle it gracefully.
+        Wh_Log(L"Returning NULL for setlocale");
+        return nullptr;
+    }
+
+    return SetLocale_Original(category, locale);
+}
+
+bool InitGlobals() {
+    if (!GetModuleHandleEx(0, L"libc++.dll", &g_libCpp)) {
+        Wh_Log(L"No libc++.dll");
+        return false;
+    }
+
+    g_ppSetlocale = FindImportPtr(g_libCpp, "msvcrt.dll", "setlocale");
+    if (!g_ppSetlocale) {
+        Wh_Log(L"No setlocale");
+        return false;
+    }
+
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           (PCWSTR)*g_ppSetlocale, &g_msvcrtModule)) {
+        Wh_Log(L"No setlocale module");
+        return false;
+    }
+
+    if (g_msvcrtModule != GetModuleHandle(L"msvcrt.dll")) {
+        Wh_Log(L"Bad setlocale module, already patched?");
+        Wh_Log(L"%p %p", g_msvcrtModule, GetModuleHandle(L"msvcrt.dll"));
+        return false;
+    }
+
+    g_msvcrtErrno = (_errno_t)GetProcAddress(g_msvcrtModule, "_errno");
+    if (!g_msvcrtErrno) {
+        Wh_Log(L"No _errno");
+        return false;
+    }
+
+    return true;
+}
+
+}  // namespace ProcessShutdownMessageBoxFix
 
 void LoadSettings() {
     PCWSTR calculateFolderSizes = Wh_GetStringSetting(L"calculateFolderSizes");
@@ -993,6 +1163,30 @@ BOOL Wh_ModInit() {
                               (void**)&LoadStringW_Original);
     }
 
+    {
+        using namespace ProcessShutdownMessageBoxFix;
+
+        if (InitGlobals()) {
+            DWORD dwOldProtect;
+            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale),
+                           PAGE_EXECUTE_READWRITE, &dwOldProtect);
+            SetLocale_Original = (SetLocale_t)*g_ppSetlocale;
+            *g_ppSetlocale = (void*)SetLocale_Wrapper;
+            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
+                           &dwOldProtect);
+
+            g_msvcrtSetLocalePatched = true;
+        } else {
+            if (g_msvcrtModule) {
+                FreeLibrary(g_msvcrtModule);
+            }
+
+            if (g_libCpp) {
+                FreeLibrary(g_libCpp);
+            }
+        }
+    }
+
     return TRUE;
 }
 
@@ -1015,6 +1209,22 @@ void Wh_ModUninit() {
 
     while (g_hookRefCount > 0) {
         Sleep(200);
+    }
+
+    {
+        using namespace ProcessShutdownMessageBoxFix;
+
+        if (g_msvcrtSetLocalePatched) {
+            DWORD dwOldProtect;
+            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale),
+                           PAGE_EXECUTE_READWRITE, &dwOldProtect);
+            *g_ppSetlocale = (void*)SetLocale_Original;
+            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
+                           &dwOldProtect);
+
+            FreeLibrary(g_msvcrtModule);
+            FreeLibrary(g_libCpp);
+        }
     }
 }
 

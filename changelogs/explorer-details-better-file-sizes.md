@@ -1,3 +1,8 @@
+## 1.4.2 ([Nov 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/319700c1152b5e0d664b6832eff4bb003d92dfee/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Fixed the mod interfering with file size calculation in operations such as copying folders.
+* Added a workaround to the error message that says "Runtime Error - Not Enough space for thread Data". The error could occur when a process is shutting down due to a somewhat specific incompatibility between the Microsoft C++ runtime library and Windhawk's C++ library. It's not really harmful, as the process is shutting down anyway, but it can be annoying.
+
 ## 1.4.1 ([Nov 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a338ea9f84db30284a1e95afd8475423e389ef58/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Fixed elevated processes being unable to receive folder sizes from Everything, causing a timeout and missing folder sizes.
