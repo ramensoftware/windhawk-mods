@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4
+// @version         1.4.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -411,6 +411,9 @@ DWORD WINAPI Everything4Wh_Thread(void* parameter) {
         return 1;
     }
 
+    ChangeWindowMessageFilterEx(hReceiverWnd, WM_COPYDATA, MSGFLT_ALLOW,
+                                nullptr);
+
     g_gsReply.hEvent = hEvent;
     g_gsReceiverWnd = hReceiverWnd;
 
@@ -789,6 +792,44 @@ HRESULT WINAPI PSFormatForDisplayAlloc_Hook(const PROPERTYKEY& key,
     return PSFormatForDisplayAlloc_Original(key, propvar, pdffNew, ppszDisplay);
 }
 
+using PSFormatForDisplay_t = decltype(&PSFormatForDisplay);
+PSFormatForDisplay_t PSFormatForDisplay_Original;
+HRESULT WINAPI PSFormatForDisplay_Hook(const PROPERTYKEY& propkey,
+                                       const PROPVARIANT& propvar,
+                                       PROPDESC_FORMAT_FLAGS pdfFlags,
+                                       LPWSTR pwszText,
+                                       DWORD cchText) {
+    auto original = [=]() {
+        return PSFormatForDisplay_Original(propkey, propvar, pdfFlags, pwszText,
+                                           cchText);
+    };
+
+    PROPDESC_FORMAT_FLAGS pdfFlagsNew = pdfFlags & ~PDFF_ALWAYSKB;
+    if (pdfFlagsNew == pdfFlags) {
+        return original();
+    }
+
+    void* retAddress = __builtin_return_address(0);
+
+    HMODULE shell32 = GetModuleHandle(L"shell32.dll");
+    if (!shell32) {
+        return original();
+    }
+
+    HMODULE module;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)retAddress, &module) ||
+        module != shell32) {
+        return original();
+    }
+
+    Wh_Log(L">");
+
+    return PSFormatForDisplay_Original(propkey, propvar, pdfFlagsNew, pwszText,
+                                       cchText);
+}
+
 using LoadStringW_t = decltype(&LoadStringW);
 LoadStringW_t LoadStringW_Original;
 int WINAPI LoadStringW_Hook(HINSTANCE hInstance,
@@ -914,6 +955,11 @@ BOOL Wh_ModInit() {
         WindhawkUtils::Wh_SetFunctionHookT(PSFormatForDisplayAlloc,
                                            PSFormatForDisplayAlloc_Hook,
                                            &PSFormatForDisplayAlloc_Original);
+
+        // Used by older file dialogs, for example Regedit's export dialog.
+        WindhawkUtils::Wh_SetFunctionHookT(PSFormatForDisplay,
+                                           PSFormatForDisplay_Hook,
+                                           &PSFormatForDisplay_Original);
     }
 
     if (g_settings.useIecTerms) {
