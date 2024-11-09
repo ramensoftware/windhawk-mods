@@ -2,7 +2,7 @@
 // @id           legacy-alt-tab
 // @name         Legacy Alt+Tab dialog
 // @description  Enables legacy Alt+Tab dialog from Windows XP and Windows 2000
-// @version      1.0
+// @version      1.0.1
 // @author       Anixx
 // @github       https://github.com/Anixx
 // @include      explorer.exe
@@ -10,7 +10,8 @@
 
 // ==WindhawkModReadme==
 /*
-Enables legacy Alt+Tab dialog from Windows XP and Windows 2000
+Enables legacy Alt+Tab dialog from Windows XP and Windows 2000. The last Windows version supported
+is Windows 11 23H2. On Windows version 24H2 and later the legacy Alt+Tab has been removed.
 
 ![Legacy Alt+Tab](https://i.imgur.com/wdX9PW7.png)
 
