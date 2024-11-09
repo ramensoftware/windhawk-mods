@@ -2,7 +2,7 @@
 // @id              win10-taskbar-on-win11-24h2
 // @name            Enable Win10 taskbar on Win11 24H2
 // @description     Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024
-// @version         0.1
+// @version         0.1.1
 // @architecture    x86-64
 // @author          Anixx
 // @github          https://github.com/Anixx
