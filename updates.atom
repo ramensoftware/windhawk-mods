@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-08T23:35:10.000Z</updated>
+    <updated>2024-11-09T00:55:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy Alt+Tab dialog 1.0.1]]></title>
+        <id>https://windhawk.net/mods/legacy-alt-tab#b3712cc03e6f39212f8e7e79b91acb36e87b2507</id>
+        <link href="https://windhawk.net/mods/legacy-alt-tab"/>
+        <updated>2024-11-09T00:55:38.000Z</updated>
+        <content type="html"><![CDATA[<p>Add info on supported Windows versions.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.4]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#8a97216088069321df239b51174247ec6342138c</id>
@@ -277,21 +288,6 @@ using a native styled titlebar.</p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab per monitor 1.0.0]]></title>
-        <id>https://windhawk.net/mods/alt-tab-per-monitor#1b53ec6de6072aae622f18e895fedd349521136c</id>
-        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
-        <updated>2024-10-28T20:52:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alttabpermonitor">Alt+Tab per monitor</h1>
-<p>When you press the Alt+Tab combination, the window switcher will appear on the
-primary display, showing all open windows across all monitors. This mod
-customizes the behavior to display the switcher on the monitor where the cursor
-is currently located, showing only the windows present on that specific monitor.</p>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
         </author>
     </entry>
 </feed>
