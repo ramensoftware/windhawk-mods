@@ -1,3 +1,8 @@
+## 1.1.2 ([Nov 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/699e3b8e67452ab1f163ddc7bd9376549364e4db/mods/taskbar-auto-hide-when-maximized.wh.cpp))
+
+* Fixed the mod not applying on startup in some cases.
+* ExplorerPatcher taskbar: Added support for secondary taskbars for versions newer than 67.1.
+
 ## 1.1.1 ([Nov 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1819258d37a06f57310f9ab3c9f6538d808317f4/mods/taskbar-auto-hide-when-maximized.wh.cpp))
 
 * Fixed spanned windows (e.g. Win+right) affecting the sibling monitor taskbar.

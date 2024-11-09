@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-09T15:24:43.000Z</updated>
+    <updated>2024-11-09T16:48:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#699e3b8e67452ab1f163ddc7bd9376549364e4db</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
+        <updated>2024-11-09T16:48:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the mod not applying on startup in some cases.</li>
+<li>ExplorerPatcher taskbar: Added support for secondary taskbars for versions newer than 67.1.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.2]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#319700c1152b5e0d664b6832eff4bb003d92dfee</id>
@@ -261,19 +275,6 @@
 <li>Fixed the jumpy animation that occurred when the taskbar is animated.</li>
 <li>Fixed taskbar items overlapping with the start button when the taskbar is full.</li>
 <li>Fixed the mod when the "Start menu on the left" option is disabled.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#5b7ec49beb4c159ddfdef8481427a56992c0cb05</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2024-11-01T17:26:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the widget overlapping with the start button.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
