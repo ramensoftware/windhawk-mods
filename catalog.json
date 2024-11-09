@@ -1107,7 +1107,7 @@
                 "published": 1730231151000,
                 "rating": 10,
                 "ratingUsers": 41,
-                "updated": 1731108910000,
+                "updated": 1731115301000,
                 "users": 2461
             },
             "metadata": {
@@ -1121,7 +1121,7 @@
                 ],
                 "name": "Better file sizes in Explorer details",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.4"
+                "version": "1.4.1"
             }
         },
         "explorer-frame-classic": {

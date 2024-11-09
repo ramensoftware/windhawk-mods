@@ -1,3 +1,8 @@
+## 1.4.1 ([Nov 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a338ea9f84db30284a1e95afd8475423e389ef58/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Fixed elevated processes being unable to receive folder sizes from Everything, causing a timeout and missing folder sizes.
+* Made the "Use MB/GB for large files" option work for older file dialogs too, for example Regedit's export dialog.
+
 ## 1.4 ([Nov 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/8a97216088069321df239b51174247ec6342138c/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Added an option to mix files and folders when sorting by size.
