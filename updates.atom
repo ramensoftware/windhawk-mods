@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-10T12:57:54.000Z</updated>
+    <updated>2024-11-10T18:47:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Shutdown Dialog 1.1.1]]></title>
+        <id>https://windhawk.net/mods/custom-shutdown-dialog#0e446407ccb4725b2eb9061b584e45e304a281ad</id>
+        <link href="https://windhawk.net/mods/custom-shutdown-dialog"/>
+        <updated>2024-11-10T18:47:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Remove unnecessary symbol hook, <code>LogoffWindowsDialog</code> is exported by ordinal</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.4]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#f396f78d645dc57089bf4805a63b0bd82f50d745</id>
@@ -250,21 +263,6 @@
         <updated>2024-11-03T00:21:28.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an incompatibility with the following mods which could lead to a crash: Taskbar tray icon spacing, Taskbar tray system icon tweaks.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#350f82b7f5076ccb9a1070a8da3f149cfb900af9</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
-        <updated>2024-11-03T00:05:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Most code was rewritten, and the mod works in a slightly different way now - instead of switching auto-hide on and off, it's always left on, but the mod prevents the taskbar from hiding in certain conditions. That has benefits like a smoother transition between the states.</li>
-<li>The taskbar now auto-hides when a window intersects it. This can be disabled in the options.</li>
-<li>Auto-hiding can be suppressed altogether in the settings. In this case, maximized windows will be covered by the taskbar. This might be desirable if the taskbar is mostly transparent.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

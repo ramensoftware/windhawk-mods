@@ -1,3 +1,7 @@
+## 1.1.1 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0e446407ccb4725b2eb9061b584e45e304a281ad/mods/custom-shutdown-dialog.wh.cpp))
+
+- Remove unnecessary symbol hook, `LogoffWindowsDialog` is exported by ordinal
+
 ## 1.1.0 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f7f83c31e2fde1cd1bdcf110318ae9e9d319ae33/mods/custom-shutdown-dialog.wh.cpp))
 
 - Add ability to override logoff dialog (used in Windows XP Explorer)
