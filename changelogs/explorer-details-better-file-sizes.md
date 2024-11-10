@@ -1,3 +1,9 @@
+## 1.4.3 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/49e105f33c5fef9363a0dae4f6e12a9b5ec31746/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Excluded Plex which is incompatible, a proper fix will be implemented later.
+* Excluded conhost to reduce possible conflicts, the mod isn't relevant for it anyway.
+* Improved the workaround to the error message that says "Runtime Error - Not Enough space for thread Data" to cover more (hopefully all) cases.
+
 ## 1.4.2 ([Nov 9, 2024](https://github.com/ramensoftware/windhawk-mods/blob/319700c1152b5e0d664b6832eff4bb003d92dfee/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Fixed the mod interfering with file size calculation in operations such as copying folders.

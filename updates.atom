@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-10T11:23:48.000Z</updated>
+    <updated>2024-11-10T12:29:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.3]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#49e105f33c5fef9363a0dae4f6e12a9b5ec31746</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-11-10T12:29:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Excluded Plex which is incompatible, a proper fix will be implemented later.</li>
+<li>Excluded conhost to reduce possible conflicts, the mod isn't relevant for it anyway.</li>
+<li>Improved the workaround to the error message that says "Runtime Error - Not Enough space for thread Data" to cover more (hopefully all) cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Shutdown Dialog 1.1.0]]></title>
         <id>https://windhawk.net/mods/custom-shutdown-dialog#f7f83c31e2fde1cd1bdcf110318ae9e9d319ae33</id>
@@ -263,20 +278,6 @@
         <author>
             <name>u3l6</name>
             <uri>https://github.com/u3l6</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Background Helper 1.0.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-background-helper#177e874ef97df111d87fd05d4e65d792bcc062b6</id>
-        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
-        <updated>2024-11-01T21:28:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the background not updating in some cases, e.g. when exiting Firefox.</li>
-<li>Added support for Win+Tab and other fullscreen windows.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
