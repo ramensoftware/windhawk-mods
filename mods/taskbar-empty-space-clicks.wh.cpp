@@ -874,6 +874,57 @@ protected:
     bool initialized;
 } g_comInitializer;
 
+struct MouseClick
+{
+    enum Button {
+        LEFT = 0,
+        MIDDLE,
+        RIGHT
+    };
+
+    MouseClick(WPARAM wParam, LPARAM lParam, Button button)
+    {
+        button = button;
+        GetMouseClickPosition(lParam, position);
+        timestamp = GetTickCount();
+        onEmptySpace = false;
+    }
+
+    Button button;
+    POINT position;
+    DWORD timestamp;
+    bool onEmptySpace;
+};
+
+class MouseClickQueue
+{
+public:
+    MouseClickQueue() = default;
+
+    void push_back(MouseClick click)
+    {
+        clicks[currentIndex] = click;
+        currentIndex = (currentIndex + 1) % 3;
+    }
+
+    MouseClick operator[](int i) const
+    {
+        const int idx = (currentIndex + i) % 3;     // oldest item always first
+        return clicks[idx];
+    }
+
+    int size() const
+    {
+        return MAX_CLICKS;
+    }
+
+private:
+    static const int MAX_CLICKS = 3;
+    MouseClick clicks[MAX_CLICKS];
+    int currentIndex;
+
+} g_mouseClickQueue;
+
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
 static DWORD g_dwTaskbarThreadId;
@@ -973,7 +1024,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     // catch middle mouse button on both main and secondary taskbars
     case WM_NCMBUTTONDOWN:
     case WM_MBUTTONDOWN:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.middleClickTaskbarAction))
+        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, MouseClick(wParam, lParam, MouseClick::MIDDLE)))
         {
             result = 0;
         }
@@ -985,7 +1036,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 
     case WM_LBUTTONDBLCLK:
     case WM_NCLBUTTONDBLCLK:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.doubleClickTaskbarAction))
+        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, MouseClick(wParam, lParam, MouseClick::LEFT)))
         {
             result = 0;
         }
@@ -1024,22 +1075,19 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
         if (IsTaskbarWindow(hRootWnd))
         {
-            TaskBarAction action;
             if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
             {
-                action = g_settings.middleClickTaskbarAction;
+                if (OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::MIDDLE)))
+                {
+                    return 0;
+                }
             }
             else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam, hWnd))
             {
-                action = g_settings.doubleClickTaskbarAction;
-            }
-            else
-            {
-                action = ACTION_NOTHING;
-            }
-            if (OnMouseClick(hRootWnd, wParam, lParam, action))
-            {
-                return 0;
+                if (OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::LEFT)))
+                {
+                    return 0;
+                };
             }
         }
         break;
@@ -1276,46 +1324,52 @@ bool IsTaskbarWindow(HWND hWnd)
     }
 }
 
-bool isMouseDoubleClick(LPARAM lParam, HWND hWnd)
+bool isMouseDoubleClick()
 {
-    LOG_TRACE();
+    // LOG_TRACE();
 
-    static DWORD lastPointerDownTime = 0;
-    static POINT lastPointerDownLocation = {0, 0};
+    // static DWORD lastPointerDownTime = 0;
+    // static POINT lastPointerDownLocation = {0, 0};
 
-    DWORD currentTime = GetTickCount();
-    POINT currentLocation;
-    currentLocation.x = GET_X_LPARAM(lParam);
-    currentLocation.y = GET_Y_LPARAM(lParam);
+    // DWORD currentTime = GetTickCount();
+    // POINT currentLocation;
+    // currentLocation.x = GET_X_LPARAM(lParam);
+    // currentLocation.y = GET_Y_LPARAM(lParam);
 
-    UINT dpi = GetDpiForWindow(hWnd);  
-    float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor 
+    // UINT dpi = GetDpiForWindow(hWnd);  
+    // float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor 
 
-    // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
-    const int MAX_POS_OFFSET_PX = 15;   
-    // if user has hires screen, every slight movement result in bigger pixel offset
-    const int MAX_POS_OFFSET_PX_SCALED = dpiScale*MAX_POS_OFFSET_PX;     
+    // // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
+    // const int MAX_POS_OFFSET_PX = 15;   
+    // // if user has hires screen, every slight movement result in bigger pixel offset
+    // const int MAX_POS_OFFSET_PX_SCALED = dpiScale*MAX_POS_OFFSET_PX;     
 
-    // Check if the current event is within the double-click time and distance
-    bool result = false;
-    if (abs(currentLocation.x - lastPointerDownLocation.x) <= MAX_POS_OFFSET_PX_SCALED &&
-        abs(currentLocation.y - lastPointerDownLocation.y) <= MAX_POS_OFFSET_PX_SCALED &&
-        ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
-    {
-        result = true;
+    // // Check if the current event is within the double-click time and distance
+    // bool result = false;
+    // if (abs(currentLocation.x - lastPointerDownLocation.x) <= MAX_POS_OFFSET_PX_SCALED &&
+    //     abs(currentLocation.y - lastPointerDownLocation.y) <= MAX_POS_OFFSET_PX_SCALED &&
+    //     ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
+    // {
+    //     result = true;
 
-        // Update the time and location to defaults, otherwise a triple-click will be detected as two double-clicks
-        lastPointerDownTime = 0;
-        lastPointerDownLocation = {0, 0};
-    }
-    else
-    {
-        // Update the time and location of the last WM_POINTERDOWN event
-        lastPointerDownTime = currentTime;
-        lastPointerDownLocation = currentLocation;
-    }
+    //     // Update the time and location to defaults, otherwise a triple-click will be detected as two double-clicks
+    //     lastPointerDownTime = 0;
+    //     lastPointerDownLocation = {0, 0};
+    // }
+    // else
+    // {
+    //     // Update the time and location of the last WM_POINTERDOWN event
+    //     lastPointerDownTime = currentTime;
+    //     lastPointerDownLocation = currentLocation;
+    // }
 
-    return result;
+    // return result;
+    return false;
+}
+
+bool isMouseTripleClick()
+{
+    return false;
 }
 
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
@@ -1949,18 +2003,11 @@ void StartProcess(const std::wstring &command)
 // =====================================================================
 
 // main body of the mod called every time a taskbar is clicked
-bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction)
+bool OnMouseClick(HWND hWnd, MouseClick click)
 {
     LOG_TRACE();
 
-    if ((GetCapture() != NULL) || (taskbarAction == ACTION_NOTHING))
-    {
-        return false;
-    }
-
-    // old Windows mouse handling of WM_MBUTTONDOWN message
-    POINT pointerLocation{};
-    if (!GetMouseClickPosition(lParam, pointerLocation))
+    if ((GetCapture() != NULL))
     {
         return false;
     }
@@ -1971,7 +2018,7 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     // opened window, icon, start menu, etc.
 
     com_ptr<IUIAutomationElement> pWindowElement = NULL;
-    if (FAILED(g_pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put())) || !pWindowElement)
+    if (FAILED(g_pUIAutomation->ElementFromPoint(click.position, pWindowElement.put())) || !pWindowElement)
     {
         LOG_ERROR(L"Failed to retrieve UI element from mouse click");
         return false;
@@ -1988,13 +2035,37 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
                                 (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
                                 (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
                                 (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
+    click.onEmptySpace = taskbarClicked;
+
+    TaskBarAction taskbarAction{ACTION_NOTHING};
+    if ((click.button == MouseClick::MIDDLE) && taskbarClicked)
+    {
+        taskbarAction = g_settings.middleClickTaskbarAction;
+    }
+    else if (click.button == MouseClick::LEFT)
+    {
+        g_mouseClickQueue.push_back(click);
+        if (isMouseTripleClick())
+        {
+            taskbarAction = g_settings.middleClickTaskbarAction;
+        } 
+        else if (isMouseDoubleClick())
+        {
+            taskbarAction = g_settings.doubleClickTaskbarAction;
+        }
+    }
+
     if (!taskbarClicked)
     {
         return false;
     }
-    LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
+    LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld, btn=%d", pointerLocation.x, pointerLocation.y, static_cast<int>(click.button));
 
-    if (taskbarAction == ACTION_SHOW_DESKTOP)
+    if (taskbarAction == ACTION_NOTHING)
+    {
+        return false;
+    }
+    else if (taskbarAction == ACTION_SHOW_DESKTOP)
     {
         ShowDesktop(hWnd);
     }
