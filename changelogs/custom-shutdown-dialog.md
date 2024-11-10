@@ -1,3 +1,7 @@
+## 1.1.0 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f7f83c31e2fde1cd1bdcf110318ae9e9d319ae33/mods/custom-shutdown-dialog.wh.cpp))
+
+- Add ability to override logoff dialog (used in Windows XP Explorer)
+
 ## 1.0.1 ([Nov 5, 2024](https://github.com/ramensoftware/windhawk-mods/blob/283efe79823953bacbe87532d0ade644bcbd8f62/mods/custom-shutdown-dialog.wh.cpp))
 
 - Remove unnecessary version check, as it caused issues on older Explorer versions

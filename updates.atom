@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-09T16:48:24.000Z</updated>
+    <updated>2024-11-10T11:23:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Shutdown Dialog 1.1.0]]></title>
+        <id>https://windhawk.net/mods/custom-shutdown-dialog#f7f83c31e2fde1cd1bdcf110318ae9e9d319ae33</id>
+        <link href="https://windhawk.net/mods/custom-shutdown-dialog"/>
+        <updated>2024-11-10T11:23:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add ability to override logoff dialog (used in Windows XP Explorer)</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#699e3b8e67452ab1f163ddc7bd9376549364e4db</id>
@@ -260,21 +273,6 @@
         <content type="html"><![CDATA[<ul>
 <li>Fixed the background not updating in some cases, e.g. when exiting Firefox.</li>
 <li>Added support for Win+Tab and other fullscreen windows.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#f44455ff44bcaa2a31f0d6aca46b8bd22fe2dae1</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2024-11-01T19:14:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the jumpy animation that occurred when the taskbar is animated.</li>
-<li>Fixed taskbar items overlapping with the start button when the taskbar is full.</li>
-<li>Fixed the mod when the "Start menu on the left" option is disabled.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
