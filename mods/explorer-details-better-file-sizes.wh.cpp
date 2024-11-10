@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.3
+// @version         1.4.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -158,6 +158,7 @@ HMODULE g_propsysModule;
 std::atomic<int> g_hookRefCount;
 
 thread_local bool g_inCDefItem_GetValue;
+thread_local bool g_inCFSFolder_CompareIDs_Hook;
 
 auto hookRefCountScope() {
     g_hookRefCount++;
@@ -615,7 +616,8 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
 
     HRESULT ret = CFSFolder__GetSize_Original(pCFSFolder, itemidChild, idFolder,
                                               propVariant);
-    if (!g_inCDefItem_GetValue || ret != S_OK || propVariant->vt != VT_EMPTY) {
+    if ((!g_inCDefItem_GetValue && !g_inCFSFolder_CompareIDs_Hook) ||
+        ret != S_OK || propVariant->vt != VT_EMPTY) {
         return ret;
     }
 
@@ -757,17 +759,21 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
         return original();
     }
 
-    _variant_t value1;
-    if (FAILED(CFSFolder_GetDetailsEx_Original(pCFSFolder, itemid1, &columnSCID,
-                                               value1.GetAddress())) ||
-        value1.vt != VT_UI8) {
-        return original();
-    }
+    g_inCFSFolder_CompareIDs_Hook = true;
 
+    _variant_t value1;
     _variant_t value2;
-    if (FAILED(CFSFolder_GetDetailsEx_Original(pCFSFolder, itemid2, &columnSCID,
-                                               value2.GetAddress())) ||
-        value2.vt != VT_UI8) {
+    bool succeeded =
+        SUCCEEDED(CFSFolder_GetDetailsEx_Original(
+            pCFSFolder, itemid1, &columnSCID, value1.GetAddress())) &&
+        value1.vt == VT_UI8 &&
+        SUCCEEDED(CFSFolder_GetDetailsEx_Original(
+            pCFSFolder, itemid2, &columnSCID, value2.GetAddress())) &&
+        value2.vt == VT_UI8;
+
+    g_inCFSFolder_CompareIDs_Hook = false;
+
+    if (!succeeded) {
         return original();
     }
 

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-10T12:29:58.000Z</updated>
+    <updated>2024-11-10T12:57:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.4]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#f396f78d645dc57089bf4805a63b0bd82f50d745</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-11-10T12:57:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the "Mix files and folders when sorting by size" option that stopped working in version 1.4.2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.3]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#49e105f33c5fef9363a0dae4f6e12a9b5ec31746</id>
@@ -256,28 +269,6 @@
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force Chinese IME Mode 1.0]]></title>
-        <id>https://windhawk.net/mods/force-chinese-ime#3fc41a9016398426c18543edb7d1af15293f6a0c</id>
-        <link href="https://windhawk.net/mods/force-chinese-ime"/>
-        <updated>2024-11-02T16:29:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="forcechineseimemode">Force Chinese IME Mode | 强制中文输入法</h1>
-<h2 id="feature">Feature | 功能</h2>
-<p>This mod forces the Microsoft Pinyin IME to stay in Chinese input mode, preventing unwanted mode switches.<br />
-这个 mod 强制微软拼音输入法保持在中文输入模式，防止出现不必要的模式切换。</p>
-<h3 id="before">Before | 使用前</h3>
-<p>The input mode often switches irregular while using Microsoft Pinyin IME.<br />
-使用微软拼音输入法时输入模式经常无规则切换。
-<img src="https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/Before.png" alt="before" /></p>
-<h3 id="after">After | 使用后</h3>
-<p>It can ensure that when using the Microsoft Pinyin IME, English will never be entered using the input box.<br />
-可以确保在微软拼音输入法的时候，使用输入框永远不会输入英文。
-<img src="https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/After.png" alt="after" /></p>]]></content>
-        <author>
-            <name>u3l6</name>
-            <uri>https://github.com/u3l6</uri>
         </author>
     </entry>
 </feed>

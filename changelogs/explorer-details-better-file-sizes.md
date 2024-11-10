@@ -1,3 +1,7 @@
+## 1.4.4 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f396f78d645dc57089bf4805a63b0bd82f50d745/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Fixed the "Mix files and folders when sorting by size" option that stopped working in version 1.4.2.
+
 ## 1.4.3 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/49e105f33c5fef9363a0dae4f6e12a9b5ec31746/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Excluded Plex which is incompatible, a proper fix will be implemented later.
