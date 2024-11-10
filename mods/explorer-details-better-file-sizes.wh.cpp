@@ -2,12 +2,14 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.2
+// @version         1.4.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         *
+// @exclude         conhost.exe
+// @exclude         plex.exe
 // @compilerOptions -lole32 -loleaut32 -lpropsys
 // ==/WindhawkMod==
 
@@ -962,15 +964,17 @@ bool HookWindowsStorageSymbols() {
 // Separate mod implementation:
 // https://gist.github.com/m417z/f0cdf071868a6f31210e84dd0d444055.
 // This workaround will be included in Windhawk in future versions.
+#include <cxxabi.h>
+#include <locale.h>
 namespace ProcessShutdownMessageBoxFix {
 
 using _errno_t = decltype(&_errno);
 
-HMODULE g_libCpp;
+WCHAR errorMsg[1025];
 void** g_ppSetlocale;
 HMODULE g_msvcrtModule;
 _errno_t g_msvcrtErrno;
-bool g_msvcrtSetLocalePatched;
+bool g_msvcrtSetLocaleIsPatched;
 
 void** FindImportPtr(HMODULE hFindInModule,
                      PCSTR pModuleName,
@@ -1050,47 +1054,131 @@ char* __cdecl SetLocale_Wrapper(int category, const char* locale) {
         // thread errno from the heap means we have no PTD (Per-thread data) and
         // setlocale will fail, likely with a message box and abort. Return NULL
         // instead to let the caller handle it gracefully.
-        Wh_Log(L"Returning NULL for setlocale");
+        // Wh_Log(L"Returning NULL for setlocale");
         return nullptr;
     }
 
     return SetLocale_Original(category, locale);
 }
 
-bool InitGlobals() {
-    if (!GetModuleHandleEx(0, L"libc++.dll", &g_libCpp)) {
-        Wh_Log(L"No libc++.dll");
+bool Init(HMODULE module) {
+    // Make sure the functions are in the import table.
+    void* p;
+    InterlockedExchangePointer(&p, (void*)__cxxabiv1::__cxa_throw);
+    InterlockedExchangePointer(&p, (void*)setlocale);
+
+    void** ppCxaThrow = FindImportPtr(module, "libc++.dll", "__cxa_throw");
+    if (!ppCxaThrow) {
+        wsprintf(errorMsg, L"No __cxa_throw");
         return false;
     }
 
-    g_ppSetlocale = FindImportPtr(g_libCpp, "msvcrt.dll", "setlocale");
+    void** ppSetlocale = FindImportPtr(module, "msvcrt.dll", "setlocale");
+    if (!ppSetlocale) {
+        wsprintf(errorMsg, L"No setlocale");
+        return false;
+    }
+
+    HMODULE libcppModule;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)*ppCxaThrow, &libcppModule)) {
+        wsprintf(errorMsg, L"No libcpp module");
+        return false;
+    }
+
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)*ppSetlocale, &g_msvcrtModule)) {
+        wsprintf(errorMsg, L"No msvcrt module");
+        return false;
+    }
+
+    g_ppSetlocale = FindImportPtr(libcppModule, "msvcrt.dll", "setlocale");
     if (!g_ppSetlocale) {
-        Wh_Log(L"No setlocale");
+        wsprintf(errorMsg, L"No setlocale for libc++.dll");
         return false;
     }
 
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                           (PCWSTR)*g_ppSetlocale, &g_msvcrtModule)) {
-        Wh_Log(L"No setlocale module");
+    HMODULE msvcrtModuleForLibcpp;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)*g_ppSetlocale, &msvcrtModuleForLibcpp)) {
+        wsprintf(errorMsg, L"No msvcrt module for libc++.dll");
         return false;
     }
 
-    if (g_msvcrtModule != GetModuleHandle(L"msvcrt.dll")) {
-        Wh_Log(L"Bad setlocale module, already patched?");
-        Wh_Log(L"%p %p", g_msvcrtModule, GetModuleHandle(L"msvcrt.dll"));
+    if (msvcrtModuleForLibcpp != g_msvcrtModule) {
+        wsprintf(errorMsg, L"Bad msvcrt module, already patched? %p!=%p",
+                 msvcrtModuleForLibcpp, g_msvcrtModule);
         return false;
     }
 
-    g_msvcrtErrno = (_errno_t)GetProcAddress(g_msvcrtModule, "_errno");
+    g_msvcrtErrno = (_errno_t)GetProcAddress(msvcrtModuleForLibcpp, "_errno");
     if (!g_msvcrtErrno) {
-        Wh_Log(L"No _errno");
+        wsprintf(errorMsg, L"No _errno");
         return false;
     }
 
+    DWORD dwOldProtect;
+    if (!VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), PAGE_READWRITE,
+                        &dwOldProtect)) {
+        wsprintf(errorMsg, L"VirtualProtect failed");
+        return false;
+    }
+
+    SetLocale_Original = (SetLocale_t)*g_ppSetlocale;
+    *g_ppSetlocale = (void*)SetLocale_Wrapper;
+    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
+                   &dwOldProtect);
+
+    g_msvcrtSetLocaleIsPatched = true;
     return true;
 }
 
+void LogErrorIfAny() {
+    if (*errorMsg) {
+        Wh_Log(L"%s", errorMsg);
+    }
+}
+
+void Uninit() {
+    if (!g_msvcrtSetLocaleIsPatched) {
+        return;
+    }
+
+    DWORD dwOldProtect;
+    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), PAGE_READWRITE,
+                   &dwOldProtect);
+    *g_ppSetlocale = (void*)SetLocale_Original;
+    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
+                   &dwOldProtect);
+}
+
 }  // namespace ProcessShutdownMessageBoxFix
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
+    switch (fdwReason) {
+        case DLL_PROCESS_ATTACH:
+            ProcessShutdownMessageBoxFix::Init(hinstDLL);
+            break;
+
+        case DLL_THREAD_ATTACH:
+        case DLL_THREAD_DETACH:
+            break;
+
+        case DLL_PROCESS_DETACH:
+            // Do not do cleanup if process termination scenario.
+            if (lpReserved) {
+                break;
+            }
+
+            ProcessShutdownMessageBoxFix::Uninit();
+            break;
+    }
+
+    return TRUE;
+}
 
 void LoadSettings() {
     PCWSTR calculateFolderSizes = Wh_GetStringSetting(L"calculateFolderSizes");
@@ -1111,6 +1199,8 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    ProcessShutdownMessageBoxFix::LogErrorIfAny();
 
     LoadSettings();
 
@@ -1163,30 +1253,6 @@ BOOL Wh_ModInit() {
                               (void**)&LoadStringW_Original);
     }
 
-    {
-        using namespace ProcessShutdownMessageBoxFix;
-
-        if (InitGlobals()) {
-            DWORD dwOldProtect;
-            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale),
-                           PAGE_EXECUTE_READWRITE, &dwOldProtect);
-            SetLocale_Original = (SetLocale_t)*g_ppSetlocale;
-            *g_ppSetlocale = (void*)SetLocale_Wrapper;
-            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
-                           &dwOldProtect);
-
-            g_msvcrtSetLocalePatched = true;
-        } else {
-            if (g_msvcrtModule) {
-                FreeLibrary(g_msvcrtModule);
-            }
-
-            if (g_libCpp) {
-                FreeLibrary(g_libCpp);
-            }
-        }
-    }
-
     return TRUE;
 }
 
@@ -1209,22 +1275,6 @@ void Wh_ModUninit() {
 
     while (g_hookRefCount > 0) {
         Sleep(200);
-    }
-
-    {
-        using namespace ProcessShutdownMessageBoxFix;
-
-        if (g_msvcrtSetLocalePatched) {
-            DWORD dwOldProtect;
-            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale),
-                           PAGE_EXECUTE_READWRITE, &dwOldProtect);
-            *g_ppSetlocale = (void*)SetLocale_Original;
-            VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
-                           &dwOldProtect);
-
-            FreeLibrary(g_msvcrtModule);
-            FreeLibrary(g_libCpp);
-        }
     }
 }
 
