@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-10T18:47:08.000Z</updated>
+    <updated>2024-11-10T21:12:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.1.9]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#adad08eed4819a37229592168641eb2753afa76e</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2024-11-10T21:12:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved compatibility with some resources in some cases in the experimental mode.</li>
+<li>Fixed string redirection in some cases (non-experimental mode).</li>
+<li>Added support for theme.ini files larger than 32 KB (yes, somebody had a file larger than that).</li>
+<li>Added a workaround to the error message that says "Runtime Error - Not Enough space for thread Data". The error could occur when a process is shutting down due to a somewhat specific incompatibility between the Microsoft C++ runtime library and Windhawk's C++ library. It's not really harmful, as the process is shutting down anyway, but it can be annoying.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Shutdown Dialog 1.1.1]]></title>
         <id>https://windhawk.net/mods/custom-shutdown-dialog#0e446407ccb4725b2eb9061b584e45e304a281ad</id>
@@ -250,19 +266,6 @@
         <updated>2024-11-03T00:38:37.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the mod always thinking there's a maximized window in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.0.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#25345e441de9f8b292d8a2d316c06ac6869e3ced</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2024-11-03T00:21:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with the following mods which could lead to a crash: Taskbar tray icon spacing, Taskbar tray system icon tweaks.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

@@ -1,3 +1,10 @@
+## 1.1.9 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/adad08eed4819a37229592168641eb2753afa76e/mods/icon-resource-redirect.wh.cpp))
+
+* Improved compatibility with some resources in some cases in the experimental mode.
+* Fixed string redirection in some cases (non-experimental mode).
+* Added support for theme.ini files larger than 32 KB (yes, somebody had a file larger than that).
+* Added a workaround to the error message that says "Runtime Error - Not Enough space for thread Data". The error could occur when a process is shutting down due to a somewhat specific incompatibility between the Microsoft C++ runtime library and Windhawk's C++ library. It's not really harmful, as the process is shutting down anyway, but it can be annoying.
+
 ## 1.1.8 ([Oct 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5c313117215b4ad4452f3c15a7e1378cd2eb3a00/mods/icon-resource-redirect.wh.cpp))
 
 * "Redirect all loaded resources" mode: Fixed icon loading in case the redirection module has different icon formats.
