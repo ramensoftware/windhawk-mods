@@ -2,7 +2,7 @@
 // @id              custom-shutdown-dialog
 // @name            Custom Shutdown Dialog
 // @description     Override the classic shutdown dialog in Explorer with your own
-// @version         1.1.0
+// @version         1.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -84,17 +84,6 @@ WindhawkUtils::SYMBOL_HOOK shutdownuxDllHooks[] = {
         _ShutdownDialogEx_hook,
         false
     }
-};\
-
-WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
-    {
-        {
-            L"LogoffWindowsDialog"
-        },
-        &LogoffWindowsDialog_orig,
-        LogoffWindowsDialog_hook,
-        false
-    }
 };
 
 void LoadSettings(void)
@@ -133,10 +122,17 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    if (!WindhawkUtils::HookSymbols(
-        hShell32,
-        shell32DllHooks,
-        ARRAYSIZE(shell32DllHooks)
+    FARPROC LogoffWindowsDialog = GetProcAddress(hShell32, (LPCSTR)54);
+    if (!LogoffWindowsDialog)
+    {
+        Wh_Log(L"Failed to get address of LogoffWindowsDialog");
+        return FALSE;
+    }
+
+    if (!Wh_SetFunctionHook(
+        (void *)LogoffWindowsDialog,
+        (void *)LogoffWindowsDialog_hook,
+        (void **)&LogoffWindowsDialog_orig
     ))
     {
         Wh_Log(L"Failed to hook LogoffWindowsDialog");
