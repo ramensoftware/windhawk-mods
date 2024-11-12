@@ -2,11 +2,11 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.3
+// @version         1.5
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
-// @compilerOptions -DWINVER=0x0602 -D_WIN32_WINNT=0x0602 -lcomctl32 -loleaut32 -lole32 -lversion
+// @compilerOptions -DWINVER=0x0A00 -lcomctl32 -loleaut32 -lole32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -138,8 +138,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 */
 // ==/WindhawkModSettings==
 
-// Note: If intellisense is giving you a trouble, add -DWINVER=0x0602 -D_WIN32_WINNT=0x0602 flags to compile_flags.txt (Ctrl+E).
-
+#include <initguid.h>
 #include <commctrl.h>
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
@@ -175,10 +174,11 @@ using bstr_ptr = _bstr_t;
 
 // =====================================================================
 
+// following block is to keep compatibility with pre Windhawk 1.5 versions
+#ifndef __IUIAutomationElement_INTERFACE_DEFINED__
+
 // following include are taken from Qt project since builtin compiler is missing those definitions
 #pragma region uiautomation_includes
-
-#include <initguid.h>
 
 // Pasted below and commented duplicate definitions:
 // https://github.com/qt/qtbase/blob/dev/src/gui/accessible/windows/apisupport/uiatypes_p.h
@@ -666,6 +666,8 @@ typedef class CUIAutomation CUIAutomation;
 
 #pragma endregion
 
+#endif
+
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
@@ -846,7 +848,7 @@ public:
     {
         if (!initialized)
         {
-            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_MULTITHREADED));
+            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
         }
         return initialized;
     }
@@ -1752,12 +1754,26 @@ void OpenTaskManager(HWND taskbarhWnd)
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending OpenTaskManager message");
-    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
-    if (SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0) != 0)
-    {
-        LOG_ERROR(L"Failed to send OpenTaskManager message");
-    }
+    LOG_INFO(L"Opening Taskmgr.exe using ShellExecuteEx");
+
+    WCHAR szWindowsDirectory[MAX_PATH];
+    GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory));
+    std::wstring taskmgrPath = szWindowsDirectory;
+    taskmgrPath += L"\\System32\\Taskmgr.exe";  
+
+    SHELLEXECUTEINFO sei = { sizeof(sei) };  
+    sei.lpVerb = L"open";   // Use "runas" to explicitly request elevation  
+    sei.lpFile = taskmgrPath.c_str();  
+    sei.nShow = SW_SHOW;  
+
+    if (!ShellExecuteEx(&sei))  
+    {  
+        DWORD error = GetLastError();  
+        if (error != ERROR_CANCELLED)   // User declined the elevation.
+        {  
+            LOG_ERROR(L"Failed to start process taskmgr.exe with error code: %d", error);
+        }  
+    } 
 }
 
 void ToggleVolMuted()
@@ -1910,7 +1926,8 @@ void StartProcess(const std::wstring &command)
 
     if (!CreateProcess(NULL, (LPWSTR)command.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
     {
-        LOG_ERROR(L"Failed to start process - CreateProcess failed!");
+        DWORD error = GetLastError();  
+        LOG_ERROR(L"Failed to start process - CreateProcess failed with error code: %d", error);
     }
     else
     {

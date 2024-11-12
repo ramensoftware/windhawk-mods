@@ -2,11 +2,11 @@
 // @id              classic-explorer-treeview
 // @name            Classic Explorer Treeview
 // @description     Modifies Folder Treeview in file explorer so as to make it look more classic.
-// @version         1.1
+// @version         1.1.2
 // @author          Waldemar
 // @github          https://github.com/CyprinusCarpio
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -lgdi32 -loleaut32 -lole32 -lshlwapi
+// @compilerOptions -lcomctl32 -lgdi32 -loleaut32 -lole32 -lshlwapi -lruntimeobject -luxtheme
 // @architecture    x86-64
 // ==/WindhawkMod==
 
@@ -18,9 +18,15 @@
 - DrawLines: true
   $name: Draw Dotted Lines
   $description: Use TVS_HASLINES style. Disable for a more XP-like look.
+- HotTracking: false
+  $name: Item Hot Tracking
+  $description: Use TVS_TRACKSELECT style. Enable for a more XP-like look.
 - LinesAtRoot: false
   $name: Lines At Root
   $description: Use TVS_LINESATROOT style.
+- GradientBackground: false
+  $name: Gradient Background
+  $description: Draw a gradient in the header. Enable for a more accurate XP-like look.
 - DrawButtons: true
   $name: Draw +/- Buttons
   $description: Should the mod draw it's own +/- buttons. Disable only if not using Classic theme.
@@ -60,6 +66,14 @@ For issue reports, contact waldemar3194 on Discord, or file a report at my [gith
 
 
 # Changelog:
+## 1.1.2
+- Added a option to enable item hot tracking
+
+## 1.1.1
+- Added a option to draw a gradient background for the header for XP-like looks
+- Added a context menu for the header like in real InfoBands
+- A theme-accurate button frame is now drawn for the X button
+
 ## 1.1
 - Enabling the folders pane will now hide real InfoBands and vice versa
 - Fixed a hidden bug where clicking the X button many times would hang Explorer
@@ -135,6 +149,7 @@ are enabled.
 */
 // ==/WindhawkModReadme==
 
+#include <windows.h>
 #define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 
@@ -148,11 +163,15 @@ are enabled.
 #include <winrt/base.h>
 #include <shlwapi.h>
 #include <shdeprecated.h>
+#include <uxtheme.h>
+#include <vsstyle.h>
 
 // Mod settings
 bool g_settingDrawDottedLines = true;
 bool g_settingLinesAtRoot = false;
 bool g_settingDrawButtons = true;
+bool g_settingsGradientBackground = false;
+bool g_settingsHotTracking = false;
 WindhawkUtils::StringSetting g_settingLineColorOption;
 WindhawkUtils::StringSetting g_settingFoldersPaneText;
 int g_settingCloseButtonXOffset = 0;
@@ -161,6 +180,8 @@ int g_settingCloseButtonYOffset = 0;
 int g_lineColorOptionInt = 2;
 wchar_t g_defaultFoldersPaneText[32];
 wchar_t g_menuTreeviewText[32];
+wchar_t g_closeText[32];
+wchar_t g_toolBandText[32];
 
 std::vector<unsigned int> g_knownBrowserBandIds;
 
@@ -516,18 +537,28 @@ LRESULT CALLBACK NTCSubclassProc(_In_ HWND hWnd,
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
 
-        HBRUSH brush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
-        HBRUSH original = (HBRUSH)SelectObject(hdc, brush);
-
         // Get the themed band offset and calculate the rectangle for the background, and draw it
         int themeBandOffset = GetThemedBandOffset();
         RECT rect;
         GetClientRect(hWnd, &rect);
         long origBottom = rect.bottom;
-        rect.bottom = rect.top + 22 + themeBandOffset;
+
+        HBRUSH brush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+        HBRUSH original = (HBRUSH)SelectObject(hdc, brush);
         FillRect(hdc, &rect, brush);
         SelectObject(hdc, original);
         DeleteObject(brush);
+
+        if(g_settingsGradientBackground)
+        {
+            HTHEME hThemeRebar = OpenThemeData(NULL, L"REBAR");
+            if(hThemeRebar)
+            {
+                DrawThemeBackground(hThemeRebar, hdc, RP_BACKGROUND, 0, &rect, NULL);
+                CloseThemeData(hThemeRebar);
+            }
+        }
+
         long origTop = rect.top;
 
         // Create and fill the top line of the rebar
@@ -557,6 +588,25 @@ LRESULT CALLBACK NTCSubclassProc(_In_ HWND hWnd,
                 eFlags = g_FEWExtras[i].eFlags;
                 break;
             }
+        }
+
+        // If the mouse is over the button, draw the X button frame
+        if (eFlags & MOUSE_OVER_BUTTON)
+        {
+            RECT buttonFrame;
+            GetClientRect(hWnd, &buttonFrame);
+            SetCloseButtonRect(buttonFrame);
+            // If a theme is enabled, draw the theme correct button frame
+            HTHEME hThemeToolbar = OpenThemeData(hWnd, L"TOOLBAR");
+            if(hThemeToolbar)
+            {
+                DrawThemeBackground(hThemeToolbar, hdc, TP_BUTTON,  eFlags & MOUSE_PRESSED ? TS_PRESSED : TS_HOT, &buttonFrame, NULL);
+                CloseThemeData(hThemeToolbar);
+            }
+            else
+                DrawEdge(hdc, &buttonFrame,
+                         eFlags & MOUSE_PRESSED ? BDR_SUNKENOUTER : BDR_RAISEDINNER,
+                         BF_RECT);
         }
 
         // Create a brush for the close button
@@ -653,20 +703,12 @@ LRESULT CALLBACK NTCSubclassProc(_In_ HWND hWnd,
         SetTextColor(hdc, GetSysColor(COLOR_BTNTEXT));
         SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
 
-        //Draw the etched edge around the NSTC
-        DrawEdge(hdc, &rect, EDGE_ETCHED, BF_RECT);
-
-        // If the mouse is over the button, draw a raised inner border over the close button
-        if (eFlags & MOUSE_OVER_BUTTON)
+        if(!g_settingsGradientBackground)
         {
-            RECT buttonFrame;
-            GetClientRect(hWnd, &buttonFrame);
-            SetCloseButtonRect(buttonFrame);
-            DrawEdge(
-                hdc, &buttonFrame,
-                eFlags & MOUSE_PRESSED ? BDR_SUNKENOUTER : BDR_RAISEDINNER,
-                BF_RECT);
+            //Draw the etched edge around the NSTC
+            DrawEdge(hdc, &rect, EDGE_ETCHED, BF_RECT);
         }
+
         SelectObject(hdc, original);
 
         // Get the font and draw the folder pane text
@@ -680,6 +722,7 @@ LRESULT CALLBACK NTCSubclassProc(_In_ HWND hWnd,
 
         PCWSTR foldersPaneText = g_settingFoldersPaneText.get();
         unsigned int foldersPaneTextLength;
+        SetBkMode(hdc, TRANSPARENT);
         if (lstrcmpW(foldersPaneText, L"default") == 0)
         {
             foldersPaneTextLength = wcslen(g_defaultFoldersPaneText);
@@ -820,18 +863,50 @@ LRESULT CALLBACK NTCSubclassProc(_In_ HWND hWnd,
         // Check if the mouse click is within the button rectangle
         if (xPos >= rect.left && xPos <= rect.right && yPos >= rect.top && yPos <= rect.bottom)
         {
-            size_t i = 0;
-            for (; i < s; i++)
+            for (size_t i = 0; i < s; i++)
             {
                 if (hWnd == g_FEWExtras[i].hNSTC)
                 {
                     // Remove the flag so that the button edge won't be drawn after the treeview is enabled again
                     g_FEWExtras[i].eFlags &= ~MOUSE_OVER_BUTTON;
+                    g_FEWExtras[i].SetTreeviewVisible(false);
                     break;
                 }
             }
-            //SetFoldersPaneVisible(GetParent(GetParent(GetParent(GetParent(hWnd)))), false);
-            g_FEWExtras[i].SetTreeviewVisible(false);
+        }
+    }
+    break;
+    case WM_RBUTTONUP:
+    {
+        // Open info band context menu
+        POINT p;
+	    p.x = GET_X_LPARAM(lParam);
+	    p.y = GET_Y_LPARAM(lParam);
+	    ClientToScreen(hWnd, &p);
+
+        static std::wstring menuItem = L"";
+        if(menuItem == L"")
+        {
+            menuItem += g_closeText;
+            menuItem += L" ";
+            menuItem += g_toolBandText;
+        }
+
+        HMENU hMenu = CreatePopupMenu();
+        AppendMenuW(hMenu, MF_STRING, 1, menuItem.c_str());
+        int sel = TrackPopupMenu(hMenu, TPM_RETURNCMD, p.x, p.y, 0, hWnd, NULL);
+	    DestroyMenu(hMenu);
+
+        if(sel == 1) // Close the treeview
+        {
+            for (size_t i = 0; i < g_FEWExtras.size(); i++)
+            {
+                if (hWnd == g_FEWExtras[i].hNSTC)
+                {
+                    g_FEWExtras[i].SetTreeviewVisible(false);
+                    break;
+                }
+            }
         }
     }
     break;
@@ -993,6 +1068,8 @@ HWND __cdecl NSCCreateTreeviewHook(void* pThis, HWND hWnd)
                 dwStyle |= TVS_LINESATROOT;
             if(g_settingDrawDottedLines)
                 dwStyle |= TVS_HASLINES;
+            if(g_settingsHotTracking)
+                dwStyle |= TVS_TRACKSELECT;
 
             SetWindowLongPtrW(treeview, GWL_STYLE, dwStyle);
 
@@ -1107,7 +1184,7 @@ BOOL Wh_ModInit()
     }
 
     // Define the symbol hooks for required member functions
-    WindhawkUtils::SYMBOL_HOOK hooks[] =
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] =
     {
         {   {
                 L"private: struct HWND__ * __cdecl CNscTree::_CreateTreeview(struct HWND__ *)"
@@ -1153,7 +1230,7 @@ BOOL Wh_ModInit()
         }
     };
     // Hook the symbols in explorerframe.dll, return FALSE if any of the symbols cannot be hooked
-    if (!WindhawkUtils::HookSymbols(hExplorerFrame, hooks, 6))
+    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, 6))
     {
         Wh_Log(L"Failed to hook one or more member functions in ExplorerFrame.dll");
         return FALSE;
@@ -1163,6 +1240,8 @@ BOOL Wh_ModInit()
     g_settingDrawDottedLines = Wh_GetIntSetting(L"DrawLines");
     g_settingLinesAtRoot = Wh_GetIntSetting(L"LinesAtRoot");
     g_settingDrawButtons = Wh_GetIntSetting(L"DrawButtons");
+    g_settingsGradientBackground = Wh_GetIntSetting(L"GradientBackground");
+    g_settingsHotTracking = Wh_GetIntSetting(L"HotTracking");
     g_settingLineColorOption =
         WindhawkUtils::StringSetting::make(L"AlternateLineColor");
     g_settingFoldersPaneText =
@@ -1181,42 +1260,36 @@ BOOL Wh_ModInit()
         g_lineColorOptionInt = 2;
     }
 
-    // Set the folders pane text based on the string setting
-    if (wcscmp(g_settingFoldersPaneText.get(), L"default") == 0)
+    //Load the applicable localized texts from ieframe
+    HMODULE hIeFrame = LoadLibraryW(L"ieframe.dll");
+    if(hIeFrame)
     {
-        Wh_Log(L"Loading default localized folders pane text.");
-        HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
-        if (!shell32)
+        if (wcscmp(g_settingFoldersPaneText.get(), L"default") == 0)
         {
-            // Load the default, non localized text
-            Wh_Log(L"Unable to load localized text resource: shell32 9045");
-            std::wstring def = L"Folders";
-            def.copy(g_defaultFoldersPaneText, 32);
-        }
-        else
-        {
-            // Load the default localized folders pane text from shell32 resources
-            // On failure, load the default, non localized text
-            if (LoadStringW(shell32, 9045, g_defaultFoldersPaneText, 32) == 0)
+            if (LoadStringW(hIeFrame, 12919, g_defaultFoldersPaneText, 32) == 0)
             {
-                Wh_Log(
-                    L"Unable to load localized text resource: shell32 "
-                    L"9045");
+                Wh_Log(L"Unable to load localized text resource: ieframe 12919");
                 std::wstring def = L"Folders";
                 def.copy(g_defaultFoldersPaneText, 32);
             }
         }
-    }
-
-    //Load the localized Treeview text
-    HMODULE hIeFrame = LoadLibraryW(L"ieframe.dll");
-    if(hIeFrame)
-    {
         if (LoadStringW(hIeFrame, 3010, g_menuTreeviewText, 32) == 0)
         {
             Wh_Log(L"Unable to load localized text resource: ieframe 3010");
             std::wstring def = L"Treeview";
             def.copy(g_menuTreeviewText, 32);
+        }
+        if (LoadStringW(hIeFrame, 41298, g_toolBandText, 32) == 0)
+        {
+            Wh_Log(L"Unable to load localized text resource: ieframe 41298");
+            std::wstring def = L"toolbar";
+            def.copy(g_toolBandText, 32);
+        }
+        if (LoadStringW(hIeFrame, 53810, g_closeText, 32) == 0)
+        {
+            Wh_Log(L"Unable to load localized text resource: ieframe 53810");
+            std::wstring def = L"Close";
+            def.copy(g_closeText, 32);
         }
         FreeLibrary(hIeFrame);
     }
@@ -1247,6 +1320,8 @@ void Wh_ModSettingsChanged()
     g_settingDrawDottedLines = Wh_GetIntSetting(L"DrawLines");
     g_settingLinesAtRoot = Wh_GetIntSetting(L"LinesAtRoot");
     g_settingDrawButtons = Wh_GetIntSetting(L"DrawButtons");
+    g_settingsGradientBackground = Wh_GetIntSetting(L"GradientBackground");
+    g_settingsHotTracking = Wh_GetIntSetting(L"HotTracking");
     g_settingLineColorOption =
         WindhawkUtils::StringSetting::make(L"AlternateLineColor");
     g_settingFoldersPaneText =

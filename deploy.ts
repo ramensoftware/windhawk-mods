@@ -126,8 +126,13 @@ async function generateModCatalog() {
     return await enrichCatalog(catalog);
 }
 
-function getChangelogTextFromCommitMessage(message: string) {
-    let messageTrimmed = message.trim();
+function getModChangelogTextForVersion(modId: string, modVersion: string, commitMessage: string) {
+    const overridePath = path.join('changelog_override', modId, `${modVersion}.md`);
+    if (fs.existsSync(overridePath)) {
+        return fs.readFileSync(overridePath, 'utf8');
+    }
+
+    let messageTrimmed = commitMessage.trim();
     if (messageTrimmed.includes('\n')) {
         // Remove first line.
         return messageTrimmed.replace(/^.* \(#\d+\)\n\n/, '').trim();
@@ -158,6 +163,10 @@ function generateModChangelog(modId: string) {
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
+        if (!metadata.version) {
+            throw new Error(`Mod ${modId} has no version in commit ${commit}`);
+        }
+
         const commitTime = parseInt(gitExec([
             'log',
             '--format=%ct',
@@ -173,13 +182,13 @@ function generateModChangelog(modId: string) {
         changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
 
         if (commit !== lastCommit) {
-            const message = gitExec([
+            const commitMessage = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
             ]);
-            const changelogItem = getChangelogTextFromCommitMessage(message);
+            const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
             changelog += `${changelogItem}\n\n`;
         } else {
             changelog += 'Initial release.\n';
@@ -208,6 +217,10 @@ function generateRssFeed() {
         content: string;
         url: string;
         date: Date;
+        author: {
+            name?: string;
+            link?: string;
+        };
     };
 
     let feedItems: FeedItem[] = [];
@@ -249,6 +262,10 @@ function generateRssFeed() {
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
+        if (!metadata.version) {
+            throw new Error(`Mod ${modId} has no version in commit ${commit}`);
+        }
+
         const commitTime = parseInt(gitExec([
             'log',
             '--format=%ct',
@@ -258,13 +275,13 @@ function generateRssFeed() {
 
         let content = '';
         if (changeType === 'M') {
-            const message = gitExec([
+            const commitMessage = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
             ]);
-            content = getChangelogTextFromCommitMessage(message);
+            content = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }
@@ -275,6 +292,10 @@ function generateRssFeed() {
             content,
             url: `https://windhawk.net/mods/${modId}`,
             date: new Date(commitTime * 1000),
+            author: {
+                name: metadata.author,
+                link: metadata.github,
+            },
         });
 
         if (feedItems.length >= 20) {
@@ -309,6 +330,7 @@ function generateRssFeed() {
             link: feedItem.url,
             content: markdownToHtml(feedItem.content),
             date: feedItem.date,
+            author: [feedItem.author],
         });
     }
 

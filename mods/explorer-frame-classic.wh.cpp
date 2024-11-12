@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.4
+// @version         1.0.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -25,7 +25,7 @@
 # Classic Explorer navigation bar
 
 Restores the classic Explorer navigation bar to the version before the Windows
-11 "Moments 4" update. Among other things, that makes drag and drop work again.
+11 "Moments 4" update.
 
 **Note**: You may need to restart Explorer to apply the changes.
 
@@ -490,6 +490,65 @@ bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
     return moduleQfe >= qfe;
 }
 
+std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
+    enum FEATURE_ENABLED_STATE {
+        FEATURE_ENABLED_STATE_DEFAULT = 0,
+        FEATURE_ENABLED_STATE_DISABLED = 1,
+        FEATURE_ENABLED_STATE_ENABLED = 2,
+    };
+
+#pragma pack(push, 1)
+    struct RTL_FEATURE_CONFIGURATION {
+        unsigned int featureId;
+        unsigned __int32 group : 4;
+        FEATURE_ENABLED_STATE enabledState : 2;
+        unsigned __int32 enabledStateOptions : 1;
+        unsigned __int32 unused1 : 1;
+        unsigned __int32 variant : 6;
+        unsigned __int32 variantPayloadKind : 2;
+        unsigned __int32 unused2 : 16;
+        unsigned int payload;
+    };
+#pragma pack(pop)
+
+    using RtlQueryFeatureConfiguration_t =
+        int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
+    static RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration = []() {
+        HMODULE hNtDll = LoadLibraryW(L"ntdll.dll");
+        return hNtDll ? (RtlQueryFeatureConfiguration_t)GetProcAddress(
+                            hNtDll, "RtlQueryFeatureConfiguration")
+                      : nullptr;
+    }();
+
+    if (!pRtlQueryFeatureConfiguration) {
+        Wh_Log(L"RtlQueryFeatureConfiguration not found");
+        return std::nullopt;
+    }
+
+    RTL_FEATURE_CONFIGURATION feature = {0};
+    INT64 changeStamp = 0;
+    HRESULT hr =
+        pRtlQueryFeatureConfiguration(featureId, 1, &changeStamp, &feature);
+    if (SUCCEEDED(hr)) {
+        Wh_Log(L"RtlQueryFeatureConfiguration result for %u: %d", featureId,
+               feature.enabledState);
+
+        switch (feature.enabledState) {
+            case FEATURE_ENABLED_STATE_DISABLED:
+                return false;
+            case FEATURE_ENABLED_STATE_ENABLED:
+                return true;
+            case FEATURE_ENABLED_STATE_DEFAULT:
+                return std::nullopt;
+        }
+    } else {
+        Wh_Log(L"RtlQueryFeatureConfiguration error for %u: %08X", featureId,
+               hr);
+    }
+
+    return std::nullopt;
+}
+
 bool HandleNavigationBarControl(IUnknown* navigationBarControl) {
     winrt::com_ptr<WASDK::IUIElement> uiElement;
     (*(IUnknown**)((BYTE*)navigationBarControl + 0x08))
@@ -535,6 +594,29 @@ bool HandleNavigationBarControl(IUnknown* navigationBarControl) {
 
     rowDefinition->put_MaxHeight(0);
     return true;
+}
+
+using XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_t =
+    HRESULT(WINAPI*)(PVOID pThis, SIZE* size);
+XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_t
+    XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Original;
+HRESULT WINAPI
+XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Hook(PVOID pThis,
+                                                           SIZE* size) {
+    Wh_Log(L">");
+
+    HRESULT ret =
+        XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Original(pThis,
+                                                                       size);
+
+    if (SUCCEEDED(ret) &&
+        g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
+        int originalCy = size->cy;
+        size->cy = MulDiv(size->cy, 90, 136);
+        Wh_Log(L"%d -> %d", originalCy, size->cy);
+    }
+
+    return ret;
 }
 
 using Feature_NavigationBarControl_OnApplyTemplate_t =
@@ -607,8 +689,6 @@ HRESULT WINAPI CoCreateInstance_Hook(REFCLSID rclsid,
                                      DWORD dwClsContext,
                                      REFIID riid,
                                      LPVOID* ppv) {
-    Wh_Log(L">");
-
     constexpr winrt::guid CLSID_XamlIslandViewAdapter{
         0x6480100B,
         0x5A83,
@@ -617,6 +697,8 @@ HRESULT WINAPI CoCreateInstance_Hook(REFCLSID rclsid,
 
     if (IsEqualCLSID(rclsid, CLSID_XamlIslandViewAdapter) &&
         g_settings.explorerStyle == ExplorerStyle::classicRibbonUI) {
+        Wh_Log(L">");
+
         return REGDB_E_CLASSNOTREG;
     }
 
@@ -628,7 +710,7 @@ bool HookExplorerFrameSymbols() {
     HMODULE module = LoadLibrary(L"explorerframe.dll");
     if (!module) {
         Wh_Log(L"Couldn't load explorerframe.dll");
-        return FALSE;
+        return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
@@ -648,6 +730,43 @@ bool HookExplorerFrameSymbols() {
 
     return HookSymbols(module, explorerFrameDllHooks,
                        ARRAYSIZE(explorerFrameDllHooks));
+}
+
+bool HookWindowsUIFileExplorerSymbols() {
+    if (IsVersionAtLeast(10, 0, 26100, 0)) {
+        if (!IsVersionAtLeast(10, 0, 26100, 1591)) {
+            return true;
+        }
+    } else if (IsVersionAtLeast(10, 0, 22621, 0)) {
+        if (!IsVersionAtLeast(10, 0, 22621, 4111)) {
+            return true;
+        }
+    } else {
+        return true;
+    }
+
+    constexpr UINT kFileExplorerTabLineFix = 51960011;
+    if (!IsOsFeatureEnabled(kFileExplorerTabLineFix).value_or(true)) {
+        return true;
+    }
+
+    HMODULE module = LoadLibrary(L"Windows.UI.FileExplorer.dll");
+    if (!module) {
+        Wh_Log(L"Couldn't load Windows.UI.FileExplorer.dll");
+        return false;
+    }
+
+    // Windows.UI.FileExplorer.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(public: virtual long __cdecl XamlIslandViewAdapter::get_DesiredSizeInPhysicalPixels(struct tagSIZE *))"},
+            (void**)&XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Original,
+            (void*)XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Hook,
+            true,
+        },
+    };
+
+    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 bool HookFileExplorerExtensionsSymbols() {
@@ -699,6 +818,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!HookExplorerFrameSymbols()) {
+        return FALSE;
+    }
+
+    if (!HookWindowsUIFileExplorerSymbols()) {
         return FALSE;
     }
 

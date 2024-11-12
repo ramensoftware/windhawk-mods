@@ -2,7 +2,7 @@
 // @id              classic-menus
 // @name            Classic Menus
 // @description     Makes menus classic themed while keeping other controls themed
-// @version         1.0.0
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -14,8 +14,6 @@
 # Classic Menus
 In Windows XP, menus remained unthemed even with themes enabled. This mod replicates
 that functionality.
-
-**This mod will only work on Windhawk v1.4 and greater.**
 
 **Before**:
 
@@ -30,26 +28,28 @@ that functionality.
 #include <uxtheme.h>
 #include <windhawk_utils.h>
 
-typedef HTHEME (__fastcall *OpenThemeDataExInternal_t)(HWND, LPCWSTR, int, INT_PTR, int);
-OpenThemeDataExInternal_t OpenThemeDataExInternal_orig;
-HTHEME __fastcall OpenThemeDataExInternal_hook(
-    HWND    hWnd,
-    LPCWSTR pszClassList,
-    int     i1,
-    INT_PTR i2,
-    int     i3
-)
+int (__fastcall *CThemeMenu_Attach_orig)(HWND, HMENU, int, bool, void **);
+int __fastcall CThemeMenu_Attach_hook(HWND, HMENU, int, bool, void **)
 {
-    if (!wcsicmp(pszClassList, L"MENU"))
-    {
-        SetLastError(E_POINTER);
-        return 0;
-    }
-
-    return OpenThemeDataExInternal_orig(
-        hWnd, pszClassList, i1, i2, i3
-    );
+    return 0;
 }
+
+WindhawkUtils::SYMBOL_HOOK uxThemeDllHooks[] = {
+    {
+        {
+            L"protected: static int "
+#ifdef _WIN64
+            L"__cdecl"
+#else
+            L"__stdcall"
+#endif
+            L" CThemeMenu::Attach(struct HWND__ *,struct HMENU__ *,int,bool,class CThemeMenu * *)"
+        },
+        &CThemeMenu_Attach_orig,
+        CThemeMenu_Attach_hook,
+        false
+    }
+};
 
 BOOL Wh_ModInit(void)
 {
@@ -60,26 +60,13 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hook = {
-        {
-            #ifdef _WIN64
-            L"OpenThemeDataExInternal"
-            #else
-            L"_OpenThemeDataExInternal@20"
-            #endif
-        },
-        &OpenThemeDataExInternal_orig,
-        OpenThemeDataExInternal_hook,
-        false
-    };
-
     if (!WindhawkUtils::HookSymbols(
         hUxTheme,
-        &hook,
-        1
+        uxThemeDllHooks,
+        ARRAYSIZE(uxThemeDllHooks)
     ))
     {
-        Wh_Log(L"Failed to hook OpenThemeDataExInternal");
+        Wh_Log(L"Failed to hook one or more symbol functions in uxtheme.dll");
         return FALSE;
     }
 

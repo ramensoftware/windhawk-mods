@@ -2,7 +2,7 @@
 // @id              taskbar-button-click
 // @name            Middle click to close on the taskbar
 // @description     Close programs with a middle click on the taskbar instead of creating a new instance
-// @version         1.0.6
+// @version         1.0.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -27,11 +27,16 @@
 Close programs with the middle click on the taskbar instead of creating a new
 instance.
 
+Holding Ctrl while middle clicking will end the running task. The key
+combination can be configured or disabled in the mod settings.
+
 Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 **Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.
+
+![Demonstration](https://i.imgur.com/qeO9tLG.gif)
 */
 // ==/WindhawkModReadme==
 
@@ -46,6 +51,15 @@ or a similar tool), enable the relevant option in the mod's settings.
   - closeAll: Close all windows
   - closeForeground: Close foreground window
   - none: Do nothing
+- keysToEndTask:
+  - Ctrl: true
+  - Alt: false
+  $name: Keys to end task
+  $description: >-
+    A combination of keys that can be pressed while middle clicking to
+    forcefully end the running task
+
+    Note: This option won't have effect on a group of taskbar items
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
@@ -55,9 +69,11 @@ or a similar tool), enable the relevant option in the mod's settings.
 */
 // ==/WindhawkModSettings==
 
+#include <psapi.h>
 #include <wininet.h>
 
 #include <algorithm>
+#include <atomic>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -70,6 +86,8 @@ enum {
 
 struct {
     int multipleItemsBehavior;
+    bool keysToEndTaskCtrl;
+    bool keysToEndTaskAlt;
     bool oldTaskbarOnWin11;
 } g_settings;
 
@@ -77,9 +95,13 @@ enum class WinVersion {
     Unsupported,
     Win10,
     Win11,
+    Win11_24H2,
 };
 
 WinVersion g_winVersion;
+
+std::atomic<bool> g_initialized;
+std::atomic<bool> g_explorerPatcherInitialized;
 
 using CTaskListWnd_HandleClick_t = long(WINAPI*)(
     LPVOID pThis,
@@ -117,6 +139,11 @@ using CTaskListWnd_ProcessJumpViewCloseWindow_t =
                   HMONITOR);
 CTaskListWnd_ProcessJumpViewCloseWindow_t
     CTaskListWnd_ProcessJumpViewCloseWindow_Original;
+
+using CTaskBand__EndTask_t = void(WINAPI*)(LPVOID pThis,
+                                           HWND hWnd,
+                                           BOOL bForce);
+CTaskBand__EndTask_t CTaskBand__EndTask_Original;
 
 using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(LPVOID pThis);
 CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType_Original;
@@ -190,7 +217,7 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
                                   int param3) {
     Wh_Log(L">");
 
-    auto original = [&]() {
+    auto original = [=]() {
         return CTaskBand_Launch_Original(pThis, taskGroup, param2, param3);
     };
 
@@ -257,20 +284,48 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
     if (taskItemIndex >= 0) {
         void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
             g_pCTaskListWndTaskBtnGroup, taskItemIndex);
-        if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
+
+        bool isImmersive = false;
+        if (CImmersiveTaskItem_vftable) {
+            isImmersive = *(void**)taskItem == CImmersiveTaskItem_vftable;
+        } else {
+            // ExplorerPatcher doesn't export vtables.
+            using IsImmersive_t = bool(WINAPI*)(PVOID pThis);
+            IsImmersive_t pIsImmersive =
+                (IsImmersive_t)(*(void***)taskItem)[57];
+            isImmersive = pIsImmersive(taskItem);
+        }
+
+        if (isImmersive) {
             hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
         } else {
             hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
         }
     }
 
-    Wh_Log(L"Closing HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+    bool ctrlDown = GetKeyState(VK_CONTROL) < 0;
+    bool altDown = GetKeyState(VK_MENU) < 0;
+    bool endTask = (ctrlDown || altDown) &&
+                   g_settings.keysToEndTaskCtrl == ctrlDown &&
+                   g_settings.keysToEndTaskAlt == altDown;
 
-    POINT pt;
-    GetCursorPos(&pt);
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    CTaskListWnd_ProcessJumpViewCloseWindow_Original(
-        g_pCTaskListWndHandlingClick, hWnd, realTaskGroup, monitor);
+    if (endTask) {
+        if (hWnd) {
+            Wh_Log(L"Ending task for HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+            CTaskBand__EndTask_Original(pThis, hWnd, TRUE);
+        } else {
+            Wh_Log(L"No HWND to end task");
+        }
+    } else {
+        Wh_Log(L"Closing HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+
+        POINT pt;
+        GetCursorPos(&pt);
+        HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        CTaskListWnd_ProcessJumpViewCloseWindow_Original(
+            g_pCTaskListWndHandlingClick, hWnd, realTaskGroup, monitor);
+    }
+
     return 0;
 }
 
@@ -294,16 +349,18 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
         }
     }
 
-    if (puPtrLen)
+    if (puPtrLen) {
         *puPtrLen = uPtrLen;
+    }
 
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-WinVersion GetWindowsVersion() {
+WinVersion GetExplorerVersion() {
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
-    if (!fixedFileInfo)
+    if (!fixedFileInfo) {
         return WinVersion::Unsupported;
+    }
 
     WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
     WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
@@ -314,10 +371,13 @@ WinVersion GetWindowsVersion() {
 
     switch (major) {
         case 10:
-            if (build < 22000)
+            if (build < 22000) {
                 return WinVersion::Win10;
-            else
+            } else if (build < 26100) {
                 return WinVersion::Win11;
+            } else {
+                return WinVersion::Win11_24H2;
+            }
             break;
     }
 
@@ -333,7 +393,8 @@ struct SYMBOL_HOOK {
 
 bool HookSymbols(HMODULE module,
                  const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
+                 size_t symbolHooksCount,
+                 bool cacheOnly = false) {
     const WCHAR cacheVer = L'1';
     const WCHAR cacheSep = L'@';
     constexpr size_t cacheMaxSize = 10240;
@@ -475,7 +536,14 @@ bool HookSymbols(HMODULE module,
 
             if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
                 Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+
                 symbolResolved[i] = true;
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    newSystemCacheStr += cacheSep;
+                    newSystemCacheStr += hookSymbol;
+                    newSystemCacheStr += cacheSep;
+                }
             }
         }
 
@@ -486,6 +554,10 @@ bool HookSymbols(HMODULE module,
     }
 
     Wh_Log(L"Couldn't resolve all symbols from cache");
+
+    if (cacheOnly) {
+        return false;
+    }
 
     WH_FIND_SYMBOL findSymbol;
     HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
@@ -604,11 +676,12 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
                                         size_t symbolHooksCount) {
     constexpr WCHAR kModIdForCache[] = L"taskbar-button-click";
 
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
+    if (HookSymbols(module, symbolHooks, symbolHooksCount,
+                    /*cacheOnly=*/true)) {
         return true;
     }
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
 
     WCHAR moduleFilePath[MAX_PATH];
     DWORD moduleFilePathLen =
@@ -663,46 +736,135 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
 
     auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
+    if (onlineCache) {
+        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    } else {
         Wh_Log(L"Failed to get online cache");
-        return false;
     }
-
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
 
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
 
-void LoadSettings() {
-    PCWSTR multipleItemsBehavior =
-        Wh_GetStringSetting(L"multipleItemsBehavior");
-    g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_CLOSE_ALL;
-    if (wcscmp(multipleItemsBehavior, L"closeForeground") == 0) {
-        g_settings.multipleItemsBehavior =
-            MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND;
-    } else if (wcscmp(multipleItemsBehavior, L"none") == 0) {
-        g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_NONE;
+bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
+    if (g_explorerPatcherInitialized.exchange(true)) {
+        return true;
     }
-    Wh_FreeStringSetting(multipleItemsBehavior);
 
-    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+    struct EXPLORER_PATCHER_HOOK {
+        PCSTR symbol;
+        void** pOriginalFunction;
+        void* hookFunction = nullptr;
+        bool optional = false;
+    };
+
+    EXPLORER_PATCHER_HOOK hooks[] = {
+        // // Win11 only:
+        // {R"()",
+        //  (void**)&CTaskListWnd_HandleClick_Original,
+        //  (void*)CTaskListWnd_HandleClick_Hook},
+        // Win10 and Win11:
+        {R"(?_HandleClick@CTaskListWnd@@IEAAXPEAUITaskBtnGroup@@HW4eCLICKACTION@1@HH@Z)",
+         (void**)&CTaskListWnd__HandleClick_Original,
+         (void*)CTaskListWnd__HandleClick_Hook},
+        {R"(?Launch@CTaskBand@@UEAAJPEAUITaskGroup@@AEBUtagPOINT@@W4LaunchFromTaskbarOptions@@@Z)",
+         (void**)&CTaskBand_Launch_Original, (void*)CTaskBand_Launch_Hook},
+        {R"(?GetActiveBtn@CTaskListWnd@@UEAAJPEAPEAUITaskGroup@@PEAH@Z)",
+         (void**)&CTaskListWnd_GetActiveBtn_Original},
+        {R"(?ProcessJumpViewCloseWindow@CTaskListWnd@@UEAAXPEAUHWND__@@PEAUITaskGroup@@PEAUHMONITOR__@@@Z)",
+         (void**)&CTaskListWnd_ProcessJumpViewCloseWindow_Original},
+        {R"(?_EndTask@CTaskBand@@IEAAXQEAUHWND__@@H@Z)",
+         (void**)&CTaskBand__EndTask_Original},
+        {R"(?GetGroupType@CTaskBtnGroup@@UEAA?AW4eTBGROUPTYPE@@XZ)",
+         (void**)&CTaskBtnGroup_GetGroupType_Original},
+        {R"(?GetGroup@CTaskBtnGroup@@UEAAPEAUITaskGroup@@XZ)",
+         (void**)&CTaskBtnGroup_GetGroup_Original},
+        {R"(?GetTaskItem@CTaskBtnGroup@@UEAAPEAUITaskItem@@H@Z)",
+         (void**)&CTaskBtnGroup_GetTaskItem_Original},
+        {R"(?GetWindow@CWindowTaskItem@@UEAAPEAUHWND__@@XZ)",
+         (void**)&CWindowTaskItem_GetWindow_Original},
+        {R"(?GetWindow@CImmersiveTaskItem@@UEAAPEAUHWND__@@XZ)",
+         (void**)&CImmersiveTaskItem_GetWindow_Original},
+        // {R"()", (void**)&CImmersiveTaskItem_vftable},
+    };
+
+    bool succeeded = true;
+
+    for (const auto& hook : hooks) {
+        void* ptr = (void*)GetProcAddress(explorerPatcherModule, hook.symbol);
+        if (!ptr) {
+            Wh_Log(L"ExplorerPatcher symbol%s doesn't exist: %S",
+                   hook.optional ? L" (optional)" : L"", hook.symbol);
+            if (!hook.optional) {
+                succeeded = false;
+            }
+            continue;
+        }
+
+        if (hook.hookFunction) {
+            Wh_SetFunctionHook(ptr, hook.hookFunction, hook.pOriginalFunction);
+        } else {
+            *hook.pOriginalFunction = ptr;
+        }
+    }
+
+    if (g_initialized) {
+        Wh_ApplyHookOperations();
+    }
+
+    return succeeded;
 }
 
-BOOL Wh_ModInit() {
-    Wh_Log(L">");
-
-    LoadSettings();
-
-    g_winVersion = GetWindowsVersion();
-    if (g_winVersion == WinVersion::Unsupported) {
-        Wh_Log(L"Unsupported Windows version");
-        return FALSE;
+bool HandleModuleIfExplorerPatcher(HMODULE module) {
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            return false;
     }
 
-    if (g_winVersion >= WinVersion::Win11 && g_settings.oldTaskbarOnWin11) {
-        g_winVersion = WinVersion::Win10;
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        return false;
     }
 
+    moduleFileName++;
+
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) !=
+        0) {
+        return true;
+    }
+
+    Wh_Log(L"ExplorerPatcher taskbar loaded: %s", moduleFileName);
+    return HookExplorerPatcherSymbols(module);
+}
+
+void HandleLoadedExplorerPatcher() {
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
+                           &cbNeeded)) {
+        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
+            HandleModuleIfExplorerPatcher(hMods[i]);
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
+        HandleModuleIfExplorerPatcher(module);
+    }
+
+    return module;
+}
+
+bool HookTaskbarSymbols() {
+    // Taskbar.dll, explorer.exe
     SYMBOL_HOOK symbolHooks[] = {
         // Win11 only:
         {{
@@ -734,6 +896,16 @@ BOOL Wh_ModInit() {
              LR"(public: virtual void __cdecl CTaskListWnd::ProcessJumpViewCloseWindow(struct HWND__ * __ptr64,struct ITaskGroup * __ptr64,struct HMONITOR__ * __ptr64) __ptr64)",
          },
          (void**)&CTaskListWnd_ProcessJumpViewCloseWindow_Original},
+        {{
+             // Win11:
+             LR"(protected: void __cdecl CTaskBand::_EndTask(struct HWND__ * const,int))",
+             LR"(protected: void __cdecl CTaskBand::_EndTask(struct HWND__ * __ptr64 const,int) __ptr64)",
+
+             // Win10:
+             LR"(protected: void __thiscall CTaskBand::_EndTask(struct HWND__ * const,int))",
+             LR"(protected: void __thiscall CTaskBand::_EndTask(struct HWND__ * __ptr64 const,int) __ptr64)",
+         },
+         (void**)&CTaskBand__EndTask_Original},
         {{
              LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))",
              LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void) __ptr64)",
@@ -768,25 +940,85 @@ BOOL Wh_ModInit() {
     if (g_winVersion <= WinVersion::Win10) {
         SYMBOL_HOOK* symbolHooksWin10 = symbolHooks + 1;
         size_t symbolHooksWin10Count = ARRAYSIZE(symbolHooks) - 1;
-        if (!HookSymbolsWithOnlineCacheFallback(GetModuleHandle(nullptr),
-                                                symbolHooksWin10,
-                                                symbolHooksWin10Count)) {
-            return FALSE;
-        }
+        return HookSymbolsWithOnlineCacheFallback(
+            GetModuleHandle(nullptr), symbolHooksWin10, symbolHooksWin10Count);
     } else {
         HMODULE taskbarModule = LoadLibrary(L"taskbar.dll");
         if (!taskbarModule) {
             Wh_Log(L"Couldn't load taskbar.dll");
+            return false;
+        }
+
+        return HookSymbolsWithOnlineCacheFallback(taskbarModule, symbolHooks,
+                                                  ARRAYSIZE(symbolHooks));
+    }
+}
+
+void LoadSettings() {
+    PCWSTR multipleItemsBehavior =
+        Wh_GetStringSetting(L"multipleItemsBehavior");
+    g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_CLOSE_ALL;
+    if (wcscmp(multipleItemsBehavior, L"closeForeground") == 0) {
+        g_settings.multipleItemsBehavior =
+            MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND;
+    } else if (wcscmp(multipleItemsBehavior, L"none") == 0) {
+        g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_NONE;
+    }
+    Wh_FreeStringSetting(multipleItemsBehavior);
+
+    g_settings.keysToEndTaskCtrl = Wh_GetIntSetting(L"keysToEndTask.Ctrl");
+    g_settings.keysToEndTaskAlt = Wh_GetIntSetting(L"keysToEndTask.Alt");
+
+    g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    LoadSettings();
+
+    g_winVersion = GetExplorerVersion();
+    if (g_winVersion == WinVersion::Unsupported) {
+        Wh_Log(L"Unsupported Windows version");
+        return FALSE;
+    }
+
+    if (g_settings.oldTaskbarOnWin11) {
+        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
+
+        if (g_winVersion >= WinVersion::Win11) {
+            g_winVersion = WinVersion::Win10;
+        }
+
+        if (hasWin10Taskbar && !HookTaskbarSymbols()) {
             return FALSE;
         }
 
-        if (!HookSymbolsWithOnlineCacheFallback(taskbarModule, symbolHooks,
-                                                ARRAYSIZE(symbolHooks))) {
+        HandleLoadedExplorerPatcher();
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        FARPROC pKernelBaseLoadLibraryExW =
+            GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+        Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
+                           (void*)LoadLibraryExW_Hook,
+                           (void**)&LoadLibraryExW_Original);
+    } else {
+        if (!HookTaskbarSymbols()) {
             return FALSE;
         }
     }
 
+    g_initialized = true;
+
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    // Try again in case there's a race between the previous attempt and the
+    // LoadLibraryExW hook.
+    if (g_settings.oldTaskbarOnWin11 && !g_explorerPatcherInitialized) {
+        HandleLoadedExplorerPatcher();
+    }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {

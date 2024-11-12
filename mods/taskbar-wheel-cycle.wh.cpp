@@ -2,14 +2,14 @@
 // @id              taskbar-wheel-cycle
 // @name            Cycle taskbar buttons with mouse wheel
 // @description     Use the mouse wheel while hovering over the taskbar to cycle between taskbar buttons (Windows 11 only)
-// @version         1.1.4
+// @version         1.1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -loleaut32 -lole32 -lruntimeobject -lwininet
+// @compilerOptions -lcomctl32 -loleaut32 -lole32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -56,11 +56,12 @@ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 */
 // ==/WindhawkModSettings==
 
-#undef GetCurrentTime
+#include <windhawk_utils.h>
 
 #include <commctrl.h>
 #include <windowsx.h>
-#include <wininet.h>
+
+#undef GetCurrentTime
 
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -107,6 +108,15 @@ enum {
     kHotkeyIdLeft = 1682530408,  // From epochconverter.com
     kHotkeyIdRight,
 };
+
+using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType;
+
+using CTaskBtnGroup_GetNumItems_t = int(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetNumItems_t CTaskBtnGroup_GetNumItems;
+
+using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(void* pThis, int index);
+CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem;
 
 using CWindowTaskItem_GetWindow_t = HWND(WINAPI*)(PVOID pThis);
 CWindowTaskItem_GetWindow_t CWindowTaskItem_GetWindow_Original;
@@ -225,36 +235,31 @@ BOOL IsMinimizedTaskItem(LONG_PTR* task_item) {
 BOOL TaskbarScrollRight(int button_groups_count,
                         LONG_PTR** button_groups,
                         int* p_button_group_index,
-                        int* p_button_index,
-                        int* p_buttons_count,
-                        LONG_PTR*** p_buttons) {
+                        int* p_button_index) {
     int button_group_index = *p_button_group_index;
     int button_index = *p_button_index;
-    int buttons_count = *p_buttons_count;
-    LONG_PTR** buttons = *p_buttons;
-    LONG_PTR* plp;
     int button_group_type;
 
-    if (button_group_index == -1 || ++button_index >= buttons_count) {
+    int buttons_count =
+        button_group_index == -1
+            ? 0
+            : CTaskBtnGroup_GetNumItems(button_groups[button_group_index]);
+    if (++button_index >= buttons_count) {
         do {
             button_group_index++;
-            if (button_group_index >= button_groups_count)
+            if (button_group_index >= button_groups_count) {
                 return FALSE;
+            }
 
-            button_group_type = (int)button_groups[button_group_index][8];
+            button_group_type =
+                CTaskBtnGroup_GetGroupType(button_groups[button_group_index]);
         } while (button_group_type != 1 && button_group_type != 3);
-
-        plp = (LONG_PTR*)button_groups[button_group_index][7];
-        buttons_count = (int)plp[0];
-        buttons = (LONG_PTR**)plp[1];
 
         button_index = 0;
     }
 
     *p_button_group_index = button_group_index;
     *p_button_index = button_index;
-    *p_buttons_count = buttons_count;
-    *p_buttons = buttons;
 
     return TRUE;
 }
@@ -262,38 +267,32 @@ BOOL TaskbarScrollRight(int button_groups_count,
 BOOL TaskbarScrollLeft(int button_groups_count,
                        LONG_PTR** button_groups,
                        int* p_button_group_index,
-                       int* p_button_index,
-                       int* p_buttons_count,
-                       LONG_PTR*** p_buttons) {
+                       int* p_button_index) {
     int button_group_index = *p_button_group_index;
     int button_index = *p_button_index;
-    int buttons_count = *p_buttons_count;
-    LONG_PTR** buttons = *p_buttons;
-    LONG_PTR* plp;
     int button_group_type;
 
     if (button_group_index == -1 || --button_index < 0) {
-        if (button_group_index == -1)
+        if (button_group_index == -1) {
             button_group_index = button_groups_count;
+        }
 
         do {
             button_group_index--;
-            if (button_group_index < 0)
+            if (button_group_index < 0) {
                 return FALSE;
+            }
 
-            button_group_type = (int)button_groups[button_group_index][8];
+            button_group_type =
+                CTaskBtnGroup_GetGroupType(button_groups[button_group_index]);
         } while (button_group_type != 1 && button_group_type != 3);
 
-        plp = (LONG_PTR*)button_groups[button_group_index][7];
-        buttons_count = (int)plp[0];
-        buttons = (LONG_PTR**)plp[1];
-
+        int buttons_count =
+            CTaskBtnGroup_GetNumItems(button_groups[button_group_index]);
         button_index = buttons_count - 1;
     }
 
     *p_button_group_index = button_group_index;
-    *p_buttons_count = buttons_count;
-    *p_buttons = buttons;
     *p_button_index = button_index;
 
     return TRUE;
@@ -309,19 +308,10 @@ LONG_PTR* TaskbarScrollHelper(int button_groups_count,
     int button_group_index, button_index;
     BOOL bRotateRight;
     int prev_button_group_index, prev_button_index;
-    LONG_PTR* plp;
-    int buttons_count;
-    LONG_PTR** buttons;
     BOOL bScrollSucceeded;
 
     button_group_index = button_group_index_active;
     button_index = button_index_active;
-
-    if (button_group_index != -1) {
-        plp = (LONG_PTR*)button_groups[button_group_index][7];
-        buttons_count = (int)plp[0];
-        buttons = (LONG_PTR**)plp[1];
-    }
 
     bRotateRight = TRUE;
     if (nRotates < 0) {
@@ -334,31 +324,33 @@ LONG_PTR* TaskbarScrollHelper(int button_groups_count,
 
     while (nRotates--) {
         if (bRotateRight) {
-            bScrollSucceeded = TaskbarScrollRight(
-                button_groups_count, button_groups, &button_group_index,
-                &button_index, &buttons_count, &buttons);
+            bScrollSucceeded =
+                TaskbarScrollRight(button_groups_count, button_groups,
+                                   &button_group_index, &button_index);
             while (bScrollSucceeded && bSkipMinimized &&
-                   IsMinimizedTaskItem((LONG_PTR*)buttons[button_index][4])) {
-                bScrollSucceeded = TaskbarScrollRight(
-                    button_groups_count, button_groups, &button_group_index,
-                    &button_index, &buttons_count, &buttons);
+                   IsMinimizedTaskItem((LONG_PTR*)CTaskBtnGroup_GetTaskItem(
+                       button_groups[button_group_index], button_index))) {
+                bScrollSucceeded =
+                    TaskbarScrollRight(button_groups_count, button_groups,
+                                       &button_group_index, &button_index);
             }
         } else {
-            bScrollSucceeded = TaskbarScrollLeft(
-                button_groups_count, button_groups, &button_group_index,
-                &button_index, &buttons_count, &buttons);
+            bScrollSucceeded =
+                TaskbarScrollLeft(button_groups_count, button_groups,
+                                  &button_group_index, &button_index);
             while (bScrollSucceeded && bSkipMinimized &&
-                   IsMinimizedTaskItem((LONG_PTR*)buttons[button_index][4])) {
-                bScrollSucceeded = TaskbarScrollLeft(
-                    button_groups_count, button_groups, &button_group_index,
-                    &button_index, &buttons_count, &buttons);
+                   IsMinimizedTaskItem((LONG_PTR*)CTaskBtnGroup_GetTaskItem(
+                       button_groups[button_group_index], button_index))) {
+                bScrollSucceeded =
+                    TaskbarScrollLeft(button_groups_count, button_groups,
+                                      &button_group_index, &button_index);
             }
         }
 
         if (!bScrollSucceeded) {
             // If no results were found in the whole taskbar
             if (prev_button_group_index == -1) {
-                return NULL;
+                return nullptr;
             }
 
             if (bWarpAround) {
@@ -371,10 +363,6 @@ LONG_PTR* TaskbarScrollHelper(int button_groups_count,
                 button_group_index = prev_button_group_index;
                 button_index = prev_button_index;
 
-                plp = (LONG_PTR*)button_groups[button_group_index][7];
-                buttons_count = (int)plp[0];
-                buttons = (LONG_PTR**)plp[1];
-
                 break;
             }
         }
@@ -384,10 +372,12 @@ LONG_PTR* TaskbarScrollHelper(int button_groups_count,
     }
 
     if (button_group_index == button_group_index_active &&
-        button_index == button_index_active)
-        return NULL;
+        button_index == button_index_active) {
+        return nullptr;
+    }
 
-    return (LONG_PTR*)buttons[button_index][4];
+    return (LONG_PTR*)CTaskBtnGroup_GetTaskItem(
+        button_groups[button_group_index], button_index);
 }
 
 LONG_PTR* TaskbarScroll(LONG_PTR lpMMTaskListLongPtr,
@@ -395,44 +385,42 @@ LONG_PTR* TaskbarScroll(LONG_PTR lpMMTaskListLongPtr,
                         BOOL bSkipMinimized,
                         BOOL bWarpAround,
                         LONG_PTR* src_task_item) {
-    LONG_PTR* button_group_active;
+    if (nRotates == 0) {
+        return nullptr;
+    }
+
+    LONG_PTR* plp =
+        (LONG_PTR*)*EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(lpMMTaskListLongPtr);
+    if (!plp) {
+        return nullptr;
+    }
+
+    int button_groups_count = (int)plp[0];
+    LONG_PTR** button_groups = (LONG_PTR**)plp[1];
+
     int button_group_index_active, button_index_active;
-    LONG_PTR* plp;
-    int button_groups_count;
-    LONG_PTR** button_groups;
-    int button_group_type;
-    int buttons_count;
-    LONG_PTR** buttons;
-    int i, j;
-
-    if (nRotates == 0)
-        return NULL;
-
-    plp = (LONG_PTR*)*EV_MM_TASKLIST_BUTTON_GROUPS_HDPA(lpMMTaskListLongPtr);
-    if (!plp)
-        return NULL;
-
-    button_groups_count = (int)plp[0];
-    button_groups = (LONG_PTR**)plp[1];
 
     if (src_task_item) {
+        int i;
         for (i = 0; i < button_groups_count; i++) {
-            button_group_type = (int)button_groups[i][8];
+            int button_group_type =
+                CTaskBtnGroup_GetGroupType(button_groups[i]);
             if (button_group_type == 1 || button_group_type == 3) {
-                plp = (LONG_PTR*)button_groups[i][7];
-                buttons_count = (int)plp[0];
-                buttons = (LONG_PTR**)plp[1];
+                int buttons_count = CTaskBtnGroup_GetNumItems(button_groups[i]);
 
+                int j;
                 for (j = 0; j < buttons_count; j++) {
-                    if ((LONG_PTR*)buttons[j][4] == src_task_item) {
+                    if ((LONG_PTR*)CTaskBtnGroup_GetTaskItem(
+                            button_groups[i], j) == src_task_item) {
                         button_group_index_active = i;
                         button_index_active = j;
                         break;
                     }
                 }
 
-                if (j < buttons_count)
+                if (j < buttons_count) {
                     break;
+                }
             }
         }
 
@@ -441,12 +429,13 @@ LONG_PTR* TaskbarScroll(LONG_PTR lpMMTaskListLongPtr,
             button_index_active = -1;
         }
     } else {
-        button_group_active =
+        LONG_PTR* button_group_active =
             *EV_MM_TASKLIST_ACTIVE_BUTTON_GROUP(lpMMTaskListLongPtr);
         button_index_active =
             *EV_MM_TASKLIST_ACTIVE_BUTTON_INDEX(lpMMTaskListLongPtr);
 
         if (button_group_active && button_index_active >= 0) {
+            int i;
             for (i = 0; i < button_groups_count; i++) {
                 if (button_groups[i] == button_group_active) {
                     button_group_index_active = i;
@@ -454,8 +443,9 @@ LONG_PTR* TaskbarScroll(LONG_PTR lpMMTaskListLongPtr,
                 }
             }
 
-            if (i == button_groups_count)
-                return NULL;
+            if (i == button_groups_count) {
+                return nullptr;
+            }
         } else {
             button_group_index_active = -1;
             button_index_active = -1;
@@ -523,6 +513,23 @@ HWND TaskListFromSecondaryTaskbarWnd(HWND hSecondaryTaskbarWnd) {
     return FindWindowEx(hWorkerWWnd, nullptr, L"MSTaskListWClass", nullptr);
 }
 
+HWND TaskListFromMMTaskbarWnd(HWND hMMTaskbarWnd) {
+    WCHAR szClassName[32];
+    if (!GetClassName(hMMTaskbarWnd, szClassName, ARRAYSIZE(szClassName))) {
+        return nullptr;
+    }
+
+    if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+        return TaskListFromTaskbarWnd(hMMTaskbarWnd);
+    }
+
+    if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+        return TaskListFromSecondaryTaskbarWnd(hMMTaskbarWnd);
+    }
+
+    return nullptr;
+}
+
 HWND TaskListFromPoint(POINT pt) {
     HWND hPointWnd = WindowFromPoint(pt);
     if (!hPointWnd) {
@@ -534,20 +541,51 @@ HWND TaskListFromPoint(POINT pt) {
         return nullptr;
     }
 
-    WCHAR szClassName[32];
-    if (!GetClassName(hRootWnd, szClassName, ARRAYSIZE(szClassName))) {
+    return TaskListFromMMTaskbarWnd(hRootWnd);
+}
+
+HWND GetTaskbarForMonitor(HWND hTaskbarWnd, HMONITOR monitor) {
+    DWORD taskbarThreadId = 0;
+    DWORD taskbarProcessId = 0;
+    if (!(taskbarThreadId =
+              GetWindowThreadProcessId(hTaskbarWnd, &taskbarProcessId)) ||
+        taskbarProcessId != GetCurrentProcessId()) {
         return nullptr;
     }
 
-    if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
-        return TaskListFromTaskbarWnd(hRootWnd);
+    if (MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST) == monitor) {
+        return hTaskbarWnd;
     }
 
-    if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
-        return TaskListFromSecondaryTaskbarWnd(hRootWnd);
-    }
+    HWND hResultWnd = nullptr;
 
-    return nullptr;
+    auto enumWindowsProc = [monitor, &hResultWnd](HWND hWnd) -> BOOL {
+        WCHAR szClassName[32];
+        if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+            return TRUE;
+        }
+
+        if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") != 0) {
+            return TRUE;
+        }
+
+        if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
+            return TRUE;
+        }
+
+        hResultWnd = hWnd;
+        return FALSE;
+    };
+
+    EnumThreadWindows(
+        taskbarThreadId,
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
+            return proc(hWnd);
+        },
+        reinterpret_cast<LPARAM>(&enumWindowsProc));
+
+    return hResultWnd;
 }
 
 using TaskbarFrame_OnPointerWheelChanged_t = int(WINAPI*)(PVOID pThis,
@@ -974,14 +1012,25 @@ void RegisterHotkeys(HWND hWnd) {
 bool OnTaskbarHotkey(HWND hWnd, int hotkeyId) {
     Wh_Log(L">");
 
-    HWND hTaskListWnd = TaskListFromTaskbarWnd(hWnd);
-    if (!hTaskListWnd) {
+    DWORD messagePos = GetMessagePos();
+    POINT pt{
+        GET_X_LPARAM(messagePos),
+        GET_Y_LPARAM(messagePos),
+    };
+
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+    HWND hTaskbarForMonitor = GetTaskbarForMonitor(hWnd, monitor);
+
+    HWND hMMTaskListWnd = TaskListFromMMTaskbarWnd(
+        hTaskbarForMonitor ? hTaskbarForMonitor : hWnd);
+    if (!hMMTaskListWnd) {
         return false;
     }
 
     int clicks = hotkeyId == kHotkeyIdLeft ? -1 : 1;
 
-    LONG_PTR lpTaskListLongPtr = GetWindowLongPtr(hTaskListWnd, 0);
+    LONG_PTR lpTaskListLongPtr = GetWindowLongPtr(hMMTaskListWnd, 0);
     PVOID targetTaskItem = TaskbarScroll(lpTaskListLongPtr, clicks,
                                          g_settings.skipMinimizedWindows,
                                          g_settings.wrapAround, nullptr);
@@ -1018,6 +1067,22 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd,
                 default:
                     result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     break;
+            }
+            break;
+
+        case WM_POWERBROADCAST:
+            // Keyboard shortcuts stop working sometimes, not sure why. Try to
+            // mitigate it by unregistering and re-registering hotkeys on resume
+            // from wake up.
+            if (wParam == PBT_APMQUERYSUSPEND) {
+                switch (lParam) {
+                    case PBT_APMRESUMECRITICAL:
+                    case PBT_APMRESUMESUSPEND:
+                    case PBT_APMRESUMEAUTOMATIC:
+                        UnregisterHotkeys(hWnd);
+                        RegisterHotkeys(hWnd);
+                        break;
+                }
             }
             break;
 
@@ -1084,360 +1149,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
-struct SYMBOL_HOOK {
-    std::vector<std::wstring_view> symbols;
-    void** pOriginalFunction;
-    void* hookFunction = nullptr;
-    bool optional = false;
-};
-
-bool HookSymbols(HMODULE module,
-                 const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount,
-                 bool cacheOnly = false) {
-    const WCHAR cacheVer = L'1';
-    const WCHAR cacheSep = L'#';
-    constexpr size_t cacheMaxSize = 10240;
-
-    WCHAR moduleFilePath[MAX_PATH];
-    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned an unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
-    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
-
-    std::wstring_view cacheBufferView(cacheBuffer);
-
-    // https://stackoverflow.com/a/46931770
-    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
-        size_t pos_start = 0, pos_end;
-        std::wstring_view token;
-        std::vector<std::wstring_view> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) !=
-               std::wstring_view::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + 1;
-            res.push_back(token);
-        }
-
-        res.push_back(s.substr(pos_start));
-        return res;
-    };
-
-    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
-
-    std::vector<bool> symbolResolved(symbolHooksCount, false);
-    std::wstring newSystemCacheStr;
-
-    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
-                             &newSystemCacheStr,
-                             module](std::wstring_view symbol, void* address) {
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i]) {
-                continue;
-            }
-
-            bool match = false;
-            for (auto hookSymbol : symbolHooks[i].symbols) {
-                if (hookSymbol == symbol) {
-                    match = true;
-                    break;
-                }
-            }
-
-            if (!match) {
-                continue;
-            }
-
-            if (symbolHooks[i].hookFunction) {
-                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
-                                   symbolHooks[i].pOriginalFunction);
-                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            } else {
-                *symbolHooks[i].pOriginalFunction = address;
-                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            }
-
-            symbolResolved[i] = true;
-
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += symbol;
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr +=
-                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
-
-            break;
-        }
-    };
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    newSystemCacheStr += cacheVer;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += timeStamp;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += imageSize;
-
-    if (cacheParts.size() >= 3 &&
-        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
-        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
-        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
-            auto symbol = cacheParts[i];
-            auto address = cacheParts[i + 1];
-            if (address.length() == 0) {
-                continue;
-            }
-
-            void* addressPtr =
-                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
-                        (ULONG_PTR)module);
-
-            onSymbolResolved(symbol, addressPtr);
-        }
-
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i] || !symbolHooks[i].optional) {
-                continue;
-            }
-
-            size_t noAddressMatchCount = 0;
-            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
-                auto symbol = cacheParts[j];
-                auto address = cacheParts[j + 1];
-                if (address.length() != 0) {
-                    continue;
-                }
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    if (hookSymbol == symbol) {
-                        noAddressMatchCount++;
-                        break;
-                    }
-                }
-            }
-
-            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
-                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
-                symbolResolved[i] = true;
-            }
-        }
-
-        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
-                        [](bool b) { return b; })) {
-            return true;
-        }
-    }
-
-    Wh_Log(L"Couldn't resolve all symbols from cache");
-
-    if (cacheOnly) {
-        return false;
-    }
-
-    WH_FIND_SYMBOL findSymbol;
-    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
-    if (!findSymbolHandle) {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
-        return false;
-    }
-
-    do {
-        onSymbolResolved(findSymbol.symbol, findSymbol.address);
-    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
-
-    Wh_FindCloseSymbol(findSymbolHandle);
-
-    for (size_t i = 0; i < symbolHooksCount; i++) {
-        if (symbolResolved[i]) {
-            continue;
-        }
-
-        if (!symbolHooks[i].optional) {
-            Wh_Log(L"Unresolved symbol: %d", i);
-            return false;
-        }
-
-        Wh_Log(L"Optional symbol %d doesn't exist", i);
-
-        for (auto hookSymbol : symbolHooks[i].symbols) {
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += hookSymbol;
-            newSystemCacheStr += cacheSep;
-        }
-    }
-
-    if (newSystemCacheStr.length() <= cacheMaxSize) {
-        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
-    } else {
-        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
-    }
-
-    return true;
-}
-
-std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
-    HINTERNET hOpenHandle = InternetOpen(
-        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hOpenHandle) {
-        return std::nullopt;
-    }
-
-    HINTERNET hUrlHandle =
-        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
-                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
-                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
-                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
-                        0);
-    if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwStatusCode = 0;
-    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
-    if (!HttpQueryInfo(hUrlHandle,
-                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
-                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
-        dwStatusCode != 200) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
-    if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
-    DWORD dwLength = dwNumberOfBytesRead;
-
-    while (dwNumberOfBytesRead) {
-        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
-            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
-        if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
-            HeapFree(GetProcessHeap(), 0, pUrlContent);
-            return std::nullopt;
-        }
-
-        pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
-        dwLength += dwNumberOfBytesRead;
-    }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
-
-    // Assume UTF-8.
-    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
-                                          dwLength, nullptr, 0);
-    std::wstring unicodeContent(charsNeeded, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
-                        unicodeContent.data(), unicodeContent.size());
-
-    HeapFree(GetProcessHeap(), 0, pUrlContent);
-
-    return unicodeContent;
-}
-
-bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
-                                        const SYMBOL_HOOK* symbolHooks,
-                                        size_t symbolHooksCount) {
-    constexpr WCHAR kModIdForCache[] = L"taskbar-wheel-cycle";
-
-    if (HookSymbols(module, symbolHooks, symbolHooksCount,
-                    /*cacheOnly=*/true)) {
-        return true;
-    }
-
-    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
-
-    WCHAR moduleFilePath[MAX_PATH];
-    DWORD moduleFilePathLen =
-        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
-    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    DWORD moduleFileNameLen =
-        moduleFilePathLen - (moduleFileName - moduleFilePath);
-
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
-                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
-                  nullptr, 0);
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    std::wstring cacheStrKey =
-#if defined(_M_IX86)
-        L"symbol-x86-cache-";
-#elif defined(_M_X64)
-        L"symbol-cache-";
-#else
-#error "Unsupported architecture"
-#endif
-    cacheStrKey += moduleFileName;
-
-    std::wstring onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
-    onlineCacheUrl += kModIdForCache;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += cacheStrKey;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += timeStamp;
-    onlineCacheUrl += L'-';
-    onlineCacheUrl += imageSize;
-    onlineCacheUrl += L".txt";
-
-    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
-
-    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (onlineCache) {
-        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
-    } else {
-        Wh_Log(L"Failed to get online cache");
-    }
-
-    return HookSymbols(module, symbolHooks, symbolHooksCount);
-}
-
 void LoadSettings() {
     g_settings.skipMinimizedWindows = Wh_GetIntSetting(L"skipMinimizedWindows");
     g_settings.wrapAround = Wh_GetIntSetting(L"wrapAround");
@@ -1493,7 +1204,7 @@ bool HookTaskbarViewDllSymbols() {
     }
 
     // Taskbar.View.dll, ExplorerExtensions.dll
-    SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerWheelChanged(void *))"},
             (void**)&TaskbarFrame_OnPointerWheelChanged_Original,
@@ -1501,8 +1212,7 @@ bool HookTaskbarViewDllSymbols() {
         },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 
 BOOL HookTaskbarDllSymbols() {
@@ -1512,7 +1222,19 @@ BOOL HookTaskbarDllSymbols() {
         return FALSE;
     }
 
-    SYMBOL_HOOK taskbarDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))"},
+            (void**)&CTaskBtnGroup_GetGroupType,
+        },
+        {
+            {LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void))"},
+            (void**)&CTaskBtnGroup_GetNumItems,
+        },
+        {
+            {LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))"},
+            (void**)&CTaskBtnGroup_GetTaskItem,
+        },
         {
             {LR"(public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void))"},
             (void**)&CWindowTaskItem_GetWindow_Original,
@@ -1540,8 +1262,7 @@ BOOL HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
-                                              ARRAYSIZE(taskbarDllHooks));
+    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 BOOL Wh_ModInit() {

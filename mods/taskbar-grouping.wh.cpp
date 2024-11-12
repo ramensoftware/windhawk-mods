@@ -2,7 +2,7 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.5
+// @version         1.3.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -111,6 +111,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 */
 // ==/WindhawkModSettings==
 
+#include <psapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <wininet.h>
@@ -162,12 +163,16 @@ enum class WinVersion {
     Unsupported,
     Win10,
     Win11,
+    Win11_24H2,
 };
 
 constexpr WCHAR kCustomGroupPrefix[] = L"Windhawk_Group_";
 constexpr size_t kCustomGroupPrefixLen = ARRAYSIZE(kCustomGroupPrefix) - 1;
 
 WinVersion g_winVersion;
+
+std::atomic<bool> g_initialized;
+std::atomic<bool> g_explorerPatcherInitialized;
 
 bool g_inTaskBandLaunch;
 bool g_inUpdateItemIcon;
@@ -182,6 +187,10 @@ bool g_disableGetLauncherName;
 std::atomic<DWORD> g_compareStringOrdinalHookThreadId;
 bool g_compareStringOrdinalIgnoreSuffix;
 bool g_compareStringOrdinalAnySuffixEqual;
+std::atomic<DWORD> g_doingPinnedItemSwapThreadId;
+void* g_doingPinnedItemSwapFromTaskGroup;
+void* g_doingPinnedItemSwapToTaskGroup;
+int g_doingPinnedItemSwapIndex = -1;
 
 constexpr size_t ITaskListUIOffset = 0x28;
 
@@ -260,6 +269,16 @@ CTaskGroup_GetTitleText_t CTaskGroup_GetTitleText_Original;
 using CTaskGroup_SetTip_t = HRESULT(WINAPI*)(PVOID pThis, PCWSTR tip);
 CTaskGroup_SetTip_t CTaskGroup_SetTip_Original;
 
+using CTaskGroup_GetIconId_t = HRESULT(WINAPI*)(PVOID pThis,
+                                                PVOID taskItem,
+                                                int* id);
+CTaskGroup_GetIconId_t CTaskGroup_GetIconId_Original;
+
+using CTaskGroup_SetIconId_t = HRESULT(WINAPI*)(PVOID pThis,
+                                                PVOID taskItem,
+                                                int id);
+CTaskGroup_SetIconId_t CTaskGroup_SetIconId_Original;
+
 using CTaskGroup_DoesWindowMatch_t =
     HRESULT(WINAPI*)(PVOID pThis,
                      HWND hWnd,
@@ -322,18 +341,24 @@ void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
             }
         }
 
-        LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
-                      resolvedWindowProcessPath,
-                      resolvedWindowProcessPathLen + 1,
-                      resolvedWindowProcessPathUpper,
-                      resolvedWindowProcessPathLen + 1, nullptr, nullptr, 0);
+        if (resolvedWindowProcessPathLen > 0) {
+            LCMapStringEx(
+                LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                resolvedWindowProcessPath, resolvedWindowProcessPathLen + 1,
+                resolvedWindowProcessPathUpper,
+                resolvedWindowProcessPathLen + 1, nullptr, nullptr, 0);
 
-        programFileNameUpper = wcsrchr(resolvedWindowProcessPathUpper, L'\\');
-        if (programFileNameUpper) {
-            programFileNameUpper++;
-            if (!*programFileNameUpper) {
-                programFileNameUpper = nullptr;
+            programFileNameUpper =
+                wcsrchr(resolvedWindowProcessPathUpper, L'\\');
+            if (programFileNameUpper) {
+                programFileNameUpper++;
+                if (!*programFileNameUpper) {
+                    programFileNameUpper = nullptr;
+                }
             }
+        } else {
+            *resolvedWindowProcessPath = L'\0';
+            *resolvedWindowProcessPathUpper = L'\0';
         }
     }
 
@@ -824,7 +849,20 @@ PVOID WINAPI CTaskListWnd__CreateTBGroup_Hook(PVOID pThis,
 using DPA_InsertPtr_t = decltype(&DPA_InsertPtr);
 DPA_InsertPtr_t DPA_InsertPtr_Original;
 int WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
-    auto original = [&]() { return DPA_InsertPtr_Original(hdpa, i, p); };
+    if (g_doingPinnedItemSwapThreadId == GetCurrentThreadId()) {
+        Wh_Log(L">");
+
+        if (g_doingPinnedItemSwapIndex != -1) {
+            PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(p);
+            if (taskGroup && taskGroup == g_doingPinnedItemSwapToTaskGroup) {
+                i = g_doingPinnedItemSwapIndex;
+            }
+        }
+
+        return DPA_InsertPtr_Original(hdpa, i, p);
+    }
+
+    auto original = [=]() { return DPA_InsertPtr_Original(hdpa, i, p); };
 
     if (g_cTaskListWnd__CreateTBGroup_ThreadId != GetCurrentThreadId()) {
         return original();
@@ -878,7 +916,25 @@ int WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
         i = lastMatchIndex + 1;
     }
 
-    return original();
+    return DPA_InsertPtr_Original(hdpa, i, p);
+}
+
+using DPA_DeletePtr_t = decltype(&DPA_DeletePtr);
+DPA_DeletePtr_t DPA_DeletePtr_Original;
+PVOID WINAPI DPA_DeletePtr_Hook(HDPA hdpa, int i) {
+    if (g_doingPinnedItemSwapThreadId == GetCurrentThreadId()) {
+        Wh_Log(L">");
+
+        void* p = DPA_GetPtr(hdpa, i);
+        if (p) {
+            PVOID taskGroup = CTaskBtnGroup_GetGroup_Original(p);
+            if (taskGroup && taskGroup == g_doingPinnedItemSwapFromTaskGroup) {
+                g_doingPinnedItemSwapIndex = i;
+            }
+        }
+    }
+
+    return DPA_DeletePtr_Original(hdpa, i);
 }
 
 using CTaskBand_HandleTaskGroupSwitchItemAdded_t =
@@ -935,6 +991,11 @@ void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
     CTaskGroup_GetTitleText_Original(taskGroup2, nullptr, tip2Copy, MAX_PATH);
     g_disableGetLauncherName = false;
 
+    int iconId1 = 0;
+    int iconId2 = 0;
+    CTaskGroup_GetIconId_Original(taskGroup1, nullptr, &iconId1);
+    CTaskGroup_GetIconId_Original(taskGroup2, nullptr, &iconId2);
+
     CTaskGroup_SetAppID_Original(taskGroup1,
                                  CTaskGroup_GetAppID_Original(taskGroup2));
     CTaskGroup_SetShortcutIDList_Original(
@@ -942,11 +1003,13 @@ void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
     CTaskGroup_UpdateFlags_Original(taskGroup1, ~0,
                                     CTaskGroup_GetFlags_Original(taskGroup2));
     CTaskGroup_SetTip_Original(taskGroup1, tip2Copy);
+    CTaskGroup_SetIconId_Original(taskGroup1, nullptr, iconId2);
 
     CTaskGroup_SetAppID_Original(taskGroup2, appId1Copy);
     CTaskGroup_SetShortcutIDList_Original(taskGroup2, idList1Copy);
     CTaskGroup_UpdateFlags_Original(taskGroup2, ~0, flags1Copy);
     CTaskGroup_SetTip_Original(taskGroup2, tip1Copy);
+    CTaskGroup_SetIconId_Original(taskGroup2, nullptr, iconId1);
 
     if (idList1Copy) {
         ILFree(idList1Copy);
@@ -994,8 +1057,20 @@ void HandleUnsuffixedInstanceOnTaskDestroyed(PVOID taskList_TaskListUI,
     SwapTaskGroupIds(taskGroup, taskGroupMatched.get());
 
     if (taskGroupIsPinned) {
+        g_doingPinnedItemSwapThreadId = GetCurrentThreadId();
+        g_doingPinnedItemSwapFromTaskGroup = taskGroup;
+        g_doingPinnedItemSwapToTaskGroup = taskGroupMatched.get();
+        g_doingPinnedItemSwapIndex = -1;
+        // The flags argument is absent in newer Windows versions. According to
+        // the calling convention, it just gets ignored.
+        CTaskListWnd_HandleTaskGroupUnpinned_Original(taskList_TaskListUI,
+                                                      taskGroup, 0);
         CTaskListWnd_HandleTaskGroupPinned_Original(taskList_TaskListUI,
                                                     taskGroupMatched.get());
+        g_doingPinnedItemSwapThreadId = 0;
+        g_doingPinnedItemSwapFromTaskGroup = nullptr;
+        g_doingPinnedItemSwapToTaskGroup = nullptr;
+        g_doingPinnedItemSwapIndex = -1;
     }
 }
 
@@ -1047,7 +1122,7 @@ LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_Hook(PVOID pThis,
                                                 int taskDestroyedFlags) {
     Wh_Log(L">");
 
-    auto original = [&]() {
+    auto original = [=]() {
         return CTaskListWnd_TaskDestroyed_Original(pThis, taskGroup, taskItem,
                                                    taskDestroyedFlags);
     };
@@ -1064,7 +1139,7 @@ LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_2_Hook(PVOID pThis,
                                                   PVOID taskItem) {
     Wh_Log(L">");
 
-    auto original = [&]() {
+    auto original = [=]() {
         return CTaskListWnd_TaskDestroyed_2_Original(pThis, taskGroup,
                                                      taskItem);
     };
@@ -1140,7 +1215,7 @@ LONG_PTR WINAPI CTaskListWnd__TaskCreated_Hook(PVOID pThis,
                                                int param3) {
     Wh_Log(L">");
 
-    auto original = [&]() {
+    auto original = [=]() {
         return CTaskListWnd__TaskCreated_Original(pThis, taskGroup, taskItem,
                                                   param3);
     };
@@ -1228,7 +1303,7 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-WinVersion GetWindowsVersion() {
+WinVersion GetExplorerVersion() {
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
     if (!fixedFileInfo) {
         return WinVersion::Unsupported;
@@ -1245,8 +1320,10 @@ WinVersion GetWindowsVersion() {
         case 10:
             if (build < 22000) {
                 return WinVersion::Win10;
-            } else {
+            } else if (build < 26100) {
                 return WinVersion::Win11;
+            } else {
+                return WinVersion::Win11_24H2;
             }
             break;
     }
@@ -1406,7 +1483,14 @@ bool HookSymbols(HMODULE module,
 
             if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
                 Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
+
                 symbolResolved[i] = true;
+
+                for (auto hookSymbol : symbolHooks[i].symbols) {
+                    newSystemCacheStr += cacheSep;
+                    newSystemCacheStr += hookSymbol;
+                    newSystemCacheStr += cacheSep;
+                }
             }
         }
 
@@ -1608,9 +1692,194 @@ bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
     return HookSymbols(module, symbolHooks, symbolHooksCount);
 }
 
+bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
+    if (g_explorerPatcherInitialized.exchange(true)) {
+        return true;
+    }
+
+    struct EXPLORER_PATCHER_HOOK {
+        PCSTR symbol;
+        void** pOriginalFunction;
+        void* hookFunction = nullptr;
+        bool optional = false;
+    };
+
+    EXPLORER_PATCHER_HOOK hooks[] = {
+        {R"(?GetNumItems@CTaskGroup@@UEAAHXZ)",
+         (void**)&CTaskGroup_GetNumItems_Original},
+        {R"(?SetAppID@CTaskGroup@@UEAAJPEBG@Z)",
+         (void**)&CTaskGroup_SetAppID_Original},
+        {R"(?GetFlags@CTaskGroup@@UEBAKXZ)",
+         (void**)&CTaskGroup_GetFlags_Original},
+        {R"(?UpdateFlags@CTaskGroup@@UEAAJKK@Z)",
+         (void**)&CTaskGroup_UpdateFlags_Original},
+        {R"(?GetTitleText@CTaskGroup@@UEAAJPEAUITaskItem@@PEAGH@Z)",
+         (void**)&CTaskGroup_GetTitleText_Original},
+        {R"(?SetTip@CTaskGroup@@UEAAJPEBG@Z)",
+         (void**)&CTaskGroup_SetTip_Original},
+        {R"(?GetIconId@CTaskGroup@@UEAAJPEAUITaskItem@@PEAH@Z)",
+         (void**)&CTaskGroup_GetIconId_Original},
+        {R"(?SetIconId@CTaskGroup@@UEAAJPEAUITaskItem@@H@Z)",
+         (void**)&CTaskGroup_SetIconId_Original},
+        {R"(?DoesWindowMatch@CTaskGroup@@UEAAJPEAUHWND__@@PEBU_ITEMIDLIST_ABSOLUTE@@PEBGPEAW4WINDOWMATCHCONFIDENCE@@PEAPEAUITaskItem@@@Z)",
+         (void**)&CTaskGroup_DoesWindowMatch_Original},
+        {R"(?_MatchWindow@CTaskBand@@IEAAJPEAUHWND__@@PEBU_ITEMIDLIST_ABSOLUTE@@PEBGW4WINDOWMATCHCONFIDENCE@@PEAPEAUITaskGroup@@PEAPEAUITaskItem@@@Z)",
+         (void**)&CTaskBand__MatchWindow_Original},
+        {R"(?GetGroupType@CTaskBtnGroup@@UEAA?AW4eTBGROUPTYPE@@XZ)",
+         (void**)&CTaskBtnGroup_GetGroupType_Original},
+        {R"(?_HandleWindowResolved@CTaskBand@@IEAAXPEAURESOLVEDWINDOW@@@Z)",
+         (void**)&CTaskBand__HandleWindowResolved_Original,
+         (void*)CTaskBand__HandleWindowResolved_Hook},
+        {R"(?_HandleItemResolved@CTaskBand@@IEAAXPEAURESOLVEDWINDOW@@PEAUITaskListUI@@PEAUITaskGroup@@PEAUITaskItem@@@Z)",
+         (void**)&CTaskBand__HandleItemResolved_Original,
+         (void*)CTaskBand__HandleItemResolved_Hook},
+        {R"(?_Launch@CLauncherTask@CTaskBand@@AEAAJXZ)",
+         (void**)&CTaskBand__Launch_Original, (void*)CTaskBand__Launch_Hook},
+        {R"(?GetAppID@CTaskGroup@@UEAAPEBGXZ)",
+         (void**)&CTaskGroup_GetAppID_Original,
+         (void*)CTaskGroup_GetAppID_Hook},
+        {R"(?IsImmersiveGroup@CTaskGroup@@UEAA_NXZ)",
+         (void**)&CTaskGroup_IsImmersiveGroup_Original,
+         (void*)CTaskGroup_IsImmersiveGroup_Hook},
+        {R"(?GetApplicationIDList@CTaskGroup@@UEAAPEAU_ITEMIDLIST_ABSOLUTE@@XZ)",
+         (void**)&CTaskGroup_GetApplicationIDList_Original},
+        {R"(?GetShortcutIDList@CTaskGroup@@UEAAPEBU_ITEMIDLIST_ABSOLUTE@@XZ)",
+         (void**)&CTaskGroup_GetShortcutIDList_Original,
+         (void*)CTaskGroup_GetShortcutIDList_Hook},
+        {R"(?SetShortcutIDList@CTaskGroup@@UEAAJPEBU_ITEMIDLIST_ABSOLUTE@@@Z)",
+         (void**)&CTaskGroup_SetShortcutIDList_Original},
+        {R"(?GetIconResource@CTaskGroup@@UEAAPEBGXZ)",
+         (void**)&CTaskGroup_GetIconResource_Original,
+         (void*)CTaskGroup_GetIconResource_Hook},
+        {R"(?_UpdateItemIcon@CTaskBand@@IEAAXPEAUITaskGroup@@PEAUITaskItem@@@Z)",
+         (void**)&CTaskBand__UpdateItemIcon_Original,
+         (void*)CTaskBand__UpdateItemIcon_Hook},
+        {R"(?Launch@CTaskBand@@UEAAJPEAUITaskGroup@@AEBUtagPOINT@@W4LaunchFromTaskbarOptions@@@Z)",
+         (void**)&CTaskBand_Launch_Original, (void*)CTaskBand_Launch_Hook},
+        {R"(?GetLauncherName@CTaskGroup@@UEAAJPEAPEAG@Z)",
+         (void**)&CTaskGroup_GetLauncherName_Original,
+         (void*)CTaskGroup_GetLauncherName_Hook},
+        {R"(?_GetJumpViewParams@CTaskListWnd@@IEBAJPEAUITaskBtnGroup@@PEAUITaskItem@@H_NPEAPEAUIJumpViewParams@JumpView@Shell@Internal@Windows@ABI@@@Z)",
+         (void**)&CTaskListWnd__GetJumpViewParams_Original,
+         (void*)CTaskListWnd__GetJumpViewParams_Hook},
+        // {// Available from Windows 11.
+        //  R"()", (void**)&CTaskBtnGroup_GetIcon_Original,
+        //  (void*)CTaskBtnGroup_GetIcon_Hook, true},
+        {// Available until Windows 10.
+         R"(?_DrawRegularButton@CTaskBtnGroup@@AEAAXPEAUHDC__@@AEBUBUTTONRENDERINFO@@@Z)",
+         (void**)&CTaskBtnGroup__DrawRegularButton_Original,
+         (void*)CTaskBtnGroup__DrawRegularButton_Hook, true},
+        {R"(?GetGroup@CTaskBtnGroup@@UEAAPEAUITaskGroup@@XZ)",
+         (void**)&CTaskBtnGroup_GetGroup_Original,
+         (void*)CTaskBtnGroup_GetGroup_Hook},
+        {R"(?_GetTBGroupFromGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@PEAH@Z)",
+         (void**)&CTaskListWnd__GetTBGroupFromGroup_Original},
+        {R"(?IsOnPrimaryTaskband@CTaskListWnd@@UEAAHXZ)",
+         (void**)&CTaskListWnd_IsOnPrimaryTaskband_Original},
+        {R"(?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z)",
+         (void**)&CTaskListWnd__CreateTBGroup_Original,
+         (void*)CTaskListWnd__CreateTBGroup_Hook},
+        {// Available from Windows 11.
+         R"(?HandleTaskGroupSwitchItemAdded@CTaskBand@@IEAAJPEAUISwitchItem@Multitasking@ComposableShell@Internal@Windows@ABI@@@Z)",
+         (void**)&CTaskBand_HandleTaskGroupSwitchItemAdded_Original,
+         (void*)CTaskBand_HandleTaskGroupSwitchItemAdded_Hook, true},
+        // {// Available from Windows 11.
+        //  R"()", (void**)&CTaskListWnd_GroupChanged_Original, nullptr, true},
+        {R"(?HandleTaskGroupPinned@CTaskListWnd@@UEAAXPEAUITaskGroup@@@Z)",
+         (void**)&CTaskListWnd_HandleTaskGroupPinned_Original},
+        {R"(?HandleTaskGroupUnpinned@CTaskListWnd@@UEAAXPEAUITaskGroup@@W4HandleTaskGroupUnpinnedFlags@@@Z)",
+         (void**)&CTaskListWnd_HandleTaskGroupUnpinned_Original},
+        {// An older variant, see the newer variant below.
+         R"(?TaskDestroyed@CTaskListWnd@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@W4TaskDestroyedFlags@@@Z)",
+         (void**)&CTaskListWnd_TaskDestroyed_Original,
+         (void*)CTaskListWnd_TaskDestroyed_Hook, true},
+        // {// A newer variant seen in insider builds.
+        //  R"()", (void**)&CTaskListWnd_TaskDestroyed_2_Original,
+        //  (void*)CTaskListWnd_TaskDestroyed_2_Hook, true},
+        {R"(?_TaskCreated@CTaskListWnd@@IEAAJPEAUITaskGroup@@PEAUITaskItem@@H@Z)",
+         (void**)&CTaskListWnd__TaskCreated_Original,
+         (void*)CTaskListWnd__TaskCreated_Hook},
+    };
+
+    bool succeeded = true;
+
+    for (const auto& hook : hooks) {
+        void* ptr = (void*)GetProcAddress(explorerPatcherModule, hook.symbol);
+        if (!ptr) {
+            Wh_Log(L"ExplorerPatcher symbol%s doesn't exist: %S",
+                   hook.optional ? L" (optional)" : L"", hook.symbol);
+            if (!hook.optional) {
+                succeeded = false;
+            }
+            continue;
+        }
+
+        if (hook.hookFunction) {
+            Wh_SetFunctionHook(ptr, hook.hookFunction, hook.pOriginalFunction);
+        } else {
+            *hook.pOriginalFunction = ptr;
+        }
+    }
+
+    if (g_initialized) {
+        Wh_ApplyHookOperations();
+    }
+
+    return succeeded;
+}
+
+bool HandleModuleIfExplorerPatcher(HMODULE module) {
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            return false;
+    }
+
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName) {
+        return false;
+    }
+
+    moduleFileName++;
+
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) !=
+        0) {
+        return true;
+    }
+
+    Wh_Log(L"ExplorerPatcher taskbar loaded: %s", moduleFileName);
+    return HookExplorerPatcherSymbols(module);
+}
+
+void HandleLoadedExplorerPatcher() {
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
+                           &cbNeeded)) {
+        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
+            HandleModuleIfExplorerPatcher(hMods[i]);
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
+        HandleModuleIfExplorerPatcher(module);
+    }
+
+    return module;
+}
+
 bool HookTaskbarSymbols() {
     // Taskbar.dll, explorer.exe
-    SYMBOL_HOOK symbolHooks[] =
+    SYMBOL_HOOK symbolHooks[] =  //
         {
             {
                 {
@@ -1653,6 +1922,20 @@ bool HookTaskbarSymbols() {
                     LR"(public: virtual long __cdecl CTaskGroup::SetTip(unsigned short const * __ptr64) __ptr64)",
                 },
                 (void**)&CTaskGroup_SetTip_Original,
+            },
+            {
+                {
+                    LR"(public: virtual long __cdecl CTaskGroup::GetIconId(struct ITaskItem *,int *))",
+                    LR"(public: virtual long __cdecl CTaskGroup::GetIconId(struct ITaskItem * __ptr64,int * __ptr64) __ptr64)",
+                },
+                (void**)&CTaskGroup_GetIconId_Original,
+            },
+            {
+                {
+                    LR"(public: virtual long __cdecl CTaskGroup::SetIconId(struct ITaskItem *,int))",
+                    LR"(public: virtual long __cdecl CTaskGroup::SetIconId(struct ITaskItem * __ptr64,int) __ptr64)",
+                },
+                (void**)&CTaskGroup_SetIconId_Original,
             },
             {
                 {
@@ -1902,7 +2185,7 @@ bool HookTaskbarSymbols() {
         module = LoadLibrary(L"taskbar.dll");
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
-            return FALSE;
+            return false;
         }
     }
 
@@ -2005,18 +2288,35 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_winVersion = GetWindowsVersion();
+    g_winVersion = GetExplorerVersion();
     if (g_winVersion == WinVersion::Unsupported) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
-    if (g_winVersion >= WinVersion::Win11 && g_settings.oldTaskbarOnWin11) {
-        g_winVersion = WinVersion::Win10;
-    }
+    if (g_settings.oldTaskbarOnWin11) {
+        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
 
-    if (!HookTaskbarSymbols()) {
-        return FALSE;
+        if (g_winVersion >= WinVersion::Win11) {
+            g_winVersion = WinVersion::Win10;
+        }
+
+        if (hasWin10Taskbar && !HookTaskbarSymbols()) {
+            return FALSE;
+        }
+
+        HandleLoadedExplorerPatcher();
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        FARPROC pKernelBaseLoadLibraryExW =
+            GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+        Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
+                           (void*)LoadLibraryExW_Hook,
+                           (void**)&LoadLibraryExW_Original);
+    } else {
+        if (!HookTaskbarSymbols()) {
+            return FALSE;
+        }
     }
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
@@ -2029,7 +2329,20 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)DPA_InsertPtr, (void*)DPA_InsertPtr_Hook,
                        (void**)&DPA_InsertPtr_Original);
 
+    Wh_SetFunctionHook((void*)DPA_DeletePtr, (void*)DPA_DeletePtr_Hook,
+                       (void**)&DPA_DeletePtr_Original);
+
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    // Try again in case there's a race between the previous attempt and the
+    // LoadLibraryExW hook.
+    if (g_settings.oldTaskbarOnWin11 && !g_explorerPatcherInitialized) {
+        HandleLoadedExplorerPatcher();
+    }
 }
 
 void Wh_ModUninit() {
