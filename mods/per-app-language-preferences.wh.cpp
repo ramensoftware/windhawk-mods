@@ -6,8 +6,9 @@
 // @author          yezhiyi9670
 // @github          https://github.com/yezhiyi9670
 // @include         *
+// @architecture    x86
 // @architecture    x86-64
-// @compilerOptions -lShlwapi -loleaut32 -lole32 -lruntimeobject -lwininet
+// @compilerOptions -lShlwapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -85,6 +86,7 @@ short WINAPI GetUserDefaultUILanguage_Hook() {
     for(int index = 0; ; index++) {
         PCWSTR glob = Wh_GetStringSetting(L"programList[%d].glob", index);
         if(!*glob) {
+            Wh_FreeStringSetting(glob);
             break;
         }
         if(S_OK == PathMatchSpecExW(filename_buf, glob, PMSF_MULTIPLE)) {
