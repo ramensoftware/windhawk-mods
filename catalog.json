@@ -2133,6 +2133,31 @@
                 "version": "1.0.1"
             }
         },
+        "per-app-language-preferences": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1731512140000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1731512140000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86",
+                    "x86-64"
+                ],
+                "author": "yezhiyi9670",
+                "compilerOptions": "-lShlwapi",
+                "description": "Override the preferred UI language for specific apps.",
+                "github": "https://github.com/yezhiyi9670",
+                "include": [
+                    "*"
+                ],
+                "name": "Per-app Language Preferences",
+                "version": "1.0"
+            }
+        },
         "pinned-items-double-click": {
             "details": {
                 "defaultSorting": 3640,

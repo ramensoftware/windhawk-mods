@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-10T21:12:49.000Z</updated>
+    <updated>2024-11-13T15:35:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Per-app Language Preferences 1.0]]></title>
+        <id>https://windhawk.net/mods/per-app-language-preferences#82900d19c69cbf2ca0a8b7ca6dde2d52084c4bc7</id>
+        <link href="https://windhawk.net/mods/per-app-language-preferences"/>
+        <updated>2024-11-13T15:35:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="perapplanguagepreferences">Per-app Language Preferences</h1>
+<p>In Windows 11, it is no longer possible to set display languages for specific apps.</p>
+<p>This mod allow you to override the preferred language for specific apps using the mod's settings.</p>
+<p>Instructions on the settings:</p>
+<ul>
+<li>The filename pattern is parsed using <a href="https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-pathmatchspecexw">PathMatchSpecExW</a>. It supports wildcard <code>*</code> <code>?</code>. It also supports multiple semicolon-separated patterns.</li>
+<li>The language ID can be found in the <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/70feba9f-294e-491e-b6eb-56532684c37f">MS-LCID</a> specification. For example, the language ID for English (United States) is 1033.</li>
+</ul>
+<p>Use cases:</p>
+<ul>
+<li>You want to use a certain app in another language without affecting your current language, but that app does not provide individual language settings.</li>
+<li>A certain app is not compatible with the encoding on your machine and displays corrupt characters, and you want to force it into using English.</li>
+</ul>
+<p>Note that it changes the language only and does not affect the encoding used in legacy programs. To actually fix corrupt characters issues with legacy programs or games, try using <a href="https://github.com/InWILL/Locale_Remulator">LocaleRemulator</a>.</p>
+<p><img src="https://raw.githubusercontent.com/yezhiyi9670/akioi-cdn/refs/heads/master/demo-img/wacom-panel-forced-engligh.png" alt="Wacom panel with corrupt characters, &quot;fixed&quot; by forcing English" /></p>]]></content>
+        <author>
+            <name>yezhiyi9670</name>
+            <uri>https://github.com/yezhiyi9670</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.1.9]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#adad08eed4819a37229592168641eb2753afa76e</id>
@@ -253,19 +278,6 @@
         <updated>2024-11-03T01:03:06.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed spanned windows (e.g. Win+right) affecting the sibling monitor taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Background Helper 1.0.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-background-helper#ec00d6753b2fb4d370071ec57abe7481eb30aa95</id>
-        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
-        <updated>2024-11-03T00:38:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod always thinking there's a maximized window in some cases.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
