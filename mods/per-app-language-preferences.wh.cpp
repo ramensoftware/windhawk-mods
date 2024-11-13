@@ -17,7 +17,7 @@
 /*
 # Per-app Language Preferences
 
-In Windows 11, [it is no longer possible](https://answers.microsoft.com/en-us/windows/forum/all/setting-different-language-for-different/91daab5f-03ab-415a-bee1-5eba20a4f288) to set language for specific apps.
+In Windows 11, it is no longer possible to set display languages for specific apps.
 
 This mod allow you to override the preferred language for specific apps using the mod's settings.
 
@@ -32,6 +32,8 @@ Use cases:
 - A certain app is not compatible with the encoding on your machine and displays corrupt characters, and you want to force it into using English.
 
 Note that it changes the language only and does not affect the encoding used in legacy programs. To actually fix corrupt characters issues with legacy programs or games, try using [LocaleRemulator](https://github.com/InWILL/Locale_Remulator).
+
+![Wacom panel with corrupt characters, "fixed" by forcing English](https://raw.githubusercontent.com/yezhiyi9670/akioi-cdn/refs/heads/master/demo-img/wacom-panel-forced-engligh.png)
 
 */
 // ==/WindhawkModReadme==
@@ -56,16 +58,6 @@ Note that it changes the language only and does not affect the encoding used in 
 */
 // ==/WindhawkModSettings==
 
-
-#undef GetCurrentTime
-
-#include <initguid.h>  // must come before knownfolders.h
-
-#include <inspectable.h>
-#include <knownfolders.h>
-#include <shlobj.h>
-#include <wininet.h>
-
 #include <windows.h>
 #include <shlwapi.h>
 
@@ -76,11 +68,11 @@ Note that it changes the language only and does not affect the encoding used in 
 using GetUserDefaultUILanguage_t = short(WINAPI*)();
 GetUserDefaultUILanguage_t GetUserDefaultUILanguage_Original;
 short WINAPI GetUserDefaultUILanguage_Hook() {
-    static wchar_t filename_buf[2049];
+    wchar_t filename_buf[2049];
 
     Wh_Log(L">GetUserDefaultUILanguage");
 
-    GetModuleFileNameW(NULL, filename_buf, 2048);
+    GetModuleFileNameW(NULL, filename_buf, 2049);
     Wh_Log(L">Process file: %ls", filename_buf);
 
     for(int index = 0; ; index++) {
