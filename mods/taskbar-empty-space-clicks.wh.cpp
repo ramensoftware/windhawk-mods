@@ -874,20 +874,68 @@ protected:
     bool initialized;
 } g_comInitializer;
 
+bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
+
+static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
+
+static DWORD g_dwTaskbarThreadId;
+static bool g_initialized = false;
+static bool g_inputSiteProcHooked = false;
+
+static HWND g_hTaskbarWnd;
+static std::unordered_set<HWND> g_secondaryTaskbarWindows;
+
+static com_ptr<IUIAutomation> g_pUIAutomation;
+static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
+
+// object to store information about the mouse click, its position, button, timestamp and whether it was on empty space
 struct MouseClick
 {
-    enum Button {
+    enum Button
+    {
         LEFT = 0,
         MIDDLE,
-        RIGHT
+        RIGHT,
+        INVALID
     };
 
-    MouseClick(WPARAM wParam, LPARAM lParam, Button button)
+    MouseClick() : button(INVALID), position{0, 0}, timestamp(0), onEmptySpace(false)
     {
-        button = button;
-        GetMouseClickPosition(lParam, position);
+    }
+
+    MouseClick(WPARAM wParam, LPARAM lParam, Button btn) : button(INVALID), position{0, 0}, timestamp(0), onEmptySpace(false)
+    {
+        button = btn;
         timestamp = GetTickCount();
-        onEmptySpace = false;
+        if (!GetMouseClickPosition(lParam, position))
+        {
+            return; // without position there is no point to going further, other members are initialized so it's safe to return
+        }
+
+        // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
+        // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
+        // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
+        // opened window, icon, start menu, etc.
+        com_ptr<IUIAutomationElement> pWindowElement = NULL;
+        if (FAILED(g_pUIAutomation->ElementFromPoint(position, pWindowElement.put())) || !pWindowElement)
+        {
+            LOG_ERROR(L"Failed to retrieve UI element from mouse click");
+            return; // without element info we cannot determine its type, other members are initialized so it's safe to return
+        }
+
+        bstr_ptr className;
+        if (FAILED(pWindowElement->get_CurrentClassName(className.GetAddress())) || !className)
+        {
+            LOG_ERROR(L"Failed to retrieve the Name of the UI element clicked.");
+            return; // we can't determine the type of the element, other members are initialized so it's safe to return
+        }
+        onEmptySpace = (wcscmp(className.GetBSTR(), L"Shell_TrayWnd") == 0) ||                        // Windows 10 primary taskbar
+                       (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
+                       (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
+                       (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
+
+        LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld, btn=%d, element=%s, isEmptySpace=%d",
+                  position.x, position.y, static_cast<int>(button), className.GetBSTR(), onEmptySpace);
     }
 
     Button button;
@@ -896,20 +944,41 @@ struct MouseClick
     bool onEmptySpace;
 };
 
+// simple ring buffer to store last 3 mouse clicks with python-like index access
 class MouseClickQueue
 {
 public:
-    MouseClickQueue() = default;
-
-    void push_back(MouseClick click)
+    void push_back(const MouseClick &click)
     {
         clicks[currentIndex] = click;
         currentIndex = (currentIndex + 1) % 3;
     }
 
-    MouseClick operator[](int i) const
+    const MouseClick &operator[](int i) const
     {
-        const int idx = (currentIndex + i) % 3;     // oldest item always first
+        int idx = 0;
+        if (i > 0)
+        {
+            if (idx < size())
+            {
+                idx = (currentIndex + i) % 3; // oldest item always first
+            }
+            else
+            {
+                LOG_ERROR(L"Index out of bounds");
+            }
+        }
+        else
+        {
+            if (idx >= -size())
+            {
+                idx = (currentIndex + i + 3) % 3; // -1 is the newest (last) item
+            }
+            else
+            {
+                LOG_ERROR(L"Index out of bounds");
+            }
+        }
         return clicks[idx];
     }
 
@@ -925,22 +994,11 @@ private:
 
 } g_mouseClickQueue;
 
-static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
-
-static DWORD g_dwTaskbarThreadId;
-static bool g_initialized = false;
-static bool g_inputSiteProcHooked = false;
-
-static HWND g_hTaskbarWnd;
-static std::unordered_set<HWND> g_secondaryTaskbarWindows;
-
-static com_ptr<IUIAutomation> g_pUIAutomation;
-static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
-
 // since the mod can't be split to multiple files, the definition order becomes somehow complicated
 bool IsTaskbarWindow(HWND hWnd);
-bool isMouseDoubleClick(LPARAM lParam, HWND hWnd);
-bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction);
+bool IsMouseDoubleClick(HWND hWnd);
+bool IsMouseThreeFingerTap(HWND hWnd);
+bool OnMouseClick(HWND hWnd, MouseClick click);
 
 // =====================================================================
 
@@ -1075,19 +1133,15 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
         if (IsTaskbarWindow(hRootWnd))
         {
-            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
+            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam) &&
+                OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::MIDDLE)))
             {
-                if (OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::MIDDLE)))
-                {
-                    return 0;
-                }
+                return 0;
             }
-            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam, hWnd))
+            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) &&
+                     OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::LEFT)))
             {
-                if (OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::LEFT)))
-                {
-                    return 0;
-                };
+                return 0;
             }
         }
         break;
@@ -1306,8 +1360,6 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 
 #pragma endregion // hook_magic
 
-#pragma region functions
-
 bool IsTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
@@ -1324,51 +1376,31 @@ bool IsTaskbarWindow(HWND hWnd)
     }
 }
 
-bool isMouseDoubleClick()
+bool IsMouseDoubleClick(HWND hWnd)
 {
-    // LOG_TRACE();
+    LOG_TRACE();
 
-    // static DWORD lastPointerDownTime = 0;
-    // static POINT lastPointerDownLocation = {0, 0};
+    const MouseClick &lastClick = g_mouseClickQueue[-2];
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
 
-    // DWORD currentTime = GetTickCount();
-    // POINT currentLocation;
-    // currentLocation.x = GET_X_LPARAM(lParam);
-    // currentLocation.y = GET_Y_LPARAM(lParam);
+    UINT dpi = GetDpiForWindow(hWnd);
+    float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor
 
-    // UINT dpi = GetDpiForWindow(hWnd);  
-    // float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor 
+    // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
+    const int MAX_POS_OFFSET_PX = 15;
+    // if user has hires screen, every slight movement result in bigger pixel offset
+    const int MAX_POS_OFFSET_PX_SCALED = dpiScale * MAX_POS_OFFSET_PX;
 
-    // // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
-    // const int MAX_POS_OFFSET_PX = 15;   
-    // // if user has hires screen, every slight movement result in bigger pixel offset
-    // const int MAX_POS_OFFSET_PX_SCALED = dpiScale*MAX_POS_OFFSET_PX;     
-
-    // // Check if the current event is within the double-click time and distance
-    // bool result = false;
-    // if (abs(currentLocation.x - lastPointerDownLocation.x) <= MAX_POS_OFFSET_PX_SCALED &&
-    //     abs(currentLocation.y - lastPointerDownLocation.y) <= MAX_POS_OFFSET_PX_SCALED &&
-    //     ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
-    // {
-    //     result = true;
-
-    //     // Update the time and location to defaults, otherwise a triple-click will be detected as two double-clicks
-    //     lastPointerDownTime = 0;
-    //     lastPointerDownLocation = {0, 0};
-    // }
-    // else
-    // {
-    //     // Update the time and location of the last WM_POINTERDOWN event
-    //     lastPointerDownTime = currentTime;
-    //     lastPointerDownLocation = currentLocation;
-    // }
-
-    // return result;
-    return false;
+    // Check if the current event is within the double-click time and distance
+    bool result = abs(lastClick.position.x - currentClick.position.x) <= MAX_POS_OFFSET_PX_SCALED &&
+                  abs(lastClick.position.y - currentClick.position.y) <= MAX_POS_OFFSET_PX_SCALED &&
+                  ((currentClick.timestamp - lastClick.timestamp) <= GetDoubleClickTime());
+    return result;
 }
 
-bool isMouseTripleClick()
+bool IsMouseThreeFingerTap(HWND hWnd)
 {
+    // TODO: TBD
     return false;
 }
 
@@ -1821,21 +1853,21 @@ void OpenTaskManager(HWND taskbarhWnd)
     WCHAR szWindowsDirectory[MAX_PATH];
     GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory));
     std::wstring taskmgrPath = szWindowsDirectory;
-    taskmgrPath += L"\\System32\\Taskmgr.exe";  
+    taskmgrPath += L"\\System32\\Taskmgr.exe";
 
-    SHELLEXECUTEINFO sei = { sizeof(sei) };  
-    sei.lpVerb = L"open";   // Use "runas" to explicitly request elevation  
-    sei.lpFile = taskmgrPath.c_str();  
-    sei.nShow = SW_SHOW;  
+    SHELLEXECUTEINFO sei = {sizeof(sei)};
+    sei.lpVerb = L"open"; // Use "runas" to explicitly request elevation
+    sei.lpFile = taskmgrPath.c_str();
+    sei.nShow = SW_SHOW;
 
-    if (!ShellExecuteEx(&sei))  
-    {  
-        DWORD error = GetLastError();  
-        if (error != ERROR_CANCELLED)   // User declined the elevation.
-        {  
+    if (!ShellExecuteEx(&sei))
+    {
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED) // User declined the elevation.
+        {
             LOG_ERROR(L"Failed to start process taskmgr.exe with error code: %d", error);
-        }  
-    } 
+        }
+    }
 }
 
 void ToggleVolMuted()
@@ -1988,7 +2020,7 @@ void StartProcess(const std::wstring &command)
 
     if (!CreateProcess(NULL, (LPWSTR)command.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
     {
-        DWORD error = GetLastError();  
+        DWORD error = GetLastError();
         LOG_ERROR(L"Failed to start process - CreateProcess failed with error code: %d", error);
     }
     else
@@ -1997,8 +2029,6 @@ void StartProcess(const std::wstring &command)
         CloseHandle(pi.hProcess);
     }
 }
-
-#pragma endregion // functions
 
 // =====================================================================
 
@@ -2012,54 +2042,26 @@ bool OnMouseClick(HWND hWnd, MouseClick click)
         return false;
     }
 
-    // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
-    // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
-    // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
-    // opened window, icon, start menu, etc.
-
-    com_ptr<IUIAutomationElement> pWindowElement = NULL;
-    if (FAILED(g_pUIAutomation->ElementFromPoint(click.position, pWindowElement.put())) || !pWindowElement)
-    {
-        LOG_ERROR(L"Failed to retrieve UI element from mouse click");
-        return false;
-    }
-
-    bstr_ptr className;
-    if (FAILED(pWindowElement->get_CurrentClassName(className.GetAddress())) || !className)
-    {
-        LOG_ERROR(L"Failed to retrieve the Name of the UI element clicked.");
-        return false;
-    }
-    LOG_DEBUG(L"Clicked UI element ClassName: %s", className.GetBSTR());
-    const bool taskbarClicked = (wcscmp(className.GetBSTR(), L"Shell_TrayWnd") == 0) ||                        // Windows 10 primary taskbar
-                                (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
-                                (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
-                                (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
-    click.onEmptySpace = taskbarClicked;
+    g_mouseClickQueue.push_back(click);
 
     TaskBarAction taskbarAction{ACTION_NOTHING};
-    if ((click.button == MouseClick::MIDDLE) && taskbarClicked)
+    if ((click.button == MouseClick::MIDDLE) && click.onEmptySpace)
     {
         taskbarAction = g_settings.middleClickTaskbarAction;
     }
     else if (click.button == MouseClick::LEFT)
     {
-        g_mouseClickQueue.push_back(click);
-        if (isMouseTripleClick())
+        if (IsMouseThreeFingerTap(hWnd))
         {
             taskbarAction = g_settings.middleClickTaskbarAction;
-        } 
-        else if (isMouseDoubleClick())
+        }
+        else if (IsMouseDoubleClick(hWnd))
         {
             taskbarAction = g_settings.doubleClickTaskbarAction;
         }
     }
 
-    if (!taskbarClicked)
-    {
-        return false;
-    }
-    LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld, btn=%d", pointerLocation.x, pointerLocation.y, static_cast<int>(click.button));
+    // ===  execute action ====
 
     if (taskbarAction == ACTION_NOTHING)
     {
