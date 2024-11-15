@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-14T04:56:22.000Z</updated>
+    <updated>2024-11-15T07:36:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Basic Caption Text 1.1.1]]></title>
+        <id>https://windhawk.net/mods/fix-basic-caption-text#2613791dbe45f4777ff658a06d3cb430e8b26285</id>
+        <link href="https://windhawk.net/mods/fix-basic-caption-text"/>
+        <updated>2024-11-15T07:36:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Make behavior accurate to Windows 7; custom frames (e.g. UIRibbon) will always show active color when composition is enabled</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Basic Caption Text 1.1.0]]></title>
         <id>https://windhawk.net/mods/fix-basic-caption-text#ee50aef8b9cbdf57c84bff30cb17fcbbb0821ab8</id>
@@ -271,20 +284,6 @@
         <author>
             <name>u3l6</name>
             <uri>https://github.com/u3l6</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Shutdown Dialog 1.0.1]]></title>
-        <id>https://windhawk.net/mods/custom-shutdown-dialog#283efe79823953bacbe87532d0ade644bcbd8f62</id>
-        <link href="https://windhawk.net/mods/custom-shutdown-dialog"/>
-        <updated>2024-11-05T11:39:05.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Remove unnecessary version check, as it caused issues on older Explorer versions</li>
-<li>Refactor code to fit modern Windhawk standards</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

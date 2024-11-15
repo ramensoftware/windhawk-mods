@@ -1274,7 +1274,7 @@
                 "published": 1700125078000,
                 "rating": 9,
                 "ratingUsers": 3,
-                "updated": 1731560182000,
+                "updated": 1731656219000,
                 "users": 354
             },
             "metadata": {
@@ -1286,7 +1286,7 @@
                     "*"
                 ],
                 "name": "Fix Basic Caption Text",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "fix-darkmode-listviews": {
