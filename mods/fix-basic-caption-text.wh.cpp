@@ -2,7 +2,7 @@
 // @id              fix-basic-caption-text
 // @name            Fix Basic Caption Text
 // @description     Fixes non-DWM and UIRibbon frames having incorrect caption colors
-// @version         1.1.0
+// @version         1.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -49,13 +49,61 @@ You can also optionally make basic windows use small icons instead of downscalin
 
 bool g_bSmallIcons = true;
 
-#define  _NCWNDMET_Active(pThis)  *((DWORD *)pThis + 21)
+typedef int WINDOWPARTS, CLOSEBUTTONSTATES;
 
-DWORD (__thiscall *_NCWNDMET__GetCaptionColor_orig)(LPVOID, bool);
-DWORD __thiscall _NCWNDMET__GetCaptionColor_hook(LPVOID pThis, bool bDarkText)
+enum FRAMESTATES
 {
+    FS_ACTIVE = 0x1,
+    FS_INACTIVE = 0x2
+};
+
+typedef struct _NCWNDMET
+{
+    BOOL fValid;
+    BOOL fFrame;
+    BOOL fSmallFrame;
+    BOOL fMin;
+    BOOL fMaxed;
+    BOOL fFullMaxed;
+    BOOL fDirtyRects;
+    BOOL fCustomFrame;
+    BOOL fCustom;
+    DWORD dwStyle;
+    DWORD dwExStyle;
+    DWORD dwWindowStatus;
+    DWORD dwStyleClass;
+    WINDOWPARTS rgframeparts[4];
+    WINDOWPARTS rgsizehitparts[4];
+    FRAMESTATES framestate;
+    HFONT hfCaption;
+    COLORREF rgbCaption;
+    SIZE sizeCaptionText;
+    MARGINS CaptionMargins;
+    int iMinButtonPart;
+    int iMaxButtonPart;
+    CLOSEBUTTONSTATES rawCloseBtnState;
+    CLOSEBUTTONSTATES rawMinBtnState;
+    CLOSEBUTTONSTATES rawMaxBtnState;
+    CLOSEBUTTONSTATES rawHelpBtnState;
+    int cyMenu;
+    int cnMenuOffsetLeft;
+    int cnMenuOffsetRight;
+    int cnMenuOffsetTop;
+    int cnBorders;
+    RECT rcS0[26];
+    RECT rcW0[26];
+} NCWNDMET;
+
+DWORD (__thiscall *_NCWNDMET__GetCaptionColor_orig)(NCWNDMET *, bool);
+DWORD __thiscall _NCWNDMET__GetCaptionColor_hook(NCWNDMET *pThis, bool bDarkText)
+{
+    bool fInactive = (pThis->framestate == FS_INACTIVE);
+    // When composition was active, Windows 7 always displayed active color on
+    // ribbon.
+    if (IsCompositionActive() && pThis->fCustomFrame)
+        fInactive = false;
     return GetSysColor(
-        (_NCWNDMET_Active(pThis) != 1) ? COLOR_INACTIVECAPTIONTEXT : COLOR_CAPTIONTEXT
+        fInactive ? COLOR_INACTIVECAPTIONTEXT : COLOR_CAPTIONTEXT
     );
 }
 
