@@ -1400,8 +1400,41 @@ bool IsMouseDoubleClick(HWND hWnd)
 
 bool IsMouseThreeFingerTap(HWND hWnd)
 {
-    // TODO: TBD
-    return false;
+    LOG_TRACE();
+
+    // check time between the last three clicks
+    const int MAX_TIME_DIFF_MS = 100; // ms
+    if (((g_mouseClickQueue[-1].timestamp - g_mouseClickQueue[-2].timestamp) > MAX_TIME_DIFF_MS) ||
+        ((g_mouseClickQueue[-2].timestamp - g_mouseClickQueue[-3].timestamp) > MAX_TIME_DIFF_MS))
+    {
+        return false; // click are too far apart in time
+    }
+
+    int numOfFingersIn = 0;
+    numOfFingersIn += g_mouseClickQueue[0].onEmptySpace;
+    numOfFingersIn += g_mouseClickQueue[1].onEmptySpace;
+    numOfFingersIn += g_mouseClickQueue[2].onEmptySpace;
+    if (numOfFingersIn < 2)
+    {
+        return false; // at least two fingers must be in the empty space
+    }
+
+    // check how far from each other the clicks are in pixels
+    auto dist = [](const POINT &p1, const POINT &p2) -> float
+    { return sqrt(((p1.x - p2.x) * (p1.x - p2.x)) + ((p1.y - p2.y) * (p1.y - p2.y))); };
+
+    UINT dpi = GetDpiForWindow(hWnd);
+    float dpiScale = static_cast<float>(dpi) / 96.0f;                 // 96 DPI is the standard scaling factor
+    const int MAX_POS_DISTANCE_PX = static_cast<int>(dpiScale * 200); // 200 px on 96 DPI
+
+    int numOfCloseEnoughFingers = 0;
+    numOfCloseEnoughFingers += static_cast<int>(dist(g_mouseClickQueue[0].position, g_mouseClickQueue[1].position) <= MAX_POS_DISTANCE_PX);
+    numOfCloseEnoughFingers += static_cast<int>(dist(g_mouseClickQueue[1].position, g_mouseClickQueue[2].position) <= MAX_POS_DISTANCE_PX);
+    numOfCloseEnoughFingers += static_cast<int>(dist(g_mouseClickQueue[2].position, g_mouseClickQueue[0].position) <= MAX_POS_DISTANCE_PX);
+
+    bool isThreeFingerTap = numOfCloseEnoughFingers >= 2;
+
+    return isThreeFingerTap;
 }
 
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
