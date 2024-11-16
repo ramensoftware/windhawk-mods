@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-16T00:41:37.000Z</updated>
+    <updated>2024-11-16T13:39:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Customize Windows notifications placement 1.0.2]]></title>
+        <id>https://windhawk.net/mods/notifications-placement#19f3806e71b16183c5217ec05500791bbd400896</id>
+        <link href="https://windhawk.net/mods/notifications-placement"/>
+        <updated>2024-11-16T13:39:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add an option to show notifications on the monitor where the mouse cursor is located.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Desktop Watermark 1.0.2]]></title>
         <id>https://windhawk.net/mods/custom-desktop-watermark#3205ff7547c8429f0d5b7141231a8733c18d123d</id>
@@ -268,20 +281,6 @@
         <updated>2024-11-07T00:56:08.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added support for Everything 1.5 alpha.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.2]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#b789eaa75dec0f1005f0c08b8657a9901bbb910d</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-11-06T21:11:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option for getting folder sizes via "Everything" integration, which results in immediate folder sizes without having to calculate them manually.</li>
-<li>Improved the performance of sorting folders by size.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
