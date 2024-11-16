@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-16T13:39:31.000Z</updated>
+    <updated>2024-11-16T21:19:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#799488e7933b684caa77565ce1df5698833139ac</id>
+        <link href="https://windhawk.net/mods/taskbar-primary-on-secondary-monitor"/>
+        <updated>2024-11-16T21:19:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="primarytaskbaronsecondarymonitor">Primary taskbar on secondary monitor</h1>
+<p>Move the primary taskbar, including the tray icons, notifications, action
+center, etc. to another monitor.</p>
+<p><img src="https://i.imgur.com/hFU9oyK.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows notifications placement 1.0.2]]></title>
         <id>https://windhawk.net/mods/notifications-placement#19f3806e71b16183c5217ec05500791bbd400896</id>
@@ -268,19 +282,6 @@
 <li>Fixed all group items minimizing/restoring on scroll even when the group is not combined.</li>
 <li>Fixed compatibility with the <code>ExtendedUIXamlRefresh</code> Windows feature flag.</li>
 <li>Fixed thumbnails sometimes being stuck in an inconsistent state when scrolling over them.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.2.1]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#2d7a490c8540c53e5c97f7b8f96789c2a96d5fd4</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-11-07T00:56:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for Everything 1.5 alpha.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
