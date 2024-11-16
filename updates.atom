@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-15T07:36:59.000Z</updated>
+    <updated>2024-11-16T00:41:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Desktop Watermark 1.0.2]]></title>
+        <id>https://windhawk.net/mods/custom-desktop-watermark#3205ff7547c8429f0d5b7141231a8733c18d123d</id>
+        <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
+        <updated>2024-11-16T00:41:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix resource leak</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Basic Caption Text 1.1.1]]></title>
         <id>https://windhawk.net/mods/fix-basic-caption-text#2613791dbe45f4777ff658a06d3cb430e8b26285</id>
@@ -273,17 +286,6 @@
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force Chinese IME Mode 1.0.1]]></title>
-        <id>https://windhawk.net/mods/force-chinese-ime#a9fe3e8c0a2e81543a4cb42777d6112000e4288b</id>
-        <link href="https://windhawk.net/mods/force-chinese-ime"/>
-        <updated>2024-11-05T11:52:31.000Z</updated>
-        <content type="html"><![CDATA[<p>Add warning message for force-chinese-ime</p>]]></content>
-        <author>
-            <name>u3l6</name>
-            <uri>https://github.com/u3l6</uri>
         </author>
     </entry>
 </feed>
