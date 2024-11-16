@@ -2,7 +2,7 @@
 // @id              notifications-placement
 // @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -38,7 +38,8 @@ Only Windows 10 64-bit and Windows 11 are supported.
 - monitor: 1
   $name: Monitor
   $description: >-
-    The monitor number that notifications will appear on
+    The monitor number that notifications will appear on, set to zero to use the
+    monitor where the mouse cursor is located
 - horizontalPlacement: right
   $name: Horizontal placement on the screen
   $options:
@@ -271,9 +272,18 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
         return;
     }
 
-    HMONITOR destMonitor = !g_unloading && g_settings.monitor >= 1
-                               ? GetMonitorById(g_settings.monitor - 1)
-                               : nullptr;
+    HMONITOR destMonitor = nullptr;
+
+    if (!g_unloading) {
+        if (g_settings.monitor == 0) {
+            POINT pt;
+            GetCursorPos(&pt);
+            destMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        } else if (g_settings.monitor >= 1) {
+            destMonitor = GetMonitorById(g_settings.monitor - 1);
+        }
+    }
+
     if (!destMonitor) {
         destMonitor = primaryMonitor;
     }
