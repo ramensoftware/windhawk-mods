@@ -158,7 +158,6 @@ If you have request for new functions, suggestions or you are experiencing some 
 #include <string>
 #include <unordered_set>
 #include <vector>
-#include <fstream>
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -679,6 +678,7 @@ typedef class CUIAutomation CUIAutomation;
 // =====================================================================
 
 #ifdef ENABLE_FILE_LOGGER
+#include <fstream>
 // file logger works as simple Tee to log to both console and file
 class FileLogger
 {
@@ -895,7 +895,6 @@ struct MouseClick
     {
         LEFT = 0,
         MIDDLE,
-        RIGHT,
         INVALID
     };
 
@@ -906,11 +905,11 @@ struct MouseClick
         INVALID
     };
 
-    MouseClick() : button(Button::INVALID), position{0, 0}, timestamp(0), onEmptySpace(false)
+    MouseClick() : type(Type::INVALID), button(Button::INVALID), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(NULL)
     {
     }
 
-    MouseClick(WPARAM wParam, LPARAM lParam, Type ptrType, Button btn) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false)
+    MouseClick(WPARAM wParam, LPARAM lParam, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
     {
         timestamp = GetTickCount();
         if (!GetMouseClickPosition(lParam, position))
@@ -944,27 +943,45 @@ struct MouseClick
                   position.x, position.y, static_cast<int>(type), static_cast<int>(button), className.GetBSTR(), onEmptySpace);
     }
 
-    static MouseClick::Type GetPointerType(WPARAM wParam)
+    static MouseClick::Type GetPointerType(WPARAM wParam, LPARAM lParam)
     {
-        POINTER_INFO pointerInfo;
-        UINT32 pointerId = GET_POINTERID_WPARAM(wParam);
-
-        // Retrieve common pointer information
         MouseClick::Type type = MouseClick::Type::INVALID;
-        if (GetPointerInfo(pointerId, &pointerInfo))
+
+        if (g_taskbarVersion == WIN_10_TASKBAR)
         {
-            if ((pointerInfo.pointerType == PT_TOUCH) || (pointerInfo.pointerType == PT_PEN) || (pointerInfo.pointerType == PT_POINTER))
+            // legacy messages have information about pointer id stored in extra info (lparam)
+            // https://learn.microsoft.com/en-us/windows/win32/tablet/system-events-and-mouse-messages?redirectedfrom=MSDN#distinguishing-pen-input-from-mouse-and-touch
+            const auto MI_WP_SIGNATURE = 0xFF515700U;
+            const auto SIGNATURE_MASK = 0xFFFFFF00U;
+            if ((lParam & SIGNATURE_MASK) == MI_WP_SIGNATURE) // IsPenEvent ?
             {
-                return MouseClick::Type::TOUCH;
+                type = MouseClick::Type::TOUCH;
             }
             else
             {
-                return MouseClick::Type::MOUSE;
+                type = MouseClick::Type::MOUSE;
             }
         }
         else
         {
-            LOG_ERROR(L"Failed to retrieve pointer info for pointer id %d", pointerId);
+            // Retrieve common pointer information to find out source of the click
+            POINTER_INFO pointerInfo;
+            UINT32 pointerId = GET_POINTERID_WPARAM(wParam);
+            if (GetPointerInfo(pointerId, &pointerInfo))
+            {
+                if ((pointerInfo.pointerType == PT_TOUCH) || (pointerInfo.pointerType == PT_PEN) || (pointerInfo.pointerType == PT_POINTER))
+                {
+                    type = MouseClick::Type::TOUCH;
+                }
+                else
+                {
+                    type = MouseClick::Type::MOUSE;
+                }
+            }
+            else
+            {
+                LOG_ERROR(L"Failed to retrieve pointer info for pointer id %d", pointerId);
+            }
         }
         return type;
     }
@@ -974,6 +991,7 @@ struct MouseClick
     POINT position;
     DWORD timestamp;
     bool onEmptySpace;
+    HWND hWnd;
 };
 
 // simple ring buffer to store last 3 mouse clicks with python-like index access
@@ -1014,6 +1032,14 @@ public:
         return clicks[idx];
     }
 
+    void clear()
+    {
+        currentIndex = 0;
+        clicks[0] = MouseClick();
+        clicks[1] = MouseClick();
+        clicks[2] = MouseClick();
+    }
+
     int size() const
     {
         return MAX_CLICKS;
@@ -1026,12 +1052,16 @@ private:
 
 } g_mouseClickQueue;
 
+UINT_PTR gMouseClickTimer = (UINT_PTR)0;
+
 // since the mod can't be split to multiple files, the definition order becomes somehow complicated
 bool IsTaskbarWindow(HWND hWnd);
 bool IsDoubleClick();
-bool IsDoubleTap(HWND hWnd);
-bool IsThreeFingerTap(HWND hWnd);
-bool OnMouseClick(HWND hWnd, MouseClick click);
+bool IsDoubleTap();
+bool IsTripleTap();
+void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd);
+void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD);
+bool OnMouseClick(MouseClick click);
 
 // =====================================================================
 
@@ -1116,7 +1146,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     case WM_NCMBUTTONDOWN:
     case WM_MBUTTONDOWN:
         if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-            OnMouseClick(hWnd, MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::MIDDLE)))
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::MIDDLE, hWnd)))
         {
             result = 0;
         }
@@ -1129,7 +1159,21 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     case WM_LBUTTONDBLCLK:
     case WM_NCLBUTTONDBLCLK:
         if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-            OnMouseClick(hWnd, MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::LEFT)))
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)) &&
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)))
+        {
+            result = 0;
+        }
+        else
+        {
+            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
+        break;
+
+    case WM_LBUTTONDOWN:
+    case WM_NCLBUTTONDOWN:
+        if ((g_taskbarVersion == WIN_10_TASKBAR) &&
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)))
         {
             result = 0;
         }
@@ -1169,12 +1213,12 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         if (IsTaskbarWindow(hRootWnd))
         {
             if (IS_POINTER_THIRDBUTTON_WPARAM(wParam) &&
-                OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam), MouseClick::Button::MIDDLE)))
+                OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), MouseClick::Button::MIDDLE, hRootWnd)))
             {
                 return 0;
             }
             else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) &&
-                     OnMouseClick(hRootWnd, MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam), MouseClick::Button::LEFT)))
+                     OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), MouseClick::Button::LEFT, hRootWnd)))
             {
                 return 0;
             }
@@ -1395,114 +1439,6 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 
 #pragma endregion // hook_magic
 
-bool IsTaskbarWindow(HWND hWnd)
-{
-    LOG_TRACE();
-
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
-    {
-        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
-    }
-    else
-    {
-        LOG_ERROR(L"Failed to get window class name");
-        return false;
-    }
-}
-
-bool IsDoubleClick()
-{
-    LOG_TRACE();
-
-    const MouseClick &previousClick = g_mouseClickQueue[-2];
-    const MouseClick &currentClick = g_mouseClickQueue[-1];
-
-    if (previousClick.type != MouseClick::Type::MOUSE || currentClick.type != MouseClick::Type::MOUSE)
-    {
-        return false;
-    }
-
-    // Check if the current event is within the double-click time and distance
-    bool result = abs(previousClick.position.x - currentClick.position.x) <= GetSystemMetrics(SM_CXDOUBLECLK) &&
-                  abs(previousClick.position.y - currentClick.position.y) <= GetSystemMetrics(SM_CYDOUBLECLK) &&
-                  ((currentClick.timestamp - previousClick.timestamp) <= GetDoubleClickTime());
-    return result;
-}
-
-bool IsDoubleTap(HWND hWnd)
-{
-    LOG_TRACE();
-
-    const MouseClick &previousClick = g_mouseClickQueue[-2];
-    const MouseClick &currentClick = g_mouseClickQueue[-1];
-
-    if (previousClick.type != MouseClick::Type::TOUCH || currentClick.type != MouseClick::Type::TOUCH)
-    {
-        return false;
-    }
-
-    UINT dpi = GetDpiForWindow(hWnd);
-    float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor
-
-    // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
-    const int MAX_POS_OFFSET_PX = 15;
-    // if user has hi-res screen, every slight movement result in big pixel offset
-    const int MAX_POS_OFFSET_PX_SCALED = dpiScale * MAX_POS_OFFSET_PX;
-
-    // Check if the current event is within the double-click time and distance
-    bool result = abs(previousClick.position.x - currentClick.position.x) <= MAX_POS_OFFSET_PX_SCALED &&
-                  abs(previousClick.position.y - currentClick.position.y) <= MAX_POS_OFFSET_PX_SCALED &&
-                  ((currentClick.timestamp - previousClick.timestamp) <= (1.5 * GetDoubleClickTime()));
-    return result;
-}
-
-bool IsThreeFingerTap(HWND hWnd)
-{
-    LOG_TRACE();
-
-    if ((g_mouseClickQueue[0].type != MouseClick::Type::TOUCH) ||
-        (g_mouseClickQueue[1].type != MouseClick::Type::TOUCH) ||
-        (g_mouseClickQueue[2].type != MouseClick::Type::TOUCH))
-    {
-        return false;
-    }
-
-    // check time between the last three clicks
-    const int MAX_TIME_DIFF_MS = 100; // ms
-    if (((g_mouseClickQueue[-1].timestamp - g_mouseClickQueue[-2].timestamp) > MAX_TIME_DIFF_MS) ||
-        ((g_mouseClickQueue[-2].timestamp - g_mouseClickQueue[-3].timestamp) > MAX_TIME_DIFF_MS))
-    {
-        return false; // click are too far apart in time
-    }
-
-    int numOfFingersIn = 0;
-    numOfFingersIn += g_mouseClickQueue[0].onEmptySpace;
-    numOfFingersIn += g_mouseClickQueue[1].onEmptySpace;
-    numOfFingersIn += g_mouseClickQueue[2].onEmptySpace;
-    if (numOfFingersIn < 2)
-    {
-        return false; // at least two fingers must be in the empty space
-    }
-
-    // check how far from each other the clicks are in pixels
-    auto dist = [](const POINT &p1, const POINT &p2) -> float
-    { return sqrt(((p1.x - p2.x) * (p1.x - p2.x)) + ((p1.y - p2.y) * (p1.y - p2.y))); };
-
-    UINT dpi = GetDpiForWindow(hWnd);
-    float dpiScale = static_cast<float>(dpi) / 96.0f;                 // 96 DPI is the standard scaling factor
-    const int MAX_POS_DISTANCE_PX = static_cast<int>(dpiScale * 200); // 200 px on 96 DPI
-
-    int numOfCloseEnoughFingers = 0;
-    numOfCloseEnoughFingers += static_cast<int>(dist(g_mouseClickQueue[0].position, g_mouseClickQueue[1].position) <= MAX_POS_DISTANCE_PX);
-    numOfCloseEnoughFingers += static_cast<int>(dist(g_mouseClickQueue[1].position, g_mouseClickQueue[2].position) <= MAX_POS_DISTANCE_PX);
-    numOfCloseEnoughFingers += static_cast<int>(dist(g_mouseClickQueue[2].position, g_mouseClickQueue[0].position) <= MAX_POS_DISTANCE_PX);
-
-    bool isThreeFingerTap = numOfCloseEnoughFingers >= 2;
-
-    return isThreeFingerTap;
-}
-
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 {
     LOG_TRACE();
@@ -1554,7 +1490,6 @@ BOOL WindowsVersionInit()
     WORD nMajor = HIWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nMinor = LOWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nBuild = HIWORD(pFixedFileInfo->dwFileVersionLS);
-    WORD nQFE = LOWORD(pFixedFileInfo->dwFileVersionLS);
     LOG_INFO(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
 
     if (nMajor == 6)
@@ -1913,7 +1848,7 @@ void SendKeypress(std::vector<int> keys)
         input[NUM_KEYS + i].ki.dwFlags = KEYEVENTF_KEYUP;
     }
 
-    if (SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0])) != (NUM_KEYS * 2))
+    if (SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0])) != (UINT)(NUM_KEYS * 2))
     {
         LOG_ERROR(L"Failed to send all key inputs");
     }
@@ -2131,42 +2066,112 @@ void StartProcess(const std::wstring &command)
 
 // =====================================================================
 
-// main body of the mod called every time a taskbar is clicked
-bool OnMouseClick(HWND hWnd, MouseClick click)
+bool IsTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
 
-    if ((GetCapture() != NULL))
+    WCHAR szClassName[32];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
+    {
+        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to get window class name");
+        return false;
+    }
+}
+
+bool IsDoubleClick()
+{
+    LOG_TRACE();
+
+    const MouseClick &previousClick = g_mouseClickQueue[-2];
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
+
+    if (previousClick.type != MouseClick::Type::MOUSE || currentClick.type != MouseClick::Type::MOUSE)
     {
         return false;
     }
 
-    g_mouseClickQueue.push_back(click);
+    // Check if the current event is within the double-click time and distance
+    bool result = abs(previousClick.position.x - currentClick.position.x) <= GetSystemMetrics(SM_CXDOUBLECLK) &&
+                  abs(previousClick.position.y - currentClick.position.y) <= GetSystemMetrics(SM_CYDOUBLECLK) &&
+                  ((currentClick.timestamp - previousClick.timestamp) <= GetDoubleClickTime());
+    return result;
+}
 
-    TaskBarAction taskbarAction{ACTION_NOTHING};
-    if ((click.button == MouseClick::Button::MIDDLE) && click.onEmptySpace)
+bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick)
+{
+    LOG_TRACE();
+
+    if (previousClick.type != MouseClick::Type::TOUCH || currentClick.type != MouseClick::Type::TOUCH)
     {
-        taskbarAction = g_settings.middleClickTaskbarAction;
-    }
-    else if (click.button == MouseClick::Button::LEFT)
-    {
-        if (IsThreeFingerTap(hWnd))
-        {
-            taskbarAction = g_settings.middleClickTaskbarAction;
-        }
-        else if (IsDoubleClick() || IsDoubleTap(hWnd))
-        {
-            taskbarAction = g_settings.doubleClickTaskbarAction;
-        }
+        return false;
     }
 
-    // ===  execute action ====
+    if (previousClick.hWnd != currentClick.hWnd)
+    {
+        return false;
+    }
 
+    HWND hWnd = currentClick.hWnd;
+    UINT dpi = GetDpiForWindow(hWnd);
+    float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor
+
+    // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
+    const int MAX_POS_OFFSET_PX = 15;
+    // if user has hi-res screen, every slight movement result in big pixel offset
+    const int MAX_POS_OFFSET_PX_SCALED = dpiScale * MAX_POS_OFFSET_PX;
+
+    // Check if the current event is within the double-click time and distance
+    bool result = abs(previousClick.position.x - currentClick.position.x) <= MAX_POS_OFFSET_PX_SCALED &&
+                  abs(previousClick.position.y - currentClick.position.y) <= MAX_POS_OFFSET_PX_SCALED &&
+                  ((currentClick.timestamp - previousClick.timestamp) <= (GetDoubleClickTime()));
+    return result;
+}
+
+bool IsDoubleTap()
+{
+    LOG_TRACE();
+    const MouseClick &previousClick = g_mouseClickQueue[-2];
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
+    return IsDoubleTap(previousClick, currentClick);
+}
+
+bool IsTripleTap()
+{
+    LOG_TRACE();
+    return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
+}
+
+void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
+{
+    if (!KillTimer(NULL, gMouseClickTimer))
+    {
+        LOG_ERROR(L"Failed to kill triple click timer");
+    } 
+    gMouseClickTimer = 0;
+    
+    if (IsTripleTap())
+    {
+        ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, g_mouseClickQueue[-1].hWnd);
+    }
+    else
+    {
+        ExecuteTaskbarAction(g_settings.doubleClickTaskbarAction, g_mouseClickQueue[-1].hWnd);
+    }
+    g_mouseClickQueue.clear();
+}
+
+void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
+{
     if (taskbarAction == ACTION_NOTHING)
     {
-        return false;
+        return;
     }
-    else if (taskbarAction == ACTION_SHOW_DESKTOP)
+
+    if (taskbarAction == ACTION_SHOW_DESKTOP)
     {
         ShowDesktop(hWnd);
     }
@@ -2223,7 +2228,57 @@ bool OnMouseClick(HWND hWnd, MouseClick click)
     {
         LOG_ERROR(L"Unknown taskbar action '%d'", taskbarAction);
     }
+}
 
+// main body of the mod called every time a taskbar is clicked
+bool OnMouseClick(MouseClick click)
+{
+    LOG_TRACE();
+
+    if ((GetCapture() != NULL) || !click.onEmptySpace)
+    {
+        return false;
+    }
+
+    // directly handle middle click
+    if (click.button == MouseClick::Button::MIDDLE)
+    {
+        ExecuteTaskbarAction( g_settings.middleClickTaskbarAction, click.hWnd);
+    }
+    // buffer left clicks to detect double and triple clicks
+    else if (click.button == MouseClick::Button::LEFT)
+    {
+        g_mouseClickQueue.push_back(click);
+        
+        // mouse supports only double and middle click, touch supports double and triple taps (clicks)
+        if (IsTripleTap())
+        {
+            if (gMouseClickTimer != 0) {
+                if (!KillTimer(NULL, gMouseClickTimer))
+                {
+                    LOG_ERROR(L"Failed to kill triple click timer");
+                }  
+                gMouseClickTimer = 0;
+            }
+            // even though ProcessTripleTap callback should be called within this thread, just to be sure and avoid race condition, 
+            // clear the queue to avoid executing the action twice
+            g_mouseClickQueue.clear();
+            ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, click.hWnd);
+        }
+        else if (IsDoubleTap())
+        {
+            // setup triple click timer if not running already
+            // if within given time another tap is detected, triple tap (middle click) is executed, else double click is executed
+            if (gMouseClickTimer == 0) {  
+                gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessTripleTap); 
+            }
+        }
+        else if (IsDoubleClick())
+        {
+            ExecuteTaskbarAction(g_settings.doubleClickTaskbarAction, click.hWnd);
+            g_mouseClickQueue.clear();
+        }
+    }
     return false;
 }
 
