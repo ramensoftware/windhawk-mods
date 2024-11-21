@@ -1,3 +1,8 @@
+## 1.1 ([Nov 21, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7fb455e856a1d5067bae96a727cd1e27a6af9ff3/mods/chrome-wheel-scroll-tabs.wh.cpp))
+
+* Added an option to switch between tabs when the mouse's horizontal scroll wheel is tilted or rotated.
+* Fixed the border around the web content in Edge triggering the tab scrolling.
+
 ## 1.0.3 ([Dec 31, 2022](https://github.com/ramensoftware/windhawk-mods/blob/c323dbab16d3ed2e63b923a87b325278ff43e767/mods/chrome-wheel-scroll-tabs.wh.cpp))
 
 * Fix scrolling in Edge with the find bar open.

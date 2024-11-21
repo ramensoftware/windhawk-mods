@@ -265,13 +265,13 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 57,
-                "updated": 1672509589000,
+                "updated": 1732217907000,
                 "users": 4510
             },
             "featured": true,
             "metadata": {
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32",
+                "compilerOptions": "-lcomctl32 -lgdi32",
                 "description": "Use the mouse wheel while hovering over the tab bar to switch between tabs",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -283,7 +283,7 @@
                 ],
                 "name": "Chrome/Edge scroll tabs with mouse wheel",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.3"
+                "version": "1.1"
             }
         },
         "classic-browser-fix": {
