@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-16T21:19:48.000Z</updated>
+    <updated>2024-11-21T11:02:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.2.1]]></title>
+        <id>https://windhawk.net/mods/classic-browser-fix#f646116532b0fbd44766c91c0c4d9ca824647ee6</id>
+        <link href="https://windhawk.net/mods/classic-browser-fix"/>
+        <updated>2024-11-21T11:02:33.000Z</updated>
+        <content type="html"><![CDATA[<p>Add Chatgpt app.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#799488e7933b684caa77565ce1df5698833139ac</id>
@@ -267,21 +278,6 @@ center, etc. to another monitor.</p>
         <updated>2024-11-08T18:05:33.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>The integration with Everything was rewritten and is now faster (about x6 speedup), more stable (occasional hangs were fixed), and more robust overall.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.0.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-scroll#88f7a3c83a0d67d032d94c18d438fa0f0f407a30</id>
-        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
-        <updated>2024-11-07T23:42:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed all group items minimizing/restoring on scroll even when the group is not combined.</li>
-<li>Fixed compatibility with the <code>ExtendedUIXamlRefresh</code> Windows feature flag.</li>
-<li>Fixed thumbnails sometimes being stuck in an inconsistent state when scrolling over them.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

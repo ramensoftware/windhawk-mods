@@ -292,7 +292,7 @@
                 "published": 1706897392000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1720265506000,
+                "updated": 1732186953000,
                 "users": 102
             },
             "metadata": {
@@ -306,10 +306,11 @@
                     "chromium.exe",
                     "Skype.exe",
                     "steam.exe",
-                    "brave.exe"
+                    "brave.exe",
+                    "chatgpt.exe"
                 ],
                 "name": "Fix browsers for Windows Classic theme",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "classic-clock-button-behavior": {

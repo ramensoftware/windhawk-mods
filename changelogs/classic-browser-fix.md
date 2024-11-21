@@ -1,3 +1,7 @@
+## 1.2.1 ([Nov 21, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f646116532b0fbd44766c91c0c4d9ca824647ee6/mods/classic-browser-fix.wh.cpp))
+
+Add Chatgpt app.
+
 ## 1.2 ([Jul 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/77c66fbd6c63d5ac8642a77789dbc30880a33e71/mods/classic-browser-fix.wh.cpp))
 
 plus Brave browser, mitigate reported issues in File Picker
