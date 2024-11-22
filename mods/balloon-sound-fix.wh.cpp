@@ -15,72 +15,40 @@
 # Balloon Sound Fix
 Windows XP played a sound when showing balloon notifications. However, this
 functionality has been broken since Windows Vista. This mod fixes that issue in
-Windows 10.
+Windows 10/11.
 */
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
 
-typedef unsigned __int64 QWORD;
-
-struct CTrayItemIdentity
+HRESULT (*SHPlaySound_orig)(void);
+HRESULT SHPlaySound_hook(void)
 {
-    GUID m_guidItem = GUID_NULL;
-    HWND m_hWnd = nullptr;
-    WCHAR m_szExeName[MAX_PATH];
-    UINT m_uID = 0;
-    UINT m_uVersion = 3;
-    UINT m_uCallbackMsg = 0;
-};
+    // Microsoft messed this up badly, presumably starting in Vista.
+    // It attempts to play the balloon sound from the `Explorer` app, when it
+    // should play it from `.Default`. The strange thing is, the original version
+    // of this function seems to include code for grabbing the .Default version
+    // of the sound from registry, but the result is never used.
+    WCHAR szFileName[MAX_PATH] = { 0 };
+    LONG cbSize = sizeof(szFileName);
 
-struct TNINFOITEM
-{
-    CTrayItemIdentity identity;
-    WCHAR szInfoTitle[128];
-    WCHAR szInfo[256];
-    DWORD dwInfoFlags;
-    BOOL bRealtime;
-};
-
-struct CTrayBalloonInfoTipManager
-{
-    HWND m_hwndTooltip;
-    IUnknown *m_events;
-    void *m_trayItemController;
-    TNINFOITEM *m_info;
-};
-
-DWORD (*CTrayBalloonInfoTipManager__ShowBalloonTip_orig)(CTrayBalloonInfoTipManager *, HICON, DWORD);
-DWORD CTrayBalloonInfoTipManager__ShowBalloonTip_hook(
-    CTrayBalloonInfoTipManager *pThis,
-    HICON hIcon,
-    DWORD dwLastSoundTime
-)
-{
-    if (pThis->m_info && !(pThis->m_info->dwInfoFlags & NIIF_NOSOUND)
-        && GetTickCount() - dwLastSoundTime >= 500)
+    if (ERROR_SUCCESS == RegQueryValueW(
+        HKEY_CURRENT_USER, L"AppEvents\\Schemes\\Apps\\.Default\\SystemNotification\\.Current", 
+        szFileName, &cbSize)
+        && szFileName[0])
     {
-        WCHAR szFileName[MAX_PATH] = { 0 };
-        LONG cbSize = sizeof(szFileName);
-
-        if (ERROR_SUCCESS == RegQueryValueW(
-            HKEY_CURRENT_USER, L"AppEvents\\Schemes\\Apps\\.Default\\SystemNotification\\.Current", 
-            szFileName, &cbSize)
-            && szFileName[0])
-        {
-            PlaySoundW(szFileName, NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT | SND_NOSTOP);
-        }
+        PlaySoundW(szFileName, NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT | SND_NOSTOP);
     }
-    return CTrayBalloonInfoTipManager__ShowBalloonTip_orig(pThis, hIcon, dwLastSoundTime);
+    return S_OK;
 }
 
 const WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
     {
         {
-            L"private: unsigned long __cdecl CTrayBalloonInfoTipManager::_ShowBalloonTip(struct HICON__ *,unsigned long)"
+            L"SHPlaySound"
         },
-        &CTrayBalloonInfoTipManager__ShowBalloonTip_orig,
-        CTrayBalloonInfoTipManager__ShowBalloonTip_hook,
+        &SHPlaySound_orig,
+        SHPlaySound_hook,
         false
     }
 };
@@ -93,7 +61,7 @@ BOOL Wh_ModInit(void)
         ARRAYSIZE(explorerExeHooks)
     ))
     {
-        Wh_Log(L"Failed to hook CTrayBalloonInfoTipManager::_ShowBalloonTip");
+        Wh_Log(L"Failed to hook SHPlaySound");
         return FALSE;
     }
 
