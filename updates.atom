@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-22T00:42:56.000Z</updated>
+    <updated>2024-11-22T18:05:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[TortoiseGit progress animation background fix for classic dark theme 1.0.0]]></title>
+        <id>https://windhawk.net/mods/tortoisegit-progress-animation-background-fix#23d47eaa50c0dd34b1bd7b843c4652f684198f14</id>
+        <link href="https://windhawk.net/mods/tortoisegit-progress-animation-background-fix"/>
+        <updated>2024-11-22T18:05:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="tortoisegitprogressanimationbackgroundfixforclassicdarktheme">TortoiseGit progress animation background fix for classic dark theme</h1>
+<p>Under classic dark theme, TortoiseGit progress animation has a white background, thus looking as if something is broken.</p>
+<p>This mod fixes the progress animation background in classic dark theme by replacing the white background with a classic button face colour.</p>
+<p>Before:</p>
+<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/before-tortoisegit-progress-animation-background.png" alt="Before" /></p>
+<p>After:</p>
+<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-tortoisegit-progress-animation-background.png" alt="After" /> </p>
+<h2 id="knownlimitations">Known limitations</h2>
+<p>There is still a brief flash of a white coloured box before the progress animation starts. I have tried various ways, but have been unable to get rid of that. If you have an idea how to fix that, please let me know!</p>]]></content>
+        <author>
+            <name>Roland Pihlakas</name>
+            <uri>https://github.com/levitation</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Visual Studio Anti-Rich-Header 1.0.3]]></title>
         <id>https://windhawk.net/mods/visual-studio-anti-rich-header#5c2c1aee4460b052b77496e4cbb4f00bddba510b</id>
@@ -272,17 +291,6 @@ center, etc. to another monitor.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Legacy Alt+Tab dialog 1.0.1]]></title>
-        <id>https://windhawk.net/mods/legacy-alt-tab#b3712cc03e6f39212f8e7e79b91acb36e87b2507</id>
-        <link href="https://windhawk.net/mods/legacy-alt-tab"/>
-        <updated>2024-11-09T00:55:38.000Z</updated>
-        <content type="html"><![CDATA[<p>Add info on supported Windows versions.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

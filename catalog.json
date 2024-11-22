@@ -3225,6 +3225,28 @@
                 "version": "1.0"
             }
         },
+        "tortoisegit-progress-animation-background-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1732298725000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1732298725000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Roland Pihlakas",
+                "compilerOptions": "-lgdi32",
+                "description": "Fixes progress animation background in classic dark theme by replacing white background with a classic button face colour",
+                "github": "https://github.com/levitation",
+                "homepage": "https://www.simplify.ee/",
+                "include": [
+                    "TortoiseGitProc.exe"
+                ],
+                "name": "TortoiseGit progress animation background fix for classic dark theme",
+                "version": "1.0.0"
+            }
+        },
         "transparent-screensaver-fix": {
             "details": {
                 "defaultSorting": 2280,
