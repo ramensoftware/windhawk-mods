@@ -15,7 +15,12 @@
 # Balloon Sound Fix
 Windows XP played a sound when showing balloon notifications. However, this
 functionality has been broken since Windows Vista. This mod fixes that issue in
-Windows 10/11.
+Windows 10. This mod will *not* work on Windows 11's new taskbar, as that does
+not support legacy balloons.
+
+To enable the balloons, create the registry value
+`HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications`
+as a DWORD, set it to 1, and restart Explorer (or sign out and sign in). 
 */
 // ==/WindhawkModReadme==
 
