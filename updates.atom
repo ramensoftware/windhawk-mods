@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-21T19:38:27.000Z</updated>
+    <updated>2024-11-22T00:42:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Visual Studio Anti-Rich-Header 1.0.3]]></title>
+        <id>https://windhawk.net/mods/visual-studio-anti-rich-header#5c2c1aee4460b052b77496e4cbb4f00bddba510b</id>
+        <link href="https://windhawk.net/mods/visual-studio-anti-rich-header"/>
+        <updated>2024-11-22T00:42:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for a newer version of link.exe which comes with Visual Studio 2022 version 17.12.1.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.1]]></title>
         <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#7fb455e856a1d5067bae96a727cd1e27a6af9ff3</id>
@@ -270,19 +283,6 @@ center, etc. to another monitor.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#8a97216088069321df239b51174247ec6342138c</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-11-08T23:35:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to mix files and folders when sorting by size.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
