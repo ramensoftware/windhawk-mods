@@ -21,7 +21,7 @@
 /*
 # Click on empty taskbar space
 
-This mod lets you assign an action to a mouse click on Windows taskbar. Double-click and middle-click actions are supported. This mod only modifies behaviour when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Both primary and secondary taskbars are supported.
+This mod lets you assign an action to a mouse click on Windows taskbar. Double-click and middle-click actions are supported. Additionally double tap and triple tap on touch screens are supported. This mod only modifies behaviour when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Both primary and secondary taskbars are supported.
 
 ## Supported actions:
 
@@ -65,7 +65,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 // ==WindhawkModSettings==
 /*
 - doubleClickAction: ACTION_NOTHING
-  $name: Double click on empty space
+  $name: Double click / double tap on empty space
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
@@ -80,7 +80,7 @@ If you have request for new functions, suggestions or you are experiencing some 
   - ACTION_SEND_KEYPRESS: Virtual key press
   - ACTION_START_PROCESS: Start application
 - middleClickAction: ACTION_NOTHING
-  $name: Middle click on empty space
+  $name: Middle click / triple tap on empty space
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
