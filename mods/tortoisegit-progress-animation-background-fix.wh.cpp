@@ -47,12 +47,6 @@ There is still a brief flash of a white coloured box before the progress animati
 #include <new>          //std::nothrow
 
 
-#ifndef WH_MOD
-#define WH_MOD
-#include <mods_api.h>
-#endif
-
-
 template <typename T>
 BOOL Wh_SetFunctionHookT(
     FARPROC targetFunction,
