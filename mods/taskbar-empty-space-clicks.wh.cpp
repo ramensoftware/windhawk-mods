@@ -2094,9 +2094,16 @@ bool IsDoubleClick()
         return false;
     }
 
+    if (previousClick.hWnd != currentClick.hWnd)
+    {
+        return false;
+    }
+
+    UINT dpi = GetDpiForWindow(currentClick.hWnd);
+
     // Check if the current event is within the double-click time and distance
-    bool result = abs(previousClick.position.x - currentClick.position.x) <= GetSystemMetrics(SM_CXDOUBLECLK) &&
-                  abs(previousClick.position.y - currentClick.position.y) <= GetSystemMetrics(SM_CYDOUBLECLK) &&
+    bool result = abs(previousClick.position.x - currentClick.position.x) <= MulDiv(GetSystemMetrics(SM_CXDOUBLECLK), dpi, 96) &&
+                  abs(previousClick.position.y - currentClick.position.y) <= MulDiv(GetSystemMetrics(SM_CYDOUBLECLK), dpi, 96) &&
                   ((currentClick.timestamp - previousClick.timestamp) <= GetDoubleClickTime());
     return result;
 }
@@ -2117,12 +2124,11 @@ bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick
 
     HWND hWnd = currentClick.hWnd;
     UINT dpi = GetDpiForWindow(hWnd);
-    float dpiScale = static_cast<float>(dpi) / 96.0f; // 96 DPI is the standard scaling factor
 
     // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
     const int MAX_POS_OFFSET_PX = 15;
     // if user has hi-res screen, every slight movement result in big pixel offset
-    const int MAX_POS_OFFSET_PX_SCALED = dpiScale * MAX_POS_OFFSET_PX;
+    const int MAX_POS_OFFSET_PX_SCALED = MulDiv(MAX_POS_OFFSET_PX, dpi, 96);
 
     // Check if the current event is within the double-click time and distance
     bool result = abs(previousClick.position.x - currentClick.position.x) <= MAX_POS_OFFSET_PX_SCALED &&
