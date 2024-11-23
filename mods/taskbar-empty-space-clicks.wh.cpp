@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.6
+// @version         1.7
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -662,6 +662,290 @@ DEFINE_GUID(CLSID_CUIAutomation, 0xff48dba4, 0x60ef, 0x4201, 0xaa, 0x87, 0x54, 0
 #endif
 
 typedef class CUIAutomation CUIAutomation;
+
+#ifndef __IUIAutomationInvokePattern_FWD_DEFINED__
+#define __IUIAutomationInvokePattern_FWD_DEFINED__
+typedef interface IUIAutomationInvokePattern IUIAutomationInvokePattern;
+#ifdef __cplusplus
+interface IUIAutomationInvokePattern;
+#endif /* __cplusplus */
+#endif
+
+#ifndef __IUIAutomationTogglePattern_FWD_DEFINED__
+#define __IUIAutomationTogglePattern_FWD_DEFINED__
+typedef interface IUIAutomationTogglePattern IUIAutomationTogglePattern;
+#ifdef __cplusplus
+interface IUIAutomationTogglePattern;
+#endif /* __cplusplus */
+#endif
+
+#ifndef __IUIAutomationCondition_FWD_DEFINED__
+#define __IUIAutomationCondition_FWD_DEFINED__
+typedef interface IUIAutomationCondition IUIAutomationCondition;
+#ifdef __cplusplus
+interface IUIAutomationCondition;
+#endif /* __cplusplus */
+#endif
+
+/*****************************************************************************
+ * IUIAutomationInvokePattern interface
+ */
+#ifndef __IUIAutomationInvokePattern_INTERFACE_DEFINED__
+#define __IUIAutomationInvokePattern_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("fb377fbe-8ea6-46d5-9c73-6499642d3059")
+IUIAutomationInvokePattern : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Invoke() = 0;
+};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59)
+#endif
+#else
+typedef struct IUIAutomationInvokePatternVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationInvokePattern *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationInvokePattern *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationInvokePattern *This);
+
+    /*** IUIAutomationInvokePattern methods ***/
+    HRESULT(STDMETHODCALLTYPE *Invoke)
+    (
+        IUIAutomationInvokePattern *This);
+
+    END_INTERFACE
+} IUIAutomationInvokePatternVtbl;
+
+interface IUIAutomationInvokePattern
+{
+    CONST_VTBL IUIAutomationInvokePatternVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationInvokePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationInvokePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationInvokePattern_Release(This) (This)->lpVtbl->Release(This)
+/*** IUIAutomationInvokePattern methods ***/
+#define IUIAutomationInvokePattern_Invoke(This) (This)->lpVtbl->Invoke(This)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_QueryInterface(IUIAutomationInvokePattern *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationInvokePattern_AddRef(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationInvokePattern_Release(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->Release(This);
+}
+/*** IUIAutomationInvokePattern methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_Invoke(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->Invoke(This);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationInvokePattern_INTERFACE_DEFINED__ */
+
+/*****************************************************************************
+ * IUIAutomationTogglePattern interface
+ */
+#ifndef __IUIAutomationTogglePattern_INTERFACE_DEFINED__
+#define __IUIAutomationTogglePattern_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70")
+IUIAutomationTogglePattern : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Toggle() = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_CurrentToggleState(
+        enum ToggleState * retVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_CachedToggleState(
+        enum ToggleState * retVal) = 0;
+};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70)
+#endif
+#else
+typedef struct IUIAutomationTogglePatternVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationTogglePattern *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationTogglePattern *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationTogglePattern *This);
+
+    /*** IUIAutomationTogglePattern methods ***/
+    HRESULT(STDMETHODCALLTYPE *Toggle)
+    (
+        IUIAutomationTogglePattern *This);
+
+    HRESULT(STDMETHODCALLTYPE *get_CurrentToggleState)
+    (
+        IUIAutomationTogglePattern *This,
+        enum ToggleState *retVal);
+
+    HRESULT(STDMETHODCALLTYPE *get_CachedToggleState)
+    (
+        IUIAutomationTogglePattern *This,
+        enum ToggleState *retVal);
+
+    END_INTERFACE
+} IUIAutomationTogglePatternVtbl;
+
+interface IUIAutomationTogglePattern
+{
+    CONST_VTBL IUIAutomationTogglePatternVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationTogglePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationTogglePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationTogglePattern_Release(This) (This)->lpVtbl->Release(This)
+/*** IUIAutomationTogglePattern methods ***/
+#define IUIAutomationTogglePattern_Toggle(This) (This)->lpVtbl->Toggle(This)
+#define IUIAutomationTogglePattern_get_CurrentToggleState(This, retVal) (This)->lpVtbl->get_CurrentToggleState(This, retVal)
+#define IUIAutomationTogglePattern_get_CachedToggleState(This, retVal) (This)->lpVtbl->get_CachedToggleState(This, retVal)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_QueryInterface(IUIAutomationTogglePattern *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationTogglePattern_AddRef(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationTogglePattern_Release(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->Release(This);
+}
+/*** IUIAutomationTogglePattern methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_Toggle(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->Toggle(This);
+}
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CurrentToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
+{
+    return This->lpVtbl->get_CurrentToggleState(This, retVal);
+}
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CachedToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
+{
+    return This->lpVtbl->get_CachedToggleState(This, retVal);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationTogglePattern_INTERFACE_DEFINED__ */
+
+/*****************************************************************************
+ * IUIAutomationCondition interface
+ */
+#ifndef __IUIAutomationCondition_INTERFACE_DEFINED__
+#define __IUIAutomationCondition_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("352ffba8-0973-437c-a61f-f64cafd81df9")
+IUIAutomationCondition : public IUnknown{};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9)
+#endif
+#else
+typedef struct IUIAutomationConditionVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationCondition *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationCondition *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationCondition *This);
+
+    END_INTERFACE
+} IUIAutomationConditionVtbl;
+
+interface IUIAutomationCondition
+{
+    CONST_VTBL IUIAutomationConditionVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationCondition_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationCondition_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationCondition_Release(This) (This)->lpVtbl->Release(This)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationCondition_QueryInterface(IUIAutomationCondition *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationCondition_AddRef(IUIAutomationCondition *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition *This)
+{
+    return This->lpVtbl->Release(This);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationCondition_INTERFACE_DEFINED__ */
 
 #pragma endregion
 
@@ -1803,15 +2087,22 @@ void ToggleTaskbarAutohide()
     }
 }
 
-void ShowDesktop(HWND taskbarhWnd)
+void ShowDesktop()
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending ShowDesktop message");
-    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
-    if (SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0) != 0)
+    if (g_hTaskbarWnd)
     {
-        LOG_ERROR(L"Failed to send ShowDesktop message");
+        LOG_INFO(L"Sending ShowDesktop message");
+        // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
+        if (SendMessage(g_hTaskbarWnd, WM_COMMAND, MAKELONG(407, 0), 0) != 0)
+        {
+            LOG_ERROR(L"Failed to send ShowDesktop message");
+        }
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to show desktop - taskbar window not found");
     }
 }
 
@@ -1874,8 +2165,130 @@ void SendWinKeypress()
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending Win keypress");
-    SendKeypress({VK_LWIN});
+    const MouseClick &lastClick = g_mouseClickQueue[-1];
+    if (!lastClick.onEmptySpace)
+    {
+        LOG_ERROR(L"Failed to send Win keypress - last click was not on empty space");
+        return;
+    }
+
+    // Get the taskbar element from the last mouse click position
+    com_ptr<IUIAutomationElement> pWindowElement = NULL;
+    if (FAILED(g_pUIAutomation->ElementFromPoint(lastClick.position, pWindowElement.put())) || !pWindowElement)
+    {
+        LOG_ERROR(L"Failed to taskbar UI element from mouse click");
+        return;
+    }
+
+    com_ptr<IUIAutomationElement> pStartButton = NULL;
+
+    // find the Start button element on the Taskbar so it can be clicked
+    if (g_taskbarVersion == WIN_10_TASKBAR)
+    {
+        // *************** Handling Windows 10 Start Button ***************
+
+        // Create Condition 1: ControlType == Button
+        com_ptr<IUIAutomationCondition> pControlTypeCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId,
+                                                            _variant_t(static_cast<int>(UIA_ButtonControlTypeId)),
+                                                            pControlTypeCondition.put())) ||
+            !pControlTypeCondition)
+        {
+            LOG_ERROR(L"Failed to create ControlType condition for Start button search.");
+            return;
+        }
+
+        // Create Condition 2: ClassName == "Start"
+        com_ptr<IUIAutomationCondition> pClassNameCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId,
+                                                            _variant_t(L"Start"),
+                                                            pClassNameCondition.put())) ||
+            !pClassNameCondition)
+        {
+            LOG_ERROR(L"Failed to create ClassName condition for Start button search.");
+            return;
+        }
+
+        // Combine both conditions using AndCondition
+        com_ptr<IUIAutomationCondition> pAndCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreateAndCondition(pControlTypeCondition.get(),
+                                                       pClassNameCondition.get(),
+                                                       pAndCondition.put())) ||
+            !pAndCondition)
+        {
+            LOG_ERROR(L"Failed to create ControlType&&ClassName condition for Start button search.");
+            return;
+        }
+
+        // Use the combined condition to find the Start button within the Taskbar
+        if (FAILED(pWindowElement->FindFirst(TreeScope_Children, pAndCondition.get(), pStartButton.put())) || !pStartButton)
+        {
+            LOG_ERROR(L"Failed to locate the Start button element for Windows 10 taskbar.");
+            return;
+        }
+    }
+    else
+    {
+        // *************** Handling Windows 11 Start Button ***************
+
+        // Create a condition to find the Start button by AutomationId
+        com_ptr<IUIAutomationCondition> pCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_AutomationIdPropertyId,
+                                                            _variant_t(L"StartButton"),
+                                                            pCondition.put())) ||
+            !pCondition)
+        {
+            LOG_ERROR(L"Failed to create property condition for locating the Start button.");
+            return;
+        }
+
+        // Use the AutomationId condition to find the Start button within the Taskbar
+        if (FAILED(pWindowElement->FindFirst(TreeScope_Children, pCondition.get(), pStartButton.put())) || !pStartButton)
+        {
+            LOG_ERROR(L"Failed to locate the Start button element for Windows 11 taskbar.");
+            return;
+        }
+    }
+
+    // Perform the appropriate action based on the Taskbar version
+    if (g_taskbarVersion == WIN_10_TASKBAR)
+    {
+        // Use Invoke pattern to click the Start button on Windows 10
+        com_ptr<IUIAutomationInvokePattern> pInvoke = NULL;
+        if (FAILED(pStartButton->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(pInvoke.put()))) || !pInvoke)
+        {
+            LOG_ERROR(L"Invoke pattern not supported by the Start button.");
+            return;
+        }
+
+        if (FAILED(pInvoke->Invoke()))
+        {
+            LOG_ERROR(L"Failed to invoke the Start button.");
+        }
+        else
+        {
+            LOG_INFO(L"Start button clicked successfully on Windows 10 taskbar.");
+        }
+    }
+    else
+    {
+        // Use Toggle pattern to toggle the Start button on Windows 11
+        com_ptr<IUIAutomationTogglePattern> pToggle = NULL;
+        if (FAILED(pStartButton->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(pToggle.put()))) || !pToggle)
+        {
+            LOG_ERROR(L"Toggle pattern not supported by the Start button.");
+            return;
+        }
+
+        if (FAILED(pToggle->Toggle()))
+        {
+            LOG_ERROR(L"Failed to toggle the Start button.");
+        }
+        else
+        {
+            LOG_INFO(L"Start button toggled successfully on Windows 11 taskbar.");
+        }
+    }
 }
 
 void OpenTaskManager(HWND taskbarhWnd)
@@ -2156,9 +2569,9 @@ void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
     if (!KillTimer(NULL, gMouseClickTimer))
     {
         LOG_ERROR(L"Failed to kill triple click timer");
-    } 
+    }
     gMouseClickTimer = 0;
-    
+
     if (IsTripleTap())
     {
         ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, g_mouseClickQueue[-1].hWnd);
@@ -2179,7 +2592,7 @@ void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
 
     if (taskbarAction == ACTION_SHOW_DESKTOP)
     {
-        ShowDesktop(hWnd);
+        ShowDesktop();
     }
     else if (taskbarAction == ACTION_CTRL_ALT_TAB)
     {
@@ -2249,24 +2662,25 @@ bool OnMouseClick(MouseClick click)
     // directly handle middle click
     if (click.button == MouseClick::Button::MIDDLE)
     {
-        ExecuteTaskbarAction( g_settings.middleClickTaskbarAction, click.hWnd);
+        ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, click.hWnd);
     }
     // buffer left clicks to detect double and triple clicks
     else if (click.button == MouseClick::Button::LEFT)
     {
         g_mouseClickQueue.push_back(click);
-        
+
         // mouse supports only double and middle click, touch supports double and triple taps (clicks)
         if (IsTripleTap())
         {
-            if (gMouseClickTimer != 0) {
+            if (gMouseClickTimer != 0)
+            {
                 if (!KillTimer(NULL, gMouseClickTimer))
                 {
                     LOG_ERROR(L"Failed to kill triple click timer");
-                }  
+                }
                 gMouseClickTimer = 0;
             }
-            // even though ProcessTripleTap callback should be called within this thread, just to be sure and avoid race condition, 
+            // even though ProcessTripleTap callback should be called within this thread, just to be sure and avoid race condition,
             // clear the queue to avoid executing the action twice
             g_mouseClickQueue.clear();
             ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, click.hWnd);
@@ -2275,8 +2689,9 @@ bool OnMouseClick(MouseClick click)
         {
             // setup triple click timer if not running already
             // if within given time another tap is detected, triple tap (middle click) is executed, else double click is executed
-            if (gMouseClickTimer == 0) {  
-                gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessTripleTap); 
+            if (gMouseClickTimer == 0)
+            {
+                gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessTripleTap);
             }
         }
         else if (IsDoubleClick())

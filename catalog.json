@@ -2676,7 +2676,7 @@
                 "published": 1704123810000,
                 "rating": 10,
                 "ratingUsers": 63,
-                "updated": 1732373046000,
+                "updated": 1732380450000,
                 "users": 2463
             },
             "metadata": {
@@ -2688,7 +2688,7 @@
                     "explorer.exe"
                 ],
                 "name": "Click on empty taskbar space",
-                "version": "1.6"
+                "version": "1.7"
             }
         },
         "taskbar-grouping": {

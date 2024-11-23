@@ -1,3 +1,8 @@
+## 1.7 ([Nov 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2e30970216e691be9103eb6693f557e63eb39e45/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- Start menu now opens on the same monitor where the taskbar was clicked - fixes https://github.com/m1lhaus/windhawk-mods/issues/19
+- Show Desktop feature fixes for Explorer Patcher taskbar - fixes https://github.com/m1lhaus/windhawk-mods/issues/10
+
 ## 1.6 ([Nov 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5e8a177134d706049012b8451736c782c753b1c0/mods/taskbar-empty-space-clicks.wh.cpp))
 
 Double tap on touch screens is now much more benevolent in terms of click position on the screen. It takes into account screen DPI since in hi-res screens (like my 14'' 4k laptop) the position diffs between clicks when performing double tap can be significant. Also, since middle mouse button click is not possible with touch and detecting touch gesture is quite cumbersome (to work reliably across both Windows 10 and Windows 11 taskbars), I implemented support for triple tap which activates middle mouse click action. Fixes https://github.com/m1lhaus/windhawk-mods/issues/11
