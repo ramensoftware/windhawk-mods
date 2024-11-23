@@ -1803,15 +1803,22 @@ void ToggleTaskbarAutohide()
     }
 }
 
-void ShowDesktop(HWND taskbarhWnd)
+void ShowDesktop()
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending ShowDesktop message");
-    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
-    if (SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0) != 0)
+    if (g_hTaskbarWnd)
     {
-        LOG_ERROR(L"Failed to send ShowDesktop message");
+        LOG_INFO(L"Sending ShowDesktop message");
+        // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
+        if (SendMessage(g_hTaskbarWnd, WM_COMMAND, MAKELONG(407, 0), 0) != 0)
+        {
+            LOG_ERROR(L"Failed to send ShowDesktop message");
+        }
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to show desktop - taskbar window not found");
     }
 }
 
@@ -2301,7 +2308,7 @@ void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
 
     if (taskbarAction == ACTION_SHOW_DESKTOP)
     {
-        ShowDesktop(hWnd);
+        ShowDesktop();
     }
     else if (taskbarAction == ACTION_CTRL_ALT_TAB)
     {
