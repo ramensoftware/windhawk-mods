@@ -663,6 +663,290 @@ DEFINE_GUID(CLSID_CUIAutomation, 0xff48dba4, 0x60ef, 0x4201, 0xaa, 0x87, 0x54, 0
 
 typedef class CUIAutomation CUIAutomation;
 
+#ifndef __IUIAutomationInvokePattern_FWD_DEFINED__
+#define __IUIAutomationInvokePattern_FWD_DEFINED__
+typedef interface IUIAutomationInvokePattern IUIAutomationInvokePattern;
+#ifdef __cplusplus
+interface IUIAutomationInvokePattern;
+#endif /* __cplusplus */
+#endif
+
+#ifndef __IUIAutomationTogglePattern_FWD_DEFINED__
+#define __IUIAutomationTogglePattern_FWD_DEFINED__
+typedef interface IUIAutomationTogglePattern IUIAutomationTogglePattern;
+#ifdef __cplusplus
+interface IUIAutomationTogglePattern;
+#endif /* __cplusplus */
+#endif
+
+#ifndef __IUIAutomationCondition_FWD_DEFINED__
+#define __IUIAutomationCondition_FWD_DEFINED__
+typedef interface IUIAutomationCondition IUIAutomationCondition;
+#ifdef __cplusplus
+interface IUIAutomationCondition;
+#endif /* __cplusplus */
+#endif
+
+/*****************************************************************************
+ * IUIAutomationInvokePattern interface
+ */
+#ifndef __IUIAutomationInvokePattern_INTERFACE_DEFINED__
+#define __IUIAutomationInvokePattern_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("fb377fbe-8ea6-46d5-9c73-6499642d3059")
+IUIAutomationInvokePattern : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Invoke() = 0;
+};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59)
+#endif
+#else
+typedef struct IUIAutomationInvokePatternVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationInvokePattern *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationInvokePattern *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationInvokePattern *This);
+
+    /*** IUIAutomationInvokePattern methods ***/
+    HRESULT(STDMETHODCALLTYPE *Invoke)
+    (
+        IUIAutomationInvokePattern *This);
+
+    END_INTERFACE
+} IUIAutomationInvokePatternVtbl;
+
+interface IUIAutomationInvokePattern
+{
+    CONST_VTBL IUIAutomationInvokePatternVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationInvokePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationInvokePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationInvokePattern_Release(This) (This)->lpVtbl->Release(This)
+/*** IUIAutomationInvokePattern methods ***/
+#define IUIAutomationInvokePattern_Invoke(This) (This)->lpVtbl->Invoke(This)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_QueryInterface(IUIAutomationInvokePattern *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationInvokePattern_AddRef(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationInvokePattern_Release(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->Release(This);
+}
+/*** IUIAutomationInvokePattern methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_Invoke(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->Invoke(This);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationInvokePattern_INTERFACE_DEFINED__ */
+
+/*****************************************************************************
+ * IUIAutomationTogglePattern interface
+ */
+#ifndef __IUIAutomationTogglePattern_INTERFACE_DEFINED__
+#define __IUIAutomationTogglePattern_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70")
+IUIAutomationTogglePattern : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Toggle() = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_CurrentToggleState(
+        enum ToggleState * retVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_CachedToggleState(
+        enum ToggleState * retVal) = 0;
+};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70)
+#endif
+#else
+typedef struct IUIAutomationTogglePatternVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationTogglePattern *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationTogglePattern *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationTogglePattern *This);
+
+    /*** IUIAutomationTogglePattern methods ***/
+    HRESULT(STDMETHODCALLTYPE *Toggle)
+    (
+        IUIAutomationTogglePattern *This);
+
+    HRESULT(STDMETHODCALLTYPE *get_CurrentToggleState)
+    (
+        IUIAutomationTogglePattern *This,
+        enum ToggleState *retVal);
+
+    HRESULT(STDMETHODCALLTYPE *get_CachedToggleState)
+    (
+        IUIAutomationTogglePattern *This,
+        enum ToggleState *retVal);
+
+    END_INTERFACE
+} IUIAutomationTogglePatternVtbl;
+
+interface IUIAutomationTogglePattern
+{
+    CONST_VTBL IUIAutomationTogglePatternVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationTogglePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationTogglePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationTogglePattern_Release(This) (This)->lpVtbl->Release(This)
+/*** IUIAutomationTogglePattern methods ***/
+#define IUIAutomationTogglePattern_Toggle(This) (This)->lpVtbl->Toggle(This)
+#define IUIAutomationTogglePattern_get_CurrentToggleState(This, retVal) (This)->lpVtbl->get_CurrentToggleState(This, retVal)
+#define IUIAutomationTogglePattern_get_CachedToggleState(This, retVal) (This)->lpVtbl->get_CachedToggleState(This, retVal)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_QueryInterface(IUIAutomationTogglePattern *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationTogglePattern_AddRef(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationTogglePattern_Release(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->Release(This);
+}
+/*** IUIAutomationTogglePattern methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_Toggle(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->Toggle(This);
+}
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CurrentToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
+{
+    return This->lpVtbl->get_CurrentToggleState(This, retVal);
+}
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CachedToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
+{
+    return This->lpVtbl->get_CachedToggleState(This, retVal);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationTogglePattern_INTERFACE_DEFINED__ */
+
+/*****************************************************************************
+ * IUIAutomationCondition interface
+ */
+#ifndef __IUIAutomationCondition_INTERFACE_DEFINED__
+#define __IUIAutomationCondition_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("352ffba8-0973-437c-a61f-f64cafd81df9")
+IUIAutomationCondition : public IUnknown{};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9)
+#endif
+#else
+typedef struct IUIAutomationConditionVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationCondition *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationCondition *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationCondition *This);
+
+    END_INTERFACE
+} IUIAutomationConditionVtbl;
+
+interface IUIAutomationCondition
+{
+    CONST_VTBL IUIAutomationConditionVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationCondition_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationCondition_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationCondition_Release(This) (This)->lpVtbl->Release(This)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationCondition_QueryInterface(IUIAutomationCondition *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationCondition_AddRef(IUIAutomationCondition *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition *This)
+{
+    return This->lpVtbl->Release(This);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationCondition_INTERFACE_DEFINED__ */
+
 #pragma endregion
 
 #endif
