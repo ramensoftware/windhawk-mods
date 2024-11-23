@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-22T18:05:25.000Z</updated>
+    <updated>2024-11-23T14:44:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 1.6]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#5e8a177134d706049012b8451736c782c753b1c0</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2024-11-23T14:44:06.000Z</updated>
+        <content type="html"><![CDATA[<p>Double tap on touch screens is now much more benevolent in terms of click position on the screen. It takes into account screen DPI since in hi-res screens (like my 14'' 4k laptop) the position diffs between clicks when performing double tap can be significant. Also, since middle mouse button click is not possible with touch and detecting touch gesture is quite cumbersome (to work reliably across both Windows 10 and Windows 11 taskbars), I implemented support for triple tap which activates middle mouse click action. Fixes https://github.com/m1lhaus/windhawk-mods/issues/11</p>]]></content>
+        <author>
+            <name>m1lhaus</name>
+            <uri>https://github.com/m1lhaus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[TortoiseGit progress animation background fix for classic dark theme 1.0.0]]></title>
         <id>https://windhawk.net/mods/tortoisegit-progress-animation-background-fix#23d47eaa50c0dd34b1bd7b843c4652f684198f14</id>
@@ -277,20 +288,6 @@ center, etc. to another monitor.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.1]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#a338ea9f84db30284a1e95afd8475423e389ef58</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-11-09T01:21:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed elevated processes being unable to receive folder sizes from Everything, causing a timeout and missing folder sizes.</li>
-<li>Made the "Use MB/GB for large files" option work for older file dialogs too, for example Regedit's export dialog.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
