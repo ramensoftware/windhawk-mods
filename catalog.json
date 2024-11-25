@@ -145,6 +145,30 @@
                 "version": "1.0.0"
             }
         },
+        "balloon-sound-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1732548916000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1732548916000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lwinmm",
+                "description": "Makes notifciation balloons play a sound again",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Balloon Sound Fix",
+                "version": "1.0.0"
+            }
+        },
         "basic-themer": {
             "details": {
                 "defaultSorting": 2960,
