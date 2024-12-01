@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-11-25T15:35:16.000Z</updated>
+    <updated>2024-12-01T18:44:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#6082c60100929675fc56d995c9f9a6ae7b221c9e</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2024-12-01T18:44:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the new "Show abbreviated time and date" Windows 11 option.</li>
+<li>Added a way to specify multiple date/time formats. It can be useful for things such as showing hours and minutes in different lines.</li>
+<li>Added an option for the clock max width (Windows 11 only).</li>
+<li>Added the <code>%dayofyear%</code> pattern - the day of year starting from January 1st.</li>
+<li>Added the <code>%newline%</code> pattern - a newline.</li>
+<li>Web content is now updated right away after resuming the computer from sleep.</li>
+<li>Added support for the ExplorerPatcher taskbar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Balloon Sound Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/balloon-sound-fix#b676789d78e5fd70e166d24c775bed520eb3fb3d</id>
@@ -280,20 +299,6 @@ center, etc. to another monitor.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the mod not applying on startup in some cases.</li>
 <li>ExplorerPatcher taskbar: Added support for secondary taskbars for versions newer than 67.1.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.2]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#319700c1152b5e0d664b6832eff4bb003d92dfee</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-11-09T15:24:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod interfering with file size calculation in operations such as copying folders.</li>
-<li>Added a workaround to the error message that says "Runtime Error - Not Enough space for thread Data". The error could occur when a process is shutting down due to a somewhat specific incompatibility between the Microsoft C++ runtime library and Windhawk's C++ library. It's not really harmful, as the process is shutting down anyway, but it can be annoying.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

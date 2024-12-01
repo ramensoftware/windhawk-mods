@@ -1,3 +1,13 @@
+## 1.4 ([Dec 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6082c60100929675fc56d995c9f9a6ae7b221c9e/mods/taskbar-clock-customization.wh.cpp))
+
+* Added support for the new "Show abbreviated time and date" Windows 11 option.
+* Added a way to specify multiple date/time formats. It can be useful for things such as showing hours and minutes in different lines.
+* Added an option for the clock max width (Windows 11 only).
+* Added the `%dayofyear%` pattern - the day of year starting from January 1st.
+* Added the `%newline%` pattern - a newline.
+* Web content is now updated right away after resuming the computer from sleep.
+* Added support for the ExplorerPatcher taskbar.
+
 ## 1.3.3 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/058fa8b81165b566fd988e19e42052771a59b120/mods/taskbar-clock-customization.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).
