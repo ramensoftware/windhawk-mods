@@ -1,3 +1,7 @@
+## 1.8 ([Dec 2, 2024](https://github.com/ramensoftware/windhawk-mods/blob/10dd219bec0369013eeeb9a3c0bee7efc3987f41/mods/taskbar-empty-space-clicks.wh.cpp))
+
+Added fallback method to open Start menu when Start button was not found on the taskbar (e.g. was hidden via other Windhawk mod) - temporary hotfix for https://github.com/m1lhaus/windhawk-mods/issues/21.
+
 ## 1.7 ([Nov 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2e30970216e691be9103eb6693f557e63eb39e45/mods/taskbar-empty-space-clicks.wh.cpp))
 
 - Start menu now opens on the same monitor where the taskbar was clicked - fixes https://github.com/m1lhaus/windhawk-mods/issues/19
