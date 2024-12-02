@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.7
+// @version         1.8
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -2161,15 +2161,13 @@ void SendWinTabKeypress()
     SendKeypress({VK_LWIN, VK_TAB});
 }
 
-void SendWinKeypress()
+bool ClickStartMenu()
 {
-    LOG_TRACE();
-
     const MouseClick &lastClick = g_mouseClickQueue[-1];
     if (!lastClick.onEmptySpace)
     {
         LOG_ERROR(L"Failed to send Win keypress - last click was not on empty space");
-        return;
+        return false;
     }
 
     // Get the taskbar element from the last mouse click position
@@ -2177,7 +2175,7 @@ void SendWinKeypress()
     if (FAILED(g_pUIAutomation->ElementFromPoint(lastClick.position, pWindowElement.put())) || !pWindowElement)
     {
         LOG_ERROR(L"Failed to taskbar UI element from mouse click");
-        return;
+        return false;
     }
 
     com_ptr<IUIAutomationElement> pStartButton = NULL;
@@ -2195,7 +2193,7 @@ void SendWinKeypress()
             !pControlTypeCondition)
         {
             LOG_ERROR(L"Failed to create ControlType condition for Start button search.");
-            return;
+            return false;
         }
 
         // Create Condition 2: ClassName == "Start"
@@ -2206,7 +2204,7 @@ void SendWinKeypress()
             !pClassNameCondition)
         {
             LOG_ERROR(L"Failed to create ClassName condition for Start button search.");
-            return;
+            return false;
         }
 
         // Combine both conditions using AndCondition
@@ -2217,14 +2215,14 @@ void SendWinKeypress()
             !pAndCondition)
         {
             LOG_ERROR(L"Failed to create ControlType&&ClassName condition for Start button search.");
-            return;
+            return false;
         }
 
         // Use the combined condition to find the Start button within the Taskbar
         if (FAILED(pWindowElement->FindFirst(TreeScope_Children, pAndCondition.get(), pStartButton.put())) || !pStartButton)
         {
             LOG_ERROR(L"Failed to locate the Start button element for Windows 10 taskbar.");
-            return;
+            return false;
         }
     }
     else
@@ -2239,14 +2237,14 @@ void SendWinKeypress()
             !pCondition)
         {
             LOG_ERROR(L"Failed to create property condition for locating the Start button.");
-            return;
+            return false;
         }
 
         // Use the AutomationId condition to find the Start button within the Taskbar
         if (FAILED(pWindowElement->FindFirst(TreeScope_Children, pCondition.get(), pStartButton.put())) || !pStartButton)
         {
             LOG_ERROR(L"Failed to locate the Start button element for Windows 11 taskbar.");
-            return;
+            return false;
         }
     }
 
@@ -2258,12 +2256,13 @@ void SendWinKeypress()
         if (FAILED(pStartButton->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(pInvoke.put()))) || !pInvoke)
         {
             LOG_ERROR(L"Invoke pattern not supported by the Start button.");
-            return;
+            return false;
         }
 
         if (FAILED(pInvoke->Invoke()))
         {
             LOG_ERROR(L"Failed to invoke the Start button.");
+            return false;
         }
         else
         {
@@ -2277,17 +2276,29 @@ void SendWinKeypress()
         if (FAILED(pStartButton->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(pToggle.put()))) || !pToggle)
         {
             LOG_ERROR(L"Toggle pattern not supported by the Start button.");
-            return;
+            return false;
         }
 
         if (FAILED(pToggle->Toggle()))
         {
             LOG_ERROR(L"Failed to toggle the Start button.");
+            return false;
         }
         else
         {
             LOG_INFO(L"Start button toggled successfully on Windows 11 taskbar.");
         }
+    }
+    return true;
+}
+
+void OpenStartMenu()
+{
+    LOG_TRACE();
+    if (!ClickStartMenu())  // if user hide the start menu via other Windhawk mod, we can't click it
+    {
+        LOG_INFO(L"Sending Win keypress");
+        SendKeypress({VK_LWIN});
     }
 }
 
@@ -2632,7 +2643,7 @@ void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
     }
     else if (taskbarAction == ACTION_OPEN_START_MENU)
     {
-        SendWinKeypress();
+        OpenStartMenu();
     }
     else if (taskbarAction == ACTION_SEND_KEYPRESS)
     {
