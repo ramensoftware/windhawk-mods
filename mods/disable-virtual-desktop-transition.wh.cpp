@@ -169,7 +169,8 @@ BOOL Wh_ModInit()
 
     Wh_Log(L"Init");
 
-    WindhawkUtils::SYMBOL_HOOK udwmHooks[] = {
+    // uDWM.dll
+    WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
             {
                 L"public: __cdecl CVirtualDesktopSwitch::CVirtualDesktopSwitch(void)"
@@ -179,7 +180,7 @@ BOOL Wh_ModInit()
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(GetModuleHandleW(L"udwm.dll"), udwmHooks, ARRAYSIZE(udwmHooks)))
+    if (!WindhawkUtils::HookSymbols(GetModuleHandleW(L"udwm.dll"), udwmDllHooks, ARRAYSIZE(udwmDllHooks)))
     {
         Wh_Log(L"Failed to successfully install all symbol hooks for uDWM.dll");
 
