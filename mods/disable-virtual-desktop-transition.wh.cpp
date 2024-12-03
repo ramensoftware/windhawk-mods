@@ -169,7 +169,6 @@ BOOL Wh_ModInit()
 
     Wh_Log(L"Init");
 
-    // uDWM.dll
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
             {
