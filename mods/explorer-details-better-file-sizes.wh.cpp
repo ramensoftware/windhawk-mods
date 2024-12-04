@@ -2,14 +2,15 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.4
+// @version         1.4.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         *
 // @exclude         conhost.exe
-// @exclude         plex.exe
+// @exclude         Plex.exe
+// @exclude         Plex Media Server.exe
 // @compilerOptions -lole32 -loleaut32 -lpropsys
 // ==/WindhawkMod==
 
@@ -449,28 +450,13 @@ DWORD WINAPI Everything4Wh_Thread(void* parameter) {
     return 0;
 }
 
-LPCITEMIDLIST PIDLNext(LPCITEMIDLIST pidl) {
-    return reinterpret_cast<LPCITEMIDLIST>(reinterpret_cast<const BYTE*>(pidl) +
-                                           pidl->mkid.cb);
-}
-
-size_t PIDLSize(LPCITEMIDLIST pidl) {
-    size_t s = 0;
-    while (pidl->mkid.cb > 0) {
-        s += pidl->mkid.cb;
-        pidl = PIDLNext(pidl);
-    }
-    // We add 2 because an LPITEMIDLIST is terminated by two NULL bytes.
-    return 2 + s;
-}
-
 std::vector<BYTE> PIDLToVector(const ITEMIDLIST* pidl) {
     if (!pidl) {
         return {};
     }
 
     const BYTE* ptr = reinterpret_cast<const BYTE*>(pidl);
-    size_t size = PIDLSize(pidl);
+    size_t size = ILGetSize(pidl);
     return std::vector<BYTE>(ptr, ptr + size);
 }
 
@@ -789,6 +775,97 @@ HRESULT WINAPI CFSFolder_CompareIDs_Hook(void* pCFSFolder,
     }
 }
 
+using SHOpenFolderAndSelectItems_t = decltype(&SHOpenFolderAndSelectItems);
+SHOpenFolderAndSelectItems_t SHOpenFolderAndSelectItems_Original;
+HRESULT WINAPI SHOpenFolderAndSelectItems_Hook(LPCITEMIDLIST pidlFolder,
+                                               UINT cidl,
+                                               LPCITEMIDLIST* apidl,
+                                               DWORD dwFlags) {
+    Wh_Log(L">");
+
+    // If the current thread is the UI thread, run the function in a new thread
+    // to prevent a deadlock. See:
+    // https://voidtools.com/forum/viewtopic.php?p=71433#p71433
+
+    bool isUiThread = false;
+
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+            constexpr WCHAR kClassNamePrefix[] =
+                L"EVERYTHING_TASKBAR_NOTIFICATION";
+            constexpr size_t kClassNameLen = ARRAYSIZE(kClassNamePrefix) - 1;
+
+            bool& isUiThread = *(bool*)lParam;
+
+            WCHAR szClassName[64];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
+            }
+
+            if (_wcsnicmp(kClassNamePrefix, szClassName, kClassNameLen) == 0) {
+                isUiThread = true;
+                return FALSE;
+            }
+
+            return TRUE;
+        },
+        (LPARAM)&isUiThread);
+
+    if (!isUiThread) {
+        return SHOpenFolderAndSelectItems_Original(pidlFolder, cidl, apidl,
+                                                   dwFlags);
+    }
+
+    struct ThreadParam {
+        LPITEMIDLIST pidlFolder;
+        std::vector<LPITEMIDLIST> apidl;
+        DWORD dwFlags;
+    };
+
+    auto threadParam = std::make_unique<ThreadParam>();
+
+    threadParam->pidlFolder = ILClone(pidlFolder);
+
+    if (cidl) {
+        threadParam->apidl.reserve(cidl);
+        for (UINT i = 0; i < cidl; i++) {
+            threadParam->apidl.push_back(ILClone(apidl[i]));
+        }
+    }
+
+    threadParam->dwFlags = dwFlags;
+
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID lpParam) WINAPI -> DWORD {
+            Wh_Log(L">");
+
+            std::unique_ptr<ThreadParam> threadParam{(ThreadParam*)lpParam};
+
+            CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+            SHOpenFolderAndSelectItems_Original(
+                threadParam->pidlFolder, threadParam->apidl.size(),
+                (LPCITEMIDLIST*)threadParam->apidl.data(),
+                threadParam->dwFlags);
+
+            ILFree(threadParam->pidlFolder);
+            for (auto pidl : threadParam->apidl) {
+                ILFree(pidl);
+            }
+
+            CoUninitialize();
+            return 0;
+        },
+        threadParam.release(), 0, nullptr);
+    if (thread) {
+        CloseHandle(thread);
+    }
+
+    return S_OK;
+}
+
 using PSFormatForDisplayAlloc_t = decltype(&PSFormatForDisplayAlloc);
 PSFormatForDisplayAlloc_t PSFormatForDisplayAlloc_Original;
 HRESULT WINAPI PSFormatForDisplayAlloc_Hook(const PROPERTYKEY& key,
@@ -922,8 +999,14 @@ bool HookWindowsStorageSymbols() {
             {
 #ifdef _WIN64
                 LR"(public: virtual long __cdecl CDefItem::GetValue(enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *))",
+
+                // Older Win10 versions.
+                LR"(public: virtual long __cdecl CDefItem::GetValue(enum tagACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum tagVALUE_STATE *))",
 #else
                 LR"(public: virtual long __stdcall CDefItem::GetValue(enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *))",
+
+                // Older Win10 versions.
+                LR"(public: virtual long __stdcall CDefItem::GetValue(enum tagACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum tagVALUE_STATE *))",
 #endif
             },
             &CDefItem_GetValue_Original,
@@ -1215,6 +1298,10 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Failed hooking Windows Storage symbols");
             return false;
         }
+
+        WindhawkUtils::Wh_SetFunctionHookT(
+            SHOpenFolderAndSelectItems, SHOpenFolderAndSelectItems_Hook,
+            &SHOpenFolderAndSelectItems_Original);
     }
 
     if (g_settings.disableKbOnlySizes) {
