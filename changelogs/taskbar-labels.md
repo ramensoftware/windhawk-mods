@@ -1,3 +1,9 @@
+## 1.3.3 ([Dec 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b0179b2e31ee74e302077bfb2de1b7cdfc6092d7/mods/taskbar-labels.wh.cpp))
+
+* The "Minimum taskbar item width" option can now be set to any value. Only 44 or larger values were previously supported.
+* Fixed a crash which could occur in some cases due to an incorrect running indicator width calculation.
+* Fixed taskbar settings (the "Combine taskbar buttons and hide labels" option) affecting some of the taskbar behavior, such as left click on combined items.
+
 ## 1.3.2 ([Oct 20, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0951986351d82332cd99a2335f16f6fbcb22033b/mods/taskbar-labels.wh.cpp))
 
 * Added an option exclude programs by application ids.
