@@ -1,3 +1,9 @@
+## 1.4.5 ([Dec 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1c07c82111a8cfb4c2a1757f702e598172570193/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Fixed Explorer hanging when Open Path is used in Everything.
+* Excluded Plex Media Server which is incompatible, a proper fix will be implemented later.
+* Added support for older Windows 10 versions.
+
 ## 1.4.4 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f396f78d645dc57089bf4805a63b0bd82f50d745/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Fixed the "Mix files and folders when sorting by size" option that stopped working in version 1.4.2.

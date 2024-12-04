@@ -1132,7 +1132,7 @@
                 "published": 1730231151000,
                 "rating": 10,
                 "ratingUsers": 105,
-                "updated": 1731243474000,
+                "updated": 1733321929000,
                 "users": 5920
             },
             "metadata": {
@@ -1141,7 +1141,8 @@
                 "description": "Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)",
                 "exclude": [
                     "conhost.exe",
-                    "plex.exe"
+                    "Plex.exe",
+                    "Plex Media Server.exe"
                 ],
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -1150,7 +1151,7 @@
                 ],
                 "name": "Better file sizes in Explorer details",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.4.4"
+                "version": "1.4.5"
             }
         },
         "explorer-frame-classic": {
