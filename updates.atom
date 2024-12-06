@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-04T14:18:49.000Z</updated>
+    <updated>2024-12-06T21:17:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.0]]></title>
+        <id>https://windhawk.net/mods/dark-menus#32a08d93bca7856d61c3bac57491c6a2ff7aaafa</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2024-12-06T21:17:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="darkmodecontextmenus">Dark mode context menus</h1>
+<p>Forces dark mode for all win32 context menus to create a more consistent UI.</p>
+<h3 id="before">Before:</h3>
+<p><img src="https://i.imgur.com/bGRVJz8.png" alt="Before" /></p>
+<h3 id="after">After:</h3>
+<p><img src="https://i.imgur.com/BURKEki.png" alt="After" /></p>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.5]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#1c07c82111a8cfb4c2a1757f702e598172570193</id>
@@ -289,19 +305,6 @@ center, etc. to another monitor.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.4]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#f396f78d645dc57089bf4805a63b0bd82f50d745</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-11-10T12:57:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the "Mix files and folders when sorting by size" option that stopped working in version 1.4.2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
