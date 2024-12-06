@@ -12,6 +12,12 @@
 /*
 # Dark mode context menus
 Forces dark mode for all win32 context menus to create a more consistent UI.
+
+### Before:
+![Before](https://i.imgur.com/bGRVJz8.png)
+
+### After:
+![After](https://i.imgur.com/BURKEki.png)
 */
 // ==/WindhawkModReadme==
 
@@ -54,10 +60,8 @@ BOOL Wh_ModInit() {
 }
 
 //Restores the default theme.
-BOOL Wh_ModUninit()
+void Wh_ModUninit()
 {
     FlushMenuThemes();
-    HRESULT hResult = SetPreferredAppMode(Default);
-
-    return SUCCEEDED(hResult);
+    SetPreferredAppMode(Default);
 }
