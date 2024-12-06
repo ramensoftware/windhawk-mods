@@ -4,7 +4,7 @@
 // @description     Enables dark mode for all win32 menus.
 // @version         1.0
 // @author          Mgg Sk
-// @github          https://github.com/mggsk
+// @github          https://github.com/MGGSK
 // @include         *
 // ==/WindhawkMod==
 
