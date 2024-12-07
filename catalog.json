@@ -2891,6 +2891,32 @@
                 "version": "1.1.1"
             }
         },
+        "taskbar-multirow": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1733602163000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1733602163000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Span taskbar items across multiple rows, just like it was possible before Windows 11",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Multirow taskbar for Windows 11",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-notification-icon-spacing": {
             "details": {
                 "defaultSorting": 42200,

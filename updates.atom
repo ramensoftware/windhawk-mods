@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-06T21:17:05.000Z</updated>
+    <updated>2024-12-07T20:09:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#5e82578b6fd3b234cc853ecce9c6580573bc0b1c</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2024-12-07T20:09:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="multirowtaskbarforwindows11">Multirow taskbar for Windows 11</h1>
+<p>Span taskbar items across multiple rows, just like it was possible before
+Windows 11.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod doesn't change the taskbar height, it only makes the task list span
+across multiple rows. To change the taskbar height, use the <a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height
+and icon size</a> mod.</li>
+<li>The mod works best with "Taskbar alignment" set to "Left" in the taskbar
+settings in Windows.</li>
+</ul>
+<p><img src="https://i.imgur.com/ZpzoDXy.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dark mode context menus 1.0]]></title>
         <id>https://windhawk.net/mods/dark-menus#32a08d93bca7856d61c3bac57491c6a2ff7aaafa</id>
@@ -292,19 +314,6 @@ center, etc. to another monitor.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Shutdown Dialog 1.1.1]]></title>
-        <id>https://windhawk.net/mods/custom-shutdown-dialog#0e446407ccb4725b2eb9061b584e45e304a281ad</id>
-        <link href="https://windhawk.net/mods/custom-shutdown-dialog"/>
-        <updated>2024-11-10T18:47:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Remove unnecessary symbol hook, <code>LogoffWindowsDialog</code> is exported by ordinal</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
