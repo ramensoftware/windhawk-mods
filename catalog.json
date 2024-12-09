@@ -2384,6 +2384,26 @@
                 "version": "1.0.1"
             }
         },
+        "shadowplay-do-not-disable": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1733774874000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1733774874000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Temm",
+                "description": "Prevent Nvidia ShadowPlay from disabling itself",
+                "github": "https://github.com/leumasme",
+                "include": [
+                    "nvcontainer.exe"
+                ],
+                "name": "Shadowplay anti-disable",
+                "version": "1.0"
+            }
+        },
         "shrink-address-bar-height": {
             "details": {
                 "defaultSorting": 7590,

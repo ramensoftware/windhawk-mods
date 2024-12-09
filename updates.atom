@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-09T15:33:53.000Z</updated>
+    <updated>2024-12-09T20:07:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Shadowplay anti-disable 1.0]]></title>
+        <id>https://windhawk.net/mods/shadowplay-do-not-disable#1fd480af6b69fe3339d52712268afa8a87839f7a</id>
+        <link href="https://windhawk.net/mods/shadowplay-do-not-disable"/>
+        <updated>2024-12-09T20:07:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="shadowplayantidisable">Shadowplay anti-disable</h1>
+<p>Nvidia ShadowPlay will normally turn off automatically/pause when detecting DRM content playing or when a Window requests to be hidden from screen captures.
+This sucks, because ShadowPlay may just randomly turn off because a random window requests to be hidden from screen captures.
+No more! This mod disables both of these checks.</p>
+<p>Works with both the old "GeForce Experience" as well as the new "NVIDIA App"</p>
+<p><img src="https://i.imgur.com/zdP0nhd.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>Temm</name>
+            <uri>https://github.com/leumasme</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Virtual Desktop Transition Animation 1.0]]></title>
         <id>https://windhawk.net/mods/disable-virtual-desktop-transition#000110fb95288d15f121807167c826024d9e764e</id>
@@ -290,31 +306,6 @@ center, etc. to another monitor.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-app Language Preferences 1.0]]></title>
-        <id>https://windhawk.net/mods/per-app-language-preferences#82900d19c69cbf2ca0a8b7ca6dde2d52084c4bc7</id>
-        <link href="https://windhawk.net/mods/per-app-language-preferences"/>
-        <updated>2024-11-13T15:35:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="perapplanguagepreferences">Per-app Language Preferences</h1>
-<p>In Windows 11, it is no longer possible to set display languages for specific apps.</p>
-<p>This mod allow you to override the preferred language for specific apps using the mod's settings.</p>
-<p>Instructions on the settings:</p>
-<ul>
-<li>The filename pattern is parsed using <a href="https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-pathmatchspecexw">PathMatchSpecExW</a>. It supports wildcard <code>*</code> <code>?</code>. It also supports multiple semicolon-separated patterns.</li>
-<li>The language ID can be found in the <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/70feba9f-294e-491e-b6eb-56532684c37f">MS-LCID</a> specification. For example, the language ID for English (United States) is 1033.</li>
-</ul>
-<p>Use cases:</p>
-<ul>
-<li>You want to use a certain app in another language without affecting your current language, but that app does not provide individual language settings.</li>
-<li>A certain app is not compatible with the encoding on your machine and displays corrupt characters, and you want to force it into using English.</li>
-</ul>
-<p>Note that it changes the language only and does not affect the encoding used in legacy programs. To actually fix corrupt characters issues with legacy programs or games, try using <a href="https://github.com/InWILL/Locale_Remulator">LocaleRemulator</a>.</p>
-<p><img src="https://raw.githubusercontent.com/yezhiyi9670/akioi-cdn/refs/heads/master/demo-img/wacom-panel-forced-engligh.png" alt="Wacom panel with corrupt characters, &quot;fixed&quot; by forcing English" /></p>]]></content>
-        <author>
-            <name>yezhiyi9670</name>
-            <uri>https://github.com/yezhiyi9670</uri>
         </author>
     </entry>
 </feed>
