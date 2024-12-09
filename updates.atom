@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-07T20:09:23.000Z</updated>
+    <updated>2024-12-09T15:33:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Virtual Desktop Transition Animation 1.0]]></title>
+        <id>https://windhawk.net/mods/disable-virtual-desktop-transition#000110fb95288d15f121807167c826024d9e764e</id>
+        <link href="https://windhawk.net/mods/disable-virtual-desktop-transition"/>
+        <updated>2024-12-09T15:33:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablevirtualdesktoptransitionanimation">Disable Virtual Desktop Transition Animation</h1>
+<p>This mod disables the animation seen when switching between virtual desktops in Windows 10.</p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In order to use this mod, you must allow Windhawk to inject into the <strong>dwm.exe</strong> 
+system process. To do so, add it to the process inclusion list in the advanced 
+settings. If you do not do this, it will silently fail to inject.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>]]></content>
+        <author>
+            <name>Isabella Lulamoon (kawapure)</name>
+            <uri>https://github.com/kawapure</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-multirow#5e82578b6fd3b234cc853ecce9c6580573bc0b1c</id>
@@ -298,22 +315,6 @@ center, etc. to another monitor.</p>
         <author>
             <name>yezhiyi9670</name>
             <uri>https://github.com/yezhiyi9670</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.1.9]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#adad08eed4819a37229592168641eb2753afa76e</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2024-11-10T21:12:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved compatibility with some resources in some cases in the experimental mode.</li>
-<li>Fixed string redirection in some cases (non-experimental mode).</li>
-<li>Added support for theme.ini files larger than 32 KB (yes, somebody had a file larger than that).</li>
-<li>Added a workaround to the error message that says "Runtime Error - Not Enough space for thread Data". The error could occur when a process is shutting down due to a somewhat specific incompatibility between the Microsoft C++ runtime library and Windhawk's C++ library. It's not really harmful, as the process is shutting down anyway, but it can be annoying.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

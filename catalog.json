@@ -983,6 +983,32 @@
                 "version": "1.0.1"
             }
         },
+        "disable-virtual-desktop-transition": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1733758433000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1733758433000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Isabella Lulamoon (kawapure)",
+                "compilerOptions": "-lkernel32 -lwevtapi",
+                "description": "Disables the animation when switching between virtual desktops on Windows 10.",
+                "github": "https://github.com/kawapure",
+                "homepage": "https://kawapure.github.io",
+                "include": [
+                    "dwm.exe"
+                ],
+                "name": "Disable Virtual Desktop Transition Animation",
+                "twitter": "https://twitter.com/kawaipure",
+                "version": "1.0"
+            }
+        },
         "dot-hide": {
             "details": {
                 "defaultSorting": 3380,
