@@ -1,3 +1,9 @@
+## 1.2 ([Dec 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/8db53b86b7fb576eaf44aaa772c00a53a8933590/mods/windows-11-start-menu-styler.wh.cpp))
+
+* The start menu search (what you see when you click on the start menu search bar) is now styled as well. Most of the search content is a WebView element, and the mod now allows to style it with CSS targets and styles. Refer to the mod description for more details.
+* Added the Everblush theme.
+* Updated themes: SideBySide2, Fluent2Inspired, Metro10Minimal.
+
 ## 1.1.6 ([Oct 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/31cc7d1150a2953dfb1897f13678dcd70f74fa47/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added themes: RosePine, Windows11_Metro10Minimal.

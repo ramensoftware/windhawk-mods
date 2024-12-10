@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-09T20:07:54.000Z</updated>
+    <updated>2024-12-10T14:57:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#8db53b86b7fb576eaf44aaa772c00a53a8933590</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2024-12-10T14:57:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The start menu search (what you see when you click on the start menu search bar) is now styled as well. Most of the search content is a WebView element, and the mod now allows to style it with CSS targets and styles. Refer to the mod description for more details.</li>
+<li>Added the Everblush theme.</li>
+<li>Updated themes: SideBySide2, Fluent2Inspired, Metro10Minimal.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Shadowplay anti-disable 1.0]]></title>
         <id>https://windhawk.net/mods/shadowplay-do-not-disable#1fd480af6b69fe3339d52712268afa8a87839f7a</id>
@@ -286,22 +301,6 @@ center, etc. to another monitor.</p>
         <updated>2024-11-15T07:36:59.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Make behavior accurate to Windows 7; custom frames (e.g. UIRibbon) will always show active color when composition is enabled</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Basic Caption Text 1.1.0]]></title>
-        <id>https://windhawk.net/mods/fix-basic-caption-text#ee50aef8b9cbdf57c84bff30cb17fcbbb0821ab8</id>
-        <link href="https://windhawk.net/mods/fix-basic-caption-text"/>
-        <updated>2024-11-14T04:56:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix inactive state retrieval</li>
-<li>Remove "Use theme data" option; no edition of Windows ever did this</li>
-<li>Make using small window icons optional</li>
-<li>Refactor code to match modern Windhawk standards</li>
 </ul>]]></content>
         <author>
             <name>aubymori</name>
