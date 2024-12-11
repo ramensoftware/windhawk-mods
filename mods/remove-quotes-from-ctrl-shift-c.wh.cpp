@@ -4,7 +4,7 @@
 // @description     Intercepts the copied file path (CTRL+SHIFT+C in Explorer) and removes surrounding quotes
 // @version         1.0
 // @author          draxas
-
+// @github          https://github.com/draxas
 // @include         explorer.exe
 // ==/WindhawkMod==
 
