@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              taskbar-on-top
-// @name            Taskbar on top for Windows 11
+// @id              taskbar-on-top-fork
+// @name            Taskbar on top for Windows 11 - Fork
 // @description     Moves the Windows 11 taskbar to the top of the screen
 // @version         1.0.5
 // @author          m417z
@@ -1052,14 +1052,24 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         };
 
         HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo = {sizeof(MONITORINFO)};
+        if (GetMonitorInfo(monitor, &monitorInfo)) {
+            // Corrigir o posicionamento horizontal
+            if (X < monitorInfo.rcWork.left) {
+                X = monitorInfo.rcWork.left;
+            } else if (X > monitorInfo.rcWork.right - cx) {
+                X = monitorInfo.rcWork.right - cx;
+            }
+
+            // Corrigir o posicionamento vertical
+            if (Y < monitorInfo.rcWork.top) {
+                Y = monitorInfo.rcWork.top;
+            }
+        }
         if (GetTaskbarLocationForMonitor(monitor) == TaskbarLocation::bottom) {
             return original();
         }
-
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        GetMonitorInfo(monitor, &monitorInfo);
 
         if (g_inCTaskListThumbnailWnd_DisplayUI) {
             Y = std::max(monitorInfo.rcWork.top, pt.y);
@@ -1084,14 +1094,24 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         };
 
         HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo = {sizeof(MONITORINFO)};
+        if (GetMonitorInfo(monitor, &monitorInfo)) {
+            // Corrigir o posicionamento horizontal
+            if (X < monitorInfo.rcWork.left) {
+                X = monitorInfo.rcWork.left;
+            } else if (X > monitorInfo.rcWork.right - cx) {
+                X = monitorInfo.rcWork.right - cx;
+            }
+
+            // Corrigir o posicionamento vertical
+            if (Y < monitorInfo.rcWork.top) {
+                Y = monitorInfo.rcWork.top;
+            }
+        }
         if (GetTaskbarLocationForMonitor(monitor) == TaskbarLocation::bottom) {
             return original();
         }
-
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        GetMonitorInfo(monitor, &monitorInfo);
 
         if (Y < monitorInfo.rcWork.top) {
             Y = monitorInfo.rcWork.top;
@@ -1135,14 +1155,24 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         GetCursorPos(&pt);
 
         HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo = {sizeof(MONITORINFO)};
+        if (GetMonitorInfo(monitor, &monitorInfo)) {
+            // Corrigir o posicionamento horizontal
+            if (X < monitorInfo.rcWork.left) {
+                X = monitorInfo.rcWork.left;
+            } else if (X > monitorInfo.rcWork.right - cx) {
+                X = monitorInfo.rcWork.right - cx;
+            }
+
+            // Corrigir o posicionamento vertical
+            if (Y < monitorInfo.rcWork.top) {
+                Y = monitorInfo.rcWork.top;
+            }
+        }
         if (GetTaskbarLocationForMonitor(monitor) == TaskbarLocation::bottom) {
             return original();
         }
-
-        MONITORINFO monitorInfo{
-            .cbSize = sizeof(MONITORINFO),
-        };
-        GetMonitorInfo(monitor, &monitorInfo);
 
         Y = monitorInfo.rcWork.top;
     } else {
@@ -1245,7 +1275,19 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     int cy = targetRect.bottom - targetRect.top;
 
     if (target == Target::StartMenu) {
-        // Only change height.
+        // Obter o monitor do hwnd
+        HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+
+        MONITORINFO monitorInfo = {sizeof(MONITORINFO)};
+        if (!GetMonitorInfo(monitor, &monitorInfo)) {
+            return original(); // Fallback caso falhe.
+        }
+
+        // Centralizar no monitor ativo
+        int xNew = (monitorInfo.rcWork.left + monitorInfo.rcWork.right - cx) / 2;
+        int yNew = monitorInfo.rcWork.top;
+
+        // Ajustar apenas a altura para StartMenu
         const int h1 = MulDiv(750, monitorDpiY, 96);
         const int h2 = MulDiv(694, monitorDpiY, 96);
         int cyNew = cy;
@@ -1255,11 +1297,12 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
             cyNew = h2;
         }
 
-        if (cyNew == cy) {
-            return original();
-        }
+        // Aplicar as novas coordenadas
+        SetWindowPos_Original(hwnd, nullptr, xNew, yNew, cx, cyNew,
+                            SWP_NOZORDER | SWP_NOACTIVATE);
 
-        cy = cyNew;
+        return original(); // Retornar após ajustar.
+
     } else if (target == Target::SearchHost) {
         // Only change y.
         MONITORINFO monitorInfo{
