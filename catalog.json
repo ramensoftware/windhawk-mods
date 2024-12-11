@@ -2362,6 +2362,26 @@
                 "version": "1.0.0"
             }
         },
+        "remove-quotes-from-ctrl-shift-c": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1733929613000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1733929613000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "draxas",
+                "description": "Intercepts the copied file path (CTRL+SHIFT+C in Explorer) and removes surrounding quotes",
+                "github": "https://github.com/draxas",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "CTRL+SHIFT+C quotes remover",
+                "version": "1.0"
+            }
+        },
         "ribbon-caption-icon-fix": {
             "details": {
                 "defaultSorting": 3080,
