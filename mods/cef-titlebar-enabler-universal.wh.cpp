@@ -159,16 +159,8 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     // Check if this process is auxilliary process by checking if the arguments contain --type=
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    BOOL isAuxProcess = FALSE;
-    for (int i = 1; i < argc; i++) {
-        if (wcsstr(argv[i], L"--type=") != NULL) {
-            isAuxProcess = TRUE;
-            break;
-        }
-    }
-    if (isAuxProcess) {
+    LPWSTR args = GetCommandLineW();
+    if (wcsstr(args, L"--type=") != NULL) {
         Wh_Log(L"Auxilliary process detected, skipping");
         return FALSE;
     }
