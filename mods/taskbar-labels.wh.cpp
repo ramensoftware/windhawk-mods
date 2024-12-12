@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.3.3
+// @version         1.3.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -135,6 +135,12 @@ Labels can also be shown or hidden per-program in the settings.
   $name: Left and right padding size
 - spaceBetweenIconAndLabel: 8
   $name: Space between icon and label
+- alwaysShowThumbnailLabels: false
+  $name: Always show thumbnail labels
+  $description: >-
+    By default, thumbnail labels are shown on hover only if taskbar labels are
+    hidden, but that might not be applied for all customizations that this mod
+    offers
 - labelForSingleItem: "%name%"
   $name: Label for a single item
   $description: >-
@@ -212,6 +218,7 @@ struct {
     int fontSize;
     int leftAndRightPaddingSize;
     int spaceBetweenIconAndLabel;
+    bool alwaysShowThumbnailLabels;
     string_setting_unique_ptr labelForSingleItem;
     string_setting_unique_ptr labelForMultipleItems;
 } g_settings;
@@ -377,8 +384,6 @@ void RecalculateLabels() {
 
     g_applyingSettings = false;
 }
-
-void* TaskbarSettings_GroupingMode_Original;
 
 using TaskListButton_get_IsRunning_t = HRESULT(WINAPI*)(void* pThis,
                                                         bool* running);
@@ -1390,6 +1395,36 @@ void WINAPI TaskListButton_Icon_Hook(void* pThis, LONG_PTR randomAccessStream) {
     }
 }
 
+using TaskbarSettings_GroupingMode_t = DWORD(WINAPI*)(void* pThis);
+TaskbarSettings_GroupingMode_t TaskbarSettings_GroupingMode_Original;
+DWORD WINAPI TaskbarSettings_GroupingMode_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    DWORD ret = TaskbarSettings_GroupingMode_Original(pThis);
+
+    if (!g_unloading) {
+        // 0 - Always
+        // 1 - When taskbar is full
+        // 2 - Never
+        if (g_settings.mode == Mode::noLabelsWithCombining ||
+            g_settings.mode == Mode::labelsWithCombining) {
+            ret = 0;
+        } else if (ret == 0) {
+            ret = 2;
+        }
+    }
+
+    if (g_overrideGroupingMode) {
+        if (ret == 0) {
+            ret = 2;
+        } else {
+            ret = 0;
+        }
+    }
+
+    return ret;
+}
+
 using ITaskbarButton_get_MinScalableWidth_t = HRESULT(WINAPI*)(void* pThis,
                                                                float* minWidth);
 ITaskbarButton_get_MinScalableWidth_t
@@ -1619,15 +1654,20 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
         *pcbData == sizeof(DWORD)) {
         Wh_Log(L">");
 
-        DWORD taskbarGlomLevel = (ret = ERROR_SUCCESS) ? *(DWORD*)pvData : 0;
+        DWORD taskbarGlomLevel = (ret == ERROR_SUCCESS) ? *(DWORD*)pvData : 0;
         DWORD taskbarGlomLevelOriginal = taskbarGlomLevel;
 
         if (!g_unloading) {
-            // 0 - Always
-            // 1 - When taskbar is full
-            // 2 - Never
-            if (g_settings.mode == Mode::noLabelsWithCombining ||
-                g_settings.mode == Mode::labelsWithCombining) {
+            // This value is used by native code for thumbnail titles and maybe
+            // other things. The value for WinUI code is overridden in
+            // TaskbarSettings_GroupingMode_Hook.
+            //
+            // 0 - Always (show thumb titles)
+            // 1 - When taskbar is full (hide thumb titles, adaptive)
+            // 2 - Never (hide thumb titles, adaptive)
+            if (g_settings.alwaysShowThumbnailLabels ||
+                g_settings.mode == Mode::noLabelsWithCombining ||
+                g_settings.mode == Mode::noLabelsWithoutCombining) {
                 taskbarGlomLevel = 0;
             } else if (taskbarGlomLevel == 0) {
                 taskbarGlomLevel = 2;
@@ -1756,6 +1796,8 @@ void LoadSettings() {
         Wh_GetIntSetting(L"leftAndRightPaddingSize");
     g_settings.spaceBetweenIconAndLabel =
         Wh_GetIntSetting(L"spaceBetweenIconAndLabel");
+    g_settings.alwaysShowThumbnailLabels =
+        Wh_GetIntSetting(L"alwaysShowThumbnailLabels");
     g_settings.labelForSingleItem.reset(
         Wh_GetStringSetting(L"labelForSingleItem"));
     g_settings.labelForMultipleItems.reset(
@@ -2178,15 +2220,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         {
             {
                 {
-                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const )",
-                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const __ptr64)",
-                },
-                (void**)&TaskbarSettings_GroupingMode_Original,
-                nullptr,
-                true,
-            },
-            {
-                {
                     LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))",
                     LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool * __ptr64) __ptr64)",
                 },
@@ -2231,6 +2264,15 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&TaskListButton_Icon_Original,
                 (void*)TaskListButton_Icon_Hook,
+            },
+            {
+                {
+                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const )",
+                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const __ptr64)",
+                },
+                (void**)&TaskbarSettings_GroupingMode_Original,
+                (void*)TaskbarSettings_GroupingMode_Hook,
+                true,
             },
             {
                 {
