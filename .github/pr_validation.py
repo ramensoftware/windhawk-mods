@@ -28,6 +28,7 @@ VERIFIED_TWITTER_ACCOUNTS = {
     'https://github.com/kawapure': 'kawaipure',
     'https://github.com/TorutheRedFox': 'TorutheRedFox',
     'https://github.com/u3l6': 'u_3l6',
+    'https://github.com/Ingan121': 'Ingan121',
 }
 
 MOD_METADATA_PARAMS = {
