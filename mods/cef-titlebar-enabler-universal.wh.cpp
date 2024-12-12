@@ -18,7 +18,7 @@
 * Only works on apps using native CEF top-level windows
     * Steam uses SDL for its top-level windows (except DevTools), so this mod doesn't work with Steam
 * Electron apps are NOT supported! Just patch asar to override `frame: false` to true in BrowserWindow creation
-* Supported CEF versions: 90, 91, 94-101, 102-106, 120, 124-132
+* Supported CEF versions: 90.6, 91.1, 91.3-101, 102-106, 120, 124-132
     * Versions between the listed versions, and versions before 90, are likely not to work
     * Versions after 132 may work but are not tested
     * Only x86-64 is supported on CEF 120 and newer
@@ -27,7 +27,8 @@
     * Copy required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them to the above variant to calculate the offsets
 * Supported Spotify versions: 1.1.60-1.1.97, 1.2.30, 1.2.38-1.2.52
 * Spotify notes:
-    * 1.1.60-1.1.67: Use SpotifyNoControls mod to remove the window controls
+    * Old releases are available [here](https://docs.google.com/spreadsheets/d/1wztO1L4zvNykBRw7X4jxP8pvo11oQjT0O5DvZ_-S4Ok/edit?pli=1&gid=803394557#gid=803394557)
+    * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
     * 1.1.68-1.1.70: Window control hiding doesn't work yet
     * 1.1.74: Last version to support proper DWM window controls
     * Native DWM window controls are invisible since 1.1.75 as it began hooking window messages to support Windows 11 maximize button hover menu
@@ -82,8 +83,8 @@ cte_offset_t is_frameless_offsets[] = {
 };
 
 cte_offset_t add_child_view_offsets[] = {
-    {90, 6, NULL}, // Spotify 1.1.60 to 1.1.62, not needed (use SpotifyNoControls)
-    {91, 1, NULL}, // Spotify 1.1.63 to 1.1.67, not needed (use SpotifyNoControls)
+    {90, 6, NULL}, // Spotify 1.1.60 to 1.1.62, not needed (use SpotifyNoControl)
+    {91, 1, NULL}, // Spotify 1.1.63 to 1.1.67, not needed (use SpotifyNoControl)
     {91, 3, NULL}, // Spotify 1.1.68 to 1.1.70, not working
     {94, 0, 0xf0}, // Spotify 1.1.71
     {102, 0, 0xf0}, // Spotify 1.1.89
@@ -102,9 +103,9 @@ int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _
     return 0;
 }
 
-typedef _cef_window_t* (*cef_window_create_top_level_t)(void* delegate);
-cef_window_create_top_level_t cef_window_create_top_level_original;
-_cef_window_t* cef_window_create_top_level_hook(void* delegate) {
+typedef _cef_window_t* CEF_CALLBACK (*cef_window_create_top_level_t)(void* delegate);
+cef_window_create_top_level_t CEF_CALLBACK cef_window_create_top_level_original;
+_cef_window_t* CEF_CALLBACK cef_window_create_top_level_hook(void* delegate) {
     Wh_Log(L"cef_window_create_top_level_hook");
 
     if (is_frameless_offset.offset != NULL && cte_settings.showframe == TRUE) {
@@ -169,10 +170,14 @@ BOOL Wh_ModInit() {
     }
     if (isAuxProcess) {
         Wh_Log(L"Auxilliary process detected, skipping");
-        return TRUE;
+        return FALSE;
     }
 
     HMODULE cefModule = LoadLibrary(L"libcef.dll");
+    if (!cefModule) {
+        Wh_Log(L"Failed to load CEF!");
+        return FALSE;
+    }
     cef_window_create_top_level_t cef_window_create_top_level =
         (cef_window_create_top_level_t)GetProcAddress(cefModule,
                                                 "cef_window_create_top_level");
