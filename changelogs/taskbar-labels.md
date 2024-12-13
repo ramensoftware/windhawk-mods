@@ -1,3 +1,8 @@
+## 1.3.5 ([Dec 13, 2024](https://github.com/ramensoftware/windhawk-mods/blob/37fce381dc197fbd1858b833d6ca0475acb40a54/mods/taskbar-labels.wh.cpp))
+
+* Undid the fix of thumbnail labels incorrectly showing or not showing when using some modes, since the fix had unintended side effects.
+* Reimplemented an option to always show thumbnail labels, so that it can still be used as a workaround.
+
 ## 1.3.4 ([Dec 13, 2024](https://github.com/ramensoftware/windhawk-mods/blob/17e0c80c827a71f9a6a66079eaaae4dd289fecf9/mods/taskbar-labels.wh.cpp))
 
 * Fixed thumbnail labels incorrectly showing or not showing when using some modes.
