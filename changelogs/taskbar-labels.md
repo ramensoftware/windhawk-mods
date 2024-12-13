@@ -1,3 +1,9 @@
+## 1.3.4 ([Dec 13, 2024](https://github.com/ramensoftware/windhawk-mods/blob/17e0c80c827a71f9a6a66079eaaae4dd289fecf9/mods/taskbar-labels.wh.cpp))
+
+* Fixed thumbnail labels incorrectly showing or not showing when using some modes.
+* Added an option to always show thumbnail labels. By default, thumbnail labels are shown on hover only if taskbar labels are hidden, but that might not be applied for all customizations that this mod offers.
+* Fixed restoring labels on mod unload.
+
 ## 1.3.3 ([Dec 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b0179b2e31ee74e302077bfb2de1b7cdfc6092d7/mods/taskbar-labels.wh.cpp))
 
 * The "Minimum taskbar item width" option can now be set to any value. Only 44 or larger values were previously supported.

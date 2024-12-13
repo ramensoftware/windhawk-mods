@@ -2888,7 +2888,7 @@
                 "published": 1661149953000,
                 "rating": 10,
                 "ratingUsers": 158,
-                "updated": 1733320729000,
+                "updated": 1734048553000,
                 "users": 10725
             },
             "featured": true,
@@ -2906,7 +2906,7 @@
                 ],
                 "name": "Taskbar Labels for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.3"
+                "version": "1.3.4"
             }
         },
         "taskbar-language-indicator-layout-control": {
