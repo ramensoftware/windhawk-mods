@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.3.3
+// @version         1.3.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -135,6 +135,12 @@ Labels can also be shown or hidden per-program in the settings.
   $name: Left and right padding size
 - spaceBetweenIconAndLabel: 8
   $name: Space between icon and label
+- alwaysShowThumbnailLabels: false
+  $name: Always show thumbnail labels
+  $description: >-
+    By default, thumbnail labels are shown on hover only if taskbar labels are
+    hidden, but that might not be applied for all customizations that this mod
+    offers
 - labelForSingleItem: "%name%"
   $name: Label for a single item
   $description: >-
@@ -212,6 +218,7 @@ struct {
     int fontSize;
     int leftAndRightPaddingSize;
     int spaceBetweenIconAndLabel;
+    bool alwaysShowThumbnailLabels;
     string_setting_unique_ptr labelForSingleItem;
     string_setting_unique_ptr labelForMultipleItems;
 } g_settings;
@@ -555,6 +562,29 @@ double CalculateTaskbarItemWidth(FrameworkElement taskbarFrameRepeaterElement,
     }
 
     return width;
+}
+
+using CTaskListThumbnailWnd_DisplayUI_t = void*(WINAPI*)(void* pThis,
+                                                         void* param1,
+                                                         void* param2,
+                                                         void* param3,
+                                                         DWORD flags);
+CTaskListThumbnailWnd_DisplayUI_t CTaskListThumbnailWnd_DisplayUI_Original;
+void* WINAPI CTaskListThumbnailWnd_DisplayUI_Hook(void* pThis,
+                                                  void* param1,
+                                                  void* param2,
+                                                  void* param3,
+                                                  DWORD flags) {
+    Wh_Log(L">");
+
+    if (g_settings.alwaysShowThumbnailLabels) {
+        flags |= 0x01;
+    }
+
+    void* ret = CTaskListThumbnailWnd_DisplayUI_Original(pThis, param1, param2,
+                                                         param3, flags);
+
+    return ret;
 }
 
 using CTaskListWnd__GetTBGroupFromGroup_t = void*(WINAPI*)(void* pThis,
@@ -1619,7 +1649,7 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
         *pcbData == sizeof(DWORD)) {
         Wh_Log(L">");
 
-        DWORD taskbarGlomLevel = (ret = ERROR_SUCCESS) ? *(DWORD*)pvData : 0;
+        DWORD taskbarGlomLevel = (ret == ERROR_SUCCESS) ? *(DWORD*)pvData : 0;
         DWORD taskbarGlomLevelOriginal = taskbarGlomLevel;
 
         if (!g_unloading) {
@@ -1756,6 +1786,8 @@ void LoadSettings() {
         Wh_GetIntSetting(L"leftAndRightPaddingSize");
     g_settings.spaceBetweenIconAndLabel =
         Wh_GetIntSetting(L"spaceBetweenIconAndLabel");
+    g_settings.alwaysShowThumbnailLabels =
+        Wh_GetIntSetting(L"alwaysShowThumbnailLabels");
     g_settings.labelForSingleItem.reset(
         Wh_GetStringSetting(L"labelForSingleItem"));
     g_settings.labelForMultipleItems.reset(
@@ -2313,11 +2345,43 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
         };
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    if (!HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                            ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
 bool HookTaskbarDllSymbols() {
+    HMODULE module = LoadLibrary(L"taskbar.dll");
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {
+                LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup *,struct ITaskItem *,struct ITaskItem *,unsigned long))",
+                LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup * __ptr64,struct ITaskItem * __ptr64,struct ITaskItem * __ptr64,unsigned long) __ptr64)",
+            },
+            (void**)&CTaskListThumbnailWnd_DisplayUI_Original,
+            (void*)CTaskListThumbnailWnd_DisplayUI_Hook,
+        },
+    };
+
+    if (!HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
+                                            ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+bool HookTaskbarDllSymbolsOldImplementation() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
@@ -2391,8 +2455,13 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
-                                              ARRAYSIZE(taskbarDllHooks));
+    if (!HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
+                                            ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
 BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
@@ -2411,10 +2480,14 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
     }
 
     if (!g_hasNativeLabelsImplementation) {
-        if (!HookTaskbarDllSymbols()) {
+        if (!HookTaskbarDllSymbolsOldImplementation()) {
             return FALSE;
         }
     } else {
+        if (!HookTaskbarDllSymbols()) {
+            return FALSE;
+        }
+
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         FARPROC pKernelBaseRegGetValueW =
             GetProcAddress(kernelBaseModule, "RegGetValueW");
