@@ -216,6 +216,29 @@
                 "version": "1.0.1"
             }
         },
+        "cef-titlebar-enabler-universal": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1734116516000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1734116516000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Ingan121",
+                "description": "Force native frames and title bars for CEF apps",
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "spotify.exe",
+                    "cefclient.exe"
+                ],
+                "name": "CEF/Spotify Titlebar Enabler",
+                "twitter": "https://twitter.com/Ingan121",
+                "version": "0.1"
+            }
+        },
         "center-titlebar": {
             "details": {
                 "defaultSorting": 3654,
