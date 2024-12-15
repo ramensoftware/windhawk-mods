@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.8
+// @version         1.9
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -45,7 +45,7 @@ Following animation shows **Taskbar auto-hide** feature. Feature gets toggled wh
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
-- Windows 11 21H2 - latest major
+- Windows 11 23H2 - latest major
 
 I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
 
@@ -53,11 +53,11 @@ I will not supporting Insider preview or other minor versions of Windows. Howeve
 
 ## Classic taskbar on Windows 11
 
-In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2).
+In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 24H2).
 
 ## Suggestions and new features
 
-If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues).
+If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues). Please, be as specific as possible and provide as much information as you can.
 
 */
 // ==/WindhawkModReadme==
@@ -2427,10 +2427,11 @@ DWORD GetCombineTaskbarButtons(const wchar_t *optionName)
  *               - 1: Combine taskbar buttons when the taskbar is full.
  *               - 2: Always combine taskbar buttons.
  */
-void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
+bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
 {
     LOG_TRACE();
 
+    bool shallNotify = false;
     if (option <= 2)
     {
         LOG_INFO(L"Setting taskbar button combining to %d", option);
@@ -2442,7 +2443,7 @@ void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
             if (RegSetValueEx(hKey, optionName, 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
             {
                 // Notify all applications of the change
-                SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+                shallNotify = true;
             }
             else
             {
@@ -2459,6 +2460,7 @@ void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
     {
         LOG_ERROR(L"Invalid option for combining taskbar buttons!");
     }
+    return shallNotify;
 }
 
 void StartProcess(const std::wstring &command)
@@ -2631,15 +2633,20 @@ void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
     }
     else if (taskbarAction == ACTION_COMBINE_TASKBAR_BUTTONS)
     {
+        bool shallNotify = false;
         // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
         static bool zigzagPrimary = (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == g_settings.primaryTaskBarButtonsState1);
         zigzagPrimary = !zigzagPrimary;
-        SetCombineTaskbarButtons(L"TaskbarGlomLevel",
+        shallNotify |= SetCombineTaskbarButtons(L"TaskbarGlomLevel",
                                  zigzagPrimary ? g_settings.primaryTaskBarButtonsState1 : g_settings.primaryTaskBarButtonsState2);
         static bool zigzagSecondary = (GetCombineTaskbarButtons(L"MMTaskbarGlomLevel") == g_settings.secondaryTaskBarButtonsState1);
         zigzagSecondary = !zigzagSecondary;
-        SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
+        shallNotify |= SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
                                  zigzagSecondary ? g_settings.secondaryTaskBarButtonsState1 : g_settings.secondaryTaskBarButtonsState2);
+        if(shallNotify)
+        {
+            SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+        }
     }
     else if (taskbarAction == ACTION_OPEN_START_MENU)
     {
