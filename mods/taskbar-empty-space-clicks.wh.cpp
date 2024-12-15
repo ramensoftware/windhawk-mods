@@ -45,7 +45,7 @@ Following animation shows **Taskbar auto-hide** feature. Feature gets toggled wh
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
-- Windows 11 21H2 - latest major
+- Windows 11 23H2 - latest major
 
 I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
 
@@ -53,11 +53,11 @@ I will not supporting Insider preview or other minor versions of Windows. Howeve
 
 ## Classic taskbar on Windows 11
 
-In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2).
+In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 24H2).
 
 ## Suggestions and new features
 
-If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues).
+If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues). Please, be as specific as possible and provide as much information as you can.
 
 */
 // ==/WindhawkModReadme==
