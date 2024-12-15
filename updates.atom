@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-13T19:01:56.000Z</updated>
+    <updated>2024-12-15T13:06:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 1.9]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#c18f329132507d6ed1a7517e5c1906d194e2bb34</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2024-12-15T13:06:35.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixed explorer.exe freeze on Windows 24H2 when the combine taskbar buttons option changed - https://github.com/m1lhaus/windhawk-mods/issues/23.</p>]]></content>
+        <author>
+            <name>m1lhaus</name>
+            <uri>https://github.com/m1lhaus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Titlebar Enabler 0.1]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#1c42a261bb552580949476c51ff569b15070ad6e</id>
@@ -325,17 +336,6 @@ as a DWORD, set it to 1, and restart Explorer (or sign out and sign in).</p>]]><
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.2.1]]></title>
-        <id>https://windhawk.net/mods/classic-browser-fix#f646116532b0fbd44766c91c0c4d9ca824647ee6</id>
-        <link href="https://windhawk.net/mods/classic-browser-fix"/>
-        <updated>2024-11-21T11:02:33.000Z</updated>
-        <content type="html"><![CDATA[<p>Add Chatgpt app.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

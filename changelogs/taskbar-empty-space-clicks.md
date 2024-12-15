@@ -1,3 +1,7 @@
+## 1.9 ([Dec 15, 2024](https://github.com/ramensoftware/windhawk-mods/blob/c18f329132507d6ed1a7517e5c1906d194e2bb34/mods/taskbar-empty-space-clicks.wh.cpp))
+
+Fixed explorer.exe freeze on Windows 24H2 when the combine taskbar buttons option changed - https://github.com/m1lhaus/windhawk-mods/issues/23.
+
 ## 1.8 ([Dec 2, 2024](https://github.com/ramensoftware/windhawk-mods/blob/10dd219bec0369013eeeb9a3c0bee7efc3987f41/mods/taskbar-empty-space-clicks.wh.cpp))
 
 Added fallback method to open Start menu when Start button was not found on the taskbar (e.g. was hidden via other Windhawk mod) - temporary hotfix for https://github.com/m1lhaus/windhawk-mods/issues/21.
