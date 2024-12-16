@@ -3013,7 +3013,7 @@
                 "published": 1706376839000,
                 "rating": 10,
                 "ratingUsers": 99,
-                "updated": 1729696417000,
+                "updated": 1734387432000,
                 "users": 4496
             },
             "metadata": {
@@ -3030,7 +3030,7 @@
                 ],
                 "name": "Taskbar tray icon spacing",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "taskbar-notification-icons-show-all": {

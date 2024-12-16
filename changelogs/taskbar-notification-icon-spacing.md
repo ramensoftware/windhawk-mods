@@ -1,3 +1,8 @@
+## 1.1.1 ([Dec 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/9c2f0424b09b758e4e82b06da5b4d94e206e05a4/mods/taskbar-notification-icon-spacing.wh.cpp))
+
+* Fixed buggy tray overflow placement when it's shown at the first time after system startup.
+* Fixed tray overflow styles not being restored on mod unload.
+
 ## 1.1 ([Oct 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a7c329d411e81a6e0b20c90efc77c36fca9fec5a/mods/taskbar-notification-icon-spacing.wh.cpp))
 
 * Renamed from "Taskbar notification icon spacing" to "Taskbar tray icon spacing", as tray is the more familiar term.

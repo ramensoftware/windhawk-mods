@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-16T18:27:30.000Z</updated>
+    <updated>2024-12-16T22:17:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray icon spacing 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#9c2f0424b09b758e4e82b06da5b4d94e206e05a4</id>
+        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
+        <updated>2024-12-16T22:17:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed buggy tray overflow placement when it's shown at the first time after system startup.</li>
+<li>Fixed tray overflow styles not being restored on mod unload.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.6]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#4daa0db637b47f3da820ad7d1cdcc64236068d12</id>
@@ -321,25 +335,6 @@ as a DWORD, set it to 1, and restart Explorer (or sign out and sign in).</p>]]><
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[TortoiseGit progress animation background fix for classic dark theme 1.0.0]]></title>
-        <id>https://windhawk.net/mods/tortoisegit-progress-animation-background-fix#23d47eaa50c0dd34b1bd7b843c4652f684198f14</id>
-        <link href="https://windhawk.net/mods/tortoisegit-progress-animation-background-fix"/>
-        <updated>2024-11-22T18:05:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="tortoisegitprogressanimationbackgroundfixforclassicdarktheme">TortoiseGit progress animation background fix for classic dark theme</h1>
-<p>Under classic dark theme, TortoiseGit progress animation has a white background, thus looking as if something is broken.</p>
-<p>This mod fixes the progress animation background in classic dark theme by replacing the white background with a classic button face colour.</p>
-<p>Before:</p>
-<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/before-tortoisegit-progress-animation-background.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://raw.githubusercontent.com/levitation-opensource/my-windhawk-mods/main/screenshots/after-tortoisegit-progress-animation-background.png" alt="After" /> </p>
-<h2 id="knownlimitations">Known limitations</h2>
-<p>There is still a brief flash of a white coloured box before the progress animation starts. I have tried various ways, but have been unable to get rid of that. If you have an idea how to fix that, please let me know!</p>]]></content>
-        <author>
-            <name>Roland Pihlakas</name>
-            <uri>https://github.com/levitation</uri>
         </author>
     </entry>
 </feed>
