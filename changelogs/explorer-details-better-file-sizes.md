@@ -1,3 +1,11 @@
+## 1.4.6 ([Dec 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4daa0db637b47f3da820ad7d1cdcc64236068d12/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* "Everything" integration for folder sizes: Added support for the new Everything SDK3. With "Everything" version 1.5.0.1384a or newer, the folder size query is much faster now (can be around 20x faster).
+* "Everything" integration for folder sizes: Folder junctions no longer have a size (zero size was shown before).
+* Fixed sorting folders by size when the "Mix files and folders when sorting by size" option is disabled.
+* Folder sizes are now displayed in more places, including "Library" folders and the details pane.
+* Fixed a rare mod hang on unload.
+
 ## 1.4.5 ([Dec 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/1c07c82111a8cfb4c2a1757f702e598172570193/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Fixed Explorer hanging when Open Path is used in Everything.

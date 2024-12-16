@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-16T17:28:15.000Z</updated>
+    <updated>2024-12-16T18:27:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.6]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#4daa0db637b47f3da820ad7d1cdcc64236068d12</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2024-12-16T18:27:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>"Everything" integration for folder sizes: Added support for the new Everything SDK3. With "Everything" version 1.5.0.1384a or newer, the folder size query is much faster now (can be around 20x faster).</li>
+<li>"Everything" integration for folder sizes: Folder junctions no longer have a size (zero size was shown before).</li>
+<li>Fixed sorting folders by size when the "Mix files and folders when sorting by size" option is disabled.</li>
+<li>Folder sizes are now displayed in more places, including "Library" folders and the details pane.</li>
+<li>Fixed a rare mod hang on unload.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win+D per monitor 1.0.20241214]]></title>
         <id>https://windhawk.net/mods/win-d-per-monitor#3527a69c3e55a8acdc4e8d4255af0cd3d5e1566a</id>
@@ -323,19 +340,6 @@ as a DWORD, set it to 1, and restart Explorer (or sign out and sign in).</p>]]><
         <author>
             <name>Roland Pihlakas</name>
             <uri>https://github.com/levitation</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Visual Studio Anti-Rich-Header 1.0.3]]></title>
-        <id>https://windhawk.net/mods/visual-studio-anti-rich-header#5c2c1aee4460b052b77496e4cbb4f00bddba510b</id>
-        <link href="https://windhawk.net/mods/visual-studio-anti-rich-header"/>
-        <updated>2024-11-22T00:42:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for a newer version of link.exe which comes with Visual Studio 2022 version 17.12.1.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
