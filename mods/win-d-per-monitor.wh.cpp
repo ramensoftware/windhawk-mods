@@ -4,6 +4,7 @@
 // @description     Press Win+D to only manage the windows on the monitor where the mouse is located.
 // @description:zh-CN   按下Win+D时 只最小化/还原鼠标所在显示器的窗口
 // @version         1.0.20241214
+// @author          easyatm
 // @github          https://github.com/easyatm
 // @include         explorer.exe
 // @compilerOptions -luser32 -lDwmapi
@@ -43,12 +44,9 @@ static std::wstring ansi_unicode(std::string_view str)
     MultiByteToWideChar(CP_ACP, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
     return wstrTo;
 }
-#define log(...)                                                                                                                                               \
-    {                                                                                                                                                          \
-        std::string gb = std::format(__VA_ARGS__);                                                                                                             \
-        auto ws = ansi_unicode(gb);                                                                                                                            \
-        Wh_Log(L"%s", ws.c_str());                                                                                                                             \
-    }
+
+using namespace std;
+#define log(...) Wh_Log(L"%s", ansi_unicode(format(__VA_ARGS__)).c_str());
 
 #define HOTKEY_ID_WIN_D 0x201
 class WindShowDesktop
@@ -264,7 +262,7 @@ class WindShowDesktop
     }
 };
 
-int (*__cdecl HandleGlobalHotkey_Original)(unsigned __int64, __int64);
+void (*__cdecl HandleGlobalHotkey_Original)(unsigned __int64, __int64);
 void __cdecl HandleGlobalHotkey_Hook(unsigned __int64 param, __int64 hotkey_id)
 {
     if (hotkey_id == HOTKEY_ID_WIN_D)
@@ -278,13 +276,9 @@ void __cdecl HandleGlobalHotkey_Hook(unsigned __int64 param, __int64 hotkey_id)
 
 BOOL Wh_ModInit()
 {
-    HMODULE hModule = GetModuleHandle(L"explorer.exe");
-    if (!hModule)
-    {
-        log("GetModuleHandle(explorer.exe) error:{}", ::GetLastError());
-        return FALSE;
-    }
+    Wh_Log(L"init");
 
+    // explorer.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(protected: void __cdecl CTray::_HandleGlobalHotkey(unsigned __int64,__int64))"},
@@ -293,14 +287,20 @@ BOOL Wh_ModInit()
         },
     };
 
-    auto retHook = WindhawkUtils::HookSymbols(hModule, symbolHooks, ARRAYSIZE(symbolHooks));
-
-    if (!retHook)
+    HMODULE hExplorer = GetModuleHandle(L"explorer.exe");
+    if (!hExplorer)
     {
-        log("HookSymbols error");
+        log("GetModuleHandle(explorer.exe) error:{}", ::GetLastError());
+        return false;
     }
 
-    return retHook;
+    if (!WindhawkUtils::HookSymbols(hExplorer, symbolHooks, ARRAYSIZE(symbolHooks)))
+    {
+        log("HookSymbols error");
+        return false;
+    }
+
+    return true;
 }
 
 // The mod is being unloaded, free all allocated resources.
