@@ -3667,6 +3667,27 @@
                 "version": "1.1.0"
             }
         },
+        "win-d-per-monitor": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1734370095000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1734370095000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "easyatm",
+                "compilerOptions": "-luser32 -lDwmapi",
+                "description": "Press Win+D to only manage the windows on the monitor where the mouse is located.",
+                "github": "https://github.com/easyatm",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Win+D per monitor",
+                "version": "1.0.20241214"
+            }
+        },
         "win10-taskbar-on-win11": {
             "details": {
                 "defaultSorting": 650,
