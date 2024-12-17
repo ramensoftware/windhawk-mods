@@ -7,7 +7,6 @@
 
 * Added keys to temporarily disable snapping. The default key is Alt, but in can be changed in the settings.
 
-
 ## 1.0 ([Mar 6, 2022](https://github.com/ramensoftware/windhawk-mods/blob/85322d8095db39e00abcd70168b490c9602c43d4/mods/slick-window-arrangement.wh.cpp))
 
 Initial release.

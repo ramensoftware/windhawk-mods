@@ -16,7 +16,6 @@
   * Fixed a bug in which the OpenGlass options were incorrectly swapped.
   * Updated readme to correct some things.
 
-
 ## 1.5 ([Oct 13, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b788c556e80d06c9ae315e53830396ff92ee1d59/mods/accent-color-sync.wh.cpp))
 
 * Fixed margins of error with the DWM colorization calculator formula, making it more accurate to ALTaleX's original Python code.
