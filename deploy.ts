@@ -129,7 +129,7 @@ async function generateModCatalog() {
 function getModChangelogTextForVersion(modId: string, modVersion: string, commitMessage: string) {
     const overridePath = path.join('changelog_override', modId, `${modVersion}.md`);
     if (fs.existsSync(overridePath)) {
-        return fs.readFileSync(overridePath, 'utf8');
+        return fs.readFileSync(overridePath, 'utf8').trim();
     }
 
     let messageTrimmed = commitMessage.trim();
@@ -142,8 +142,14 @@ function getModChangelogTextForVersion(modId: string, modVersion: string, commit
     }
 }
 
-function generateModChangelog(modId: string) {
+function generateModData(modId: string, changelogPath: string, modDir: string) {
+    fs.mkdirSync(modDir);
+
     let changelog = '';
+    const versions: {
+        version: string;
+        prerelease?: boolean;
+    }[] = [];
 
     const modSourceUtils = new ModSourceUtils('mods');
 
@@ -166,6 +172,18 @@ function generateModChangelog(modId: string) {
         if (!metadata.version) {
             throw new Error(`Mod ${modId} has no version in commit ${commit}`);
         }
+
+        versions.unshift({
+            version: metadata.version,
+            ...(metadata.version.includes('-') ? { prerelease: true } : {}),
+        });
+
+        const modVersionFilePath = path.join(modDir, `${metadata.version}.wh.cpp`);
+        if (fs.existsSync(modVersionFilePath)) {
+            throw new Error(`Mod ${modId} has duplicate version ${metadata.version} in commit ${commit}`);
+        }
+
+        fs.writeFileSync(modVersionFilePath, modFile);
 
         const commitTime = parseInt(gitExec([
             'log',
@@ -195,10 +213,13 @@ function generateModChangelog(modId: string) {
         }
     }
 
-    return changelog;
+    fs.writeFileSync(changelogPath, changelog);
+
+    const versionsPath = path.join(modDir, 'versions.json');
+    fs.writeFileSync(versionsPath, JSON.stringify(versions));
 }
 
-function generateModChangelogs(modIds: string[]) {
+function generateModsData(modIds: string[]) {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
@@ -206,7 +227,8 @@ function generateModChangelogs(modIds: string[]) {
 
     for (const modId of modIds) {
         const changelogPath = path.join(changelogDir, `${modId}.md`);
-        fs.writeFileSync(changelogPath, generateModChangelog(modId));
+        const modDir = path.join('mods', modId);
+        generateModData(modId, changelogPath, modDir);
     }
 }
 
@@ -342,7 +364,7 @@ async function main() {
     fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
 
     const modIds = Object.keys(catalog.mods);
-    generateModChangelogs(modIds);
+    generateModsData(modIds);
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 
