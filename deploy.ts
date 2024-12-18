@@ -143,13 +143,16 @@ function getModChangelogTextForVersion(modId: string, modVersion: string, commit
 }
 
 function generateModData(modId: string, changelogPath: string, modDir: string) {
-    fs.mkdirSync(modDir);
+    if (!fs.existsSync(modDir)) {
+        fs.mkdirSync(modDir);
+    }
 
     let changelog = '';
     const versions: {
         version: string;
         prerelease?: boolean;
     }[] = [];
+    let sawReleaseVersion = false;
 
     const modSourceUtils = new ModSourceUtils('mods');
 
@@ -173,9 +176,16 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
             throw new Error(`Mod ${modId} has no version in commit ${commit}`);
         }
 
+        const prerelease = metadata.version.includes('-');
+        if (!prerelease) {
+            sawReleaseVersion = true;
+        } else if (sawReleaseVersion) {
+            continue;
+        }
+
         versions.unshift({
             version: metadata.version,
-            ...(metadata.version.includes('-') ? { prerelease: true } : {}),
+            ...(prerelease ? { prerelease: true } : {}),
         });
 
         const modVersionFilePath = path.join(modDir, `${metadata.version}.wh.cpp`);

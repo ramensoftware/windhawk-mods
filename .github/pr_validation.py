@@ -191,9 +191,12 @@ def validate_metadata(path: Path, expected_author: str):
     key = ('version', None)
     if key in properties:
         value, line_number = properties[key]
-        if not re.fullmatch(r'([0-9]+\.)*[0-9]+', value):
+        if not re.fullmatch(r'([0-9]+\.)*[0-9]+(-\w+)?', value):
             warnings += add_warning(
-                path, line_number, f'{key[0]} must contain only numbers and dots'
+                path,
+                line_number,
+                f'{key[0]} must contain only numbers and dots, and optionally a'
+                ' prerelease suffix (e.g. 1.2.3-beta)',
             )
     else:
         warnings += add_warning(path, 1, f'Missing {key[0]}')
