@@ -2,13 +2,14 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Titlebar Enabler
 // @description     Force native frames and title bars for CEF apps
-// @version         0.1
+// @version         0.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
+// @compilerOptions -lcomctl32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -28,27 +29,28 @@
 * Spotify notes:
     * Old releases are available [here](https://docs.google.com/spreadsheets/d/1wztO1L4zvNykBRw7X4jxP8pvo11oQjT0O5DvZ_-S4Ok/edit?pli=1&gid=803394557#gid=803394557)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
-    * 1.1.68-1.1.70: Window control hiding doesn't work yet
-    * 1.1.74: Last version to support proper DWM window controls
-    * Native DWM window controls are invisible since 1.1.75 as it began hooking window messages to support Windows 11 maximize button hover menu
-    * 1.1.85: Last version to support proper non-DWM window controls
-    * They are still visible after 1.1.85, but they don't respond to clicks
+    * 1.1.68-1.1.70: Window control hiding doesn't work
     * 1.2.7: First version to use Library X UI by default
     * 1.2.13: Last version to have the old UI
-    * 1.2.45: Last version to support disabling the global navbar
-    * Try toggling hardware acceleration multiple times (both in window menu and preferences) if you want a proper window icon. It may work on recent-ish versions
+    * 1.2.45: Last version to support disabling the global navbar. Enable DevTools once with `spicetify enable-devtools` to get a proper window icon on this version
+    * 1.2.47: First version to use proper window icon by default
+    * Spicetify extension developers: Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - showframe: true
-  $name: Enable native frames and title bars
+  $name: Enable native frames and title bars*
+  $description: "(*): Requires a restart to take effect"
 - showmenu: true
-  $name: Show the menu button
+  $name: Show the menu button*
   $description: Disabling this also prevents opening the Spotify menu with the Alt key
 - showcontrols: false
-  $name: Show Spotify's custom window controls
+  $name: Show Spotify's custom window controls*
+- ignoreminsize: false
+  $name: Ignore minimum window size
+  $description: Allows resizing the window below the minimum size set by Spotify
 */
 // ==/WindhawkModSettings==
 
@@ -57,7 +59,13 @@
 91.1: 1.1.63-1.1.67
 91.3: 1.1.68-1.1.70
 94: 1.1.71
+95: 1.1.74-1.1.75
+96: 1.1.76
+98: 1.1.81
+100: 1.1.85
+101: 1.1.86-1.1.88
 102: 1.1.89
+104: 1.1.94
 106: 1.1.97-1.2.3
 109: 1.2.4-1.2.6
 110: 1.2.7
@@ -82,15 +90,19 @@
 
 #include <libloaderapi.h>
 #include <windhawk_utils.h>
+#include <uxtheme.h>
+#include <windows.h>
 
 #define CEF_CALLBACK __stdcall
 #define CEF_EXPORT __cdecl
+#define cef_window_handle_t HWND
 #define ANY_MINOR -1
 
 struct cte_settings {
     BOOL showframe;
     BOOL showmenu;
     BOOL showcontrols;
+    BOOL ignoreminsize;
 } cte_settings;
 
 typedef struct cte_offset {
@@ -107,7 +119,7 @@ cte_offset_t is_frameless_offsets[] = {
     {91, 0, 0x48, 0x90},
     {91, 1, 0x48, 0x90},
     // (91.2 is found nowhere)
-    {91, 3, 0x50, 0x90},
+    {91, 3, 0x50, 0xa0},
     {92, ANY_MINOR, 0x50, 0xa0},
     {101, ANY_MINOR, 0x50, 0xa0},
     {102, ANY_MINOR, 0x54, 0xa8},
@@ -118,19 +130,26 @@ cte_offset_t is_frameless_offsets[] = {
     {116, ANY_MINOR, 0x60, 0xc0},
     {117, ANY_MINOR, 0x64, 0xc8},
     {123, ANY_MINOR, 0x64, 0xc8},
-    {124, ANY_MINOR, 0x68, 0xd0},
-    {130, ANY_MINOR, 0x68, 0xd0}
+    {124, ANY_MINOR, 0x68, 0xd0}
 };
 
 cte_offset_t add_child_view_offsets[] = {
     {94, ANY_MINOR, 0xf0, 0x1e0},
     {122, ANY_MINOR, 0xf0, 0x1e0},
-    {124, ANY_MINOR, 0xf4, 0x1e8},
-    {130, ANY_MINOR, 0xf4, 0x1e8}
+    {124, ANY_MINOR, 0xf4, 0x1e8}
+};
+
+cte_offset_t get_window_handle_offsets[] = {
+    {94, ANY_MINOR, 0x184, 0x308},
+    {114, ANY_MINOR, 0x184, 0x308},
+    {115, ANY_MINOR, 0x188, 0x310},
+    {123, ANY_MINOR, 0x188, 0x310},
+    {124, ANY_MINOR, 0x18c, 0x318}
 };
 
 int is_frameless_offset = NULL;
 int add_child_view_offset = NULL;
+int get_window_handle_offset = NULL;
 
 typedef int CEF_CALLBACK (*is_frameless_t)(struct _cef_window_delegate_t* self, struct _cef_window_t* window);
 int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _cef_window_t* window) {
@@ -138,15 +157,37 @@ int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _
     return 0;
 }
 
+LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    if (uMsg == WM_NCHITTEST || uMsg == WM_NCLBUTTONDOWN || uMsg == WM_NCPAINT || uMsg == WM_NCCALCSIZE) {
+        // Unhook Spotify's custom window control event handling
+        // Also unhook WM_NCPAINT to fix non-DWM frames randomly going black
+        return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    }
+    if (uMsg == WM_GETMINMAXINFO && cte_settings.ignoreminsize == TRUE) {
+        // Ignore minimum window size
+        return 0;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+typedef cef_window_handle_t CEF_CALLBACK (*get_window_handle_t)(struct _cef_window_t* self);
+
 typedef _cef_window_t* CEF_EXPORT (*cef_window_create_top_level_t)(void* delegate);
 cef_window_create_top_level_t CEF_EXPORT cef_window_create_top_level_original;
 _cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(void* delegate) {
     Wh_Log(L"cef_window_create_top_level_hook");
 
     if (is_frameless_offset != NULL && cte_settings.showframe == TRUE) {
-        ((is_frameless_t*)((char*)delegate + is_frameless_offset))[0] = is_frameless_hook;
+        *((is_frameless_t*)((char*)delegate + is_frameless_offset)) = is_frameless_hook;
+        _cef_window_t* window = cef_window_create_top_level_original(delegate);
+        if (get_window_handle_offset != NULL) {
+            get_window_handle_t get_window_handle = *((get_window_handle_t*)((char*)window + get_window_handle_offset));
+            WindhawkUtils::SetWindowSubclassFromAnyThread(get_window_handle(window), SubclassProc, NULL);
+        }
+        return window;
+    } else {
+        return cef_window_create_top_level_original(delegate);
     }
-    return cef_window_create_top_level_original(delegate);
 }
 
 int cnt = -1;
@@ -154,7 +195,8 @@ int cnt = -1;
 typedef void CEF_CALLBACK (*add_child_view_t)(struct _cef_panel_t* self, struct _cef_view_t* view);
 add_child_view_t CEF_CALLBACK add_child_view_original;
 void CEF_CALLBACK add_child_view_hook(struct _cef_panel_t* self, struct _cef_view_t* view) {
-    Wh_Log(L"add_child_view_hook: %d", ++cnt);
+    cnt++;
+    Wh_Log(L"add_child_view_hook: %d", cnt);
     // 0: Minimize, 1: Maximize, 2: Close, 3: Menu (removing this also prevents alt key from working)
     if (cnt < 3) {
       if (cte_settings.showcontrols == FALSE) {
@@ -173,10 +215,22 @@ _cef_panel_t* CEF_EXPORT cef_panel_create_hook(void* delegate) {
     Wh_Log(L"cef_panel_create_hook");
     _cef_panel_t* panel = cef_panel_create_original(delegate);
     if (add_child_view_offset != NULL) {
-        add_child_view_original = ((add_child_view_t*)((char*)panel + add_child_view_offset))[0];
-        ((add_child_view_t*)((char*)panel + add_child_view_offset))[0] = add_child_view_hook;
+        add_child_view_original = *((add_child_view_t*)((char*)panel + add_child_view_offset));
+        *((add_child_view_t*)((char*)panel + add_child_view_offset)) = add_child_view_hook;
     }
     return panel;
+}
+
+using SetWindowThemeAttribute_t = decltype(&SetWindowThemeAttribute);
+SetWindowThemeAttribute_t SetWindowThemeAttribute_original;
+HRESULT WINAPI SetWindowThemeAttribute_hook(HWND hwnd, enum WINDOWTHEMEATTRIBUTETYPE eAttribute, PVOID pvAttribute, DWORD cbAttribute) {
+    Wh_Log(L"SetWindowThemeAttribute_hook");
+    if (eAttribute == WTA_NONCLIENT && is_frameless_offset != NULL && cte_settings.showframe == TRUE && get_window_handle_offset != NULL) {
+        // Ignore this to make sure DWM window controls are visible
+        return S_OK;
+    } else {
+        return SetWindowThemeAttribute_original(hwnd, eAttribute, pvAttribute, cbAttribute);
+    }
 }
 
 typedef int (*cef_version_info_t)(int entry);
@@ -185,10 +239,11 @@ void LoadSettings() {
     cte_settings.showframe = Wh_GetIntSetting(L"showframe");
     cte_settings.showmenu = Wh_GetIntSetting(L"showmenu");
     cte_settings.showcontrols = Wh_GetIntSetting(L"showcontrols");
+    cte_settings.ignoreminsize = Wh_GetIntSetting(L"ignoreminsize");
 }
 
 int FindOffset(int major, int minor, cte_offset_t offsets[], int offsets_size) {
-    int prev_major = 90;
+    int prev_major = offsets[0].ver_major;
     for (int i = 0; i < offsets_size; i++) {
         if (major <= offsets[i].ver_major && major >= prev_major) {
             if (offsets[i].ver_minor == ANY_MINOR ||
@@ -211,6 +266,32 @@ int FindOffset(int major, int minor, cte_offset_t offsets[], int offsets_size) {
         #endif
     }
     return NULL;
+}
+
+BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid;
+    GetWindowThreadProcessId(hWnd, &pid);
+    // Hook all relevant windows belonging to this process
+    if (pid == GetCurrentProcessId()) {
+        wchar_t className[256];
+        GetClassName(hWnd, className, 256);
+        if (wcscmp(className, L"Chrome_WidgetWin_1") == 0) {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, TRUE)) {
+                Wh_Log(L"Subclassed %p", hWnd);
+            }
+        }
+    }
+    return TRUE;
+}
+
+BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid;
+    GetWindowThreadProcessId(hWnd, &pid);
+    // Unhook all windows belonging to this process
+    if (pid == GetCurrentProcessId()) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+    }
+    return TRUE;
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
@@ -273,6 +354,8 @@ BOOL Wh_ModInit() {
     if (isSpotify) {
         add_child_view_offset = FindOffset(major, minor, add_child_view_offsets, ARRAYSIZE(add_child_view_offsets));
         Wh_Log(L"add_child_view offset: %#x", add_child_view_offset);
+        get_window_handle_offset = FindOffset(major, minor, get_window_handle_offsets, ARRAYSIZE(get_window_handle_offsets));
+        Wh_Log(L"get_window_handle offset: %#x", get_window_handle_offset);
     }
 
     if ((is_frameless_offset == NULL || !cte_settings.showframe) &&
@@ -289,13 +372,20 @@ BOOL Wh_ModInit() {
                        (void*)cef_window_create_top_level_hook,
                        (void**)&cef_window_create_top_level_original);
     Wh_SetFunctionHook((void*)cef_panel_create, (void*)cef_panel_create_hook,
-                      (void**)&cef_panel_create_original);
+                       (void**)&cef_panel_create_original);
+    Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
+                       (void**)&SetWindowThemeAttribute_original);
+
+    if (is_frameless_offset != NULL && cte_settings.showframe == TRUE) {
+        EnumWindows(InitEnumWindowsProc, 0);
+    }
     return TRUE;
 }
 
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+    EnumWindows(UninitEnumWindowsProc, 0);
 }
 
 // The mod setting were changed, reload them.
