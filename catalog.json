@@ -222,11 +222,12 @@
                 "published": 1734116516000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1734116516000,
+                "updated": 1734524915000,
                 "users": 26
             },
             "metadata": {
                 "author": "Ingan121",
+                "compilerOptions": "-lcomctl32 -luxtheme",
                 "description": "Force native frames and title bars for CEF apps",
                 "github": "https://github.com/Ingan121",
                 "homepage": "https://www.ingan121.com/",
@@ -236,7 +237,7 @@
                 ],
                 "name": "CEF/Spotify Titlebar Enabler",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.1"
+                "version": "0.2"
             }
         },
         "center-titlebar": {

@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-16T22:17:12.000Z</updated>
+    <updated>2024-12-18T12:28:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Titlebar Enabler 0.2]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#d9e7075dc68171e319427778e094cf9945dbe4a9</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2024-12-18T12:28:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Now supports proper native window controls on all supported versions. DWM, Basic, and Classic are all supported.</li>
+<li>Fix show menu option not working properly when logging is disabled</li>
+<li>Fix Basic/Classic frames turning black in some cases (upstream Chromium issue)</li>
+<li>Add an option to ignore the minimum size set by Spotify</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray icon spacing 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#9c2f0424b09b758e4e82b06da5b4d94e206e05a4</id>
@@ -321,17 +337,6 @@ as a DWORD, set it to 1, and restart Explorer (or sign out and sign in).</p>]]><
 <li>Start menu now opens on the same monitor where the taskbar was clicked - fixes https://github.com/m1lhaus/windhawk-mods/issues/19</li>
 <li>Show Desktop feature fixes for Explorer Patcher taskbar - fixes https://github.com/m1lhaus/windhawk-mods/issues/10</li>
 </ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 1.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#5e8a177134d706049012b8451736c782c753b1c0</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2024-11-23T14:44:06.000Z</updated>
-        <content type="html"><![CDATA[<p>Double tap on touch screens is now much more benevolent in terms of click position on the screen. It takes into account screen DPI since in hi-res screens (like my 14'' 4k laptop) the position diffs between clicks when performing double tap can be significant. Also, since middle mouse button click is not possible with touch and detecting touch gesture is quite cumbersome (to work reliably across both Windows 10 and Windows 11 taskbars), I implemented support for triple tap which activates middle mouse click action. Fixes https://github.com/m1lhaus/windhawk-mods/issues/11</p>]]></content>
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
