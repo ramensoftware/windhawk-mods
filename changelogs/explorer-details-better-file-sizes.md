@@ -1,3 +1,7 @@
+## 1.4.7 ([Dec 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/28f831fb2eb390551fac6fa88ca6bf6c590fac01/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* "Everything" integration for folder sizes: Added support for folder junctions.
+
 ## 1.4.6 ([Dec 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4daa0db637b47f3da820ad7d1cdcc64236068d12/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * "Everything" integration for folder sizes: Added support for the new Everything SDK3. With "Everything" version 1.5.0.1384a or newer, the folder size query is much faster now (can be around 20x faster).
