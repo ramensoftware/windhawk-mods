@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.6
+// @version         1.4.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1198,6 +1198,57 @@ bool IsReparse(PCWSTR FolderPath) {
            (fad.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
 }
 
+// Code based on:
+// https://github.com/transmission/transmission/blob/f2aeb11b0733957d8d77d7038daa3ae88442dd5b/libtransmission/file-win32.cc
+std::wstring NativePathToPath(std::wstring_view wide_path) {
+    constexpr std::wstring_view NativeUncPathPrefix{L"\\\\?\\UNC\\"};
+    if (wide_path.starts_with(NativeUncPathPrefix)) {
+        wide_path.remove_prefix(std::size(NativeUncPathPrefix));
+        std::wstring result{L"\\\\"};
+        result += wide_path;
+        return result;
+    }
+
+    constexpr std::wstring_view NativeLocalPathPrefix{L"\\\\?\\"};
+    if (wide_path.starts_with(NativeLocalPathPrefix)) {
+        wide_path.remove_prefix(std::size(NativeLocalPathPrefix));
+        return std::wstring{wide_path};
+    }
+
+    return std::wstring{wide_path};
+}
+
+// Code based on:
+// https://github.com/transmission/transmission/blob/f2aeb11b0733957d8d77d7038daa3ae88442dd5b/libtransmission/file-win32.cc
+std::wstring ResolvePath(PCWSTR path) {
+    std::wstring result;
+
+    if (auto const handle = CreateFile(
+            path, FILE_READ_EA,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+            OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        handle != INVALID_HANDLE_VALUE) {
+        if (auto const wide_ret_size =
+                GetFinalPathNameByHandle(handle, nullptr, 0, 0);
+            wide_ret_size != 0) {
+            std::wstring wide_ret;
+            wide_ret.resize(wide_ret_size);
+            if (GetFinalPathNameByHandle(handle, std::data(wide_ret),
+                                         wide_ret_size,
+                                         0) == wide_ret_size - 1) {
+                // `wide_ret_size` includes the terminating '\0'; remove it from
+                // `wide_ret`.
+                wide_ret.resize(std::size(wide_ret) - 1);
+                result = NativePathToPath(wide_ret);
+            }
+        }
+
+        CloseHandle(handle);
+    }
+
+    return result;
+}
+
 unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
     *size = 0;
 
@@ -1206,7 +1257,7 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
         *size = Everything3_GetFolderSizeFromFilenameW(pClient, folderPath);
         Everything3_DestroyClient(pClient);
 
-        if (!*size && IsReparse(folderPath)) {
+        if (*size == -1 || (!*size && IsReparse(folderPath))) {
             return ES_QUERY_NO_INDEX;
         }
 
@@ -1618,13 +1669,31 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
                    CalculateFolderSizes::everything) {
             WCHAR path[MAX_PATH];
             if (GetFolderPathFromIShellFolder(childFolder.get(), path)) {
+                Wh_Log(L"Getting size for %s", path);
+
                 int64_t size;
                 unsigned result = Everything4Wh_GetFileSize(path, &size);
+
+                if (result == ES_QUERY_NO_RESULT ||
+                    result == ES_QUERY_NO_INDEX) {
+                    // Try resolving the path in case it contains a reparse
+                    // point.
+                    auto resolved = ResolvePath(path);
+                    if (resolved.empty()) {
+                        Wh_Log(L"Failed to resolve path");
+                    } else if (resolved == path) {
+                        Wh_Log(L"Path is already resolved");
+                    } else {
+                        Wh_Log(L"Trying resolved path %s", resolved.c_str());
+                        result =
+                            Everything4Wh_GetFileSize(resolved.c_str(), &size);
+                    }
+                }
+
                 if (result == ES_QUERY_OK) {
                     cacheIt->second = size;
                 } else {
-                    Wh_Log(L"Failed to get size: %s for %s",
-                           g_gsQueryStatus[result], path);
+                    Wh_Log(L"Failed to get size: %s", g_gsQueryStatus[result]);
                 }
             } else {
                 Wh_Log(L"Failed to get path");
