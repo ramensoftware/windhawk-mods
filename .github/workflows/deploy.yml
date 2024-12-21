@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Clone last deployed content
-        run: git clone --branch gh-pages --single-branch --depth 1 https://github.com/ramensoftware/windhawk-mods.git ${{ runner.temp }}/last_deploy
+        run: git clone --branch pages --single-branch --depth 1 https://github.com/ramensoftware/windhawk-mods.git ${{ runner.temp }}/last_deploy
       - name: Cache Windhawk
         id: cache-windhawk
         uses: actions/cache@v4
