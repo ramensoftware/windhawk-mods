@@ -49,7 +49,7 @@ jobs:
           echo "Downloading $installer_url to $installer_path"
           curl -L "$installer_url" -o "$installer_path"
 
-          extract_path="${{ runner.temp }}/windhawk"
+          extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
       - name: Get changed files
@@ -67,6 +67,6 @@ jobs:
           c=ALL_CHANGED_AND_MODIFIED_FILES_COUNT
           if [[ ( ($a -eq 0 && $b -eq 1) || ($a -eq 1 && $b -eq 0) ) && $c -eq 1 ]]; then
             echo "Compiling $ALL_CHANGED_AND_MODIFIED_FILES"
-            windhawk_path="${{ runner.temp }}/windhawk"
-            python -u scripts/compile_mod.py -w "$windhawk_path" -f "$ALL_CHANGED_AND_MODIFIED_FILES" -o32 "${{ runner.temp }}/mod_32.dll" -o64 "${{ runner.temp }}/mod_64.dll"
+            windhawk_path="${{ runner.temp }}\windhawk"
+            python -u scripts/compile_mod.py -w "$windhawk_path" -f "$ALL_CHANGED_AND_MODIFIED_FILES" -o32 "${{ runner.temp }}\mod_32.dll" -o64 "${{ runner.temp }}\mod_64.dll"
           fi
