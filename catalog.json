@@ -2407,6 +2407,30 @@
                 "version": "1.0"
             }
         },
+        "remove-spotlight-shortcut": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1734795129000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1734795129000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Erizur",
+                "compilerOptions": "-lcomctl32",
+                "description": "Removes the new Desktop Shortcut when you enable Windows Spotlight.",
+                "github": "https://github.com/Erizur",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Remove Windows Spotlight Desktop Shortcut",
+                "version": "1.0"
+            }
+        },
         "ribbon-caption-icon-fix": {
             "details": {
                 "defaultSorting": 3050,

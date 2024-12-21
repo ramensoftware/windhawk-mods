@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-21T13:48:39.000Z</updated>
+    <updated>2024-12-21T15:32:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Windows Spotlight Desktop Shortcut 1.0]]></title>
+        <id>https://windhawk.net/mods/remove-spotlight-shortcut#76c158dfc3ec76744d12ec9e030792f7dd0aac0b</id>
+        <link href="https://windhawk.net/mods/remove-spotlight-shortcut"/>
+        <updated>2024-12-21T15:32:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="removewindowsspotlightdesktopshortcut">Remove Windows Spotlight Desktop Shortcut</h1>
+<p>This mod removes the new Spotlight shortcut that appears on the desktop when you use Spotlight wallpaper mode.
+Works on latest Windows 10 and LTSC 2021. Windows 11 has not been fully tested yet.</p>
+<h2 id="postinstallinstructions">Post-Install instructions</h2>
+<p>After installing the mod, you could either restart the explorer.exe process or refresh your desktop using the context menu.
+This will make the icon not show up on your desktop anymore. Enjoy!</p>]]></content>
+        <author>
+            <name>Erizur</name>
+            <uri>https://github.com/Erizur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Titlebar Enabler 0.3]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#e1dedbdcf972be80fa02d122d7379f9ca91e7582</id>
@@ -318,25 +334,6 @@ settings in Windows.</li>
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#6082c60100929675fc56d995c9f9a6ae7b221c9e</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2024-12-01T18:44:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the new "Show abbreviated time and date" Windows 11 option.</li>
-<li>Added a way to specify multiple date/time formats. It can be useful for things such as showing hours and minutes in different lines.</li>
-<li>Added an option for the clock max width (Windows 11 only).</li>
-<li>Added the <code>%dayofyear%</code> pattern - the day of year starting from January 1st.</li>
-<li>Added the <code>%newline%</code> pattern - a newline.</li>
-<li>Web content is now updated right away after resuming the computer from sleep.</li>
-<li>Added support for the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
