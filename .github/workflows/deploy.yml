@@ -31,7 +31,11 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install pywin32
       - name: Clone last deployed content
-        run: git clone --branch pages --single-branch --depth 1 https://github.com/ramensoftware/windhawk-mods.git ${{ runner.temp }}/last_deploy
+        run: |
+          git clone --branch pages --single-branch --depth 1 https://github.com/ramensoftware/windhawk-mods.git ${{ runner.temp }}/last_deploy
+
+          # Remove the .git directory which interferes with the pages deployment.
+          rm -rf ${{ runner.temp }}/last_deploy/.git
       - name: Cache Windhawk
         id: cache-windhawk
         uses: actions/cache@v4
