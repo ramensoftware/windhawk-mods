@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-position
 // @name            Start button always on the left
 // @description     Forces the start button to be on the left of the taskbar, even when taskbar icons are centered (Windows 11 only)
-// @version         1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -31,10 +31,7 @@ icons are centered.
 
 Only Windows 11 is supported.
 
-Known limitations:
-* There's a jumpy animation when a centered taskbar is animated.
-
-![Screenshot](https://i.imgur.com/bEqvfOE.png)
+![Screenshot](https://i.imgur.com/MSKYKbE.png)
 */
 // ==/WindhawkModReadme==
 
@@ -81,16 +78,6 @@ enum class Target {
 Target g_target;
 
 std::atomic<bool> g_unloading;
-
-UINT_PTR g_updateStartButtonPositionTimer;
-int g_updateStartButtonPositionTimerCounter;
-
-struct TaskbarData {
-    winrt::weak_ref<XamlRoot> xamlRoot;
-    winrt::weak_ref<FrameworkElement> startButtonElement;
-};
-
-std::vector<TaskbarData> g_taskbarData;
 
 typedef enum MONITOR_DPI_TYPE {
     MDT_EFFECTIVE_DPI = 0,
@@ -153,85 +140,7 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     });
 }
 
-void UpdateStartButtonPosition(XamlRoot xamlRoot,
-                               FrameworkElement startButton) {
-    Wh_Log(L">");
-
-    if (startButton.XamlRoot() != xamlRoot) {
-        Wh_Log(L"XamlRoot mismatch");
-        return;
-    }
-
-    FrameworkElement xamlRootContent =
-        xamlRoot.Content().try_as<FrameworkElement>();
-
-    auto pt = startButton.TransformToVisual(xamlRootContent)
-                  .TransformPoint(winrt::Windows::Foundation::Point{0, 0});
-    Wh_Log(L"%f, %f", pt.X, pt.Y);
-
-    if (pt.X == 0) {
-        return;
-    }
-
-    Media::TranslateTransform transform;
-    if (auto prevTransform =
-            startButton.RenderTransform().try_as<Media::TranslateTransform>()) {
-        transform = prevTransform;
-    }
-
-    transform.X(transform.X() - pt.X);
-    startButton.RenderTransform(transform);
-}
-
-void ResetStartButtonPosition(FrameworkElement startButton) {
-    Wh_Log(L">");
-
-    Media::TranslateTransform transform;
-    if (auto prevTransform =
-            startButton.RenderTransform().try_as<Media::TranslateTransform>()) {
-        transform = prevTransform;
-    }
-
-    transform.X(0);
-    startButton.RenderTransform(transform);
-}
-
-void ScheduleUpdateStartButtonPosition() {
-    g_updateStartButtonPositionTimerCounter = 0;
-    g_updateStartButtonPositionTimer = SetTimer(
-        nullptr, g_updateStartButtonPositionTimer, 100,
-        [](HWND hwnd,         // handle of window for timer messages
-           UINT uMsg,         // WM_TIMER message
-           UINT_PTR idEvent,  // timer identifier
-           DWORD dwTime       // current system time
-           ) WINAPI {
-            g_updateStartButtonPositionTimerCounter++;
-            if (g_updateStartButtonPositionTimerCounter >= 30) {
-                KillTimer(nullptr, g_updateStartButtonPositionTimer);
-                g_updateStartButtonPositionTimer = 0;
-            }
-
-            for (const auto& item : g_taskbarData) {
-                if (auto xamlRoot = item.xamlRoot.get()) {
-                    if (auto startButtonElement =
-                            item.startButtonElement.get()) {
-                        UpdateStartButtonPosition(xamlRoot, startButtonElement);
-                    }
-                }
-            }
-        });
-}
-
 bool ApplyStyle(XamlRoot xamlRoot) {
-    auto dataItem = std::find_if(
-        g_taskbarData.begin(), g_taskbarData.end(), [&xamlRoot](auto x) {
-            auto xamlRootIter = x.xamlRoot.get();
-            return xamlRootIter && xamlRootIter == xamlRoot;
-        });
-    if (dataItem != g_taskbarData.end()) {
-        return true;
-    }
-
     FrameworkElement xamlRootContent =
         xamlRoot.Content().try_as<FrameworkElement>();
 
@@ -260,24 +169,39 @@ bool ApplyStyle(XamlRoot xamlRoot) {
                 Automation::AutomationProperties::GetAutomationId(child);
             return automationId == L"StartButton";
         });
-    if (!startButton) {
-        return false;
+    if (startButton) {
+        double startButtonWidth = startButton.ActualWidth();
+
+        Thickness startButtonMargin = startButton.Margin();
+        startButtonMargin.Right = g_unloading ? 0 : -startButtonWidth;
+        startButton.Margin(startButtonMargin);
     }
 
-    double startButtonWidth = startButton.ActualWidth();
+    auto widgetElement =
+        EnumChildElements(taskbarFrameRepeater, [](FrameworkElement child) {
+            auto childClassName = winrt::get_class_name(child);
+            if (childClassName != L"Taskbar.AugmentedEntryPointButton") {
+                return false;
+            }
 
-    Thickness taskbarFrameRepeaterMargin = taskbarFrameRepeater.Margin();
-    taskbarFrameRepeaterMargin.Left = g_unloading ? 0 : startButtonWidth;
-    taskbarFrameRepeater.Margin(taskbarFrameRepeaterMargin);
+            if (child.Name() != L"AugmentedEntryPointButton") {
+                return false;
+            }
 
-    Thickness startButtonMargin = startButton.Margin();
-    startButtonMargin.Left = g_unloading ? 0 : -startButtonWidth;
-    startButton.Margin(startButtonMargin);
+            auto margin = child.Margin();
 
-    g_taskbarData.push_back({
-        .xamlRoot = xamlRoot,
-        .startButtonElement = startButton,
-    });
+            auto offset = child.ActualOffset();
+            if (offset.x != margin.Left || offset.y != 0) {
+                return false;
+            }
+
+            return true;
+        });
+    if (widgetElement) {
+        auto margin = widgetElement.Margin();
+        margin.Left = g_unloading ? 0 : 34;
+        widgetElement.Margin(margin);
+    }
 
     return true;
 }
@@ -450,76 +374,203 @@ void ApplySettingsFromTaskbarThread() {
 void ApplySettings(HWND hTaskbarWnd) {
     RunFromWindowThread(
         hTaskbarWnd,
-        [](PVOID pParam) WINAPI {
-            if (!g_unloading) {
-                ApplySettingsFromTaskbarThread();
-                ScheduleUpdateStartButtonPosition();
-            } else {
-                for (const auto& item : g_taskbarData) {
-                    if (auto startButtonElement =
-                            item.startButtonElement.get()) {
-                        ResetStartButtonPosition(startButtonElement);
-                    }
-                }
-
-                if (g_updateStartButtonPositionTimer) {
-                    KillTimer(nullptr, g_updateStartButtonPositionTimer);
-                    g_updateStartButtonPositionTimer = 0;
-                }
-            }
-        },
-        0);
+        [](PVOID pParam) WINAPI { ApplySettingsFromTaskbarThread(); }, 0);
 }
 
-using CPearl_SetBounds_t = HRESULT(WINAPI*)(void* pThis, void* param1);
-CPearl_SetBounds_t CPearl_SetBounds_Original;
-HRESULT WINAPI CPearl_SetBounds_Hook(void* pThis, void* param1) {
+using IUIElement_Arrange_t = HRESULT(
+    WINAPI*)(UIElement pThis, const winrt::Windows::Foundation::Rect* rect);
+IUIElement_Arrange_t IUIElement_Arrange_Original;
+HRESULT WINAPI
+IUIElement_Arrange_Hook(UIElement pThis,
+                        const winrt::Windows::Foundation::Rect* rect) {
     Wh_Log(L">");
 
-    if (!g_unloading) {
-        ApplySettingsFromTaskbarThread();
-        ScheduleUpdateStartButtonPosition();
+    auto original = [&] { return IUIElement_Arrange_Original(pThis, rect); };
+
+    if (g_unloading) {
+        return original();
     }
 
-    return CPearl_SetBounds_Original(pThis, param1);
+    FrameworkElement element = pThis.try_as<FrameworkElement>();
+    if (!element) {
+        return original();
+    }
+
+    auto className = winrt::get_class_name(element);
+    if (className != L"Taskbar.ExperienceToggleButton") {
+        return original();
+    }
+
+    auto automationId =
+        Automation::AutomationProperties::GetAutomationId(element);
+    if (automationId != L"StartButton") {
+        return original();
+    }
+
+    auto taskbarFrameRepeater =
+        Media::VisualTreeHelper::GetParent(element).as<FrameworkElement>();
+    auto widgetElement =
+        EnumChildElements(taskbarFrameRepeater, [](FrameworkElement child) {
+            auto childClassName = winrt::get_class_name(child);
+            if (childClassName != L"Taskbar.AugmentedEntryPointButton") {
+                return false;
+            }
+
+            if (child.Name() != L"AugmentedEntryPointButton") {
+                return false;
+            }
+
+            auto margin = child.Margin();
+
+            auto offset = child.ActualOffset();
+            if (offset.x != margin.Left || offset.y != 0) {
+                return false;
+            }
+
+            return true;
+        });
+
+    if (!widgetElement) {
+        element.Dispatcher().TryRunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+            [element]() {
+                double width = element.ActualWidth();
+
+                double minX = std::numeric_limits<double>::infinity();
+                auto taskbarFrameRepeater =
+                    Media::VisualTreeHelper::GetParent(element)
+                        .as<FrameworkElement>();
+                EnumChildElements(taskbarFrameRepeater,
+                                  [&element, &minX](FrameworkElement child) {
+                                      if (child == element) {
+                                          return false;
+                                      }
+
+                                      auto offset = child.ActualOffset();
+                                      if (offset.x >= 0 && offset.x < minX) {
+                                          minX = offset.x;
+                                      }
+
+                                      return false;
+                                  });
+
+                if (minX < width) {
+                    Thickness margin = element.Margin();
+                    margin.Right = 0;
+                    element.Margin(margin);
+                } else if (minX > width * 2) {
+                    Thickness margin = element.Margin();
+                    margin.Right = -width;
+                    element.Margin(margin);
+                }
+            });
+    }
+
+    // Force the start button to have X = 0.
+    winrt::Windows::Foundation::Rect newRect = *rect;
+    newRect.X = 0;
+    return IUIElement_Arrange_Original(pThis, &newRect);
 }
 
-BOOL HookTaskbarDllSymbols() {
+using AugmentedEntryPointButton_UpdateButtonPadding_t =
+    void(WINAPI*)(void* pThis);
+AugmentedEntryPointButton_UpdateButtonPadding_t
+    AugmentedEntryPointButton_UpdateButtonPadding_Original;
+void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    AugmentedEntryPointButton_UpdateButtonPadding_Original(pThis);
+
+    if (g_unloading) {
+        return;
+    }
+
+    FrameworkElement button = nullptr;
+    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(button));
+    if (!button) {
+        return;
+    }
+
+    button.Dispatcher().TryRunAsync(
+        winrt::Windows::UI::Core::CoreDispatcherPriority::High, [button]() {
+            auto offset = button.ActualOffset();
+            if (offset.x != 0 || offset.y != 0) {
+                return;
+            }
+
+            auto margin = button.Margin();
+            margin.Left = 34;
+            button.Margin(margin);
+        });
+}
+
+bool HookTaskbarDllSymbols() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
-        return FALSE;
+        return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
-            {LR"(public: long __cdecl CPearl::SetBounds(struct tagRECT const &))"},
-            (void**)&CPearl_SetBounds_Original,
-            (void*)CPearl_SetBounds_Hook,
-        },
-        {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
-            (void**)&CTaskBand_ITaskListWndSite_vftable,
+            &CTaskBand_ITaskListWndSite_vftable,
         },
         {
             {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-            (void**)&CSecondaryTaskBand_ITaskListWndSite_vftable,
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
         },
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
-            (void**)&CTaskBand_GetTaskbarHost_Original,
+            &CTaskBand_GetTaskbarHost_Original,
         },
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-            (void**)&CSecondaryTaskBand_GetTaskbarHost_Original,
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
         },
         {
             {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
-            (void**)&std__Ref_count_base__Decref_Original,
+            &std__Ref_count_base__Decref_Original,
         },
     };
 
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+}
+
+bool HookTaskbarViewDllSymbols() {
+    WCHAR dllPath[MAX_PATH];
+    if (!GetWindowsDirectory(dllPath, ARRAYSIZE(dllPath))) {
+        Wh_Log(L"GetWindowsDirectory failed");
+        return false;
+    }
+
+    wcscat_s(
+        dllPath, MAX_PATH,
+        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
+
+    HMODULE module =
+        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!module) {
+        Wh_Log(L"Taskbar view module couldn't be loaded");
+        return false;
+    }
+
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::Windows::UI::Xaml::IUIElement>::Arrange(struct winrt::Windows::Foundation::Rect const &)const )"},
+            &IUIElement_Arrange_Original,
+            IUIElement_Arrange_Hook,
+        },
+        {
+            {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::AugmentedEntryPointButton::UpdateButtonPadding(void))"},
+            &AugmentedEntryPointButton_UpdateButtonPadding_Original,
+            AugmentedEntryPointButton_UpdateButtonPadding_Hook,
+        },
+    };
+
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 
 namespace CoreWindowUI {
@@ -859,6 +910,10 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (!HookTaskbarViewDllSymbols()) {
+        return FALSE;
+    }
+
     return TRUE;
 }
 
@@ -901,13 +956,11 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     LoadSettings();
 
-    if (!g_settings.startMenuOnTheLeft) {
-        return FALSE;
-    }
-
-    *bReload = FALSE;
-
     if (g_target == Target::StartMenu || g_target == Target::SearchHost) {
+        if (!g_settings.startMenuOnTheLeft) {
+            return FALSE;
+        }
+
         CoreWindowUI::ApplySettings();
     }
 

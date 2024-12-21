@@ -126,8 +126,13 @@ async function generateModCatalog() {
     return await enrichCatalog(catalog);
 }
 
-function getChangelogTextFromCommitMessage(message: string) {
-    let messageTrimmed = message.trim();
+function getModChangelogTextForVersion(modId: string, modVersion: string, commitMessage: string) {
+    const overridePath = path.join('changelog_override', modId, `${modVersion}.md`);
+    if (fs.existsSync(overridePath)) {
+        return fs.readFileSync(overridePath, 'utf8').trim();
+    }
+
+    let messageTrimmed = commitMessage.trim();
     if (messageTrimmed.includes('\n')) {
         // Remove first line.
         return messageTrimmed.replace(/^.* \(#\d+\)\n\n/, '').trim();
@@ -137,8 +142,17 @@ function getChangelogTextFromCommitMessage(message: string) {
     }
 }
 
-function generateModChangelog(modId: string) {
+function generateModData(modId: string, changelogPath: string, modDir: string) {
+    if (!fs.existsSync(modDir)) {
+        fs.mkdirSync(modDir);
+    }
+
     let changelog = '';
+    const versions: {
+        version: string;
+        prerelease?: boolean;
+    }[] = [];
+    let sawReleaseVersion = false;
 
     const modSourceUtils = new ModSourceUtils('mods');
 
@@ -158,6 +172,29 @@ function generateModChangelog(modId: string) {
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
+        if (!metadata.version) {
+            throw new Error(`Mod ${modId} has no version in commit ${commit}`);
+        }
+
+        const prerelease = metadata.version.includes('-');
+        if (!prerelease) {
+            sawReleaseVersion = true;
+        } else if (sawReleaseVersion) {
+            continue;
+        }
+
+        versions.unshift({
+            version: metadata.version,
+            ...(prerelease ? { prerelease: true } : {}),
+        });
+
+        const modVersionFilePath = path.join(modDir, `${metadata.version}.wh.cpp`);
+        if (fs.existsSync(modVersionFilePath)) {
+            throw new Error(`Mod ${modId} has duplicate version ${metadata.version} in commit ${commit}`);
+        }
+
+        fs.writeFileSync(modVersionFilePath, modFile);
+
         const commitTime = parseInt(gitExec([
             'log',
             '--format=%ct',
@@ -173,23 +210,26 @@ function generateModChangelog(modId: string) {
         changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
 
         if (commit !== lastCommit) {
-            const message = gitExec([
+            const commitMessage = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
             ]);
-            const changelogItem = getChangelogTextFromCommitMessage(message);
+            const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
             changelog += `${changelogItem}\n\n`;
         } else {
             changelog += 'Initial release.\n';
         }
     }
 
-    return changelog;
+    fs.writeFileSync(changelogPath, changelog);
+
+    const versionsPath = path.join(modDir, 'versions.json');
+    fs.writeFileSync(versionsPath, JSON.stringify(versions));
 }
 
-function generateModChangelogs(modIds: string[]) {
+function generateModsData(modIds: string[]) {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
@@ -197,7 +237,8 @@ function generateModChangelogs(modIds: string[]) {
 
     for (const modId of modIds) {
         const changelogPath = path.join(changelogDir, `${modId}.md`);
-        fs.writeFileSync(changelogPath, generateModChangelog(modId));
+        const modDir = path.join('mods', modId);
+        generateModData(modId, changelogPath, modDir);
     }
 }
 
@@ -253,6 +294,10 @@ function generateRssFeed() {
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
+        if (!metadata.version) {
+            throw new Error(`Mod ${modId} has no version in commit ${commit}`);
+        }
+
         const commitTime = parseInt(gitExec([
             'log',
             '--format=%ct',
@@ -262,13 +307,13 @@ function generateRssFeed() {
 
         let content = '';
         if (changeType === 'M') {
-            const message = gitExec([
+            const commitMessage = gitExec([
                 'log',
                 '-1',
                 '--pretty=format:%B',
                 commit,
             ]);
-            content = getChangelogTextFromCommitMessage(message);
+            content = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }
@@ -329,7 +374,7 @@ async function main() {
     fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
 
     const modIds = Object.keys(catalog.mods);
-    generateModChangelogs(modIds);
+    generateModsData(modIds);
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 

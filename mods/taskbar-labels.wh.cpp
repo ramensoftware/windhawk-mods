@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.3.1
+// @version         1.3.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -110,6 +110,14 @@ Labels can also be shown or hidden per-program in the settings.
     will be shown for these programs
 
     If another mode is used, this list is ignored
+
+    Entries can be process names, paths or application IDs, for example:
+
+    mspaint.exe
+
+    C:\Windows\System32\notepad.exe
+
+    Microsoft.WindowsCalculator_8wekyb3d8bbwe!App
 - minimumTaskbarItemWidth: 50
   $name: Minimum taskbar item width
   $description: >-
@@ -127,6 +135,12 @@ Labels can also be shown or hidden per-program in the settings.
   $name: Left and right padding size
 - spaceBetweenIconAndLabel: 8
   $name: Space between icon and label
+- alwaysShowThumbnailLabels: false
+  $name: Always show thumbnail labels
+  $description: >-
+    By default, thumbnail labels are shown on hover only if taskbar labels are
+    hidden, but that might not be applied for all customizations that this mod
+    offers
 - labelForSingleItem: "%name%"
   $name: Label for a single item
   $description: >-
@@ -204,6 +218,7 @@ struct {
     int fontSize;
     int leftAndRightPaddingSize;
     int spaceBetweenIconAndLabel;
+    bool alwaysShowThumbnailLabels;
     string_setting_unique_ptr labelForSingleItem;
     string_setting_unique_ptr labelForMultipleItems;
 } g_settings;
@@ -220,6 +235,13 @@ double g_initialTaskbarItemWidth;
 
 UINT_PTR g_invalidateTaskListButtonTimer;
 std::unordered_set<FrameworkElement> g_taskListButtonsWithLabelMissing;
+
+#if __cplusplus < 202302L
+// Missing in older MinGW headers.
+DECLARE_HANDLE(CO_MTA_USAGE_COOKIE);
+WINOLEAPI CoIncrementMTAUsage(CO_MTA_USAGE_COOKIE* pCookie);
+WINOLEAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE Cookie);
+#endif
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 
@@ -263,19 +285,78 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
 }
 
 HWND GetTaskbarWnd() {
-    static HWND hTaskbarWnd;
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
 
-    if (!hTaskbarWnd) {
-        HWND hWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-
-        DWORD processId = 0;
-        if (hWnd && GetWindowThreadProcessId(hWnd, &processId) &&
-            processId == GetCurrentProcessId()) {
-            hTaskbarWnd = hWnd;
-        }
+    DWORD processId = 0;
+    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return nullptr;
     }
 
     return hTaskbarWnd;
+}
+
+// https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
+std::wstring GetWindowAppId(HWND hWnd) {
+    // {c8900b66-a973-584b-8cae-355b7f55341b}
+    constexpr winrt::guid CLSID_StartMenuCacheAndAppResolver{
+        0x660b90c8,
+        0x73a9,
+        0x4b58,
+        {0x8c, 0xae, 0x35, 0x5b, 0x7f, 0x55, 0x34, 0x1b}};
+
+    // {de25675a-72de-44b4-9373-05170450c140}
+    constexpr winrt::guid IID_IAppResolver_8{
+        0xde25675a,
+        0x72de,
+        0x44b4,
+        {0x93, 0x73, 0x05, 0x17, 0x04, 0x50, 0xc1, 0x40}};
+
+    struct IAppResolver_8 : public IUnknown {
+       public:
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcut() = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcutObject() = 0;
+        virtual HRESULT STDMETHODCALLTYPE
+        GetAppIDForWindow(HWND hWnd,
+                          WCHAR** pszAppId,
+                          void* pUnknown1,
+                          void* pUnknown2,
+                          void* pUnknown3) = 0;
+        virtual HRESULT STDMETHODCALLTYPE
+        GetAppIDForProcess(DWORD dwProcessId,
+                           WCHAR** pszAppId,
+                           void* pUnknown1,
+                           void* pUnknown2,
+                           void* pUnknown3) = 0;
+    };
+
+    HRESULT hr;
+    std::wstring result;
+
+    CO_MTA_USAGE_COOKIE cookie;
+    bool mtaUsageIncreased = SUCCEEDED(CoIncrementMTAUsage(&cookie));
+
+    winrt::com_ptr<IAppResolver_8> appResolver;
+    hr = CoCreateInstance(CLSID_StartMenuCacheAndAppResolver, nullptr,
+                          CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER,
+                          IID_IAppResolver_8, appResolver.put_void());
+    if (SUCCEEDED(hr)) {
+        WCHAR* pszAppId;
+        hr = appResolver->GetAppIDForWindow(hWnd, &pszAppId, nullptr, nullptr,
+                                            nullptr);
+        if (SUCCEEDED(hr)) {
+            result = pszAppId;
+            CoTaskMemFree(pszAppId);
+        }
+    }
+
+    appResolver = nullptr;
+
+    if (mtaUsageIncreased) {
+        CoDecrementMTAUsage(cookie);
+    }
+
+    return result;
 }
 
 void RecalculateLabels() {
@@ -303,6 +384,8 @@ void RecalculateLabels() {
 
     g_applyingSettings = false;
 }
+
+void* TaskbarSettings_GroupingMode_Original;
 
 using TaskListButton_get_IsRunning_t = HRESULT(WINAPI*)(void* pThis,
                                                         bool* running);
@@ -479,6 +562,29 @@ double CalculateTaskbarItemWidth(FrameworkElement taskbarFrameRepeaterElement,
     }
 
     return width;
+}
+
+using CTaskListThumbnailWnd_DisplayUI_t = void*(WINAPI*)(void* pThis,
+                                                         void* param1,
+                                                         void* param2,
+                                                         void* param3,
+                                                         DWORD flags);
+CTaskListThumbnailWnd_DisplayUI_t CTaskListThumbnailWnd_DisplayUI_Original;
+void* WINAPI CTaskListThumbnailWnd_DisplayUI_Hook(void* pThis,
+                                                  void* param1,
+                                                  void* param2,
+                                                  void* param3,
+                                                  DWORD flags) {
+    Wh_Log(L">");
+
+    if (g_settings.alwaysShowThumbnailLabels) {
+        flags |= 0x01;
+    }
+
+    void* ret = CTaskListThumbnailWnd_DisplayUI_Original(pThis, param1, param2,
+                                                         param3, flags);
+
+    return ret;
 }
 
 using CTaskListWnd__GetTBGroupFromGroup_t = void*(WINAPI*)(void* pThis,
@@ -957,18 +1063,21 @@ void UpdateTaskListButtonWithLabelStyle(
 
         double minWidth = 0;
 
-        if (indicatorStyle == IndicatorStyle::centerFixed) {
-            // Without this, the indicator isn't centered.
-            minWidth = indicatorElement.Width();
-        } else if (indicatorStyle == IndicatorStyle::centerDynamic) {
-            if (firstColumnWidthPixels > 0) {
-                minWidth = indicatorElement.Width() * taskListButtonWidth /
-                           firstColumnWidthPixels;
-            }
-        } else if (indicatorStyle == IndicatorStyle::fullWidth) {
-            minWidth = taskListButtonWidth - 6;
-            if (minWidth < 0) {
-                minWidth = 0;
+        double indicatorElementWidth = indicatorElement.Width();
+        if (indicatorElementWidth > 0) {
+            if (indicatorStyle == IndicatorStyle::centerFixed) {
+                // Without this, the indicator isn't centered.
+                minWidth = indicatorElementWidth;
+            } else if (indicatorStyle == IndicatorStyle::centerDynamic) {
+                if (firstColumnWidthPixels > 0) {
+                    minWidth = indicatorElementWidth * taskListButtonWidth /
+                               firstColumnWidthPixels;
+                }
+            } else if (indicatorStyle == IndicatorStyle::fullWidth) {
+                minWidth = taskListButtonWidth - 6;
+                if (minWidth < 0) {
+                    minWidth = 0;
+                }
             }
         }
 
@@ -980,11 +1089,13 @@ void UpdateTaskListButtonWithLabelStyle(
             double currentMinWidth = indicatorElement.MinWidth();
             if (minWidth != currentMinWidth) {
                 indicatorElement.MinWidth(0);
-                indicatorElement.Dispatcher().TryRunAsync(
-                    winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                    [indicatorElement, minWidth]() {
-                        indicatorElement.MinWidth(minWidth);
-                    });
+                if (minWidth > 0) {
+                    indicatorElement.Dispatcher().TryRunAsync(
+                        winrt::Windows::UI::Core::CoreDispatcherPriority::High,
+                        [indicatorElement, minWidth]() {
+                            indicatorElement.MinWidth(minWidth);
+                        });
+                }
             }
         } else {
             indicatorElement.MinWidth(minWidth);
@@ -1309,59 +1420,30 @@ void WINAPI TaskListButton_Icon_Hook(void* pThis, LONG_PTR randomAccessStream) {
     }
 }
 
-using TaskbarSettings_GroupingMode_t = DWORD(WINAPI*)(void* pThis);
-TaskbarSettings_GroupingMode_t TaskbarSettings_GroupingMode_Original;
-DWORD WINAPI TaskbarSettings_GroupingMode_Hook(void* pThis) {
+using ITaskbarButton_get_MinScalableWidth_t = HRESULT(WINAPI*)(void* pThis,
+                                                               float* minWidth);
+ITaskbarButton_get_MinScalableWidth_t
+    ITaskbarButton_get_MinScalableWidth_Original;
+HRESULT ITaskbarButton_get_MinScalableWidth_Hook(void* pThis, float* minWidth) {
     Wh_Log(L">");
 
-    DWORD ret = TaskbarSettings_GroupingMode_Original(pThis);
+    HRESULT ret = ITaskbarButton_get_MinScalableWidth_Original(pThis, minWidth);
 
-    if (!g_unloading) {
-        // 0 - Always
-        // 1 - When taskbar is full
-        // 2 - Never
-        if (g_settings.mode == Mode::noLabelsWithCombining ||
-            g_settings.mode == Mode::labelsWithCombining) {
-            ret = 0;
-        } else if (ret == 0) {
-            ret = 2;
-        }
-    }
-
-    if (g_overrideGroupingMode) {
-        if (ret == 0) {
-            ret = 2;
-        } else {
-            ret = 0;
-        }
-    }
-
-    return ret;
-}
-
-using TaskListButton_MinScalableWidth_t = float(WINAPI*)(void* pThis);
-TaskListButton_MinScalableWidth_t TaskListButton_MinScalableWidth_Original;
-// RDX is expected to be preserved.
-[[clang::preserve_most]]
-float TaskListButton_MinScalableWidth_Hook(void* pThis) {
-    Wh_Log(L">");
-
-    float ret = TaskListButton_MinScalableWidth_Original(pThis);
-
-    if (!g_unloading && g_hasNativeLabelsImplementation && ret > 0) {
+    if (SUCCEEDED(ret) && !g_unloading && g_hasNativeLabelsImplementation &&
+        *minWidth > 0) {
         // Allow to create many taskbar items before overflow appears.
         int minimumTaskbarItemWidth = g_settings.minimumTaskbarItemWidth;
-        if (minimumTaskbarItemWidth < 44) {
-            minimumTaskbarItemWidth = 44;
+        if (minimumTaskbarItemWidth < 1) {
+            minimumTaskbarItemWidth = 1;
             Wh_Log(L"minimumTaskbarItemWidth too small, using %d",
                    minimumTaskbarItemWidth);
         }
 
-        if (ret >= minimumTaskbarItemWidth) {
-            ret = minimumTaskbarItemWidth;
+        if (*minWidth >= minimumTaskbarItemWidth) {
+            *minWidth = minimumTaskbarItemWidth;
         } else {
             Wh_Log(L"minimumTaskbarItemWidth too large, using default (%f)",
-                   ret);
+                   *minWidth);
         }
     }
 
@@ -1493,6 +1575,16 @@ TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
                 }
             }
 
+            if (!excluded) {
+                std::wstring appId = GetWindowAppId(hWnd);
+                LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                              appId.data(), appId.length(), appId.data(),
+                              appId.length(), nullptr, nullptr, 0);
+                if (g_settings.excludedPrograms.contains(appId.c_str())) {
+                    excluded = true;
+                }
+            }
+
             if (excluded) {
                 Wh_Log(L"Excluding %s", resolvedWindowProcessPath);
                 hideLabels = !hideLabels;
@@ -1528,6 +1620,67 @@ TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
         *hasLabels = true;
     } else if (g_settings.mode == Mode::noLabelsWithoutCombining) {
         *hasLabels = false;
+    }
+
+    return ret;
+}
+
+using RegGetValueW_t = decltype(&RegGetValueW);
+RegGetValueW_t RegGetValueW_Original;
+LONG WINAPI RegGetValueW_Hook(HKEY hkey,
+                              LPCWSTR lpSubKey,
+                              LPCWSTR lpValue,
+                              DWORD dwFlags,
+                              LPDWORD pdwType,
+                              PVOID pvData,
+                              LPDWORD pcbData) {
+    LONG ret = RegGetValueW_Original(hkey, lpSubKey, lpValue, dwFlags, pdwType,
+                                     pvData, pcbData);
+
+    if (hkey == HKEY_CURRENT_USER && lpSubKey &&
+        _wcsicmp(
+            lpSubKey,
+            LR"(SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced)") ==
+            0 &&
+        lpValue &&
+        (_wcsicmp(lpValue, L"TaskbarGlomLevel") == 0 ||
+         _wcsicmp(lpValue, L"MMTaskbarGlomLevel") == 0) &&
+        dwFlags == RRF_RT_REG_DWORD && pvData && pcbData &&
+        *pcbData == sizeof(DWORD)) {
+        Wh_Log(L">");
+
+        DWORD taskbarGlomLevel = (ret == ERROR_SUCCESS) ? *(DWORD*)pvData : 0;
+        DWORD taskbarGlomLevelOriginal = taskbarGlomLevel;
+
+        if (!g_unloading) {
+            // 0 - Always
+            // 1 - When taskbar is full
+            // 2 - Never
+            if (g_settings.mode == Mode::noLabelsWithCombining ||
+                g_settings.mode == Mode::labelsWithCombining) {
+                taskbarGlomLevel = 0;
+            } else if (taskbarGlomLevel == 0) {
+                taskbarGlomLevel = 2;
+            }
+        }
+
+        if (g_overrideGroupingMode) {
+            if (taskbarGlomLevel == 0) {
+                taskbarGlomLevel = 2;
+            } else {
+                taskbarGlomLevel = 0;
+            }
+        }
+
+        Wh_Log(L"Overriding TaskbarGlomLevel: %u->%u", taskbarGlomLevelOriginal,
+               taskbarGlomLevel);
+        *(DWORD*)pvData = taskbarGlomLevel;
+
+        if (pdwType) {
+            *pdwType = REG_DWORD;
+        }
+
+        ret = ERROR_SUCCESS;
     }
 
     return ret;
@@ -1633,6 +1786,8 @@ void LoadSettings() {
         Wh_GetIntSetting(L"leftAndRightPaddingSize");
     g_settings.spaceBetweenIconAndLabel =
         Wh_GetIntSetting(L"spaceBetweenIconAndLabel");
+    g_settings.alwaysShowThumbnailLabels =
+        Wh_GetIntSetting(L"alwaysShowThumbnailLabels");
     g_settings.labelForSingleItem.reset(
         Wh_GetStringSetting(L"labelForSingleItem"));
     g_settings.labelForMultipleItems.reset(
@@ -2055,6 +2210,15 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         {
             {
                 {
+                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const )",
+                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const __ptr64)",
+                },
+                (void**)&TaskbarSettings_GroupingMode_Original,
+                nullptr,
+                true,
+            },
+            {
+                {
                     LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))",
                     LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool * __ptr64) __ptr64)",
                 },
@@ -2102,20 +2266,11 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             {
                 {
-                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const )",
-                    LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const __ptr64)",
+                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskbarButton>::get_MinScalableWidth(float *))",
+                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskbarButton>::get_MinScalableWidth(float * __ptr64) __ptr64)",
                 },
-                (void**)&TaskbarSettings_GroupingMode_Original,
-                (void*)TaskbarSettings_GroupingMode_Hook,
-                true,
-            },
-            {
-                {
-                    LR"(public: float __cdecl winrt::Taskbar::implementation::TaskListButton::MinScalableWidth(void))",
-                    LR"(public: float __cdecl winrt::Taskbar::implementation::TaskListButton::MinScalableWidth(void) __ptr64)",
-                },
-                (void**)&TaskListButton_MinScalableWidth_Original,
-                (void*)TaskListButton_MinScalableWidth_Hook,
+                (void**)&ITaskbarButton_get_MinScalableWidth_Original,
+                (void*)ITaskbarButton_get_MinScalableWidth_Hook,
                 true,
             },
             {
@@ -2190,11 +2345,43 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
         };
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    if (!HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
+                                            ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
 bool HookTaskbarDllSymbols() {
+    HMODULE module = LoadLibrary(L"taskbar.dll");
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {
+                LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup *,struct ITaskItem *,struct ITaskItem *,unsigned long))",
+                LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup * __ptr64,struct ITaskItem * __ptr64,struct ITaskItem * __ptr64,unsigned long) __ptr64)",
+            },
+            (void**)&CTaskListThumbnailWnd_DisplayUI_Original,
+            (void*)CTaskListThumbnailWnd_DisplayUI_Hook,
+        },
+    };
+
+    if (!HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
+                                            ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+bool HookTaskbarDllSymbolsOldImplementation() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
@@ -2268,8 +2455,13 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
-                                              ARRAYSIZE(taskbarDllHooks));
+    if (!HookSymbolsWithOnlineCacheFallback(module, taskbarDllHooks,
+                                            ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
 BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
@@ -2288,9 +2480,20 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
     }
 
     if (!g_hasNativeLabelsImplementation) {
+        if (!HookTaskbarDllSymbolsOldImplementation()) {
+            return FALSE;
+        }
+    } else {
         if (!HookTaskbarDllSymbols()) {
             return FALSE;
         }
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        FARPROC pKernelBaseRegGetValueW =
+            GetProcAddress(kernelBaseModule, "RegGetValueW");
+        Wh_SetFunctionHook((void*)pKernelBaseRegGetValueW,
+                           (void*)RegGetValueW_Hook,
+                           (void**)&RegGetValueW_Original);
     }
 
     return TRUE;

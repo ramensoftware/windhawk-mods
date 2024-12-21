@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.4
+// @version         1.9
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -21,7 +21,7 @@
 /*
 # Click on empty taskbar space
 
-This mod lets you assign an action to a mouse click on Windows taskbar. Double-click and middle-click actions are supported. This mod only modifies behaviour when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Both primary and secondary taskbars are supported.
+This mod lets you assign an action to a mouse click on Windows taskbar. Double-click and middle-click actions are supported. Additionally double tap and triple tap on touch screens are supported. This mod only modifies behaviour when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Both primary and secondary taskbars are supported.
 
 ## Supported actions:
 
@@ -45,7 +45,7 @@ Following animation shows **Taskbar auto-hide** feature. Feature gets toggled wh
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
-- Windows 11 21H2 - latest major
+- Windows 11 23H2 - latest major
 
 I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
 
@@ -53,11 +53,11 @@ I will not supporting Insider preview or other minor versions of Windows. Howeve
 
 ## Classic taskbar on Windows 11
 
-In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 23H2).
+In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 24H2).
 
 ## Suggestions and new features
 
-If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues).
+If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues). Please, be as specific as possible and provide as much information as you can.
 
 */
 // ==/WindhawkModReadme==
@@ -65,7 +65,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 // ==WindhawkModSettings==
 /*
 - doubleClickAction: ACTION_NOTHING
-  $name: Double click on empty space
+  $name: Double click / double tap on empty space
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
@@ -80,7 +80,7 @@ If you have request for new functions, suggestions or you are experiencing some 
   - ACTION_SEND_KEYPRESS: Virtual key press
   - ACTION_START_PROCESS: Start application
 - middleClickAction: ACTION_NOTHING
-  $name: Middle click on empty space
+  $name: Middle click / triple tap on empty space
   $options:
   - ACTION_NOTHING: Nothing (default)
   - ACTION_SHOW_DESKTOP: Show desktop
@@ -158,7 +158,6 @@ If you have request for new functions, suggestions or you are experiencing some 
 #include <string>
 #include <unordered_set>
 #include <vector>
-#include <fstream>
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -664,6 +663,290 @@ DEFINE_GUID(CLSID_CUIAutomation, 0xff48dba4, 0x60ef, 0x4201, 0xaa, 0x87, 0x54, 0
 
 typedef class CUIAutomation CUIAutomation;
 
+#ifndef __IUIAutomationInvokePattern_FWD_DEFINED__
+#define __IUIAutomationInvokePattern_FWD_DEFINED__
+typedef interface IUIAutomationInvokePattern IUIAutomationInvokePattern;
+#ifdef __cplusplus
+interface IUIAutomationInvokePattern;
+#endif /* __cplusplus */
+#endif
+
+#ifndef __IUIAutomationTogglePattern_FWD_DEFINED__
+#define __IUIAutomationTogglePattern_FWD_DEFINED__
+typedef interface IUIAutomationTogglePattern IUIAutomationTogglePattern;
+#ifdef __cplusplus
+interface IUIAutomationTogglePattern;
+#endif /* __cplusplus */
+#endif
+
+#ifndef __IUIAutomationCondition_FWD_DEFINED__
+#define __IUIAutomationCondition_FWD_DEFINED__
+typedef interface IUIAutomationCondition IUIAutomationCondition;
+#ifdef __cplusplus
+interface IUIAutomationCondition;
+#endif /* __cplusplus */
+#endif
+
+/*****************************************************************************
+ * IUIAutomationInvokePattern interface
+ */
+#ifndef __IUIAutomationInvokePattern_INTERFACE_DEFINED__
+#define __IUIAutomationInvokePattern_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("fb377fbe-8ea6-46d5-9c73-6499642d3059")
+IUIAutomationInvokePattern : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Invoke() = 0;
+};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59)
+#endif
+#else
+typedef struct IUIAutomationInvokePatternVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationInvokePattern *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationInvokePattern *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationInvokePattern *This);
+
+    /*** IUIAutomationInvokePattern methods ***/
+    HRESULT(STDMETHODCALLTYPE *Invoke)
+    (
+        IUIAutomationInvokePattern *This);
+
+    END_INTERFACE
+} IUIAutomationInvokePatternVtbl;
+
+interface IUIAutomationInvokePattern
+{
+    CONST_VTBL IUIAutomationInvokePatternVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationInvokePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationInvokePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationInvokePattern_Release(This) (This)->lpVtbl->Release(This)
+/*** IUIAutomationInvokePattern methods ***/
+#define IUIAutomationInvokePattern_Invoke(This) (This)->lpVtbl->Invoke(This)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_QueryInterface(IUIAutomationInvokePattern *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationInvokePattern_AddRef(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationInvokePattern_Release(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->Release(This);
+}
+/*** IUIAutomationInvokePattern methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_Invoke(IUIAutomationInvokePattern *This)
+{
+    return This->lpVtbl->Invoke(This);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationInvokePattern_INTERFACE_DEFINED__ */
+
+/*****************************************************************************
+ * IUIAutomationTogglePattern interface
+ */
+#ifndef __IUIAutomationTogglePattern_INTERFACE_DEFINED__
+#define __IUIAutomationTogglePattern_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70")
+IUIAutomationTogglePattern : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Toggle() = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_CurrentToggleState(
+        enum ToggleState * retVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_CachedToggleState(
+        enum ToggleState * retVal) = 0;
+};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70)
+#endif
+#else
+typedef struct IUIAutomationTogglePatternVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationTogglePattern *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationTogglePattern *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationTogglePattern *This);
+
+    /*** IUIAutomationTogglePattern methods ***/
+    HRESULT(STDMETHODCALLTYPE *Toggle)
+    (
+        IUIAutomationTogglePattern *This);
+
+    HRESULT(STDMETHODCALLTYPE *get_CurrentToggleState)
+    (
+        IUIAutomationTogglePattern *This,
+        enum ToggleState *retVal);
+
+    HRESULT(STDMETHODCALLTYPE *get_CachedToggleState)
+    (
+        IUIAutomationTogglePattern *This,
+        enum ToggleState *retVal);
+
+    END_INTERFACE
+} IUIAutomationTogglePatternVtbl;
+
+interface IUIAutomationTogglePattern
+{
+    CONST_VTBL IUIAutomationTogglePatternVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationTogglePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationTogglePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationTogglePattern_Release(This) (This)->lpVtbl->Release(This)
+/*** IUIAutomationTogglePattern methods ***/
+#define IUIAutomationTogglePattern_Toggle(This) (This)->lpVtbl->Toggle(This)
+#define IUIAutomationTogglePattern_get_CurrentToggleState(This, retVal) (This)->lpVtbl->get_CurrentToggleState(This, retVal)
+#define IUIAutomationTogglePattern_get_CachedToggleState(This, retVal) (This)->lpVtbl->get_CachedToggleState(This, retVal)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_QueryInterface(IUIAutomationTogglePattern *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationTogglePattern_AddRef(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationTogglePattern_Release(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->Release(This);
+}
+/*** IUIAutomationTogglePattern methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_Toggle(IUIAutomationTogglePattern *This)
+{
+    return This->lpVtbl->Toggle(This);
+}
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CurrentToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
+{
+    return This->lpVtbl->get_CurrentToggleState(This, retVal);
+}
+static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CachedToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
+{
+    return This->lpVtbl->get_CachedToggleState(This, retVal);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationTogglePattern_INTERFACE_DEFINED__ */
+
+/*****************************************************************************
+ * IUIAutomationCondition interface
+ */
+#ifndef __IUIAutomationCondition_INTERFACE_DEFINED__
+#define __IUIAutomationCondition_INTERFACE_DEFINED__
+
+DEFINE_GUID(IID_IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9);
+#if defined(__cplusplus) && !defined(CINTERFACE)
+MIDL_INTERFACE("352ffba8-0973-437c-a61f-f64cafd81df9")
+IUIAutomationCondition : public IUnknown{};
+#ifdef __CRT_UUID_DECL
+__CRT_UUID_DECL(IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9)
+#endif
+#else
+typedef struct IUIAutomationConditionVtbl
+{
+    BEGIN_INTERFACE
+
+    /*** IUnknown methods ***/
+    HRESULT(STDMETHODCALLTYPE *QueryInterface)
+    (
+        IUIAutomationCondition *This,
+        REFIID riid,
+        void **ppvObject);
+
+    ULONG(STDMETHODCALLTYPE *AddRef)
+    (
+        IUIAutomationCondition *This);
+
+    ULONG(STDMETHODCALLTYPE *Release)
+    (
+        IUIAutomationCondition *This);
+
+    END_INTERFACE
+} IUIAutomationConditionVtbl;
+
+interface IUIAutomationCondition
+{
+    CONST_VTBL IUIAutomationConditionVtbl *lpVtbl;
+};
+
+#ifdef COBJMACROS
+#ifndef WIDL_C_INLINE_WRAPPERS
+/*** IUnknown methods ***/
+#define IUIAutomationCondition_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
+#define IUIAutomationCondition_AddRef(This) (This)->lpVtbl->AddRef(This)
+#define IUIAutomationCondition_Release(This) (This)->lpVtbl->Release(This)
+#else
+/*** IUnknown methods ***/
+static __WIDL_INLINE HRESULT IUIAutomationCondition_QueryInterface(IUIAutomationCondition *This, REFIID riid, void **ppvObject)
+{
+    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
+}
+static __WIDL_INLINE ULONG IUIAutomationCondition_AddRef(IUIAutomationCondition *This)
+{
+    return This->lpVtbl->AddRef(This);
+}
+static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition *This)
+{
+    return This->lpVtbl->Release(This);
+}
+#endif
+#endif
+
+#endif
+
+#endif /* __IUIAutomationCondition_INTERFACE_DEFINED__ */
+
 #pragma endregion
 
 #endif
@@ -679,6 +962,7 @@ typedef class CUIAutomation CUIAutomation;
 // =====================================================================
 
 #ifdef ENABLE_FILE_LOGGER
+#include <fstream>
 // file logger works as simple Tee to log to both console and file
 class FileLogger
 {
@@ -874,6 +1158,8 @@ protected:
     bool initialized;
 } g_comInitializer;
 
+bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
+
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
 static DWORD g_dwTaskbarThreadId;
@@ -886,10 +1172,180 @@ static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 static com_ptr<IUIAutomation> g_pUIAutomation;
 static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
 
+// object to store information about the mouse click, its position, button, timestamp and whether it was on empty space
+struct MouseClick
+{
+    enum class Button
+    {
+        LEFT = 0,
+        MIDDLE,
+        INVALID
+    };
+
+    enum class Type
+    {
+        MOUSE = 0,
+        TOUCH,
+        INVALID
+    };
+
+    MouseClick() : type(Type::INVALID), button(Button::INVALID), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(NULL)
+    {
+    }
+
+    MouseClick(WPARAM wParam, LPARAM lParam, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
+    {
+        timestamp = GetTickCount();
+        if (!GetMouseClickPosition(lParam, position))
+        {
+            return; // without position there is no point to going further, other members are initialized so it's safe to return
+        }
+
+        // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
+        // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
+        // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
+        // opened window, icon, start menu, etc.
+        com_ptr<IUIAutomationElement> pWindowElement = NULL;
+        if (FAILED(g_pUIAutomation->ElementFromPoint(position, pWindowElement.put())) || !pWindowElement)
+        {
+            LOG_ERROR(L"Failed to retrieve UI element from mouse click");
+            return; // without element info we cannot determine its type, other members are initialized so it's safe to return
+        }
+
+        bstr_ptr className;
+        if (FAILED(pWindowElement->get_CurrentClassName(className.GetAddress())) || !className)
+        {
+            LOG_ERROR(L"Failed to retrieve the Name of the UI element clicked.");
+            return; // we can't determine the type of the element, other members are initialized so it's safe to return
+        }
+        onEmptySpace = (wcscmp(className.GetBSTR(), L"Shell_TrayWnd") == 0) ||                        // Windows 10 primary taskbar
+                       (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
+                       (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
+                       (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
+
+        LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld, type=%d, btn=%d, element=%s, isEmptySpace=%d",
+                  position.x, position.y, static_cast<int>(type), static_cast<int>(button), className.GetBSTR(), onEmptySpace);
+    }
+
+    static MouseClick::Type GetPointerType(WPARAM wParam, LPARAM lParam)
+    {
+        MouseClick::Type type = MouseClick::Type::INVALID;
+
+        if (g_taskbarVersion == WIN_10_TASKBAR)
+        {
+            // legacy messages have information about pointer id stored in extra info (lparam)
+            // https://learn.microsoft.com/en-us/windows/win32/tablet/system-events-and-mouse-messages?redirectedfrom=MSDN#distinguishing-pen-input-from-mouse-and-touch
+            const auto MI_WP_SIGNATURE = 0xFF515700U;
+            const auto SIGNATURE_MASK = 0xFFFFFF00U;
+            if ((lParam & SIGNATURE_MASK) == MI_WP_SIGNATURE) // IsPenEvent ?
+            {
+                type = MouseClick::Type::TOUCH;
+            }
+            else
+            {
+                type = MouseClick::Type::MOUSE;
+            }
+        }
+        else
+        {
+            // Retrieve common pointer information to find out source of the click
+            POINTER_INFO pointerInfo;
+            UINT32 pointerId = GET_POINTERID_WPARAM(wParam);
+            if (GetPointerInfo(pointerId, &pointerInfo))
+            {
+                if ((pointerInfo.pointerType == PT_TOUCH) || (pointerInfo.pointerType == PT_PEN) || (pointerInfo.pointerType == PT_POINTER))
+                {
+                    type = MouseClick::Type::TOUCH;
+                }
+                else
+                {
+                    type = MouseClick::Type::MOUSE;
+                }
+            }
+            else
+            {
+                LOG_ERROR(L"Failed to retrieve pointer info for pointer id %d", pointerId);
+            }
+        }
+        return type;
+    }
+
+    Type type;
+    Button button;
+    POINT position;
+    DWORD timestamp;
+    bool onEmptySpace;
+    HWND hWnd;
+};
+
+// simple ring buffer to store last 3 mouse clicks with python-like index access
+class MouseClickQueue
+{
+public:
+    void push_back(const MouseClick &click)
+    {
+        clicks[currentIndex] = click;
+        currentIndex = (currentIndex + 1) % 3;
+    }
+
+    const MouseClick &operator[](int i) const
+    {
+        int idx = 0;
+        if (i > 0)
+        {
+            if (idx < size())
+            {
+                idx = (currentIndex + i) % 3; // oldest item always first
+            }
+            else
+            {
+                LOG_ERROR(L"Index out of bounds");
+            }
+        }
+        else
+        {
+            if (idx >= -size())
+            {
+                idx = (currentIndex + i + 3) % 3; // -1 is the newest (last) item
+            }
+            else
+            {
+                LOG_ERROR(L"Index out of bounds");
+            }
+        }
+        return clicks[idx];
+    }
+
+    void clear()
+    {
+        currentIndex = 0;
+        clicks[0] = MouseClick();
+        clicks[1] = MouseClick();
+        clicks[2] = MouseClick();
+    }
+
+    int size() const
+    {
+        return MAX_CLICKS;
+    }
+
+private:
+    static const int MAX_CLICKS = 3;
+    MouseClick clicks[MAX_CLICKS];
+    int currentIndex;
+
+} g_mouseClickQueue;
+
+UINT_PTR gMouseClickTimer = (UINT_PTR)0;
+
 // since the mod can't be split to multiple files, the definition order becomes somehow complicated
 bool IsTaskbarWindow(HWND hWnd);
-bool isMouseDoubleClick(LPARAM lParam);
-bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction);
+bool IsDoubleClick();
+bool IsDoubleTap();
+bool IsTripleTap();
+void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd);
+void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD);
+bool OnMouseClick(MouseClick click);
 
 // =====================================================================
 
@@ -973,7 +1429,8 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     // catch middle mouse button on both main and secondary taskbars
     case WM_NCMBUTTONDOWN:
     case WM_MBUTTONDOWN:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.middleClickTaskbarAction))
+        if ((g_taskbarVersion == WIN_10_TASKBAR) &&
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::MIDDLE, hWnd)))
         {
             result = 0;
         }
@@ -985,7 +1442,22 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 
     case WM_LBUTTONDBLCLK:
     case WM_NCLBUTTONDBLCLK:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) && OnMouseClick(hWnd, wParam, lParam, g_settings.doubleClickTaskbarAction))
+        if ((g_taskbarVersion == WIN_10_TASKBAR) &&
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)) &&
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)))
+        {
+            result = 0;
+        }
+        else
+        {
+            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        }
+        break;
+
+    case WM_LBUTTONDOWN:
+    case WM_NCLBUTTONDOWN:
+        if ((g_taskbarVersion == WIN_10_TASKBAR) &&
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)))
         {
             result = 0;
         }
@@ -1024,20 +1496,13 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
         if (IsTaskbarWindow(hRootWnd))
         {
-            TaskBarAction action;
-            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
+            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam) &&
+                OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), MouseClick::Button::MIDDLE, hRootWnd)))
             {
-                action = g_settings.middleClickTaskbarAction;
+                return 0;
             }
-            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) && isMouseDoubleClick(lParam))
-            {
-                action = g_settings.doubleClickTaskbarAction;
-            }
-            else
-            {
-                action = ACTION_NOTHING;
-            }
-            if (OnMouseClick(hRootWnd, wParam, lParam, action))
+            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) &&
+                     OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), MouseClick::Button::LEFT, hRootWnd)))
             {
                 return 0;
             }
@@ -1258,58 +1723,6 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 
 #pragma endregion // hook_magic
 
-#pragma region functions
-
-bool IsTaskbarWindow(HWND hWnd)
-{
-    LOG_TRACE();
-
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
-    {
-        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
-    }
-    else
-    {
-        LOG_ERROR(L"Failed to get window class name");
-        return false;
-    }
-}
-
-bool isMouseDoubleClick(LPARAM lParam)
-{
-    LOG_TRACE();
-
-    static DWORD lastPointerDownTime = 0;
-    static POINT lastPointerDownLocation = {0, 0};
-
-    DWORD currentTime = GetTickCount();
-    POINT currentLocation;
-    currentLocation.x = GET_X_LPARAM(lParam);
-    currentLocation.y = GET_Y_LPARAM(lParam);
-
-    // Check if the current event is within the double-click time and distance
-    bool result = false;
-    if (abs(currentLocation.x - lastPointerDownLocation.x) <= GetSystemMetrics(SM_CXDOUBLECLK) &&
-        abs(currentLocation.y - lastPointerDownLocation.y) <= GetSystemMetrics(SM_CYDOUBLECLK) &&
-        ((currentTime - lastPointerDownTime) <= GetDoubleClickTime()))
-    {
-        result = true;
-
-        // Update the time and location to defaults, otherwise a triple-click will be detected as two double-clicks
-        lastPointerDownTime = 0;
-        lastPointerDownLocation = {0, 0};
-    }
-    else
-    {
-        // Update the time and location of the last WM_POINTERDOWN event
-        lastPointerDownTime = currentTime;
-        lastPointerDownLocation = currentLocation;
-    }
-
-    return result;
-}
-
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 {
     LOG_TRACE();
@@ -1361,7 +1774,6 @@ BOOL WindowsVersionInit()
     WORD nMajor = HIWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nMinor = LOWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nBuild = HIWORD(pFixedFileInfo->dwFileVersionLS);
-    WORD nQFE = LOWORD(pFixedFileInfo->dwFileVersionLS);
     LOG_INFO(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
 
     if (nMajor == 6)
@@ -1675,15 +2087,22 @@ void ToggleTaskbarAutohide()
     }
 }
 
-void ShowDesktop(HWND taskbarhWnd)
+void ShowDesktop()
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending ShowDesktop message");
-    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
-    if (SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(407, 0), 0) != 0)
+    if (g_hTaskbarWnd)
     {
-        LOG_ERROR(L"Failed to send ShowDesktop message");
+        LOG_INFO(L"Sending ShowDesktop message");
+        // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
+        if (SendMessage(g_hTaskbarWnd, WM_COMMAND, MAKELONG(407, 0), 0) != 0)
+        {
+            LOG_ERROR(L"Failed to send ShowDesktop message");
+        }
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to show desktop - taskbar window not found");
     }
 }
 
@@ -1720,7 +2139,7 @@ void SendKeypress(std::vector<int> keys)
         input[NUM_KEYS + i].ki.dwFlags = KEYEVENTF_KEYUP;
     }
 
-    if (SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0])) != (NUM_KEYS * 2))
+    if (SendInput(NUM_KEYS * 2, input.get(), sizeof(input[0])) != (UINT)(NUM_KEYS * 2))
     {
         LOG_ERROR(L"Failed to send all key inputs");
     }
@@ -1742,23 +2161,170 @@ void SendWinTabKeypress()
     SendKeypress({VK_LWIN, VK_TAB});
 }
 
-void SendWinKeypress()
+bool ClickStartMenu()
+{
+    const MouseClick &lastClick = g_mouseClickQueue[-1];
+    if (!lastClick.onEmptySpace)
+    {
+        LOG_ERROR(L"Failed to send Win keypress - last click was not on empty space");
+        return false;
+    }
+
+    // Get the taskbar element from the last mouse click position
+    com_ptr<IUIAutomationElement> pWindowElement = NULL;
+    if (FAILED(g_pUIAutomation->ElementFromPoint(lastClick.position, pWindowElement.put())) || !pWindowElement)
+    {
+        LOG_ERROR(L"Failed to taskbar UI element from mouse click");
+        return false;
+    }
+
+    com_ptr<IUIAutomationElement> pStartButton = NULL;
+
+    // find the Start button element on the Taskbar so it can be clicked
+    if (g_taskbarVersion == WIN_10_TASKBAR)
+    {
+        // *************** Handling Windows 10 Start Button ***************
+
+        // Create Condition 1: ControlType == Button
+        com_ptr<IUIAutomationCondition> pControlTypeCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId,
+                                                            _variant_t(static_cast<int>(UIA_ButtonControlTypeId)),
+                                                            pControlTypeCondition.put())) ||
+            !pControlTypeCondition)
+        {
+            LOG_ERROR(L"Failed to create ControlType condition for Start button search.");
+            return false;
+        }
+
+        // Create Condition 2: ClassName == "Start"
+        com_ptr<IUIAutomationCondition> pClassNameCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId,
+                                                            _variant_t(L"Start"),
+                                                            pClassNameCondition.put())) ||
+            !pClassNameCondition)
+        {
+            LOG_ERROR(L"Failed to create ClassName condition for Start button search.");
+            return false;
+        }
+
+        // Combine both conditions using AndCondition
+        com_ptr<IUIAutomationCondition> pAndCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreateAndCondition(pControlTypeCondition.get(),
+                                                       pClassNameCondition.get(),
+                                                       pAndCondition.put())) ||
+            !pAndCondition)
+        {
+            LOG_ERROR(L"Failed to create ControlType&&ClassName condition for Start button search.");
+            return false;
+        }
+
+        // Use the combined condition to find the Start button within the Taskbar
+        if (FAILED(pWindowElement->FindFirst(TreeScope_Children, pAndCondition.get(), pStartButton.put())) || !pStartButton)
+        {
+            LOG_ERROR(L"Failed to locate the Start button element for Windows 10 taskbar.");
+            return false;
+        }
+    }
+    else
+    {
+        // *************** Handling Windows 11 Start Button ***************
+
+        // Create a condition to find the Start button by AutomationId
+        com_ptr<IUIAutomationCondition> pCondition = NULL;
+        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_AutomationIdPropertyId,
+                                                            _variant_t(L"StartButton"),
+                                                            pCondition.put())) ||
+            !pCondition)
+        {
+            LOG_ERROR(L"Failed to create property condition for locating the Start button.");
+            return false;
+        }
+
+        // Use the AutomationId condition to find the Start button within the Taskbar
+        if (FAILED(pWindowElement->FindFirst(TreeScope_Children, pCondition.get(), pStartButton.put())) || !pStartButton)
+        {
+            LOG_ERROR(L"Failed to locate the Start button element for Windows 11 taskbar.");
+            return false;
+        }
+    }
+
+    // Perform the appropriate action based on the Taskbar version
+    if (g_taskbarVersion == WIN_10_TASKBAR)
+    {
+        // Use Invoke pattern to click the Start button on Windows 10
+        com_ptr<IUIAutomationInvokePattern> pInvoke = NULL;
+        if (FAILED(pStartButton->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(pInvoke.put()))) || !pInvoke)
+        {
+            LOG_ERROR(L"Invoke pattern not supported by the Start button.");
+            return false;
+        }
+
+        if (FAILED(pInvoke->Invoke()))
+        {
+            LOG_ERROR(L"Failed to invoke the Start button.");
+            return false;
+        }
+        else
+        {
+            LOG_INFO(L"Start button clicked successfully on Windows 10 taskbar.");
+        }
+    }
+    else
+    {
+        // Use Toggle pattern to toggle the Start button on Windows 11
+        com_ptr<IUIAutomationTogglePattern> pToggle = NULL;
+        if (FAILED(pStartButton->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(pToggle.put()))) || !pToggle)
+        {
+            LOG_ERROR(L"Toggle pattern not supported by the Start button.");
+            return false;
+        }
+
+        if (FAILED(pToggle->Toggle()))
+        {
+            LOG_ERROR(L"Failed to toggle the Start button.");
+            return false;
+        }
+        else
+        {
+            LOG_INFO(L"Start button toggled successfully on Windows 11 taskbar.");
+        }
+    }
+    return true;
+}
+
+void OpenStartMenu()
 {
     LOG_TRACE();
-
-    LOG_INFO(L"Sending Win keypress");
-    SendKeypress({VK_LWIN});
+    if (!ClickStartMenu())  // if user hide the start menu via other Windhawk mod, we can't click it
+    {
+        LOG_INFO(L"Sending Win keypress");
+        SendKeypress({VK_LWIN});
+    }
 }
 
 void OpenTaskManager(HWND taskbarhWnd)
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending OpenTaskManager message");
-    // https://www.codeproject.com/Articles/14380/Manipulating-The-Windows-Taskbar
-    if (SendMessage(taskbarhWnd, WM_COMMAND, MAKELONG(420, 0), 0) != 0)
+    LOG_INFO(L"Opening Taskmgr.exe using ShellExecuteEx");
+
+    WCHAR szWindowsDirectory[MAX_PATH];
+    GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory));
+    std::wstring taskmgrPath = szWindowsDirectory;
+    taskmgrPath += L"\\System32\\Taskmgr.exe";
+
+    SHELLEXECUTEINFO sei = {sizeof(sei)};
+    sei.lpVerb = L"open"; // Use "runas" to explicitly request elevation
+    sei.lpFile = taskmgrPath.c_str();
+    sei.nShow = SW_SHOW;
+
+    if (!ShellExecuteEx(&sei))
     {
-        LOG_ERROR(L"Failed to send OpenTaskManager message");
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED) // User declined the elevation.
+        {
+            LOG_ERROR(L"Failed to start process taskmgr.exe with error code: %d", error);
+        }
     }
 }
 
@@ -1861,10 +2427,11 @@ DWORD GetCombineTaskbarButtons(const wchar_t *optionName)
  *               - 1: Combine taskbar buttons when the taskbar is full.
  *               - 2: Always combine taskbar buttons.
  */
-void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
+bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
 {
     LOG_TRACE();
 
+    bool shallNotify = false;
     if (option <= 2)
     {
         LOG_INFO(L"Setting taskbar button combining to %d", option);
@@ -1876,7 +2443,7 @@ void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
             if (RegSetValueEx(hKey, optionName, 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
             {
                 // Notify all applications of the change
-                SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+                shallNotify = true;
             }
             else
             {
@@ -1893,6 +2460,7 @@ void SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
     {
         LOG_ERROR(L"Invalid option for combining taskbar buttons!");
     }
+    return shallNotify;
 }
 
 void StartProcess(const std::wstring &command)
@@ -1912,7 +2480,8 @@ void StartProcess(const std::wstring &command)
 
     if (!CreateProcess(NULL, (LPWSTR)command.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
     {
-        LOG_ERROR(L"Failed to start process - CreateProcess failed!");
+        DWORD error = GetLastError();
+        LOG_ERROR(L"Failed to start process - CreateProcess failed with error code: %d", error);
     }
     else
     {
@@ -1921,59 +2490,122 @@ void StartProcess(const std::wstring &command)
     }
 }
 
-#pragma endregion // functions
-
 // =====================================================================
 
-// main body of the mod called every time a taskbar is clicked
-bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbarAction)
+bool IsTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
 
-    if ((GetCapture() != NULL) || (taskbarAction == ACTION_NOTHING))
+    WCHAR szClassName[32];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
+    {
+        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to get window class name");
+        return false;
+    }
+}
+
+bool IsDoubleClick()
+{
+    LOG_TRACE();
+
+    const MouseClick &previousClick = g_mouseClickQueue[-2];
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
+
+    if (previousClick.type != MouseClick::Type::MOUSE || currentClick.type != MouseClick::Type::MOUSE)
     {
         return false;
     }
 
-    // old Windows mouse handling of WM_MBUTTONDOWN message
-    POINT pointerLocation{};
-    if (!GetMouseClickPosition(lParam, pointerLocation))
+    if (previousClick.hWnd != currentClick.hWnd)
     {
         return false;
     }
 
-    // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
-    // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
-    // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
-    // opened window, icon, start menu, etc.
+    UINT dpi = GetDpiForWindow(currentClick.hWnd);
 
-    com_ptr<IUIAutomationElement> pWindowElement = NULL;
-    if (FAILED(g_pUIAutomation->ElementFromPoint(pointerLocation, pWindowElement.put())) || !pWindowElement)
+    // Check if the current event is within the double-click time and distance
+    bool result = abs(previousClick.position.x - currentClick.position.x) <= MulDiv(GetSystemMetrics(SM_CXDOUBLECLK), dpi, 96) &&
+                  abs(previousClick.position.y - currentClick.position.y) <= MulDiv(GetSystemMetrics(SM_CYDOUBLECLK), dpi, 96) &&
+                  ((currentClick.timestamp - previousClick.timestamp) <= GetDoubleClickTime());
+    return result;
+}
+
+bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick)
+{
+    LOG_TRACE();
+
+    if (previousClick.type != MouseClick::Type::TOUCH || currentClick.type != MouseClick::Type::TOUCH)
     {
-        LOG_ERROR(L"Failed to retrieve UI element from mouse click");
         return false;
     }
 
-    bstr_ptr className;
-    if (FAILED(pWindowElement->get_CurrentClassName(className.GetAddress())) || !className)
-    {
-        LOG_ERROR(L"Failed to retrieve the Name of the UI element clicked.");
-        return false;
-    }
-    LOG_DEBUG(L"Clicked UI element ClassName: %s", className.GetBSTR());
-    const bool taskbarClicked = (wcscmp(className.GetBSTR(), L"Shell_TrayWnd") == 0) ||                        // Windows 10 primary taskbar
-                                (wcscmp(className.GetBSTR(), L"Shell_SecondaryTrayWnd") == 0) ||               // Windows 10 secondary taskbar
-                                (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
-                                (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
-    if (!taskbarClicked)
+    if (previousClick.hWnd != currentClick.hWnd)
     {
         return false;
     }
-    LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld", pointerLocation.x, pointerLocation.y);
+
+    HWND hWnd = currentClick.hWnd;
+    UINT dpi = GetDpiForWindow(hWnd);
+
+    // GetSystemMetrics(SM_CXDOUBLECLK) is suitable just for mouse, not really for touch
+    const int MAX_POS_OFFSET_PX = 15;
+    // if user has hi-res screen, every slight movement result in big pixel offset
+    const int MAX_POS_OFFSET_PX_SCALED = MulDiv(MAX_POS_OFFSET_PX, dpi, 96);
+
+    // Check if the current event is within the double-click time and distance
+    bool result = abs(previousClick.position.x - currentClick.position.x) <= MAX_POS_OFFSET_PX_SCALED &&
+                  abs(previousClick.position.y - currentClick.position.y) <= MAX_POS_OFFSET_PX_SCALED &&
+                  ((currentClick.timestamp - previousClick.timestamp) <= (GetDoubleClickTime()));
+    return result;
+}
+
+bool IsDoubleTap()
+{
+    LOG_TRACE();
+    const MouseClick &previousClick = g_mouseClickQueue[-2];
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
+    return IsDoubleTap(previousClick, currentClick);
+}
+
+bool IsTripleTap()
+{
+    LOG_TRACE();
+    return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
+}
+
+void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
+{
+    if (!KillTimer(NULL, gMouseClickTimer))
+    {
+        LOG_ERROR(L"Failed to kill triple click timer");
+    }
+    gMouseClickTimer = 0;
+
+    if (IsTripleTap())
+    {
+        ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, g_mouseClickQueue[-1].hWnd);
+    }
+    else
+    {
+        ExecuteTaskbarAction(g_settings.doubleClickTaskbarAction, g_mouseClickQueue[-1].hWnd);
+    }
+    g_mouseClickQueue.clear();
+}
+
+void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
+{
+    if (taskbarAction == ACTION_NOTHING)
+    {
+        return;
+    }
 
     if (taskbarAction == ACTION_SHOW_DESKTOP)
     {
-        ShowDesktop(hWnd);
+        ShowDesktop();
     }
     else if (taskbarAction == ACTION_CTRL_ALT_TAB)
     {
@@ -2001,19 +2633,24 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     }
     else if (taskbarAction == ACTION_COMBINE_TASKBAR_BUTTONS)
     {
+        bool shallNotify = false;
         // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
         static bool zigzagPrimary = (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == g_settings.primaryTaskBarButtonsState1);
         zigzagPrimary = !zigzagPrimary;
-        SetCombineTaskbarButtons(L"TaskbarGlomLevel",
+        shallNotify |= SetCombineTaskbarButtons(L"TaskbarGlomLevel",
                                  zigzagPrimary ? g_settings.primaryTaskBarButtonsState1 : g_settings.primaryTaskBarButtonsState2);
         static bool zigzagSecondary = (GetCombineTaskbarButtons(L"MMTaskbarGlomLevel") == g_settings.secondaryTaskBarButtonsState1);
         zigzagSecondary = !zigzagSecondary;
-        SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
+        shallNotify |= SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
                                  zigzagSecondary ? g_settings.secondaryTaskBarButtonsState1 : g_settings.secondaryTaskBarButtonsState2);
+        if(shallNotify)
+        {
+            SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+        }
     }
     else if (taskbarAction == ACTION_OPEN_START_MENU)
     {
-        SendWinKeypress();
+        OpenStartMenu();
     }
     else if (taskbarAction == ACTION_SEND_KEYPRESS)
     {
@@ -2028,7 +2665,59 @@ bool OnMouseClick(HWND hWnd, WPARAM wParam, LPARAM lParam, TaskBarAction taskbar
     {
         LOG_ERROR(L"Unknown taskbar action '%d'", taskbarAction);
     }
+}
 
+// main body of the mod called every time a taskbar is clicked
+bool OnMouseClick(MouseClick click)
+{
+    LOG_TRACE();
+
+    if ((GetCapture() != NULL) || !click.onEmptySpace)
+    {
+        return false;
+    }
+
+    // directly handle middle click
+    if (click.button == MouseClick::Button::MIDDLE)
+    {
+        ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, click.hWnd);
+    }
+    // buffer left clicks to detect double and triple clicks
+    else if (click.button == MouseClick::Button::LEFT)
+    {
+        g_mouseClickQueue.push_back(click);
+
+        // mouse supports only double and middle click, touch supports double and triple taps (clicks)
+        if (IsTripleTap())
+        {
+            if (gMouseClickTimer != 0)
+            {
+                if (!KillTimer(NULL, gMouseClickTimer))
+                {
+                    LOG_ERROR(L"Failed to kill triple click timer");
+                }
+                gMouseClickTimer = 0;
+            }
+            // even though ProcessTripleTap callback should be called within this thread, just to be sure and avoid race condition,
+            // clear the queue to avoid executing the action twice
+            g_mouseClickQueue.clear();
+            ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, click.hWnd);
+        }
+        else if (IsDoubleTap())
+        {
+            // setup triple click timer if not running already
+            // if within given time another tap is detected, triple tap (middle click) is executed, else double click is executed
+            if (gMouseClickTimer == 0)
+            {
+                gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessTripleTap);
+            }
+        }
+        else if (IsDoubleClick())
+        {
+            ExecuteTaskbarAction(g_settings.doubleClickTaskbarAction, click.hWnd);
+            g_mouseClickQueue.clear();
+        }
+    }
     return false;
 }
 
