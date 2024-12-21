@@ -378,7 +378,7 @@ def compile_mod(
             with tempfile.NamedTemporaryFile(delete=False, suffix='.wh.cpp') as tmp:
                 mod_file_temp = Path(tmp.name)
 
-            mod_file_temp.write_text(mod_code)
+            mod_file_temp.write_text(mod_code, encoding='utf-8')
             mod_file_for_compilation = mod_file_temp
 
         compiler_args = [
