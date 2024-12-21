@@ -371,7 +371,7 @@ def compile_mod(
         compatibility_patches = mod_compatibility.get('patches')
         if compatibility_patches:
             print(f'Using compatibility patches: {compatibility_patches}')
-            mod_code = mod_file.read_text()
+            mod_code = mod_file.read_text(encoding='utf-8')
             for search, replace in compatibility_patches:
                 mod_code = re.sub(search, replace, mod_code, flags=re.MULTILINE)
 
