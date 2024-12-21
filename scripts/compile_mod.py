@@ -398,6 +398,7 @@ def compile_mod(
             'windhawk_api.h',
             '-target',
             compiler_target,
+			'-Wl,--export-all-symbols',
             '-o',
             output_paths[arch],
             *extra_args,
