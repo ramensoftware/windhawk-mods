@@ -222,7 +222,7 @@
                 "published": 1734116516000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1734524915000,
+                "updated": 1734788919000,
                 "users": 52
             },
             "metadata": {
@@ -237,7 +237,7 @@
                 ],
                 "name": "CEF/Spotify Titlebar Enabler",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.2"
+                "version": "0.3"
             }
         },
         "center-titlebar": {

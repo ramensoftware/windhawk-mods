@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-18T14:13:18.000Z</updated>
+    <updated>2024-12-21T13:48:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Titlebar Enabler 0.3]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#e1dedbdcf972be80fa02d122d7379f9ca91e7582</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2024-12-21T13:48:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.53</li>
+<li>The ignore minimum size option now works without having to enable the native frames option</li>
+<li>Add an option to enable native frames on non-main windows (miniplayer, DevTools, etc.)</li>
+<li>WM_NCPAINT fix now works on non-Spotify CEF applications</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.7]]></title>
         <id>https://windhawk.net/mods/explorer-details-better-file-sizes#28f831fb2eb390551fac6fa88ca6bf6c590fac01</id>
@@ -321,24 +337,6 @@ settings in Windows.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Balloon Sound Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/balloon-sound-fix#b676789d78e5fd70e166d24c775bed520eb3fb3d</id>
-        <link href="https://windhawk.net/mods/balloon-sound-fix"/>
-        <updated>2024-11-25T15:35:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="balloonsoundfix">Balloon Sound Fix</h1>
-<p>Windows XP played a sound when showing balloon notifications. However, this
-functionality has been broken since Windows Vista. This mod fixes that issue in
-Windows 10. This mod will <em>not</em> work on Windows 11's new taskbar, as that does
-not support legacy balloons.</p>
-<p>To enable the balloons, create the registry value
-<code>HKEY_CURRENT_USER\SOFTWARE\Policies\Microsoft\Windows\Explorer\EnableLegacyBalloonNotifications</code>
-as a DWORD, set it to 1, and restart Explorer (or sign out and sign in).</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
