@@ -411,9 +411,8 @@ def compile_mod(
         if mod_file_temp:
             mod_file_temp.unlink()
 
-        print(f'Result: {result}')
-
         if result != 0:
+            print(f'Failed to compile {mod_file}')
             succeeded = False
 
     return succeeded
