@@ -174,9 +174,20 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
         const modVersionCompiled64FilePath = path.join(modDir, `${metadata.version}_64.dll`);
         const cachedMod32Path = findCachedMod(modId, metadata.version, '32');
         const cachedMod64Path = findCachedMod(modId, metadata.version, '64');
-        if (cachedMod32Path && cachedMod64Path) {
-            fs.copyFileSync(cachedMod32Path, modVersionCompiled32FilePath);
-            fs.copyFileSync(cachedMod64Path, modVersionCompiled64FilePath);
+        if (cachedMod32Path || cachedMod64Path) {
+            const modHas32 = metadata.architecture?.includes('x86') ?? true;
+            const modHas64 = metadata.architecture?.includes('x86-64') ?? true;
+            if (modHas32 != !!cachedMod32Path || modHas64 != !!cachedMod64Path) {
+                throw new Error(`Mod ${modId} architecture mismatch`);
+            }
+
+            if (cachedMod32Path) {
+                fs.copyFileSync(cachedMod32Path, modVersionCompiled32FilePath);
+            }
+
+            if (cachedMod64Path) {
+                fs.copyFileSync(cachedMod64Path, modVersionCompiled64FilePath);
+            }
         } else {
             compileMod(modVersionFilePath, modVersionCompiled32FilePath, modVersionCompiled64FilePath);
         }
