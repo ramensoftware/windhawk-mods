@@ -47,11 +47,11 @@ jobs:
           installer_url="https://github.com/ramensoftware/windhawk/releases/download/${{ matrix.version }}/windhawk_setup.exe"
           installer_path="${{ runner.temp }}/windhawk_setup.exe"
           echo "Downloading $installer_url to $installer_path"
-          curl -L $url -o "$installer_path"
+          curl -L "$installer_url" -o "$installer_path"
 
           extract_path="${{ runner.temp }}/windhawk"
           echo "Extracting $installer_path to $extract_path"
-          ${installer_path} /S /PORTABLE /D=$extract_path
+          "$installer_path" /S /PORTABLE /D=$extract_path
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@v44
