@@ -81,6 +81,162 @@ function getModModifiedTime(modId: string) {
     return time * 1000;
 }
 
+function findCachedMod(modId: string, version: string, arch: string) {
+    const lastDeployPath = process.env.WINDHAWK_MODS_LAST_DEPLOY_PATH;
+    if (!lastDeployPath) {
+        throw new Error('WINDHAWK_MODS_LAST_DEPLOY_PATH is not set');
+    }
+
+    const modFile = path.join(lastDeployPath, 'mods', modId, `${version}_${arch}.dll`);
+    return fs.existsSync(modFile) ? modFile : null;
+}
+
+function compileMod(modFilePath: string, output32FilePath: string, output64FilePath: string) {
+    const windhawkPath = process.env.WINDHAWK_PATH;
+    if (!windhawkPath) {
+        throw new Error('WINDHAWK_PATH is not set');
+    }
+
+    const result = child_process.spawnSync('py', [
+        'scripts/compile_mod.py',
+        '-w',
+        windhawkPath,
+        '-f',
+        modFilePath,
+        '-o32',
+        output32FilePath,
+        '-o64',
+        output64FilePath,
+    ], { encoding: 'utf8', stdio: 'inherit' });
+    if (result.status !== 0) {
+        throw new Error('Compiling ' + modFilePath + ' failed with status ' + result.status);
+    }
+}
+
+function generateModData(modId: string, changelogPath: string, modDir: string) {
+    if (!fs.existsSync(modDir)) {
+        fs.mkdirSync(modDir);
+    }
+
+    let changelog = '';
+    const versions: {
+        version: string;
+        prerelease?: boolean;
+    }[] = [];
+    let sawReleaseVersion = false;
+
+    const modSourceUtils = new ModSourceUtils('mods');
+
+    const commits = gitExec([
+        'rev-list',
+        'HEAD',
+        '--',
+        `mods/${modId}.wh.cpp`,
+    ]).trim().split('\n');
+    const lastCommit = commits[commits.length - 1];
+
+    for (const commit of commits) {
+        const modFile = gitExec([
+            'show',
+            `${commit}:mods/${modId}.wh.cpp`,
+        ]);
+
+        const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
+
+        if (!metadata.version) {
+            throw new Error(`Mod ${modId} has no version in commit ${commit}`);
+        }
+
+        const prerelease = metadata.version.includes('-');
+        if (prerelease && sawReleaseVersion) {
+            continue;
+        }
+
+        versions.unshift({
+            version: metadata.version,
+            ...(prerelease ? { prerelease: true } : {}),
+        });
+
+        const modVersionFilePath = path.join(modDir, `${metadata.version}.wh.cpp`);
+        if (fs.existsSync(modVersionFilePath)) {
+            throw new Error(`Mod ${modId} has duplicate version ${metadata.version} in commit ${commit}`);
+        }
+
+        fs.writeFileSync(modVersionFilePath, modFile);
+
+        if (!prerelease && !sawReleaseVersion) {
+            // Override root file with the latest release version.
+            fs.copyFileSync(path.join('mods', `${modId}.wh.cpp`), modVersionFilePath);
+            sawReleaseVersion = true;
+        }
+
+        const modVersionCompiled32FilePath = path.join(modDir, `${metadata.version}_32.dll`);
+        const modVersionCompiled64FilePath = path.join(modDir, `${metadata.version}_64.dll`);
+        const cachedMod32Path = findCachedMod(modId, metadata.version, '32');
+        const cachedMod64Path = findCachedMod(modId, metadata.version, '64');
+        if (cachedMod32Path && cachedMod64Path) {
+            fs.copyFileSync(cachedMod32Path, modVersionCompiled32FilePath);
+            fs.copyFileSync(cachedMod64Path, modVersionCompiled64FilePath);
+        } else {
+            compileMod(modVersionFilePath, modVersionCompiled32FilePath, modVersionCompiled64FilePath);
+        }
+
+        const commitTime = parseInt(gitExec([
+            'log',
+            '--format=%ct',
+            '-1',
+            commit,
+        ]), 10);
+
+        const commitFormattedDate = new Date(commitTime * 1000)
+            .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+        const modVersionUrl = `https://github.com/ramensoftware/windhawk-mods/blob/${commit}/mods/${modId}.wh.cpp`;
+
+        changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
+
+        if (commit !== lastCommit) {
+            const commitMessage = gitExec([
+                'log',
+                '-1',
+                '--pretty=format:%B',
+                commit,
+            ]);
+            const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
+            changelog += `${changelogItem}\n\n`;
+        } else {
+            changelog += 'Initial release.\n';
+        }
+    }
+
+    fs.writeFileSync(changelogPath, changelog);
+
+    const versionsPath = path.join(modDir, 'versions.json');
+    fs.writeFileSync(versionsPath, JSON.stringify(versions));
+}
+
+function generateModsData() {
+    const changelogDir = 'changelogs';
+    if (!fs.existsSync(changelogDir)) {
+        fs.mkdirSync(changelogDir);
+    }
+
+    const modsSourceDir = fs.opendirSync('mods');
+    try {
+        let modsSourceDirEntry: fs.Dirent | null;
+        while ((modsSourceDirEntry = modsSourceDir.readSync()) !== null) {
+            if (modsSourceDirEntry.isFile() && modsSourceDirEntry.name.endsWith('.wh.cpp')) {
+                const modId = modsSourceDirEntry.name.slice(0, -'.wh.cpp'.length);
+                const changelogPath = path.join(changelogDir, `${modId}.md`);
+                const modDir = path.join('mods', modId);
+                generateModData(modId, changelogPath, modDir);
+            }
+        }
+    } finally {
+        modsSourceDir.closeSync();
+    }
+}
+
 async function enrichCatalog(catalog: Record<string, any>) {
     const url = 'https://update.windhawk.net/mods_catalog_enrichment.json';
     const enrichment = await fetchJson(url);
@@ -139,106 +295,6 @@ function getModChangelogTextForVersion(modId: string, modVersion: string, commit
     } else {
         // Only remove trailing PR number if it's the only line.
         return messageTrimmed.replace(/ \(#\d+\)$/, '').trim();
-    }
-}
-
-function generateModData(modId: string, changelogPath: string, modDir: string) {
-    if (!fs.existsSync(modDir)) {
-        fs.mkdirSync(modDir);
-    }
-
-    let changelog = '';
-    const versions: {
-        version: string;
-        prerelease?: boolean;
-    }[] = [];
-    let sawReleaseVersion = false;
-
-    const modSourceUtils = new ModSourceUtils('mods');
-
-    const commits = gitExec([
-        'rev-list',
-        'HEAD',
-        '--',
-        `mods/${modId}.wh.cpp`,
-    ]).trim().split('\n');
-    const lastCommit = commits[commits.length - 1];
-
-    for (const commit of commits) {
-        const modFile = gitExec([
-            'show',
-            `${commit}:mods/${modId}.wh.cpp`,
-        ]);
-
-        const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
-
-        if (!metadata.version) {
-            throw new Error(`Mod ${modId} has no version in commit ${commit}`);
-        }
-
-        const prerelease = metadata.version.includes('-');
-        if (!prerelease) {
-            sawReleaseVersion = true;
-        } else if (sawReleaseVersion) {
-            continue;
-        }
-
-        versions.unshift({
-            version: metadata.version,
-            ...(prerelease ? { prerelease: true } : {}),
-        });
-
-        const modVersionFilePath = path.join(modDir, `${metadata.version}.wh.cpp`);
-        if (fs.existsSync(modVersionFilePath)) {
-            throw new Error(`Mod ${modId} has duplicate version ${metadata.version} in commit ${commit}`);
-        }
-
-        fs.writeFileSync(modVersionFilePath, modFile);
-
-        const commitTime = parseInt(gitExec([
-            'log',
-            '--format=%ct',
-            '-1',
-            commit,
-        ]), 10);
-
-        const commitFormattedDate = new Date(commitTime * 1000)
-            .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
-        const modVersionUrl = `https://github.com/ramensoftware/windhawk-mods/blob/${commit}/mods/${modId}.wh.cpp`;
-
-        changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
-
-        if (commit !== lastCommit) {
-            const commitMessage = gitExec([
-                'log',
-                '-1',
-                '--pretty=format:%B',
-                commit,
-            ]);
-            const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
-            changelog += `${changelogItem}\n\n`;
-        } else {
-            changelog += 'Initial release.\n';
-        }
-    }
-
-    fs.writeFileSync(changelogPath, changelog);
-
-    const versionsPath = path.join(modDir, 'versions.json');
-    fs.writeFileSync(versionsPath, JSON.stringify(versions));
-}
-
-function generateModsData(modIds: string[]) {
-    const changelogDir = 'changelogs';
-    if (!fs.existsSync(changelogDir)) {
-        fs.mkdirSync(changelogDir);
-    }
-
-    for (const modId of modIds) {
-        const changelogPath = path.join(changelogDir, `${modId}.md`);
-        const modDir = path.join('mods', modId);
-        generateModData(modId, changelogPath, modDir);
     }
 }
 
@@ -370,11 +426,10 @@ function generateRssFeed() {
 }
 
 async function main() {
+    generateModsData();
+
     const catalog = await generateModCatalog();
     fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
-
-    const modIds = Object.keys(catalog.mods);
-    generateModsData(modIds);
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 
