@@ -35,10 +35,27 @@ jobs:
           python-version: '3.x'
       - name: Install Python dependencies
         run: python -m pip install pywin32
+      - name: Cache Windhawk
+        id: cache-windhawk
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/windhawk
+          key: v1-${{ runner.os }}-${{ matrix.version }}
+      - name: Extract Windhawk
+        if: steps.cache-windhawk.outputs.cache-hit != 'true'
+        run: |
+          installer_url="https://github.com/ramensoftware/windhawk/releases/download/${{ matrix.version }}/windhawk_setup.exe"
+          installer_path="${{ runner.temp }}/windhawk_setup.exe"
+          echo "Downloading $installer_url to $installer_path"
+          curl -L $url -o "$installer_path"
+
+          extract_path="${{ runner.temp }}/windhawk"
+          echo "Extracting $installer_path to $extract_path"
+          ${installer_path} /S /PORTABLE /D=$extract_path
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@v44
-      - name: Validate the changes
+      - name: Compile mod
         env:
           ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
           MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
@@ -49,5 +66,7 @@ jobs:
           b=MODIFIED_FILES_COUNT
           c=ALL_CHANGED_AND_MODIFIED_FILES_COUNT
           if [[ ( ($a -eq 0 && $b -eq 1) || ($a -eq 1 && $b -eq 0) ) && $c -eq 1 ]]; then
-            python -u .github/mod_compatibility_checker.py -v "${{ matrix.version }}" -f "$ALL_CHANGED_AND_MODIFIED_FILES"
+            echo "Compiling $ALL_CHANGED_AND_MODIFIED_FILES"
+            windhawk_path="${{ runner.temp }}/windhawk"
+            python -u scripts/compile_mod.py -w "$windhawk_path" -f "$ALL_CHANGED_AND_MODIFIED_FILES" -o32 "${{ runner.temp }}/mod_32.dll" -o64 "${{ runner.temp }}/mod_64.dll"
           fi
