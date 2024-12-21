@@ -148,9 +148,7 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
         }
 
         const prerelease = metadata.version.includes('-');
-        if (!prerelease) {
-            sawReleaseVersion = true;
-        } else if (sawReleaseVersion) {
+        if (prerelease && sawReleaseVersion) {
             continue;
         }
 
@@ -165,6 +163,12 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
         }
 
         fs.writeFileSync(modVersionFilePath, modFile);
+
+        if (!prerelease && !sawReleaseVersion) {
+            // Override root file with the latest release version.
+            fs.copyFileSync(path.join('mods', `${modId}.wh.cpp`), modVersionFilePath);
+            sawReleaseVersion = true;
+        }
 
         const modVersionCompiled32FilePath = path.join(modDir, `${metadata.version}_32.dll`);
         const modVersionCompiled64FilePath = path.join(modDir, `${metadata.version}_64.dll`);
