@@ -51,7 +51,7 @@ jobs:
 
           extract_path="${{ runner.temp }}/windhawk"
           echo "Extracting $installer_path to $extract_path"
-          "$installer_path" /S /PORTABLE /D=$extract_path
+          MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@v44
