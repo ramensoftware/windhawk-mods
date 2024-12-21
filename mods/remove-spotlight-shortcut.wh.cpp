@@ -87,7 +87,7 @@ INT64 __fastcall IconLayoutEngine_CheckIconPositionsAndUpdateSpotlightPositions_
     return val;
 }
 
-const WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK hooks[] = {
     {
         {
             L"public: long __cdecl IconLayoutEngine::SetSpotlightIconInitialized(void)"
@@ -149,8 +149,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hShell32,
-        shell32Hooks,
-        ARRAYSIZE(shell32Hooks)
+        hooks,
+        ARRAYSIZE(hooks)
     ))
     {
         Wh_Log(L"Failed to hook functions!");
