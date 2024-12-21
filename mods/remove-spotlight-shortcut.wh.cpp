@@ -87,6 +87,7 @@ INT64 __fastcall IconLayoutEngine_CheckIconPositionsAndUpdateSpotlightPositions_
     return val;
 }
 
+// shell32.dll
 const WindhawkUtils::SYMBOL_HOOK hooks[] = {
     {
         {
