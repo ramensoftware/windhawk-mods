@@ -10,6 +10,7 @@ import showdown from 'showdown';
 async function fetchJson(url: string) {
     return new Promise<any>((resolve, reject) => {
         const req = https.request(url,
+            { headers: { 'User-Agent': 'nodejs' } },
             (res) => {
                 let body = '';
                 res.on('data', (chunk) => (body += chunk.toString()));
@@ -250,7 +251,7 @@ function generateModsData() {
     }
 }
 
-function enrichCatalog(catalog: Record<string, any>, enrichment: any) {
+function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any) {
     const app = {
         version: enrichment.app.version,
     };
@@ -262,11 +263,16 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any) {
             throw new Error(`Expected ${id} === ${idFromMetadata}`);
         }
 
+        modTimes[id] = modTimes[id] || {
+            published: getModCreatedTime(id),
+            updated: getModModifiedTime(id),
+        };
+
         mods[id] = {
             metadata: rest,
             details: {
-                published: getModCreatedTime(id),
-                updated: getModModifiedTime(id),
+                published: modTimes[id].published,
+                updated: modTimes[id].updated,
                 defaultSorting: 0,
                 rating: 0,
                 users: 0,
@@ -295,8 +301,10 @@ async function generateModCatalogs() {
 
     const modSourceUtils = new ModSourceUtils('mods');
 
+    const modTimes = {};
+
     const catalog = modSourceUtils.getMetadataOfMods('en-US');
-    const catalogEnriched = enrichCatalog(catalog, enrichment);
+    const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
     fs.writeFileSync('catalog.json', JSONstringifyOrder(catalogEnriched, 4));
 
     const catalogsDir = 'catalogs';
@@ -312,7 +320,7 @@ async function generateModCatalogs() {
 
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
-        const catalogEnriched = enrichCatalog(catalog, enrichment);
+        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
         fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
     }
 }
