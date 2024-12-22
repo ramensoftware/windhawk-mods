@@ -10,6 +10,7 @@ import showdown from 'showdown';
 async function fetchJson(url: string) {
     return new Promise<any>((resolve, reject) => {
         const req = https.request(url,
+            { headers: { 'User-Agent': 'nodejs' } },
             (res) => {
                 let body = '';
                 res.on('data', (chunk) => (body += chunk.toString()));
@@ -250,10 +251,7 @@ function generateModsData() {
     }
 }
 
-async function enrichCatalog(catalog: Record<string, any>) {
-    const url = 'https://update.windhawk.net/mods_catalog_enrichment.json';
-    const enrichment = await fetchJson(url);
-
+function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any) {
     const app = {
         version: enrichment.app.version,
     };
@@ -265,11 +263,16 @@ async function enrichCatalog(catalog: Record<string, any>) {
             throw new Error(`Expected ${id} === ${idFromMetadata}`);
         }
 
+        modTimes[id] = modTimes[id] || {
+            published: getModCreatedTime(id),
+            updated: getModModifiedTime(id),
+        };
+
         mods[id] = {
             metadata: rest,
             details: {
-                published: getModCreatedTime(id),
-                updated: getModModifiedTime(id),
+                published: modTimes[id].published,
+                updated: modTimes[id].updated,
                 defaultSorting: 0,
                 rating: 0,
                 users: 0,
@@ -289,10 +292,37 @@ async function enrichCatalog(catalog: Record<string, any>) {
     };
 }
 
-async function generateModCatalog() {
+async function generateModCatalogs() {
+    const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
+    const enrichment = await fetchJson(enrichmentUrl);
+
+    const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
+    const translateFiles = await fetchJson(translateFilesUrl);
+
     const modSourceUtils = new ModSourceUtils('mods');
+
+    const modTimes = {};
+
     const catalog = modSourceUtils.getMetadataOfMods('en-US');
-    return await enrichCatalog(catalog);
+    const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
+    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalogEnriched, 4));
+
+    const catalogsDir = 'catalogs';
+    if (!fs.existsSync(catalogsDir)) {
+        fs.mkdirSync(catalogsDir);
+    }
+
+    for (const translateFile of translateFiles) {
+        const translateFileName = translateFile.name;
+        if (!translateFileName.endsWith('.yml')) {
+            continue;
+        }
+
+        const language = translateFileName.slice(0, -'.yml'.length);
+        const catalog = modSourceUtils.getMetadataOfMods(language);
+        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
+    }
 }
 
 function getModChangelogTextForVersion(modId: string, modVersion: string, commitMessage: string) {
@@ -441,8 +471,7 @@ function generateRssFeed() {
 async function main() {
     generateModsData();
 
-    const catalog = await generateModCatalog();
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
+    await generateModCatalogs();
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 
