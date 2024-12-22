@@ -250,10 +250,7 @@ function generateModsData() {
     }
 }
 
-async function enrichCatalog(catalog: Record<string, any>) {
-    const url = 'https://update.windhawk.net/mods_catalog_enrichment.json';
-    const enrichment = await fetchJson(url);
-
+function enrichCatalog(catalog: Record<string, any>, enrichment: any) {
     const app = {
         version: enrichment.app.version,
     };
@@ -289,10 +286,35 @@ async function enrichCatalog(catalog: Record<string, any>) {
     };
 }
 
-async function generateModCatalog() {
+async function generateModCatalogs() {
+    const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
+    const enrichment = await fetchJson(enrichmentUrl);
+
+    const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
+    const translateFiles = await fetchJson(translateFilesUrl);
+
     const modSourceUtils = new ModSourceUtils('mods');
+
     const catalog = modSourceUtils.getMetadataOfMods('en-US');
-    return await enrichCatalog(catalog);
+    const catalogEnriched = enrichCatalog(catalog, enrichment);
+    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalogEnriched, 4));
+
+    const catalogsDir = 'catalogs';
+    if (!fs.existsSync(catalogsDir)) {
+        fs.mkdirSync(catalogsDir);
+    }
+
+    for (const translateFile of translateFiles) {
+        const translateFileName = translateFile.name;
+        if (!translateFileName.endsWith('.yml')) {
+            continue;
+        }
+
+        const language = translateFileName.slice(0, -'.yml'.length);
+        const catalog = modSourceUtils.getMetadataOfMods(language);
+        const catalogEnriched = enrichCatalog(catalog, enrichment);
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
+    }
 }
 
 function getModChangelogTextForVersion(modId: string, modVersion: string, commitMessage: string) {
@@ -441,8 +463,7 @@ function generateRssFeed() {
 async function main() {
     generateModsData();
 
-    const catalog = await generateModCatalog();
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
+    await generateModCatalogs();
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 
