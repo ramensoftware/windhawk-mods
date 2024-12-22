@@ -121,6 +121,7 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
     let changelog = '';
     const versions: {
         version: string;
+        timestamp: number;
         prerelease?: boolean;
     }[] = [];
     let sawReleaseVersion = false;
@@ -151,11 +152,6 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
         if (prerelease && sawReleaseVersion) {
             continue;
         }
-
-        versions.unshift({
-            version: metadata.version,
-            ...(prerelease ? { prerelease: true } : {}),
-        });
 
         const modVersionFilePath = path.join(modDir, `${metadata.version}.wh.cpp`);
         if (fs.existsSync(modVersionFilePath)) {
@@ -218,6 +214,12 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
         } else {
             changelog += 'Initial release.\n';
         }
+
+        versions.unshift({
+            version: metadata.version,
+            timestamp: commitTime,
+            ...(prerelease ? { prerelease: true } : {}),
+        });
     }
 
     fs.writeFileSync(changelogPath, changelog);
