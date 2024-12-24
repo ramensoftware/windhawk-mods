@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Titlebar Enabler
 // @description     Force native frames and title bars for CEF apps
-// @version         0.3
+// @version         0.4
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -163,6 +163,15 @@ int is_frameless_offset = NULL;
 int add_child_view_offset = NULL;
 int get_window_handle_offset = NULL;
 
+// Same offset for all versions that supports window control hiding
+// Cuz get_preferred_size is the very first function in the struct (cef_panel_delegate_t->(cef_view_delegate_t)base.get_preferred_size)
+// And cef_base_ref_counted_t, which is the base struct of cef_view_delegate_t, hasn't changed since 94
+#ifdef _WIN64
+    int get_preferred_size_offset = 0x28;
+#else
+    int get_preferred_size_offset = 0x14;
+#endif
+
 typedef int CEF_CALLBACK (*is_frameless_t)(struct _cef_window_delegate_t* self, struct _cef_window_t* window);
 int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _cef_window_t* window) {
     Wh_Log(L"is_frameless_hook");
@@ -245,6 +254,14 @@ typedef _cef_panel_t* CEF_EXPORT (*cef_panel_create_t)(void* delegate);
 cef_panel_create_t CEF_EXPORT cef_panel_create_original;
 _cef_panel_t* CEF_EXPORT cef_panel_create_hook(void* delegate) {
     Wh_Log(L"cef_panel_create_hook");
+    if ((cnt != 2 || cte_settings.showmenu == FALSE) && // left panel
+        (cnt != -1 || cte_settings.showcontrols == FALSE) // right panel
+    ) {
+        // Nullify get_preferred_size to make the leftover space from hiding the window controls clickable
+        // This has side effect of making the menu button ignore the height set by cosmos endpoint (used by noControls Spicetify extension)
+        // So only nullify get_preferred_size for the left panel if menu button is hidden
+        *((void**)((char*)delegate + get_preferred_size_offset)) = NULL;
+    }
     _cef_panel_t* panel = cef_panel_create_original(delegate);
     if (add_child_view_offset != NULL) {
         add_child_view_original = *((add_child_view_t*)((char*)panel + add_child_view_offset));
