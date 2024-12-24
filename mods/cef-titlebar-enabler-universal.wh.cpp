@@ -459,12 +459,14 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)cef_window_create_top_level,
                        (void*)cef_window_create_top_level_hook,
                        (void**)&cef_window_create_top_level_original);
-    Wh_SetFunctionHook((void*)cef_panel_create, (void*)cef_panel_create_hook,
-                       (void**)&cef_panel_create_original);
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook,
                        (void**)&CreateWindowExW_original);
-    Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
-                       (void**)&SetWindowThemeAttribute_original);
+    if (isSpotify) {
+        Wh_SetFunctionHook((void*)cef_panel_create, (void*)cef_panel_create_hook,
+                           (void**)&cef_panel_create_original);
+        Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
+                           (void**)&SetWindowThemeAttribute_original);
+    }
 
     EnumWindows(InitEnumWindowsProc, 0);
     return TRUE;
