@@ -559,7 +559,7 @@ void Wh_ModUninit() {
 
     // Restore the original set_background_color functions to prevent crashes
     // (Control colors hooks won't work till the app is restarted)
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         if (cte_controls[i].set_background_color_addr != NULL) {
             *((set_background_color_t*)cte_controls[i].set_background_color_addr) = cte_controls[i].set_background_color_original;
         }
