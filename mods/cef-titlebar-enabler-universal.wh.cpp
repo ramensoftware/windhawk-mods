@@ -24,9 +24,9 @@
 * Enable native frames and title bars on other windows, including Miniplayer, DevTools, etc.
 * Hide the menu button or Spotify's custom window controls
 * Make Spotify's custom window controls transparent
-* Ignore minimum window size set by Spotify
-* Use the settings tab in the mod details page to configure the features
-* This mod also adds support for [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone). To make Spotify window transparent, follow the instructions below:
+* Ignore the minimum window size set by Spotify
+* Use the settings tab on the mod details page to configure the features
+* This mod also adds support for [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone). To make the Spotify window transparent, follow the instructions below:
     * Install a hex editor (e.g. [HxD](https://mh-nexus.de/en/hxd/))
     * Exit Spotify
     * Open `%appdata%\Spotify\Spotify.exe` in the hex editor
@@ -50,7 +50,7 @@
     * 1.2.28: First version to support Chrome runtime (disabled by default)
     * 1.2.45: Last version to support disabling the global navbar
     * 1.2.47: Chrome runtime is always enabled since this version
-    * Try the [noControls](https://github.com/ohitstom/spicetify-extensions/tree/main/noControls) Spicetify extension to remove the empty space left by the custom window controls
+    * Try the [noControls](https://github.com/ohitstom/spicetify-extensions/tree/main/noControls) Spicetify extension to remove the space left by the custom window controls
     * Enable Chrome runtime to get a proper window icon. Use `--enable-chrome-runtime` flag or put `app.enable-chrome-runtime=true` in `%appdata%\Spotify\prefs`
     * Spicetify extension developers: Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
 */
@@ -559,7 +559,7 @@ void Wh_ModUninit() {
 
     // Restore the original set_background_color functions to prevent crashes
     // (Control colors hooks won't work till the app is restarted)
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         if (cte_controls[i].set_background_color_addr != NULL) {
             *((set_background_color_t*)cte_controls[i].set_background_color_addr) = cte_controls[i].set_background_color_original;
         }
