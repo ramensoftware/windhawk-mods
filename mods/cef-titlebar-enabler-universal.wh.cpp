@@ -33,6 +33,7 @@
     * Find all occurrences of `BA 12 12 12 FF` and replace the second match with `BA 00 00 00 00`, then save the file
     * Use the MicaForEveryone settings to make the window transparent
     * Install [Spicetify](https://spicetify.app) and apply a CSS theme with a transparent background
+    * Chrome runtime is required for this patch to work
 ## Notes
 * Supported CEF versions: 90.4 to 132
     * This mod won't work with versions before 90.4
