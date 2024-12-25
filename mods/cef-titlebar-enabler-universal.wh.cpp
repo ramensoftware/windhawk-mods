@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Titlebar Enabler
 // @description     Force native frames and title bars for CEF apps
-// @version         0.4
+// @version         0.5
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -19,6 +19,22 @@
 * Only works on apps using native CEF top-level windows
     * Steam uses SDL for its top-level windows (except DevTools), so this mod doesn't work with Steam
 * Electron apps are NOT supported! Just patch asar to override `frame: false` to true in BrowserWindow creation
+## Features for Spotify
+* Enable native frames and title bars on the main window
+* Enable native frames and title bars on other windows, including Miniplayer, DevTools, etc.
+* Hide the menu button or Spotify's custom window controls
+* Make Spotify's custom window controls transparent
+* Ignore the minimum window size set by Spotify
+* Use the settings tab on the mod details page to configure the features
+* This mod also adds support for [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone). To make the Spotify window transparent, follow the instructions below:
+    * Install a hex editor (e.g. [HxD](https://mh-nexus.de/en/hxd/))
+    * Exit Spotify
+    * Open `%appdata%\Spotify\Spotify.exe` in the hex editor
+    * Find all occurrences of `BA 12 12 12 FF` and replace the second match with `BA 00 00 00 00`, then save the file
+    * Use the MicaForEveryone settings to make the window transparent
+    * Install [Spicetify](https://spicetify.app) and apply a CSS theme with a transparent background
+    * Chrome runtime is required for this patch to work
+## Notes
 * Supported CEF versions: 90.4 to 132
     * This mod won't work with versions before 90.4
     * Versions after 132 may work but are not tested
@@ -35,7 +51,7 @@
     * 1.2.28: First version to support Chrome runtime (disabled by default)
     * 1.2.45: Last version to support disabling the global navbar
     * 1.2.47: Chrome runtime is always enabled since this version
-    * Try the [noControls](https://github.com/ohitstom/spicetify-extensions/tree/main/noControls) Spicetify extension to remove the empty space left by the custom window controls
+    * Try the [noControls](https://github.com/ohitstom/spicetify-extensions/tree/main/noControls) Spicetify extension to remove the space left by the custom window controls
     * Enable Chrome runtime to get a proper window icon. Use `--enable-chrome-runtime` flag or put `app.enable-chrome-runtime=true` in `%appdata%\Spotify\prefs`
     * Spicetify extension developers: Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
 */
@@ -54,9 +70,14 @@
   $description: Disabling this also prevents opening the Spotify menu with the Alt key
 - showcontrols: false
   $name: Show Spotify's custom window controls*
+- transparentcontrols: false
+  $name: Make Spotify's custom window controls transparent
 - ignoreminsize: false
   $name: Ignore minimum window size
   $description: Allows resizing the window below the minimum size set by Spotify
+- allowuntested: false
+  $name: (Advanced) Use unsafe methods on untested CEF versions
+  $description: Allows calling unsafe functions on untested CEF versions. May cause crashes or other issues. If disabled, an inefficient alternative method will be used on untested versions.
 */
 // ==/WindhawkModSettings==
 
@@ -105,12 +126,16 @@
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 
+typedef uint32_t cef_color_t;
+
 struct cte_settings {
     BOOL showframe;
     BOOL showframeonothers;
     BOOL showmenu;
     BOOL showcontrols;
+    BOOL transparentcontrols;
     BOOL ignoreminsize;
+    BOOL allowuntested;
 } cte_settings;
 
 typedef struct cte_offset {
@@ -138,7 +163,7 @@ cte_offset_t is_frameless_offsets[] = {
     {116, ANY_MINOR, 0x60, 0xc0},
     {117, ANY_MINOR, 0x64, 0xc8},
     {123, ANY_MINOR, 0x64, 0xc8},
-    {124, ANY_MINOR, 0x68, 0xd0},
+    {124, ANY_MINOR, 0x68, 0xd0}
 };
 
 cte_offset_t add_child_view_offsets[] = {
@@ -156,12 +181,20 @@ cte_offset_t get_window_handle_offsets[] = {
     {123, ANY_MINOR, 0x188, 0x310},
     {124, ANY_MINOR, 0x18c, 0x318},
     {130, ANY_MINOR, 0x18c, 0x318},
-    {131, ANY_MINOR, 0x194, 0x328}
+    {131, ANY_MINOR, 0x194, 0x328},
+    {132, ANY_MINOR, 0x194, 0x328}
+};
+
+cte_offset_t set_background_color_offsets[] = {
+    {94, ANY_MINOR, 0xbc, 0x178},
+    {130, ANY_MINOR, 0xbc, 0x178},
+    {131, ANY_MINOR, 0xc0, 0x180}
 };
 
 int is_frameless_offset = NULL;
 int add_child_view_offset = NULL;
 int get_window_handle_offset = NULL;
+int set_background_color_offset = NULL;
 
 // Same offset for all versions that supports window control hiding
 // Cuz get_preferred_size is the very first function in the struct (cef_panel_delegate_t->(cef_view_delegate_t)base.get_preferred_size)
@@ -172,17 +205,14 @@ int get_window_handle_offset = NULL;
     int get_preferred_size_offset = 0x14;
 #endif
 
-typedef int CEF_CALLBACK (*is_frameless_t)(struct _cef_window_delegate_t* self, struct _cef_window_t* window);
-int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _cef_window_t* window) {
-    Wh_Log(L"is_frameless_hook");
-    return 0;
-}
-
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     // dwRefData is 1 if the window is created by cef_window_create_top_level
     // Assumed 1 if this mod is loaded after the window is created
     // dwRefData is 2 if the window is created by cef_window_create_top_level and is_frameless is hooked
     switch (uMsg) {
+        case WM_NCACTIVATE:
+            // Fix MicaForEveryone not working well without native frames
+            return DefWindowProc(hWnd, uMsg, wParam, lParam);
         case WM_NCHITTEST:
         case WM_NCLBUTTONDOWN:
         case WM_NCPAINT:
@@ -208,6 +238,66 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        // Update NonClient size
+        wchar_t className[256];
+        GetClassName(hWnd, className, 256);
+        if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
+            if (lParam == 1) {
+                // Really move the window a bit to make Spotify update window control colors
+                RECT rect;
+                GetWindowRect(hWnd, &rect);
+                SetWindowPos(hWnd, NULL, rect.left, rect.top + 1, 0, 0, SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_NOSIZE);
+                SetWindowPos(hWnd, NULL, rect.left, rect.top, 0, 0, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_NOSIZE);
+            } else {
+                SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+    return TRUE;
+}
+
+BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid;
+    GetWindowThreadProcessId(hWnd, &pid);
+    // Subclass all relevant windows belonging to this process
+    if (pid == GetCurrentProcessId()) {
+        wchar_t className[256];
+        GetClassName(hWnd, className, 256);
+        if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
+                Wh_Log(L"Subclassed %p", hWnd);
+                if (lParam == 1) {
+                    UpdateEnumWindowsProc(hWnd, 0);
+                }
+            }
+        }
+    }
+    return TRUE;
+}
+
+BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid;
+    GetWindowThreadProcessId(hWnd, &pid);
+    // Unsubclass all windows belonging to this process
+    if (pid == GetCurrentProcessId()) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+        if (lParam == 1) {
+            UpdateEnumWindowsProc(hWnd, 0);
+        }
+    }
+    return TRUE;
+}
+
+typedef int CEF_CALLBACK (*is_frameless_t)(struct _cef_window_delegate_t* self, struct _cef_window_t* window);
+int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _cef_window_t* window) {
+    Wh_Log(L"is_frameless_hook");
+    return 0;
+}
+
 typedef cef_window_handle_t CEF_CALLBACK (*get_window_handle_t)(struct _cef_window_t* self);
 
 typedef _cef_window_t* CEF_EXPORT (*cef_window_create_top_level_t)(void* delegate);
@@ -227,9 +317,32 @@ _cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(void* delegate) {
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(get_window_handle(window), SubclassProc, is_frameless_hooked ? 2 : 1)) {
             Wh_Log(L"Subclassed %p", get_window_handle(window));
         }
+    } else {
+        // Just subclass everything again if get_window_handle is not available
+        // Calling functions from invalid offsets will crash the app for sure
+        EnumWindows(UninitEnumWindowsProc, 0);
+        EnumWindows(InitEnumWindowsProc, 1);
+        Wh_Log(L"Avoided calling get_window_handle on an untested version");
     }
     return window;
 }
+
+typedef void CEF_CALLBACK (*set_background_color_t)(struct _cef_view_t* self, cef_color_t color);
+set_background_color_t CEF_CALLBACK set_background_color_original;
+void CEF_CALLBACK set_background_color_hook(struct _cef_view_t* self, cef_color_t color) {
+    //Wh_Log(L"set_background_color_hook: %#x", color);
+    // 0x87000000: normal, 0x3fffffff: hover, 0x33ffffff: active, 0xffc42b1c: close button hover, 0xff941320: close button active
+    if (color == 0x87000000 && cte_settings.transparentcontrols == TRUE) {
+        color = 0x00000000;
+    }
+    set_background_color_original(self, color);
+    return;
+}
+
+struct cte_control_container {
+    set_background_color_t CEF_CALLBACK set_background_color_original;
+    set_background_color_t* CEF_CALLBACK set_background_color_addr;
+} cte_controls[3];
 
 int cnt = -1;
 
@@ -245,6 +358,12 @@ void CEF_CALLBACK add_child_view_hook(struct _cef_panel_t* self, struct _cef_vie
       }
     } else if (cte_settings.showmenu == FALSE) {
       return;
+    }
+    if (cnt < 3 && set_background_color_offset != NULL) {
+        set_background_color_original = *((set_background_color_t*)((char*)view + set_background_color_offset));
+        *((set_background_color_t*)((char*)view + set_background_color_offset)) = set_background_color_hook;
+        cte_controls[cnt].set_background_color_original = set_background_color_original;
+        cte_controls[cnt].set_background_color_addr = (set_background_color_t*)((char*)view + set_background_color_offset);
     }
     add_child_view_original(self, view);
     return;
@@ -305,57 +424,17 @@ HRESULT WINAPI SetWindowThemeAttribute_hook(HWND hwnd, enum WINDOWTHEMEATTRIBUTE
 
 typedef int (*cef_version_info_t)(int entry);
 
-BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam) {
-    DWORD pid;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid == GetCurrentProcessId()) {
-        // Update NonClient size
-        wchar_t className[256];
-        GetClassName(hWnd, className, 256);
-        if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
-            SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
-        }
-    }
-    return TRUE;
-}
-
-BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
-    DWORD pid;
-    GetWindowThreadProcessId(hWnd, &pid);
-    // Subclass all relevant windows belonging to this process
-    if (pid == GetCurrentProcessId()) {
-        wchar_t className[256];
-        GetClassName(hWnd, className, 256);
-        if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-                UpdateEnumWindowsProc(hWnd, 0);
-            }
-        }
-    }
-    return TRUE;
-}
-
-BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
-    DWORD pid;
-    GetWindowThreadProcessId(hWnd, &pid);
-    // Unsubclass all windows belonging to this process
-    if (pid == GetCurrentProcessId()) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-        UpdateEnumWindowsProc(hWnd, 0);
-    }
-    return TRUE;
-}
-
 void LoadSettings() {
     cte_settings.showframe = Wh_GetIntSetting(L"showframe");
     cte_settings.showframeonothers = Wh_GetIntSetting(L"showframeonothers");
     cte_settings.showmenu = Wh_GetIntSetting(L"showmenu");
     cte_settings.showcontrols = Wh_GetIntSetting(L"showcontrols");
+    cte_settings.transparentcontrols = Wh_GetIntSetting(L"transparentcontrols");
     cte_settings.ignoreminsize = Wh_GetIntSetting(L"ignoreminsize");
+    cte_settings.allowuntested = Wh_GetIntSetting(L"allowuntested");
 }
 
-int FindOffset(int major, int minor, cte_offset_t offsets[], int offsets_size) {
+int FindOffset(int major, int minor, cte_offset_t offsets[], int offsets_size, BOOL allow_untested = TRUE) {
     int prev_major = offsets[0].ver_major;
     for (int i = 0; i < offsets_size; i++) {
         if (major <= offsets[i].ver_major && major >= prev_major) {
@@ -371,7 +450,7 @@ int FindOffset(int major, int minor, cte_offset_t offsets[], int offsets_size) {
         }
         prev_major = offsets[i].ver_major;
     }
-    if (major >= offsets[offsets_size - 1].ver_major) {
+    if (allow_untested && major >= offsets[offsets_size - 1].ver_major) {
         #ifdef _WIN64
             return offsets[offsets_size - 1].offset_x64;
         #else
@@ -437,12 +516,14 @@ BOOL Wh_ModInit() {
     // Get appropriate offsets for current CEF version
     is_frameless_offset = FindOffset(major, minor, is_frameless_offsets, ARRAYSIZE(is_frameless_offsets));
     Wh_Log(L"is_frameless offset: %#x", is_frameless_offset);
-    get_window_handle_offset = FindOffset(major, minor, get_window_handle_offsets, ARRAYSIZE(get_window_handle_offsets));
+    get_window_handle_offset = FindOffset(major, minor, get_window_handle_offsets, ARRAYSIZE(get_window_handle_offsets), cte_settings.allowuntested);
     Wh_Log(L"get_window_handle offset: %#x", get_window_handle_offset);
 
     if (isSpotify) {
         add_child_view_offset = FindOffset(major, minor, add_child_view_offsets, ARRAYSIZE(add_child_view_offsets));
         Wh_Log(L"add_child_view offset: %#x", add_child_view_offset);
+        set_background_color_offset = FindOffset(major, minor, set_background_color_offsets, ARRAYSIZE(set_background_color_offsets));
+        Wh_Log(L"set_background_color offset: %#x", set_background_color_offset);
     }
 
     if ((is_frameless_offset == NULL || !cte_settings.showframe) &&
@@ -468,18 +549,27 @@ BOOL Wh_ModInit() {
                            (void**)&SetWindowThemeAttribute_original);
     }
 
-    EnumWindows(InitEnumWindowsProc, 0);
+    EnumWindows(InitEnumWindowsProc, 1);
     return TRUE;
 }
 
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
-    EnumWindows(UninitEnumWindowsProc, 0);
+    EnumWindows(UninitEnumWindowsProc, 1);
+
+    // Restore the original set_background_color functions to prevent crashes
+    // (Control colors hooks won't work till the app is restarted)
+    for (int i = 0; i < 3; i++) {
+        if (cte_controls[i].set_background_color_addr != NULL) {
+            *((set_background_color_t*)cte_controls[i].set_background_color_addr) = cte_controls[i].set_background_color_original;
+        }
+    }
 }
 
 // The mod setting were changed, reload them.
 void Wh_ModSettingsChanged() {
+    BOOL prev_transparentcontrols = cte_settings.transparentcontrols;
     LoadSettings();
-    EnumWindows(UpdateEnumWindowsProc, 0);
+    EnumWindows(UpdateEnumWindowsProc, prev_transparentcontrols != cte_settings.transparentcontrols);
 }
