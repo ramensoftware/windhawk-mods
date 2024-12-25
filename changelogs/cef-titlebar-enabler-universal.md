@@ -1,3 +1,9 @@
+## 0.5 ([Dec 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d25beeb3c894c97d36c4fe7b52e67a3505ad78e2/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Support making Spotify's custom window controls transparent
+* Try to avoid crashes on untested newer releases of CEF/Spotify
+* Support using DWM backgrounds with MicaForEveryone (requires hex patching `Spotify.exe`; see the mod details for instructions)
+
 ## 0.4 ([Dec 24, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b8b4b7aaa97eae0a573b4cde7bcd95b869448bd9/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * The leftover space from hiding Spotify's custom window controls and the menu button is now clickable (mouse events are sent to the CEF browser)
