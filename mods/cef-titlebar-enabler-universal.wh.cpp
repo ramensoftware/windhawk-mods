@@ -133,7 +133,6 @@ struct cte_settings {
     BOOL showmenu;
     BOOL showcontrols;
     BOOL transparentcontrols;
-    BOOL mfefix;
     BOOL ignoreminsize;
     BOOL allowuntested;
 } cte_settings;
