@@ -2185,7 +2185,7 @@
                 "published": 1725643905000,
                 "rating": 10,
                 "ratingUsers": 22,
-                "updated": 1731764371000,
+                "updated": 1735666754000,
                 "users": 1598
             },
             "metadata": {
@@ -2203,7 +2203,7 @@
                 ],
                 "name": "Customize Windows notifications placement",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.1"
             }
         },
         "old-this-pc-commands": {

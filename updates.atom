@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-25T15:25:49.000Z</updated>
+    <updated>2024-12-31T17:39:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Customize Windows notifications placement 1.1]]></title>
+        <id>https://windhawk.net/mods/notifications-placement#d8232bbf9fd4b173e4848587d1b9604acc359453</id>
+        <link href="https://windhawk.net/mods/notifications-placement"/>
+        <updated>2024-12-31T17:39:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the "Monitor interface name" option which can be used instead of the monitor number. Can be useful if the monitor numbers change often.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Titlebar Enabler 0.5]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#d25beeb3c894c97d36c4fe7b52e67a3505ad78e2</id>
@@ -321,21 +334,6 @@ settings in Windows.</li>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.5]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#1c07c82111a8cfb4c2a1757f702e598172570193</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-12-04T14:18:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed Explorer hanging when Open Path is used in Everything.</li>
-<li>Excluded Plex Media Server which is incompatible, a proper fix will be implemented later.</li>
-<li>Added support for older Windows 10 versions.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
