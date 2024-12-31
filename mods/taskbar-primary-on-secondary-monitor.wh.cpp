@@ -2,12 +2,13 @@
 // @id              taskbar-primary-on-secondary-monitor
 // @name            Primary taskbar on secondary monitor
 // @description     Move the primary taskbar, including the tray icons, notifications, action center, etc. to another monitor
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
+// @include         ShellHost.exe
 // @architecture    x86-64
 // @compilerOptions -lversion
 // ==/WindhawkMod==
@@ -37,6 +38,14 @@ center, etc. to another monitor.
   $name: Monitor
   $description: >-
     The monitor number to have the primary taskbar on
+- monitorInterfaceName: ""
+  $name: Monitor interface name
+  $description: >-
+    If not empty, the given monitor interface name (can also be an interface
+    name substring) will be used instead of the monitor number. Can be useful if
+    the monitor numbers change often. To see all available interface names, set
+    any interface name, enable mod logs and look for "Found display device"
+    messages.
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
@@ -53,8 +62,16 @@ center, etc. to another monitor.
 
 struct {
     int monitor;
+    WindhawkUtils::StringSetting monitorInterfaceName;
     bool oldTaskbarOnWin11;
 } g_settings;
+
+enum class Target {
+    Explorer,
+    ShellHost,  // Win11 24H2.
+};
+
+Target g_target;
 
 enum class WinVersion {
     Unsupported,
@@ -86,8 +103,7 @@ HMONITOR GetMonitorById(int monitorId) {
     HMONITOR monitorResult = nullptr;
     int currentMonitorId = 0;
 
-    auto monitorEnumProc = [&monitorResult, &currentMonitorId,
-                            monitorId](HMONITOR hMonitor) -> BOOL {
+    auto monitorEnumProc = [&](HMONITOR hMonitor) -> BOOL {
         if (currentMonitorId == monitorId) {
             monitorResult = hMonitor;
             return FALSE;
@@ -99,7 +115,46 @@ HMONITOR GetMonitorById(int monitorId) {
     EnumDisplayMonitors(
         nullptr, nullptr,
         [](HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor,
-           LPARAM dwData) WINAPI -> BOOL {
+           LPARAM dwData) -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(monitorEnumProc)*>(dwData);
+            return proc(hMonitor);
+        },
+        reinterpret_cast<LPARAM>(&monitorEnumProc));
+
+    return monitorResult;
+}
+
+HMONITOR GetMonitorByInterfaceNameSubstr(PCWSTR interfaceNameSubstr) {
+    HMONITOR monitorResult = nullptr;
+
+    auto monitorEnumProc = [&](HMONITOR hMonitor) -> BOOL {
+        MONITORINFOEX monitorInfo = {};
+        monitorInfo.cbSize = sizeof(monitorInfo);
+
+        if (GetMonitorInfo(hMonitor, &monitorInfo)) {
+            DISPLAY_DEVICE displayDevice = {
+                .cb = sizeof(displayDevice),
+            };
+
+            if (EnumDisplayDevices(monitorInfo.szDevice, 0, &displayDevice,
+                                   EDD_GET_DEVICE_INTERFACE_NAME)) {
+                Wh_Log(L"Found display device %s, interface name: %s",
+                       monitorInfo.szDevice, displayDevice.DeviceID);
+
+                if (wcsstr(displayDevice.DeviceID, interfaceNameSubstr)) {
+                    Wh_Log(L"Matched display device");
+                    monitorResult = hMonitor;
+                    return FALSE;
+                }
+            }
+        }
+        return TRUE;
+    };
+
+    EnumDisplayMonitors(
+        nullptr, nullptr,
+        [](HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor,
+           LPARAM dwData) -> BOOL {
             auto& proc = *reinterpret_cast<decltype(monitorEnumProc)*>(dwData);
             return proc(hMonitor);
         },
@@ -113,8 +168,17 @@ MonitorFromPoint_t MonitorFromPoint_Original;
 HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD dwFlags) {
     Wh_Log(L">");
 
-    if (pt.x == 0 && pt.y == 0 && g_settings.monitor >= 1) {
-        if (HMONITOR monitor = GetMonitorById(g_settings.monitor - 1)) {
+    if (pt.x == 0 && pt.y == 0) {
+        HMONITOR monitor = nullptr;
+
+        if (*g_settings.monitorInterfaceName.get()) {
+            monitor = GetMonitorByInterfaceNameSubstr(
+                g_settings.monitorInterfaceName.get());
+        } else if (g_settings.monitor >= 1) {
+            monitor = GetMonitorById(g_settings.monitor - 1);
+        }
+
+        if (monitor) {
             return monitor;
         }
     }
@@ -128,10 +192,15 @@ TrayUI__SetStuckMonitor_t TrayUI__SetStuckMonitor_Original;
 HRESULT WINAPI TrayUI__SetStuckMonitor_Hook(void* pThis, HMONITOR monitor) {
     Wh_Log(L">");
 
-    if (!g_unloading && g_settings.monitor >= 1) {
-        monitor = GetMonitorById(g_settings.monitor - 1);
-    } else {
-        monitor = nullptr;
+    monitor = nullptr;
+
+    if (!g_unloading) {
+        if (*g_settings.monitorInterfaceName.get()) {
+            monitor = GetMonitorByInterfaceNameSubstr(
+                g_settings.monitorInterfaceName.get());
+        } else if (g_settings.monitor >= 1) {
+            monitor = GetMonitorById(g_settings.monitor - 1);
+        }
     }
 
     if (!monitor) {
@@ -341,6 +410,8 @@ void ApplySettings() {
 
 void LoadSettings() {
     g_settings.monitor = Wh_GetIntSetting(L"monitor");
+    g_settings.monitorInterfaceName =
+        WindhawkUtils::StringSetting::make(L"monitorInterfaceName");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
@@ -349,34 +420,58 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_winVersion = GetExplorerVersion();
-    if (g_winVersion == WinVersion::Unsupported) {
-        Wh_Log(L"Unsupported Windows version");
-        return FALSE;
+    g_target = Target::Explorer;
+
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            Wh_Log(L"GetModuleFileName failed");
+            break;
+
+        default:
+            if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
+                moduleFileName++;
+                if (_wcsicmp(moduleFileName, L"ShellHost.exe") == 0) {
+                    g_target = Target::ShellHost;
+                }
+            } else {
+                Wh_Log(L"GetModuleFileName returned an unsupported path");
+            }
+            break;
     }
 
-    if (g_settings.oldTaskbarOnWin11) {
-        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
-
-        if (g_winVersion >= WinVersion::Win11) {
-            g_winVersion = WinVersion::Win10;
-        }
-
-        if (hasWin10Taskbar && !HookTaskbarSymbols()) {
+    if (g_target == Target::Explorer) {
+        g_winVersion = GetExplorerVersion();
+        if (g_winVersion == WinVersion::Unsupported) {
+            Wh_Log(L"Unsupported Windows version");
             return FALSE;
         }
-    } else if (!HookTaskbarSymbols()) {
-        return FALSE;
+
+        if (g_settings.oldTaskbarOnWin11) {
+            bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
+
+            if (g_winVersion >= WinVersion::Win11) {
+                g_winVersion = WinVersion::Win10;
+            }
+
+            if (hasWin10Taskbar && !HookTaskbarSymbols()) {
+                return FALSE;
+            }
+        } else if (!HookTaskbarSymbols()) {
+            return FALSE;
+        }
+
+        HandleLoadedExplorerPatcher();
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        FARPROC pKernelBaseLoadLibraryExW =
+            GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+        Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
+                           (void*)LoadLibraryExW_Hook,
+                           (void**)&LoadLibraryExW_Original);
     }
-
-    HandleLoadedExplorerPatcher();
-
-    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-    FARPROC pKernelBaseLoadLibraryExW =
-        GetProcAddress(kernelBaseModule, "LoadLibraryExW");
-    Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
-                       (void*)LoadLibraryExW_Hook,
-                       (void**)&LoadLibraryExW_Original);
 
     WindhawkUtils::Wh_SetFunctionHookT(MonitorFromPoint, MonitorFromPoint_Hook,
                                        &MonitorFromPoint_Original);
@@ -389,13 +484,15 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    // Try again in case there's a race between the previous attempt and the
-    // LoadLibraryExW hook.
-    if (!g_explorerPatcherInitialized) {
-        HandleLoadedExplorerPatcher();
-    }
+    if (g_target == Target::Explorer) {
+        // Try again in case there's a race between the previous attempt and the
+        // LoadLibraryExW hook.
+        if (!g_explorerPatcherInitialized) {
+            HandleLoadedExplorerPatcher();
+        }
 
-    ApplySettings();
+        ApplySettings();
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -403,7 +500,9 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    ApplySettings();
+    if (g_target == Target::Explorer) {
+        ApplySettings();
+    }
 }
 
 void Wh_ModUninit() {
@@ -417,9 +516,11 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     LoadSettings();
 
-    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
-    if (!*bReload) {
-        ApplySettings();
+    if (g_target == Target::Explorer) {
+        *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+        if (!*bReload) {
+            ApplySettings();
+        }
     }
 
     return TRUE;
