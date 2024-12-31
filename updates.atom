@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-31T17:39:14.000Z</updated>
+    <updated>2024-12-31T17:51:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#4db829a377d9b5b497da107523171d2d785042c7</id>
+        <link href="https://windhawk.net/mods/taskbar-primary-on-secondary-monitor"/>
+        <updated>2024-12-31T17:51:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the "Monitor interface name" option which can be used instead of the monitor number. Can be useful if the monitor numbers change often.</li>
+<li>Fixed the Action Center (Win+A) always opening on primary monitor on Windows 11 version 24H2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows notifications placement 1.1]]></title>
         <id>https://windhawk.net/mods/notifications-placement#d8232bbf9fd4b173e4848587d1b9604acc359453</id>
@@ -318,22 +332,6 @@ settings in Windows.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.0]]></title>
-        <id>https://windhawk.net/mods/dark-menus#32a08d93bca7856d61c3bac57491c6a2ff7aaafa</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2024-12-06T21:17:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="darkmodecontextmenus">Dark mode context menus</h1>
-<p>Forces dark mode for all win32 context menus to create a more consistent UI.</p>
-<h3 id="before">Before:</h3>
-<p><img src="https://i.imgur.com/bGRVJz8.png" alt="Before" /></p>
-<h3 id="after">After:</h3>
-<p><img src="https://i.imgur.com/BURKEki.png" alt="After" /></p>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>

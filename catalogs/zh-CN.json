@@ -3115,7 +3115,7 @@
                 "published": 1731791988000,
                 "rating": 10,
                 "ratingUsers": 10,
-                "updated": 1731791988000,
+                "updated": 1735667463000,
                 "users": 298
             },
             "metadata": {
@@ -3128,11 +3128,12 @@
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
-                    "explorer.exe"
+                    "explorer.exe",
+                    "ShellHost.exe"
                 ],
                 "name": "Primary taskbar on secondary monitor",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "taskbar-scroll-actions": {
