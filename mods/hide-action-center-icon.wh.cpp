@@ -10,9 +10,9 @@
 
 // ==WindhawkModReadme==
 /* 
-Removes the Action Center icon (cogwheel) from Win10 taskbar. After application of the mod,
+Removes the Action Center icon (cogwheel) from the Win10 taskbar, running under Winedows 10 or Windows 11. After application of the mod,
 File Explorer should be restarted.
-The code is based on the corresponding code from Explorer Patcher and can stop working in the future.
+The code is based on the corresponding code from Explorer Patcher.
 */
 // ==/WindhawkModReadme==
 
