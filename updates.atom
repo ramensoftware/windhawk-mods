@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2024-12-31T17:51:03.000Z</updated>
+    <updated>2025-01-03T12:07:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Action Center icon 1.0.1]]></title>
+        <id>https://windhawk.net/mods/hide-action-center-icon#754cfb4e6257c90fb4729c169f08deba96227bc4</id>
+        <link href="https://windhawk.net/mods/hide-action-center-icon"/>
+        <updated>2025-01-03T12:07:57.000Z</updated>
+        <content type="html"><![CDATA[<p>Will not stop working in the future as the Win10 taskbar will not get any changes.</p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Primary taskbar on secondary monitor 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-primary-on-secondary-monitor#4db829a377d9b5b497da107523171d2d785042c7</id>
@@ -310,28 +321,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-multirow#5e82578b6fd3b234cc853ecce9c6580573bc0b1c</id>
-        <link href="https://windhawk.net/mods/taskbar-multirow"/>
-        <updated>2024-12-07T20:09:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="multirowtaskbarforwindows11">Multirow taskbar for Windows 11</h1>
-<p>Span taskbar items across multiple rows, just like it was possible before
-Windows 11.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod doesn't change the taskbar height, it only makes the task list span
-across multiple rows. To change the taskbar height, use the <a href="https://windhawk.net/mods/taskbar-icon-size">Taskbar height
-and icon size</a> mod.</li>
-<li>The mod works best with "Taskbar alignment" set to "Left" in the taskbar
-settings in Windows.</li>
-</ul>
-<p><img src="https://i.imgur.com/ZpzoDXy.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

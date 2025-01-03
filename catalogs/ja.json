@@ -1526,7 +1526,7 @@
                 "published": 1710579606000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1710579606000,
+                "updated": 1735906077000,
                 "users": 50
             },
             "metadata": {
@@ -1537,7 +1537,7 @@
                     "explorer.exe"
                 ],
                 "name": "Hide Action Center icon",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "hide-search-bar": {
