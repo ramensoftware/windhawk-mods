@@ -2,7 +2,7 @@
 // @id              hide-action-center-icon
 // @name            Hide Action Center icon
 // @description     Hides Action Center icon from Win10 taskbar
-// @version         1.0.0
+// @version         1.0.1
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
