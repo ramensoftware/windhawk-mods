@@ -26,7 +26,7 @@ jobs:
         ]
         exclude:
           # Exclude 1.3.1, which is quite old, for everyone but m417z.
-          - version: ${{ github.event.pull_request.user.login != 'm417z' && '1.3.1' }}
+          - version: ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'm417z') && '1.3.1' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
