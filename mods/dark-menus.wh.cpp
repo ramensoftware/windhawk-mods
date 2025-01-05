@@ -65,6 +65,8 @@ HRESULT ApplyTheme(AppMode inputTheme = Max)
             theme = AllowDark;
         else
             theme = ForceDark;
+
+        Wh_FreeStringSetting(savedTheme);
     }
 
     //Apply the theme
