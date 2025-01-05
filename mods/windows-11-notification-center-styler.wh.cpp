@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center with themes contributed by others or create your own
-// @version         1.1.4
+// @version         1.1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -43,6 +43,15 @@ TranslucentShell](https://github.com/ramensoftware/windows-11-notification-cente
 [![Unified](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/Unified/screenshot-small.png)
 \
 Unified](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/Unified/README.md)
+
+[![10JumpLists](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/10JumpLists/screenshot-small.png)
+\
+10JumpLists](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/10JumpLists/README.md)
+
+More themes can be found in the **Themes** section of [The Windows 11
+notification center styling
+guide](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/README.md#themes).
+Contributions of new themes are welcome!
 
 ## Advanced styling
 
@@ -100,6 +109,11 @@ A couple of practical examples:
 **Target**: `Grid#NotificationCenterGrid` \
 **Style**: `Visibility=Collapsed`
 
+#### Shrink the notification center height
+Makes panel non full-height when there are fewer notifications (fit to size). \
+**Target**: `Grid#NotificationCenterGrid` \
+**Style**: `VerticalAlignment=2`
+
 #### Square the corners of the notification center
 **Target**: `Grid#NotificationCenterGrid` \
 **Style**: `CornerRadius=0`
@@ -149,6 +163,7 @@ code from the **TranslucentTB** project.
   - "": None
   - TranslucentShell: TranslucentShell
   - Unified: Unified
+  - 10JumpLists: 10JumpLists
 - controlStyles:
   - - target: ""
       $name: Target
@@ -164,7 +179,6 @@ code from the **TranslucentTB** project.
 */
 // ==/WindhawkModSettings==
 
-#include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 #include <xamlom.h>
 
 #include <atomic>
@@ -272,6 +286,72 @@ const Theme g_themeUnified = {{
         L"CornerRadius=0"}},
 }};
 
+const Theme g_theme10JumpLists = {{
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#JumpListGrid", {
+        L"Margin=0,0,0,0",
+        L"CornerRadius=0",
+        L"Width=256"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#JumpListRestyledAcrylic", {
+        L"CornerRadius=0",
+        L"Background=Transparent",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"JumpViewUI.SystemItemListView#SystemItemList", {
+        L"Width=256"}},
+    ThemeTargetStyles{L"JumpViewUI.TaskbarJumpListFrame", {
+        L"Width=256",
+        L"RequestedTheme=2"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListListView#ItemList", {
+        L"Width=256",
+        L"Background:=<AcrylicBrush TintColor=\"#202020\" TintOpacity=\"0.75\" FallbackColor=\"#202020\" />",
+        L"Padding=0,5,0,5"}},
+    ThemeTargetStyles{L"JumpViewUI.SystemItemControl > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.TextBlock", {
+        L"FontFamily=Segoe MDL2 Assets"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.TextBlock", {
+        L"FontFamily=Segoe MDL2 Assets"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton", {
+        L"Width=30",
+        L"Height=30"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem", {
+        L"Margin=0,0,0,0",
+        L"Height=30"}},
+    ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem", {
+        L"Margin=0,0,0,0",
+        L"Height=30"}},
+    ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Windows.UI.Xaml.Controls.Grid#LayoutRoot@CommonStates > Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
+        L"CornerRadius=0",
+        L"Background@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.5\" FallbackColor=\"#353535\" />",
+        L"Background@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.9\" FallbackColor=\"#4c4c4c\" />",
+        L"BorderBrush@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
+        L"BorderBrush@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
+        L"BorderThickness=1,1,1,1"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Windows.UI.Xaml.Controls.Grid#LayoutRoot@CommonStates > Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
+        L"CornerRadius=0",
+        L"Background@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.5\" FallbackColor=\"#353535\"/>",
+        L"Background@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.9\" FallbackColor=\"#4c4c4c\" />",
+        L"BorderBrush@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
+        L"BorderBrush@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
+        L"BorderThickness=1,1,1,1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Shapes.Rectangle", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#DisplayNameTextBlock", {
+        L"FontSize=12"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListCategoryHeaderControl > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.TextBlock#HeadingTextBlock", {
+        L"Margin=12,10,12,6"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SystemItemsContainer > Windows.UI.Xaml.Shapes.Rectangle", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SystemItemsContainer", {
+        L"Padding=0,5,0,5",
+        L"Background:=<AcrylicBrush TintColor=\"#101010\" TintOpacity=\"0.75\" FallbackColor=\"#101010\" />"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Windows.UI.Xaml.Controls.Grid#LayoutRoot > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.Grid#LayoutRoot > Windows.UI.Xaml.Shapes.Rectangle", {
+        L"Margin=12,4,12,4"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListControl#JumpList", {
+        L"Margin=0,0,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton > Windows.UI.Xaml.Controls.Grid@CommonStates > Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
+        L"Background@PointerOver:=<AcrylicBrush TintColor=\"#7d8787\" TintOpacity=\"0.3\" FallbackColor=\"#494949\" />",
+        L"Background@Pressed:=<AcrylicBrush TintColor=\"#788787\" TintOpacity=\"0.3\" FallbackColor=\"#5d5d5d\" />",
+        L"CornerRadius=0"}},
+}};
+
 // clang-format on
 
 std::atomic<bool> g_initialized;
@@ -298,27 +378,20 @@ HMODULE GetCurrentModuleHandle() {
 
 #pragma region winrt_hpp
 
-#include <guiddef.h>
 #include <Unknwn.h>
 #include <winrt/base.h>
 
 // forward declare namespaces we alias
 namespace winrt {
     namespace Windows {
-        namespace Foundation::Collections {}
-        namespace UI::Xaml {
-            namespace Controls {}
-            namespace Hosting {}
-        }
+        namespace Foundation {}
+        namespace UI::Xaml {}
     }
 }
 
 // alias some long namespaces for convenience
 namespace wf = winrt::Windows::Foundation;
-// namespace wfc = wf::Collections;
 namespace wux = winrt::Windows::UI::Xaml;
-// namespace wuxc = wux::Controls;
-namespace wuxh = wux::Hosting;
 
 #pragma endregion  // winrt_hpp
 
@@ -345,13 +418,11 @@ private:
     HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) override;
     HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle element, VisualElementState elementState, LPCWSTR context) noexcept override;
 
-    template<typename T>
-    T FromHandle(InstanceHandle handle)
+    wf::IInspectable FromHandle(InstanceHandle handle)
     {
         wf::IInspectable obj;
         winrt::check_hresult(m_XamlDiagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(obj))));
-
-        return obj.as<T>();
+        return obj;
     }
 
     winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
@@ -361,8 +432,6 @@ private:
 
 #pragma region visualtreewatcher_cpp
 
-#include <winrt/Windows.UI.Xaml.Hosting.h>
-
 VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
     m_XamlDiagnostics(site.as<IXamlDiagnostics>())
 {
@@ -370,13 +439,14 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
     // winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(this));
 
     // Calling AdviseVisualTreeChange from the current thread causes the app to
-    // hang on Windows 10 in Advising::RunOnUIThread. Creating a new thread and
+    // hang in Advising::RunOnUIThread sometimes. Creating a new thread and
     // calling it from there fixes it.
     HANDLE thread = CreateThread(
         nullptr, 0,
         [](LPVOID lpParam) -> DWORD {
             auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
             HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
+            watcher->Release();
             if (FAILED(hr)) {
                 Wh_Log(L"Error %08X", hr);
             }
@@ -384,6 +454,7 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
         },
         this, 0, nullptr);
     if (thread) {
+        AddRef();
         CloseHandle(thread);
     }
 }
@@ -422,19 +493,16 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement
 
     if (mutationType == Add)
     {
-        const auto inspectable = FromHandle<wf::IInspectable>(element.Handle);
-
+        const auto inspectable = FromHandle(element.Handle);
         auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
-        if (!frameworkElement)
-        {
-            const auto desktopXamlSource = FromHandle<wuxh::DesktopWindowXamlSource>(element.Handle);
-            frameworkElement = desktopXamlSource.Content().try_as<wux::FrameworkElement>();
-        }
-
         if (frameworkElement)
         {
             Wh_Log(L"FrameworkElement name: %s", frameworkElement.Name().c_str());
             ApplyCustomizations(element.Handle, frameworkElement, element.Type);
+        }
+        else
+        {
+            Wh_Log(L"Skipping non-FrameworkElement");
         }
     }
     else if (mutationType == Remove)
@@ -466,7 +534,6 @@ HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementSt
 
 #include <ocidl.h>
 
-// TODO: weak_ref might be better here.
 winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
 
 // {C85D8CC7-5463-40E8-A432-F5916B6427E5}
@@ -509,7 +576,9 @@ HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
 }
 catch (...)
 {
-    return winrt::to_hresult();
+    HRESULT hr = winrt::to_hresult();
+    Wh_Log(L"Error %08X", hr);
+    return hr;
 }
 
 HRESULT WindhawkTAP::GetSite(REFIID riid, void **ppvSite) noexcept
@@ -540,7 +609,9 @@ struct SimpleFactory : winrt::implements<SimpleFactory<T>, IClassFactory, winrt:
     }
     catch (...)
     {
-        return winrt::to_hresult();
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+        return hr;
     }
 
     HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override
@@ -573,7 +644,9 @@ _Use_decl_annotations_ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LP
 }
 catch (...)
 {
-    return winrt::to_hresult();
+    HRESULT hr = winrt::to_hresult();
+    Wh_Log(L"Error %08X", hr);
+    return hr;
 }
 
 __declspec(dllexport)
@@ -625,13 +698,23 @@ HRESULT InjectWindhawkTAP() noexcept
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    const HRESULT hr2 = ixde(L"VisualDiagConnection1", GetCurrentProcessId(), nullptr, location, CLSID_WindhawkTAP, nullptr);
-    if (FAILED(hr2)) [[unlikely]]
+    // I didn't find a better way than trying many connections until one works.
+    // Reference:
+    // https://github.com/microsoft/microsoft-ui-xaml/blob/d74a0332cf0d5e58f12eddce1070fa7a79b4c2db/src/dxaml/xcp/dxaml/lib/DXamlCore.cpp#L2782
+    HRESULT hr;
+    for (int i = 0; i < 10000; i++)
     {
-        return hr2;
+        WCHAR connectionName[256];
+        wsprintf(connectionName, L"VisualDiagConnection%d", i + 1);
+
+        hr = ixde(connectionName, GetCurrentProcessId(), L"", location, CLSID_WindhawkTAP, nullptr);
+        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
+        {
+            break;
+        }
     }
 
-    return S_OK;
+    return hr;
 }
 
 #pragma endregion  // api_cpp
@@ -805,8 +888,8 @@ void SetOrClearValue(DependencyObject elementDo,
 std::wstring EscapeXmlAttribute(std::wstring_view data) {
     std::wstring buffer;
     buffer.reserve(data.size());
-    for (size_t pos = 0; pos != data.size(); ++pos) {
-        switch (data[pos]) {
+    for (const auto c : data) {
+        switch (c) {
             case '&':
                 buffer.append(L"&amp;");
                 break;
@@ -823,7 +906,7 @@ std::wstring EscapeXmlAttribute(std::wstring_view data) {
                 buffer.append(L"&gt;");
                 break;
             default:
-                buffer.append(&data[pos], 1);
+                buffer.push_back(c);
                 break;
         }
     }
@@ -907,6 +990,32 @@ Style GetStyleFromXamlSetters(const std::wstring_view type,
     return styleInspectable.as<Style>();
 }
 
+Style GetStyleFromXamlSettersWithFallbackType(
+    const std::wstring_view type,
+    const std::wstring_view fallbackType,
+    const std::wstring_view xamlStyleSetters) {
+    try {
+        return GetStyleFromXamlSetters(type, xamlStyleSetters);
+    } catch (winrt::hresult_error const& ex) {
+        constexpr HRESULT kStowedException = 0x802B000A;
+        if (ex.code() != kStowedException) {
+            throw;
+        }
+
+        // For some types such as JumpViewUI.JumpListListViewItem, the following
+        // error is returned:
+        //
+        // Error 802B000A: Failed to create a 'System.Type' from the text
+        // 'windhawkstyler:JumpListListViewItem'. [Line: 8 Position: 12]
+        //
+        // Retry with a fallback type, which will allow to at least use the
+        // basic properties.
+        Wh_Log(L"Retrying with fallback type type due to error %08X: %s",
+               ex.code(), ex.message().c_str());
+        return GetStyleFromXamlSetters(fallbackType, xamlStyleSetters);
+    }
+}
+
 const PropertyOverrides& GetResolvedPropertyOverrides(
     const std::wstring_view type,
     PropertyOverridesMaybeUnresolved* propertyOverridesMaybeUnresolved) {
@@ -945,7 +1054,8 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
                 }
             }
 
-            auto style = GetStyleFromXamlSetters(type, xaml);
+            auto style = GetStyleFromXamlSettersWithFallbackType(
+                type, winrt::name_of<FrameworkElement>(), xaml);
 
             uint32_t i = 0;
             for (const auto& rule : styleRules) {
@@ -993,7 +1103,8 @@ const PropertyValues& GetResolvedPropertyValues(
                 xaml += L"\" />\n";
             }
 
-            auto style = GetStyleFromXamlSetters(type, xaml);
+            auto style = GetStyleFromXamlSettersWithFallbackType(
+                type, winrt::name_of<FrameworkElement>(), xaml);
 
             for (size_t i = 0; i < propertyValuesStr.size(); i++) {
                 const auto setter = style.Setters().GetAt(i).as<Setter>();
@@ -1397,22 +1508,20 @@ void ApplyCustomizations(InstanceHandle handle,
 }
 
 void CleanupCustomizations(InstanceHandle handle) {
-    auto it = g_elementsCustomizationState.find(handle);
-    if (it == g_elementsCustomizationState.end()) {
-        return;
+    if (auto it = g_elementsCustomizationState.find(handle);
+        it != g_elementsCustomizationState.end()) {
+        auto& elementCustomizationState = it->second;
+
+        auto element = elementCustomizationState.element.get();
+
+        for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
+             elementCustomizationState.perVisualStateGroup) {
+            RestoreCustomizationsForVisualStateGroup(
+                element, visualStateGroupOptionalWeakPtrIter, stateIter);
+        }
+
+        g_elementsCustomizationState.erase(it);
     }
-
-    auto& elementCustomizationState = it->second;
-
-    auto element = elementCustomizationState.element.get();
-
-    for (const auto& [visualStateGroupOptionalWeakPtrIter, stateIter] :
-         elementCustomizationState.perVisualStateGroup) {
-        RestoreCustomizationsForVisualStateGroup(
-            element, visualStateGroupOptionalWeakPtrIter, stateIter);
-    }
-
-    g_elementsCustomizationState.erase(it);
 }
 
 ElementMatcher ElementMatcherFromString(std::wstring_view str) {
@@ -1645,6 +1754,8 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeTranslucentShell;
     } else if (wcscmp(themeName, L"Unified") == 0) {
         theme = &g_themeUnified;
+    } else if (wcscmp(themeName, L"10JumpLists") == 0) {
+        theme = &g_theme10JumpLists;
     }
     Wh_FreeStringSetting(themeName);
 
