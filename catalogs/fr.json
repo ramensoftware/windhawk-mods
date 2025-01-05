@@ -862,7 +862,7 @@
                 "published": 1733519825000,
                 "rating": 9,
                 "ratingUsers": 11,
-                "updated": 1733519825000,
+                "updated": 1736093145000,
                 "users": 912
             },
             "metadata": {
@@ -873,7 +873,7 @@
                     "*"
                 ],
                 "name": "Dark mode context menus",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "desktop-icons-view": {

@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-05T09:46:08.000Z</updated>
+    <updated>2025-01-05T16:05:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.1]]></title>
+        <id>https://windhawk.net/mods/dark-menus#fa6306bf70a7363c7449ec89def690c17e5aed24</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2025-01-05T16:05:45.000Z</updated>
+        <content type="html"><![CDATA[<p>Added a option to only use context menus in dark mode if Windows is in dark mode. Also cleaned up the code.</p>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chromium Frame Blackout Fix 0.1]]></title>
         <id>https://windhawk.net/mods/chromium-ncpaint-fix#88b6b51a5fd5a4646173f127b087231380292e1a</id>
@@ -302,22 +313,6 @@ where the mouse cursor is located.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shadowplay anti-disable 1.0]]></title>
-        <id>https://windhawk.net/mods/shadowplay-do-not-disable#1fd480af6b69fe3339d52712268afa8a87839f7a</id>
-        <link href="https://windhawk.net/mods/shadowplay-do-not-disable"/>
-        <updated>2024-12-09T20:07:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="shadowplayantidisable">Shadowplay anti-disable</h1>
-<p>Nvidia ShadowPlay will normally turn off automatically/pause when detecting DRM content playing or when a Window requests to be hidden from screen captures.
-This sucks, because ShadowPlay may just randomly turn off because a random window requests to be hidden from screen captures.
-No more! This mod disables both of these checks.</p>
-<p>Works with both the old "GeForce Experience" as well as the new "NVIDIA App"</p>
-<p><img src="https://i.imgur.com/zdP0nhd.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>Temm</name>
-            <uri>https://github.com/leumasme</uri>
         </author>
     </entry>
 </feed>
