@@ -54,9 +54,11 @@ jobs:
           echo "Extracting $installer_path to $extract_path"
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE "/D=$extract_path"
       - name: Get changed files
+        if: github.event_name == 'pull_request'
         id: changed-files
         uses: tj-actions/changed-files@v44
       - name: Compile mod
+        if: github.event_name == 'pull_request'
         env:
           ADDED_FILES_COUNT: ${{ steps.changed-files.outputs.added_files_count }}
           MODIFIED_FILES_COUNT: ${{ steps.changed-files.outputs.modified_files_count }}
