@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-05T16:05:45.000Z</updated>
+    <updated>2025-01-05T20:02:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.5]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#b0d7a441fde94fac703f55f232efbb0ea674e803</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2025-01-05T20:02:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a new theme: 10JumpLists.</li>
+<li>Fixed not being able to style some elements due to error 802B000A (failed to create a 'System.Type' from the text).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dark mode context menus 1.1]]></title>
         <id>https://windhawk.net/mods/dark-menus#fa6306bf70a7363c7449ec89def690c17e5aed24</id>
@@ -298,21 +312,6 @@ where the mouse cursor is located.</p>
         <author>
             <name>draxas</name>
             <uri>https://github.com/draxas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#8db53b86b7fb576eaf44aaa772c00a53a8933590</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2024-12-10T14:57:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The start menu search (what you see when you click on the start menu search bar) is now styled as well. Most of the search content is a WebView element, and the mod now allows to style it with CSS targets and styles. Refer to the mod description for more details.</li>
-<li>Added the Everblush theme.</li>
-<li>Updated themes: SideBySide2, Fluent2Inspired, Metro10Minimal.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,8 @@
+## 1.1.5 ([Jan 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b0d7a441fde94fac703f55f232efbb0ea674e803/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added a new theme: 10JumpLists.
+* Fixed not being able to style some elements due to error 802B000A (failed to create a 'System.Type' from the text).
+
 ## 1.1.4 ([Oct 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6f54b0820eb9261a690c18fc396760e82890975b/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Updated the TranslucentShell theme to make the text more readable when on a light background.
