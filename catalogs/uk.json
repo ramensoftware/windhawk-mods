@@ -334,6 +334,29 @@
                 "version": "1.1"
             }
         },
+        "chromium-ncpaint-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1736070368000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1736070368000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Ingan121",
+                "compilerOptions": "-lcomctl32",
+                "description": "Fix Basic/Classic frames going black in Chromium/Electron/CEF apps",
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "*"
+                ],
+                "name": "Chromium Frame Blackout Fix",
+                "twitter": "https://twitter.com/Ingan121",
+                "version": "0.1"
+            }
+        },
         "classic-browser-fix": {
             "details": {
                 "defaultSorting": 972,

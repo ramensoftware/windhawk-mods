@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-03T12:07:57.000Z</updated>
+    <updated>2025-01-05T09:46:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chromium Frame Blackout Fix 0.1]]></title>
+        <id>https://windhawk.net/mods/chromium-ncpaint-fix#88b6b51a5fd5a4646173f127b087231380292e1a</id>
+        <link href="https://windhawk.net/mods/chromium-ncpaint-fix"/>
+        <updated>2025-01-05T09:46:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromiumframeblackoutfix">Chromium Frame Blackout Fix</h1>
+<ul>
+<li>Fix Basic/Classic frames going black in Chromium/Electron/CEF apps</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Action Center icon 1.0.1]]></title>
         <id>https://windhawk.net/mods/hide-action-center-icon#754cfb4e6257c90fb4729c169f08deba96227bc4</id>
@@ -304,23 +318,6 @@ No more! This mod disables both of these checks.</p>
         <author>
             <name>Temm</name>
             <uri>https://github.com/leumasme</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Virtual Desktop Transition Animation 1.0]]></title>
-        <id>https://windhawk.net/mods/disable-virtual-desktop-transition#000110fb95288d15f121807167c826024d9e764e</id>
-        <link href="https://windhawk.net/mods/disable-virtual-desktop-transition"/>
-        <updated>2024-12-09T15:33:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablevirtualdesktoptransitionanimation">Disable Virtual Desktop Transition Animation</h1>
-<p>This mod disables the animation seen when switching between virtual desktops in Windows 10.</p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>In order to use this mod, you must allow Windhawk to inject into the <strong>dwm.exe</strong> 
-system process. To do so, add it to the process inclusion list in the advanced 
-settings. If you do not do this, it will silently fail to inject.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>]]></content>
-        <author>
-            <name>Isabella Lulamoon (kawapure)</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>
