@@ -1,3 +1,7 @@
+## 1.2.2 ([Jan 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6a8345066ab3b41d72f1aa2e2c75cdac73186484/mods/classic-browser-fix.wh.cpp))
+
+This mod is outdated
+
 ## 1.2.1 ([Nov 21, 2024](https://github.com/ramensoftware/windhawk-mods/blob/f646116532b0fbd44766c91c0c4d9ca824647ee6/mods/classic-browser-fix.wh.cpp))
 
 Add Chatgpt app.

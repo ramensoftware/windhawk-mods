@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-05T20:02:13.000Z</updated>
+    <updated>2025-01-07T10:52:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.2.2]]></title>
+        <id>https://windhawk.net/mods/classic-browser-fix#6a8345066ab3b41d72f1aa2e2c75cdac73186484</id>
+        <link href="https://windhawk.net/mods/classic-browser-fix"/>
+        <updated>2025-01-07T10:52:08.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod is outdated</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.5]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#b0d7a441fde94fac703f55f232efbb0ea674e803</id>
@@ -293,25 +304,6 @@ where the mouse cursor is located.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CTRL+SHIFT+C quotes remover 1.0]]></title>
-        <id>https://windhawk.net/mods/remove-quotes-from-ctrl-shift-c#03e48ec11ead99e4fff7a66162d13dcd90dca4b7</id>
-        <link href="https://windhawk.net/mods/remove-quotes-from-ctrl-shift-c"/>
-        <updated>2024-12-11T15:06:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="removequotesfromctrlshiftcfilepaths">Remove quotes from CTRL+SHIFT+C file paths</h1>
-<p>When you press <code>CTRL+SHIFT+C</code> on a file in Windows Explorer, the file’s full path is usually copied to the clipboard with quotes, for example: <code>"C:\Path\To\File.txt"</code>. With this mod, those quotes are automatically removed, leaving you with a clean, unquoted path for easier use.</p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>Whenever you copy a file path using <code>CTRL+SHIFT+C</code>, this mod intercepts the text before it’s placed into the clipboard.</li>
-<li>If the path is enclosed in quotes, they are removed.</li>
-<li>You end up with a path like <code>C:\Path\To\File.txt</code> instead of <code>"C:\Path\To\File.txt"</code>.</li>
-</ul>
-<p>No additional configuration is needed—just use CTRL+SHIFT+C as you normally would.</p>]]></content>
-        <author>
-            <name>draxas</name>
-            <uri>https://github.com/draxas</uri>
         </author>
     </entry>
 </feed>
