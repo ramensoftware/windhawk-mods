@@ -1694,7 +1694,7 @@
                 "published": 1723297622000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1731113738000,
+                "updated": 1736441410000,
                 "users": 75
             },
             "metadata": {
@@ -1705,7 +1705,7 @@
                     "explorer.exe"
                 ],
                 "name": "Legacy Alt+Tab dialog",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "legacy-file-copy": {
