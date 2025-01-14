@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-09T16:50:10.000Z</updated>
+    <updated>2025-01-14T14:23:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Treeview 1.1.3]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-treeview#60b870f0fac7f0c4678967f33546b34d32e54702</id>
+        <link href="https://windhawk.net/mods/classic-explorer-treeview"/>
+        <updated>2025-01-14T14:23:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Use Microsoft::WRL::ComPtr instead of winrt::com_ptr</li>
+<li>Symbol hooks made compatible with Win7</li>
+</ul>]]></content>
+        <author>
+            <name>Waldemar</name>
+            <uri>https://github.com/CyprinusCarpio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy Alt+Tab dialog 1.0.2]]></title>
         <id>https://windhawk.net/mods/legacy-alt-tab#2cb620735e9f7eed807169bcf816c3fee9b4f1a2</id>
@@ -286,20 +300,6 @@ where the mouse cursor is located.</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.3.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#37fce381dc197fbd1858b833d6ca0475acb40a54</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2024-12-13T01:57:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Undid the fix of thumbnail labels incorrectly showing or not showing when using some modes, since the fix had unintended side effects.</li>
-<li>Reimplemented an option to always show thumbnail labels, so that it can still be used as a workaround.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

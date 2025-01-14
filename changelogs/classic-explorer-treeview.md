@@ -1,3 +1,8 @@
+## 1.1.3 ([Jan 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/60b870f0fac7f0c4678967f33546b34d32e54702/mods/classic-explorer-treeview.wh.cpp))
+
+- Use Microsoft::WRL::ComPtr instead of winrt::com_ptr
+- Symbol hooks made compatible with Win7
+
 ## 1.1.2 ([Oct 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/e5a77cad35db119b7a798eb68597cead108a76a2/mods/classic-explorer-treeview.wh.cpp))
 
 - Added a option to enable item hot tracking
