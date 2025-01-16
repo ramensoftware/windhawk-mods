@@ -1922,6 +1922,28 @@
                 "version": "1.0.2"
             }
         },
+        "magnifier-mod": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1737058005000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1737058005000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "00face",
+                "compilerOptions": "-lgdi32 -lcomdlg32 -luxtheme -lgdiplus",
+                "description": "Adds a magnifier window above the taskbar with the same width and height.",
+                "github": "https://github.com/00face",
+                "homepage": "https://hyaenahyaena.com",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Magnifier Mod",
+                "version": "0.4.2"
+            }
+        },
         "maintain-flux-colour-temperature": {
             "details": {
                 "defaultSorting": 430,
