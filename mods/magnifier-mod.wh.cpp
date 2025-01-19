@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              magnifier-mod
 // @name            Taskbar Magnifier Mod
-// @description     Adds a magnifier window above the taskbar with the same width and height.
-// @version         0.4.2
+// @description     Adds a magnifier window you can customize and dock at the top, bottom, left, or right of your screen.
+// @version         0.5.1
 // @author          00face
 // @github          https://github.com/00face
 // @homepage        https://hyaenahyaena.com
@@ -13,7 +13,32 @@
 // ==WindhawkModReadme==
 /*
 # Taskbar Magnifier Mod
-This mod adds a magnifier window you can customize and dock at the top or bottom of your screen.
+This mod adds a magnifier window you can customize and dock at the top, bottom, left, or right of your screen and more.
+
+## Features
+- **Zoom Level**: Adjust the zoom level of the magnifier window.
+- **Idle Update Interval**: Set the update interval when the cursor is idle.
+- **Magnifier Height**: Customize the height of the magnifier window.
+- **Magnifier Width**: Customize the width of the magnifier window.
+- **Position**: Position the magnifier at the top, bottom, left, or right of the screen.
+- **Use Default Height**: Use the default height (same as the taskbar height).
+- **Use Default Width**: Use the default width (same as the taskbar width).
+- **Padding**: Add padding at the top, right, bottom, and left of the magnifier.
+- **Opacity**: Adjust the opacity level of the magnifier window.
+
+# Changelog
+
+## [0.5.1] - 2025-19-01
+### Added
+- Added support for vertical positions (left and right).
+- Removed click-through feature.
+- Removed border rounding feature.
+- Updated metadata and settings to reflect changes.
+- Updated readme with features and more information.
+
+## [0.4.2] - 2025-16-01
+### Added
+- Initial release of the Taskbar Magnifier Mod.
 */
 // ==/WindhawkModReadme==
 
@@ -28,18 +53,30 @@ This mod adds a magnifier window you can customize and dock at the top or bottom
 - magnifierHeight: 100
   $name: Magnifier Height
   $description: The height of the magnifier window.
-- positionTop: false
-  $name: Position at Top
-  $description: Position the magnifier at the top of the screen.
+- magnifierWidth: 100
+  $name: Magnifier Width
+  $description: The width of the magnifier window.
+- position: bottom
+  $name: Position
+  $description: Position the magnifier at the top, bottom, left, or right of the screen.
 - useDefaultHeight: true
   $name: Use Default Height
   $description: Use the default height (same as the taskbar height).
-- paddingTop: 10
+- useDefaultWidth: true
+  $name: Use Default Width
+  $description: Use the default width (same as the taskbar width).
+- paddingTop: 0
   $name: Padding Top
   $description: Padding at the top of the magnifier.
-- paddingBottom: 10
+- paddingRight: 0
+  $name: Padding Right
+  $description: Padding at the right of the magnifier.
+- paddingBottom: 0
   $name: Padding Bottom
   $description: Padding at the bottom of the magnifier.
+- paddingLeft: 0
+  $name: Padding Left
+  $description: Padding at the left of the magnifier.
 - opacity: 128
   $name: Opacity
   $description: The opacity level of the magnifier window (0-255).
@@ -55,6 +92,9 @@ This mod adds a magnifier window you can customize and dock at the top or bottom
 #include <atomic>
 #include <chrono>
 #include <gdiplus.h>
+#include <string>
+#include <locale>
+#include <codecvt>
 
 #define WC_MAGNIFIER L"Magnifier"
 
@@ -95,10 +135,14 @@ struct {
     float zoomLevel;
     int idleUpdateInterval;
     int magnifierHeight;
-    bool positionTop;
+    int magnifierWidth;
+    std::string position;
     bool useDefaultHeight;
+    bool useDefaultWidth;
     int paddingTop;
+    int paddingRight;
     int paddingBottom;
+    int paddingLeft;
     int opacity;
     HWND hwndMagnifier;
     HWND hwndHost;
@@ -121,10 +165,18 @@ void LoadSettings() {
     settings.zoomLevel = static_cast<float>(Wh_GetIntSetting(L"zoomLevel")) / 100.0f;
     settings.idleUpdateInterval = Wh_GetIntSetting(L"idleUpdateInterval");
     settings.magnifierHeight = Wh_GetIntSetting(L"magnifierHeight");
-    settings.positionTop = Wh_GetIntSetting(L"positionTop") != 0;
+    settings.magnifierWidth = Wh_GetIntSetting(L"magnifierWidth");
+
+    // Convert wide string to narrow string
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    settings.position = converter.to_bytes(Wh_GetStringSetting(L"position"));
+
     settings.useDefaultHeight = Wh_GetIntSetting(L"useDefaultHeight") != 0;
+    settings.useDefaultWidth = Wh_GetIntSetting(L"useDefaultWidth") != 0;
     settings.paddingTop = Wh_GetIntSetting(L"paddingTop");
+    settings.paddingRight = Wh_GetIntSetting(L"paddingRight");
     settings.paddingBottom = Wh_GetIntSetting(L"paddingBottom");
+    settings.paddingLeft = Wh_GetIntSetting(L"paddingLeft");
     settings.opacity = Wh_GetIntSetting(L"opacity");
     Wh_Log(L"Settings loaded");
 }
@@ -300,18 +352,36 @@ void UpdateMagnifierPosition() {
         return;
     }
 
-    int magnifierWidth = GetSystemMetrics(SM_CXSCREEN);
+    int magnifierWidth = settings.useDefaultWidth ? (rectTaskbar.right - rectTaskbar.left) : settings.magnifierWidth;
     int magnifierHeight = settings.useDefaultHeight ? (rectTaskbar.bottom - rectTaskbar.top) : settings.magnifierHeight;
     int x = 0;
-    int y = settings.positionTop ? settings.paddingTop : rectTaskbar.top - magnifierHeight - settings.paddingBottom;
+    int y = 0;
+
+    if (settings.position == "top") {
+        y = settings.paddingTop;
+        magnifierWidth = GetSystemMetrics(SM_CXSCREEN);
+    } else if (settings.position == "bottom") {
+        y = rectTaskbar.top - magnifierHeight - settings.paddingBottom;
+        magnifierWidth = GetSystemMetrics(SM_CXSCREEN);
+    } else if (settings.position == "left") {
+        x = settings.paddingLeft;
+        y = settings.paddingTop;
+        magnifierWidth = settings.useDefaultWidth ? (rectTaskbar.bottom - rectTaskbar.top) : settings.magnifierWidth;
+        magnifierHeight = GetSystemMetrics(SM_CYSCREEN);
+    } else if (settings.position == "right") {
+        x = GetSystemMetrics(SM_CXSCREEN) - (settings.useDefaultWidth ? (rectTaskbar.bottom - rectTaskbar.top) : settings.magnifierWidth) - settings.paddingRight;
+        y = settings.paddingTop;
+        magnifierWidth = settings.useDefaultWidth ? (rectTaskbar.bottom - rectTaskbar.top) : settings.magnifierWidth;
+        magnifierHeight = GetSystemMetrics(SM_CYSCREEN);
+    }
 
     if (!SetWindowPos(settings.hwndHost, HWND_TOPMOST, x, y, magnifierWidth, magnifierHeight,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
+                      SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
         return;
     }
 
     if (!SetWindowPos(settings.hwndMagnifier, NULL, 0, 0, magnifierWidth, magnifierHeight,
-                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
+                      SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
         return;
     }
 
@@ -421,10 +491,14 @@ void MagnifierThreadFunc() {
     settings.zoomLevel = 0;
     settings.idleUpdateInterval = 0;
     settings.magnifierHeight = 0;
-    settings.positionTop = false;
+    settings.magnifierWidth = 0;
+    settings.position = "";
     settings.useDefaultHeight = false;
+    settings.useDefaultWidth = false;
     settings.paddingTop = 0;
+    settings.paddingRight = 0;
     settings.paddingBottom = 0;
+    settings.paddingLeft = 0;
     settings.opacity = 0;
     settings.hwndMagnifier = NULL;
     settings.hwndHost = NULL;
