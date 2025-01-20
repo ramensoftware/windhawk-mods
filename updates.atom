@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-20T19:21:55.000Z</updated>
+    <updated>2025-01-20T19:57:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.2]]></title>
+        <id>https://windhawk.net/mods/dark-menus#4632327b4f048f0e6c6721e478d4bbf6fe96c79b</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2025-01-20T19:57:07.000Z</updated>
+        <content type="html"><![CDATA[<p>Added a compatibility check to avoid crashes on incompatible Windows versions.
+The readme now shows Windows 10 screenshots.
+Code cleanup</p>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Magnifier Mod 0.5.1]]></title>
         <id>https://windhawk.net/mods/magnifier-mod#c2f53e472a7957b36e71567c700fe1a5e2629879</id>
@@ -269,20 +282,6 @@ This will make the icon not show up on your desktop anymore. Enjoy!</p>]]></cont
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win+D per monitor 1.0.20241214]]></title>
-        <id>https://windhawk.net/mods/win-d-per-monitor#3527a69c3e55a8acdc4e8d4255af0cd3d5e1566a</id>
-        <link href="https://windhawk.net/mods/win-d-per-monitor"/>
-        <updated>2024-12-16T17:28:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windpermonitor">Win+D per monitor</h1>
-<p>When you press win+d, it only minimizes/restores the windows on the monitor
-where the mouse cursor is located.</p>
-<p>按下win+d时,只最小化/还原鼠标所在监视器上的窗口</p>]]></content>
-        <author>
-            <name>easyatm</name>
-            <uri>https://github.com/easyatm</uri>
         </author>
     </entry>
 </feed>
