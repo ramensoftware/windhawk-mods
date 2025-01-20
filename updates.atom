@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-16T20:06:45.000Z</updated>
+    <updated>2025-01-20T19:21:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Magnifier Mod 0.5.1]]></title>
+        <id>https://windhawk.net/mods/magnifier-mod#c2f53e472a7957b36e71567c700fe1a5e2629879</id>
+        <link href="https://windhawk.net/mods/magnifier-mod"/>
+        <updated>2025-01-20T19:21:55.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li>Added support for vertical positions (left and right).</li>
+<li>Removed click-through feature.</li>
+<li>Removed border rounding feature.</li>
+<li>Updated metadata and settings to reflect changes.</li>
+<li>Updated readme with features and more information.</li>
+</ul>]]></content>
+        <author>
+            <name>00face</name>
+            <uri>https://github.com/00face</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Magnifier Mod 0.4.2]]></title>
         <id>https://windhawk.net/mods/magnifier-mod#b4ec16697e16d9d5d8205e4cc11d2323fd0ca1da</id>
@@ -265,17 +283,6 @@ where the mouse cursor is located.</p>
         <author>
             <name>easyatm</name>
             <uri>https://github.com/easyatm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 1.9]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#c18f329132507d6ed1a7517e5c1906d194e2bb34</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2024-12-15T13:06:35.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixed explorer.exe freeze on Windows 24H2 when the combine taskbar buttons option changed - https://github.com/m1lhaus/windhawk-mods/issues/23.</p>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>
