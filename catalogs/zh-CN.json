@@ -1928,20 +1928,20 @@
                 "published": 1737058005000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1737400915000,
+                "updated": 1737493649000,
                 "users": 0
             },
             "metadata": {
                 "author": "00face",
                 "compilerOptions": "-lgdi32 -lcomdlg32 -luxtheme -lgdiplus",
-                "description": "Adds a magnifier window you can customize and dock at the top, bottom, left, or right of your screen.",
+                "description": "Adds a magnifier window you can customize and dock at the top, bottom, left, or right of your screen and more.",
                 "github": "https://github.com/00face",
                 "homepage": "https://hyaenahyaena.com",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Taskbar Magnifier Mod",
-                "version": "0.5.1"
+                "name": "Taskbar Magnifier M🔍d",
+                "version": "0.5.4"
             }
         },
         "maintain-flux-colour-temperature": {

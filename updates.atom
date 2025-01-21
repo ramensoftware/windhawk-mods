@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-20T19:57:07.000Z</updated>
+    <updated>2025-01-21T21:07:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Magnifier M🔍d 0.5.4]]></title>
+        <id>https://windhawk.net/mods/magnifier-mod#68d96765b3bbb81677eae7fab0033dc7c1116a11</id>
+        <link href="https://windhawk.net/mods/magnifier-mod"/>
+        <updated>2025-01-21T21:07:29.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="05420250120">[0.5.4] - 2025-01-20</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li>Ensured the magnifier window moves to the correct monitor when switching between monitors.</li>
+<li>Added error handling for monitor selection.</li>
+</ul>
+<h2 id="05320250120">[0.5.3] - 2025-01-20</h2>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>Enabled click-through.</li>
+<li>Simplified cursor handling.</li>
+</ul>
+<h2 id="05220250120">[0.5.2] - 2025-01-20</h2>
+<h3 id="added-1">Added</h3>
+<ul>
+<li>Improved multi-monitor support.</li>
+<li>Fixed cursor loading state issue.</li>
+<li>Fixed window turning white or duplicating issue.</li>
+<li>Fixed transparency loss issue.</li>
+<li>Fixed padding issues.</li>
+<li>Added logging for better diagnostics.</li>
+</ul>]]></content>
+        <author>
+            <name>00face</name>
+            <uri>https://github.com/00face</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dark mode context menus 1.2]]></title>
         <id>https://windhawk.net/mods/dark-menus#4632327b4f048f0e6c6721e478d4bbf6fe96c79b</id>
@@ -261,23 +293,6 @@ This will make the icon not show up on your desktop anymore. Enjoy!</p>]]></cont
         <content type="html"><![CDATA[<ul>
 <li>Fixed buggy tray overflow placement when it's shown at the first time after system startup.</li>
 <li>Fixed tray overflow styles not being restored on mod unload.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.6]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#4daa0db637b47f3da820ad7d1cdcc64236068d12</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2024-12-16T18:27:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>"Everything" integration for folder sizes: Added support for the new Everything SDK3. With "Everything" version 1.5.0.1384a or newer, the folder size query is much faster now (can be around 20x faster).</li>
-<li>"Everything" integration for folder sizes: Folder junctions no longer have a size (zero size was shown before).</li>
-<li>Fixed sorting folders by size when the "Mix files and folders when sorting by size" option is disabled.</li>
-<li>Folder sizes are now displayed in more places, including "Library" folders and the details pane.</li>
-<li>Fixed a rare mod hang on unload.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
