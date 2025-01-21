@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              magnifier-mod
-// @name            Taskbar Magnifier Mod
-// @description     Adds a magnifier window you can customize and dock at the top, bottom, left, or right of your screen.
-// @version         0.5.1
+// @name            Taskbar Magnifier M🔍d
+// @description     Adds a magnifier window you can customize and dock at the top, bottom, left, or right of your screen and more.
+// @version         0.5.4
 // @author          00face
 // @github          https://github.com/00face
 // @homepage        https://hyaenahyaena.com
@@ -12,7 +12,8 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Magnifier Mod
+![Logo](https://raw.githubusercontent.com/00face/Windhawk-Mod-Magnifier/refs/heads/main/magmod.png)
+## Description
 This mod adds a magnifier window you can customize and dock at the top, bottom, left, or right of your screen and more.
 
 ## Features
@@ -25,10 +26,34 @@ This mod adds a magnifier window you can customize and dock at the top, bottom, 
 - **Use Default Width**: Use the default width (same as the taskbar width).
 - **Padding**: Add padding at the top, right, bottom, and left of the magnifier.
 - **Opacity**: Adjust the opacity level of the magnifier window.
+- **Monitor Selection**: Select which monitor to display the magnifier on.
+- **Click-through**: Does not interfere with your workspace.
+
+![Magnifier Example](https://raw.githubusercontent.com/00face/Windhawk-Mod-Magnifier/refs/heads/main/magmodcode-ezgif.com-resize.gif)
+![Magnifier Example2](https://raw.githubusercontent.com/00face/Windhawk-Mod-Magnifier/refs/heads/main/magmodvideo-ezgif.com-resize.gif)
 
 # Changelog
 
-## [0.5.1] - 2025-19-01
+## [0.5.4] - 2025-01-20
+### Added
+- Ensured the magnifier window moves to the correct monitor when switching between monitors.
+- Added error handling for monitor selection.
+
+## [0.5.3] - 2025-01-20
+### Changed
+- Enabled click-through.
+- Simplified cursor handling.
+
+## [0.5.2] - 2025-01-20
+### Added
+- Improved multi-monitor support.
+- Fixed cursor loading state issue.
+- Fixed window turning white or duplicating issue.
+- Fixed transparency loss issue.
+- Fixed padding issues.
+- Added logging for better diagnostics.
+
+## [0.5.1] - 2025-01-19
 ### Added
 - Added support for vertical positions (left and right).
 - Removed click-through feature.
@@ -36,7 +61,7 @@ This mod adds a magnifier window you can customize and dock at the top, bottom, 
 - Updated metadata and settings to reflect changes.
 - Updated readme with features and more information.
 
-## [0.4.2] - 2025-16-01
+## [0.4.2] - 2025-01-16
 ### Added
 - Initial release of the Taskbar Magnifier Mod.
 */
@@ -80,6 +105,9 @@ This mod adds a magnifier window you can customize and dock at the top, bottom, 
 - opacity: 128
   $name: Opacity
   $description: The opacity level of the magnifier window (0-255).
+- monitorIndex: 0
+  $name: Monitor Index
+  $description: The index of the monitor to display the magnifier on (0 for primary monitor).
 */
 // ==/WindhawkModSettings==
 
@@ -144,6 +172,7 @@ struct {
     int paddingBottom;
     int paddingLeft;
     int opacity;
+    int monitorIndex;
     HWND hwndMagnifier;
     HWND hwndHost;
     HMODULE hMagnification;
@@ -178,6 +207,7 @@ void LoadSettings() {
     settings.paddingBottom = Wh_GetIntSetting(L"paddingBottom");
     settings.paddingLeft = Wh_GetIntSetting(L"paddingLeft");
     settings.opacity = Wh_GetIntSetting(L"opacity");
+    settings.monitorIndex = Wh_GetIntSetting(L"monitorIndex");
     Wh_Log(L"Settings loaded");
 }
 
@@ -288,13 +318,14 @@ HWND CreateMagnifierHost() {
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = L"MagnifierHostClass_Unique";
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW); // Set default cursor
 
     if (!RegisterClassEx(&wc)) {
         return NULL;
     }
 
     HWND hwnd = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_LAYERED,
         wc.lpszClassName,
         L"Magnifier Host",
         WS_POPUP | WS_VISIBLE,
@@ -312,8 +343,20 @@ HWND CreateMagnifierHost() {
 }
 
 HWND CreateMagnifierWindow(HWND hwndHost) {
+    WNDCLASSEX wc = {0};
+    wc.cbSize = sizeof(WNDCLASSEX);
+    wc.lpfnWndProc = DefWindowProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = L"MagnifierClass_Unique";
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW); // Set default cursor
+
+    if (!RegisterClassEx(&wc)) {
+        return NULL;
+    }
+
     HWND hwnd = CreateWindowEx(
-        WS_EX_LAYERED, // Add WS_EX_LAYERED style
+        WS_EX_LAYERED | WS_EX_TOPMOST, // Add WS_EX_LAYERED and WS_EX_TOPMOST styles
         WC_MAGNIFIER,
         L"MagnifierWindow",
         WS_CHILD | WS_VISIBLE,
@@ -357,22 +400,47 @@ void UpdateMagnifierPosition() {
     int x = 0;
     int y = 0;
 
-    if (settings.position == "top") {
-        y = settings.paddingTop;
-        magnifierWidth = GetSystemMetrics(SM_CXSCREEN);
-    } else if (settings.position == "bottom") {
-        y = rectTaskbar.top - magnifierHeight - settings.paddingBottom;
-        magnifierWidth = GetSystemMetrics(SM_CXSCREEN);
-    } else if (settings.position == "left") {
-        x = settings.paddingLeft;
-        y = settings.paddingTop;
-        magnifierWidth = settings.useDefaultWidth ? (rectTaskbar.bottom - rectTaskbar.top) : settings.magnifierWidth;
-        magnifierHeight = GetSystemMetrics(SM_CYSCREEN);
-    } else if (settings.position == "right") {
-        x = GetSystemMetrics(SM_CXSCREEN) - (settings.useDefaultWidth ? (rectTaskbar.bottom - rectTaskbar.top) : settings.magnifierWidth) - settings.paddingRight;
-        y = settings.paddingTop;
-        magnifierWidth = settings.useDefaultWidth ? (rectTaskbar.bottom - rectTaskbar.top) : settings.magnifierWidth;
-        magnifierHeight = GetSystemMetrics(SM_CYSCREEN);
+    // Get the monitor information for the selected monitor
+    HMONITOR hMonitor = NULL;
+    MONITORINFO monitorInfo = {0};
+    monitorInfo.cbSize = sizeof(MONITORINFO);
+
+    int monitorCount = GetSystemMetrics(SM_CMONITORS);
+    if (settings.monitorIndex >= 0 && settings.monitorIndex < monitorCount) {
+        hMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
+        for (int i = 0; i <= settings.monitorIndex; i++) {
+            if (hMonitor) {
+                if (GetMonitorInfo(hMonitor, &monitorInfo)) {
+                    if (i == settings.monitorIndex) {
+                        break;
+                    }
+                    hMonitor = MonitorFromRect(&monitorInfo.rcMonitor, MONITOR_DEFAULTTONEAREST);
+                }
+            }
+        }
+    } else {
+        Wh_Log(L"Monitor index out of range");
+        return;
+    }
+
+    if (hMonitor && GetMonitorInfo(hMonitor, &monitorInfo)) {
+        if (settings.position == "top") {
+            y = settings.paddingTop;
+            magnifierWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+        } else if (settings.position == "bottom") {
+            y = monitorInfo.rcMonitor.bottom - magnifierHeight - settings.paddingBottom;
+            magnifierWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+        } else if (settings.position == "left") {
+            x = settings.paddingLeft;
+            y = settings.paddingTop;
+            magnifierWidth = settings.useDefaultWidth ? (monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top) : settings.magnifierWidth;
+            magnifierHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+        } else if (settings.position == "right") {
+            x = monitorInfo.rcMonitor.right - (settings.useDefaultWidth ? (monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top) : settings.magnifierWidth) - settings.paddingRight;
+            y = settings.paddingTop;
+            magnifierWidth = settings.useDefaultWidth ? (monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top) : settings.magnifierWidth;
+            magnifierHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+        }
     }
 
     if (!SetWindowPos(settings.hwndHost, HWND_TOPMOST, x, y, magnifierWidth, magnifierHeight,
@@ -393,34 +461,39 @@ void UpdateMagnifierPosition() {
         return;
     }
 
-    int sourceWidth = 400;
-    int sourceHeight = 100;
+    // Get the monitor information for the cursor position
+    hMonitor = MonitorFromPoint(ptCursor, MONITOR_DEFAULTTONEAREST);
+    if (GetMonitorInfo(hMonitor, &monitorInfo)) {
+        int sourceWidth = 400;
+        int sourceHeight = 100;
 
-    MAGRECTANGLE sourceRect = {
-        static_cast<LONG>(ptCursor.x - (sourceWidth / 2)),
-        static_cast<LONG>(ptCursor.y - (sourceHeight / 2)),
-        static_cast<LONG>(ptCursor.x + (sourceWidth / 2)),
-        static_cast<LONG>(ptCursor.y + (sourceHeight / 2))
-    };
-
-    RECT screenRect;
-    SystemParametersInfo(SPI_GETWORKAREA, 0, &screenRect, 0);
-    sourceRect.left = std::max(screenRect.left, sourceRect.left);
-    sourceRect.top = std::max(screenRect.top, sourceRect.top);
-    sourceRect.right = std::min(screenRect.right, sourceRect.right);
-    sourceRect.bottom = std::min(screenRect.bottom, sourceRect.bottom);
-
-    if (pfnMagSetWindowSource(settings.hwndMagnifier, sourceRect)) {
-        float matrix[9] = {
-            settings.zoomLevel, 0, 0,
-            0, settings.zoomLevel, 0,
-            0, 0, 1
+        MAGRECTANGLE sourceRect = {
+            static_cast<LONG>(ptCursor.x - (sourceWidth / 2)),
+            static_cast<LONG>(ptCursor.y - (sourceHeight / 2)),
+            static_cast<LONG>(ptCursor.x + (sourceWidth / 2)),
+            static_cast<LONG>(ptCursor.y + (sourceHeight / 2))
         };
-        pfnMagSetWindowTransform(settings.hwndMagnifier, matrix);
 
-        InvalidateRect(settings.hwndMagnifier, NULL, FALSE);
-        UpdateWindow(settings.hwndMagnifier);
+        RECT screenRect = monitorInfo.rcMonitor;
+        sourceRect.left = std::max(screenRect.left, sourceRect.left);
+        sourceRect.top = std::max(screenRect.top, sourceRect.top);
+        sourceRect.right = std::min(screenRect.right, sourceRect.right);
+        sourceRect.bottom = std::min(screenRect.bottom, sourceRect.bottom);
+
+        if (pfnMagSetWindowSource(settings.hwndMagnifier, sourceRect)) {
+            float matrix[9] = {
+                settings.zoomLevel, 0, 0,
+                0, settings.zoomLevel, 0,
+                0, 0, 1
+            };
+            pfnMagSetWindowTransform(settings.hwndMagnifier, matrix);
+
+            InvalidateRect(settings.hwndMagnifier, NULL, FALSE);
+            UpdateWindow(settings.hwndMagnifier);
+        }
     }
+
+    Wh_Log(L"Magnifier position updated");
 }
 
 void MagnifierThreadFunc() {
@@ -486,6 +559,7 @@ void MagnifierThreadFunc() {
     }
 
     UnregisterClass(L"MagnifierHostClass_Unique", GetModuleHandle(NULL));
+    UnregisterClass(L"MagnifierClass_Unique", GetModuleHandle(NULL));
 
     // Reset individual fields of the settings structure
     settings.zoomLevel = 0;
@@ -500,6 +574,7 @@ void MagnifierThreadFunc() {
     settings.paddingBottom = 0;
     settings.paddingLeft = 0;
     settings.opacity = 0;
+    settings.monitorIndex = 0;
     settings.hwndMagnifier = NULL;
     settings.hwndHost = NULL;
     settings.hMagnification = NULL;
@@ -511,6 +586,8 @@ void MagnifierThreadFunc() {
     settings.frameCount = 0;
     settings.startTime = 0;
     settings.isEnabled = false;
+
+    Wh_Log(L"Magnifier thread exited");
 }
 
 BOOL Wh_ModInit() {
@@ -527,6 +604,7 @@ void Wh_ModUninit() {
         settings.magnifierThread.join();
     }
     Gdiplus::GdiplusShutdown(gdiplusToken);
+    Wh_Log(L"Mod uninitialized");
 }
 
 void Wh_ModSettingsChanged() {
@@ -538,4 +616,5 @@ void Wh_ModSettingsChanged() {
             SetLayeredWindowAttributes(settings.hwndMagnifier, 0, settings.opacity, LWA_ALPHA);
         }
     }
+    Wh_Log(L"Settings changed");
 }
