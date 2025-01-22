@@ -7,7 +7,6 @@
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -175,6 +174,12 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
+    if (!twinuiPcshellModule) {
+        Wh_Log(L"Couldn't load twinui.pcshell.dll");
+        return FALSE;
+    }
+
     if (g_winVersion == WinVersion::Win11) {
         // twinui.pcshell.dll
         WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
@@ -185,12 +190,6 @@ BOOL Wh_ModInit() {
             },
 
         };
-
-        HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
-        if (!twinuiPcshellModule) {
-            Wh_Log(L"Couldn't load twinui.pcshell.dll");
-            return FALSE;
-        }
 
         if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
                          ARRAYSIZE(twinuiPcshellSymbolHooks))) {
@@ -204,13 +203,8 @@ BOOL Wh_ModInit() {
                 &CAltTabViewHost_Show_Original,
                 CAltTabViewHost_Show_Hook,
             },
-        };
 
-        HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
-        if (!twinuiPcshellModule) {
-            Wh_Log(L"Couldn't load twinui.pcshell.dll");
-            return FALSE;
-        }
+        };
 
         if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
                          ARRAYSIZE(twinuiPcshellSymbolHooks))) {
