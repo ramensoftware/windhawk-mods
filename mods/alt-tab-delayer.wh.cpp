@@ -30,11 +30,72 @@ Ubuntu handle fast app switching.
 
 #include <windhawk_utils.h>
 
+enum class WinVersion {
+    Unsupported,
+    Win10,
+    Win11,
+};
+
+WinVersion g_winVersion;
+
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
 HWND g_taskSwitcherHwnd;
 UINT_PTR g_timerId;
 int g_nCmdShow;
 int g_delayMilliseconds;
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+WinVersion GetWindowsVersion() {
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return WinVersion::Unsupported;
+    }
+
+    WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD qfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    Wh_Log(L"Version: %u.%u.%u.%u", major, minor, build, qfe);
+
+    switch (major) {
+        case 10:
+            if (build < 22000) {
+                return WinVersion::Win10;
+            } else {
+                return WinVersion::Win11;
+            }
+            break;
+    }
+
+    return WinVersion::Unsupported;
+}
 
 void ClearState() {
     if (g_timerId != 0) {
@@ -46,12 +107,29 @@ void ClearState() {
 
 using XamlAltTabViewHost_DisplayAltTab_t = void(WINAPI*)(void* pThis);
 XamlAltTabViewHost_DisplayAltTab_t XamlAltTabViewHost_DisplayAltTab_Original;
-void XamlAltTabViewHost_DisplayAltTab_Hook(void* pThis) {
+void WINAPI XamlAltTabViewHost_DisplayAltTab_Hook(void* pThis) {
     Wh_Log(L">");
     ClearState();
     g_threadIdForAltTabShowWindow = GetCurrentThreadId();
     XamlAltTabViewHost_DisplayAltTab_Original(pThis);
     g_threadIdForAltTabShowWindow = 0;
+}
+
+using CAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
+                                                void* param1,
+                                                void* param2,
+                                                void* param3);
+CAltTabViewHost_Show_t CAltTabViewHost_Show_Original;
+HRESULT WINAPI CAltTabViewHost_Show_Hook(void* pThis,
+                                         void* param1,
+                                         void* param2,
+                                         void* param3) {
+    Wh_Log(L">");
+    ClearState();
+    g_threadIdForAltTabShowWindow = GetCurrentThreadId();
+    HRESULT ret = CAltTabViewHost_Show_Original(pThis, param1, param2, param3);
+    g_threadIdForAltTabShowWindow = 0;
+    return ret;
 }
 
 using ShowWindow_t = decltype(&ShowWindow);
@@ -63,7 +141,7 @@ void CALLBACK TimerProc(HWND hWnd, UINT uMsg, UINT_PTR idTimer, DWORD dwTime) {
     ShowWindow_Original(g_taskSwitcherHwnd, g_nCmdShow);
 }
 
-BOOL ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (hWnd == g_taskSwitcherHwnd && nCmdShow == SW_HIDE) {
         Wh_Log(L"> Resetting state");
         ClearState();
@@ -91,26 +169,54 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    g_winVersion = GetWindowsVersion();
+
     LoadSettings();
 
-    // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
-        {
-            {LR"(private: void __cdecl XamlAltTabViewHost::DisplayAltTab(void))"},
-            &XamlAltTabViewHost_DisplayAltTab_Original,
-            XamlAltTabViewHost_DisplayAltTab_Hook,
-        },
+    if (g_winVersion == WinVersion::Win11) {
+        // twinui.pcshell.dll
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+            {
+                {LR"(private: void __cdecl XamlAltTabViewHost::DisplayAltTab(void))"},
+                &XamlAltTabViewHost_DisplayAltTab_Original,
+                XamlAltTabViewHost_DisplayAltTab_Hook,
+            },
 
-    };
+        };
 
-    HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
-    if (!twinuiPcshellModule) {
-        Wh_Log(L"Couldn't load twinui.pcshell.dll");
-        return FALSE;
-    }
+        HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
+        if (!twinuiPcshellModule) {
+            Wh_Log(L"Couldn't load twinui.pcshell.dll");
+            return FALSE;
+        }
 
-    if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
-                     ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
+                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+            return FALSE;
+        }
+    } else if (g_winVersion == WinVersion::Win10) {
+        // twinui.pcshell.dll
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+            {
+                {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &CAltTabViewHost_Show_Original,
+                CAltTabViewHost_Show_Hook,
+            },
+        };
+
+        HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
+        if (!twinuiPcshellModule) {
+            Wh_Log(L"Couldn't load twinui.pcshell.dll");
+            return FALSE;
+        }
+
+        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
+                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
