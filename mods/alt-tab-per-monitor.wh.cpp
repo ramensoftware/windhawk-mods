@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              alt-tab-per-monitor-fork
-// @name            Alt+Tab per monitor - Fork
+// @id              alt-tab-per-monitor
+// @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
 // @version         1.0.0
 // @author          L3r0y
