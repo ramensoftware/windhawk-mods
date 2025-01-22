@@ -7,6 +7,7 @@
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
