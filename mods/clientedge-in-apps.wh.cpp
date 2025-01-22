@@ -2,7 +2,7 @@
 // @id              clientedge-in-apps
 // @name            Clientedge Everywhere
 // @description     Adds 3D border (WS_EX_CLIENTEDGE style) to some windows to look better in Classic theme.
-// @version         1.1.0
+// @version         1.2.0
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -51,6 +51,17 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
             dwExStyle |= WS_EX_CLIENTEDGE;
         }
     }
+
+    // Control Panel
+
+    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"DUIViewWndClassName")) {
+        GetClassNameW(hWndParent, wszClassName, 256);
+        if (!wcscmp(wszClassName, L"ShellTabWindowClass")) {
+            GetClassNameW(GetParent(hWndParent), wszClassName, 256);
+            dwExStyle |= WS_EX_CLIENTEDGE;
+        }
+    }
+
 
     // Internet Explorer
 
