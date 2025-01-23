@@ -154,7 +154,7 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    // determine_my_langid();
+    determine_my_langid();
 }
 
 // The mod is being unloaded, free all allocated resources.
