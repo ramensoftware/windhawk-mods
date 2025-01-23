@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-21T21:07:29.000Z</updated>
+    <updated>2025-01-23T17:25:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Per-app Language Preferences 1.1]]></title>
+        <id>https://windhawk.net/mods/per-app-language-preferences#c2fe499b39ef859de2618237086dc6520b53a754</id>
+        <link href="https://windhawk.net/mods/per-app-language-preferences"/>
+        <updated>2025-01-23T17:25:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Determines language ID for each process only once when launching</p></li>
+<li><p>Also update language ID on mod settings change</p></li>
+</ul>]]></content>
+        <author>
+            <name>yezhiyi9670</name>
+            <uri>https://github.com/yezhiyi9670</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Magnifier M🔍d 0.5.4]]></title>
         <id>https://windhawk.net/mods/magnifier-mod#68d96765b3bbb81677eae7fab0033dc7c1116a11</id>
@@ -283,20 +297,6 @@ This will make the icon not show up on your desktop anymore. Enjoy!</p>]]></cont
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray icon spacing 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#9c2f0424b09b758e4e82b06da5b4d94e206e05a4</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
-        <updated>2024-12-16T22:17:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed buggy tray overflow placement when it's shown at the first time after system startup.</li>
-<li>Fixed tray overflow styles not being restored on mod unload.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
