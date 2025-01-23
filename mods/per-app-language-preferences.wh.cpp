@@ -2,7 +2,7 @@
 // @id              per-app-language-preferences
 // @name            Per-app Language Preferences
 // @description     Override the preferred UI language for specific apps.
-// @version         1.0
+// @version         1.1
 // @author          yezhiyi9670
 // @github          https://github.com/yezhiyi9670
 // @include         *
@@ -65,30 +65,42 @@ Note that it changes the language only and does not affect the encoding used in 
 
 // ===========================================================
 
+bool langid_determined = false;
+int my_langid = 0;
+
 using GetUserDefaultUILanguage_t = short(WINAPI*)();
 GetUserDefaultUILanguage_t GetUserDefaultUILanguage_Original;
 short WINAPI GetUserDefaultUILanguage_Hook() {
-    wchar_t filename_buf[2049];
+    // Wh_Log(L">GetUserDefaultUILanguage");
 
-    Wh_Log(L">GetUserDefaultUILanguage");
+    if(!langid_determined) {
+        wchar_t *filename_buf = new wchar_t[2048];
+        GetModuleFileNameW(NULL, filename_buf, 2048);
+        Wh_Log(L">Process file: %ls", filename_buf);
 
-    GetModuleFileNameW(NULL, filename_buf, 2049);
-    Wh_Log(L">Process file: %ls", filename_buf);
-
-    for(int index = 0; ; index++) {
-        PCWSTR glob = Wh_GetStringSetting(L"programList[%d].glob", index);
-        if(!*glob) {
+        int lang_id = -1;
+        for(int index = 0; ; index++) {
+            PCWSTR glob = Wh_GetStringSetting(L"programList[%d].glob", index);
+            if(!*glob) {
+                Wh_FreeStringSetting(glob);
+                break;
+            }
+            if(S_OK == PathMatchSpecExW(filename_buf, glob, PMSF_MULTIPLE)) {
+                lang_id = Wh_GetIntSetting(L"programList[%d].langId", index);
+                break;
+            }
             Wh_FreeStringSetting(glob);
-            break;
         }
-        if(S_OK == PathMatchSpecExW(filename_buf, glob, PMSF_MULTIPLE)) {
-            int lang_id = Wh_GetIntSetting(L"programList[%d].langId", index);
-            return lang_id;
-        }
-        Wh_FreeStringSetting(glob);
+        delete[] filename_buf;
+        my_langid = lang_id;
+        langid_determined = true;
     }
 
-    return GetUserDefaultUILanguage_Original();
+    if(my_langid == -1) {
+        return GetUserDefaultUILanguage_Original();
+    } else {
+        return my_langid;
+    }
 }
 
 // ===========================================================
