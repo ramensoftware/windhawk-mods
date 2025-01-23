@@ -121,6 +121,30 @@
                 "version": "1.0.2"
             }
         },
+        "alt-tab-delayer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1737657431000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1737657431000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "L3r0y",
+                "compilerOptions": "-lversion",
+                "description": "Delays the appearance of the Alt+Tab window, preventing flickering and reducing distractions during fast app switching",
+                "github": "https://github.com/L3r0yThingz",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Alt+Tab window delayer",
+                "version": "1.0.0"
+            }
+        },
         "alt-tab-per-monitor": {
             "details": {
                 "defaultSorting": 6850,
