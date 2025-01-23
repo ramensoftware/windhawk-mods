@@ -23,7 +23,9 @@ This mod allow you to override the preferred language for specific apps using th
 
 Instructions on the settings:
 
-- The filename pattern is parsed using [PathMatchSpecExW](https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-pathmatchspecexw). It supports wildcard `*` `?`. It also supports multiple semicolon-separated patterns.
+- The file path pattern is parsed using [PathMatchSpecExW](https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-pathmatchspecexw). It supports wildcard `*` `?`. It also supports multiple semicolon-separated patterns.  
+  Note that the full path (e.g. `C:\Program Files\MyApp\my-app.exe`), rather than the base filename (e.g. `my-app.exe`), is checked against the pattern.  
+  To check the actual executable file path of your app, use the task manager or observe log output from this mod.
 - The language ID can be found in the [MS-LCID](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/70feba9f-294e-491e-b6eb-56532684c37f) specification. For example, the language ID for English (United States) is 1033.
 
 Use cases:
@@ -49,9 +51,9 @@ Note that it changes the language only and does not affect the encoding used in 
   - - glob: "*\\example-executable-file-114514.exe"
       $name: Filename pattern
       $description: "The pattern corresponding to the program filename."
-    - langId: 1033
+    - langId: -1
       $name: Language identifier
-      $description: "The language ID to apply."
+      $description: "The language ID to apply. Set -1 to use the system default value."
   $name: Overrides List
   $description: >-
     Assign a new language to these programs.
@@ -65,42 +67,41 @@ Note that it changes the language only and does not affect the encoding used in 
 
 // ===========================================================
 
-bool langid_determined = false;
-int my_langid = 0;
+int my_langid = -1;
 
 using GetUserDefaultUILanguage_t = short(WINAPI*)();
 GetUserDefaultUILanguage_t GetUserDefaultUILanguage_Original;
 short WINAPI GetUserDefaultUILanguage_Hook() {
     // Wh_Log(L">GetUserDefaultUILanguage");
 
-    if(!langid_determined) {
-        wchar_t *filename_buf = new wchar_t[2048];
-        GetModuleFileNameW(NULL, filename_buf, 2048);
-        Wh_Log(L">Process file: %ls", filename_buf);
-
-        int lang_id = -1;
-        for(int index = 0; ; index++) {
-            PCWSTR glob = Wh_GetStringSetting(L"programList[%d].glob", index);
-            if(!*glob) {
-                Wh_FreeStringSetting(glob);
-                break;
-            }
-            if(S_OK == PathMatchSpecExW(filename_buf, glob, PMSF_MULTIPLE)) {
-                lang_id = Wh_GetIntSetting(L"programList[%d].langId", index);
-                break;
-            }
-            Wh_FreeStringSetting(glob);
-        }
-        delete[] filename_buf;
-        my_langid = lang_id;
-        langid_determined = true;
-    }
-
     if(my_langid == -1) {
         return GetUserDefaultUILanguage_Original();
     } else {
         return my_langid;
     }
+}
+
+void determine_my_langid() {
+    wchar_t *filename_buf = new wchar_t[2048];
+    GetModuleFileNameW(NULL, filename_buf, 2048);
+    Wh_Log(L">Process file: %ls", filename_buf);
+
+    int lang_id = -1;
+    for(int index = 0; ; index++) {
+        PCWSTR glob = Wh_GetStringSetting(L"programList[%d].glob", index);
+        if(!*glob) {
+            Wh_FreeStringSetting(glob);
+            break;
+        }
+        if(S_OK == PathMatchSpecExW(filename_buf, glob, PMSF_MULTIPLE)) {
+            lang_id = Wh_GetIntSetting(L"programList[%d].langId", index);
+            Wh_FreeStringSetting(glob);
+            break;
+        }
+        Wh_FreeStringSetting(glob);
+    }
+    delete[] filename_buf;
+    my_langid = lang_id;
 }
 
 // ===========================================================
@@ -145,7 +146,15 @@ BOOL ModInit() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    determine_my_langid();
+
     return ModInit();
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    // determine_my_langid();
 }
 
 // The mod is being unloaded, free all allocated resources.
