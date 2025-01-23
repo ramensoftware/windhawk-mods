@@ -2,12 +2,12 @@
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.0.0
+// @version         1.0.1
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32
+// @compilerOptions -lole32 -loleaut32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,11 +27,72 @@ is currently located, showing only the windows present on that specific monitor.
 
 #include <winrt/windows.foundation.collections.h>
 
+enum class WinVersion {
+    Unsupported,
+    Win10,
+    Win11,
+};
+
+WinVersion g_winVersion;
+
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
 std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
 ULONGLONG g_CreateInstance_TickCount;
 constexpr ULONGLONG kDeltaThreshold = 200;
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+WinVersion GetWindowsVersion() {
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return WinVersion::Unsupported;
+    }
+
+    WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD qfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    Wh_Log(L"Version: %u.%u.%u.%u", major, minor, build, qfe);
+
+    switch (major) {
+        case 10:
+            if (build < 22000) {
+                return WinVersion::Win10;
+            } else {
+                return WinVersion::Win11;
+            }
+            break;
+    }
+
+    return WinVersion::Unsupported;
+}
 
 bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
     POINT pt;
@@ -298,13 +359,15 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Hook(void* pThis,
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    g_winVersion = GetWindowsVersion();
+
     HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
     if (!twinuiPcshellModule) {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return FALSE;
     }
 
-    if (false) {
+    if (g_winVersion == WinVersion::Win11) {
         // twinui.pcshell.dll
         WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
             {
@@ -349,7 +412,7 @@ BOOL Wh_ModInit() {
                          ARRAYSIZE(twinuiPcshellSymbolHooks))) {
             return FALSE;
         }
-    } else if (true) {
+    } else if (g_winVersion == WinVersion::Win10) {
         // twinui.pcshell.dll
         WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
             {
@@ -395,6 +458,8 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     } else {
+        Wh_Log(L"Unsupported Windows version");
+        return FALSE;
     }
 
     return TRUE;
