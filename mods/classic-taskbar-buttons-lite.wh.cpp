@@ -2,7 +2,7 @@
 // @id              classic-taskbar-buttons-lite
 // @name            Classic Taskbar 3D buttons Lite
 // @description     Lightweight mod, restoring the 3D buttons in classic theme
-// @version         1.3
+// @version         1.3.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -22,6 +22,8 @@ Before:
 After:
 
 ![After](https://i.imgur.com/Jz4EkRQ.png)
+
+Be warned that the progress indicator will not be displayed on the task buttons in the 3D mode, so if you need the progress bar, don't apply this mod. 
 
 */
 // ==/WindhawkModReadme==
