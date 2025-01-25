@@ -23,7 +23,7 @@ After:
 
 ![After](https://i.imgur.com/Jz4EkRQ.png)
 
-Be warned that the progress indicator will not be displayed on the task buttons in the 3D mode, so if you need the progress bar, don't use this mod. 
+Be warned that the progress indicator will not be displayed on the task buttons in the 3D mode, so if you need the progress bar, don't apply this mod. 
 
 */
 // ==/WindhawkModReadme==
