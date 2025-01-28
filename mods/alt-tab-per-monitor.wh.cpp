@@ -2,7 +2,7 @@
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.0.1
+// @version         1.1.0
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
@@ -94,29 +94,7 @@ WinVersion GetWindowsVersion() {
     return WinVersion::Unsupported;
 }
 
-bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
-    POINT pt;
-    if (!GetCursorPos(&pt)) {
-        return false;
-    }
-
-    auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-
-    MONITORINFO monInfo;
-    monInfo.cbSize = sizeof(MONITORINFO);
-    if (!GetMonitorInfo(hMon, &monInfo)) {
-        return false;
-    }
-
-    rect->Height = monInfo.rcWork.bottom - monInfo.rcWork.top;
-    rect->Width = monInfo.rcWork.right - monInfo.rcWork.left;
-    rect->X = monInfo.rcWork.left;
-    rect->Y = monInfo.rcWork.top;
-
-    return true;
-}
-
-bool HandleAltTabWindowWin10(RECT* rect) {
+bool HandleAltTabWindow(RECT* rect) {
     POINT pt;
     if (!GetCursorPos(&pt)) {
         return false;
@@ -131,7 +109,6 @@ bool HandleAltTabWindowWin10(RECT* rect) {
     }
 
     *rect = monInfo.rcWork;
-
     return true;
 }
 
@@ -229,10 +206,10 @@ using XamlAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
                                                    int param2,
                                                    void* param3);
 XamlAltTabViewHost_Show_t XamlAltTabViewHost_Show_Original;
-HRESULT XamlAltTabViewHost_Show_Hook(void* pThis,
-                                     void* param1,
-                                     int param2,
-                                     void* param3) {
+HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis,
+                                            void* param1,
+                                            int param2,
+                                            void* param3) {
     g_threadIdForAltTabShowWindow = GetCurrentThreadId();
     HRESULT ret =
         XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
@@ -242,12 +219,12 @@ HRESULT XamlAltTabViewHost_Show_Hook(void* pThis,
 
 using CAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
                                                 void* param1,
-                                                void* param2,
+                                                int param2,
                                                 void* param3);
 CAltTabViewHost_Show_t CAltTabViewHost_Show_Original;
 HRESULT WINAPI CAltTabViewHost_Show_Hook(void* pThis,
                                          void* param1,
-                                         void* param2,
+                                         int param2,
                                          void* param3) {
     Wh_Log(L">");
     g_threadIdForAltTabShowWindow = GetCurrentThreadId();
@@ -260,7 +237,7 @@ using ITaskGroupWindowInformation_Position_t =
     HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect* rect);
 ITaskGroupWindowInformation_Position_t
     ITaskGroupWindowInformation_Position_Original;
-HRESULT ITaskGroupWindowInformation_Position_Hook(
+HRESULT WINAPI ITaskGroupWindowInformation_Position_Hook(
     void* pThis,
     winrt::Windows::Foundation::Rect* rect) {
     if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
@@ -268,10 +245,17 @@ HRESULT ITaskGroupWindowInformation_Position_Hook(
     }
     g_threadIdForAltTabShowWindow = 0;
 
-    winrt::Windows::Foundation::Rect newRect;
-    if (!HandleAltTabWindow(&newRect)) {
+    RECT newRectNative;
+    if (!HandleAltTabWindow(&newRectNative)) {
         return ITaskGroupWindowInformation_Position_Original(pThis, rect);
     }
+
+    winrt::Windows::Foundation::Rect newRect{
+        static_cast<float>(newRectNative.left),
+        static_cast<float>(newRectNative.top),
+        static_cast<float>(newRectNative.right - newRectNative.left),
+        static_cast<float>(newRectNative.bottom - newRectNative.top),
+    };
 
     HRESULT ret =
         ITaskGroupWindowInformation_Position_Original(pThis, &newRect);
@@ -284,16 +268,16 @@ using CMultitaskingViewFrame_CreateFrame_t = HRESULT(WINAPI*)(void* pThis,
                                                               void* param2);
 CMultitaskingViewFrame_CreateFrame_t
     CMultitaskingViewFrame_CreateFrame_Original;
-HRESULT CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
-                                                RECT* rect,
-                                                void* param2) {
+HRESULT WINAPI CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
+                                                       RECT* rect,
+                                                       void* param2) {
     if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
         return CMultitaskingViewFrame_CreateFrame_Original(pThis, rect, param2);
     }
     g_threadIdForAltTabShowWindow = 0;
 
     RECT newRect;
-    if (!HandleAltTabWindowWin10(&newRect)) {
+    if (!HandleAltTabWindow(&newRect)) {
         return CMultitaskingViewFrame_CreateFrame_Original(pThis, rect, param2);
     }
 
@@ -410,6 +394,7 @@ BOOL Wh_ModInit() {
 
         if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
                          ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+            Wh_Log(L"HookSymbols failed");
             return FALSE;
         }
     } else if (g_winVersion == WinVersion::Win10) {
@@ -455,6 +440,7 @@ BOOL Wh_ModInit() {
 
         if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
                          ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+            Wh_Log(L"HookSymbols failed");
             return FALSE;
         }
     } else {
