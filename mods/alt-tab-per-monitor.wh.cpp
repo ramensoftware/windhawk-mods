@@ -390,6 +390,25 @@ BOOL Wh_ModInit() {
                 &XamlAltTabViewHost_CreateInstance_Original,
                 XamlAltTabViewHost_CreateInstance_Hook,
             },
+            // Fot the old Win10 (non-XAML) Alt+Tab (can be enabled in the registry):
+            {
+                {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &CAltTabViewHost_Show_Original,
+                CAltTabViewHost_Show_Hook,
+                true,
+            },
+            {
+                {LR"(public: virtual long __cdecl CMultitaskingViewFrame::CreateFrame(struct Geometry::CRect const &,enum MultitaskingViewZOrder))"},
+                &CMultitaskingViewFrame_CreateFrame_Original,
+                CMultitaskingViewFrame_CreateFrame_Hook,
+                true,
+            },
+            {
+                {LR"(long __cdecl CAltTabViewHost_CreateInstance(struct IMultitaskingData *,struct IMultitaskingViewManagerInternal *,struct IApplicationViewSwitcher *,struct IImmersiveAppCrusher *,struct IMultitaskingViewVisibilityServiceInternal *,struct IMultitaskingViewGestureState *,struct IApplicationViewCollection *,struct Windows::Internal::ComposableShell::Tabs::ITabController *,struct ITabViewManager *,struct _GUID const &,void * *))"},
+                &CAltTabViewHost_CreateInstance_Original,
+                CAltTabViewHost_CreateInstance_Hook,
+                true,
+            },
         };
 
         if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
