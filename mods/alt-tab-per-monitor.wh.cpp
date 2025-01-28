@@ -390,7 +390,7 @@ BOOL Wh_ModInit() {
                 &XamlAltTabViewHost_CreateInstance_Original,
                 XamlAltTabViewHost_CreateInstance_Hook,
             },
-            // Fot the old Win10 (non-XAML) Alt+Tab (can be enabled in the registry):
+            // For the old Win10 (non-XAML) Alt+Tab (can be enabled with ExplorerPatcher):
             {
                 {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &CAltTabViewHost_Show_Original,
