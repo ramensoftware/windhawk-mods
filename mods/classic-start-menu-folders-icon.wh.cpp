@@ -155,7 +155,8 @@ long THISCALL CFSFolder_GetIconOf_hook(CFSFolder* pThis,
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    const WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
+    // windows.storage.dll
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
         {{L"protected: long " STHISCALL
           " CFSFolder::_CreateFileFolderDefExtIcon(struct _ITEMID_CHILD const "
           "__unaligned *,struct IDFOLDER const __unaligned *,struct IBindCtx "
