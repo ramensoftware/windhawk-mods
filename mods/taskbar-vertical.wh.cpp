@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.3.1
+// @version         1.3.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1051,6 +1051,26 @@ void WINAPI SystemTrayFrame_Height_Hook(void* pThis, double value) {
     SystemTrayFrame_Height_Original(pThis, value);
 }
 
+bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
+    FrameworkElement controlCenterButton = nullptr;
+
+    FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
+    if (child &&
+        (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
+        (child = FindChildByName(child, L"SystemTrayFrameGrid")) &&
+        (child = FindChildByName(child, L"ControlCenterButton"))) {
+        controlCenterButton = child;
+    }
+
+    if (!controlCenterButton) {
+        return false;
+    }
+
+    // On secondary taskbars, the element that holds the system icons is empty
+    // and has the width of 2.
+    return controlCenterButton.ActualWidth() < 5;
+}
+
 bool UpdateNotifyIconsIfNeeded(XamlRoot xamlRoot);
 
 bool ApplyStyle(FrameworkElement taskbarFrame,
@@ -1094,15 +1114,18 @@ bool ApplyStyle(FrameworkElement taskbarFrame,
         }
     }
 
+    bool isSecondaryTaskbar = IsSecondaryTaskbar(taskbarFrame.XamlRoot());
+    TaskbarLocation taskbarLocation = isSecondaryTaskbar
+                                          ? g_settings.taskbarLocationSecondary
+                                          : g_settings.taskbarLocation;
+
     FrameworkElement child = taskbarFrame;
     if ((child = FindChildByName(child, L"RootGrid")) &&
         (child = FindChildByName(child, L"BackgroundControl")) &&
         (child =
              FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid")) &&
         (child = FindChildByName(child, L"BackgroundStroke"))) {
-        // TODO: Handle secondary taskbars.
-        if (!g_unloading &&
-            g_settings.taskbarLocation == TaskbarLocation::right) {
+        if (!g_unloading && taskbarLocation == TaskbarLocation::right) {
             child.VerticalAlignment(VerticalAlignment::Bottom);
             // Account for the extra margin above.
             child.Margin(Thickness{0, 0, 0, 1});
@@ -1777,6 +1800,29 @@ void UpdateTaskListButton(FrameworkElement taskListButtonElement) {
 
             badgeElement.Margin(margin);
         }
+    }
+
+    bool isSecondaryTaskbar =
+        IsSecondaryTaskbar(taskListButtonElement.XamlRoot());
+    TaskbarLocation taskbarLocation = isSecondaryTaskbar
+                                          ? g_settings.taskbarLocationSecondary
+                                          : g_settings.taskbarLocation;
+
+    PCWSTR indicatorClassNames[] = {
+        L"RunningIndicator",
+        L"ProgressIndicator",
+    };
+    for (auto indicatorClassName : indicatorClassNames) {
+        auto indicatorElement =
+            FindChildByName(iconPanelElement, indicatorClassName);
+        if (!indicatorElement) {
+            continue;
+        }
+
+        indicatorElement.VerticalAlignment(
+            !g_unloading && taskbarLocation == TaskbarLocation::right
+                ? VerticalAlignment::Top
+                : VerticalAlignment::Bottom);
     }
 }
 
