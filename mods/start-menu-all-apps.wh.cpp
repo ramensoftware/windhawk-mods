@@ -2,7 +2,7 @@
 // @id              start-menu-all-apps
 // @name            Show all apps by default in start menu
 // @description     When the Windows 11 start menu is opened, show all apps right away
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -25,12 +25,6 @@
 
 When the Windows 11 start menu is opened, show all apps right away without
 having to click on the "All apps" button.
-
-**Note:** Requires Windhawk 1.3 or newer.
-
-**Note:** Might not work with a portable version of Windhawk. The reason is that
-the StartMenuExperienceHost.exe process has limited access to files, and it
-might not be able to load the mod.
 
 Before:
 
@@ -138,18 +132,26 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK startMenuDllHooks[] = {
         {
             {
-                LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps(void)const )",
+                // First seen in StartMenu.dll version 2124.33803.0.0.
+                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::IDockedStartControllerOverrides>::ShowAllApps(void)const )",
+                // Older symbol.
                 LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps(void)const )",
+                // Even older symbol.
+                LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps(void)const )",
             },
             (void**)&pOriginalShowAllApps,
         },
         {
             {
-                LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps(void)const )",
+                // First seen in StartMenu.dll version 2124.33803.0.0.
+                LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::IDockedStartControllerOverrides>::HideAllApps(void)const )",
+                // Older symbol.
                 LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps(void)const )",
+                // Even older symbol.
+                LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps(void)const )",
             },
             (void**)&pOriginalHideAllApps,
             (void*)HideAllAppsHook,
@@ -163,7 +165,8 @@ BOOL Wh_ModInit(void)
         }
     };
 
-    if (!HookSymbols(module, taskbarHooks, ARRAYSIZE(taskbarHooks))) {
+    if (!HookSymbols(module, startMenuDllHooks, ARRAYSIZE(startMenuDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
         return FALSE;
     }
 
