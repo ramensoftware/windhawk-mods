@@ -1,3 +1,9 @@
+## 1.3.1 ([Jan 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b4dba0e9ddf0dbcc0b0668b079cf7144ec54c298/mods/taskbar-vertical.wh.cpp))
+
+* Fixed the start menu width option not applying until restart in some cases.
+* Fixed context menus not appearing with monitors that are arranged vertically, one above the other.
+* Fixed compatibility with recent preview builds of Windows 11.
+
 ## 1.3 ([Oct 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b43bd5d00887601ed297b2366631494080f0dd3e/mods/taskbar-vertical.wh.cpp))
 
 * Fixed jump lists being cut off when opened near the edge of the screen.

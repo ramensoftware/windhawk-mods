@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-29T19:01:58.000Z</updated>
+    <updated>2025-01-29T19:23:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#b4dba0e9ddf0dbcc0b0668b079cf7144ec54c298</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2025-01-29T19:23:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the start menu width option not applying until restart in some cases.</li>
+<li>Fixed context menus not appearing with monitors that are arranged vertically, one above the other.</li>
+<li>Fixed compatibility with recent preview builds of Windows 11.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Show all apps by default in start menu 1.0.3]]></title>
         <id>https://windhawk.net/mods/start-menu-all-apps#9266c1a00a43a728ba70e79c88995861adaf0b9c</id>
@@ -275,22 +290,6 @@ Code cleanup</p>]]></content>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Windows Spotlight Desktop Shortcut 1.0]]></title>
-        <id>https://windhawk.net/mods/remove-spotlight-shortcut#76c158dfc3ec76744d12ec9e030792f7dd0aac0b</id>
-        <link href="https://windhawk.net/mods/remove-spotlight-shortcut"/>
-        <updated>2024-12-21T15:32:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="removewindowsspotlightdesktopshortcut">Remove Windows Spotlight Desktop Shortcut</h1>
-<p>This mod removes the new Spotlight shortcut that appears on the desktop when you use Spotlight wallpaper mode.
-Works on latest Windows 10 and LTSC 2021. Windows 11 has not been fully tested yet.</p>
-<h2 id="postinstallinstructions">Post-Install instructions</h2>
-<p>After installing the mod, you could either restart the explorer.exe process or refresh your desktop using the context menu.
-This will make the icon not show up on your desktop anymore. Enjoy!</p>]]></content>
-        <author>
-            <name>Erizur</name>
-            <uri>https://github.com/Erizur</uri>
         </author>
     </entry>
 </feed>
