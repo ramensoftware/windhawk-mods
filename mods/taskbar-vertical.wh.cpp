@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
-// @description     Finally, the missing vertical taskbar option for Windows 11!
-// @version         1.3
+// @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -42,7 +42,7 @@ Some of the other taskbar mods, such as [Taskbar height and icon
 size](https://windhawk.net/mods/taskbar-icon-size), aren't compatible with this
 mod.
 
-**Note**: This mod requires Windhawk v1.5 or later.
+**Note**: This mod requires Windhawk v1.5 or newer.
 
 ## Known limitations
 
@@ -709,7 +709,7 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
     int x = monitorInfo.rcWork.left +
             (monitorInfo.rcWork.right - monitorInfo.rcWork.left) / 2 + counter;
     point->X = x;
-    point->Y = monitorInfo.rcWork.bottom;
+    point->Y = monitorInfo.rcWork.bottom - 1;
 
     return ret;
 }
@@ -1445,18 +1445,18 @@ void ApplySystemTrayChevronIconViewStyle(
     baseTextBlock.RenderTransformOrigin({origin, origin});
 }
 
-using IconView_IconView_t = void(WINAPI*)(PVOID pThis);
+using IconView_IconView_t = void*(WINAPI*)(PVOID pThis);
 IconView_IconView_t IconView_IconView_Original;
-void WINAPI IconView_IconView_Hook(PVOID pThis) {
+void* WINAPI IconView_IconView_Hook(PVOID pThis) {
     Wh_Log(L">");
 
-    IconView_IconView_Original(pThis);
+    void* ret = IconView_IconView_Original(pThis);
 
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
     if (!iconView) {
-        return;
+        return ret;
     }
 
     g_notifyIconAutoRevokerList.emplace_back();
@@ -1500,6 +1500,8 @@ void WINAPI IconView_IconView_Hook(PVOID pThis) {
                 }
             }
         });
+
+    return ret;
 }
 
 bool ApplyStyleIfNeeded(XamlRoot xamlRoot) {
@@ -2674,12 +2676,8 @@ void AdjustCoreWindowSize(int x, int y, int* width, int* height) {
     UINT monitorDpiY = 96;
     GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
 
-    const int w1 =
-        MulDiv(g_settings.startMenuWidth ? g_settings.startMenuWidth : 660,
-               monitorDpiX, 96);
-    if (*width > w1) {
-        *width = w1;
-    }
+    *width = MulDiv(g_settings.startMenuWidth ? g_settings.startMenuWidth : 660,
+                    monitorDpiX, 96);
 
     const int h1 = MulDiv(750, monitorDpiY, 96);
     const int h2 = MulDiv(694, monitorDpiY, 96);
@@ -2924,16 +2922,12 @@ void LoadSettings() {
 }
 
 HWND GetTaskbarWnd() {
-    static HWND hTaskbarWnd;
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
 
-    if (!hTaskbarWnd) {
-        HWND hWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-
-        DWORD processId = 0;
-        if (hWnd && GetWindowThreadProcessId(hWnd, &processId) &&
-            processId == GetCurrentProcessId()) {
-            hTaskbarWnd = hWnd;
-        }
+    DWORD processId = 0;
+    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return nullptr;
     }
 
     return hTaskbarWnd;
@@ -3170,6 +3164,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&CopilotIcon_UpdateVisualStates_Original,
                 (void*)CopilotIcon_UpdateVisualStates_Hook,
+                true,  // Removed in insider builds around KB5046756.
             },
             {
                 {
@@ -3177,6 +3172,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&CopilotIcon_ToggleEdgeCopilot_Original,
                 (void*)CopilotIcon_ToggleEdgeCopilot_Hook,
+                true,  // Removed in insider builds around KB5046756.
             },
             {
                 {
