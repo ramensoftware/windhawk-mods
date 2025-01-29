@@ -203,8 +203,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!WindhawkUtils::HookSymbols(hWindowsStorage, windowsStorageDllHooks,
-                                    ARRAYSIZE(windowsStorageDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(hWindowsStorage, windowsStorageHooks,
+                                    ARRAYSIZE(windowsStorageHooks))) {
         Wh_Log(L"Failed to hook windows.storage.dll");
         return FALSE;
     }
