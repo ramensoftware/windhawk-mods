@@ -2636,7 +2636,7 @@
                 "published": 1647604671000,
                 "rating": 10,
                 "ratingUsers": 19,
-                "updated": 1699302173000,
+                "updated": 1738177318000,
                 "users": 2653
             },
             "metadata": {
@@ -2652,7 +2652,7 @@
                 ],
                 "name": "Show all apps by default in start menu",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "suppress-run-box-error-message": {
