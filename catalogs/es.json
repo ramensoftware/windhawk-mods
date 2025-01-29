@@ -596,6 +596,26 @@
                 "version": "1.1.0"
             }
         },
+        "classic-start-menu-folders-icon": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1738189438000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1738189438000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "xalejandro",
+                "description": "Change the default icon of Start Menu folders like Windows XP and before",
+                "github": "https://github.com/tetawaves",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Start Menu Folders Icon",
+                "version": "1.0"
+            }
+        },
         "classic-taskbar-background-fix": {
             "details": {
                 "defaultSorting": 432,

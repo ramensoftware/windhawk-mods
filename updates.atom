@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-29T21:21:50.000Z</updated>
+    <updated>2025-01-29T22:23:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Start Menu Folders Icon 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-start-menu-folders-icon#63ae9cbd3a4c8479f6eeb26bc60a532e2f84afed</id>
+        <link href="https://windhawk.net/mods/classic-start-menu-folders-icon"/>
+        <updated>2025-01-29T22:23:58.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicstartmenufoldersicon">Classic Start Menu Folders Icon</h1>
+<p>Changes the default icon of Start Menu folders that was used in Windows XP and before.</p>
+<p><img src="https://i.imgur.com/rufM7Yh.png" alt="Open-Shell Menu comparison showing the icon that was used in Windows XP and before" /></p>
+<p><strong>NOTE:</strong> This mod doesn't change the icon of Windows 10/11 Start Menu.
+<a href="https://github.com/Open-Shell/Open-Shell-Menu">Open-Shell</a> was used for the
+screenshot.</p>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.2]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#2d855bfc1ee92c213a681996b36cb7997fb1594d</id>
@@ -275,21 +291,6 @@ Code cleanup</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CEF/Spotify Titlebar Enabler 0.5]]></title>
-        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#d25beeb3c894c97d36c4fe7b52e67a3505ad78e2</id>
-        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
-        <updated>2024-12-25T15:25:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Support making Spotify's custom window controls transparent</li>
-<li>Try to avoid crashes on untested newer releases of CEF/Spotify</li>
-<li>Support using DWM backgrounds with MicaForEveryone (requires hex patching <code>Spotify.exe</code>; see the mod details for instructions)</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>
