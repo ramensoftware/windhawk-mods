@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.0.5
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -58,6 +58,9 @@ versions weren't tested and are probably not compatible.
   - sameAsPrimary: Same as on primary monitor
   - top: Top
   - bottom: Bottom
+- runningIndicatorsOnTop: false
+  $name: Running indicators on top
+  $description: Show running indicators above the taskbar icons
 */
 // ==/WindhawkModSettings==
 
@@ -96,6 +99,7 @@ enum class TaskbarLocation {
 struct {
     TaskbarLocation taskbarLocation;
     TaskbarLocation taskbarLocationSecondary;
+    bool runningIndicatorsOnTop;
 } g_settings;
 
 WCHAR g_taskbarViewDllPath[MAX_PATH];
@@ -584,7 +588,7 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
 
     // Place at the bottom of the monitor, will reposition later in
     // SetWindowPos.
-    point->Y = monitorInfo.rcWork.bottom;
+    point->Y = monitorInfo.rcWork.bottom - 1;
 
     return ret;
 }
@@ -683,6 +687,26 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,
     }
 
     return ret;
+}
+
+bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
+    FrameworkElement controlCenterButton = nullptr;
+
+    FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
+    if (child &&
+        (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
+        (child = FindChildByName(child, L"SystemTrayFrameGrid")) &&
+        (child = FindChildByName(child, L"ControlCenterButton"))) {
+        controlCenterButton = child;
+    }
+
+    if (!controlCenterButton) {
+        return false;
+    }
+
+    // On secondary taskbars, the element that holds the system icons is empty
+    // and has the width of 2.
+    return controlCenterButton.ActualWidth() < 5;
 }
 
 void ApplyTaskbarFrameStyle(FrameworkElement taskbarFrame) {
@@ -895,6 +919,63 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
         });
 
     return ret;
+}
+
+void UpdateTaskListButton(FrameworkElement taskListButtonElement) {
+    auto iconPanelElement =
+        FindChildByName(taskListButtonElement, L"IconPanel");
+    if (!iconPanelElement) {
+        return;
+    }
+
+    bool indicatorsOnTop = false;
+    if (!g_unloading && g_settings.runningIndicatorsOnTop) {
+        bool isSecondaryTaskbar =
+            IsSecondaryTaskbar(taskListButtonElement.XamlRoot());
+        TaskbarLocation taskbarLocation =
+            isSecondaryTaskbar ? g_settings.taskbarLocationSecondary
+                               : g_settings.taskbarLocation;
+        if (taskbarLocation == TaskbarLocation::top) {
+            indicatorsOnTop = true;
+        }
+    }
+
+    PCWSTR indicatorClassNames[] = {
+        L"RunningIndicator",
+        L"ProgressIndicator",
+    };
+    for (auto indicatorClassName : indicatorClassNames) {
+        auto indicatorElement =
+            FindChildByName(iconPanelElement, indicatorClassName);
+        if (!indicatorElement) {
+            continue;
+        }
+
+        indicatorElement.VerticalAlignment(indicatorsOnTop
+                                               ? VerticalAlignment::Top
+                                               : VerticalAlignment::Bottom);
+    }
+}
+
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    TaskListButton_UpdateVisualStates_Original(pThis);
+
+    void* taskListButtonIUnknownPtr = (void**)pThis + 3;
+    winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
+    winrt::copy_from_abi(taskListButtonIUnknown, taskListButtonIUnknownPtr);
+
+    auto taskListButtonElement = taskListButtonIUnknown.as<FrameworkElement>();
+
+    try {
+        UpdateTaskListButton(taskListButtonElement);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
 }
 
 using OverflowFlyoutModel_Show_t = void(WINAPI*)(void* pThis);
@@ -1299,19 +1380,18 @@ void LoadSettings() {
         g_settings.taskbarLocationSecondary = TaskbarLocation::bottom;
     }
     Wh_FreeStringSetting(taskbarLocationSecondary);
+
+    g_settings.runningIndicatorsOnTop =
+        Wh_GetIntSetting(L"runningIndicatorsOnTop");
 }
 
 HWND GetTaskbarWnd() {
-    static HWND hTaskbarWnd;
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
 
-    if (!hTaskbarWnd) {
-        HWND hWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-
-        DWORD processId = 0;
-        if (hWnd && GetWindowThreadProcessId(hWnd, &processId) &&
-            processId == GetCurrentProcessId()) {
-            hTaskbarWnd = hWnd;
-        }
+    DWORD processId = 0;
+    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return nullptr;
     }
 
     return hTaskbarWnd;
@@ -1408,6 +1488,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&IconView_IconView_Original,
                 (void*)IconView_IconView_Hook,
+            },
+            {
+                {
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))",
+                },
+                (void**)&TaskListButton_UpdateVisualStates_Original,
+                (void*)TaskListButton_UpdateVisualStates_Hook,
             },
             {
                 {
