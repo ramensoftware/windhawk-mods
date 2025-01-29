@@ -1,3 +1,7 @@
+## 1.3.2 ([Jan 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/2d855bfc1ee92c213a681996b36cb7997fb1594d/mods/taskbar-vertical.wh.cpp))
+
+* Show the running indicator on the right instead of the left when the taskbar is on the right.
+
 ## 1.3.1 ([Jan 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b4dba0e9ddf0dbcc0b0668b079cf7144ec54c298/mods/taskbar-vertical.wh.cpp))
 
 * Fixed the start menu width option not applying until restart in some cases.
