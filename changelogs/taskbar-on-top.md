@@ -1,3 +1,8 @@
+## 1.1 ([Jan 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/124523bc261918872e9ca412c587f832519d7a01/mods/taskbar-on-top.wh.cpp))
+
+* Added an option to show running indicators above the taskbar icons.
+* Fixed context menus not appearing with monitors that are arranged vertically, one above the other.
+
 ## 1.0.5 ([Nov 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/25345e441de9f8b292d8a2d316c06ac6869e3ced/mods/taskbar-on-top.wh.cpp))
 
 * Fixed an incompatibility with the following mods which could lead to a crash: Taskbar tray icon spacing, Taskbar tray system icon tweaks.

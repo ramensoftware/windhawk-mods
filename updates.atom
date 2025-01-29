@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-01-29T22:23:58.000Z</updated>
+    <updated>2025-01-29T22:42:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#124523bc261918872e9ca412c587f832519d7a01</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2025-01-29T22:42:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to show running indicators above the taskbar icons.</li>
+<li>Fixed context menus not appearing with monitors that are arranged vertically, one above the other.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Start Menu Folders Icon 1.0]]></title>
         <id>https://windhawk.net/mods/classic-start-menu-folders-icon#63ae9cbd3a4c8479f6eeb26bc60a532e2f84afed</id>
@@ -274,19 +288,6 @@ Code cleanup</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Added the "Monitor interface name" option which can be used instead of the monitor number. Can be useful if the monitor numbers change often.</li>
 <li>Fixed the Action Center (Win+A) always opening on primary monitor on Windows 11 version 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Customize Windows notifications placement 1.1]]></title>
-        <id>https://windhawk.net/mods/notifications-placement#d8232bbf9fd4b173e4848587d1b9604acc359453</id>
-        <link href="https://windhawk.net/mods/notifications-placement"/>
-        <updated>2024-12-31T17:39:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the "Monitor interface name" option which can be used instead of the monitor number. Can be useful if the monitor numbers change often.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
