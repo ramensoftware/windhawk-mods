@@ -246,22 +246,22 @@
                 "published": 1734116516000,
                 "rating": 10,
                 "ratingUsers": 6,
-                "updated": 1735140349000,
+                "updated": 1738229819000,
                 "users": 179
             },
             "metadata": {
                 "author": "Ingan121",
-                "compilerOptions": "-lcomctl32 -luxtheme",
-                "description": "Force native frames and title bars for CEF apps",
+                "compilerOptions": "-lcomctl32 -luxtheme -ldwmapi -DWINVER=0x0A00",
+                "description": "Various tweaks for Spotify, including native frames, transparent windows, and more",
                 "github": "https://github.com/Ingan121",
                 "homepage": "https://www.ingan121.com/",
                 "include": [
                     "spotify.exe",
                     "cefclient.exe"
                 ],
-                "name": "CEF/Spotify Titlebar Enabler",
+                "name": "CEF/Spotify Tweaks",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.5"
+                "version": "0.6"
             }
         },
         "center-titlebar": {

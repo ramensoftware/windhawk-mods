@@ -1,3 +1,10 @@
+## 0.6 ([Jan 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1a126cbd6d9e3d268ccfe23eb3a5774acb456102/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Add support for Spotify 1.2.55 and 1.2.56
+* Support directly enabling transparent web content rendering without having to patch `Spotify.exe` manually
+* Add options to disable forced dark mode or force-enable Chrome extension support
+* Add a JavaScript API for interacting with this mod or the main window that can be used within Spicetify extensions and themes
+
 ## 0.5 ([Dec 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d25beeb3c894c97d36c4fe7b52e67a3505ad78e2/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Support making Spotify's custom window controls transparent
