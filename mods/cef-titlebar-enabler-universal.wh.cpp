@@ -9,7 +9,7 @@
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
-// @compilerOptions -lcomctl32 -luxtheme -ldwmapi
+// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -DWINVER=0x0A00
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -48,7 +48,7 @@
     * 1.2.45: Last version to support disabling the global navbar
     * 1.2.47: Chrome runtime is always enabled since this version
     * Try the [noControls](https://github.com/ohitstom/spicetify-extensions/tree/main/noControls) Spicetify extension to remove the space left by the custom window controls
-    * Or try the [WMPotify](https://github.com/Ingan121/WMPotify) theme by me for Windows Media Player 11-like look
+    * Or try my [WMPotify](https://github.com/Ingan121/WMPotify) theme for Windows Media Player 11-like look
     * Enable Chrome runtime to get a proper window icon. Use `--enable-chrome-runtime` flag or put `app.enable-chrome-runtime=true` in `%appdata%\Spotify\prefs`
 * Notes for Spicetify extension/theme developers
     * Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
@@ -154,6 +154,14 @@ using namespace std::string_view_literals;
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
 #define LAST_TESTED_CEF_VERSION 131
+
+// Win11 only DWM attributes for Windhawk 1.4
+#define DWMWA_USE_HOSTBACKDROPBRUSH 17
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+
+#define DWMSBT_MAINWINDOW 2
+#define DWMSBT_TRANSIENTWINDOW 3
+#define DWMSBT_TABBEDWINDOW 4
 
 struct cte_settings {
     BOOL showframe;
@@ -1258,19 +1266,19 @@ void HandleWindhawkComm(LPCWSTR command) {
         if (wcscmp(command + 16, L"mica") == 0) {
             BOOL value = TRUE;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
-            DWM_SYSTEMBACKDROP_TYPE backdrop_type = DWMSBT_MAINWINDOW;
+            int backdrop_type = DWMSBT_MAINWINDOW;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
             g_dwmBackdropEnabled = TRUE;
         } else if (wcscmp(command + 16, L"acrylic") == 0) {
             BOOL value = TRUE;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
-            DWM_SYSTEMBACKDROP_TYPE backdrop_type = DWMSBT_TRANSIENTWINDOW;
+            int backdrop_type = DWMSBT_TRANSIENTWINDOW;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
             g_dwmBackdropEnabled = TRUE;
         } else if (wcscmp(command + 16, L"tabbed") == 0) {
             BOOL value = TRUE;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
-            DWM_SYSTEMBACKDROP_TYPE backdrop_type = DWMSBT_TABBEDWINDOW;
+            int backdrop_type = DWMSBT_TABBEDWINDOW;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
             g_dwmBackdropEnabled = TRUE;
         }
