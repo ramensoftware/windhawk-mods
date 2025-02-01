@@ -1,3 +1,13 @@
+## 1.2.1 ([Feb 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/8e8581b30c2d1d64c641b8fdfe8ee417df35fdcb/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added themes: 21996, Down Aero, UniMenu.
+* Updated themes: NoRecommendedSection, TranslucentStartMenu.
+* Added support for styling the Windows 10 search menu.
+* Added support for styling the offline variant of the search menu (when the DisableSearchBoxSuggestions registry option is enabled).
+* Fixed the All Apps list sometimes becoming truncated.
+* Empty visual states can now be targeted, can be useful in cases when there's no active visual state.
+* Fixed not being able to style some elements due to error 802B000A (failed to create a 'System.Type' from the text).
+
 ## 1.2 ([Dec 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/8db53b86b7fb576eaf44aaa772c00a53a8933590/mods/windows-11-start-menu-styler.wh.cpp))
 
 * The start menu search (what you see when you click on the start menu search bar) is now styled as well. Most of the search content is a WebView element, and the mod now allows to style it with CSS targets and styles. Refer to the mod description for more details.
