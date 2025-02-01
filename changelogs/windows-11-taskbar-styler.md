@@ -1,3 +1,10 @@
+## 1.3.9 ([Feb 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/42d2709e22df203d6f5765b796909dca2a286cf1/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added the 21996Taskbar theme.
+* Updated themes: WinXP, Lucent.
+* Empty visual states can now be targeted, can be useful in cases when there's no active visual state.
+* Fixed error 80070490 which sometime prevented the mod from loading.
+
 ## 1.3.8 ([Oct 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/fde2dd9c8dafbf68a126fb25ec1b3f9587efd18b/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added themes: CleanSlate, Lucent.
