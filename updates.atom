@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-04T18:55:17.000Z</updated>
+    <updated>2025-02-04T22:37:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.3]]></title>
+        <id>https://windhawk.net/mods/logon-logoff-shutdown-sounds#72ede460ac2338d3c3529f5e159e9703257956a4</id>
+        <link href="https://windhawk.net/mods/logon-logoff-shutdown-sounds"/>
+        <updated>2025-02-04T22:37:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with ExplorerEx and XP/Server 2003 and earlier Explorer ports like it</li>
+<li>Made code style more consistent</li>
+</ul>]]></content>
+        <author>
+            <name>Toru the Red Fox</name>
+            <uri>https://github.com/TorutheRedFox</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#0ed562ab9a86e0ec763753d8da5109cbe66c9325</id>
@@ -292,20 +306,6 @@ Code cleanup</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.5]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#b0d7a441fde94fac703f55f232efbb0ea674e803</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2025-01-05T20:02:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a new theme: 10JumpLists.</li>
-<li>Fixed not being able to style some elements due to error 802B000A (failed to create a 'System.Type' from the text).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

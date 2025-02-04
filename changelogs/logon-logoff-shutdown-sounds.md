@@ -1,3 +1,8 @@
+## 1.0.3 ([Feb 4, 2025](https://github.com/ramensoftware/windhawk-mods/blob/72ede460ac2338d3c3529f5e159e9703257956a4/mods/logon-logoff-shutdown-sounds.wh.cpp))
+
+- Fixed compatibility with ExplorerEx and XP/Server 2003 and earlier Explorer ports like it
+- Made code style more consistent
+
 ## 1.0.2 ([Oct 24, 2024](https://github.com/ramensoftware/windhawk-mods/blob/4bff79462b7f9726d32933f94bcec37e9ec82022/mods/logon-logoff-shutdown-sounds.wh.cpp))
 
 * Improved XP mode accuracy per @aubymori's suggestion

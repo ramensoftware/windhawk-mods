@@ -1950,7 +1950,7 @@
                 "published": 1725792150000,
                 "rating": 10,
                 "ratingUsers": 13,
-                "updated": 1729806251000,
+                "updated": 1738708669000,
                 "users": 1054
             },
             "metadata": {
@@ -1963,7 +1963,7 @@
                 ],
                 "name": "Logon, Logoff & Shutdown Sounds Restored",
                 "twitter": "https://twitter.com/TorutheRedFox",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "magnifier-mod": {
