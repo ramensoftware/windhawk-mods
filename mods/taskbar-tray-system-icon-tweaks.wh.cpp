@@ -2,7 +2,7 @@
 // @id              taskbar-tray-system-icon-tweaks
 // @name            Taskbar tray system icon tweaks
 // @description     Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the "Show desktop" button (Windows 11 only)
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -103,16 +103,12 @@ winrt::weak_ref<Controls::TextBlock> g_bellInnerTextBlock;
 int64_t g_bellTextChangedToken;
 
 HWND GetTaskbarWnd() {
-    static HWND hTaskbarWnd;
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
 
-    if (!hTaskbarWnd) {
-        HWND hWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-
-        DWORD processId = 0;
-        if (hWnd && GetWindowThreadProcessId(hWnd, &processId) &&
-            processId == GetCurrentProcessId()) {
-            hTaskbarWnd = hWnd;
-        }
+    DWORD processId = 0;
+    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return nullptr;
     }
 
     return hTaskbarWnd;
@@ -222,6 +218,7 @@ enum class SystemTrayIconIdent {
     kMicrophoneAndGeolocation,
     kBellEmpty,
     kBellFull,
+    kLanguage,
 };
 
 SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
@@ -372,6 +369,13 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         case L'\uF2A5':  // Full bell
         case L'\uF2A8':  // Full bell, Do Not Disturb
             return SystemTrayIconIdent::kBellFull;
+
+        case L'\uE97E':  // HalfAlpha
+        case L'\uE97F':  // FullAlpha
+        case L'\uE986':  // FullHiragana
+        case L'\uE987':  // FullKatakana
+        case L'\uE988':  // HalfKatakana
+            return SystemTrayIconIdent::kLanguage;
     }
 
     return SystemTrayIconIdent::kUnknown;
@@ -476,17 +480,41 @@ void ApplyMainStackIconViewStyle(FrameworkElement notifyIconViewElement) {
 
 void ApplyNonActivatableStackIconViewStyle(
     FrameworkElement notifyIconViewElement) {
-    FrameworkElement systemTrayLanguageTextIconContent = nullptr;
-
     FrameworkElement child = notifyIconViewElement;
     if ((child = FindChildByName(child, L"ContainerGrid")) &&
         (child = FindChildByName(child, L"ContentPresenter")) &&
-        (child = FindChildByName(child, L"ContentGrid")) &&
-        (child = FindChildByClassName(child,
-                                      L"SystemTray.LanguageTextIconContent"))) {
-        systemTrayLanguageTextIconContent = child;
-    } else {
-        Wh_Log(L"Failed to get SystemTray.LanguageTextIconContent");
+        (child = FindChildByName(child, L"ContentGrid"))) {
+        child = EnumChildElements(child, [](FrameworkElement child) {
+            auto className = winrt::get_class_name(child);
+            if (className == L"SystemTray.TextIconContent") {
+                Controls::TextBlock innerTextBlock = nullptr;
+
+                if ((child = FindChildByName(child, L"ContainerGrid")) &&
+                    (child = FindChildByName(child, L"Base")) &&
+                    (child = FindChildByName(child, L"InnerTextBlock"))) {
+                    innerTextBlock = child.as<Controls::TextBlock>();
+                } else {
+                    Wh_Log(L"Failed to get InnerTextBlock");
+                    return false;
+                }
+
+                auto text = innerTextBlock.Text();
+                auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
+
+                Wh_Log(L"Language bar icon %d (%s)", (int)systemTrayIconIdent,
+                       StringToHex(text).c_str());
+
+                return true;
+            } else if (className == L"SystemTray.LanguageTextIconContent") {
+                return true;
+            }
+
+            Wh_Log(L"Unsupported class name %s of child", className.c_str());
+            return false;
+        });
+    }
+
+    if (!child) {
         return;
     }
 
@@ -981,18 +1009,18 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     return somethingSucceeded;
 }
 
-using IconView_IconView_t = void(WINAPI*)(PVOID pThis);
+using IconView_IconView_t = void*(WINAPI*)(void* pThis);
 IconView_IconView_t IconView_IconView_Original;
-void WINAPI IconView_IconView_Hook(PVOID pThis) {
+void* WINAPI IconView_IconView_Hook(void* pThis) {
     Wh_Log(L">");
 
-    IconView_IconView_Original(pThis);
+    void* ret = IconView_IconView_Original(pThis);
 
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
     if (!iconView) {
-        return;
+        return ret;
     }
 
     g_autoRevokerList.emplace_back();
@@ -1035,14 +1063,16 @@ void WINAPI IconView_IconView_Hook(PVOID pThis) {
                 }
             }
         });
+
+    return ret;
 }
 
 void* CTaskBand_ITaskListWndSite_vftable;
 
-using CTaskBand_GetTaskbarHost_t = PVOID(WINAPI*)(PVOID pThis, PVOID* result);
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
 
-using std__Ref_count_base__Decref_t = void(WINAPI*)(PVOID pThis);
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
 
 XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
@@ -1051,19 +1081,19 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         return nullptr;
     }
 
-    PVOID taskBand = (PVOID)GetWindowLongPtr(hTaskSwWnd, 0);
-    PVOID taskBandForTaskListWndSite = taskBand;
-    for (int i = 0; *(PVOID*)taskBandForTaskListWndSite !=
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
                     CTaskBand_ITaskListWndSite_vftable;
          i++) {
         if (i == 20) {
             return nullptr;
         }
 
-        taskBandForTaskListWndSite = (PVOID*)taskBandForTaskListWndSite + 1;
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
     }
 
-    PVOID taskbarHostSharedPtr[2]{};
+    void* taskbarHostSharedPtr[2]{};
     CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
                                       taskbarHostSharedPtr);
     if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
@@ -1088,17 +1118,17 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     return result;
 }
 
-using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
-                         PVOID procParam) {
+                         void* procParam) {
     static const UINT runFromWindowThreadRegisteredMsg =
         RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     struct RUN_FROM_WINDOW_THREAD_PARAM {
         RunFromWindowThreadProc_t proc;
-        PVOID procParam;
+        void* procParam;
     };
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -1180,7 +1210,7 @@ void ApplySettings() {
 
     RunFromWindowThread(
         hTaskbarWnd,
-        [](PVOID pParam) WINAPI {
+        [](void* pParam) WINAPI {
             ApplySettingsParam& param = *(ApplySettingsParam*)pParam;
 
             g_autoRevokerList.clear();
