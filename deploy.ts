@@ -10,6 +10,7 @@ import showdown from 'showdown';
 async function fetchJson(url: string) {
     return new Promise<any>((resolve, reject) => {
         const req = https.request(url,
+            { headers: { 'User-Agent': 'nodejs' } },
             (res) => {
                 let body = '';
                 res.on('data', (chunk) => (body += chunk.toString()));
@@ -81,69 +82,50 @@ function getModModifiedTime(modId: string) {
     return time * 1000;
 }
 
-async function enrichCatalog(catalog: Record<string, any>) {
-    const url = 'https://update.windhawk.net/mods_catalog_enrichment.json';
-    const enrichment = await fetchJson(url);
-
-    const app = {
-        version: enrichment.app.version,
-    };
-
-    const mods: Record<string, any> = {};
-    for (const [id, metadata] of Object.entries(catalog)) {
-        const { id: idFromMetadata, ...rest } = metadata;
-        if (id !== idFromMetadata) {
-            throw new Error(`Expected ${id} === ${idFromMetadata}`);
-        }
-
-        mods[id] = {
-            metadata: rest,
-            details: {
-                published: getModCreatedTime(id),
-                updated: getModModifiedTime(id),
-                defaultSorting: 0,
-                rating: 0,
-                users: 0,
-                ratingUsers: 0,
-                ...enrichment.mods[id]?.details,
-            },
-        };
-
-        if (enrichment.mods[id]?.featured) {
-            mods[id].featured = true;
-        }
+function findCachedMod(modId: string, version: string, arch: string) {
+    const lastDeployPath = process.env.WINDHAWK_MODS_LAST_DEPLOY_PATH;
+    if (!lastDeployPath) {
+        throw new Error('WINDHAWK_MODS_LAST_DEPLOY_PATH is not set');
     }
 
-    return {
-        app,
-        mods,
-    };
+    const modFile = path.join(lastDeployPath, 'mods', modId, `${version}_${arch}.dll`);
+    return fs.existsSync(modFile) ? modFile : null;
 }
 
-async function generateModCatalog() {
-    const modSourceUtils = new ModSourceUtils('mods');
-    const catalog = modSourceUtils.getMetadataOfMods('en-US');
-    return await enrichCatalog(catalog);
-}
-
-function getModChangelogTextForVersion(modId: string, modVersion: string, commitMessage: string) {
-    const overridePath = path.join('changelog_override', modId, `${modVersion}.md`);
-    if (fs.existsSync(overridePath)) {
-        return fs.readFileSync(overridePath, 'utf8');
+function compileMod(modFilePath: string, output32FilePath: string, output64FilePath: string) {
+    const windhawkPath = process.env.WINDHAWK_PATH;
+    if (!windhawkPath) {
+        throw new Error('WINDHAWK_PATH is not set');
     }
 
-    let messageTrimmed = commitMessage.trim();
-    if (messageTrimmed.includes('\n')) {
-        // Remove first line.
-        return messageTrimmed.replace(/^.* \(#\d+\)\n\n/, '').trim();
-    } else {
-        // Only remove trailing PR number if it's the only line.
-        return messageTrimmed.replace(/ \(#\d+\)$/, '').trim();
+    const result = child_process.spawnSync('py', [
+        'scripts/compile_mod.py',
+        '-w',
+        windhawkPath,
+        '-f',
+        modFilePath,
+        '-o32',
+        output32FilePath,
+        '-o64',
+        output64FilePath,
+    ], { encoding: 'utf8', stdio: 'inherit' });
+    if (result.status !== 0) {
+        throw new Error('Compiling ' + modFilePath + ' failed with status ' + result.status);
     }
 }
 
-function generateModChangelog(modId: string) {
+function generateModData(modId: string, changelogPath: string, modDir: string) {
+    if (!fs.existsSync(modDir)) {
+        fs.mkdirSync(modDir);
+    }
+
     let changelog = '';
+    const versions: {
+        version: string;
+        timestamp: number;
+        prerelease?: boolean;
+    }[] = [];
+    let sawReleaseVersion = false;
 
     const modSourceUtils = new ModSourceUtils('mods');
 
@@ -165,6 +147,46 @@ function generateModChangelog(modId: string) {
 
         if (!metadata.version) {
             throw new Error(`Mod ${modId} has no version in commit ${commit}`);
+        }
+
+        const prerelease = metadata.version.includes('-');
+        if (prerelease && sawReleaseVersion) {
+            continue;
+        }
+
+        const modVersionFilePath = path.join(modDir, `${metadata.version}.wh.cpp`);
+        if (fs.existsSync(modVersionFilePath)) {
+            throw new Error(`Mod ${modId} has duplicate version ${metadata.version} in commit ${commit}`);
+        }
+
+        fs.writeFileSync(modVersionFilePath, modFile);
+
+        if (!prerelease && !sawReleaseVersion) {
+            // Override root file with the latest release version.
+            fs.copyFileSync(path.join('mods', `${modId}.wh.cpp`), modVersionFilePath);
+            sawReleaseVersion = true;
+        }
+
+        const modVersionCompiled32FilePath = path.join(modDir, `${metadata.version}_32.dll`);
+        const modVersionCompiled64FilePath = path.join(modDir, `${metadata.version}_64.dll`);
+        const cachedMod32Path = findCachedMod(modId, metadata.version, '32');
+        const cachedMod64Path = findCachedMod(modId, metadata.version, '64');
+        if (cachedMod32Path || cachedMod64Path) {
+            const modHas32 = metadata.architecture?.includes('x86') ?? true;
+            const modHas64 = metadata.architecture?.includes('x86-64') ?? true;
+            if (modHas32 != !!cachedMod32Path || modHas64 != !!cachedMod64Path) {
+                throw new Error(`Mod ${modId} architecture mismatch`);
+            }
+
+            if (cachedMod32Path) {
+                fs.copyFileSync(cachedMod32Path, modVersionCompiled32FilePath);
+            }
+
+            if (cachedMod64Path) {
+                fs.copyFileSync(cachedMod64Path, modVersionCompiled64FilePath);
+            }
+        } else {
+            compileMod(modVersionFilePath, modVersionCompiled32FilePath, modVersionCompiled64FilePath);
         }
 
         const commitTime = parseInt(gitExec([
@@ -193,20 +215,129 @@ function generateModChangelog(modId: string) {
         } else {
             changelog += 'Initial release.\n';
         }
+
+        versions.unshift({
+            version: metadata.version,
+            timestamp: commitTime,
+            ...(prerelease ? { prerelease: true } : {}),
+        });
     }
 
-    return changelog;
+    fs.writeFileSync(changelogPath, changelog);
+
+    const versionsPath = path.join(modDir, 'versions.json');
+    fs.writeFileSync(versionsPath, JSON.stringify(versions));
 }
 
-function generateModChangelogs(modIds: string[]) {
+function generateModsData() {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
     }
 
-    for (const modId of modIds) {
-        const changelogPath = path.join(changelogDir, `${modId}.md`);
-        fs.writeFileSync(changelogPath, generateModChangelog(modId));
+    const modsSourceDir = fs.opendirSync('mods');
+    try {
+        let modsSourceDirEntry: fs.Dirent | null;
+        while ((modsSourceDirEntry = modsSourceDir.readSync()) !== null) {
+            if (modsSourceDirEntry.isFile() && modsSourceDirEntry.name.endsWith('.wh.cpp')) {
+                const modId = modsSourceDirEntry.name.slice(0, -'.wh.cpp'.length);
+                const changelogPath = path.join(changelogDir, `${modId}.md`);
+                const modDir = path.join('mods', modId);
+                generateModData(modId, changelogPath, modDir);
+            }
+        }
+    } finally {
+        modsSourceDir.closeSync();
+    }
+}
+
+function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any) {
+    const app = {
+        version: enrichment.app.version,
+    };
+
+    const mods: Record<string, any> = {};
+    for (const [id, metadata] of Object.entries(catalog)) {
+        const { id: idFromMetadata, ...rest } = metadata;
+        if (id !== idFromMetadata) {
+            throw new Error(`Expected ${id} === ${idFromMetadata}`);
+        }
+
+        modTimes[id] = modTimes[id] || {
+            published: getModCreatedTime(id),
+            updated: getModModifiedTime(id),
+        };
+
+        mods[id] = {
+            metadata: rest,
+            details: {
+                published: modTimes[id].published,
+                updated: modTimes[id].updated,
+                defaultSorting: 0,
+                rating: 0,
+                users: 0,
+                ratingUsers: 0,
+                ...enrichment.mods[id]?.details,
+            },
+        };
+
+        if (enrichment.mods[id]?.featured) {
+            mods[id].featured = true;
+        }
+    }
+
+    return {
+        app,
+        mods,
+    };
+}
+
+async function generateModCatalogs() {
+    const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
+    const enrichment = await fetchJson(enrichmentUrl);
+
+    const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
+    const translateFiles = await fetchJson(translateFilesUrl);
+
+    const modSourceUtils = new ModSourceUtils('mods');
+
+    const modTimes = {};
+
+    const catalog = modSourceUtils.getMetadataOfMods('en-US');
+    const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
+    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalogEnriched, 4));
+
+    const catalogsDir = 'catalogs';
+    if (!fs.existsSync(catalogsDir)) {
+        fs.mkdirSync(catalogsDir);
+    }
+
+    for (const translateFile of translateFiles) {
+        const translateFileName = translateFile.name;
+        if (!translateFileName.endsWith('.yml')) {
+            continue;
+        }
+
+        const language = translateFileName.slice(0, -'.yml'.length);
+        const catalog = modSourceUtils.getMetadataOfMods(language);
+        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
+    }
+}
+
+function getModChangelogTextForVersion(modId: string, modVersion: string, commitMessage: string) {
+    const overridePath = path.join('changelog_override', modId, `${modVersion}.md`);
+    if (fs.existsSync(overridePath)) {
+        return fs.readFileSync(overridePath, 'utf8').trim();
+    }
+
+    let messageTrimmed = commitMessage.trim();
+    if (messageTrimmed.includes('\n')) {
+        // Remove first line.
+        return messageTrimmed.replace(/^.* \(#\d+\)\n\n/, '').trim();
+    } else {
+        // Only remove trailing PR number if it's the only line.
+        return messageTrimmed.replace(/ \(#\d+\)$/, '').trim();
     }
 }
 
@@ -338,11 +469,9 @@ function generateRssFeed() {
 }
 
 async function main() {
-    const catalog = await generateModCatalog();
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalog, 4));
+    generateModsData();
 
-    const modIds = Object.keys(catalog.mods);
-    generateModChangelogs(modIds);
+    await generateModCatalogs();
 
     fs.writeFileSync('updates.atom', generateRssFeed());
 

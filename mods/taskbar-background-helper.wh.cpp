@@ -2,7 +2,7 @@
 // @id              taskbar-background-helper
 // @name            Taskbar Background Helper
 // @description     Sets the taskbar background for the transparent parts, always or only when there's a maximized window, designed to be used with Windows 11 Taskbar Styler
-// @version         1.0.1
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -86,6 +86,8 @@ a workaround.
 
 #include <dwmapi.h>
 
+#include <atomic>
+#include <mutex>
 #include <optional>
 #include <unordered_set>
 
@@ -106,9 +108,18 @@ struct {
     std::optional<TaskbarStyle> darkModeStyle;
 } g_settings;
 
-HANDLE g_winObjectLocationChangeThread;
+std::mutex g_winEventHookThreadMutex;
+std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_set<HMONITOR> g_pendingMonitors;
 UINT_PTR g_pendingMonitorsTimer;
+
+// Missing in older MinGW headers.
+#ifndef EVENT_OBJECT_CLOAKED
+#define EVENT_OBJECT_CLOAKED 0x8017
+#endif
+#ifndef EVENT_OBJECT_UNCLOAKED
+#define EVENT_OBJECT_UNCLOAKED 0x8018
+#endif
 
 enum WINDOWCOMPOSITIONATTRIB {
     WCA_UNDEFINED = 0,
@@ -205,7 +216,7 @@ bool IsWindowsDarkModeEnabled() {
 }
 
 // https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
-BOOL IsWindowCloaked(HWND hwnd) {
+bool IsWindowCloaked(HWND hwnd) {
     BOOL isCloaked = FALSE;
     return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked,
                                            sizeof(isCloaked))) &&
@@ -303,29 +314,44 @@ HWND GetTaskbarForMonitor(HMONITOR monitor) {
 bool DoesMonitorHaveMaximizedWindow(HMONITOR monitor) {
     bool hasMaximized = false;
 
-    auto enumWindowsProc = [monitor, &hasMaximized](HWND hWnd) -> BOOL {
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(monitorInfo),
+    };
+    GetMonitorInfo(monitor, &monitorInfo);
+
+    HWND hShellWindow = GetShellWindow();
+
+    auto enumWindowsProc = [&](HWND hWnd) -> BOOL {
         if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
             return TRUE;
         }
 
-        if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
+        if (hWnd == hShellWindow || GetProp(hWnd, L"DesktopWindow") ||
+            !IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
             return TRUE;
         }
 
-        if (GetWindowLong(hWnd, GWL_EXSTYLE) &
-            (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)) {
+        if (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE) {
             return TRUE;
         }
 
         WINDOWPLACEMENT wp{
             .length = sizeof(WINDOWPLACEMENT),
         };
-        if (!GetWindowPlacement(hWnd, &wp) || wp.showCmd != SW_SHOWMAXIMIZED) {
-            return TRUE;
+        if (GetWindowPlacement(hWnd, &wp) && wp.showCmd == SW_SHOWMAXIMIZED) {
+            hasMaximized = true;
+            return FALSE;
         }
 
-        hasMaximized = true;
-        return FALSE;
+        RECT rc;
+        if (GetWindowRect(hWnd, &rc) &&
+            EqualRect(&rc, &monitorInfo.rcMonitor)) {
+            // Spans across the whole monitor, e.g. Win+Tab view.
+            hasMaximized = true;
+            return FALSE;
+        }
+
+        return TRUE;
     };
 
     EnumWindows(
@@ -338,18 +364,24 @@ bool DoesMonitorHaveMaximizedWindow(HMONITOR monitor) {
     return hasMaximized;
 }
 
-void CALLBACK LocationChangeWinEventProc(HWINEVENTHOOK hWinEventHook,
-                                         DWORD event,
-                                         HWND hWnd,
-                                         LONG idObject,
-                                         LONG idChild,
-                                         DWORD dwEventThread,
-                                         DWORD dwmsEventTime) {
-    if (idObject != OBJID_WINDOW) {
+void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
+                           DWORD event,
+                           HWND hWnd,
+                           LONG idObject,
+                           LONG idChild,
+                           DWORD dwEventThread,
+                           DWORD dwmsEventTime) {
+    if (idObject != OBJID_WINDOW ||
+        (GetWindowLong(hWnd, GWL_STYLE) & WS_CHILD)) {
         return;
     }
 
-    Wh_Log(L">");
+    HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
+    if (hParentWnd && hParentWnd != GetDesktopWindow()) {
+        return;
+    }
+
+    Wh_Log(L"> %08X", (DWORD)(ULONG_PTR)hWnd);
 
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     g_pendingMonitors.insert(monitor);
@@ -383,8 +415,71 @@ void CALLBACK LocationChangeWinEventProc(HWINEVENTHOOK hWinEventHook,
                  });
 }
 
+DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
+    HWINEVENTHOOK winObjectEventHook1 =
+        SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, nullptr,
+                        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!winObjectEventHook1) {
+        Wh_Log(L"Error: SetWinEventHook");
+    }
+
+    HWINEVENTHOOK winObjectEventHook2 = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!winObjectEventHook2) {
+        Wh_Log(L"Error: SetWinEventHook");
+    }
+
+    HWINEVENTHOOK winObjectEventHook3 =
+        SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
+                        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!winObjectEventHook3) {
+        Wh_Log(L"Error: SetWinEventHook");
+    }
+
+    BOOL bRet;
+    MSG msg;
+    while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0) {
+        if (bRet == -1) {
+            msg.wParam = 0;
+            break;
+        }
+
+        if (msg.hwnd == NULL && msg.message == WM_APP) {
+            PostQuitMessage(0);
+            continue;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (winObjectEventHook1) {
+        UnhookWinEvent(winObjectEventHook1);
+    }
+
+    if (winObjectEventHook2) {
+        UnhookWinEvent(winObjectEventHook2);
+    }
+
+    if (winObjectEventHook3) {
+        UnhookWinEvent(winObjectEventHook3);
+    }
+
+    return 0;
+}
+
 BOOL AdjustTaskbarStyle(HWND hWnd) {
     if (g_settings.onlyWhenMaximized) {
+        if (!g_winEventHookThread) {
+            std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
+
+            if (!g_winEventHookThread) {
+                g_winEventHookThread = CreateThread(
+                    nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
+            }
+        }
+
         HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
         if (!DoesMonitorHaveMaximizedWindow(monitor)) {
             return ResetTaskbarStyle(hWnd);
@@ -550,57 +645,22 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
     WNDCLASS wndclass;
     if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) {
         AdjustAllTaskbarStyles();
-    }
-
-    if (g_settings.onlyWhenMaximized) {
-        g_winObjectLocationChangeThread = CreateThread(
-            nullptr, 0,
-            [](LPVOID lpParameter) WINAPI -> DWORD {
-                HWINEVENTHOOK winObjectLocationChangeEventHook =
-                    SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE,
-                                    EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-                                    LocationChangeWinEventProc, 0, 0,
-                                    WINEVENT_OUTOFCONTEXT);
-                if (!winObjectLocationChangeEventHook) {
-                    Wh_Log(L"Error: SetWinEventHook");
-                    return 0;
-                }
-
-                BOOL bRet;
-                MSG msg;
-                while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0) {
-                    if (bRet == -1) {
-                        msg.wParam = 0;
-                        break;
-                    }
-
-                    if (msg.hwnd == NULL && msg.message == WM_APP) {
-                        PostQuitMessage(0);
-                        continue;
-                    }
-
-                    TranslateMessage(&msg);
-                    DispatchMessage(&msg);
-                }
-
-                UnhookWinEvent(winObjectLocationChangeEventHook);
-                return 0;
-            },
-            nullptr, 0, nullptr);
     }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_winObjectLocationChangeThread) {
-        PostThreadMessage(GetThreadId(g_winObjectLocationChangeThread), WM_APP,
-                          0, 0);
-        WaitForSingleObject(g_winObjectLocationChangeThread, INFINITE);
-        CloseHandle(g_winObjectLocationChangeThread);
+    if (g_winEventHookThread) {
+        PostThreadMessage(GetThreadId(g_winEventHookThread), WM_APP, 0, 0);
+        WaitForSingleObject(g_winEventHookThread, INFINITE);
+        CloseHandle(g_winEventHookThread);
+        g_winEventHookThread = nullptr;
     }
 
     std::unordered_set<HWND> secondaryTaskbarWindows;
@@ -614,18 +674,21 @@ void Wh_ModUninit() {
     }
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
-
-    bool prevOnlyWhenMaximized = g_settings.onlyWhenMaximized;
 
     LoadSettings();
 
-    *bReload = g_settings.onlyWhenMaximized != prevOnlyWhenMaximized;
+    if (!g_settings.onlyWhenMaximized) {
+        std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
 
-    if (!*bReload) {
-        AdjustAllTaskbarStyles();
+        if (g_winEventHookThread) {
+            PostThreadMessage(GetThreadId(g_winEventHookThread), WM_APP, 0, 0);
+            WaitForSingleObject(g_winEventHookThread, INFINITE);
+            CloseHandle(g_winEventHookThread);
+            g_winEventHookThread = nullptr;
+        }
     }
 
-    return TRUE;
+    AdjustAllTaskbarStyles();
 }

@@ -2,14 +2,14 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.0.3
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -58,6 +58,9 @@ versions weren't tested and are probably not compatible.
   - sameAsPrimary: Same as on primary monitor
   - top: Top
   - bottom: Bottom
+- runningIndicatorsOnTop: false
+  $name: Running indicators on top
+  $description: Show running indicators above the taskbar icons
 */
 // ==/WindhawkModSettings==
 
@@ -96,6 +99,7 @@ enum class TaskbarLocation {
 struct {
     TaskbarLocation taskbarLocation;
     TaskbarLocation taskbarLocationSecondary;
+    bool runningIndicatorsOnTop;
 } g_settings;
 
 WCHAR g_taskbarViewDllPath[MAX_PATH];
@@ -106,6 +110,7 @@ std::atomic<int> g_hookCallCounter;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
 bool g_inCTaskListThumbnailWnd_LayoutThumbnails;
 bool g_inOverflowFlyoutModel_Show;
+int g_lastTaskbarAlignment;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
@@ -129,6 +134,60 @@ STDAPI GetDpiForMonitor(HMONITOR hmonitor,
 using GetThreadDescription_t =
     WINBASEAPI HRESULT(WINAPI*)(HANDLE hThread, PWSTR* ppszThreadDescription);
 GetThreadDescription_t pGetThreadDescription;
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+    static VS_FIXEDFILEINFO* fixedFileInfo =
+        GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return false;
+    }
+
+    WORD moduleMajor = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleMinor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleBuild = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD moduleQfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    if (moduleMajor != major) {
+        return moduleMajor > major;
+    }
+
+    if (moduleMinor != minor) {
+        return moduleMinor > minor;
+    }
+
+    if (moduleBuild != build) {
+        return moduleBuild > build;
+    }
+
+    return moduleQfe >= qfe;
+}
 
 bool GetMonitorRect(HMONITOR monitor, RECT* rc) {
     MONITORINFO monitorInfo{
@@ -331,7 +390,15 @@ void WINAPI TrayUI_GetStuckInfo_Hook(void* pThis,
 
     TrayUI_GetStuckInfo_Original(pThis, rect, taskbarPos);
 
-    *taskbarPos = ABE_TOP;
+    switch (g_settings.taskbarLocation) {
+        case TaskbarLocation::top:
+            *taskbarPos = ABE_TOP;
+            break;
+
+        case TaskbarLocation::bottom:
+            *taskbarPos = ABE_BOTTOM;
+            break;
+    }
 }
 
 void TaskbarWndProcPreProcess(HWND hWnd,
@@ -340,6 +407,16 @@ void TaskbarWndProcPreProcess(HWND hWnd,
                               LPARAM* lParam) {
     switch (Msg) {
         case 0x5C3: {
+            // On Windows 11 23H2, setting the taskbar location here also causes
+            // the start menu to be opened on the left of the screen, even if
+            // the icons on the taskbar are centered. Therefore, only set it if
+            // the icons are aligned to left, not centered. The drawback is that
+            // the jump list animations won't be correct in this case.
+            if (g_lastTaskbarAlignment == 1 &&
+                !IsVersionAtLeast(10, 0, 26100, 0)) {
+                break;
+            }
+
             // The taskbar location that affects the jump list animations.
             if (*wParam == ABE_BOTTOM) {
                 HMONITOR monitor = (HMONITOR)lParam;
@@ -511,7 +588,7 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
 
     // Place at the bottom of the monitor, will reposition later in
     // SetWindowPos.
-    point->Y = monitorInfo.rcWork.bottom;
+    point->Y = monitorInfo.rcWork.bottom - 1;
 
     return ret;
 }
@@ -594,6 +671,42 @@ void* WINAPI XamlExplorerHostWindow_XamlExplorerHostWindow_Hook(
 
     return XamlExplorerHostWindow_XamlExplorerHostWindow_Original(pThis, param1,
                                                                   rect, param3);
+}
+
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                          int* alignment);
+ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,
+                                                   int* alignment) {
+    Wh_Log(L">");
+
+    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        Wh_Log(L"alignment=%d", *alignment);
+        g_lastTaskbarAlignment = *alignment;
+    }
+
+    return ret;
+}
+
+bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
+    FrameworkElement controlCenterButton = nullptr;
+
+    FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
+    if (child &&
+        (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
+        (child = FindChildByName(child, L"SystemTrayFrameGrid")) &&
+        (child = FindChildByName(child, L"ControlCenterButton"))) {
+        controlCenterButton = child;
+    }
+
+    if (!controlCenterButton) {
+        return false;
+    }
+
+    // On secondary taskbars, the element that holds the system icons is empty
+    // and has the width of 2.
+    return controlCenterButton.ActualWidth() < 5;
 }
 
 void ApplyTaskbarFrameStyle(FrameworkElement taskbarFrame) {
@@ -693,13 +806,13 @@ TaskbarFrame_TaskbarFrame_t TaskbarFrame_TaskbarFrame_Original;
 void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
     Wh_Log(L">");
 
-    pThis = TaskbarFrame_TaskbarFrame_Original(pThis);
+    void* ret = TaskbarFrame_TaskbarFrame_Original(pThis);
 
     FrameworkElement taskbarFrame = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(taskbarFrame));
     if (!taskbarFrame) {
-        return pThis;
+        return ret;
     }
 
     g_elementLoadedAutoRevokerList.emplace_back();
@@ -730,7 +843,7 @@ void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
             }
         });
 
-    return pThis;
+    return ret;
 }
 
 void ApplySystemTrayChevronIconViewStyle(
@@ -769,13 +882,13 @@ IconView_IconView_t IconView_IconView_Original;
 void* WINAPI IconView_IconView_Hook(void* pThis) {
     Wh_Log(L">");
 
-    pThis = IconView_IconView_Original(pThis);
+    void* ret = IconView_IconView_Original(pThis);
 
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
     if (!iconView) {
-        return pThis;
+        return ret;
     }
 
     g_elementLoadedAutoRevokerList.emplace_back();
@@ -805,7 +918,64 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
             }
         });
 
-    return pThis;
+    return ret;
+}
+
+void UpdateTaskListButton(FrameworkElement taskListButtonElement) {
+    auto iconPanelElement =
+        FindChildByName(taskListButtonElement, L"IconPanel");
+    if (!iconPanelElement) {
+        return;
+    }
+
+    bool indicatorsOnTop = false;
+    if (!g_unloading && g_settings.runningIndicatorsOnTop) {
+        bool isSecondaryTaskbar =
+            IsSecondaryTaskbar(taskListButtonElement.XamlRoot());
+        TaskbarLocation taskbarLocation =
+            isSecondaryTaskbar ? g_settings.taskbarLocationSecondary
+                               : g_settings.taskbarLocation;
+        if (taskbarLocation == TaskbarLocation::top) {
+            indicatorsOnTop = true;
+        }
+    }
+
+    PCWSTR indicatorClassNames[] = {
+        L"RunningIndicator",
+        L"ProgressIndicator",
+    };
+    for (auto indicatorClassName : indicatorClassNames) {
+        auto indicatorElement =
+            FindChildByName(iconPanelElement, indicatorClassName);
+        if (!indicatorElement) {
+            continue;
+        }
+
+        indicatorElement.VerticalAlignment(indicatorsOnTop
+                                               ? VerticalAlignment::Top
+                                               : VerticalAlignment::Bottom);
+    }
+}
+
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    TaskListButton_UpdateVisualStates_Original(pThis);
+
+    void* taskListButtonIUnknownPtr = (void**)pThis + 3;
+    winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
+    winrt::copy_from_abi(taskListButtonIUnknown, taskListButtonIUnknownPtr);
+
+    auto taskListButtonElement = taskListButtonIUnknown.as<FrameworkElement>();
+
+    try {
+        UpdateTaskListButton(taskListButtonElement);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
 }
 
 using OverflowFlyoutModel_Show_t = void(WINAPI*)(void* pThis);
@@ -1210,19 +1380,18 @@ void LoadSettings() {
         g_settings.taskbarLocationSecondary = TaskbarLocation::bottom;
     }
     Wh_FreeStringSetting(taskbarLocationSecondary);
+
+    g_settings.runningIndicatorsOnTop =
+        Wh_GetIntSetting(L"runningIndicatorsOnTop");
 }
 
 HWND GetTaskbarWnd() {
-    static HWND hTaskbarWnd;
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
 
-    if (!hTaskbarWnd) {
-        HWND hWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-
-        DWORD processId = 0;
-        if (hWnd && GetWindowThreadProcessId(hWnd, &processId) &&
-            processId == GetCurrentProcessId()) {
-            hTaskbarWnd = hWnd;
-        }
+    DWORD processId = 0;
+    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return nullptr;
     }
 
     return hTaskbarWnd;
@@ -1319,6 +1488,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 },
                 (void**)&IconView_IconView_Original,
                 (void*)IconView_IconView_Hook,
+            },
+            {
+                {
+                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))",
+                },
+                (void**)&TaskListButton_UpdateVisualStates_Original,
+                (void*)TaskListButton_UpdateVisualStates_Hook,
             },
             {
                 {
@@ -1441,6 +1617,13 @@ bool HookTaskbarDllSymbols() {
             },
             (void**)&XamlExplorerHostWindow_XamlExplorerHostWindow_Original,
             (void*)XamlExplorerHostWindow_XamlExplorerHostWindow_Hook,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))",
+            },
+            (void**)&ITaskbarSettings_get_Alignment_Original,
+            (void*)ITaskbarSettings_get_Alignment_Hook,
         },
     };
 
