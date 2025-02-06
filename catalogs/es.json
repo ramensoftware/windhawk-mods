@@ -151,7 +151,7 @@
                 "published": 1730148779000,
                 "rating": 10,
                 "ratingUsers": 19,
-                "updated": 1730148779000,
+                "updated": 1738869843000,
                 "users": 860
             },
             "metadata": {
@@ -159,14 +159,14 @@
                     "x86-64"
                 ],
                 "author": "L3r0y",
-                "compilerOptions": "-lole32 -loleaut32",
+                "compilerOptions": "-lole32 -loleaut32 -lversion",
                 "description": "Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.",
                 "github": "https://github.com/L3r0yThingz",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Alt+Tab per monitor",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "balloon-sound-fix": {

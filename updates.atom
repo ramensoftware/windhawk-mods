@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-04T22:37:49.000Z</updated>
+    <updated>2025-02-06T19:24:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab per monitor 1.1.0]]></title>
+        <id>https://windhawk.net/mods/alt-tab-per-monitor#b246940e57bf03c9d6a6586440cc43d46187b663</id>
+        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
+        <updated>2025-02-06T19:24:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Make the mod compatible with Win10 and with the Win10 alt+tab on Win11</li>
+</ul>]]></content>
+        <author>
+            <name>L3r0y</name>
+            <uri>https://github.com/L3r0yThingz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Logon, Logoff & Shutdown Sounds Restored 1.0.3]]></title>
         <id>https://windhawk.net/mods/logon-logoff-shutdown-sounds#72ede460ac2338d3c3529f5e159e9703257956a4</id>
@@ -292,17 +305,6 @@ Code cleanup</p>]]></content>
         <link href="https://windhawk.net/mods/legacy-alt-tab"/>
         <updated>2025-01-09T16:50:10.000Z</updated>
         <content type="html"><![CDATA[<p>Clarificetion on effect on Win11 24H2.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix browsers for Windows Classic theme 1.2.2]]></title>
-        <id>https://windhawk.net/mods/classic-browser-fix#6a8345066ab3b41d72f1aa2e2c75cdac73186484</id>
-        <link href="https://windhawk.net/mods/classic-browser-fix"/>
-        <updated>2025-01-07T10:52:08.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod is outdated</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
