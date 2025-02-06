@@ -340,6 +340,40 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Hook(void* pThis,
     return ret;
 }
 
+using CAltTabViewHost_CreateInstance_Win11_t = HRESULT(WINAPI*)(void* pThis,
+                                                                void* param1,
+                                                                void* param2,
+                                                                void* param3,
+                                                                void* param4,
+                                                                void* param5,
+                                                                void* param6,
+                                                                void* param7,
+                                                                void* param8,
+                                                                void* param9,
+                                                                void* param10);
+CAltTabViewHost_CreateInstance_Win11_t
+    CAltTabViewHost_CreateInstance_Win11_Original;
+HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
+                                                         void* param1,
+                                                         void* param2,
+                                                         void* param3,
+                                                         void* param4,
+                                                         void* param5,
+                                                         void* param6,
+                                                         void* param7,
+                                                         void* param8,
+                                                         void* param9,
+                                                         void* param10) {
+    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_CreateInstance_TickCount = GetTickCount64();
+    HRESULT ret = CAltTabViewHost_CreateInstance_Win11_Original(
+        pThis, param1, param2, param3, param4, param5, param6, param7, param8,
+        param9, param10);
+    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
+    return ret;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -390,7 +424,8 @@ BOOL Wh_ModInit() {
                 &XamlAltTabViewHost_CreateInstance_Original,
                 XamlAltTabViewHost_CreateInstance_Hook,
             },
-            // For the old Win10 (non-XAML) Alt+Tab (can be enabled with ExplorerPatcher):
+            // For the old Win10 (non-XAML) Alt+Tab (can be enabled with
+            // ExplorerPatcher):
             {
                 {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &CAltTabViewHost_Show_Original,
@@ -404,9 +439,9 @@ BOOL Wh_ModInit() {
                 true,
             },
             {
-                {LR"(long __cdecl CAltTabViewHost_CreateInstance(struct IMultitaskingData *,struct IMultitaskingViewManagerInternal *,struct IApplicationViewSwitcher *,struct IImmersiveAppCrusher *,struct IMultitaskingViewVisibilityServiceInternal *,struct IMultitaskingViewGestureState *,struct IApplicationViewCollection *,struct Windows::Internal::ComposableShell::Tabs::ITabController *,struct ITabViewManager *,struct _GUID const &,void * *))"},
-                &CAltTabViewHost_CreateInstance_Original,
-                CAltTabViewHost_CreateInstance_Hook,
+                {LR"(long __cdecl CAltTabViewHost_CreateInstance(struct IMultitaskingData *,struct IMultitaskingViewManagerInternal *,struct IApplicationViewSwitcher *,struct IImmersiveAppCrusher *,struct IMultitaskingViewVisibilityServiceInternal *,struct IMultitaskingViewGestureState *,struct IApplicationViewCollection *,struct ITouchGestureSettings *,struct _GUID const &,void * *))"},
+                &CAltTabViewHost_CreateInstance_Win11_Original,
+                CAltTabViewHost_CreateInstance_Win11_Hook,
                 true,
             },
         };
