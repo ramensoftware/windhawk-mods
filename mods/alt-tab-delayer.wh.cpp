@@ -2,7 +2,7 @@
 // @id              alt-tab-delayer
 // @name            Alt+Tab window delayer
 // @description     Delays the appearance of the Alt+Tab window, preventing flickering and reducing distractions during fast app switching
-// @version         1.0.0
+// @version         1.1.0
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
@@ -189,7 +189,14 @@ BOOL Wh_ModInit() {
                 &XamlAltTabViewHost_DisplayAltTab_Original,
                 XamlAltTabViewHost_DisplayAltTab_Hook,
             },
-
+            // For the old Win10 (non-XAML) Alt+Tab (can be enabled with
+            // ExplorerPatcher):
+            {
+                {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &CAltTabViewHost_Show_Original,
+                CAltTabViewHost_Show_Hook,
+                true,
+            },
         };
 
         if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
@@ -204,7 +211,6 @@ BOOL Wh_ModInit() {
                 &CAltTabViewHost_Show_Original,
                 CAltTabViewHost_Show_Hook,
             },
-
         };
 
         if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
