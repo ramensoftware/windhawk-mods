@@ -1,3 +1,7 @@
+## 1.1.1 ([Feb 8, 2025](https://github.com/ramensoftware/windhawk-mods/blob/33d869f823bca2613379a3ce5664cc27b0e9471d/mods/taskbar-on-top.wh.cpp))
+
+* Added support for the new thumbnail previews implementation in Windows.
+
 ## 1.1 ([Jan 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/124523bc261918872e9ca412c587f832519d7a01/mods/taskbar-on-top.wh.cpp))
 
 * Added an option to show running indicators above the taskbar icons.

@@ -3178,7 +3178,7 @@
                 "published": 1728056002000,
                 "rating": 10,
                 "ratingUsers": 61,
-                "updated": 1738190541000,
+                "updated": 1739046565000,
                 "users": 3276
             },
             "metadata": {
@@ -3195,7 +3195,7 @@
                 ],
                 "name": "Taskbar on top for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "taskbar-primary-on-secondary-monitor": {

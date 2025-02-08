@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-08T19:57:31.000Z</updated>
+    <updated>2025-02-08T20:29:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#33d869f823bca2613379a3ce5664cc27b0e9471d</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2025-02-08T20:29:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the new thumbnail previews implementation in Windows.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.3]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#cf9709ca613ae552c8f1d4a3ed9a029f916a9344</id>
@@ -295,18 +308,6 @@ Code cleanup</p>]]></content>
 <li>Updated metadata and settings to reflect changes.</li>
 <li>Updated readme with features and more information.</li>
 </ul>]]></content>
-        <author>
-            <name>00face</name>
-            <uri>https://github.com/00face</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Magnifier Mod 0.4.2]]></title>
-        <id>https://windhawk.net/mods/magnifier-mod#b4ec16697e16d9d5d8205e4cc11d2323fd0ca1da</id>
-        <link href="https://windhawk.net/mods/magnifier-mod"/>
-        <updated>2025-01-16T20:06:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarmagnifiermod">Taskbar Magnifier Mod</h1>
-<p>This mod adds a magnifier window you can customize and dock at the top or bottom of your screen.</p>]]></content>
         <author>
             <name>00face</name>
             <uri>https://github.com/00face</uri>
