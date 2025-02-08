@@ -2650,6 +2650,27 @@
                 "version": "1.0.0"
             }
         },
+        "spoof-light-dark-theme": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1739047328000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1739047328000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lntdll",
+                "description": "Use light/dark theme on an application basis",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Spoof Light/Dark Theme",
+                "version": "1.0.0"
+            }
+        },
         "start-menu-all-apps": {
             "details": {
                 "defaultSorting": 27560,

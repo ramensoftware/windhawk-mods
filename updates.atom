@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-08T20:29:25.000Z</updated>
+    <updated>2025-02-08T20:42:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Spoof Light/Dark Theme 1.0.0]]></title>
+        <id>https://windhawk.net/mods/spoof-light-dark-theme#762d95fff304f1a99f3c35857d5d9502f8e59b00</id>
+        <link href="https://windhawk.net/mods/spoof-light-dark-theme"/>
+        <updated>2025-02-08T20:42:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="spooflightdarktheme">Spoof Light/Dark Theme</h1>
+<p>This mod lets you make specific applications believe you are using either light or dark theme,
+regardless of your actual Windows setting.</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#33d869f823bca2613379a3ce5664cc27b0e9471d</id>
@@ -293,24 +306,6 @@ Code cleanup</p>]]></content>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Magnifier Mod 0.5.1]]></title>
-        <id>https://windhawk.net/mods/magnifier-mod#c2f53e472a7957b36e71567c700fe1a5e2629879</id>
-        <link href="https://windhawk.net/mods/magnifier-mod"/>
-        <updated>2025-01-20T19:21:55.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li>Added support for vertical positions (left and right).</li>
-<li>Removed click-through feature.</li>
-<li>Removed border rounding feature.</li>
-<li>Updated metadata and settings to reflect changes.</li>
-<li>Updated readme with features and more information.</li>
-</ul>]]></content>
-        <author>
-            <name>00face</name>
-            <uri>https://github.com/00face</uri>
         </author>
     </entry>
 </feed>
