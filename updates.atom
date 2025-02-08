@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-08T20:42:08.000Z</updated>
+    <updated>2025-02-08T21:12:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#65167d91ff632f8defcde31939d90f391e43c155</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2025-02-08T21:12:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved start menu positioning.</li>
+<li>Fixed the start menu width option not applying until restart in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Spoof Light/Dark Theme 1.0.0]]></title>
         <id>https://windhawk.net/mods/spoof-light-dark-theme#762d95fff304f1a99f3c35857d5d9502f8e59b00</id>
@@ -293,19 +307,6 @@ Ubuntu handle fast app switching.</p>]]></content>
         <author>
             <name>00face</name>
             <uri>https://github.com/00face</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.2]]></title>
-        <id>https://windhawk.net/mods/dark-menus#4632327b4f048f0e6c6721e478d4bbf6fe96c79b</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2025-01-20T19:57:07.000Z</updated>
-        <content type="html"><![CDATA[<p>Added a compatibility check to avoid crashes on incompatible Windows versions.
-The readme now shows Windows 10 screenshots.
-Code cleanup</p>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>

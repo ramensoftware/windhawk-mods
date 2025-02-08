@@ -3275,7 +3275,7 @@
                 "published": 1724520144000,
                 "rating": 10,
                 "ratingUsers": 19,
-                "updated": 1730488449000,
+                "updated": 1739049149000,
                 "users": 1550
             },
             "metadata": {
@@ -3283,18 +3283,16 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore",
+                "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore",
                 "description": "Forces the start button to be on the left of the taskbar, even when taskbar icons are centered (Windows 11 only)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
-                    "explorer.exe",
-                    "StartMenuExperienceHost.exe",
-                    "SearchHost.exe"
+                    "explorer.exe"
                 ],
                 "name": "Start button always on the left",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "taskbar-thumbnail-reorder": {
