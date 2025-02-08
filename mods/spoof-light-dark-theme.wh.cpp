@@ -81,7 +81,7 @@ LSTATUS WINAPI RegQueryValueExW_hook(
 )
 {
     LSTATUS lStatus = RegQueryValueExW_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-    if (ERROR_SUCCESS == lStatus && lpData && 0 == wcsicmp(lpValueName, L"AppsUseLightTheme"))
+    if (g_fSpoofTheme && ERROR_SUCCESS == lStatus && lpData && 0 == wcsicmp(lpValueName, L"AppsUseLightTheme"))
     {
         ULONG ulSize = 0;
         NTSTATUS status = NtQueryKey(hKey, KeyNameInformation, nullptr, 0, &ulSize);
