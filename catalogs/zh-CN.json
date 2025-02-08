@@ -3361,7 +3361,7 @@
                 "published": 1718190574000,
                 "rating": 10,
                 "ratingUsers": 96,
-                "updated": 1738185710000,
+                "updated": 1739044651000,
                 "users": 4159
             },
             "metadata": {
@@ -3369,20 +3369,18 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore",
+                "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore",
                 "description": "Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
                     "explorer.exe",
-                    "StartMenuExperienceHost.exe",
-                    "SearchHost.exe",
                     "ShellExperienceHost.exe",
                     "ShellHost.exe"
                 ],
                 "name": "Vertical Taskbar for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.2"
+                "version": "1.3.3"
             }
         },
         "taskbar-volume-control": {
