@@ -37,7 +37,7 @@
     * Variant of this mod using copy-pasted CEF structs instead of hardcoded offsets is available at [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them to the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.56 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.57 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://docs.google.com/spreadsheets/d/1wztO1L4zvNykBRw7X4jxP8pvo11oQjT0O5DvZ_-S4Ok/edit?pli=1&gid=803394557#gid=803394557)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -53,7 +53,7 @@
 * Notes for Spicetify extension/theme developers
     * Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
     * This mod exposes a JavaScript API that can be used to interact with the main window and this mod
-    * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-1.2.56)
+    * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-1.2.57)
     * Use `(window._getSpotifyModule || cancelEsperantoCall)('ctewh').query()` to get various information about the window and the mod
     * Various functions are available in the object returned by `_getSpotifyModule('ctewh')` or `cancelEsperantoCall('ctewh')`
     * See [here](https://github.com/Ingan121/WMPotify/blob/master/theme/src/js/WindhawkComm.js) for a simple example of how to use the functions
@@ -127,7 +127,7 @@
 128: 1.2.47-1.2.48
 129: 1.2.49-1.2.50
 130: 1.2.51-1.2.52
-131: 1.2.53, 1.2.55-1.2.56
+131: 1.2.53, 1.2.55-1.2.57
 */
 
 #include <libloaderapi.h>
