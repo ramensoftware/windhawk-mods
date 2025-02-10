@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         0.6
+// @version         0.7
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -37,7 +37,7 @@
     * Variant of this mod using copy-pasted CEF structs instead of hardcoded offsets is available at [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them to the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.56 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.57 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://docs.google.com/spreadsheets/d/1wztO1L4zvNykBRw7X4jxP8pvo11oQjT0O5DvZ_-S4Ok/edit?pli=1&gid=803394557#gid=803394557)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -53,9 +53,9 @@
 * Notes for Spicetify extension/theme developers
     * Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
     * This mod exposes a JavaScript API that can be used to interact with the main window and this mod
-    * The API is available with `window.cancelEsperantoCall('ctewh')`
-    * Use `cancelEsperantoCall('ctewh').query()` to get various information about the window and the mod
-    * Various functions are available in the object returned by `cancelEsperantoCall('ctewh')`
+    * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-1.2.57)
+    * Use `(window.cancelEsperantoCall || window._getSpotifyModule)('ctewh').query()` to get various information about the window and the mod
+    * Various functions are available in the object returned by `_getSpotifyModule('ctewh')` or `cancelEsperantoCall('ctewh')`
     * See [here](https://github.com/Ingan121/WMPotify/blob/master/theme/src/js/WindhawkComm.js) for a simple example of how to use the functions
     * This API is only available on Spotify 1.2.4 and above, and only if the mod is enabled before Spotify starts
     * The API is disabled by default on untested CEF versions
@@ -127,7 +127,7 @@
 128: 1.2.47-1.2.48
 129: 1.2.49-1.2.50
 130: 1.2.51-1.2.52
-131: 1.2.53, 1.2.55-1.2.56
+131: 1.2.53, 1.2.55-1.2.57
 */
 
 #include <libloaderapi.h>
@@ -1871,52 +1871,71 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
 
 typedef int CEF_CALLBACK (*v8func_exec_t)(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception);
 v8func_exec_t CEF_CALLBACK cancelEsperantoCall_original;
+v8func_exec_t CEF_CALLBACK _getSpotifyModule_original;
+
+int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) {
+    cef_string_t* arg = arguments[0]->get_string_value(arguments[0]); // NULL when it's an empty string
+    if (arg != NULL && u"ctewh" == std::u16string(arg->str, arg->length)) {
+        Wh_Log(L"CTEWH is being requested");
+        cef_v8handler_t* ctewh = (cef_v8handler_t*)calloc(1, sizeof(cef_v8handler_t));
+        ctewh->base.size = sizeof(cef_v8handler_t);
+        ctewh->execute = WindhawkCommV8Handler;
+        cef_v8value_t* retobj = cef_v8value_create_object(NULL, NULL);
+        AddFunctionToObj(retobj, u"query", ctewh);
+        AddFunctionToObj(retobj, u"extendFrame", ctewh);
+        AddFunctionToObj(retobj, u"minimize", ctewh);
+        AddFunctionToObj(retobj, u"maximizeRestore", ctewh);
+        AddFunctionToObj(retobj, u"close", ctewh);
+        AddFunctionToObj(retobj, u"focus", ctewh);
+        AddFunctionToObj(retobj, u"setLayered", ctewh);
+        AddFunctionToObj(retobj, u"setBackdrop", ctewh);
+        AddFunctionToObj(retobj, u"resizeTo", ctewh);
+        AddFunctionToObj(retobj, u"setMinSize", ctewh);
+        AddFunctionToObj(retobj, u"setTopMost", ctewh);
+        AddFunctionToObj(retobj, u"setTitle", ctewh);
+        AddFunctionToObj(retobj, u"lockTitle", ctewh);
+        AddFunctionToObj(retobj, u"openSpotifyMenu", ctewh);
+        #ifdef _WIN64
+        AddFunctionToObj(retobj, u"setPlaybackSpeed", ctewh);
+        #endif
+        cef_v8value_t* initialConfigObj = cef_v8value_create_object(NULL, NULL);
+        AddValueToObj(initialConfigObj, u"showframe", cef_v8value_create_bool(cte_settings.showframe));
+        AddValueToObj(initialConfigObj, u"showframeonothers", cef_v8value_create_bool(cte_settings.showframeonothers));
+        AddValueToObj(initialConfigObj, u"showmenu", cef_v8value_create_bool(cte_settings.showmenu));
+        AddValueToObj(initialConfigObj, u"showcontrols", cef_v8value_create_bool(cte_settings.showcontrols));
+        AddValueToObj(initialConfigObj, u"transparentcontrols", cef_v8value_create_bool(cte_settings.transparentcontrols));
+        AddValueToObj(initialConfigObj, u"transparentrendering", cef_v8value_create_bool(cte_settings.transparentrendering));
+        AddValueToObj(initialConfigObj, u"ignoreminsize", cef_v8value_create_bool(cte_settings.ignoreminsize));
+        AddValueToObj(initialConfigObj, u"noforceddarkmode", cef_v8value_create_bool(cte_settings.noforceddarkmode));
+        AddValueToObj(initialConfigObj, u"forceextensions", cef_v8value_create_bool(cte_settings.forceextensions));
+        AddValueToObj(initialConfigObj, u"allowuntested", cef_v8value_create_bool(cte_settings.allowuntested));
+        AddValueToObj(retobj, u"initialOptions", initialConfigObj);
+        AddValueToObj(retobj, u"version", u"0.7");
+
+        *retval = retobj;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 int CEF_CALLBACK cancelEsperantoCall_hook(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception) {
     Wh_Log(L"cancelEsperantoCall_hook called with name: %s", name->str);
     if (argumentsCount == 1) {
-        cef_string_t* arg = arguments[0]->get_string_value(arguments[0]); // NULL when it's an empty string
-        if (arg != NULL && u"ctewh" == std::u16string(arg->str, arg->length)) {
-            Wh_Log(L"CTEWH is being requested");
-            cef_v8handler_t* ctewh = (cef_v8handler_t*)calloc(1, sizeof(cef_v8handler_t));
-            ctewh->base.size = sizeof(cef_v8handler_t);
-            ctewh->execute = WindhawkCommV8Handler;
-            cef_v8value_t* retobj = cef_v8value_create_object(NULL, NULL);
-            AddFunctionToObj(retobj, u"query", ctewh);
-            AddFunctionToObj(retobj, u"extendFrame", ctewh);
-            AddFunctionToObj(retobj, u"minimize", ctewh);
-            AddFunctionToObj(retobj, u"maximizeRestore", ctewh);
-            AddFunctionToObj(retobj, u"close", ctewh);
-            AddFunctionToObj(retobj, u"focus", ctewh);
-            AddFunctionToObj(retobj, u"setLayered", ctewh);
-            AddFunctionToObj(retobj, u"setBackdrop", ctewh);
-            AddFunctionToObj(retobj, u"resizeTo", ctewh);
-            AddFunctionToObj(retobj, u"setMinSize", ctewh);
-            AddFunctionToObj(retobj, u"setTopMost", ctewh);
-            AddFunctionToObj(retobj, u"setTitle", ctewh);
-            AddFunctionToObj(retobj, u"lockTitle", ctewh);
-            AddFunctionToObj(retobj, u"openSpotifyMenu", ctewh);
-            #ifdef _WIN64
-            AddFunctionToObj(retobj, u"setPlaybackSpeed", ctewh);
-            #endif
-            cef_v8value_t* initialConfigObj = cef_v8value_create_object(NULL, NULL);
-            AddValueToObj(initialConfigObj, u"showframe", cef_v8value_create_bool(cte_settings.showframe));
-            AddValueToObj(initialConfigObj, u"showframeonothers", cef_v8value_create_bool(cte_settings.showframeonothers));
-            AddValueToObj(initialConfigObj, u"showmenu", cef_v8value_create_bool(cte_settings.showmenu));
-            AddValueToObj(initialConfigObj, u"showcontrols", cef_v8value_create_bool(cte_settings.showcontrols));
-            AddValueToObj(initialConfigObj, u"transparentcontrols", cef_v8value_create_bool(cte_settings.transparentcontrols));
-            AddValueToObj(initialConfigObj, u"transparentrendering", cef_v8value_create_bool(cte_settings.transparentrendering));
-            AddValueToObj(initialConfigObj, u"ignoreminsize", cef_v8value_create_bool(cte_settings.ignoreminsize));
-            AddValueToObj(initialConfigObj, u"noforceddarkmode", cef_v8value_create_bool(cte_settings.noforceddarkmode));
-            AddValueToObj(initialConfigObj, u"forceextensions", cef_v8value_create_bool(cte_settings.forceextensions));
-            AddValueToObj(initialConfigObj, u"allowuntested", cef_v8value_create_bool(cte_settings.allowuntested));
-            AddValueToObj(retobj, u"initialOptions", initialConfigObj);
-            AddValueToObj(retobj, u"version", u"0.6");
-
-            *retval = retobj;
+        if (InjectCTEV8Handler(arguments, retval)) {
             return TRUE;
         }
     }
     return cancelEsperantoCall_original(self, name, object, argumentsCount, arguments, retval, exception);
+}
+
+int CEF_CALLBACK _getSpotifyModule_hook(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception) {
+    Wh_Log(L"_getSpotifyModule_hook called with name: %s", name->str);
+    if (argumentsCount == 1) {
+        if (InjectCTEV8Handler(arguments, retval)) {
+            return TRUE;
+        }
+    }
+    return _getSpotifyModule_original(self, name, object, argumentsCount, arguments, retval, exception);
 }
 
 cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](const cef_string_t* name, cef_v8handler_t* handler) -> cef_v8value_t* {
@@ -1932,6 +1951,18 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         cancelEsperantoCall_original = handler->execute;
         handler->execute = cancelEsperantoCall_hook;
         return cef_v8value_create_function_original(name, handler);
+    }
+    // And hook _getSpotifyModule too for 1.2.4-1.2.32 which lack cancelEsperantoCall
+    // I'd better just hook cancelCosmosRequest from the beginning as it's exists on all XPUI Spotify versions
+    // But it's too late, 0.6 is already released without realizing that cancelEsperantoCall is only available on 1.2.33+
+    if (u"_getSpotifyModule" == std::u16string(name->str, name->length)) {
+        Wh_Log(L"_getSpotifyModule is being created");
+        if (g_hPipe == INVALID_HANDLE_VALUE) {
+            // API won't be available if the pipe is not connected
+            return cef_v8value_create_function_original(name, handler);
+        }
+        _getSpotifyModule_original = handler->execute;
+        handler->execute = _getSpotifyModule_hook;
     }
     return cef_v8value_create_function_original(name, handler);
 };
@@ -2109,30 +2140,28 @@ BOOL Wh_ModInit() {
                            (void**)&CreateProcessAsUserW_original);
 
         // Patch the executable in memory to enable transparent rendering, disable forced dark mode, or force enable extensions
-        // (Only do this on process startup as patching after CEF initialization is pointless)
-        if (isInitialThread) {
-            if (cte_settings.transparentrendering) {
-                if (EnableTransparentRendering(pbExecutable)) {
-                    Wh_Log(L"Enabled transparent rendering");
-                }
+        // (Pointless if done after CEF initialization though)
+        if (cte_settings.transparentrendering) {
+            if (EnableTransparentRendering(pbExecutable)) {
+                Wh_Log(L"Enabled transparent rendering");
             }
-            if (cte_settings.noforceddarkmode) {
-                if (DisableForcedDarkMode(pbExecutable)) {
-                    Wh_Log(L"Disabled forced dark mode");
-                }
-            }
-            if (cte_settings.forceextensions) {
-                if (ForceEnableExtensions(pbExecutable)) {
-                    Wh_Log(L"Enabled extensions");
-                }
-            }
-
-            #ifdef _WIN64
-            if (major >= 122 && isTestedVersion) {
-                HookCreateTrackPlayer(pbExecutable, major >= 127);
-            }
-            #endif
         }
+        if (cte_settings.noforceddarkmode) {
+            if (DisableForcedDarkMode(pbExecutable)) {
+                Wh_Log(L"Disabled forced dark mode");
+            }
+        }
+        if (cte_settings.forceextensions) {
+            if (ForceEnableExtensions(pbExecutable)) {
+                Wh_Log(L"Enabled extensions");
+            }
+        }
+
+        #ifdef _WIN64
+        if (major >= 122 && isTestedVersion) {
+            HookCreateTrackPlayer(pbExecutable, major >= 127);
+        }
+        #endif
     }
 
     EnumWindows(InitEnumWindowsProc, 1);
