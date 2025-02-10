@@ -2,7 +2,7 @@
 // @id              taskbar-tray-system-icon-tweaks
 // @name            Taskbar tray system icon tweaks
 // @description     Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the "Show desktop" button (Windows 11 only)
-// @version         1.1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -45,6 +45,8 @@ there are no new notifications), and the "Show desktop" button.
   $name: Hide location (e.g. GPS) icon
 - hideLanguageBar: false
   $name: Hide language bar
+- hideLanguageSupplementaryIcons: false
+  $name: Hide language supplementary icons
 - hideBellIcon: never
   $name: Hide bell icon
   $options:
@@ -84,6 +86,7 @@ struct {
     bool hideMicrophoneIcon;
     bool hideGeolocationIcon;
     bool hideLanguageBar;
+    bool hideLanguageSupplementaryIcons;
     HideBellIcon hideBellIcon;
     int showDesktopButtonWidth;
 } g_settings;
@@ -370,11 +373,32 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         case L'\uF2A8':  // Full bell, Do Not Disturb
             return SystemTrayIconIdent::kBellFull;
 
+        // Language supplementary icons.
+        // Found by installing all the built-in input methods from:
+        // https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-language-pack-default-values?view=windows-11#input-method-editors
+        // and identify the icon code in the fonts Segoe Fluent and
+        // AXPIcons.ttf.
+        // https://learn.microsoft.com/en-us/windows/apps/design/style/segoe-fluent-icons-font
+        // %SystemRoot%\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\SystemTray\Assets\AXPIcons.ttf
+        case L'\uE4D7':  // (Maybe) English Private mode
+        case L'\uE4D8':  // (Maybe) Chinese Private mode
+        case L'\uE5BF':  // (Maybe) English mode locked
         case L'\uE97E':  // HalfAlpha
         case L'\uE97F':  // FullAlpha
+        case L'\uE980':  // Key12On (Korean mode)
+        case L'\uE982':  // QWERTYOn (Chinese mode)
+        case L'\uE983':  // QWERTYOff (English mode)
         case L'\uE986':  // FullHiragana
         case L'\uE987':  // FullKatakana
         case L'\uE988':  // HalfKatakana
+        case L'\uEB90':  // StatusErrorFull (Input method disabled)
+        case L'\uEE41':  // FullHiraganaPrivateMode
+        case L'\uEE42':  // FullKatakanaPrivateMode
+        case L'\uEE43':  // HalfAlphaPrivateMode
+        case L'\uEE44':  // HalfKatakanaPrivateMode
+        case L'\uEE45':  // FullAlphaPrivateMode
+        case L'\uEE75':  // (Maybe) HalfAlpha
+        case L'\uEE76':  // (Maybe) HalfAlphaPrivateMode
             return SystemTrayIconIdent::kLanguage;
     }
 
@@ -481,10 +505,11 @@ void ApplyMainStackIconViewStyle(FrameworkElement notifyIconViewElement) {
 void ApplyNonActivatableStackIconViewStyle(
     FrameworkElement notifyIconViewElement) {
     FrameworkElement child = notifyIconViewElement;
+    bool hide = false;
     if ((child = FindChildByName(child, L"ContainerGrid")) &&
         (child = FindChildByName(child, L"ContentPresenter")) &&
         (child = FindChildByName(child, L"ContentGrid"))) {
-        child = EnumChildElements(child, [](FrameworkElement child) {
+        child = EnumChildElements(child, [&hide](FrameworkElement child) {
             auto className = winrt::get_class_name(child);
             if (className == L"SystemTray.TextIconContent") {
                 Controls::TextBlock innerTextBlock = nullptr;
@@ -501,11 +526,24 @@ void ApplyNonActivatableStackIconViewStyle(
                 auto text = innerTextBlock.Text();
                 auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
 
-                Wh_Log(L"Language bar icon %d (%s)", (int)systemTrayIconIdent,
-                       StringToHex(text).c_str());
+                if (systemTrayIconIdent == SystemTrayIconIdent::kLanguage) {
+                    Wh_Log(L"Language supplementary icon %d (%s)",
+                           (int)systemTrayIconIdent, StringToHex(text).c_str());
 
+                    hide = g_settings.hideLanguageSupplementaryIcons;
+                    return true;
+                } else {
+                    Wh_Log(L"Language bar unknown icon %d (%s)",
+                           (int)systemTrayIconIdent, StringToHex(text).c_str());
+                    return false;
+                }
+            } else if (className == L"SystemTray.ImageIconContent") {
+                hide = g_settings.hideLanguageSupplementaryIcons;
                 return true;
-            } else if (className == L"SystemTray.LanguageTextIconContent") {
+            } else if (className == L"SystemTray.LanguageTextIconContent" ||
+                       className == L"SystemTray.LanguageImageIconContent") {
+                Wh_Log(L"Language bar main icon");
+                hide = g_settings.hideLanguageBar;
                 return true;
             }
 
@@ -515,10 +553,22 @@ void ApplyNonActivatableStackIconViewStyle(
     }
 
     if (!child) {
+        // Some input methods use LanguageImageIconContent/ImageIconContent
+        // instead of LanguageTextIconContent/TextIconContent with icon fonts.
+        // If the language bar is hidden and the user switches from a "text"
+        // input method to a "image" input method, the invisible element will
+        // not be populated with the new type of icon content but become empty
+        // instead. Then the icon will be permanently hidden even after
+        // disabling the mod. This code forces the empty element to become
+        // visible and populated, fixing this issue.
+        if (Media::VisualTreeHelper::GetChildrenCount(notifyIconViewElement) ==
+            0) {
+            notifyIconViewElement.Visibility(Visibility::Visible);
+        }
         return;
     }
 
-    bool hide = !g_unloading && g_settings.hideLanguageBar;
+    hide = !g_unloading && hide;
 
     Wh_Log(L"Language bar, hide=%d", hide);
 
@@ -1143,7 +1193,7 @@ bool RunFromWindowThread(HWND hWnd,
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
@@ -1177,6 +1227,8 @@ void LoadSettings() {
     g_settings.hideMicrophoneIcon = Wh_GetIntSetting(L"hideMicrophoneIcon");
     g_settings.hideGeolocationIcon = Wh_GetIntSetting(L"hideGeolocationIcon");
     g_settings.hideLanguageBar = Wh_GetIntSetting(L"hideLanguageBar");
+    g_settings.hideLanguageSupplementaryIcons =
+        Wh_GetIntSetting(L"hideLanguageSupplementaryIcons");
 
     PCWSTR hideBellIcon = Wh_GetStringSetting(L"hideBellIcon");
     g_settings.hideBellIcon = HideBellIcon::never;
@@ -1210,7 +1262,7 @@ void ApplySettings() {
 
     RunFromWindowThread(
         hTaskbarWnd,
-        [](void* pParam) WINAPI {
+        [](void* pParam) {
             ApplySettingsParam& param = *(ApplySettingsParam*)pParam;
 
             g_autoRevokerList.clear();
