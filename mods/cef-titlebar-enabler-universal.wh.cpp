@@ -54,7 +54,7 @@
     * Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
     * This mod exposes a JavaScript API that can be used to interact with the main window and this mod
     * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-1.2.57)
-    * Use `(window._getSpotifyModule || cancelEsperantoCall)('ctewh').query()` to get various information about the window and the mod
+    * Use `(window.cancelEsperantoCall || window._getSpotifyModule)('ctewh').query()` to get various information about the window and the mod
     * Various functions are available in the object returned by `_getSpotifyModule('ctewh')` or `cancelEsperantoCall('ctewh')`
     * See [here](https://github.com/Ingan121/WMPotify/blob/master/theme/src/js/WindhawkComm.js) for a simple example of how to use the functions
     * This API is only available on Spotify 1.2.4 and above, and only if the mod is enabled before Spotify starts
