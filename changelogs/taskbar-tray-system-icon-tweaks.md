@@ -1,3 +1,10 @@
+## 1.2 ([Feb 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/739d5e32426532fdd48f408029d2642060ac1c33/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
+
+* Added a separate option for language bar supplementary icons, such as Japanese Romaji or Kana.
+* Fixed some non-language icons, such as the keyboard icon, hiding when hiding the language bar.
+
+Both fixes were [contributed by jingyu9575](https://github.com/ramensoftware/windhawk-mods/issues/1489).
+
 ## 1.1.1 ([Feb 4, 2025](https://github.com/ramensoftware/windhawk-mods/blob/0ed562ab9a86e0ec763753d8da5109cbe66c9325/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
 
 * When hiding the language bar, supplementary icons (such as Japanese Romaji or Kana) are now hidden too.

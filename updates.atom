@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-10T07:35:07.000Z</updated>
+    <updated>2025-02-10T23:24:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#739d5e32426532fdd48f408029d2642060ac1c33</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
+        <updated>2025-02-10T23:24:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a separate option for language bar supplementary icons, such as Japanese Romaji or Kana.</li>
+<li>Fixed some non-language icons, such as the keyboard icon, hiding when hiding the language bar.</li>
+</ul>
+<p>Both fixes were <a href="https://github.com/ramensoftware/windhawk-mods/issues/1489">contributed by jingyu9575</a>.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Tweaks 0.7]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#da2e72abc1f05e34d0737578eb8fcc8a17780a59</id>
@@ -276,20 +291,6 @@ Ubuntu handle fast app switching.</p>]]></content>
         <author>
             <name>L3r0y</name>
             <uri>https://github.com/L3r0yThingz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-app Language Preferences 1.1]]></title>
-        <id>https://windhawk.net/mods/per-app-language-preferences#c2fe499b39ef859de2618237086dc6520b53a754</id>
-        <link href="https://windhawk.net/mods/per-app-language-preferences"/>
-        <updated>2025-01-23T17:25:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Determines language ID for each process only once when launching</p></li>
-<li><p>Also update language ID on mod settings change</p></li>
-</ul>]]></content>
-        <author>
-            <name>yezhiyi9670</name>
-            <uri>https://github.com/yezhiyi9670</uri>
         </author>
     </entry>
 </feed>
