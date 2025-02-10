@@ -246,7 +246,7 @@
                 "published": 1734116516000,
                 "rating": 10,
                 "ratingUsers": 7,
-                "updated": 1738229819000,
+                "updated": 1739172907000,
                 "users": 373
             },
             "metadata": {
@@ -261,7 +261,7 @@
                 ],
                 "name": "CEF/Spotify Tweaks",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.6"
+                "version": "0.7"
             }
         },
         "center-titlebar": {

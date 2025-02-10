@@ -1,3 +1,9 @@
+## 0.7 ([Feb 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/da2e72abc1f05e34d0737578eb8fcc8a17780a59/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Add support for Spotify 1.2.57
+* Fix JS API being unavailable on Spotify 1.2.4-1.2.32: use `window._getSpotifyModule('ctewh')` instead on these versions
+* The transparent rendering, anti-forced dark mode, and Chrome extension enabler mods can now be applied even if the mod is loaded a bit late
+
 ## 0.6 ([Jan 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1a126cbd6d9e3d268ccfe23eb3a5774acb456102/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Add support for Spotify 1.2.55 and 1.2.56

@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-08T21:12:29.000Z</updated>
+    <updated>2025-02-10T07:35:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 0.7]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#da2e72abc1f05e34d0737578eb8fcc8a17780a59</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-02-10T07:35:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.57</li>
+<li>Fix JS API being unavailable on Spotify 1.2.4-1.2.32: use <code>window._getSpotifyModule('ctewh')</code> instead on these versions</li>
+<li>The transparent rendering, anti-forced dark mode, and Chrome extension enabler mods can now be applied even if the mod is loaded a bit late</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#65167d91ff632f8defcde31939d90f391e43c155</id>
@@ -275,38 +290,6 @@ Ubuntu handle fast app switching.</p>]]></content>
         <author>
             <name>yezhiyi9670</name>
             <uri>https://github.com/yezhiyi9670</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Magnifier M🔍d 0.5.4]]></title>
-        <id>https://windhawk.net/mods/magnifier-mod#68d96765b3bbb81677eae7fab0033dc7c1116a11</id>
-        <link href="https://windhawk.net/mods/magnifier-mod"/>
-        <updated>2025-01-21T21:07:29.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="05420250120">[0.5.4] - 2025-01-20</h2>
-<h3 id="added">Added</h3>
-<ul>
-<li>Ensured the magnifier window moves to the correct monitor when switching between monitors.</li>
-<li>Added error handling for monitor selection.</li>
-</ul>
-<h2 id="05320250120">[0.5.3] - 2025-01-20</h2>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>Enabled click-through.</li>
-<li>Simplified cursor handling.</li>
-</ul>
-<h2 id="05220250120">[0.5.2] - 2025-01-20</h2>
-<h3 id="added-1">Added</h3>
-<ul>
-<li>Improved multi-monitor support.</li>
-<li>Fixed cursor loading state issue.</li>
-<li>Fixed window turning white or duplicating issue.</li>
-<li>Fixed transparency loss issue.</li>
-<li>Fixed padding issues.</li>
-<li>Added logging for better diagnostics.</li>
-</ul>]]></content>
-        <author>
-            <name>00face</name>
-            <uri>https://github.com/00face</uri>
         </author>
     </entry>
 </feed>
