@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-10T23:24:59.000Z</updated>
+    <updated>2025-02-11T07:11:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Per-app Language Preferences 1.2]]></title>
+        <id>https://windhawk.net/mods/per-app-language-preferences#99736f85dcf4a3e189d4a38b807977544d4082be</id>
+        <link href="https://windhawk.net/mods/per-app-language-preferences"/>
+        <updated>2025-02-11T07:11:51.000Z</updated>
+        <content type="html"><![CDATA[<p>Add more hooks to (somehow) improve compatibility</p>]]></content>
+        <author>
+            <name>yezhiyi9670</name>
+            <uri>https://github.com/yezhiyi9670</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#739d5e32426532fdd48f408029d2642060ac1c33</id>
@@ -276,21 +287,6 @@ screenshot.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab window delayer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/alt-tab-delayer#0f7a4f6134f786bcf5f8f8b133d1446d9e325c6d</id>
-        <link href="https://windhawk.net/mods/alt-tab-delayer"/>
-        <updated>2025-01-23T18:37:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alttabwindowdelayer">Alt tab window delayer</h1>
-<p>This mod improves the Alt+Tab behavior by introducing a short delay before
-displaying the tasks window. It helps reduce visual distractions by preventing
-brief flickers when quickly switching between apps, similar to how macOS and
-Ubuntu handle fast app switching.</p>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
         </author>
     </entry>
 </feed>

@@ -2325,7 +2325,7 @@
                 "published": 1731512140000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1737653134000,
+                "updated": 1739257911000,
                 "users": 62
             },
             "metadata": {
@@ -2341,7 +2341,7 @@
                     "*"
                 ],
                 "name": "Per-app Language Preferences",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "pinned-items-double-click": {
