@@ -2,7 +2,7 @@
 // @id              per-app-language-preferences
 // @name            Per-app Language Preferences
 // @description     Override the preferred UI language for specific apps.
-// @version         1.1
+// @version         1.2
 // @author          yezhiyi9670
 // @github          https://github.com/yezhiyi9670
 // @include         *
@@ -17,9 +17,9 @@
 /*
 # Per-app Language Preferences
 
-In Windows 11, it is no longer possible to set display languages for specific apps.
+In Windows 11, it is no longer possible to set display languages for specific apps. This mod allow you to override the preferred language for specific apps using the mod's settings.
 
-This mod allow you to override the preferred language for specific apps using the mod's settings.
+**Currently, the approach only works for some apps, not all. Specifically, it does not seem to work for some UWP apps. See [#1510](https://github.com/ramensoftware/windhawk-mods/issues/1510).**
 
 Instructions on the settings:
 
@@ -69,13 +69,30 @@ Note that it changes the language only and does not affect the encoding used in 
 
 int my_langid = -1;
 
-using GetUserDefaultUILanguage_t = short(WINAPI*)();
-GetUserDefaultUILanguage_t GetUserDefaultUILanguage_Original;
-short WINAPI GetUserDefaultUILanguage_Hook() {
-    // Wh_Log(L">GetUserDefaultUILanguage");
+using LangGetter_t = short(WINAPI*)();
 
+LangGetter_t GetUserDefaultUILanguage_Original;
+short WINAPI GetUserDefaultUILanguage_Hook() {
     if(my_langid == -1) {
         return GetUserDefaultUILanguage_Original();
+    } else {
+        return my_langid;
+    }
+}
+
+LangGetter_t GetUserDefaultLangID_Original;
+short WINAPI GetUserDefaultLangID_Hook() {
+    if(my_langid == -1) {
+        return GetUserDefaultLangID_Original();
+    } else {
+        return my_langid;
+    }
+}
+
+LangGetter_t GetUserDefaultLCID_Original;
+short WINAPI GetUserDefaultLCID_Hook() {
+    if(my_langid == -1) {
+        return GetUserDefaultLCID_Original();
     } else {
         return my_langid;
     }
@@ -127,7 +144,11 @@ bool HookKernel32DllSymbols() {
     };
 
     // kernel32.dll
-    return setKernelFunctionHook("GetUserDefaultUILanguage", (void*)GetUserDefaultUILanguage_Hook, (void**)&GetUserDefaultUILanguage_Original);
+    return (
+        setKernelFunctionHook("GetUserDefaultUILanguage", (void*)GetUserDefaultUILanguage_Hook, (void**)&GetUserDefaultUILanguage_Original) &&
+        setKernelFunctionHook("GetUserDefaultLangID", (void*)GetUserDefaultLangID_Hook, (void**)&GetUserDefaultLangID_Original) &&
+        setKernelFunctionHook("GetUserDefaultLCID", (void*)GetUserDefaultLCID_Hook, (void**)&GetUserDefaultLCID_Original)
+    );
 }
 
 BOOL ModInit() {
