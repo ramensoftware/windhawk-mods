@@ -1,3 +1,11 @@
+## 1.1 ([Feb 12, 2025](https://github.com/ramensoftware/windhawk-mods/blob/ceb0321bf91e11a795aa5c846bfb84864d73cb90/mods/taskbar-button-scroll.wh.cpp))
+
+* Added support for the new thumbnail previews implementation in Windows 11.
+* Added support for Windows 10.
+* Added support for the Windows 10 taskbar on Windows 11 (the relevant option has to be enabled in the mod settings).
+* Added support for the ExplorerPatcher taskbar. A version newer than ExplorerPatcher 67.1 is required. Currently, ExplorerPatcher 67.1 is the latest version, meaning that you'll have to wait for the next update. If you can't wait to try it, according to the maintainers of ExplorerPatcher, you can use [this pre-release version of the taskbar](https://github.com/ExplorerPatcher/ep_taskbar_releases/releases/tag/860073b).
+* Fixed the taskbar becoming hung when scrolling over a window which isn't responding.
+
 ## 1.0.7 ([Nov 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/88f7a3c83a0d67d032d94c18d438fa0f0f407a30/mods/taskbar-button-scroll.wh.cpp))
 
 * Fixed all group items minimizing/restoring on scroll even when the group is not combined.
