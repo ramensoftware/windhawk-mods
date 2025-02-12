@@ -1,3 +1,8 @@
+## 1.3.8 ([Feb 12, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6dbf9a4b807f290ef52204bb86d9d091073e4bcf/mods/taskbar-grouping.wh.cpp))
+
+* Fixed pinned item icons not updating after the last window is closed. The bug happened with the "Use window icons" option, with multiple monitors when the "All monitors" taskbar configuration was used.
+* The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.
+
 ## 1.3.7 ([Oct 11, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b2f3b382fc4b9699326678d9440c6164ead46fae/mods/taskbar-grouping.wh.cpp))
 
 * Fixed support for the ExplorerPatcher taskbar.
