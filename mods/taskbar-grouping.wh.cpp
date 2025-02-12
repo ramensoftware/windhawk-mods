@@ -2,14 +2,14 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.7
+// @version         1.3.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -D__USE_MINGW_ANSI_STDIO=0 -lcomctl32 -loleaut32 -lole32 -lshlwapi -lversion -lwininet
+// @compilerOptions -D__USE_MINGW_ANSI_STDIO=0 -lcomctl32 -loleaut32 -lole32 -lshlwapi -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -106,22 +106,20 @@ or a similar tool), enable the relevant option in the mod's settings.
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
-    1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool).
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <psapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
-#include <wininet.h>
 #include <winrt/base.h>
 
-#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -469,21 +467,32 @@ void ProcessResolvedWindow(PVOID pThis, RESOLVEDWINDOW* resolvedWindow) {
     }
 }
 
-using CTaskBand__HandleWindowResolved_t =
-    void(WINAPI*)(PVOID pThis, RESOLVEDWINDOW* resolvedWindow);
-CTaskBand__HandleWindowResolved_t CTaskBand__HandleWindowResolved_Original;
-void WINAPI
-CTaskBand__HandleWindowResolved_Hook(PVOID pThis,
-                                     RESOLVEDWINDOW* resolvedWindow) {
-    Wh_Log(L">");
+using CTaskBand_v_WndProc_t = LRESULT(
+    WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+CTaskBand_v_WndProc_t CTaskBand_v_WndProc_Original;
+LRESULT WINAPI CTaskBand_v_WndProc_Hook(void* pThis,
+                                        HWND hWnd,
+                                        UINT Msg,
+                                        WPARAM wParam,
+                                        LPARAM lParam) {
+    LRESULT ret;
 
-    g_compareStringOrdinalHookThreadId = GetCurrentThreadId();
-    g_compareStringOrdinalIgnoreSuffix = true;
+    // Calls CTaskBand::_HandleWindowResolved.
+    if (Msg == 0x44A) {
+        Wh_Log(L">");
 
-    CTaskBand__HandleWindowResolved_Original(pThis, resolvedWindow);
+        g_compareStringOrdinalHookThreadId = GetCurrentThreadId();
+        g_compareStringOrdinalIgnoreSuffix = true;
 
-    g_compareStringOrdinalHookThreadId = 0;
-    g_compareStringOrdinalIgnoreSuffix = false;
+        ret = CTaskBand_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
+
+        g_compareStringOrdinalHookThreadId = 0;
+        g_compareStringOrdinalIgnoreSuffix = false;
+    } else {
+        ret = CTaskBand_v_WndProc_Original(pThis, hWnd, Msg, wParam, lParam);
+    }
+
+    return ret;
 }
 
 using CTaskBand__HandleItemResolved_t =
@@ -500,7 +509,7 @@ void WINAPI CTaskBand__HandleItemResolved_Hook(PVOID pThis,
                                                PVOID taskItem) {
     Wh_Log(L">");
 
-    // Reset flags set by CTaskBand__HandleWindowResolved_Hook.
+    // Reset flags set by CTaskBand_v_WndProc_Hook.
     g_compareStringOrdinalHookThreadId = 0;
     g_compareStringOrdinalIgnoreSuffix = false;
 
@@ -973,7 +982,7 @@ CTaskListWnd_HandleTaskGroupUnpinned_t
 void SwapTaskGroupIds(PVOID taskGroup1, PVOID taskGroup2) {
     WCHAR appId1Copy[MAX_PATH] = L"";
     if (PCWSTR appId1 = CTaskGroup_GetAppID_Original(taskGroup1)) {
-        wcscpy_s(appId1Copy, CTaskGroup_GetAppID_Original(taskGroup1));
+        wcscpy_s(appId1Copy, appId1);
     }
 
     ITEMIDLIST* idList1Copy = nullptr;
@@ -1081,21 +1090,22 @@ LONG_PTR OnTaskDestroyed(std::function<LONG_PTR()> original,
     // taskItem is null when unpinning, for example. Not returning in this case
     // causes a bug in which the item stays pinned if there are running
     // instances on other monitors or virtual desktops.
-    if (!CTaskListWnd_IsOnPrimaryTaskband_Original(taskList_TaskListUI) ||
-        !taskItem) {
+    if (!taskItem) {
         return original();
     }
 
+    bool isPrimaryTaskbar =
+        CTaskListWnd_IsOnPrimaryTaskband_Original(taskList_TaskListUI);
     int numItems = CTaskGroup_GetNumItems_Original(taskGroup);
     bool taskGroupIsPinned = CTaskGroup_GetFlags_Original(taskGroup) & 1;
 
-    if (numItems == 1) {
+    if (isPrimaryTaskbar && numItems == 1) {
         HandleUnsuffixedInstanceOnTaskDestroyed(taskList_TaskListUI, taskGroup);
     }
 
     LONG_PTR ret = original();
 
-    if (numItems == 0) {
+    if (isPrimaryTaskbar && numItems == 0) {
         HandleUnsuffixedInstanceOnTaskDestroyed(taskList_TaskListUI, taskGroup);
     }
 
@@ -1250,7 +1260,7 @@ int WINAPI CompareStringOrdinal_Hook(LPCWCH lpString1,
                                      int cchCount1,
                                      LPCWCH lpString2,
                                      int cchCount2,
-                                     WINBOOL bIgnoreCase) {
+                                     BOOL bIgnoreCase) {
     if (g_compareStringOrdinalHookThreadId == GetCurrentThreadId() &&
         cchCount1 == -1 && cchCount2 == -1) {
         PCWSTR suffix1 = FindAppIdSuffix(lpString1);
@@ -1331,474 +1341,118 @@ WinVersion GetExplorerVersion() {
     return WinVersion::Unsupported;
 }
 
-struct SYMBOL_HOOK {
-    std::vector<std::wstring_view> symbols;
+struct EXPLORER_PATCHER_HOOK {
+    PCSTR symbol;
     void** pOriginalFunction;
     void* hookFunction = nullptr;
     bool optional = false;
+
+    template <typename Prototype>
+    EXPLORER_PATCHER_HOOK(
+        PCSTR symbol,
+        Prototype** originalFunction,
+        std::type_identity_t<Prototype*> hookFunction = nullptr,
+        bool optional = false)
+        : symbol(symbol),
+          pOriginalFunction(reinterpret_cast<void**>(originalFunction)),
+          hookFunction(reinterpret_cast<void*>(hookFunction)),
+          optional(optional) {}
 };
-
-bool HookSymbols(HMODULE module,
-                 const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount,
-                 bool cacheOnly = false) {
-    const WCHAR cacheVer = L'1';
-    const WCHAR cacheSep = L'#';
-    constexpr size_t cacheMaxSize = 10240;
-
-    WCHAR moduleFilePath[MAX_PATH];
-    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned an unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
-    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
-
-    std::wstring_view cacheBufferView(cacheBuffer);
-
-    // https://stackoverflow.com/a/46931770
-    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
-        size_t pos_start = 0, pos_end;
-        std::wstring_view token;
-        std::vector<std::wstring_view> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) !=
-               std::wstring_view::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + 1;
-            res.push_back(token);
-        }
-
-        res.push_back(s.substr(pos_start));
-        return res;
-    };
-
-    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
-
-    std::vector<bool> symbolResolved(symbolHooksCount, false);
-    std::wstring newSystemCacheStr;
-
-    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
-                             &newSystemCacheStr,
-                             module](std::wstring_view symbol, void* address) {
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i]) {
-                continue;
-            }
-
-            bool match = false;
-            for (auto hookSymbol : symbolHooks[i].symbols) {
-                if (hookSymbol == symbol) {
-                    match = true;
-                    break;
-                }
-            }
-
-            if (!match) {
-                continue;
-            }
-
-            if (symbolHooks[i].hookFunction) {
-                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
-                                   symbolHooks[i].pOriginalFunction);
-                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            } else {
-                *symbolHooks[i].pOriginalFunction = address;
-                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            }
-
-            symbolResolved[i] = true;
-
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += symbol;
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr +=
-                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
-
-            break;
-        }
-    };
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    newSystemCacheStr += cacheVer;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += timeStamp;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += imageSize;
-
-    if (cacheParts.size() >= 3 &&
-        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
-        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
-        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
-            auto symbol = cacheParts[i];
-            auto address = cacheParts[i + 1];
-            if (address.length() == 0) {
-                continue;
-            }
-
-            void* addressPtr =
-                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
-                        (ULONG_PTR)module);
-
-            onSymbolResolved(symbol, addressPtr);
-        }
-
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i] || !symbolHooks[i].optional) {
-                continue;
-            }
-
-            size_t noAddressMatchCount = 0;
-            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
-                auto symbol = cacheParts[j];
-                auto address = cacheParts[j + 1];
-                if (address.length() != 0) {
-                    continue;
-                }
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    if (hookSymbol == symbol) {
-                        noAddressMatchCount++;
-                        break;
-                    }
-                }
-            }
-
-            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
-                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
-
-                symbolResolved[i] = true;
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    newSystemCacheStr += cacheSep;
-                    newSystemCacheStr += hookSymbol;
-                    newSystemCacheStr += cacheSep;
-                }
-            }
-        }
-
-        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
-                        [](bool b) { return b; })) {
-            return true;
-        }
-    }
-
-    Wh_Log(L"Couldn't resolve all symbols from cache");
-
-    if (cacheOnly) {
-        return false;
-    }
-
-    WH_FIND_SYMBOL findSymbol;
-    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
-    if (!findSymbolHandle) {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
-        return false;
-    }
-
-    do {
-        onSymbolResolved(findSymbol.symbol, findSymbol.address);
-    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
-
-    Wh_FindCloseSymbol(findSymbolHandle);
-
-    for (size_t i = 0; i < symbolHooksCount; i++) {
-        if (symbolResolved[i]) {
-            continue;
-        }
-
-        if (!symbolHooks[i].optional) {
-            Wh_Log(L"Unresolved symbol: %d", i);
-            return false;
-        }
-
-        Wh_Log(L"Optional symbol %d doesn't exist", i);
-
-        for (auto hookSymbol : symbolHooks[i].symbols) {
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += hookSymbol;
-            newSystemCacheStr += cacheSep;
-        }
-    }
-
-    if (newSystemCacheStr.length() <= cacheMaxSize) {
-        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
-    } else {
-        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
-    }
-
-    return true;
-}
-
-std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
-    HINTERNET hOpenHandle = InternetOpen(
-        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hOpenHandle) {
-        return std::nullopt;
-    }
-
-    HINTERNET hUrlHandle =
-        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
-                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
-                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
-                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
-                        0);
-    if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwStatusCode = 0;
-    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
-    if (!HttpQueryInfo(hUrlHandle,
-                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
-                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
-        dwStatusCode != 200) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
-    if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
-    DWORD dwLength = dwNumberOfBytesRead;
-
-    while (dwNumberOfBytesRead) {
-        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
-            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
-        if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
-            HeapFree(GetProcessHeap(), 0, pUrlContent);
-            return std::nullopt;
-        }
-
-        pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
-        dwLength += dwNumberOfBytesRead;
-    }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
-
-    // Assume UTF-8.
-    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
-                                          dwLength, nullptr, 0);
-    std::wstring unicodeContent(charsNeeded, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
-                        unicodeContent.data(), unicodeContent.size());
-
-    HeapFree(GetProcessHeap(), 0, pUrlContent);
-
-    return unicodeContent;
-}
-
-bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
-                                        const SYMBOL_HOOK* symbolHooks,
-                                        size_t symbolHooksCount) {
-    constexpr WCHAR kModIdForCache[] = L"taskbar-grouping";
-
-    if (HookSymbols(module, symbolHooks, symbolHooksCount,
-                    /*cacheOnly=*/true)) {
-        return true;
-    }
-
-    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
-
-    WCHAR moduleFilePath[MAX_PATH];
-    DWORD moduleFilePathLen =
-        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
-    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    DWORD moduleFileNameLen =
-        moduleFilePathLen - (moduleFileName - moduleFilePath);
-
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
-                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
-                  nullptr, 0);
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    std::wstring cacheStrKey =
-#if defined(_M_IX86)
-        L"symbol-x86-cache-";
-#elif defined(_M_X64)
-        L"symbol-cache-";
-#else
-#error "Unsupported architecture"
-#endif
-    cacheStrKey += moduleFileName;
-
-    std::wstring onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
-    onlineCacheUrl += kModIdForCache;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += cacheStrKey;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += timeStamp;
-    onlineCacheUrl += L'-';
-    onlineCacheUrl += imageSize;
-    onlineCacheUrl += L".txt";
-
-    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
-
-    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (onlineCache) {
-        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
-    } else {
-        Wh_Log(L"Failed to get online cache");
-    }
-
-    return HookSymbols(module, symbolHooks, symbolHooksCount);
-}
 
 bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
     if (g_explorerPatcherInitialized.exchange(true)) {
         return true;
     }
 
-    struct EXPLORER_PATCHER_HOOK {
-        PCSTR symbol;
-        void** pOriginalFunction;
-        void* hookFunction = nullptr;
-        bool optional = false;
-    };
+    if (g_winVersion >= WinVersion::Win11) {
+        g_winVersion = WinVersion::Win10;
+    }
 
     EXPLORER_PATCHER_HOOK hooks[] = {
         {R"(?GetNumItems@CTaskGroup@@UEAAHXZ)",
-         (void**)&CTaskGroup_GetNumItems_Original},
-        {R"(?SetAppID@CTaskGroup@@UEAAJPEBG@Z)",
-         (void**)&CTaskGroup_SetAppID_Original},
-        {R"(?GetFlags@CTaskGroup@@UEBAKXZ)",
-         (void**)&CTaskGroup_GetFlags_Original},
+         &CTaskGroup_GetNumItems_Original},
+        {R"(?SetAppID@CTaskGroup@@UEAAJPEBG@Z)", &CTaskGroup_SetAppID_Original},
+        {R"(?GetFlags@CTaskGroup@@UEBAKXZ)", &CTaskGroup_GetFlags_Original},
         {R"(?UpdateFlags@CTaskGroup@@UEAAJKK@Z)",
-         (void**)&CTaskGroup_UpdateFlags_Original},
+         &CTaskGroup_UpdateFlags_Original},
         {R"(?GetTitleText@CTaskGroup@@UEAAJPEAUITaskItem@@PEAGH@Z)",
-         (void**)&CTaskGroup_GetTitleText_Original},
-        {R"(?SetTip@CTaskGroup@@UEAAJPEBG@Z)",
-         (void**)&CTaskGroup_SetTip_Original},
+         &CTaskGroup_GetTitleText_Original},
+        {R"(?SetTip@CTaskGroup@@UEAAJPEBG@Z)", &CTaskGroup_SetTip_Original},
         {R"(?GetIconId@CTaskGroup@@UEAAJPEAUITaskItem@@PEAH@Z)",
-         (void**)&CTaskGroup_GetIconId_Original},
+         &CTaskGroup_GetIconId_Original},
         {R"(?SetIconId@CTaskGroup@@UEAAJPEAUITaskItem@@H@Z)",
-         (void**)&CTaskGroup_SetIconId_Original},
+         &CTaskGroup_SetIconId_Original},
         {R"(?DoesWindowMatch@CTaskGroup@@UEAAJPEAUHWND__@@PEBU_ITEMIDLIST_ABSOLUTE@@PEBGPEAW4WINDOWMATCHCONFIDENCE@@PEAPEAUITaskItem@@@Z)",
-         (void**)&CTaskGroup_DoesWindowMatch_Original},
+         &CTaskGroup_DoesWindowMatch_Original},
         {R"(?_MatchWindow@CTaskBand@@IEAAJPEAUHWND__@@PEBU_ITEMIDLIST_ABSOLUTE@@PEBGW4WINDOWMATCHCONFIDENCE@@PEAPEAUITaskGroup@@PEAPEAUITaskItem@@@Z)",
-         (void**)&CTaskBand__MatchWindow_Original},
+         &CTaskBand__MatchWindow_Original},
         {R"(?GetGroupType@CTaskBtnGroup@@UEAA?AW4eTBGROUPTYPE@@XZ)",
-         (void**)&CTaskBtnGroup_GetGroupType_Original},
-        {R"(?_HandleWindowResolved@CTaskBand@@IEAAXPEAURESOLVEDWINDOW@@@Z)",
-         (void**)&CTaskBand__HandleWindowResolved_Original,
-         (void*)CTaskBand__HandleWindowResolved_Hook},
+         &CTaskBtnGroup_GetGroupType_Original},
+        {R"(?v_WndProc@CTaskBand@@MEAA_JPEAUHWND__@@I_K_J@Z)",
+         &CTaskBand_v_WndProc_Original, CTaskBand_v_WndProc_Hook},
         {R"(?_HandleItemResolved@CTaskBand@@IEAAXPEAURESOLVEDWINDOW@@PEAUITaskListUI@@PEAUITaskGroup@@PEAUITaskItem@@@Z)",
-         (void**)&CTaskBand__HandleItemResolved_Original,
-         (void*)CTaskBand__HandleItemResolved_Hook},
+         &CTaskBand__HandleItemResolved_Original,
+         CTaskBand__HandleItemResolved_Hook},
         {R"(?_Launch@CLauncherTask@CTaskBand@@AEAAJXZ)",
-         (void**)&CTaskBand__Launch_Original, (void*)CTaskBand__Launch_Hook},
-        {R"(?GetAppID@CTaskGroup@@UEAAPEBGXZ)",
-         (void**)&CTaskGroup_GetAppID_Original,
-         (void*)CTaskGroup_GetAppID_Hook},
+         &CTaskBand__Launch_Original, CTaskBand__Launch_Hook},
+        {R"(?GetAppID@CTaskGroup@@UEAAPEBGXZ)", &CTaskGroup_GetAppID_Original,
+         CTaskGroup_GetAppID_Hook},
         {R"(?IsImmersiveGroup@CTaskGroup@@UEAA_NXZ)",
-         (void**)&CTaskGroup_IsImmersiveGroup_Original,
-         (void*)CTaskGroup_IsImmersiveGroup_Hook},
+         &CTaskGroup_IsImmersiveGroup_Original,
+         CTaskGroup_IsImmersiveGroup_Hook},
         {R"(?GetApplicationIDList@CTaskGroup@@UEAAPEAU_ITEMIDLIST_ABSOLUTE@@XZ)",
-         (void**)&CTaskGroup_GetApplicationIDList_Original},
+         &CTaskGroup_GetApplicationIDList_Original},
         {R"(?GetShortcutIDList@CTaskGroup@@UEAAPEBU_ITEMIDLIST_ABSOLUTE@@XZ)",
-         (void**)&CTaskGroup_GetShortcutIDList_Original,
-         (void*)CTaskGroup_GetShortcutIDList_Hook},
+         &CTaskGroup_GetShortcutIDList_Original,
+         CTaskGroup_GetShortcutIDList_Hook},
         {R"(?SetShortcutIDList@CTaskGroup@@UEAAJPEBU_ITEMIDLIST_ABSOLUTE@@@Z)",
-         (void**)&CTaskGroup_SetShortcutIDList_Original},
+         &CTaskGroup_SetShortcutIDList_Original},
         {R"(?GetIconResource@CTaskGroup@@UEAAPEBGXZ)",
-         (void**)&CTaskGroup_GetIconResource_Original,
-         (void*)CTaskGroup_GetIconResource_Hook},
+         &CTaskGroup_GetIconResource_Original, CTaskGroup_GetIconResource_Hook},
         {R"(?_UpdateItemIcon@CTaskBand@@IEAAXPEAUITaskGroup@@PEAUITaskItem@@@Z)",
-         (void**)&CTaskBand__UpdateItemIcon_Original,
-         (void*)CTaskBand__UpdateItemIcon_Hook},
+         &CTaskBand__UpdateItemIcon_Original, CTaskBand__UpdateItemIcon_Hook},
         {R"(?Launch@CTaskBand@@UEAAJPEAUITaskGroup@@AEBUtagPOINT@@W4LaunchFromTaskbarOptions@@@Z)",
-         (void**)&CTaskBand_Launch_Original, (void*)CTaskBand_Launch_Hook},
+         &CTaskBand_Launch_Original, CTaskBand_Launch_Hook},
         {R"(?GetLauncherName@CTaskGroup@@UEAAJPEAPEAG@Z)",
-         (void**)&CTaskGroup_GetLauncherName_Original,
-         (void*)CTaskGroup_GetLauncherName_Hook},
+         &CTaskGroup_GetLauncherName_Original, CTaskGroup_GetLauncherName_Hook},
         {R"(?_GetJumpViewParams@CTaskListWnd@@IEBAJPEAUITaskBtnGroup@@PEAUITaskItem@@H_NPEAPEAUIJumpViewParams@JumpView@Shell@Internal@Windows@ABI@@@Z)",
-         (void**)&CTaskListWnd__GetJumpViewParams_Original,
-         (void*)CTaskListWnd__GetJumpViewParams_Hook},
+         &CTaskListWnd__GetJumpViewParams_Original,
+         CTaskListWnd__GetJumpViewParams_Hook},
         // {// Available from Windows 11.
-        //  R"()", (void**)&CTaskBtnGroup_GetIcon_Original,
-        //  (void*)CTaskBtnGroup_GetIcon_Hook, true},
+        //  R"()", &CTaskBtnGroup_GetIcon_Original, CTaskBtnGroup_GetIcon_Hook,
+        //  true},
         {// Available until Windows 10.
          R"(?_DrawRegularButton@CTaskBtnGroup@@AEAAXPEAUHDC__@@AEBUBUTTONRENDERINFO@@@Z)",
-         (void**)&CTaskBtnGroup__DrawRegularButton_Original,
-         (void*)CTaskBtnGroup__DrawRegularButton_Hook, true},
+         &CTaskBtnGroup__DrawRegularButton_Original,
+         CTaskBtnGroup__DrawRegularButton_Hook, true},
         {R"(?GetGroup@CTaskBtnGroup@@UEAAPEAUITaskGroup@@XZ)",
-         (void**)&CTaskBtnGroup_GetGroup_Original,
-         (void*)CTaskBtnGroup_GetGroup_Hook},
+         &CTaskBtnGroup_GetGroup_Original, CTaskBtnGroup_GetGroup_Hook},
         {R"(?_GetTBGroupFromGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@PEAH@Z)",
-         (void**)&CTaskListWnd__GetTBGroupFromGroup_Original},
+         &CTaskListWnd__GetTBGroupFromGroup_Original},
         {R"(?IsOnPrimaryTaskband@CTaskListWnd@@UEAAHXZ)",
-         (void**)&CTaskListWnd_IsOnPrimaryTaskband_Original},
+         &CTaskListWnd_IsOnPrimaryTaskband_Original},
         {R"(?_CreateTBGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@H@Z)",
-         (void**)&CTaskListWnd__CreateTBGroup_Original,
-         (void*)CTaskListWnd__CreateTBGroup_Hook},
+         &CTaskListWnd__CreateTBGroup_Original,
+         CTaskListWnd__CreateTBGroup_Hook},
         {// Available from Windows 11.
          R"(?HandleTaskGroupSwitchItemAdded@CTaskBand@@IEAAJPEAUISwitchItem@Multitasking@ComposableShell@Internal@Windows@ABI@@@Z)",
-         (void**)&CTaskBand_HandleTaskGroupSwitchItemAdded_Original,
-         (void*)CTaskBand_HandleTaskGroupSwitchItemAdded_Hook, true},
+         &CTaskBand_HandleTaskGroupSwitchItemAdded_Original,
+         CTaskBand_HandleTaskGroupSwitchItemAdded_Hook, true},
         // {// Available from Windows 11.
-        //  R"()", (void**)&CTaskListWnd_GroupChanged_Original, nullptr, true},
+        //  R"()", &CTaskListWnd_GroupChanged_Original, nullptr, true},
         {R"(?HandleTaskGroupPinned@CTaskListWnd@@UEAAXPEAUITaskGroup@@@Z)",
-         (void**)&CTaskListWnd_HandleTaskGroupPinned_Original},
+         &CTaskListWnd_HandleTaskGroupPinned_Original},
         {R"(?HandleTaskGroupUnpinned@CTaskListWnd@@UEAAXPEAUITaskGroup@@W4HandleTaskGroupUnpinnedFlags@@@Z)",
-         (void**)&CTaskListWnd_HandleTaskGroupUnpinned_Original},
+         &CTaskListWnd_HandleTaskGroupUnpinned_Original},
         {// An older variant, see the newer variant below.
          R"(?TaskDestroyed@CTaskListWnd@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@W4TaskDestroyedFlags@@@Z)",
-         (void**)&CTaskListWnd_TaskDestroyed_Original,
-         (void*)CTaskListWnd_TaskDestroyed_Hook, true},
+         &CTaskListWnd_TaskDestroyed_Original, CTaskListWnd_TaskDestroyed_Hook,
+         true},
         // {// A newer variant seen in insider builds.
-        //  R"()", (void**)&CTaskListWnd_TaskDestroyed_2_Original,
-        //  (void*)CTaskListWnd_TaskDestroyed_2_Hook, true},
+        //  R"()", &CTaskListWnd_TaskDestroyed_2_Original,
+        //  CTaskListWnd_TaskDestroyed_2_Hook, true},
         {R"(?_TaskCreated@CTaskListWnd@@IEAAJPEAUITaskGroup@@PEAUITaskItem@@H@Z)",
-         (void**)&CTaskListWnd__TaskCreated_Original,
-         (void*)CTaskListWnd__TaskCreated_Hook},
+         &CTaskListWnd__TaskCreated_Original, CTaskListWnd__TaskCreated_Hook},
     };
 
     bool succeeded = true;
@@ -1821,14 +1475,16 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
         }
     }
 
-    if (g_initialized) {
+    if (!succeeded) {
+        Wh_Log(L"HookExplorerPatcherSymbols failed");
+    } else if (g_initialized) {
         Wh_ApplyHookOperations();
     }
 
     return succeeded;
 }
 
-bool HandleModuleIfExplorerPatcher(HMODULE module) {
+bool IsExplorerPatcherModule(HMODULE module) {
     WCHAR moduleFilePath[MAX_PATH];
     switch (
         GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
@@ -1844,24 +1500,28 @@ bool HandleModuleIfExplorerPatcher(HMODULE module) {
 
     moduleFileName++;
 
-    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) !=
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) ==
         0) {
+        Wh_Log(L"ExplorerPatcher taskbar module: %s", moduleFileName);
         return true;
     }
 
-    Wh_Log(L"ExplorerPatcher taskbar loaded: %s", moduleFileName);
-    return HookExplorerPatcherSymbols(module);
+    return false;
 }
 
-void HandleLoadedExplorerPatcher() {
+bool HandleLoadedExplorerPatcher() {
     HMODULE hMods[1024];
     DWORD cbNeeded;
     if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
                            &cbNeeded)) {
         for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
-            HandleModuleIfExplorerPatcher(hMods[i]);
+            if (IsExplorerPatcherModule(hMods[i])) {
+                return HookExplorerPatcherSymbols(hMods[i]);
+            }
         }
     }
+
+    return true;
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -1871,7 +1531,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
-        HandleModuleIfExplorerPatcher(module);
+        if (IsExplorerPatcherModule(module)) {
+            HookExplorerPatcherSymbols(module);
+        }
     }
 
     return module;
@@ -1879,300 +1541,190 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 bool HookTaskbarSymbols() {
     // Taskbar.dll, explorer.exe
-    SYMBOL_HOOK symbolHooks[] =  //
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
-                {
-                    LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void))",
-                    LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void) __ptr64)",
-                },
+                {LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void))"},
                 (void**)&CTaskGroup_GetNumItems_Original,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::SetAppID(unsigned short const *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::SetAppID(unsigned short const * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::SetAppID(unsigned short const *))"},
                 (void**)&CTaskGroup_SetAppID_Original,
             },
             {
-                {
-                    LR"(public: virtual unsigned long __cdecl CTaskGroup::GetFlags(void)const )",
-                    LR"(public: virtual unsigned long __cdecl CTaskGroup::GetFlags(void)const __ptr64)",
-                },
+                {LR"(public: virtual unsigned long __cdecl CTaskGroup::GetFlags(void)const )"},
                 (void**)&CTaskGroup_GetFlags_Original,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::UpdateFlags(unsigned long,unsigned long))",
-                    LR"(public: virtual long __cdecl CTaskGroup::UpdateFlags(unsigned long,unsigned long) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::UpdateFlags(unsigned long,unsigned long))"},
                 (void**)&CTaskGroup_UpdateFlags_Original,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::GetTitleText(struct ITaskItem *,unsigned short *,int))",
-                    LR"(public: virtual long __cdecl CTaskGroup::GetTitleText(struct ITaskItem * __ptr64,unsigned short * __ptr64,int) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::GetTitleText(struct ITaskItem *,unsigned short *,int))"},
                 (void**)&CTaskGroup_GetTitleText_Original,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::SetTip(unsigned short const *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::SetTip(unsigned short const * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::SetTip(unsigned short const *))"},
                 (void**)&CTaskGroup_SetTip_Original,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::GetIconId(struct ITaskItem *,int *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::GetIconId(struct ITaskItem * __ptr64,int * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::GetIconId(struct ITaskItem *,int *))"},
                 (void**)&CTaskGroup_GetIconId_Original,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::SetIconId(struct ITaskItem *,int))",
-                    LR"(public: virtual long __cdecl CTaskGroup::SetIconId(struct ITaskItem * __ptr64,int) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::SetIconId(struct ITaskItem *,int))"},
                 (void**)&CTaskGroup_SetIconId_Original,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ * __ptr64,struct _ITEMIDLIST_ABSOLUTE const * __ptr64,unsigned short const * __ptr64,enum WINDOWMATCHCONFIDENCE * __ptr64,struct ITaskItem * __ptr64 * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::DoesWindowMatch(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE *,struct ITaskItem * *))"},
                 (void**)&CTaskGroup_DoesWindowMatch_Original,
             },
             {
-                {
-                    LR"(protected: long __cdecl CTaskBand::_MatchWindow(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE,struct ITaskGroup * *,struct ITaskItem * *))",
-                    LR"(protected: long __cdecl CTaskBand::_MatchWindow(struct HWND__ * __ptr64,struct _ITEMIDLIST_ABSOLUTE const * __ptr64,unsigned short const * __ptr64,enum WINDOWMATCHCONFIDENCE,struct ITaskGroup * __ptr64 * __ptr64,struct ITaskItem * __ptr64 * __ptr64) __ptr64)",
-                },
+                {LR"(protected: long __cdecl CTaskBand::_MatchWindow(struct HWND__ *,struct _ITEMIDLIST_ABSOLUTE const *,unsigned short const *,enum WINDOWMATCHCONFIDENCE,struct ITaskGroup * *,struct ITaskItem * *))"},
                 (void**)&CTaskBand__MatchWindow_Original,
             },
             {
-                {
-                    LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))",
-                    LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void) __ptr64)",
-                },
+                {LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))"},
                 (void**)&CTaskBtnGroup_GetGroupType_Original,
             },
             {
-                {
-                    LR"(protected: void __cdecl CTaskBand::_HandleWindowResolved(struct RESOLVEDWINDOW *))",
-                    LR"(protected: void __cdecl CTaskBand::_HandleWindowResolved(struct RESOLVEDWINDOW * __ptr64) __ptr64)",
-                },
-                (void**)&CTaskBand__HandleWindowResolved_Original,
-                (void*)CTaskBand__HandleWindowResolved_Hook,
+                {LR"(protected: virtual __int64 __cdecl CTaskBand::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+                (void**)&CTaskBand_v_WndProc_Original,
+                (void*)CTaskBand_v_WndProc_Hook,
             },
             {
-                {
-                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW *,struct ITaskListUI *,struct ITaskGroup *,struct ITaskItem *))",
-                    LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW * __ptr64,struct ITaskListUI * __ptr64,struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
-                },
+                {LR"(protected: void __cdecl CTaskBand::_HandleItemResolved(struct RESOLVEDWINDOW *,struct ITaskListUI *,struct ITaskGroup *,struct ITaskItem *))"},
                 (void**)&CTaskBand__HandleItemResolved_Original,
                 (void*)CTaskBand__HandleItemResolved_Hook,
             },
             {
-                {
-                    LR"(private: long __cdecl CTaskBand::CLauncherTask::_Launch(void))",
-                    LR"(private: long __cdecl CTaskBand::CLauncherTask::_Launch(void) __ptr64)",
-                },
+                {LR"(private: long __cdecl CTaskBand::CLauncherTask::_Launch(void))"},
                 (void**)&CTaskBand__Launch_Original,
                 (void*)CTaskBand__Launch_Hook,
             },
             {
-                {
-                    LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))",
-                    LR"(public: virtual unsigned short const * __ptr64 __cdecl CTaskGroup::GetAppID(void) __ptr64)",
-                },
+                {LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))"},
                 (void**)&CTaskGroup_GetAppID_Original,
                 (void*)CTaskGroup_GetAppID_Hook,
             },
             {
-                {
-                    LR"(public: virtual bool __cdecl CTaskGroup::IsImmersiveGroup(void))",
-                    LR"(public: virtual bool __cdecl CTaskGroup::IsImmersiveGroup(void) __ptr64)",
-                },
+                {LR"(public: virtual bool __cdecl CTaskGroup::IsImmersiveGroup(void))"},
                 (void**)&CTaskGroup_IsImmersiveGroup_Original,
                 (void*)CTaskGroup_IsImmersiveGroup_Hook,
             },
             {
-                {
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE * __cdecl CTaskGroup::GetApplicationIDList(void))",
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE * __ptr64 __cdecl CTaskGroup::GetApplicationIDList(void) __ptr64)",
-                },
+                {LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE * __cdecl CTaskGroup::GetApplicationIDList(void))"},
                 (void**)&CTaskGroup_GetApplicationIDList_Original,
             },
             {
-                {
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __cdecl CTaskGroup::GetShortcutIDList(void))",
-                    LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __ptr64 __cdecl CTaskGroup::GetShortcutIDList(void) __ptr64)",
-                },
+                {LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __cdecl CTaskGroup::GetShortcutIDList(void))"},
                 (void**)&CTaskGroup_GetShortcutIDList_Original,
                 (void*)CTaskGroup_GetShortcutIDList_Hook,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *))"},
                 (void**)&CTaskGroup_SetShortcutIDList_Original,
             },
             {
-                {
-                    LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetIconResource(void))",
-                    LR"(public: virtual unsigned short const * __ptr64 __cdecl CTaskGroup::GetIconResource(void) __ptr64)",
-                },
+                {LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetIconResource(void))"},
                 (void**)&CTaskGroup_GetIconResource_Original,
                 (void*)CTaskGroup_GetIconResource_Hook,
             },
             {
-                {
-                    LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))",
-                    LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
-                },
+                {LR"(protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *))"},
                 (void**)&CTaskBand__UpdateItemIcon_Original,
                 (void*)CTaskBand__UpdateItemIcon_Hook,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup *,struct tagPOINT const &,enum LaunchFromTaskbarOptions))",
-                    LR"(public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup * __ptr64,struct tagPOINT const & __ptr64,enum LaunchFromTaskbarOptions) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup *,struct tagPOINT const &,enum LaunchFromTaskbarOptions))"},
                 (void**)&CTaskBand_Launch_Original,
                 (void*)CTaskBand_Launch_Hook,
             },
             {
-                {
-                    LR"(public: virtual long __cdecl CTaskGroup::GetLauncherName(unsigned short * *))",
-                    LR"(public: virtual long __cdecl CTaskGroup::GetLauncherName(unsigned short * __ptr64 * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskGroup::GetLauncherName(unsigned short * *))"},
                 (void**)&CTaskGroup_GetLauncherName_Original,
                 (void*)CTaskGroup_GetLauncherName_Hook,
             },
             {
-                {
-                    LR"(protected: long __cdecl CTaskListWnd::_GetJumpViewParams(struct ITaskBtnGroup *,struct ITaskItem *,int,bool,struct Windows::Internal::Shell::JumpView::IJumpViewParams * *)const )",
-                    LR"(protected: long __cdecl CTaskListWnd::_GetJumpViewParams(struct ITaskBtnGroup * __ptr64,struct ITaskItem * __ptr64,int,bool,struct Windows::Internal::Shell::JumpView::IJumpViewParams * __ptr64 * __ptr64)const __ptr64)",
-                },
+                {LR"(protected: long __cdecl CTaskListWnd::_GetJumpViewParams(struct ITaskBtnGroup *,struct ITaskItem *,int,bool,struct Windows::Internal::Shell::JumpView::IJumpViewParams * *)const )"},
                 (void**)&CTaskListWnd__GetJumpViewParams_Original,
                 (void*)CTaskListWnd__GetJumpViewParams_Hook,
             },
             {
                 // Available from Windows 11.
-                {
-                    LR"(public: virtual long __cdecl CTaskBtnGroup::GetIcon(struct ITaskItem *,struct HICON__ * *))",
-                    LR"(public: virtual long __cdecl CTaskBtnGroup::GetIcon(struct ITaskItem * __ptr64,struct HICON__ * __ptr64 * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskBtnGroup::GetIcon(struct ITaskItem *,struct HICON__ * *))"},
                 (void**)&CTaskBtnGroup_GetIcon_Original,
                 (void*)CTaskBtnGroup_GetIcon_Hook,
                 true,
             },
             {
                 // Available until Windows 10.
-                {
-                    LR"(private: void __cdecl CTaskBtnGroup::_DrawRegularButton(struct HDC__ *,struct BUTTONRENDERINFO const &))",
-                    LR"(private: void __cdecl CTaskBtnGroup::_DrawRegularButton(struct HDC__ * __ptr64,struct BUTTONRENDERINFO const & __ptr64) __ptr64)",
-                },
+                {LR"(private: void __cdecl CTaskBtnGroup::_DrawRegularButton(struct HDC__ *,struct BUTTONRENDERINFO const &))"},
                 (void**)&CTaskBtnGroup__DrawRegularButton_Original,
                 (void*)CTaskBtnGroup__DrawRegularButton_Hook,
                 true,
             },
             {
-                {
-                    LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))",
-                    LR"(public: virtual struct ITaskGroup * __ptr64 __cdecl CTaskBtnGroup::GetGroup(void) __ptr64)",
-                },
+                {LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))"},
                 (void**)&CTaskBtnGroup_GetGroup_Original,
                 (void*)CTaskBtnGroup_GetGroup_Hook,
             },
             {
-                {
-                    LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))",
-                    LR"(protected: struct ITaskBtnGroup * __ptr64 __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup * __ptr64,int * __ptr64) __ptr64)",
-                },
+                {LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))"},
                 (void**)&CTaskListWnd__GetTBGroupFromGroup_Original,
             },
             {
-                {
-                    LR"(public: virtual int __cdecl CTaskListWnd::IsOnPrimaryTaskband(void))",
-                    LR"(public: virtual int __cdecl CTaskListWnd::IsOnPrimaryTaskband(void) __ptr64)",
-                },
+                {LR"(public: virtual int __cdecl CTaskListWnd::IsOnPrimaryTaskband(void))"},
                 (void**)&CTaskListWnd_IsOnPrimaryTaskband_Original,
             },
             {
-                {
-                    LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_CreateTBGroup(struct ITaskGroup *,int))",
-                    LR"(protected: struct ITaskBtnGroup * __ptr64 __cdecl CTaskListWnd::_CreateTBGroup(struct ITaskGroup * __ptr64,int) __ptr64)",
-                },
+                {LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_CreateTBGroup(struct ITaskGroup *,int))"},
                 (void**)&CTaskListWnd__CreateTBGroup_Original,
                 (void*)CTaskListWnd__CreateTBGroup_Hook,
             },
             {
                 // Available from Windows 11.
-                {
-                    LR"(protected: void __cdecl CTaskBand::HandleTaskGroupSwitchItemAdded(struct winrt::Windows::Internal::ComposableShell::Multitasking::ISwitchItem const &))",
-                    LR"(protected: void __cdecl CTaskBand::HandleTaskGroupSwitchItemAdded(struct winrt::Windows::Internal::ComposableShell::Multitasking::ISwitchItem const & __ptr64) __ptr64)",
-                },
+                {LR"(protected: void __cdecl CTaskBand::HandleTaskGroupSwitchItemAdded(struct winrt::Windows::Internal::ComposableShell::Multitasking::ISwitchItem const &))"},
                 (void**)&CTaskBand_HandleTaskGroupSwitchItemAdded_Original,
                 (void*)CTaskBand_HandleTaskGroupSwitchItemAdded_Hook,
                 true,
             },
             {
                 // Available from Windows 11.
-                {
-                    LR"(public: virtual void __cdecl CTaskListWnd::GroupChanged(struct ITaskGroup *,enum winrt::WindowsUdk::UI::Shell::TaskGroupProperty))",
-                    LR"(public: virtual void __cdecl CTaskListWnd::GroupChanged(struct ITaskGroup * __ptr64,enum winrt::WindowsUdk::UI::Shell::TaskGroupProperty) __ptr64)",
-                },
+                {LR"(public: virtual void __cdecl CTaskListWnd::GroupChanged(struct ITaskGroup *,enum winrt::WindowsUdk::UI::Shell::TaskGroupProperty))"},
                 (void**)&CTaskListWnd_GroupChanged_Original,
                 nullptr,
                 true,
             },
             {
-                {
-                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup *))",
-                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup *))"},
                 (void**)&CTaskListWnd_HandleTaskGroupPinned_Original,
             },
             {
                 {
                     LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *))",
-                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup * __ptr64) __ptr64)",
 
                     // Before Windows 11 24H2.
                     LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *,enum HandleTaskGroupUnpinnedFlags))",
-                    LR"(public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup * __ptr64,enum HandleTaskGroupUnpinnedFlags) __ptr64)",
                 },
                 (void**)&CTaskListWnd_HandleTaskGroupUnpinned_Original,
             },
             {
                 // An older variant, see the newer variant below.
-                {
-                    LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *,enum TaskDestroyedFlags))",
-                    LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64,enum TaskDestroyedFlags) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *,enum TaskDestroyedFlags))"},
                 (void**)&CTaskListWnd_TaskDestroyed_Original,
                 (void*)CTaskListWnd_TaskDestroyed_Hook,
                 true,
             },
             {
                 // A newer variant seen in insider builds.
-                {
-                    LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *))",
-                    LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
-                },
+                {LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *))"},
                 (void**)&CTaskListWnd_TaskDestroyed_2_Original,
                 (void*)CTaskListWnd_TaskDestroyed_2_Hook,
                 true,
             },
             {
-                {
-                    LR"(protected: long __cdecl CTaskListWnd::_TaskCreated(struct ITaskGroup *,struct ITaskItem *,int))",
-                    LR"(protected: long __cdecl CTaskListWnd::_TaskCreated(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64,int) __ptr64)",
-                },
+                {LR"(protected: long __cdecl CTaskListWnd::_TaskCreated(struct ITaskGroup *,struct ITaskItem *,int))"},
                 (void**)&CTaskListWnd__TaskCreated_Original,
                 (void*)CTaskListWnd__TaskCreated_Hook,
             },
@@ -2189,8 +1741,12 @@ bool HookTaskbarSymbols() {
         }
     }
 
-    return HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                              ARRAYSIZE(symbolHooks));
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
 void LoadSettings() {
@@ -2304,22 +1860,22 @@ BOOL Wh_ModInit() {
         if (hasWin10Taskbar && !HookTaskbarSymbols()) {
             return FALSE;
         }
+    } else if (!HookTaskbarSymbols()) {
+        return FALSE;
+    }
 
-        HandleLoadedExplorerPatcher();
-
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        FARPROC pKernelBaseLoadLibraryExW =
-            GetProcAddress(kernelBaseModule, "LoadLibraryExW");
-        Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
-                           (void*)LoadLibraryExW_Hook,
-                           (void**)&LoadLibraryExW_Original);
-    } else {
-        if (!HookTaskbarSymbols()) {
-            return FALSE;
-        }
+    if (!HandleLoadedExplorerPatcher()) {
+        Wh_Log(L"HandleLoadedExplorerPatcher failed");
+        return FALSE;
     }
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    FARPROC pKernelBaseLoadLibraryExW =
+        GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+    Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
+                       (void*)LoadLibraryExW_Hook,
+                       (void**)&LoadLibraryExW_Original);
+
     FARPROC kernelBaseCompareStringOrdinal =
         GetProcAddress(kernelBaseModule, "CompareStringOrdinal");
     Wh_SetFunctionHook((void*)kernelBaseCompareStringOrdinal,
@@ -2340,7 +1896,7 @@ void Wh_ModAfterInit() {
 
     // Try again in case there's a race between the previous attempt and the
     // LoadLibraryExW hook.
-    if (g_settings.oldTaskbarOnWin11 && !g_explorerPatcherInitialized) {
+    if (!g_explorerPatcherInitialized) {
         HandleLoadedExplorerPatcher();
     }
 }
@@ -2359,12 +1915,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
 
     return TRUE;
-}
-
-// For pre-1.3 Windhawk compatibility.
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"> pre-1.3");
-
-    BOOL bReload = FALSE;
-    Wh_ModSettingsChanged(&bReload);
 }
