@@ -2,7 +2,7 @@
 // @id              spoof-light-dark-theme
 // @name            Spoof Light/Dark Theme
 // @description     Use light/dark theme on an application basis
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -98,7 +98,7 @@ LSTATUS WINAPI RegQueryValueExW_hook(
                     lpBuffer[ulSize / sizeof(WCHAR)] = L'\0';
                     if (EndsWith(lpKeyName, L"\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"))
                     {
-                        *(LPDWORD)lpData = 1;
+                        *(LPDWORD)lpData = !g_fDarkTheme;
                     }
                 }
                 delete[] lpBuffer;
