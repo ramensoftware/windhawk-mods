@@ -13,7 +13,7 @@
 /*
 # Restore Button Pulse Animation
 In Windows Vista and 7, buttons played a "pulse" animation when they were
-focused. This mod restores that functionality;
+focused. This mod restores that functionality.
 
 ![Preview](https://raw.githubusercontent.com/aubymori/images/main/restore-button-pulse-anim-preview.gif)
 
