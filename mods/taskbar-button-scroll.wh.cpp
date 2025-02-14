@@ -2,7 +2,7 @@
 // @id              taskbar-button-scroll
 // @name            Taskbar minimize/restore on scroll
 // @description     Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews (Windows 11 only)
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -172,6 +172,13 @@ void* Get_TaskItemFilter_For_CTaskListWnd_ITaskListUI(void* pThis_ITaskListUI) {
 }
 
 #pragma endregion  // offsets
+
+using DwmpActivateLivePreview_t = HRESULT(WINAPI*)(BOOL peekOn,
+                                                   HWND hPeekWindow,
+                                                   HWND hTopmostWindow,
+                                                   UINT peekType,
+                                                   void* param5);
+DwmpActivateLivePreview_t pDwmpActivateLivePreview;
 
 using CTaskBtnGroup_GetGroup_t = void*(WINAPI*)(void* pThis);
 CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup_Original;
@@ -366,7 +373,13 @@ HRESULT WINAPI CTaskListWnd_HandleExtendedUIClick_Hook(void* pThis,
                 pThis, taskGroup, taskItem, launcherOptions);
     }
 
+    // Stop aero peek.
+    if (pDwmpActivateLivePreview) {
+        pDwmpActivateLivePreview(FALSE, nullptr, nullptr, 3, nullptr);
+    }
+
     TriggerScrollCommand(pThis, taskGroup, taskItem, command);
+
     return S_OK;
 }
 
@@ -807,8 +820,7 @@ bool OnThumbnailWheelScroll(HWND hWnd,
     }
 
     // Allows to steal focus.
-    INPUT input;
-    ZeroMemory(&input, sizeof(INPUT));
+    INPUT input{};
     SendInput(1, &input, sizeof(INPUT));
 
     POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
@@ -1323,11 +1335,17 @@ BOOL Wh_ModInit() {
     }
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-    FARPROC pKernelBaseLoadLibraryExW =
-        GetProcAddress(kernelBaseModule, "LoadLibraryExW");
-    Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
-                       (void*)LoadLibraryExW_Hook,
-                       (void**)&LoadLibraryExW_Original);
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+
+    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
+    if (dwmapiModule) {
+        pDwmpActivateLivePreview =
+            (DwmpActivateLivePreview_t)GetProcAddress(dwmapiModule, (PCSTR)113);
+    }
 
     g_initialized = true;
 
