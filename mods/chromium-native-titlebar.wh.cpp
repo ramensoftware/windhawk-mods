@@ -4,9 +4,7 @@
 // @description     Fix Basic/Classic frames going black in Chromium/Electron/CEF apps
 // @version         0.1
 // @author          Anixx
-// @github          https://github.com/Ingan121
-// @twitter         https://twitter.com/Ingan121
-// @homepage        https://www.ingan121.com/
+// @github          https://github.com/Anixx
 // @include         chrome.exe
 // @include         msedge.exe
 // @include         chromium.exe
