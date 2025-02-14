@@ -2701,7 +2701,7 @@
                 "published": 1739047328000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1739047328000,
+                "updated": 1739548651000,
                 "users": 36
             },
             "metadata": {
@@ -2713,7 +2713,7 @@
                     "*"
                 ],
                 "name": "Spoof Light/Dark Theme",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "start-menu-all-apps": {

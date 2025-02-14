@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-14T12:59:54.000Z</updated>
+    <updated>2025-02-14T15:57:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Spoof Light/Dark Theme 1.0.1]]></title>
+        <id>https://windhawk.net/mods/spoof-light-dark-theme#9822461150f9ce017fcba156d50f18f824fde30b</id>
+        <link href="https://windhawk.net/mods/spoof-light-dark-theme"/>
+        <updated>2025-02-14T15:57:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix issue with <code>RegQueryValueExW</code> hook</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore Button Pulse Animation 1.0.0]]></title>
         <id>https://windhawk.net/mods/restore-button-pulse-anim#c371d1dd9294ac5d5843219d4af0bc01f9b4c195</id>
@@ -286,22 +299,6 @@ regardless of your actual Windows setting.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Start Menu Folders Icon 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-start-menu-folders-icon#63ae9cbd3a4c8479f6eeb26bc60a532e2f84afed</id>
-        <link href="https://windhawk.net/mods/classic-start-menu-folders-icon"/>
-        <updated>2025-01-29T22:23:58.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicstartmenufoldersicon">Classic Start Menu Folders Icon</h1>
-<p>Changes the default icon of Start Menu folders that was used in Windows XP and before.</p>
-<p><img src="https://i.imgur.com/rufM7Yh.png" alt="Open-Shell Menu comparison showing the icon that was used in Windows XP and before" /></p>
-<p><strong>NOTE:</strong> This mod doesn't change the icon of Windows 10/11 Start Menu.
-<a href="https://github.com/Open-Shell/Open-Shell-Menu">Open-Shell</a> was used for the
-screenshot.</p>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
