@@ -358,6 +358,30 @@
                 "version": "1.1"
             }
         },
+        "chromium-native-titlebar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1739537800000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1739537800000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lcomctl32",
+                "description": "Fix Basic/Classic frames going black in Chromium/Electron/CEF apps",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "chrome.exe",
+                    "msedge.exe",
+                    "chromium.exe",
+                    "supermium.exe"
+                ],
+                "name": "Native titelebars in Chromium-based browsers",
+                "version": "0.1"
+            }
+        },
         "chromium-ncpaint-fix": {
             "details": {
                 "defaultSorting": 1000,
