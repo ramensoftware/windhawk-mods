@@ -5,7 +5,6 @@
 // @version         1.0.2
 // @author          anixx
 // @github          https://github.com/Anixx
-// @license         GNU LGPL-2.1 or later
 // @include         explorer.exe
 // ==/WindhawkMod==
 
@@ -16,6 +15,7 @@ The mod is adapted from [Icon16bitFix utility](https://github.com/otya128/Icon16
 
 ![Foler view](https://i.imgur.com/g4epNjk.png)
 
+License: LGPL-2.1 or later
 */
 // ==/WindhawkModReadme==
 
