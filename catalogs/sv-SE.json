@@ -1392,7 +1392,7 @@
                 "published": 1723726056000,
                 "rating": 10,
                 "ratingUsers": 6,
-                "updated": 1723726056000,
+                "updated": 1739658844000,
                 "users": 728
             },
             "metadata": {
@@ -1407,7 +1407,7 @@
                     "explorer.exe"
                 ],
                 "name": "Explorerframe fixes for Win11 22H2+",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "extension-change-no-warning": {

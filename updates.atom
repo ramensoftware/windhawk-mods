@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-15T21:28:04.000Z</updated>
+    <updated>2025-02-15T22:34:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorerframe fixes for Win11 22H2+ 1.0.1]]></title>
+        <id>https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus#e2c7aeff56c2c4b4e13cb67630c91a4ce56567f5</id>
+        <link href="https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus"/>
+        <updated>2025-02-15T22:34:04.000Z</updated>
+        <content type="html"><![CDATA[<p>Explorerframe fixes for win11: more workarounds for unpredictable menubar appearance on later 23H2 and 24H2 builds</p>]]></content>
+        <author>
+            <name>Waldemar</name>
+            <uri>https://github.com/CyprinusCarpio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#eab90eb1da3c2a8b9916e7c31ab5a04b8724f937</id>
@@ -272,19 +283,6 @@ regardless of your actual Windows setting.</p>]]></content>
         <link href="https://windhawk.net/mods/alt-tab-delayer"/>
         <updated>2025-02-06T22:37:45.000Z</updated>
         <content type="html"><![CDATA[<p>Add support for the Win10 alt+tab on Win11</p>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab per monitor 1.1.0]]></title>
-        <id>https://windhawk.net/mods/alt-tab-per-monitor#b246940e57bf03c9d6a6586440cc43d46187b663</id>
-        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
-        <updated>2025-02-06T19:24:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Make the mod compatible with Win10 and with the Win10 alt+tab on Win11</li>
-</ul>]]></content>
         <author>
             <name>L3r0y</name>
             <uri>https://github.com/L3r0yThingz</uri>
