@@ -5,6 +5,7 @@
 // @version         1.0.1
 // @author          anixx
 // @github          https://github.com/Anixx
+// @license         GNU LGPL-2.1 or later
 // @include         explorer.exe
 // ==/WindhawkMod==
 
