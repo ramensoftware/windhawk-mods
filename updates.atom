@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-14T20:53:41.000Z</updated>
+    <updated>2025-02-15T01:24:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Native titelebars in Chromium-based browsers 0.1.1]]></title>
+        <id>https://windhawk.net/mods/chromium-native-titlebar#7c522f531da0d5606eff421dc76c9885907c79de</id>
+        <link href="https://windhawk.net/mods/chromium-native-titlebar"/>
+        <updated>2025-02-15T01:24:22.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix description</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnails#104de03d346d042e329665b5c522197d2b4bb7af</id>
@@ -273,25 +284,6 @@ regardless of your actual Windows setting.</p>]]></content>
 <li>Updated themes: WinXP, Lucent.</li>
 <li>Empty visual states can now be targeted, can be useful in cases when there's no active visual state.</li>
 <li>Fixed error 80070490 which sometime prevented the mod from loading.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.2.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#8e8581b30c2d1d64c641b8fdfe8ee417df35fdcb</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2025-02-01T16:19:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added themes: 21996, Down Aero, UniMenu.</li>
-<li>Updated themes: NoRecommendedSection, TranslucentStartMenu.</li>
-<li>Added support for styling the Windows 10 search menu.</li>
-<li>Added support for styling the offline variant of the search menu (when the DisableSearchBoxSuggestions registry option is enabled).</li>
-<li>Fixed the All Apps list sometimes becoming truncated.</li>
-<li>Empty visual states can now be targeted, can be useful in cases when there's no active visual state.</li>
-<li>Fixed not being able to style some elements due to error 802B000A (failed to create a 'System.Type' from the text).</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

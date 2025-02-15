@@ -364,13 +364,13 @@
                 "published": 1739537800000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1739537800000,
+                "updated": 1739582662000,
                 "users": 1
             },
             "metadata": {
                 "author": "Anixx",
                 "compilerOptions": "-lcomctl32",
-                "description": "Fix Basic/Classic frames going black in Chromium/Electron/CEF apps",
+                "description": "Restore native titlebars in Edge and Chrome",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "chrome.exe",
@@ -379,7 +379,7 @@
                     "supermium.exe"
                 ],
                 "name": "Native titelebars in Chromium-based browsers",
-                "version": "0.1"
+                "version": "0.1.1"
             }
         },
         "chromium-ncpaint-fix": {
