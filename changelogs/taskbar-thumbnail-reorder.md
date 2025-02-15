@@ -1,3 +1,8 @@
+## 1.1 ([Feb 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/eab90eb1da3c2a8b9916e7c31ab5a04b8724f937/mods/taskbar-thumbnail-reorder.wh.cpp))
+
+* Added support for the new thumbnail previews implementation in Windows 11.
+* Added support for the ExplorerPatcher taskbar.
+
 ## 1.0.8 ([Aug 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/2efe8bfdd78e6d3aa282afe913543b2e6e0ac84b/mods/taskbar-thumbnail-reorder.wh.cpp))
 
 * Added support for Windows 11 version 24H2.
