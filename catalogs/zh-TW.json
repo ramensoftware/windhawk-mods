@@ -1124,6 +1124,27 @@
                 "version": "1.0"
             }
         },
+        "disk-pie-chart": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1739611048000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1739611048000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32",
+                "description": "Makes the graph in disk properties a pie chart again",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Disk Pie Chart",
+                "version": "1.0.0"
+            }
+        },
         "dot-hide": {
             "details": {
                 "defaultSorting": 4630,
