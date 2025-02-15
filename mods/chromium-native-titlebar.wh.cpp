@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              chromium-native-titlebar
 // @name            Native titelebars in Chromium-based browsers
-// @description     Fix Basic/Classic frames going black in Chromium/Electron/CEF apps
-// @version         0.1
+// @description     Restore native titlebars in Edge and Chrome
+// @version         0.1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         chrome.exe
