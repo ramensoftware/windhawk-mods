@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-15T09:17:28.000Z</updated>
+    <updated>2025-02-15T12:21:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icons of Win16 apps in Explorer 1.0.2]]></title>
+        <id>https://windhawk.net/mods/icon16bitfix#80df04b114131c98440b5155570d300f9c50e45a</id>
+        <link href="https://windhawk.net/mods/icon16bitfix"/>
+        <updated>2025-02-15T12:21:18.000Z</updated>
+        <content type="html"><![CDATA[<p>Add license tag according to the license on the original code.</p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Pie Chart 1.0.0]]></title>
         <id>https://windhawk.net/mods/disk-pie-chart#976eec84d3873f386cc1b702d9486ad0a6724f7a</id>
@@ -277,19 +288,6 @@ regardless of your actual Windows setting.</p>]]></content>
         <author>
             <name>Toru the Red Fox</name>
             <uri>https://github.com/TorutheRedFox</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#0ed562ab9a86e0ec763753d8da5109cbe66c9325</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
-        <updated>2025-02-04T18:55:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>When hiding the language bar, supplementary icons (such as Japanese Romaji or Kana) are now hidden too.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
