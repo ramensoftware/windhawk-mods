@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnails
 // @name            Disable Taskbar Thumbnails
 // @description     Disable taskbar thumbnails on hover, or replace them with a list
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -87,19 +87,110 @@ WinVersion g_winVersion;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
-using HoverFlyoutModel_TransitionToFlyoutVisibleState_t =
-    void(WINAPI*)(void* pThis, void* param1);
-HoverFlyoutModel_TransitionToFlyoutVisibleState_t
-    HoverFlyoutModel_TransitionToFlyoutVisibleState_Original;
-void WINAPI HoverFlyoutModel_TransitionToFlyoutVisibleState_Hook(void* pThis,
-                                                                 void* param1) {
-    Wh_Log(L">");
+std::atomic<DWORD> g_showTaskListButtonHoverFlyoutThreadId;
+bool g_inTransitionToFlyoutVisibleStickyState;
 
-    if (g_settings.mode == Mode::disabled) {
-        return;
+struct HoverFlyoutWindowState {
+    HWND hWnd = nullptr;
+    int pendingCmdShow = SW_HIDE;
+    BOOL pendingEnable = FALSE;
+};
+
+HoverFlyoutWindowState g_hoverFlyoutWindow;
+
+using ShowWindow_t = decltype(&ShowWindow);
+ShowWindow_t ShowWindow_Original;
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    if (g_showTaskListButtonHoverFlyoutThreadId == GetCurrentThreadId() &&
+        !g_inTransitionToFlyoutVisibleStickyState) {
+        Wh_Log(L"> %08X - %d", (DWORD)(DWORD_PTR)hWnd, nCmdShow);
+
+        if (nCmdShow != SW_HIDE) {
+            if (hWnd != g_hoverFlyoutWindow.hWnd) {
+                g_hoverFlyoutWindow = {.hWnd = hWnd};
+            }
+
+            g_hoverFlyoutWindow.pendingCmdShow = nCmdShow;
+
+            return TRUE;
+        } else if (hWnd == g_hoverFlyoutWindow.hWnd) {
+            g_hoverFlyoutWindow.pendingCmdShow = SW_HIDE;
+        }
     }
 
-    HoverFlyoutModel_TransitionToFlyoutVisibleState_Original(pThis, param1);
+    return ShowWindow_Original(hWnd, nCmdShow);
+}
+
+using EnableWindow_t = decltype(&EnableWindow);
+EnableWindow_t EnableWindow_Original;
+BOOL WINAPI EnableWindow_Hook(HWND hWnd, BOOL bEnable) {
+    if (g_showTaskListButtonHoverFlyoutThreadId == GetCurrentThreadId() &&
+        !g_inTransitionToFlyoutVisibleStickyState) {
+        Wh_Log(L"> %08X - %d", (DWORD)(DWORD_PTR)hWnd, bEnable);
+
+        if (bEnable) {
+            if (hWnd != g_hoverFlyoutWindow.hWnd) {
+                g_hoverFlyoutWindow = {.hWnd = hWnd};
+            }
+
+            g_hoverFlyoutWindow.pendingEnable = bEnable;
+
+            return TRUE;
+        } else if (hWnd == g_hoverFlyoutWindow.hWnd) {
+            g_hoverFlyoutWindow.pendingEnable = FALSE;
+        }
+    }
+
+    return EnableWindow_Original(hWnd, bEnable);
+}
+
+using HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_t =
+    void(WINAPI*)(void* pThis, void* param1);
+HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_t
+    HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original;
+void WINAPI
+HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Hook(void* pThis,
+                                                           void* param1) {
+    Wh_Log(L">");
+
+    g_inTransitionToFlyoutVisibleStickyState = true;
+
+    HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original(pThis,
+                                                                   param1);
+
+    g_inTransitionToFlyoutVisibleStickyState = false;
+
+    HWND hFlyoutWnd = g_hoverFlyoutWindow.hWnd;
+    if (hFlyoutWnd) {
+        if (int pendingCmdShow = g_hoverFlyoutWindow.pendingCmdShow) {
+            ShowWindow_Original(hFlyoutWnd, pendingCmdShow);
+        }
+
+        if (BOOL pendingEnable = g_hoverFlyoutWindow.pendingEnable) {
+            EnableWindow_Original(hFlyoutWnd, pendingEnable);
+        }
+    }
+
+    g_hoverFlyoutWindow = {};
+}
+
+using HoverFlyoutController_ShowTaskListButtonHoverFlyout_t =
+    void(WINAPI*)(void* pThis, void* param1, void* param2, int param3);
+HoverFlyoutController_ShowTaskListButtonHoverFlyout_t
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original;
+void WINAPI
+HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook(void* pThis,
+                                                         void* param1,
+                                                         void* param2,
+                                                         int param3) {
+    Wh_Log(L">");
+
+    g_showTaskListButtonHoverFlyoutThreadId = GetCurrentThreadId();
+
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original(
+        pThis, param1, param2, param3);
+
+    g_showTaskListButtonHoverFlyoutThreadId = 0;
 }
 
 using FlyoutFrame_CanFitAndUpdateScaleFactor_t = bool(WINAPI*)(void* pThis,
@@ -196,9 +287,15 @@ bool HookTaskbarViewDllSymbols() {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::TransitionToFlyoutVisibleState(struct winrt::hstring))"},
-            &HoverFlyoutModel_TransitionToFlyoutVisibleState_Original,
-            HoverFlyoutModel_TransitionToFlyoutVisibleState_Hook,
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::TransitionToFlyoutVisibleStickyState(struct winrt::hstring))"},
+            &HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original,
+            HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Hook,
+            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
+            &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original,
+            HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook,
             true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
         },
         {
@@ -471,9 +568,24 @@ BOOL Wh_ModInit() {
         }
     } else if (g_winVersion >= WinVersion::Win11) {
         // For the new XAML thumbnail.
-        if (g_winVersion >= WinVersion::Win11_24H2 &&
-            !HookTaskbarViewDllSymbols()) {
-            return FALSE;
+        if (g_winVersion >= WinVersion::Win11_24H2) {
+            if (!HookTaskbarViewDllSymbols()) {
+                return FALSE;
+            }
+
+            HMODULE win32u = GetModuleHandle(L"win32u.dll");
+            if (!win32u) {
+                Wh_Log(L"Failed to get win32u.dll");
+                return FALSE;
+            }
+
+            WindhawkUtils::Wh_SetFunctionHookT(
+                (ShowWindow_t)GetProcAddress(win32u, "NtUserShowWindow"),
+                ShowWindow_Hook, &ShowWindow_Original);
+
+            WindhawkUtils::Wh_SetFunctionHookT(
+                (EnableWindow_t)GetProcAddress(win32u, "NtUserEnableWindow"),
+                EnableWindow_Hook, &EnableWindow_Original);
         }
 
         if (!HookTaskbarSymbols()) {
