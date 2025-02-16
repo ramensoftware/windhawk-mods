@@ -3367,7 +3367,7 @@
                 "published": 1657401939000,
                 "rating": 10,
                 "ratingUsers": 165,
-                "updated": 1739654884000,
+                "updated": 1739734637000,
                 "users": 7870
             },
             "featured": true,
@@ -3385,7 +3385,7 @@
                 ],
                 "name": "Taskbar Thumbnail Reorder",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "taskbar-thumbnails": {

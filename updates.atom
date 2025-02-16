@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-15T22:34:04.000Z</updated>
+    <updated>2025-02-16T19:37:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#5542d17a15bb7e47d3f6b4b779076c29d0782bd1</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
+        <updated>2025-02-16T19:37:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed support for Windows 11 version 23H2, as well as several other older Windows versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorerframe fixes for Win11 22H2+ 1.0.1]]></title>
         <id>https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus#e2c7aeff56c2c4b4e13cb67630c91a4ce56567f5</id>
@@ -275,17 +288,6 @@ regardless of your actual Windows setting.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab window delayer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/alt-tab-delayer#c5d08e2f90fadf9a1a23ac71d6f4b5928bd0f553</id>
-        <link href="https://windhawk.net/mods/alt-tab-delayer"/>
-        <updated>2025-02-06T22:37:45.000Z</updated>
-        <content type="html"><![CDATA[<p>Add support for the Win10 alt+tab on Win11</p>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
         </author>
     </entry>
 </feed>
