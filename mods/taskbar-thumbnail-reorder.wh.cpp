@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -173,7 +173,13 @@ void* QueryViaVtableBackwards(void* object, void* vtable) {
     return ptr;
 }
 
-void* CTaskListThumbnailWnd_vftable_1;
+void* Query_CTaskListThumbnailWnd_IExtendedUISwitcher(
+    void* taskListThumbnailWnd) {
+    // This has been correct at least since the first Win10 versions, and is
+    // unlikely to ever change.
+    return (void**)taskListThumbnailWnd + 2;
+}
+
 void* CTaskListWnd_vftable_ITaskListUI;
 
 using CTaskListThumbnailWnd_GetHoverIndex_t = int(WINAPI*)(void* pThis);
@@ -493,10 +499,11 @@ LRESULT WINAPI CTaskListThumbnailWnd_v_WndProc_Hook(void* pThis,
 
             {
                 void* lpMMThumbnailLongPtr = (void*)GetWindowLongPtr(hWnd, 0);
-                void* lpMMThumbnailLongPtr_vftable_1 = QueryViaVtable(
-                    lpMMThumbnailLongPtr, CTaskListThumbnailWnd_vftable_1);
+                void* lpMMThumbnailLongPtr_IExtendedUISwitcher =
+                    Query_CTaskListThumbnailWnd_IExtendedUISwitcher(
+                        lpMMThumbnailLongPtr);
                 int trackedIndex = CTaskListThumbnailWnd_GetHoverIndex(
-                    lpMMThumbnailLongPtr_vftable_1);
+                    lpMMThumbnailLongPtr_IExtendedUISwitcher);
                 if (trackedIndex >= 0) {
                     g_thumbDragDone = false;
                     g_thumbDraggedIndex = trackedIndex;
@@ -511,10 +518,11 @@ LRESULT WINAPI CTaskListThumbnailWnd_v_WndProc_Hook(void* pThis,
             if (GetCapture() == hWnd &&
                 GetTickCount() - g_taskInclusionChangeLastTickCount > 60) {
                 void* lpMMThumbnailLongPtr = (void*)GetWindowLongPtr(hWnd, 0);
-                void* lpMMThumbnailLongPtr_vftable_1 = QueryViaVtable(
-                    lpMMThumbnailLongPtr, CTaskListThumbnailWnd_vftable_1);
+                void* lpMMThumbnailLongPtr_IExtendedUISwitcher =
+                    Query_CTaskListThumbnailWnd_IExtendedUISwitcher(
+                        lpMMThumbnailLongPtr);
                 int trackedIndex = CTaskListThumbnailWnd_GetHoverIndex(
-                    lpMMThumbnailLongPtr_vftable_1);
+                    lpMMThumbnailLongPtr_IExtendedUISwitcher);
                 if (trackedIndex != g_thumbDraggedIndex &&
                     MoveItemsFromThumbnail(lpMMThumbnailLongPtr,
                                            g_thumbDraggedIndex, trackedIndex)) {
@@ -887,7 +895,22 @@ int WINAPI TaskItemThumbnailList_OnPointerReleased_Hook(void* pThis,
 
     int ret = TaskItemThumbnailList_OnPointerReleased_Original(pThis, pArgs);
 
-    g_reorderingXamlThumbnails = false;
+    FrameworkElement element = nullptr;
+    ((IUnknown*)pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(element));
+
+    if (!element) {
+        return ret;
+    }
+
+    auto className = winrt::get_class_name(element);
+    Wh_Log(L"%s", className.c_str());
+
+    if (className == L"Taskbar.TaskItemThumbnailList" ||
+        className == L"Taskbar.TaskItemThumbnailScrollableList") {
+        g_reorderingXamlThumbnails = false;
+    }
 
     return ret;
 }
@@ -917,16 +940,6 @@ bool HookTaskbarSymbols() {
     // Taskbar.dll, explorer.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
-            {
-                {
-                    // Windows 11.
-                    LR"(const CTaskListThumbnailWnd::`vftable'{for `Microsoft::WRL::Details::ImplementsHelper<struct Microsoft::WRL::RuntimeClassFlags<2>,1,struct IExtendedUISwitcher,struct IDropTarget,struct ITaskThumbnailHost>'})",
-
-                    // Windows 10.
-                    LR"(const CTaskListThumbnailWnd::`vftable'{for `Microsoft::WRL::Details::ImplementsHelper<struct Microsoft::WRL::RuntimeClassFlags<2>,1,struct IExtendedUISwitcher,struct IDropTarget,struct ITaskThumbnailHost,struct IUIAnimationStoryboardEventHandler,struct IIconLoaderNotifications2>'})",
-                },
-                &CTaskListThumbnailWnd_vftable_1,
-            },
             {
                 {LR"(const CTaskListWnd::`vftable'{for `ITaskListUI'})"},
                 &CTaskListWnd_vftable_ITaskListUI,
@@ -1154,8 +1167,6 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
     }
 
     EXPLORER_PATCHER_HOOK hooks[] = {
-        {R"(??_7CTaskListThumbnailWnd@@6B?$ImplementsHelper@U?$RuntimeClassFlags@$01@WRL@Microsoft@@$00UIDropTarget@@UITaskThumbnailHost@@UIUIAnimationStoryboardEventHandler2@@@Details@WRL@Microsoft@@@)",
-         &CTaskListThumbnailWnd_vftable_1},
         {R"(??_7CTaskListWnd@@6BITaskListUI@@@)",
          &CTaskListWnd_vftable_ITaskListUI},
         {R"(?GetHoverIndex@CTaskListThumbnailWnd@@UEBAHXZ)",
