@@ -1,3 +1,9 @@
+## 1.4.8 ([Feb 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/712276e60d0edae88611fcebec9f9119298e7ba0/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Fixed "Everything" 1.5.0.1384a or newer hanging when browsing for files in "Everything" itself using the system dialog.
+* Fixed the "Use IEC terms" option not working if "Use MB/GB for large files" is disabled.
+* Fixed size not shown for empty OneDrive folders (and possibly other non-standard folders).
+
 ## 1.4.7 ([Dec 18, 2024](https://github.com/ramensoftware/windhawk-mods/blob/28f831fb2eb390551fac6fa88ca6bf6c590fac01/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * "Everything" integration for folder sizes: Added support for folder junctions.

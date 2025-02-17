@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-16T22:12:33.000Z</updated>
+    <updated>2025-02-17T00:04:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.8]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#712276e60d0edae88611fcebec9f9119298e7ba0</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2025-02-17T00:04:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed "Everything" 1.5.0.1384a or newer hanging when browsing for files in "Everything" itself using the system dialog.</li>
+<li>Fixed the "Use IEC terms" option not working if "Use MB/GB for large files" is disabled.</li>
+<li>Fixed size not shown for empty OneDrive folders (and possibly other non-standard folders).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnails#dbf9a89f5f25ce77821c143ba1caaa55c0c3a9c9</id>
@@ -272,19 +287,6 @@ regardless of your actual Windows setting.</p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#33d869f823bca2613379a3ce5664cc27b0e9471d</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2025-02-08T20:29:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the new thumbnail previews implementation in Windows.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
