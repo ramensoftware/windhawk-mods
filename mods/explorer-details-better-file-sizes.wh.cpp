@@ -2,15 +2,14 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.7
+// @version         1.4.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         *
 // @exclude         conhost.exe
-// @exclude         Plex.exe
-// @exclude         Plex Media Server.exe
+// @exclude         Plex*.exe
 // @compilerOptions -lole32 -loleaut32 -lpropsys
 // ==/WindhawkMod==
 
@@ -162,6 +161,7 @@ struct {
     bool useIecTerms;
 } g_settings;
 
+bool g_isEverything;
 HMODULE g_propsysModule;
 std::atomic<int> g_hookRefCount;
 
@@ -1168,25 +1168,21 @@ std::atomic<DWORD> g_gsReplyCounter;
 enum : unsigned {
     ES_QUERY_OK,
     ES_QUERY_NO_INDEX,
-    ES_QUERY_NO_MEMORY,
     ES_QUERY_NO_ES_IPC,
     ES_QUERY_NO_PLUGIN_IPC,
     ES_QUERY_TIMEOUT,
     ES_QUERY_REPLY_TIMEOUT,
-    ES_QUERY_NO_RESULT,
-    ES_QUERY_DISABLED,
+    ES_QUERY_ZERO_SIZE_REPARSE_POINT,
 };
 
 PCWSTR g_gsQueryStatus[] = {
     L"Ok",
     L"No Index",
-    L"No Memory",
     L"No ES IPC",
     L"No Plugin IPC",
     L"Query Timeout",
     L"Reply Timeout",
-    L"No Result",
-    L"Disabled",
+    L"Zero-size reparse point",
 };
 
 HANDLE g_everything4Wh_Thread;
@@ -1252,13 +1248,22 @@ std::wstring ResolvePath(PCWSTR path) {
 unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
     *size = 0;
 
+    // Prevent querying from within the Everything process to avoid deadlocks.
+    if (g_isEverything) {
+        return ES_QUERY_NO_ES_IPC;
+    }
+
     EVERYTHING3_CLIENT* pClient = Everything3_ConnectW(L"1.5a");
     if (pClient) {
         *size = Everything3_GetFolderSizeFromFilenameW(pClient, folderPath);
         Everything3_DestroyClient(pClient);
 
-        if (*size == -1 || (!*size && IsReparse(folderPath))) {
+        if (*size == -1) {
             return ES_QUERY_NO_INDEX;
+        }
+
+        if (!*size && IsReparse(folderPath)) {
+            return ES_QUERY_ZERO_SIZE_REPARSE_POINT;
         }
 
         return ES_QUERY_OK;
@@ -1270,20 +1275,13 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
         return ES_QUERY_NO_PLUGIN_IPC;
     }
 
-    HWND hEverything = FindWindow(EVERYTHING_IPC_WNDCLASSW, nullptr);
+    HWND hEverything = FindWindow(EVERYTHING_IPC_WNDCLASSW_15A, nullptr);
 
     if (!hEverything) {
-        hEverything = FindWindow(EVERYTHING_IPC_WNDCLASSW_15A, nullptr);
+        hEverything = FindWindow(EVERYTHING_IPC_WNDCLASSW, nullptr);
     }
 
     if (!hEverything) {
-        return ES_QUERY_NO_ES_IPC;
-    }
-
-    // Prevent querying from within the Everything process to avoid deadlocks.
-    DWORD dwEverythingProcessId = 0;
-    GetWindowThreadProcessId(hEverything, &dwEverythingProcessId);
-    if (dwEverythingProcessId == GetCurrentProcessId()) {
         return ES_QUERY_NO_ES_IPC;
     }
 
@@ -1335,9 +1333,9 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
         if (waitResult != WAIT_OBJECT_0) {
             result = ES_QUERY_REPLY_TIMEOUT;
         } else if (!g_gsReply.bResult) {
-            result = ES_QUERY_NO_RESULT;
-        } else if (!g_gsReply.liSize && IsReparse(folderPath)) {
             result = ES_QUERY_NO_INDEX;
+        } else if (!g_gsReply.liSize && IsReparse(folderPath)) {
+            result = ES_QUERY_ZERO_SIZE_REPARSE_POINT;
         } else {
             *size = g_gsReply.liSize;
             result = ES_QUERY_OK;
@@ -1674,15 +1672,26 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
                 int64_t size;
                 unsigned result = Everything4Wh_GetFileSize(path, &size);
 
-                if (result == ES_QUERY_NO_RESULT ||
+                // Regular reparse points are indexed with size 0, and
+                // ES_QUERY_ZERO_SIZE_REPARSE_POINT is returned when querying
+                // the link itself. Subfolders of reparse points aren't indexed,
+                // so ES_QUERY_NO_INDEX is returned in this case.
+                if (result == ES_QUERY_ZERO_SIZE_REPARSE_POINT ||
                     result == ES_QUERY_NO_INDEX) {
-                    // Try resolving the path in case it contains a reparse
-                    // point.
                     auto resolved = ResolvePath(path);
                     if (resolved.empty()) {
                         Wh_Log(L"Failed to resolve path");
                     } else if (resolved == path) {
                         Wh_Log(L"Path is already resolved");
+
+                        // In some cases, reparse points are indexed with the
+                        // real size. In these cases, it was observed that the
+                        // path resolves to itself. An example is OneDrive, see:
+                        // https://github.com/ramensoftware/windhawk-mods/issues/1527
+                        if (result == ES_QUERY_ZERO_SIZE_REPARSE_POINT) {
+                            size = 0;
+                            result = ES_QUERY_OK;
+                        }
                     } else {
                         Wh_Log(L"Trying resolved path %s", resolved.c_str());
                         result =
@@ -1959,6 +1968,30 @@ HRESULT WINAPI PSFormatForDisplay_Hook(const PROPERTYKEY& propkey,
 
     return PSFormatForDisplay_Original(propkey, propvar, pdfFlagsNew, pwszText,
                                        cchText);
+}
+
+using PSStrFormatKBSizeW_t = void*(WINAPI*)(size_t size,
+                                            LPWSTR pwszText,
+                                            DWORD cchText);
+PSStrFormatKBSizeW_t PSStrFormatKBSizeW_Original;
+void* WINAPI PSStrFormatKBSizeW_Hook(size_t size,
+                                     LPWSTR pwszText,
+                                     DWORD cchText) {
+    Wh_Log(L">");
+
+    void* ret = PSStrFormatKBSizeW_Original(size, pwszText, cchText);
+
+    int len = wcslen(pwszText);
+    if (len < 2 || (size_t)len + 1 > cchText - 1 || pwszText[len - 2] != 'K' ||
+        pwszText[len - 1] != 'B') {
+        return ret;
+    }
+
+    pwszText[len - 1] = 'i';
+    pwszText[len] = 'B';
+    pwszText[len + 1] = '\0';
+
+    return ret;
 }
 
 using LoadStringW_t = decltype(&LoadStringW);
@@ -2313,10 +2346,37 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Failed hooking Windows Storage symbols");
             return false;
         }
+    }
 
-        WindhawkUtils::Wh_SetFunctionHookT(
-            SHOpenFolderAndSelectItems, SHOpenFolderAndSelectItems_Hook,
-            &SHOpenFolderAndSelectItems_Original);
+    if (g_settings.calculateFolderSizes == CalculateFolderSizes::everything) {
+        bool isEverything = false;
+        WCHAR moduleFilePath[MAX_PATH];
+        switch (GetModuleFileName(nullptr, moduleFilePath,
+                                  ARRAYSIZE(moduleFilePath))) {
+            case 0:
+            case ARRAYSIZE(moduleFilePath):
+                Wh_Log(L"GetModuleFileName failed");
+                break;
+
+            default:
+                if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
+                    moduleFileName++;
+                    if (_wcsicmp(moduleFileName, L"Everything.exe") == 0) {
+                        isEverything = true;
+                    }
+                } else {
+                    Wh_Log(L"GetModuleFileName returned an unsupported path");
+                }
+                break;
+        }
+
+        if (isEverything) {
+            g_isEverything = true;
+
+            WindhawkUtils::Wh_SetFunctionHookT(
+                SHOpenFolderAndSelectItems, SHOpenFolderAndSelectItems_Hook,
+                &SHOpenFolderAndSelectItems_Original);
+        }
     }
 
     if (g_settings.disableKbOnlySizes) {
@@ -2331,10 +2391,20 @@ BOOL Wh_ModInit() {
     }
 
     if (g_settings.useIecTerms) {
-        g_propsysModule = GetModuleHandle(L"propsys.dll");
-        if (!g_propsysModule) {
+        HMODULE propsysModule = GetModuleHandle(L"propsys.dll");
+        if (!propsysModule) {
             Wh_Log(L"Failed getting propsys.dll");
             return FALSE;
+        }
+
+        g_propsysModule = propsysModule;
+
+        if (!g_settings.disableKbOnlySizes) {
+            auto pPSStrFormatKBSizeW =
+                (PSStrFormatKBSizeW_t)GetProcAddress(propsysModule, (PCSTR)422);
+            WindhawkUtils::Wh_SetFunctionHookT(pPSStrFormatKBSizeW,
+                                               PSStrFormatKBSizeW_Hook,
+                                               &PSStrFormatKBSizeW_Original);
         }
 
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
