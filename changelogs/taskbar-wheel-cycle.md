@@ -1,3 +1,9 @@
+## 1.1.7 ([Feb 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6e4b3344875e80a12fc86756547813f61cb60810/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Added support for Windows 10.
+* Added support for the ExplorerPatcher taskbar.
+* Fixed keyboard shortcut registering on startup in some cases.
+
 ## 1.1.6 ([Oct 12, 2024](https://github.com/ramensoftware/windhawk-mods/blob/02ba0666ef1b78f2462215089a2a29834143aecf/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Added a workaround for keyboard shortcuts not working after sleep.
