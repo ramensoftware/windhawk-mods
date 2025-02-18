@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     Customize the taskbar with themes contributed by others or create your own
-// @version         1.3.9
+// @version         1.3.10
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -262,6 +262,8 @@ const Theme g_themeWinXP = {{
         L"Fill:=<LinearGradientBrush StartPoint=\"0.5,0\" EndPoint=\"0.5,1\"> <GradientStop Color=\"#3168d5\" Offset=\"0.0\" /> <GradientStop Color=\"#4993E6\" Offset=\"0.1\" /> <GradientStop Color=\"#2157D7\" Offset=\"0.35\" /> <GradientStop Color=\"#2663E0\" Offset=\"0.8\" /> <GradientStop Color=\"#1941A5\" Offset=\"1.0\" /></LinearGradientBrush>",
         L"VerticalAlignment=Stretch",
         L"Height=Auto"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#HoverFlyoutBackgroundControl > Grid > Rectangle#BackgroundFill", {
+        L"Fill:=<LinearGradientBrush StartPoint=\"0.5,0\" EndPoint=\"0.5,1\"> <GradientStop Color=\"#3168d5\" Offset=\"0.0\" /> <GradientStop Color=\"#4993E6\" Offset=\"0.1\" /> <GradientStop Color=\"#2157D7\" Offset=\"0.35\" /> <GradientStop Color=\"#2663E0\" Offset=\"0.8\" /> <GradientStop Color=\"#1941A5\" Offset=\"1.0\" /></LinearGradientBrush>"}},
     ThemeTargetStyles{L"Taskbar.ExperienceToggleButton#LaunchListButton[AutomationProperties.AutomationId=StartButton]", {
         L"CornerRadius=0",
         L"Margin=0,0,4,0",
@@ -377,8 +379,10 @@ const Theme g_themeBubbles = {{
 }};
 
 const Theme g_themeTranslucentTaskbar = {{
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Fill:=<AcrylicBrush TintColor=\"Black\" TintOpacity=\"0\" TintLuminosityOpacity=\"0.15\" Opacity=\"1\" FallbackColor=\"#70262626\"/>"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#HoverFlyoutBackgroundControl > Grid > Rectangle#BackgroundFill", {
+        L"Fill=#C444"}},
     ThemeTargetStyles{L"Rectangle#BackgroundStroke", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"MenuFlyoutPresenter", {
@@ -394,8 +398,10 @@ const Theme g_themeTranslucentTaskbar = {{
 }};
 
 const Theme g_themeSquircle = {{
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Fill=Transparent"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#HoverFlyoutBackgroundControl > Grid > Rectangle#BackgroundFill", {
+        L"Fill=#CC222222"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel@CommonStates > Border#BackgroundElement", {
         L"CornerRadius=5",
         L"Background:=<AcrylicBrush TintColor=\"Black\" TintOpacity=\"0.8\" FallbackColor=\"#BB222222\" />",
@@ -467,11 +473,13 @@ const Theme g_themeSquircle = {{
 }};
 
 const Theme g_themeSquircle_variant_WeatherOnTheRight = {{
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Fill=Transparent"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#HoverFlyoutBackgroundControl > Grid > Rectangle#BackgroundFill", {
+        L"Fill=#CC222222"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel@CommonStates > Border#BackgroundElement", {
         L"CornerRadius=5",
-        L"Background:=<AcrylicBrush TintColor=\"Black\" TintOpacity=\"0.8\" FallbackColor=\"#BB222222\"/>",
+        L"Background:=<AcrylicBrush TintColor=\"Black\" TintOpacity=\"0.8\" FallbackColor=\"#BB222222\" />",
         L"Background@InactivePointerOver:=<AcrylicBrush TintColor=\"Black\" TintOpacity=\"0.8\" FallbackColor=\"#CC222222\" />",
         L"Background@ActivePointerOver:=<AcrylicBrush TintColor=\"Black\" TintOpacity=\"0.8\" FallbackColor=\"#CC222222\" />",
         L"Background@ActiveNormal:=<AcrylicBrush TintColor=\"Black\" TintOpacity=\"0.8\" FallbackColor=\"#CC222222\" />",
@@ -595,8 +603,10 @@ const Theme g_themeRosePine = {{
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#InnerTextBlock[Text=\uE971]", {
         L"Text=\uE712"}},
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Fill=Transparent"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#HoverFlyoutBackgroundControl > Grid > Rectangle#BackgroundFill", {
+        L"Fill=#302d47"}},
     ThemeTargetStyles{L"Rectangle#BackgroundStroke", {
         L"Fill=Transparent"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel#ExperienceToggleButtonRootPanel > Border#BackgroundElement", {
@@ -617,7 +627,7 @@ const Theme g_themeDockLike = {{
         L"Padding=6,0,6,0",
         L"CornerRadius=8,8,0,0",
         L"BorderBrush:=<SolidColorBrush Color=\"{ThemeResource SurfaceStrokeColorDefault}\" />"}},
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Rectangle#BackgroundStroke", {
         L"Visibility=Collapsed"}},
@@ -708,7 +718,7 @@ const Theme g_themeWinVista = {{
 }};
 
 const Theme g_themeCleanSlate = {{
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Fill:=<AcrylicBrush TintColor=\"{ThemeResource SystemAccentColorDark2}\" TintOpacity=\"0.4\" FallbackColor=\"{ThemeResource SystemAccentColorDark1}\" />"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel@CommonStates > Border#BackgroundElement", {
         L"CornerRadius=100",
@@ -789,8 +799,10 @@ const Theme g_themeCleanSlate = {{
 }};
 
 const Theme g_themeLucent = {{
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Fill:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#00000000\" Offset=\"0.3\" /><GradientStop Color=\"#AA000000\" Offset=\"0.9\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#HoverFlyoutBackgroundControl > Grid > Rectangle#BackgroundFill", {
+        L"Fill:=<LinearGradientBrush StartPoint=\"0,0.5\" EndPoint=\"0,1\"><GradientStop Color=\"#ee000000\" Offset=\"0.1\" /><GradientStop Color=\"{ThemeResource SystemAccentColorDark2}\" Offset=\"0.9\" /><GradientStop Color=\"#AAFFFFFF\" Offset=\"1.0\" /></LinearGradientBrush>"}},
     ThemeTargetStyles{L"Taskbar.TaskListLabeledButtonPanel@RunningIndicatorStates > Rectangle#RunningIndicator", {
         L"Fill=Transparent"}},
     ThemeTargetStyles{L"Rectangle#BackgroundStroke", {
@@ -830,8 +842,10 @@ const Theme g_themeLucent = {{
 }};
 
 const Theme g_themeLucent_variant_Light = {{
-    ThemeTargetStyles{L"Rectangle#BackgroundFill", {
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid > Taskbar.TaskbarBackground > Grid > Rectangle#BackgroundFill", {
         L"Fill:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#00000000\" Offset=\"0.3\" /><GradientStop Color=\"#AA000000\" Offset=\"0.9\" /></LinearGradientBrush>"}},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#HoverFlyoutBackgroundControl > Grid > Rectangle#BackgroundFill", {
+        L"Fill:=<LinearGradientBrush StartPoint=\"0,0.5\" EndPoint=\"0,1\"><GradientStop Color=\"#ee000000\" Offset=\"0.1\" /><GradientStop Color=\"{ThemeResource SystemAccentColorDark2}\" Offset=\"0.9\" /><GradientStop Color=\"#AAFFFFFF\" Offset=\"1.0\" /></LinearGradientBrush>"}},
     ThemeTargetStyles{L"Taskbar.TaskListLabeledButtonPanel@RunningIndicatorStates > Rectangle#RunningIndicator", {
         L"Fill=Transparent"}},
     ThemeTargetStyles{L"Rectangle#BackgroundStroke", {
@@ -1518,7 +1532,8 @@ void SetOrClearValue(DependencyObject elementDo,
         // `SetValue` results in the following error: 0x80004002 (No such
         // interface supported). Box it as `Windows.UI.Text.FontWeight` as a
         // workaround.
-        if (property == Controls::TextBlock::FontWeightProperty()) {
+        if (property == Controls::TextBlock::FontWeightProperty() ||
+            property == Controls::Control::FontWeightProperty()) {
             auto valueInt = value.try_as<int>();
             if (valueInt && *valueInt >= std::numeric_limits<uint16_t>::min() &&
                 *valueInt <= std::numeric_limits<uint16_t>::max()) {
@@ -1839,7 +1854,9 @@ bool TestElementMatcher(FrameworkElement element,
     auto elementDo = element.as<DependencyObject>();
 
     for (const auto& propertyValue : GetResolvedPropertyValues(
-             matcher.type, fallbackClassName ? fallbackClassName : L"",
+             matcher.type,
+             fallbackClassName ? fallbackClassName
+                               : winrt::name_of<FrameworkElement>(),
              &matcher.propertyValues)) {
         const auto value =
             ReadLocalValueWithWorkaround(elementDo, propertyValue.first);
@@ -1941,7 +1958,8 @@ FindElementPropertyOverrides(FrameworkElement element,
         for (const auto& [property, valuesPerVisualState] :
              GetResolvedPropertyOverrides(
                  override.elementMatcher.type,
-                 fallbackClassName ? fallbackClassName : L"",
+                 fallbackClassName ? fallbackClassName
+                                   : winrt::name_of<FrameworkElement>(),
                  &override.propertyOverrides)) {
             bool propertyInserted = propertiesAdded.insert(property).second;
             if (!propertyInserted) {
@@ -2202,7 +2220,7 @@ void ApplyCustomizations(InstanceHandle handle,
                UINT uMsg,         // WM_TIMER message
                UINT_PTR idEvent,  // timer identifier
                DWORD dwTime       // current system time
-               ) WINAPI {
+            ) {
                 Wh_Log(L"Running delayed customization of BackgroundFill");
 
                 for (auto it = g_backgroundFillDelayedApplyData.begin();
@@ -2755,7 +2773,7 @@ bool RunFromWindowThread(HWND hWnd,
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
@@ -2813,8 +2831,7 @@ void Wh_ModAfterInit() {
     if (hTaskbarUiWnd) {
         Wh_Log(L"Initializing - Found DesktopWindowContentBridge window");
         RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID) WINAPI { InitializeSettingsAndTap(); },
-            nullptr);
+            hTaskbarUiWnd, [](PVOID) { InitializeSettingsAndTap(); }, nullptr);
     }
 }
 
@@ -2830,7 +2847,7 @@ void Wh_ModUninit() {
     if (hTaskbarUiWnd) {
         Wh_Log(L"Uninitializing - Found DesktopWindowContentBridge window");
         RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID) WINAPI { UninitializeSettingsAndTap(); },
+            hTaskbarUiWnd, [](PVOID) { UninitializeSettingsAndTap(); },
             nullptr);
     }
 }
@@ -2848,7 +2865,7 @@ void Wh_ModSettingsChanged() {
         Wh_Log(L"Reinitializing - Found DesktopWindowContentBridge window");
         RunFromWindowThread(
             hTaskbarUiWnd,
-            [](PVOID) WINAPI {
+            [](PVOID) {
                 UninitializeSettingsAndTap();
                 InitializeSettingsAndTap();
             },
