@@ -1,3 +1,8 @@
+## 1.3.10 ([Feb 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/969985c9efc19788571d93e85240a260c5ab0fc7/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Improved support for the new thumbnail previews implementation in Windows 11 for the following themes: WinXP, TranslucentTaskbar, Squircle, RosePine, DockLike, CleanSlate, Lucent.
+* Fixed customizing the FontWeight property for some controls.
+
 ## 1.3.9 ([Feb 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/42d2709e22df203d6f5765b796909dca2a286cf1/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added the 21996Taskbar theme.
