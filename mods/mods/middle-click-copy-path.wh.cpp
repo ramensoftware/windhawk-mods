@@ -34,8 +34,6 @@ enum {
 
 struct {
     int multipleItemsBehavior;
-    bool keysToEndTaskCtrl;
-    bool keysToEndTaskAlt;
     bool oldTaskbarOnWin11;
 } g_settings;
 
@@ -920,10 +918,7 @@ void LoadSettings() {
         g_settings.multipleItemsBehavior = MULTIPLE_ITEMS_BEHAVIOR_NONE;
     }
     Wh_FreeStringSetting(multipleItemsBehavior);
-
-    g_settings.keysToEndTaskCtrl = Wh_GetIntSetting(L"keysToEndTask.Ctrl");
-    g_settings.keysToEndTaskAlt = Wh_GetIntSetting(L"keysToEndTask.Alt");
-
+    
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
