@@ -2801,6 +2801,32 @@
                 "version": "1.0.2"
             }
         },
+        "taskbar-auto-hide-speed": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1740077841000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1740077841000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "Customize the taskbar auto-hide speed and frame rate to make it feel less sluggish and janky",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar auto-hide speed",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-auto-hide-when-maximized": {
             "details": {
                 "defaultSorting": 29493,
