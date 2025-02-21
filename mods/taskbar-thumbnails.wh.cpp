@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnails
 // @name            Disable Taskbar Thumbnails
 // @description     Disable taskbar thumbnails on hover, or replace them with a list
-// @version         1.1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -26,7 +26,7 @@
 
 Disable taskbar thumbnails on hover, or replace them with a list.
 
-Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
+Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 **Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
@@ -153,6 +153,12 @@ HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Hook(void* pThis,
                                                            void* param1) {
     Wh_Log(L">");
 
+    if (g_settings.mode != Mode::disabled) {
+        HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original(pThis,
+                                                                       param1);
+        return;
+    }
+
     g_inTransitionToFlyoutVisibleStickyState = true;
 
     HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Original(pThis,
@@ -184,6 +190,12 @@ HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook(void* pThis,
                                                          void* param2,
                                                          int param3) {
     Wh_Log(L">");
+
+    if (g_settings.mode != Mode::disabled) {
+        HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original(
+            pThis, param1, param2, param3);
+        return;
+    }
 
     g_showTaskListButtonHoverFlyoutThreadId = GetCurrentThreadId();
 
@@ -567,30 +579,27 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     } else if (g_winVersion >= WinVersion::Win11) {
-        // For the new XAML thumbnail.
-        if (g_winVersion >= WinVersion::Win11_24H2) {
-            if (!HookTaskbarViewDllSymbols()) {
-                return FALSE;
-            }
-
-            HMODULE win32u = GetModuleHandle(L"win32u.dll");
-            if (!win32u) {
-                Wh_Log(L"Failed to get win32u.dll");
-                return FALSE;
-            }
-
-            WindhawkUtils::Wh_SetFunctionHookT(
-                (ShowWindow_t)GetProcAddress(win32u, "NtUserShowWindow"),
-                ShowWindow_Hook, &ShowWindow_Original);
-
-            WindhawkUtils::Wh_SetFunctionHookT(
-                (EnableWindow_t)GetProcAddress(win32u, "NtUserEnableWindow"),
-                EnableWindow_Hook, &EnableWindow_Original);
+        if (!HookTaskbarViewDllSymbols()) {
+            return FALSE;
         }
 
         if (!HookTaskbarSymbols()) {
             return FALSE;
         }
+
+        HMODULE win32u = GetModuleHandle(L"win32u.dll");
+        if (!win32u) {
+            Wh_Log(L"Failed to get win32u.dll");
+            return FALSE;
+        }
+
+        WindhawkUtils::Wh_SetFunctionHookT(
+            (ShowWindow_t)GetProcAddress(win32u, "NtUserShowWindow"),
+            ShowWindow_Hook, &ShowWindow_Original);
+
+        WindhawkUtils::Wh_SetFunctionHookT(
+            (EnableWindow_t)GetProcAddress(win32u, "NtUserEnableWindow"),
+            EnableWindow_Hook, &EnableWindow_Original);
     } else {
         if (!HookTaskbarSymbols()) {
             return FALSE;
