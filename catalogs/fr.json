@@ -3419,7 +3419,7 @@
                 "published": 1728339473000,
                 "rating": 10,
                 "ratingUsers": 17,
-                "updated": 1739743953000,
+                "updated": 1740172000000,
                 "users": 691
             },
             "metadata": {
@@ -3436,7 +3436,7 @@
                 ],
                 "name": "Disable Taskbar Thumbnails",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.1"
+                "version": "1.1.2"
             }
         },
         "taskbar-tray-system-icon-tweaks": {
