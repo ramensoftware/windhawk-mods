@@ -156,7 +156,7 @@ BOOL Wh_ModInit() {
         },
     };
 
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks22H2[] = {
+    WindhawkUtils::SYMBOL_HOOK uDWM22H2dllHooks[] = {
         {
             {LR"(public: long __cdecl CAccentAcrylicBlurBehind::UpdateAcrylicBlurBehind(struct ACCENT_POLICY const &,unsigned long,bool,double const *))"},
             (void**)&UpdateAcrylicBlurBehind22H2_Original,
@@ -164,7 +164,7 @@ BOOL Wh_ModInit() {
         }
     };
 
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks24H2[] = {
+    WindhawkUtils::SYMBOL_HOOK uDWM24H2dllHooks[] = {
         {
             {LR"(private: static bool __cdecl CTopLevelWindow::IsShadowNCAreaPart(unsigned int))"},
             (void**)&IsShadowNCAreaPart_Original,
@@ -183,14 +183,14 @@ BOOL Wh_ModInit() {
     }
 
     if (GetWinBuild() >= 26100) {
-        if (!HookSymbols(udwm, uDWMdllHooks24H2, ARRAYSIZE(uDWMdllHooks24H2))) {
+        if (!HookSymbols(udwm, uDWM24H2dllHooks, ARRAYSIZE(uDWM24H2dllHooks))) {
             Wh_Log(L"Failed to hook 24H2-specific symbols");
             return FALSE;
         }
     }
 
     if (GetWinBuild() < 26100 && GetWinBuild() > 22000) {
-        if (!HookSymbols(udwm, uDWMdllHooks22H2, ARRAYSIZE(uDWMdllHooks22H2))) {
+        if (!HookSymbols(udwm, uDWM22H2dllHooks, ARRAYSIZE(uDWM22H2dllHooks))) {
             Wh_Log(L"Failed to hook 22H2-specific symbols");
             return FALSE;
         }
