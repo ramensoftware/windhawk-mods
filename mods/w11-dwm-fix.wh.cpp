@@ -2,7 +2,7 @@
 // @id              w11-dwm-fix
 // @name            Bring Back the Borders!
 // @description     Restores borders, corners, shadows, and more!
-// @version         3.0.0
+// @version         3.1.0
 // @author          teknixstuff
 // @github          https://github.com/teknixstuff
 // @twitter         https://twitter.com/teknixstuff
@@ -53,6 +53,15 @@ long __cdecl UpdateNCAreaGeometry_Hook(LPVOID a1this) {
     char oldContrast = (*(char**)s_pDesktopManagerInstance)[0x1A];
     (*(char**)s_pDesktopManagerInstance)[0x1A] = 1;
     long ret = UpdateNCAreaGeometry_Original(a1this);
+    (*(char**)s_pDesktopManagerInstance)[0x1A] = oldContrast;
+    return ret;
+}
+
+long (*__cdecl UpdateNCAreaBackground_Original)(LPVOID a1this);
+long __cdecl UpdateNCAreaBackground_Hook(LPVOID a1this) {
+    char oldContrast = (*(char**)s_pDesktopManagerInstance)[0x1A];
+    (*(char**)s_pDesktopManagerInstance)[0x1A] = 1;
+    long ret = UpdateNCAreaBackground_Original(a1this);
     (*(char**)s_pDesktopManagerInstance)[0x1A] = oldContrast;
     return ret;
 }
@@ -137,6 +146,25 @@ BOOL Wh_ModInit() {
             (void*)UpdateNCAreaGeometry_Hook
         },
         {
+            {LR"(public: void __cdecl CTopLevelWindow::SetSuppressBorderUpdates(bool))"},
+            (void**)&SetSuppressBorderUpdates_Original
+        },
+        {
+            {LR"(private: static class CDesktopManager * CDesktopManager::s_pDesktopManagerInstance)"},
+            (void**)&s_pDesktopManagerInstance
+        },
+    };
+
+    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks21H2[] = {
+        {
+            {LR"(private: long __cdecl CTopLevelWindow::UpdateNCAreaBackground(void))"},
+            (void**)&UpdateNCAreaBackground_Original,
+            (void*)UpdateNCAreaBackground_Hook
+        }
+    };
+
+    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks22H2[] = {
+        {
             {LR"(public: long __cdecl CLegacyNonClientBackground::SetBorderColor(struct _D3DCOLORVALUE const &))"},
             (void**)&SetBorderColor_Original,
             (void*)SetBorderColor_Hook
@@ -147,17 +175,6 @@ BOOL Wh_ModInit() {
             (void*)CalculateBackgroundType_Hook
         },
         {
-            {LR"(public: void __cdecl CTopLevelWindow::SetSuppressBorderUpdates(bool))"},
-            (void**)&SetSuppressBorderUpdates_Original
-        },
-        {
-            {LR"(private: static class CDesktopManager * CDesktopManager::s_pDesktopManagerInstance)"},
-            (void**)&s_pDesktopManagerInstance
-        },
-    };
-
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks22H2[] = {
-        {
             {LR"(public: long __cdecl CAccentAcrylicBlurBehind::UpdateAcrylicBlurBehind(struct ACCENT_POLICY const &,unsigned long,bool,double const *))"},
             (void**)&UpdateAcrylicBlurBehind22H2_Original,
             (void*)UpdateAcrylicBlurBehind22H2_Hook
@@ -165,6 +182,16 @@ BOOL Wh_ModInit() {
     };
 
     WindhawkUtils::SYMBOL_HOOK uDWMdllHooks24H2[] = {
+        {
+            {LR"(public: long __cdecl CLegacyNonClientBackground::SetBorderColor(struct _D3DCOLORVALUE const &))"},
+            (void**)&SetBorderColor_Original,
+            (void*)SetBorderColor_Hook
+        },
+        {
+            {LR"(private: enum CTopLevelWindow::BackgroundType __cdecl CTopLevelWindow::CalculateBackgroundType(void)const )"},
+            (void**)&CalculateBackgroundType_Original,
+            (void*)CalculateBackgroundType_Hook
+        },
         {
             {LR"(private: static bool __cdecl CTopLevelWindow::IsShadowNCAreaPart(unsigned int))"},
             (void**)&IsShadowNCAreaPart_Original,
@@ -194,6 +221,16 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Failed to hook 22H2-specific symbols");
             return FALSE;
         }
+    }
+
+    if (GetWinBuild() <= 22000) {
+        if (!HookSymbols(udwm, uDWMdllHooks21H2, ARRAYSIZE(uDWMdllHooks21H2))) {
+            Wh_Log(L"Failed to hook 21H2-specific symbols");
+            return FALSE;
+        }
+    }
+
+    if (GetWinBuild() < 26100 && GetWinBuild() >= 20000) {
         const auto dosHeader = (PIMAGE_DOS_HEADER)udwm;
         const auto ntHeaders = (PIMAGE_NT_HEADERS)((std::uint8_t*)udwm + dosHeader->e_lfanew);
         const auto sizeOfImage = ntHeaders->OptionalHeader.SizeOfImage;
