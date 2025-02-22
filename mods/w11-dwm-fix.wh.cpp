@@ -14,8 +14,16 @@
 // ==WindhawkModReadme==
 /*
 # Bring Back the Borders!
-This mod restores the W10 backdrop effects, borders, shadows, and acrylic.
+Restores the W10 backdrop effects, borders, shadows, and acrylic.
 Based on Ittr's uDWM patches.
+
+## ⚠ Important usage note ⚠
+
+In order to use this mod, you must allow Windhawk to inject into the **dwm.exe**
+system process. To do so, add it to the process inclusion list in the advanced
+settings. If you do not do this, it will silently fail to inject.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
 // ==/WindhawkModReadme==
 
@@ -129,7 +137,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks21H2[] = {
+    // uDWM.dll
+    WindhawkUtils::SYMBOL_HOOK uDWMHooks21H2[] = {
         {
             {LR"(public: static bool __cdecl CDesktopManager::IsHighContrastMode(void))"},
             (void**)&IsHighContrastMode_Original,
@@ -160,7 +169,8 @@ BOOL Wh_ModInit() {
         }
     };
 
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks22H2[] = {
+    // uDWM.dll
+    WindhawkUtils::SYMBOL_HOOK uDWMHooks22H2[] = {
         {
             {LR"(public: static bool __cdecl CDesktopManager::IsHighContrastMode(void))"},
             (void**)&IsHighContrastMode_Original,
@@ -201,7 +211,8 @@ BOOL Wh_ModInit() {
         }
     };
 
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks24H2[] = {
+    // uDWM.dll
+    WindhawkUtils::SYMBOL_HOOK uDWMHooks24H2[] = {
         {
             {LR"(public: static bool __cdecl CDesktopManager::IsHighContrastMode(void))"},
             (void**)&IsHighContrastMode_Original,
@@ -248,21 +259,21 @@ BOOL Wh_ModInit() {
     };
 
     if (GetWinBuild() >= 26100) {
-        if (!HookSymbols(udwm, uDWMdllHooks24H2, ARRAYSIZE(uDWMdllHooks24H2))) {
+        if (!HookSymbols(udwm, uDWMHooks24H2, ARRAYSIZE(uDWMHooks24H2))) {
             Wh_Log(L"Failed to hook symbols");
             return FALSE;
         }
     }
 
     if (GetWinBuild() < 26100 && GetWinBuild() > 22000) {
-        if (!HookSymbols(udwm, uDWMdllHooks22H2, ARRAYSIZE(uDWMdllHooks22H2))) {
+        if (!HookSymbols(udwm, uDWMHooks22H2, ARRAYSIZE(uDWMHooks22H2))) {
             Wh_Log(L"Failed to hook symbols");
             return FALSE;
         }
     }
 
     if (GetWinBuild() <= 22000 && GetWinBuild() >= 20000) {
-        if (!HookSymbols(udwm, uDWMdllHooks21H2, ARRAYSIZE(uDWMdllHooks21H2))) {
+        if (!HookSymbols(udwm, uDWMHooks21H2, ARRAYSIZE(uDWMHooks21H2))) {
             Wh_Log(L"Failed to hook symbols");
             return FALSE;
         }
