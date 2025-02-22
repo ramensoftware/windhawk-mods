@@ -2,7 +2,7 @@
 // @id              w11-dwm-fix
 // @name            Bring Back the Borders!
 // @description     Restores borders, corners, shadows, and more!
-// @version         3.1.0
+// @version         3.1.1
 // @author          teknixstuff
 // @github          https://github.com/teknixstuff
 // @twitter         https://twitter.com/teknixstuff
@@ -129,7 +129,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks21H2[] = {
         {
             {LR"(public: static bool __cdecl CDesktopManager::IsHighContrastMode(void))"},
             (void**)&IsHighContrastMode_Original,
@@ -153,9 +153,6 @@ BOOL Wh_ModInit() {
             {LR"(private: static class CDesktopManager * CDesktopManager::s_pDesktopManagerInstance)"},
             (void**)&s_pDesktopManagerInstance
         },
-    };
-
-    WindhawkUtils::SYMBOL_HOOK uDWMdllHooks21H2[] = {
         {
             {LR"(private: long __cdecl CTopLevelWindow::UpdateNCAreaBackground(void))"},
             (void**)&UpdateNCAreaBackground_Original,
@@ -164,6 +161,29 @@ BOOL Wh_ModInit() {
     };
 
     WindhawkUtils::SYMBOL_HOOK uDWMdllHooks22H2[] = {
+        {
+            {LR"(public: static bool __cdecl CDesktopManager::IsHighContrastMode(void))"},
+            (void**)&IsHighContrastMode_Original,
+            (void*)IsHighContrastMode_Hook,
+        },
+        {
+            {LR"(private: long __cdecl CTopLevelWindow::UpdateWindowVisuals(void))"},
+            (void**)&UpdateWindowVisuals_Original,
+            (void*)UpdateWindowVisuals_Hook
+        },
+        {
+            {LR"(private: long __cdecl CTopLevelWindow::UpdateNCAreaGeometry(void))"},
+            (void**)&UpdateNCAreaGeometry_Original,
+            (void*)UpdateNCAreaGeometry_Hook
+        },
+        {
+            {LR"(public: void __cdecl CTopLevelWindow::SetSuppressBorderUpdates(bool))"},
+            (void**)&SetSuppressBorderUpdates_Original
+        },
+        {
+            {LR"(private: static class CDesktopManager * CDesktopManager::s_pDesktopManagerInstance)"},
+            (void**)&s_pDesktopManagerInstance
+        },
         {
             {LR"(public: long __cdecl CLegacyNonClientBackground::SetBorderColor(struct _D3DCOLORVALUE const &))"},
             (void**)&SetBorderColor_Original,
@@ -182,6 +202,29 @@ BOOL Wh_ModInit() {
     };
 
     WindhawkUtils::SYMBOL_HOOK uDWMdllHooks24H2[] = {
+        {
+            {LR"(public: static bool __cdecl CDesktopManager::IsHighContrastMode(void))"},
+            (void**)&IsHighContrastMode_Original,
+            (void*)IsHighContrastMode_Hook,
+        },
+        {
+            {LR"(private: long __cdecl CTopLevelWindow::UpdateWindowVisuals(void))"},
+            (void**)&UpdateWindowVisuals_Original,
+            (void*)UpdateWindowVisuals_Hook
+        },
+        {
+            {LR"(private: long __cdecl CTopLevelWindow::UpdateNCAreaGeometry(void))"},
+            (void**)&UpdateNCAreaGeometry_Original,
+            (void*)UpdateNCAreaGeometry_Hook
+        },
+        {
+            {LR"(public: void __cdecl CTopLevelWindow::SetSuppressBorderUpdates(bool))"},
+            (void**)&SetSuppressBorderUpdates_Original
+        },
+        {
+            {LR"(private: static class CDesktopManager * CDesktopManager::s_pDesktopManagerInstance)"},
+            (void**)&s_pDesktopManagerInstance
+        },
         {
             {LR"(public: long __cdecl CLegacyNonClientBackground::SetBorderColor(struct _D3DCOLORVALUE const &))"},
             (void**)&SetBorderColor_Original,
@@ -204,28 +247,23 @@ BOOL Wh_ModInit() {
         }
     };
 
-    if (!HookSymbols(udwm, uDWMdllHooks, ARRAYSIZE(uDWMdllHooks))) {
-        Wh_Log(L"Failed to hook symbols");
-        return FALSE;
-    }
-
     if (GetWinBuild() >= 26100) {
         if (!HookSymbols(udwm, uDWMdllHooks24H2, ARRAYSIZE(uDWMdllHooks24H2))) {
-            Wh_Log(L"Failed to hook 24H2-specific symbols");
+            Wh_Log(L"Failed to hook symbols");
             return FALSE;
         }
     }
 
     if (GetWinBuild() < 26100 && GetWinBuild() > 22000) {
         if (!HookSymbols(udwm, uDWMdllHooks22H2, ARRAYSIZE(uDWMdllHooks22H2))) {
-            Wh_Log(L"Failed to hook 22H2-specific symbols");
+            Wh_Log(L"Failed to hook symbols");
             return FALSE;
         }
     }
 
-    if (GetWinBuild() <= 22000) {
+    if (GetWinBuild() <= 22000 && GetWinBuild() >= 20000) {
         if (!HookSymbols(udwm, uDWMdllHooks21H2, ARRAYSIZE(uDWMdllHooks21H2))) {
-            Wh_Log(L"Failed to hook 21H2-specific symbols");
+            Wh_Log(L"Failed to hook symbols");
             return FALSE;
         }
     }
