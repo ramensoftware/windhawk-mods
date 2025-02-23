@@ -292,7 +292,6 @@ BOOL Wh_ModInit() {
                 ((LPBYTE)udwm)[i+6] == 0x77)
             {
                 shadow = ((LPBYTE)udwm) + i;
-                break;
             }
         }
         if (!shadow) {
