@@ -3871,7 +3871,7 @@
                 "published": 1707592711000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1707592711000,
+                "updated": 1740300805000,
                 "users": 149
             },
             "metadata": {
@@ -3879,7 +3879,7 @@
                     "x86-64"
                 ],
                 "author": "teknixstuff",
-                "description": "Restores borders and corners",
+                "description": "Restores borders, corners, shadows, and more!",
                 "github": "https://github.com/teknixstuff",
                 "homepage": "https://teknixstuff.github.io/",
                 "include": [
@@ -3887,7 +3887,7 @@
                 ],
                 "name": "Bring Back the Borders!",
                 "twitter": "https://twitter.com/teknixstuff",
-                "version": "1.1.0"
+                "version": "3.1.1"
             }
         },
         "win-d-per-monitor": {
