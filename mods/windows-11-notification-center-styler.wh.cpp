@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center with themes contributed by others or create your own
-// @version         1.1.5
+// @version         1.1.6
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -298,12 +298,11 @@ const Theme g_theme10JumpLists = {{
     ThemeTargetStyles{L"JumpViewUI.SystemItemListView#SystemItemList", {
         L"Width=256"}},
     ThemeTargetStyles{L"JumpViewUI.TaskbarJumpListFrame", {
-        L"Width=256",
-        L"RequestedTheme=2"}},
+        L"Width=256"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListListView#ItemList", {
         L"Width=256",
-        L"Background:=<AcrylicBrush TintColor=\"#202020\" TintOpacity=\"0.75\" FallbackColor=\"#202020\" />",
-        L"Padding=0,5,0,5"}},
+        L"Padding=0,5,0,5",
+        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.78\" TintLuminosityOpacity=\"0.77\"  FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemControl > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.TextBlock", {
         L"FontFamily=Segoe MDL2 Assets"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.TextBlock", {
@@ -319,36 +318,38 @@ const Theme g_theme10JumpLists = {{
         L"Height=30"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Windows.UI.Xaml.Controls.Grid#LayoutRoot@CommonStates > Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
         L"CornerRadius=0",
-        L"Background@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.5\" FallbackColor=\"#353535\" />",
-        L"Background@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.9\" FallbackColor=\"#4c4c4c\" />",
+        L"Background@PointerOver:=<RevealBorderBrush Color=\"{ThemeResource SystemListLowColor}\" TargetTheme=\"1\" Opacity=\"0.5\" FallbackColor=\"{ThemeResource SystemListLowColor}\"/>",
+        L"Background@Pressed:=<RevealBorderBrush Color=\"{ThemeResource SystemListLowColor}\" TargetTheme=\"1\" Opacity=\"0.9\" FallbackColor=\"{ThemeResource SystemListLowColor}\" />",
         L"BorderBrush@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
         L"BorderBrush@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
         L"BorderThickness=1,1,1,1"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Windows.UI.Xaml.Controls.Grid#LayoutRoot@CommonStates > Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
         L"CornerRadius=0",
-        L"Background@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.5\" FallbackColor=\"#353535\"/>",
-        L"Background@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"0.9\" FallbackColor=\"#4c4c4c\" />",
+        L"Background@PointerOver:=<RevealBorderBrush Color=\"{ThemeResource SystemListLowColor}\" TargetTheme=\"1\" Opacity=\"0.5\" FallbackColor=\"{ThemeResource SystemListLowColor}\"/>",
+        L"Background@Pressed:=<RevealBorderBrush Color=\"{ThemeResource SystemListLowColor}\" TargetTheme=\"1\" Opacity=\"0.9\" FallbackColor=\"{ThemeResource SystemListLowColor}\" />",
         L"BorderBrush@PointerOver:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
         L"BorderBrush@Pressed:=<RevealBorderBrush Color=\"Transparent\" TargetTheme=\"1\" Opacity=\"1\" />",
         L"BorderThickness=1,1,1,1"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Shapes.Rectangle", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#DisplayNameTextBlock", {
-        L"FontSize=12"}},
+        L"FontSize=12",
+        L"FontFamily=Segoe UI"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListCategoryHeaderControl > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.TextBlock#HeadingTextBlock", {
-        L"Margin=12,10,12,6"}},
+        L"Margin=12,10,12,6",
+        L"FontFamily=Segoe UI"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SystemItemsContainer > Windows.UI.Xaml.Shapes.Rectangle", {
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SystemItemsContainer", {
         L"Padding=0,5,0,5",
-        L"Background:=<AcrylicBrush TintColor=\"#101010\" TintOpacity=\"0.75\" FallbackColor=\"#101010\" />"}},
+        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.78\" TintLuminosityOpacity=\"0.77\"  FallbackColor=\"{ThemeResource SystemChromeLowColor}\" />"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Windows.UI.Xaml.Controls.Grid#LayoutRoot > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.Grid#LayoutRoot > Windows.UI.Xaml.Shapes.Rectangle", {
         L"Margin=12,4,12,4"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListControl#JumpList", {
         L"Margin=0,0,0,0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton > Windows.UI.Xaml.Controls.Grid@CommonStates > Windows.UI.Xaml.Controls.Border#BackgroundBorder", {
-        L"Background@PointerOver:=<AcrylicBrush TintColor=\"#7d8787\" TintOpacity=\"0.3\" FallbackColor=\"#494949\" />",
-        L"Background@Pressed:=<AcrylicBrush TintColor=\"#788787\" TintOpacity=\"0.3\" FallbackColor=\"#5d5d5d\" />",
+        L"Background@PointerOver:=<AcrylicBrush TintColor=\"{ThemeResource SystemListLowColor}\" TintOpacity=\"1\" Opacity=\"0.5\" FallbackColor=\"{ThemeResource SystemListLowColor}\"/>",
+        L"Background@Pressed:=<AcrylicBrush TintColor=\"{ThemeResource SystemListLowColor}\" TintOpacity=\"1\" Opacity=\"0.9\" FallbackColor=\"{ThemeResource SystemListMediumColor}\"/>",
         L"CornerRadius=0"}},
 }};
 
@@ -869,7 +870,8 @@ void SetOrClearValue(DependencyObject elementDo,
         // `SetValue` results in the following error: 0x80004002 (No such
         // interface supported). Box it as `Windows.UI.Text.FontWeight` as a
         // workaround.
-        if (property == Controls::TextBlock::FontWeightProperty()) {
+        if (property == Controls::TextBlock::FontWeightProperty() ||
+            property == Controls::Control::FontWeightProperty()) {
             auto valueInt = value.try_as<int>();
             if (valueInt && *valueInt >= std::numeric_limits<uint16_t>::min() &&
                 *valueInt <= std::numeric_limits<uint16_t>::max()) {
@@ -998,7 +1000,8 @@ Style GetStyleFromXamlSettersWithFallbackType(
         return GetStyleFromXamlSetters(type, xamlStyleSetters);
     } catch (winrt::hresult_error const& ex) {
         constexpr HRESULT kStowedException = 0x802B000A;
-        if (ex.code() != kStowedException) {
+        if (ex.code() != kStowedException || fallbackType.empty() ||
+            fallbackType == type) {
             throw;
         }
 
@@ -1018,6 +1021,7 @@ Style GetStyleFromXamlSettersWithFallbackType(
 
 const PropertyOverrides& GetResolvedPropertyOverrides(
     const std::wstring_view type,
+    const std::wstring_view fallbackType,
     PropertyOverridesMaybeUnresolved* propertyOverridesMaybeUnresolved) {
     if (const auto* resolved =
             std::get_if<PropertyOverrides>(propertyOverridesMaybeUnresolved)) {
@@ -1055,7 +1059,7 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
             }
 
             auto style = GetStyleFromXamlSettersWithFallbackType(
-                type, winrt::name_of<FrameworkElement>(), xaml);
+                type, fallbackType, xaml);
 
             uint32_t i = 0;
             for (const auto& rule : styleRules) {
@@ -1081,6 +1085,7 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
 const PropertyValues& GetResolvedPropertyValues(
     const std::wstring_view type,
+    const std::wstring_view fallbackType,
     PropertyValuesMaybeUnresolved* propertyValuesMaybeUnresolved) {
     if (const auto* resolved =
             std::get_if<PropertyValues>(propertyValuesMaybeUnresolved)) {
@@ -1104,7 +1109,7 @@ const PropertyValues& GetResolvedPropertyValues(
             }
 
             auto style = GetStyleFromXamlSettersWithFallbackType(
-                type, winrt::name_of<FrameworkElement>(), xaml);
+                type, fallbackType, xaml);
 
             for (size_t i = 0; i < propertyValuesStr.size(); i++) {
                 const auto setter = style.Setters().GetAt(i).as<Setter>();
@@ -1171,8 +1176,11 @@ bool TestElementMatcher(FrameworkElement element,
 
     auto elementDo = element.as<DependencyObject>();
 
-    for (const auto& propertyValue :
-         GetResolvedPropertyValues(matcher.type, &matcher.propertyValues)) {
+    for (const auto& propertyValue : GetResolvedPropertyValues(
+             matcher.type,
+             fallbackClassName ? fallbackClassName
+                               : winrt::name_of<FrameworkElement>(),
+             &matcher.propertyValues)) {
         const auto value =
             ReadLocalValueWithWorkaround(elementDo, propertyValue.first);
         if (!value) {
@@ -1271,8 +1279,11 @@ FindElementPropertyOverrides(FrameworkElement element,
 
         auto& overridesForVisualStateGroup = overrides[visualStateGroup];
         for (const auto& [property, valuesPerVisualState] :
-             GetResolvedPropertyOverrides(override.elementMatcher.type,
-                                          &override.propertyOverrides)) {
+             GetResolvedPropertyOverrides(
+                 override.elementMatcher.type,
+                 fallbackClassName ? fallbackClassName
+                                   : winrt::name_of<FrameworkElement>(),
+                 &override.propertyOverrides)) {
             bool propertyInserted = propertiesAdded.insert(property).second;
             if (!propertyInserted) {
                 continue;
@@ -1630,10 +1641,6 @@ StyleRule StyleRuleFromString(std::wstring_view str) {
     auto atPos = name.find(L'@');
     if (atPos != name.npos) {
         result.visualState = TrimStringView(name.substr(atPos + 1));
-        if (result.visualState.empty()) {
-            throw std::runtime_error("Bad style syntax, empty visual state");
-        }
-
         name = name.substr(0, atPos);
     }
 
@@ -1916,7 +1923,7 @@ bool RunFromWindowThread(HWND hWnd,
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
@@ -1963,7 +1970,7 @@ bool RunFromWindowThreadViaPostMessage(HWND hWnd,
 
     HHOOK hook = SetWindowsHookEx(
         WH_GETMESSAGE,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION && wParam == PM_REMOVE) {
                 MSG* msg = (MSG*)lParam;
                 if (msg->message ==
@@ -2023,7 +2030,7 @@ void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
                 // Initializing at this point is too early and doesn't work.
                 RunFromWindowThreadViaPostMessage(
                     hWnd,
-                    [](PVOID) WINAPI {
+                    [](PVOID) {
                         InitializeForCurrentThread();
                         InitializeSettingsAndTap();
                     },
@@ -2121,7 +2128,7 @@ std::vector<HWND> GetCoreWnds() {
     std::vector<HWND> hWnds;
     ENUM_WINDOWS_PARAM param = {&hWnds};
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
 
             DWORD dwProcessId = 0;
@@ -2211,8 +2218,7 @@ void Wh_ModAfterInit() {
     for (auto hCoreWnd : hCoreWnds) {
         Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
-            hCoreWnd, [](PVOID) WINAPI { InitializeForCurrentThread(); },
-            nullptr);
+            hCoreWnd, [](PVOID) { InitializeForCurrentThread(); }, nullptr);
     }
 
     if (hCoreWnds.size() > 0) {
@@ -2230,8 +2236,7 @@ void Wh_ModUninit() {
     for (auto hCoreWnd : hCoreWnds) {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
-            hCoreWnd, [](PVOID) WINAPI { UninitializeForCurrentThread(); },
-            nullptr);
+            hCoreWnd, [](PVOID) { UninitializeForCurrentThread(); }, nullptr);
     }
 }
 
@@ -2245,7 +2250,7 @@ void Wh_ModSettingsChanged() {
         Wh_Log(L"Reinitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd,
-            [](PVOID) WINAPI {
+            [](PVOID) {
                 UninitializeForCurrentThread();
                 InitializeForCurrentThread();
             },
