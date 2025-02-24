@@ -2,7 +2,7 @@
 // @id              hide-taskbar-monitor
 // @name            Hide Taskbar on a Specific Monitor
 // @description     Hides the taskbar only on a user-specified monitor.
-// @version         1.0
+// @version         1.0.1
 // @author          Repilee
 // @github          https://github.com/Repilee
 // @include         explorer.exe
@@ -41,9 +41,12 @@ This Windhawk mod hides the Windows taskbar **only** on the specified monitor wh
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <thread>
+#include <chrono>
 
 int g_monitorIndex = 1;
 std::wstring g_taskbarMode = L"24H2";
+bool g_running = true; // Background thread control
 
 // Struct to store monitor info and assigned taskbar
 struct MonitorData {
@@ -54,6 +57,22 @@ struct MonitorData {
 
 // Global storage for monitors
 std::vector<MonitorData> g_monitors;
+
+// Function to wait for Explorer and Taskbar to load
+void WaitForExplorer() {
+    int attempts = 0;
+    while (attempts < 30) {  // Wait up to 30 seconds for Explorer
+        HWND taskbar = FindWindow(L"Shell_TrayWnd", NULL);
+        if (taskbar) {
+            Wh_Log(L"Explorer is ready, proceeding...");
+            return;
+        }
+        Wh_Log(L"Explorer not ready yet, retrying...");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        attempts++;
+    }
+    Wh_Log(L"Explorer did not load within 30 seconds, exiting.");
+}
 
 // Callback function for `EnumDisplayMonitors` to get all monitors
 BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM) {
@@ -156,12 +175,22 @@ void UpdateTaskbarVisibility() {
     }
 }
 
+// Background thread: Monitors taskbars after login or restart
+void TaskbarMonitorThread() {
+    WaitForExplorer(); // Wait until Explorer is ready
+    while (g_running) {
+        UpdateTaskbarVisibility();
+        std::this_thread::sleep_for(std::chrono::seconds(3)); // Check every 3 seconds, sometimes Explorer shows for whatever reason
+    }
+}
+
 // Hook for monitor changes
 void CALLBACK OnMonitorChange(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
     UpdateTaskbarVisibility();
 }
 
 HWINEVENTHOOK g_hook = NULL;
+std::thread g_taskbarThread;
 
 // Load Windhawk settings
 void LoadSettings() {
@@ -174,6 +203,11 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Hide Taskbar on Specific Monitor mod...");
     LoadSettings();
     g_hook = SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, NULL, OnMonitorChange, 0, 0, WINEVENT_OUTOFCONTEXT);
+    
+    // Start the taskbar monitoring thread
+    g_running = true;
+    g_taskbarThread = std::thread(TaskbarMonitorThread);
+    
     UpdateTaskbarVisibility();
     return TRUE;
 }
@@ -182,6 +216,10 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Unloading mod...");
     if (g_hook) UnhookWinEvent(g_hook);
+    
+    // Stop the taskbar monitoring thread
+    g_running = false;
+    if (g_taskbarThread.joinable()) g_taskbarThread.join();
 
     // Restore all taskbars
     for (auto& monitor : g_monitors) {
@@ -195,4 +233,3 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     UpdateTaskbarVisibility();
 }
-
