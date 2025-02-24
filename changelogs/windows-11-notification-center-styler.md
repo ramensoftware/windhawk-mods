@@ -1,3 +1,8 @@
+## 1.1.6 ([Feb 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e7c61b93d603d644bf3a2263b59f350da851e664/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Updated the 10JumpLists theme.
+* Empty visual states can now be targeted, can be useful in cases when there's no active visual state.
+
 ## 1.1.5 ([Jan 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b0d7a441fde94fac703f55f232efbb0ea674e803/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added a new theme: 10JumpLists.
