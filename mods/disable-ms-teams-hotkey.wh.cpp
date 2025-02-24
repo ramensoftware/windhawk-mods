@@ -22,7 +22,7 @@ So this mod prevents Teams from ever occupying that hotkey so that it remains av
 
 BOOL(*pOriginalRegisterHotKey)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
 
-BOOL RegisterHotKeyHook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
+BOOL WINAPI RegisterHotKeyHook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
 {
     if (fsModifiers == (MOD_CONTROL | MOD_SHIFT) && vk == VK_SPACE)
     {
