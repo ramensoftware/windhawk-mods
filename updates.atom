@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-24T19:59:01.000Z</updated>
+    <updated>2025-02-24T21:13:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#a964360a62a40333fb917ccea2c5513fe7e77b3b</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
+        <updated>2025-02-24T21:13:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarkeyboardonlyautohide">Taskbar keyboard-only auto-hide</h1>
+<p>When taskbar auto-hide is enabled, the taskbar will only be unhidden with the
+keyboard, hovering the mouse over the taskbar will not unhide it. For example,
+the Win key or Ctrl+Esc will unhide the taskbar.</p>
+<p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
+or a similar tool), enable the relevant option in the mod's settings.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.6]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#e7c61b93d603d644bf3a2263b59f350da851e664</id>
@@ -270,23 +286,6 @@ using a Windows Vista/7-styled theme in order to see the effect.</p>]]></content
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Native titelebars in Chromium-based browsers 0.1]]></title>
-        <id>https://windhawk.net/mods/chromium-native-titlebar#e6eeae29e3573ba7e681ef1137f512d91348e6b8</id>
-        <link href="https://windhawk.net/mods/chromium-native-titlebar"/>
-        <updated>2025-02-14T12:56:40.000Z</updated>
-        <content type="html"><![CDATA[<p>This is a variation of the Chromium Frame Blackout Fix mod by Ingan121.
-Ingan121 is maybe currently working on a better mod, so this mod is an interim solution.
-The difference from the original mod is in intercepting also WM<em>NCCALCSIZE in addition
-to WM</em>NCPAINT message.
-Since the effect of this mod is unpredictable on other applications, by default only
-some Chromium-based browsers are injected.</p>
-<p><img src="https://i.imgur.com/DQGNOtH.png" alt="Edge" /></p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
