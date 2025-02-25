@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-25T16:50:30.000Z</updated>
+    <updated>2025-02-25T22:37:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Fix 2.1.0]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#911869c1f7d3038b58ada05b11f0552f11d49e61</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2025-02-25T22:37:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Refactor "Classic style" option into "Message box style" dropdown</li>
+<li>Add Windows 95/NT 4.0 message box style</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Fix 2.0.1]]></title>
         <id>https://windhawk.net/mods/msg-box-font-fix#f3d7230ad5b9dd832306c0a49fdc033c1167299f</id>
@@ -265,19 +279,6 @@ changes it back to the classic pie chart.</p>
         <content type="html"><![CDATA[<ul>
 <li>Added support for the new thumbnail previews implementation in Windows 11.</li>
 <li>Added support for the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-scroll#b6614250291822a82219a5eacb2d5bd68959936b</id>
-        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
-        <updated>2025-02-14T17:46:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The aero peek effect is now canceled when scrolling over thumbnails (for the new thumbnail previews implementation in Windows 11).</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

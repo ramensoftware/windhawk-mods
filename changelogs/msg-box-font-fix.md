@@ -1,3 +1,8 @@
+## 2.1.0 ([Feb 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/911869c1f7d3038b58ada05b11f0552f11d49e61/mods/msg-box-font-fix.wh.cpp))
+
+- Refactor "Classic style" option into "Message box style" dropdown
+- Add Windows 95/NT 4.0 message box style
+
 ## 2.0.1 ([Feb 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f3d7230ad5b9dd832306c0a49fdc033c1167299f/mods/msg-box-font-fix.wh.cpp))
 
 - Fix classic message box style horizontal sizing (fix discovered by @kawapure)
