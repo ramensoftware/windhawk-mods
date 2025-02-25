@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Fix
 // @description     Fixes the MessageBox font size and optionally make them like Windows XP
-// @version         2.0.0
+// @version         2.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -180,6 +180,48 @@ typedef struct tagMSGBOXMETRICS
 } MSGBOXMETRICS, *LPMSGBOXMETRICS;
 MSGBOXMETRICS mbm;
 
+int GetCharDimensions(HDC hdc, TEXTMETRICW *lptm, int *lpcy)
+{
+    TEXTMETRICW tm;
+
+    if (!GetTextMetricsW(hdc, &tm)) // _GetTextMetricsW
+    {
+        // Fallback to global system font: (NT User caches this information, but we don't have access u_u)
+        GetTextMetricsW(GetDC(nullptr), &tm);
+
+        if (tm.tmAveCharWidth == 0)
+        {
+            // Ultimate fallback:
+            tm.tmAveCharWidth = 8;
+        }
+    }
+
+    if (lptm)
+    {
+        *lptm = tm;
+    }
+
+    if (lpcy)
+    {
+        *lpcy = tm.tmHeight;
+    }
+
+    // Variable-width fonts calculate a true average rather than relying on tmAveCharWidth.
+    if (tm.tmPitchAndFamily & TMPF_FIXED_PITCH)
+    {
+        static const WCHAR wszAvgChars[] = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+        SIZE size;
+        if (GetTextExtentPoint32W(hdc, wszAvgChars, ARRAYSIZE(wszAvgChars) - 1, &size)) // GreGetTextExtentW
+        {
+            // The above string is 26 * 2 characters. + 1 rounds the result.
+            return ((size.cx / 26) + 1) / 2;
+        }
+    }
+
+    return tm.tmAveCharWidth;
+}
+
 BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm)
 {  
     if (!pmbm)
@@ -204,12 +246,14 @@ BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm)
     );
     
     TEXTMETRICW tm;
+    int iAverageCharHeight;
+    int iAverageCharWidth = GetCharDimensions(hMemDC, nullptr, &iAverageCharHeight);
     succeeded = GetTextMetricsW(hMemDC, &tm);
     if (succeeded)
     {
-        pmbm->cxMsgFontChar = tm.tmAveCharWidth;
+        pmbm->cxMsgFontChar = iAverageCharWidth;
         pmbm->cyMsgFontChar = tm.tmHeight;
-        pmbm->wMaxBtnSize = XPixFromXDU(DU_BTNWIDTH, tm.tmAveCharWidth);
+        pmbm->wMaxBtnSize = XPixFromXDU(DU_BTNWIDTH, iAverageCharWidth);
         pmbm->hCaptionFont = CreateFontIndirectW(&ncm.lfCaptionFont);
         pmbm->hMessageFont = hf;
     }
@@ -300,8 +344,8 @@ LPBYTE MB_UpdateDlgHdr(
 
     rc.left = iX + SYSMET(CXFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
     rc.top = iY + SYSMET(CYFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
-    rc.right = iX + iCX - SYSMET(CXFIXEDFRAME) - SYSMET(CXPADDEDBORDER);
-    rc.bottom = iY + iCY - SYSMET(CYFIXEDFRAME) - SYSMET(CXPADDEDBORDER);
+    rc.right = iX + iCX - SYSMET(CXFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
+    rc.bottom = iY + iCY - SYSMET(CYFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
     rc.top += SYSMET(CYCAPTION);
 
     lpDlgTmp->style = lStyle;
