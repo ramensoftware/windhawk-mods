@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-25T16:19:40.000Z</updated>
+    <updated>2025-02-25T16:50:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Fix 2.0.1]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#f3d7230ad5b9dd832306c0a49fdc033c1167299f</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2025-02-25T16:50:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix classic message box style horizontal sizing (fix discovered by @kawapure)</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Microsoft Teams hotkeys used by Visual Studio 1.0.0]]></title>
         <id>https://windhawk.net/mods/disable-ms-teams-hotkey#0aa17f4efea5461dbfe017e5084d0989b088581c</id>
@@ -269,19 +282,6 @@ changes it back to the classic pie chart.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spoof Light/Dark Theme 1.0.1]]></title>
-        <id>https://windhawk.net/mods/spoof-light-dark-theme#9822461150f9ce017fcba156d50f18f824fde30b</id>
-        <link href="https://windhawk.net/mods/spoof-light-dark-theme"/>
-        <updated>2025-02-14T15:57:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix issue with <code>RegQueryValueExW</code> hook</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

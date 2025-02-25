@@ -1,3 +1,7 @@
+## 2.0.1 ([Feb 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f3d7230ad5b9dd832306c0a49fdc033c1167299f/mods/msg-box-font-fix.wh.cpp))
+
+- Fix classic message box style horizontal sizing (fix discovered by @kawapure)
+
 ## 2.0.0 ([Sep 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/e7a03d627c3bc66756e9748a987d484863153397/mods/msg-box-font-fix.wh.cpp))
 
 - Restructure code to match modern conventions
