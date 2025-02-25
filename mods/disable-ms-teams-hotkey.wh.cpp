@@ -20,7 +20,7 @@ So this mod prevents Teams from ever occupying that hotkey so that it remains av
 */
 // ==/WindhawkModReadme==
 
-BOOL(*pOriginalRegisterHotKey)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
+BOOL(WINAPI *pOriginalRegisterHotKey)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
 
 BOOL WINAPI RegisterHotKeyHook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
 {
