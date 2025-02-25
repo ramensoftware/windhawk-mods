@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Fix
 // @description     Fixes the MessageBox font size and optionally make them like Windows XP
-// @version         2.0.1
+// @version         2.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -28,21 +28,30 @@ This mod fixes both of those things.
 
 ![After](https://raw.githubusercontent.com/aubymori/images/main/message-box-font-fix-after.png)
 ![After (classic)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-classic.png)
+![After (Windows 95/NT 4.0)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-nt4.png)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- background: false
-  $name: Classic style
-  $description: Make message boxes look like Windows XP and before
+- style: vista
+  $name: Message box style
+  $options:
+  - nt4: Windows 95/NT 4.0
+  - xp: Windows 98-XP
+  - vista: Windows Vista-10 1703
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
 HMODULE g_hUser32 = NULL;
-bool g_bClassic = false;
+enum MESSAGEBOXSTYLE
+{
+    MBS_NT4,
+    MBS_XP,
+    MBS_VISTA,
+} g_mbStyle = MBS_VISTA;
 
 /* Only available in Windows 10 version 1607 and greater. */
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hWnd);
@@ -222,7 +231,47 @@ int GetCharDimensions(HDC hdc, TEXTMETRICW *lptm, int *lpcy)
     return tm.tmAveCharWidth;
 }
 
-BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm)
+UINT MB_FindLongestString(HDC hdc, LPCWSTR *ppszButtonText, DWORD cButtons)
+{
+    UINT wRetVal;
+    int i, iMaxLen = 0, iNewMaxLen;
+    LPCWSTR szMaxStr;
+    SIZE sizeOneChar;
+    SIZE sizeMaxStr;
+    WCHAR szOneChar[2] = L"0";
+
+    for (i = 800; i <= 810; i++) {
+        WCHAR szCurStr[256];
+        LoadStringW(g_hUser32, i, szCurStr, 256);
+        if ((iNewMaxLen = wcslen(szCurStr)) > iMaxLen) {
+            iMaxLen = iNewMaxLen;
+            szMaxStr = szCurStr;
+        }
+    }
+
+    // Modification from original NT4 func: account for any custom strings.
+    // Don't want any custom message boxes cutting off text.
+    for (i = 0; i < (int)cButtons; i++)
+    {
+        LPCWSTR szCurStr = ppszButtonText[i];
+        if ((iNewMaxLen = wcslen(szCurStr)) > iMaxLen)
+        {
+            iMaxLen = iNewMaxLen;
+            szMaxStr = szCurStr;
+        }
+    }
+
+    /*
+     * Find the longest string
+     */
+    GetTextExtentPointW(hdc, szOneChar, 1, &sizeOneChar);
+    GetTextExtentPointW(hdc, szMaxStr, iMaxLen, &sizeMaxStr);
+    wRetVal = (UINT)(sizeMaxStr.cx + (sizeOneChar.cx * 2));
+
+    return wRetVal;
+}
+
+BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm, LPCWSTR *ppszButtonText, DWORD cButtons)
 {  
     if (!pmbm)
         return FALSE;
@@ -253,7 +302,9 @@ BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm)
     {
         pmbm->cxMsgFontChar = iAverageCharWidth;
         pmbm->cyMsgFontChar = tm.tmHeight;
-        pmbm->wMaxBtnSize = XPixFromXDU(DU_BTNWIDTH, iAverageCharWidth);
+        pmbm->wMaxBtnSize = (g_mbStyle == MBS_NT4)
+            ? MB_FindLongestString(hMemDC, ppszButtonText, cButtons)
+            : XPixFromXDU(DU_BTNWIDTH, iAverageCharWidth);
         pmbm->hCaptionFont = CreateFontIndirectW(&ncm.lfCaptionFont);
         pmbm->hMessageFont = hf;
     }
@@ -794,7 +845,7 @@ int SoftModalMessageBox_XP(
     HMONITOR            hMonitor;
     MONITORINFO         mi;
 
-    GetMessageBoxMetrics(&mbm);
+    GetMessageBoxMetrics(&mbm, lpmb->ppszButtonText, lpmb->cButtons);
 
     dwStyleMsg = lpmb->dwStyle;
 
@@ -1168,7 +1219,7 @@ SMB_Exit:
 int (WINAPI *SoftModalMessageBox_orig)(LPMSGBOXDATA);
 int WINAPI SoftModalMessageBox_hook(LPMSGBOXDATA lpmb)
 {
-    if (g_bClassic)
+    if (g_mbStyle != MBS_VISTA)
         return SoftModalMessageBox_XP(lpmb);
     return SoftModalMessageBox_orig(lpmb);
 }
@@ -1177,7 +1228,20 @@ int WINAPI SoftModalMessageBox_hook(LPMSGBOXDATA lpmb)
 
 void LoadSettings(void)
 {
-    g_bClassic = Wh_GetIntSetting(L"background");
+    LPCWSTR pszStyle = Wh_GetStringSetting(L"style");
+    if (0 == wcscmp(pszStyle, L"nt4"))
+    {
+        g_mbStyle = MBS_NT4;
+    }
+    else if (0 == wcscmp(pszStyle, L"xp"))
+    {
+        g_mbStyle = MBS_XP;
+    }
+    else
+    {
+        g_mbStyle = MBS_VISTA;
+    }
+    Wh_FreeStringSetting(pszStyle);
 }
 
 const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
