@@ -1033,6 +1033,27 @@
                 "version": "1.0.0"
             }
         },
+        "disable-ms-teams-hotkey": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1740500380000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1740500380000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Yves Goergen",
+                "description": "Disables Ctrl+Shift+Space that does something useful in Visual Studio and not in Teams.",
+                "github": "https://github.com/ygoe",
+                "homepage": "https://ygoe.de/",
+                "include": [
+                    "ms-teams.exe"
+                ],
+                "name": "Disable Microsoft Teams hotkeys used by Visual Studio",
+                "version": "1.0.0"
+            }
+        },
         "disable-navigation-bar": {
             "details": {
                 "defaultSorting": 1010,

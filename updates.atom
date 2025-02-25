@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-24T21:13:50.000Z</updated>
+    <updated>2025-02-25T16:19:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Microsoft Teams hotkeys used by Visual Studio 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disable-ms-teams-hotkey#0aa17f4efea5461dbfe017e5084d0989b088581c</id>
+        <link href="https://windhawk.net/mods/disable-ms-teams-hotkey"/>
+        <updated>2025-02-25T16:19:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablemicrosoftteamshotkeysusedbyvisualstudio">Disable Microsoft Teams hotkeys used by Visual Studio</h1>
+<p>Microsoft Teams occupies the keyboard shortcut Ctrl+Shift+Space to do whatever nonsense with it while sharing the screen.
+This hotkey is also assigned in Visual Studio by default to show the parameters info of the method under the cursor.
+That information is often very useful while coding, but it's not available in a team coding session when sharing the screen.
+So this mod prevents Teams from ever occupying that hotkey so that it remains available to Visual Studio like it's supposed to.</p>]]></content>
+        <author>
+            <name>Yves Goergen</name>
+            <uri>https://github.com/ygoe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#a964360a62a40333fb917ccea2c5513fe7e77b3b</id>
@@ -264,25 +279,6 @@ changes it back to the classic pie chart.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fix issue with <code>RegQueryValueExW</code> hook</li>
 </ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore Button Pulse Animation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/restore-button-pulse-anim#c371d1dd9294ac5d5843219d4af0bc01f9b4c195</id>
-        <link href="https://windhawk.net/mods/restore-button-pulse-anim"/>
-        <updated>2025-02-14T12:59:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="restorebuttonpulseanimation">Restore Button Pulse Animation</h1>
-<p>In Windows Vista and 7, buttons played a "pulse" animation when they were
-focused. This mod restores that functionality.</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/main/restore-button-pulse-anim-preview.gif" alt="Preview" /></p>
-<h2 id="note">Note</h2>
-<p>While the theme state for the pulse animation still exists in Windows 8 and 10 to
-accomodate third party applications that custom draw controls, the images in the
-default theme are identical, and you will not see an animation. Make sure you're
-using a Windows Vista/7-styled theme in order to see the effect.</p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
