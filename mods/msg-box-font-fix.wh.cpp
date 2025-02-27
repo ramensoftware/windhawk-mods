@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Fix
 // @description     Fixes the MessageBox font size and optionally make them like Windows XP
-// @version         2.1.0
+// @version         2.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -58,11 +58,16 @@ WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hWnd);
 WINUSERAPI BOOL WINAPI SystemParametersInfoForDpi(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni, UINT dpi);
 
 /* Imported from win32u.dll */
-typedef DWORD (NTAPI *NtUserCallOneParam_t)(DWORD Param, DWORD Routine);
+typedef INT_PTR (WINAPI *NtUserCallOneParam_t)(DWORD dwParam, DWORD xpfnProc);
 NtUserCallOneParam_t NtUserCallOneParam = nullptr;
-
-typedef DWORD (NTAPI *NtUserCallHwnd_t)(HWND Wnd, DWORD Routine);
+typedef INT_PTR (NTAPI *NtUserCallHwnd_t)(HWND hwnd, DWORD xpfnProc);
 NtUserCallHwnd_t NtUserCallHwnd = nullptr;
+
+/* New in Windows 11 24H2. Using old method breaks. */
+typedef INT_PTR (WINAPI *NtUserMessageBeep_t)(DWORD dwBeep);
+NtUserMessageBeep_t NtUserMessageBeep = nullptr;
+typedef INT_PTR (WINAPI *NtUserSetMsgBox_t)(HWND hwnd);
+NtUserSetMsgBox_t NtUserSetMsgBox = nullptr;
 
 HFONT (__fastcall *GetMessageBoxFontForDpi_orig)(UINT);
 HFONT __fastcall GetMessageBoxFontForDpi_hook(
@@ -650,7 +655,10 @@ INT_PTR CALLBACK MB_DlgProc(
         lpmb = (LPMSGBOXDATA)lParam;
         SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (ULONG_PTR)lParam);
 
-        NtUserCallHwnd(hwndDlg, SFI_SETMSGBOX);
+        if (NtUserSetMsgBox)
+            NtUserSetMsgBox(hwndDlg);
+        else
+            NtUserCallHwnd(hwndDlg, SFI_SETMSGBOX);
 
         if (lpmb->dwStyle & MB_TOPMOST) {
             SetWindowPos(hwndDlg,
@@ -1160,7 +1168,10 @@ ReSize:
     if (!(lpmb->dwStyle & MB_USERICON))
     {
         int wBeep = LOWORD(lpmb->dwStyle & MB_ICONMASK);
-        NtUserCallOneParam(wBeep, SFI_PLAYEVENTSOUND);
+        if (NtUserMessageBeep)
+            NtUserMessageBeep(wBeep);
+        else
+            NtUserCallOneParam(wBeep, SFI_PLAYEVENTSOUND);
     }
 
     iRetVal = (int)DialogBoxIndirectParamW(g_hUser32,
@@ -1265,7 +1276,7 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    // Load undocumented NtUserCallOneParam function for playing message box sound
+    // Load undocumented functions for playing message box sound and incrementing message box count
     HMODULE hWin32U = GetModuleHandleW(L"win32u.dll");
     if (!hWin32U)
     {
@@ -1273,16 +1284,18 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
     NtUserCallOneParam = (NtUserCallOneParam_t)GetProcAddress(hWin32U, "NtUserCallOneParam");
-    if (!NtUserCallOneParam)
+    NtUserMessageBeep = (NtUserMessageBeep_t)GetProcAddress(hWin32U, "NtUserMessageBeep");
+    if (!NtUserCallOneParam && !NtUserMessageBeep)
     {
-        Wh_Log(L"Failed to find NtUserCallOneParam in win32u.dll");
+        Wh_Log(L"Failed to find NtUserCallOneParam or NtUserMessageBeep in win32u.dll");
         return FALSE;
     }
 
     NtUserCallHwnd = (NtUserCallHwnd_t)GetProcAddress(hWin32U, "NtUserCallHwnd");
-    if (!NtUserCallHwnd)
+    NtUserSetMsgBox = (NtUserSetMsgBox_t)GetProcAddress(hWin32U, "NtUserSetMsgBox");
+    if (!NtUserCallHwnd && !NtUserSetMsgBox)
     {
-        Wh_Log(L"Failed to find NtUserCallHwnd in win32u.dll");
+        Wh_Log(L"Failed to find NtUserCallHwnd or NtUserSetMsgBox in win32u.dll");
         return FALSE;
     }
 
