@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-25T22:37:21.000Z</updated>
+    <updated>2025-02-27T01:56:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Message Box Fix 2.1.1]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#090064e365f4d31312c1b2fac07ec3116825699a</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2025-02-27T01:56:13.000Z</updated>
+        <content type="html"><![CDATA[<p>Message Box Fix 2.1.1: Fix crashes on Windows 11 24H2</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Fix 2.1.0]]></title>
         <id>https://windhawk.net/mods/msg-box-font-fix#911869c1f7d3038b58ada05b11f0552f11d49e61</id>
@@ -269,20 +280,6 @@ changes it back to the classic pie chart.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnails#104de03d346d042e329665b5c522197d2b4bb7af</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
-        <updated>2025-02-14T20:53:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the new thumbnail previews implementation in Windows 11.</li>
-<li>Added support for the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
