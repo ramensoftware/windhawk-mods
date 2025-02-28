@@ -877,6 +877,27 @@
                 "version": "1.1.0"
             }
         },
+        "console-error-to-ding": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1740722760000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1740722760000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lwinmm",
+                "description": "Replaces the error sound in console applications with the ding",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "conhost.exe"
+                ],
+                "name": "Console Error to Ding",
+                "version": "1.0.0"
+            }
+        },
         "custom-desktop-watermark": {
             "details": {
                 "defaultSorting": 1080,

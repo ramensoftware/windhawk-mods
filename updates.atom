@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-27T01:56:13.000Z</updated>
+    <updated>2025-02-28T06:06:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Console Error to Ding 1.0.0]]></title>
+        <id>https://windhawk.net/mods/console-error-to-ding#5db055d27f26f3af53baebb9ff6bdc36170f6be3</id>
+        <link href="https://windhawk.net/mods/console-error-to-ding"/>
+        <updated>2025-02-28T06:06:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="consoleerrortoding">Console Error to Ding</h1>
+<p>Certain actions in console applications can play an error sound. This mod replaces
+that with the ding sound, which is often more accurate in the context of the application.</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Message Box Fix 2.1.1]]></title>
         <id>https://windhawk.net/mods/msg-box-font-fix#090064e365f4d31312c1b2fac07ec3116825699a</id>
@@ -269,17 +282,6 @@ changes it back to the classic pie chart.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Native titelebars in Chromium-based browsers 0.1.1]]></title>
-        <id>https://windhawk.net/mods/chromium-native-titlebar#7c522f531da0d5606eff421dc76c9885907c79de</id>
-        <link href="https://windhawk.net/mods/chromium-native-titlebar"/>
-        <updated>2025-02-15T01:24:22.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix description</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
