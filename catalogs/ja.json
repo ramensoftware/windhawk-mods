@@ -3513,7 +3513,7 @@
                 "published": 1729973006000,
                 "rating": 10,
                 "ratingUsers": 124,
-                "updated": 1739229899000,
+                "updated": 1740747624000,
                 "users": 8740
             },
             "metadata": {
@@ -3530,7 +3530,7 @@
                 ],
                 "name": "Taskbar tray system icon tweaks",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "taskbar-vertical": {

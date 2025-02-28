@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-02-28T06:06:00.000Z</updated>
+    <updated>2025-02-28T13:00:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#430f707bfe33b708eb18a2018c9f3660f27705b4</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
+        <updated>2025-02-28T13:00:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a new option for Hide bell icon: When there are no new notifications and "Do not disturb" is off. With this option, the bell is always visible in "Do not disturb" mode.</li>
+<li>Fixed bell icon not hiding when the taskbar clock is hidden via the Windows taskbar settings.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Console Error to Ding 1.0.0]]></title>
         <id>https://windhawk.net/mods/console-error-to-ding#5db055d27f26f3af53baebb9ff6bdc36170f6be3</id>
@@ -264,24 +278,6 @@ sluggish and janky.</p>
         <author>
             <name>anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Pie Chart 1.0.0]]></title>
-        <id>https://windhawk.net/mods/disk-pie-chart#976eec84d3873f386cc1b702d9486ad0a6724f7a</id>
-        <link href="https://windhawk.net/mods/disk-pie-chart"/>
-        <updated>2025-02-15T09:17:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="diskpiechart">Disk Pie Chart</h1>
-<p>Since Windows 10, the usage chart in the disk properties window was changed to
-a blue circle rather than a pie chart, like previous Windows versions. This mod
-changes it back to the classic pie chart.</p>
-<p><strong>Preview</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/disk-pie-chart-preview.png" alt="Preview" /></p>
-<p><strong>Preview (classic)</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/disk-pie-chart-preview-classic.png" alt="Preview (classic)" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

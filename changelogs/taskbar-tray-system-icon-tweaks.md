@@ -1,3 +1,8 @@
+## 1.2.1 ([Feb 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/430f707bfe33b708eb18a2018c9f3660f27705b4/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
+
+* Added a new option for Hide bell icon: When there are no new notifications and "Do not disturb" is off. With this option, the bell is always visible in "Do not disturb" mode.
+* Fixed bell icon not hiding when the taskbar clock is hidden via the Windows taskbar settings.
+
 ## 1.2 ([Feb 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/739d5e32426532fdd48f408029d2642060ac1c33/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
 
 * Added a separate option for language bar supplementary icons, such as Japanese Romaji or Kana.
