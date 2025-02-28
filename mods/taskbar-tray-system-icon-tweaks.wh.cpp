@@ -2,7 +2,7 @@
 // @id              taskbar-tray-system-icon-tweaks
 // @name            Taskbar tray system icon tweaks
 // @description     Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the "Show desktop" button (Windows 11 only)
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -52,6 +52,8 @@ there are no new notifications), and the "Show desktop" button.
   $options:
   - never: Never
   - whenInactive: When there are no new notifications
+  - whenInactiveAndNoDnd: >-
+      When there are no new notifications and "Do not disturb" is off
   - always: Always
 - showDesktopButtonWidth: 12
   $name: '"Show desktop" button width'
@@ -66,6 +68,8 @@ there are no new notifications), and the "Show desktop" button.
 
 #undef GetCurrentTime
 
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -76,6 +80,7 @@ using namespace winrt::Windows::UI::Xaml;
 enum class HideBellIcon {
     never,
     whenInactive,
+    whenInactiveAndNoDnd,
     always,
 };
 
@@ -102,8 +107,8 @@ std::list<FrameworkElementLoadedEventRevoker> g_autoRevokerList;
 winrt::weak_ref<Controls::TextBlock> g_mainStackInnerTextBlock;
 int64_t g_mainStackTextChangedToken;
 
-winrt::weak_ref<Controls::TextBlock> g_bellInnerTextBlock;
-int64_t g_bellTextChangedToken;
+winrt::weak_ref<FrameworkElement> g_bellSystemTrayIconElement;
+int64_t g_bellAutomationNameChangedToken;
 
 HWND GetTaskbarWnd() {
     HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
@@ -220,7 +225,9 @@ enum class SystemTrayIconIdent {
     kGeolocation,
     kMicrophoneAndGeolocation,
     kBellEmpty,
+    kBellEmptyDnd,
     kBellFull,
+    kBellFullDnd,
     kLanguage,
 };
 
@@ -365,13 +372,17 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         case L'\uF47F':
             return SystemTrayIconIdent::kMicrophoneAndGeolocation;
 
-        case L'\uF285':  // Empty bell, Do Not Disturb
         case L'\uF2A3':  // Empty bell
             return SystemTrayIconIdent::kBellEmpty;
 
+        case L'\uF285':  // Empty bell, Do Not Disturb
+            return SystemTrayIconIdent::kBellEmptyDnd;
+
         case L'\uF2A5':  // Full bell
-        case L'\uF2A8':  // Full bell, Do Not Disturb
             return SystemTrayIconIdent::kBellFull;
+
+        case L'\uF2A8':  // Full bell, Do Not Disturb
+            return SystemTrayIconIdent::kBellFullDnd;
 
         // Language supplementary icons.
         // Found by installing all the built-in input methods from:
@@ -687,12 +698,60 @@ void ApplyControlCenterButtonIconStyle(FrameworkElement systemTrayIconElement) {
     }
 }
 
-void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
-    FrameworkElement systemTrayTextIconContent = nullptr;
+void ApplyBellIconStyle(FrameworkElement systemTrayIconElement);
 
-    FrameworkElement child = systemTrayIconElement;
-    if ((child = FindChildByName(child, L"ContainerGrid")) &&
-        (child = FindChildByName(child, L"ContentGrid")) &&
+// When the clock is hidden, the bell icon behaves differently - its content is
+// recreated each time the bell icon changes. Therefore we retry until the
+// content is there.
+void ApplyBellIconStyleWithRetry(FrameworkElement systemTrayIconElement,
+                                 int attempt) {
+    Wh_Log(L"> %d", attempt);
+
+    if (attempt == 10) {
+        return;
+    }
+
+    FrameworkElement containerGrid =
+        FindChildByName(systemTrayIconElement, L"ContainerGrid");
+    if (!containerGrid) {
+        systemTrayIconElement.Dispatcher().TryRunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
+            [systemTrayIconElement, attempt]() {
+                ApplyBellIconStyleWithRetry(systemTrayIconElement, attempt + 1);
+            });
+        return;
+    }
+
+    ApplyBellIconStyle(systemTrayIconElement);
+}
+
+void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
+    FrameworkElement containerGrid =
+        FindChildByName(systemTrayIconElement, L"ContainerGrid");
+    if (!containerGrid) {
+        Wh_Log(L"Failed to get ContainerGrid");
+        return;
+    }
+
+    FrameworkElement systemTrayTextIconContent = nullptr;
+    bool hasContentPresenterForMissingClock = true;
+
+    // When the clock is hidden, the element path is:
+    //
+    // #ContainerGrid > #ContentPresenter > #ContentGrid >
+    // SystemTray.TextIconContent
+    //
+    // When the clock is visible, ContentPresenter is missing:
+    //
+    // #ContainerGrid > #ContentGrid > SystemTray.TextIconContent
+    FrameworkElement child =
+        FindChildByName(containerGrid, L"ContentPresenter");
+    if (!child) {
+        hasContentPresenterForMissingClock = false;
+        child = containerGrid;
+    }
+
+    if ((child = FindChildByName(child, L"ContentGrid")) &&
         (child = FindChildByClassName(child, L"SystemTray.TextIconContent"))) {
         systemTrayTextIconContent = child;
     } else {
@@ -700,12 +759,18 @@ void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
         return;
     }
 
+    auto contentPresenter =
+        Media::VisualTreeHelper::GetParent(systemTrayIconElement)
+            .try_as<FrameworkElement>();
+
     bool hide = false;
 
     if (!g_unloading) {
         if (g_settings.hideBellIcon == HideBellIcon::always) {
             hide = true;
-        } else if (g_settings.hideBellIcon == HideBellIcon::whenInactive) {
+        } else if (g_settings.hideBellIcon == HideBellIcon::whenInactive ||
+                   g_settings.hideBellIcon ==
+                       HideBellIcon::whenInactiveAndNoDnd) {
             Controls::TextBlock innerTextBlock = nullptr;
 
             child = systemTrayTextIconContent;
@@ -725,7 +790,12 @@ void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
                     case SystemTrayIconIdent::kBellEmpty:
                         return true;
 
+                    case SystemTrayIconIdent::kBellEmptyDnd:
+                        return g_settings.hideBellIcon !=
+                               HideBellIcon::whenInactiveAndNoDnd;
+
                     case SystemTrayIconIdent::kBellFull:
+                    case SystemTrayIconIdent::kBellFullDnd:
                         return false;
 
                     default:
@@ -738,35 +808,24 @@ void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
 
             hide = shouldHide(innerTextBlock);
 
-            if (!g_bellInnerTextBlock.get()) {
-                auto systemTrayTextIconContentWeakRef =
-                    winrt::make_weak(systemTrayTextIconContent);
-                g_bellInnerTextBlock = innerTextBlock;
-                g_bellTextChangedToken =
-                    innerTextBlock.RegisterPropertyChangedCallback(
-                        Controls::TextBlock::TextProperty(),
-                        [systemTrayTextIconContentWeakRef, &shouldHide](
-                            DependencyObject sender,
-                            DependencyProperty property) {
-                            auto innerTextBlock =
-                                sender.try_as<Controls::TextBlock>();
-                            if (!innerTextBlock) {
+            if (!g_bellSystemTrayIconElement.get()) {
+                g_bellSystemTrayIconElement = systemTrayIconElement;
+                g_bellAutomationNameChangedToken =
+                    systemTrayIconElement.RegisterPropertyChangedCallback(
+                        Automation::AutomationProperties::NameProperty(),
+                        [](DependencyObject sender,
+                           DependencyProperty property) {
+                            Wh_Log(L">");
+
+                            auto bellSystemTrayIconElement =
+                                sender.try_as<FrameworkElement>();
+                            if (!bellSystemTrayIconElement) {
+                                Wh_Log(L"Failed to get sender");
                                 return;
                             }
 
-                            auto systemTrayTextIconContent =
-                                systemTrayTextIconContentWeakRef.get();
-                            if (!systemTrayTextIconContent) {
-                                return;
-                            }
-
-                            bool hide = shouldHide(innerTextBlock);
-
-                            Wh_Log(L"Bell icon, hide=%d", hide);
-
-                            systemTrayTextIconContent.Visibility(
-                                hide ? Visibility::Collapsed
-                                     : Visibility::Visible);
+                            ApplyBellIconStyleWithRetry(
+                                bellSystemTrayIconElement, 0);
                         });
             }
         }
@@ -776,6 +835,14 @@ void ApplyBellIconStyle(FrameworkElement systemTrayIconElement) {
 
     systemTrayTextIconContent.Visibility(hide ? Visibility::Collapsed
                                               : Visibility::Visible);
+
+    if (contentPresenter) {
+        if (hide && hasContentPresenterForMissingClock) {
+            contentPresenter.MaxWidth(0);
+        } else {
+            contentPresenter.ClearValue(FrameworkElement::MaxWidthProperty());
+        }
+    }
 }
 
 void ApplyShowDesktopStyle(FrameworkElement systemTrayIconElement) {
@@ -1234,6 +1301,8 @@ void LoadSettings() {
     g_settings.hideBellIcon = HideBellIcon::never;
     if (wcscmp(hideBellIcon, L"whenInactive") == 0) {
         g_settings.hideBellIcon = HideBellIcon::whenInactive;
+    } else if (wcscmp(hideBellIcon, L"whenInactiveAndNoDnd") == 0) {
+        g_settings.hideBellIcon = HideBellIcon::whenInactiveAndNoDnd;
     } else if (wcscmp(hideBellIcon, L"always") == 0) {
         g_settings.hideBellIcon = HideBellIcon::always;
     }
@@ -1267,12 +1336,13 @@ void ApplySettings() {
 
             g_autoRevokerList.clear();
 
-            if (auto bellInnerTextBlock = g_bellInnerTextBlock.get()) {
-                bellInnerTextBlock.UnregisterPropertyChangedCallback(
-                    Controls::TextBlock::TextProperty(),
-                    g_bellTextChangedToken);
-                g_bellInnerTextBlock = nullptr;
-                g_bellTextChangedToken = 0;
+            if (auto bellSystemTrayIconElement =
+                    g_bellSystemTrayIconElement.get()) {
+                bellSystemTrayIconElement.UnregisterPropertyChangedCallback(
+                    Automation::AutomationProperties::NameProperty(),
+                    g_bellAutomationNameChangedToken);
+                g_bellSystemTrayIconElement = nullptr;
+                g_bellAutomationNameChangedToken = 0;
             }
 
             if (auto mainStackInnerTextBlock =
