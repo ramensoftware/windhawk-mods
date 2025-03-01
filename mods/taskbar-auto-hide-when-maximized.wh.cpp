@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     Makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -47,7 +47,7 @@ or a similar tool), enable the relevant option in the mod's settings.
   $description: >-
     Enable this option to apply the auto-hide taskbar feature only to the
     selected window.
-- excludedPrograms: [excluded1.exe]
+- excludedPrograms: [""]
   $name: Excluded programs
   $description: >-
     The taskbar won't auto-hide due to windows of these programs being maximized
@@ -116,6 +116,9 @@ std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_map<void*, HWND> g_taskbarsKeptShown;
 UINT_PTR g_pendingEventsTimer;
+
+constexpr WCHAR kUpdateTaskbarStatePendingTickCount[] =
+    L"Windhawk_UpdateTaskbarStatePendingTickCount_" WH_MOD_ID;
 
 static const UINT g_getTaskbarRectRegisteredMsg =
     RegisterWindowMessage(L"Windhawk_GetTaskbarRect_" WH_MOD_ID);
@@ -314,6 +317,10 @@ std::wstring GetWindowAppId(HWND hWnd) {
 }
 
 bool IsWindowExcluded(HWND hWnd) {
+    if (g_settings.excludedPrograms.empty()) {
+        return false;
+    }
+
     DWORD resolvedWindowProcessPathLen = 0;
     WCHAR resolvedWindowProcessPath[MAX_PATH];
     WCHAR resolvedWindowProcessPathUpper[MAX_PATH];
@@ -370,19 +377,18 @@ bool IsWindowExcluded(HWND hWnd) {
 }
 
 bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
+    if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd) ||
+        (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
+        return false;
+    }
+
+    if (hWnd == GetShellWindow() || GetProp(hWnd, L"DesktopWindow") ||
+        IsTaskbarWindow(hWnd)) {
+        return false;
+    }
+
+    // Check this after the other checks, as it's the most expensive one.
     if (IsWindowExcluded(hWnd)) {
-        return false;
-    }
-
-    HWND hShellWindow = GetShellWindow();
-
-    if (hWnd == hShellWindow || GetProp(hWnd, L"DesktopWindow") ||
-        IsTaskbarWindow(hWnd) || !IsWindowVisible(hWnd) ||
-        IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
-        return false;
-    }
-
-    if (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE) {
         return false;
     }
 
@@ -404,20 +410,6 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
         return false;
     }
 
-    RECT windowRect;
-    DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
-                          sizeof(windowRect));
-
-    MONITORINFO monitorInfo{
-        .cbSize = sizeof(MONITORINFO),
-    };
-    GetMonitorInfo(monitor, &monitorInfo);
-
-    // Don't keep the taskbar shown for a fullscreen window.
-    if (EqualRect(&windowRect, &monitorInfo.rcMonitor)) {
-        return true;
-    }
-
     // It makes sense to treat arranged windows (e.g. with Win+left) as
     // maximized, as they occupy the whole monitor height. Still check for
     // intersection, as a window can also just occupy the upper side of the
@@ -426,6 +418,10 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
         (g_settings.mode == Mode::maximized && isWindowArranged)) {
         RECT taskbarRect{};
         GetTaskbarRectForMonitor(monitor, &taskbarRect);
+
+        RECT windowRect{};
+        DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
+                              sizeof(windowRect));
 
         RECT intersectRect;
         if (IntersectRect(&intersectRect, &windowRect, &taskbarRect)) {
@@ -437,13 +433,13 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
 }
 
 bool ShouldKeepTaskbarShown(HMONITOR monitor) {
-    if (g_settings.mode == Mode::never) {
-        return true;
-    }
-
     if (g_settings.primaryMonitorOnly &&
         monitor != MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY)) {
         return false;
+    }
+
+    if (g_settings.mode == Mode::never) {
+        return true;
     }
 
     if (g_settings.foregroundWindowOnly) {
@@ -486,7 +482,7 @@ void* QueryViaVtableBackwards(void* object, void* vtable) {
 
 DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter);
 
-void AdjustTaskbar(HWND hMMTaskbarWnd) {
+void AdjustTaskbar(HWND hMMTaskbarWnd, bool clearPendingWhenDone = false) {
     if (g_settings.mode != Mode::never) {
         if (!g_winEventHookThread) {
             std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
@@ -498,7 +494,8 @@ void AdjustTaskbar(HWND hMMTaskbarWnd) {
         }
     }
 
-    PostMessage(hMMTaskbarWnd, g_updateTaskbarStateRegisteredMsg, 0, 0);
+    PostMessage(hMMTaskbarWnd, g_updateTaskbarStateRegisteredMsg,
+                clearPendingWhenDone, 0);
 }
 
 void AdjustAllTaskbars() {
@@ -511,6 +508,50 @@ void AdjustAllTaskbars() {
     for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
         AdjustTaskbar(hSecondaryWnd);
     }
+}
+
+bool AdjustAllTaskbarsIfNotPending() {
+    std::unordered_set<HWND> secondaryTaskbarWindows;
+    HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
+
+    DWORD currentTickCount = GetTickCount();
+    DWORD pendingTickCount = 0;
+
+    if (hWnd) {
+        DWORD tickCount = (DWORD)(DWORD_PTR)GetProp(
+            hWnd, kUpdateTaskbarStatePendingTickCount);
+        if (tickCount > pendingTickCount) {
+            pendingTickCount = tickCount;
+        }
+    }
+
+    for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
+        DWORD tickCount = (DWORD)(DWORD_PTR)GetProp(
+            hSecondaryWnd, kUpdateTaskbarStatePendingTickCount);
+        if (tickCount > pendingTickCount) {
+            pendingTickCount = tickCount;
+        }
+    }
+
+    // Consider times larger than 10 seconds as expired, to prevent having
+    // it stuck in this state.
+    if (pendingTickCount && currentTickCount - pendingTickCount < 1000 * 10) {
+        return false;
+    }
+
+    if (hWnd) {
+        SetProp(hWnd, kUpdateTaskbarStatePendingTickCount,
+                (HANDLE)(DWORD_PTR)currentTickCount);
+        AdjustTaskbar(hWnd, /*clearPendingWhenDone=*/true);
+    }
+
+    for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
+        SetProp(hSecondaryWnd, kUpdateTaskbarStatePendingTickCount,
+                (HANDLE)(DWORD_PTR)currentTickCount);
+        AdjustTaskbar(hSecondaryWnd, /*clearPendingWhenDone=*/true);
+    }
+
+    return true;
 }
 
 void* TrayUI_vftable_IInspectable;
@@ -624,6 +665,10 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
             }
         }
+
+        if (wParam) {
+            RemoveProp(hWnd, kUpdateTaskbarStatePendingTickCount);
+        }
     }
 
     LRESULT ret =
@@ -667,6 +712,10 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
                 SetTimer(hWnd, kTrayUITimerHide, 0, nullptr);
             }
         }
+
+        if (wParam) {
+            RemoveProp(hWnd, kUpdateTaskbarStatePendingTickCount);
+        }
     }
 
     LRESULT ret =
@@ -698,20 +747,23 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
         return;
     }
 
-    g_pendingEventsTimer =
-        SetTimer(nullptr, 0, 200,
-                 [](HWND hwnd,         // handle of window for timer messages
-                    UINT uMsg,         // WM_TIMER message
-                    UINT_PTR idEvent,  // timer identifier
-                    DWORD dwTime       // current system time
-                 ) {
-                     Wh_Log(L">");
+    g_pendingEventsTimer = SetTimer(
+        nullptr, 0, 200,
+        [](HWND hwnd,         // handle of window for timer messages
+           UINT uMsg,         // WM_TIMER message
+           UINT_PTR idEvent,  // timer identifier
+           DWORD dwTime       // current system time
+        ) {
+            Wh_Log(L">");
 
-                     KillTimer(nullptr, g_pendingEventsTimer);
-                     g_pendingEventsTimer = 0;
+            if (!AdjustAllTaskbarsIfNotPending()) {
+                Wh_Log(L"Adjustment already pending, will retry later...");
+                return;
+            }
 
-                     AdjustAllTaskbars();
-                 });
+            KillTimer(nullptr, g_pendingEventsTimer);
+            g_pendingEventsTimer = 0;
+        });
 }
 
 DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
@@ -837,6 +889,24 @@ WinVersion GetExplorerVersion() {
     return WinVersion::Unsupported;
 }
 
+struct EXPLORER_PATCHER_HOOK {
+    PCSTR symbol;
+    void** pOriginalFunction;
+    void* hookFunction = nullptr;
+    bool optional = false;
+
+    template <typename Prototype>
+    EXPLORER_PATCHER_HOOK(
+        PCSTR symbol,
+        Prototype** originalFunction,
+        std::type_identity_t<Prototype*> hookFunction = nullptr,
+        bool optional = false)
+        : symbol(symbol),
+          pOriginalFunction(reinterpret_cast<void**>(originalFunction)),
+          hookFunction(reinterpret_cast<void*>(hookFunction)),
+          optional(optional) {}
+};
+
 bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
     if (g_explorerPatcherInitialized.exchange(true)) {
         return true;
@@ -846,40 +916,32 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
         g_winVersion = WinVersion::Win10;
     }
 
-    struct EXPLORER_PATCHER_HOOK {
-        PCSTR symbol;
-        void** pOriginalFunction;
-        void* hookFunction = nullptr;
-        bool optional = false;
-    };
-
     EXPLORER_PATCHER_HOOK hooks[] = {
-        {R"(??_7TrayUI@@6BITrayDeskBand@@@)",
-         (void**)&TrayUI_vftable_IInspectable},
+        {R"(??_7TrayUI@@6BITrayDeskBand@@@)", &TrayUI_vftable_IInspectable},
         {R"(??_7TrayUI@@6BITrayComponentHost@@@)",
-         (void**)&TrayUI_vftable_ITrayComponentHost},
+         &TrayUI_vftable_ITrayComponentHost},
         {R"(??_7CSecondaryTray@@6BISecondaryTray@@@)",
-         (void**)&CSecondaryTray_vftable_ISecondaryTray},
+         &CSecondaryTray_vftable_ISecondaryTray},
         {R"(?GetStuckMonitor@TrayUI@@UEAAPEAUHMONITOR__@@XZ)",
-         (void**)&TrayUI_GetStuckMonitor_Original},
+         &TrayUI_GetStuckMonitor_Original},
         {R"(?GetMonitor@CSecondaryTray@@UEAAPEAUHMONITOR__@@XZ)",
-         (void**)&CSecondaryTray_GetMonitor_Original},
+         &CSecondaryTray_GetMonitor_Original},
         {R"(?GetStuckRectForMonitor@TrayUI@@UEAA_NPEAUHMONITOR__@@PEAUtagRECT@@@Z)",
-         (void**)&TrayUI_GetStuckRectForMonitor_Original},
-        {R"(?_Hide@TrayUI@@QEAAXXZ)", (void**)&TrayUI__Hide_Original,
-         (void*)TrayUI__Hide_Hook},
+         &TrayUI_GetStuckRectForMonitor_Original},
+        {R"(?_Hide@TrayUI@@QEAAXXZ)", &TrayUI__Hide_Original,
+         TrayUI__Hide_Hook},
         {R"(?_AutoHide@CSecondaryTray@@AEAAX_N@Z)",
-         (void**)&CSecondaryTray__AutoHide_Original,
-         (void*)CSecondaryTray__AutoHide_Hook},
+         &CSecondaryTray__AutoHide_Original, CSecondaryTray__AutoHide_Hook},
         {R"(?Unhide@TrayUI@@UEAAXW4TrayUnhideFlags@TrayCommon@@W4UnhideRequest@3@@Z)",
-         (void**)&TrayUI_Unhide_Original},
+         &TrayUI_Unhide_Original},
         {R"(?_Unhide@CSecondaryTray@@AEAAXW4TrayUnhideFlags@TrayCommon@@W4UnhideRequest@3@@Z)",
-         (void**)&CSecondaryTray__Unhide_Original},
+         &CSecondaryTray__Unhide_Original},
         {R"(?WndProc@TrayUI@@UEAA_JPEAUHWND__@@I_K_JPEA_N@Z)",
-         (void**)&TrayUI_WndProc_Original, (void*)TrayUI_WndProc_Hook},
+         &TrayUI_WndProc_Original, TrayUI_WndProc_Hook},
         {R"(?v_WndProc@CSecondaryTray@@EEAA_JPEAUHWND__@@I_K_J@Z)",
-         (void**)&CSecondaryTray_v_WndProc_Original,
-         (void*)CSecondaryTray_v_WndProc_Hook},
+         &CSecondaryTray_v_WndProc_Original, CSecondaryTray_v_WndProc_Hook,
+         // Available in versions newer than 67.1.
+         true},
     };
 
     bool succeeded = true;
@@ -902,14 +964,16 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
         }
     }
 
-    if (g_initialized) {
+    if (!succeeded) {
+        Wh_Log(L"HookExplorerPatcherSymbols failed");
+    } else if (g_initialized) {
         Wh_ApplyHookOperations();
     }
 
     return succeeded;
 }
 
-bool HandleModuleIfExplorerPatcher(HMODULE module) {
+bool IsExplorerPatcherModule(HMODULE module) {
     WCHAR moduleFilePath[MAX_PATH];
     switch (
         GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
@@ -925,24 +989,28 @@ bool HandleModuleIfExplorerPatcher(HMODULE module) {
 
     moduleFileName++;
 
-    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) !=
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) ==
         0) {
+        Wh_Log(L"ExplorerPatcher taskbar module: %s", moduleFileName);
         return true;
     }
 
-    Wh_Log(L"ExplorerPatcher taskbar loaded: %s", moduleFileName);
-    return HookExplorerPatcherSymbols(module);
+    return false;
 }
 
-void HandleLoadedExplorerPatcher() {
+bool HandleLoadedExplorerPatcher() {
     HMODULE hMods[1024];
     DWORD cbNeeded;
     if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
                            &cbNeeded)) {
         for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
-            HandleModuleIfExplorerPatcher(hMods[i]);
+            if (IsExplorerPatcherModule(hMods[i])) {
+                return HookExplorerPatcherSymbols(hMods[i]);
+            }
         }
     }
+
+    return true;
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -952,7 +1020,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
-        HandleModuleIfExplorerPatcher(module);
+        if (IsExplorerPatcherModule(module)) {
+            HookExplorerPatcherSymbols(module);
+        }
     }
 
     return module;
@@ -1113,14 +1183,17 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    HandleLoadedExplorerPatcher();
+    if (!HandleLoadedExplorerPatcher()) {
+        Wh_Log(L"HandleLoadedExplorerPatcher failed");
+        return FALSE;
+    }
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-    FARPROC pKernelBaseLoadLibraryExW =
-        GetProcAddress(kernelBaseModule, "LoadLibraryExW");
-    Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
-                       (void*)LoadLibraryExW_Hook,
-                       (void**)&LoadLibraryExW_Original);
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
 
     g_initialized = true;
 
