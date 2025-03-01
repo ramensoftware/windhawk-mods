@@ -1,3 +1,8 @@
+## 1.5 ([Mar 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/67c1039afeda68ee5efd3c6a0e5cabe2de082557/mods/taskbar-clock-customization.wh.cpp))
+
+* Added patterns for displaying additional time zones.
+* Added a visibility option for the bottom clock line (Windows 11).
+
 ## 1.4 ([Dec 1, 2024](https://github.com/ramensoftware/windhawk-mods/blob/6082c60100929675fc56d995c9f9a6ae7b221c9e/mods/taskbar-clock-customization.wh.cpp))
 
 * Added support for the new "Show abbreviated time and date" Windows 11 option.
