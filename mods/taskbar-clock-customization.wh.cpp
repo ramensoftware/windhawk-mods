@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Customize the taskbar clock: define a custom date/time format, add a news feed, customize fonts and colors, and more
-// @version         1.5
+// @version         1.5.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -164,7 +164,7 @@ styles, such as the font color and size.
     supported time zones, use the following PowerShell command: Get-TimeZone
     -ListAvailable.
 - TimeStyle:
-  - Visible: true
+  - Hidden: false
   - TextColor: ""
     $name: Text color
     $description: >-
@@ -229,7 +229,7 @@ styles, such as the font color and size.
     $description: Can be a positive or a negative number.
   $name: Top line style (Windows 11 version 22H2 and newer)
 - DateStyle:
-  - Visible: true
+  - Hidden: false
   - TextColor: ""
     $name: Text color
     $description: >-
@@ -356,7 +356,7 @@ struct WebContentsSettings {
 };
 
 struct TextStyleSettings {
-    bool visible;
+    bool hidden;
     StringSetting textColor;
     StringSetting textAlignment;
     int fontSize;
@@ -1731,7 +1731,7 @@ void ApplyTextBlockStyles(
             visibilityPropertyChangedToken->value());
     }
 
-    if (textStyleSettings && !textStyleSettings->visible) {
+    if (textStyleSettings && textStyleSettings->hidden) {
         textBlock.Visibility(Visibility::Collapsed);
         *visibilityPropertyChangedToken =
             textBlock.RegisterPropertyChangedCallback(
@@ -2843,7 +2843,7 @@ void LoadSettings() {
         g_settings.timeZones.push_back(std::move(timeZone));
     }
 
-    g_settings.timeStyle.visible = Wh_GetIntSetting(L"TimeStyle.Visible");
+    g_settings.timeStyle.hidden = Wh_GetIntSetting(L"TimeStyle.Hidden");
     g_settings.timeStyle.textColor =
         Wh_GetStringSetting(L"TimeStyle.TextColor");
     g_settings.timeStyle.textAlignment =
@@ -2860,7 +2860,7 @@ void LoadSettings() {
     g_settings.timeStyle.characterSpacing =
         Wh_GetIntSetting(L"TimeStyle.CharacterSpacing");
 
-    g_settings.dateStyle.visible = Wh_GetIntSetting(L"DateStyle.Visible");
+    g_settings.dateStyle.hidden = Wh_GetIntSetting(L"DateStyle.Hidden");
     g_settings.dateStyle.textColor =
         Wh_GetStringSetting(L"DateStyle.TextColor");
     g_settings.dateStyle.textAlignment =
@@ -2879,12 +2879,12 @@ void LoadSettings() {
 
     g_clockElementStyleEnabled =
         (g_settings.maxWidth || g_settings.textSpacing ||
-         !g_settings.timeStyle.visible || *g_settings.timeStyle.textColor ||
+         g_settings.timeStyle.hidden || *g_settings.timeStyle.textColor ||
          *g_settings.timeStyle.textAlignment || g_settings.timeStyle.fontSize ||
          *g_settings.timeStyle.fontFamily || *g_settings.timeStyle.fontWeight ||
          *g_settings.timeStyle.fontStyle || *g_settings.timeStyle.fontStretch ||
-         g_settings.timeStyle.characterSpacing ||
-         !g_settings.dateStyle.visible || *g_settings.dateStyle.textColor ||
+         g_settings.timeStyle.characterSpacing || g_settings.dateStyle.hidden ||
+         *g_settings.dateStyle.textColor ||
          *g_settings.dateStyle.textAlignment || g_settings.dateStyle.fontSize ||
          *g_settings.dateStyle.fontFamily || *g_settings.dateStyle.fontWeight ||
          *g_settings.dateStyle.fontStyle || *g_settings.dateStyle.fontStretch ||
