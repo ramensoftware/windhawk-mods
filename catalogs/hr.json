@@ -2901,7 +2901,7 @@
                 "published": 1729882023000,
                 "rating": 9,
                 "ratingUsers": 76,
-                "updated": 1740000582000,
+                "updated": 1740852131000,
                 "users": 3513
             },
             "metadata": {
@@ -2918,7 +2918,7 @@
                 ],
                 "name": "Taskbar auto-hide when maximized",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "taskbar-autohide-better": {

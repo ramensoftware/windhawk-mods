@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-01T16:54:32.000Z</updated>
+    <updated>2025-03-01T18:02:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#2a980f110766e76fe0095140c9010f8933f3918d</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
+        <updated>2025-03-01T18:02:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed taskbar thumbnails causing the taskbar to hide and then show up again right away.</li>
+<li>Made the "Never auto-hide" mode work with the "Primary monitor only" option.</li>
+<li>Improved performance and fixed the taskbar becoming stuck in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.5.1]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#a2c63362113ef44916a06a798fd2424a44c17fd6</id>
@@ -269,17 +284,6 @@ sluggish and janky.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorerframe fixes for Win11 22H2+ 1.0.1]]></title>
-        <id>https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus#e2c7aeff56c2c4b4e13cb67630c91a4ce56567f5</id>
-        <link href="https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus"/>
-        <updated>2025-02-15T22:34:04.000Z</updated>
-        <content type="html"><![CDATA[<p>Explorerframe fixes for win11: more workarounds for unpredictable menubar appearance on later 23H2 and 24H2 builds</p>]]></content>
-        <author>
-            <name>Waldemar</name>
-            <uri>https://github.com/CyprinusCarpio</uri>
         </author>
     </entry>
 </feed>
