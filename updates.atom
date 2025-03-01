@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-01T16:07:06.000Z</updated>
+    <updated>2025-03-01T16:54:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.5.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#a2c63362113ef44916a06a798fd2424a44c17fd6</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2025-03-01T16:54:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Change the Visible option for the top/bottom clock line to Hidden, to prevent the bottom line from being hidden by default after updating to version 1.5.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#67c1039afeda68ee5efd3c6a0e5cabe2de082557</id>
@@ -267,20 +280,6 @@ sluggish and janky.</p>
         <author>
             <name>Waldemar</name>
             <uri>https://github.com/CyprinusCarpio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#eab90eb1da3c2a8b9916e7c31ab5a04b8724f937</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
-        <updated>2025-02-15T21:28:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the new thumbnail previews implementation in Windows 11.</li>
-<li>Added support for the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

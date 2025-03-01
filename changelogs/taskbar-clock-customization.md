@@ -1,3 +1,7 @@
+## 1.5.1 ([Mar 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a2c63362113ef44916a06a798fd2424a44c17fd6/mods/taskbar-clock-customization.wh.cpp))
+
+* Change the Visible option for the top/bottom clock line to Hidden, to prevent the bottom line from being hidden by default after updating to version 1.5.
+
 ## 1.5 ([Mar 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/67c1039afeda68ee5efd3c6a0e5cabe2de082557/mods/taskbar-clock-customization.wh.cpp))
 
 * Added patterns for displaying additional time zones.
