@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-01T18:02:11.000Z</updated>
+    <updated>2025-03-02T09:47:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[UXTheme hook 1.2]]></title>
+        <id>https://windhawk.net/mods/uxtheme-hook#dda17325767a2dca87159c656b176e9e4c360663</id>
+        <link href="https://windhawk.net/mods/uxtheme-hook"/>
+        <updated>2025-03-02T09:47:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add FAQ</li>
+<li>Disable the fix control panel setting by default, as it breaks stuff</li>
+</ul>]]></content>
+        <author>
+            <name>rounk-ctrl</name>
+            <uri>https://github.com/rounk-ctrl</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#2a980f110766e76fe0095140c9010f8933f3918d</id>
@@ -267,19 +281,6 @@ sluggish and janky.</p>
         <updated>2025-02-16T22:12:33.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed dragging a file over a taskbar button not switching to the relevant window.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#5542d17a15bb7e47d3f6b4b779076c29d0782bd1</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
-        <updated>2025-02-16T19:37:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed support for Windows 11 version 23H2, as well as several other older Windows versions.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
