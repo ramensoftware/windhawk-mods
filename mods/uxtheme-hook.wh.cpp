@@ -2,7 +2,7 @@
 // @id              uxtheme-hook
 // @name            UXTheme hook
 // @description     Allows you to apply custom themes
-// @version         1.1
+// @version         1.2
 // @author          rounk-ctrl
 // @github          https://github.com/rounk-ctrl
 // @include         winlogon.exe
@@ -21,6 +21,12 @@ apply custom themes.
 ### ⚠ Important ⚠
 in order for this mod to work properly, you must include `winlogon.exe` and `logonui.exe` in windhawk's process inclusion list, in its advanced settings.
 
+### settings
+- **control panel fix**: prevents the white images from loading in control panel. tested on windows 11, breaks on 10. disabled by default
+
+### why is it not applying?
+you need to first patch the theme with an invalid signature, use themetool from secureuxtheme, select your theme and click patch, then you can apply.
+
 ### bugs
 the colors in control panel might be weird sometimes. works fine if you leave control panel open, then switch themes.
 */
@@ -28,7 +34,7 @@ the colors in control panel might be weird sometimes. works fine if you leave co
 
 // ==WindhawkModSettings==
 /*
-- cpanelFix: true
+- cpanelFix: false
   $name: Fix control panel white header/sidebar
   $description: Fixes control panel hardcoding white image for header and sidebar
 */
@@ -121,6 +127,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     LoadSettings();
 
+    // uxtheme.dll, uxinit.dll, themeui.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
     {
         {L"public: long " SSTDCALL " CThemeSignature::Verify(void *)"},
@@ -144,7 +151,7 @@ BOOL Wh_ModInit() {
     // for logonui
     WindhawkUtils::Wh_SetFunctionHookT(SetSysColors, SetSysColors_hook, &SetSysColors_orig);
 
-    WindhawkUtils::SYMBOL_HOOK duiHooks[] =
+    WindhawkUtils::SYMBOL_HOOK dui70dll_hooks[] =
     {
         {
             {L"public: void " SSTDCALL " DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
@@ -156,7 +163,7 @@ BOOL Wh_ModInit() {
     if (settings.cpanelFix)
     {
         HMODULE hDui = LoadLibraryW(L"dui70.dll");
-        if (!WindhawkUtils::HookSymbols(hDui, duiHooks, ARRAYSIZE(duiHooks))) 
+        if (!WindhawkUtils::HookSymbols(hDui, dui70dll_hooks, ARRAYSIZE(dui70dll_hooks))) 
         {
             Wh_Log(L"Failed to hook DUI");
             return FALSE;
