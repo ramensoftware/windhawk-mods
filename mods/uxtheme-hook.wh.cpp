@@ -2,7 +2,7 @@
 // @id              uxtheme-hook
 // @name            UXTheme hook
 // @description     Allows you to apply custom themes
-// @version         1.1
+// @version         1.2
 // @author          rounk-ctrl
 // @github          https://github.com/rounk-ctrl
 // @include         winlogon.exe
