@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-02T09:47:04.000Z</updated>
+    <updated>2025-03-02T21:17:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle through taskbar windows on click 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-left-click-cycle#e98421129e3e78e3b6f7b5305e8c0ff9301c157a</id>
+        <link href="https://windhawk.net/mods/taskbar-left-click-cycle"/>
+        <updated>2025-03-02T21:17:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the new thumbnail previews implementation in Windows 11.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[UXTheme hook 1.2]]></title>
         <id>https://windhawk.net/mods/uxtheme-hook#dda17325767a2dca87159c656b176e9e4c360663</id>
@@ -268,19 +281,6 @@ sluggish and janky.</p>
 <li>Fixed "Everything" 1.5.0.1384a or newer hanging when browsing for files in "Everything" itself using the system dialog.</li>
 <li>Fixed the "Use IEC terms" option not working if "Use MB/GB for large files" is disabled.</li>
 <li>Fixed size not shown for empty OneDrive folders (and possibly other non-standard folders).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnails#dbf9a89f5f25ce77821c143ba1caaa55c0c3a9c9</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
-        <updated>2025-02-16T22:12:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed dragging a file over a taskbar button not switching to the relevant window.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
