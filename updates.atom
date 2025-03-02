@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-02T21:17:08.000Z</updated>
+    <updated>2025-03-02T22:39:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove File Explorer Suffixes 1.0]]></title>
+        <id>https://windhawk.net/mods/file-explorer-remove-suffixes#d6867f752e2b1064f5e4bf596f92a1c893cb9e81</id>
+        <link href="https://windhawk.net/mods/file-explorer-remove-suffixes"/>
+        <updated>2025-03-02T22:39:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="removefileexplorersuffixes">Remove File Explorer Suffixes</h1>
+<p>Windows appends a " - File Explorer" suffix for each folder on the taskbar, this
+mod gets rid of these redundant suffixes.</p>
+<p><img src="https://i.imgur.com/ErUN0YU.png" alt="Before" /><br />
+<em>Before</em></p>
+<p><img src="https://i.imgur.com/tblTr3Q.png" alt="After" /><br />
+<em>After</em></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle through taskbar windows on click 1.1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-left-click-cycle#e98421129e3e78e3b6f7b5305e8c0ff9301c157a</id>
@@ -266,21 +283,6 @@ sluggish and janky.</p>
 <li>Added support for Windows 10.</li>
 <li>Added support for the ExplorerPatcher taskbar.</li>
 <li>Fixed keyboard shortcut registering on startup in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.8]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#712276e60d0edae88611fcebec9f9119298e7ba0</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2025-02-17T00:04:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed "Everything" 1.5.0.1384a or newer hanging when browsing for files in "Everything" itself using the system dialog.</li>
-<li>Fixed the "Use IEC terms" option not working if "Use MB/GB for large files" is disabled.</li>
-<li>Fixed size not shown for empty OneDrive folders (and possibly other non-standard folders).</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

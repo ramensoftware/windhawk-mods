@@ -1518,6 +1518,28 @@
                 "version": "1.0.0"
             }
         },
+        "file-explorer-remove-suffixes": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1740955143000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1740955143000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "m417z",
+                "description": "Windows appends a \" - File Explorer\" suffix for each folder on the taskbar, this mod gets rid of these redundant suffixes",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Remove File Explorer Suffixes",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "fix-basic-caption-text": {
             "details": {
                 "defaultSorting": 4260,
