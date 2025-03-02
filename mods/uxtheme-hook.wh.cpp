@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              uxtheme-hook-fork
-// @name            UXTheme hook - Fork
+// @id              uxtheme-hook
+// @name            UXTheme hook
 // @description     Allows you to apply custom themes
 // @version         1.1
 // @author          rounk-ctrl
