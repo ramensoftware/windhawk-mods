@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              uxtheme-hook
-// @name            UXTheme hook
+// @id              uxtheme-hook-fork
+// @name            UXTheme hook - Fork
 // @description     Allows you to apply custom themes
 // @version         1.1
 // @author          rounk-ctrl
@@ -21,6 +21,12 @@ apply custom themes.
 ### ⚠ Important ⚠
 in order for this mod to work properly, you must include `winlogon.exe` and `logonui.exe` in windhawk's process inclusion list, in its advanced settings.
 
+### settings
+- **control panel fix**: prevents the white images from loading in control panel. tested on windows 11, breaks on 10. disabled by default
+
+### why is it not applying?
+you need to first patch the theme with an invalid signature, use themetool from secureuxtheme, select your theme and click patch, then you can apply.
+
 ### bugs
 the colors in control panel might be weird sometimes. works fine if you leave control panel open, then switch themes.
 */
@@ -28,7 +34,7 @@ the colors in control panel might be weird sometimes. works fine if you leave co
 
 // ==WindhawkModSettings==
 /*
-- cpanelFix: true
+- cpanelFix: false
   $name: Fix control panel white header/sidebar
   $description: Fixes control panel hardcoding white image for header and sidebar
 */
