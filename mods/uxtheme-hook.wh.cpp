@@ -127,6 +127,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
     LoadSettings();
 
+    // uxtheme.dll, uxinit.dll, themeui.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
     {
         {L"public: long " SSTDCALL " CThemeSignature::Verify(void *)"},
@@ -150,7 +151,7 @@ BOOL Wh_ModInit() {
     // for logonui
     WindhawkUtils::Wh_SetFunctionHookT(SetSysColors, SetSysColors_hook, &SetSysColors_orig);
 
-    WindhawkUtils::SYMBOL_HOOK duiHooks[] =
+    WindhawkUtils::SYMBOL_HOOK dui70dll_hooks[] =
     {
         {
             {L"public: void " SSTDCALL " DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
@@ -162,7 +163,7 @@ BOOL Wh_ModInit() {
     if (settings.cpanelFix)
     {
         HMODULE hDui = LoadLibraryW(L"dui70.dll");
-        if (!WindhawkUtils::HookSymbols(hDui, duiHooks, ARRAYSIZE(duiHooks))) 
+        if (!WindhawkUtils::HookSymbols(hDui, dui70dll_hooks, ARRAYSIZE(dui70dll_hooks))) 
         {
             Wh_Log(L"Failed to hook DUI");
             return FALSE;
