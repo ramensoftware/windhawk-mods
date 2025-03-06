@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-02T22:39:03.000Z</updated>
+    <updated>2025-03-06T21:01:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic context menu on Windows 11 1.0.2]]></title>
+        <id>https://windhawk.net/mods/explorer-context-menu-classic#7f4b1793bb7134168006f53b0bea04e8a7c63aa8</id>
+        <link href="https://windhawk.net/mods/explorer-context-menu-classic"/>
+        <updated>2025-03-06T21:01:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with update KB5052093 for Windows 11 version 24H2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove File Explorer Suffixes 1.0]]></title>
         <id>https://windhawk.net/mods/file-explorer-remove-suffixes#d6867f752e2b1064f5e4bf596f92a1c893cb9e81</id>
@@ -268,21 +281,6 @@ sluggish and janky.</p>
         <content type="html"><![CDATA[<ul>
 <li>Improved support for the new thumbnail previews implementation in Windows 11 for the following themes: WinXP, TranslucentTaskbar, Squircle, RosePine, DockLike, CleanSlate, Lucent.</li>
 <li>Fixed customizing the FontWeight property for some controls.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#6e4b3344875e80a12fc86756547813f61cb60810</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2025-02-18T18:42:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for Windows 10.</li>
-<li>Added support for the ExplorerPatcher taskbar.</li>
-<li>Fixed keyboard shortcut registering on startup in some cases.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

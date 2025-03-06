@@ -1331,7 +1331,7 @@
                 "published": 1728722786000,
                 "rating": 10,
                 "ratingUsers": 52,
-                "updated": 1729252335000,
+                "updated": 1741294863000,
                 "users": 6164
             },
             "metadata": {
@@ -1347,7 +1347,7 @@
                 ],
                 "name": "Classic context menu on Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "explorer-details-better-file-sizes": {
