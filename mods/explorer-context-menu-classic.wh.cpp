@@ -2,7 +2,7 @@
 // @id              explorer-context-menu-classic
 // @name            Classic context menu on Windows 11
 // @description     Always show the classic context menu without having to select "Show More Options" or hold Shift
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -48,6 +48,8 @@ HRESULT WINAPI IUnknown_QueryService_Hook(IUnknown* punk,
                                           const GUID& guidService,
                                           const IID& riid,
                                           void** ppvOut) {
+    // GUIDs from shell32.dll, CDefView::TryGetContextMenuPresenter.
+
     // {B306C5B1-B4F2-473C-B6FF-701B246CE2D2}
     constexpr GUID guidServiceTarget = {
         0xb306c5b1,
@@ -62,8 +64,16 @@ HRESULT WINAPI IUnknown_QueryService_Hook(IUnknown* punk,
         0x4730,
         {0xbf, 0xe3, 0xca, 0xc6, 0xca, 0xd5, 0xef, 0x5e}};
 
+    // {37A472F7-63CF-4CCF-A88B-5231A3C7D8B6}
+    // Changed to this version in update KB5052093 of Windows 11 version 24H2.
+    constexpr GUID riidTarget2 = {
+        0x37a472f7,
+        0x63cf,
+        0x4ccf,
+        {0xa8, 0x8b, 0x52, 0x31, 0xa3, 0xc7, 0xd8, 0xb6}};
+
     if (IsEqualGUID(guidService, guidServiceTarget) &&
-        IsEqualGUID(riid, riidTarget)) {
+        (IsEqualGUID(riid, riidTarget) || IsEqualGUID(riid, riidTarget2))) {
         Wh_Log(L">");
 
         if (g_settings.overrideWithCtrl && GetKeyState(VK_CONTROL) < 0) {
@@ -96,7 +106,7 @@ bool HookExplorerFrameSymbols() {
     HMODULE module = LoadLibrary(L"explorerframe.dll");
     if (!module) {
         Wh_Log(L"Couldn't load explorerframe.dll");
-        return FALSE;
+        return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
