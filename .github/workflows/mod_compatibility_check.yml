@@ -56,7 +56,7 @@ jobs:
       - name: Get changed files
         if: github.event_name == 'pull_request'
         id: changed-files
-        uses: tj-actions/changed-files@v44
+        uses: tj-actions/changed-files@v45
       - name: Compile mod
         if: github.event_name == 'pull_request'
         env:
