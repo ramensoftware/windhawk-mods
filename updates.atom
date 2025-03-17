@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-15T16:00:20.000Z</updated>
+    <updated>2025-03-17T22:58:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SafeDiscShim 1.0]]></title>
+        <id>https://windhawk.net/mods/safediscshim#8c2f0e04d5f2f6892fa24eb7a11b1efbcc51504c</id>
+        <link href="https://windhawk.net/mods/safediscshim"/>
+        <updated>2025-03-17T22:58:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="important">IMPORTANT</h1>
+<p>Windhawk needs to hook into <code>svchost.exe</code> for SafeDiscShim to work on certain games.
+Please navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
+<code>svchost.exe</code> is in the Process inclusion list.</p>
+<h1 id="safediscshim">SafeDiscShim</h1>
+<p>SafeDiscShim is a compatibility tool that allows for SafeDisc protected games which utilize the insecure Macrovision
+Security Driver ("secdrv.sys") to run on modern versions of Windows which have said driver blacklisted. Previous methods
+to restore functionality to these games relied on forcefully installing the driver, potentially opening security risks.</p>
+<p>In contrast, this tool does not rely on any drivers to function. Instead, it automatically loads alongside SafeDisc
+protected games and intercepts any communication requests that would have been sent to the driver, instead sending the 
+expected response itself and allowing the game to boot.</p>
+<h1 id="disclaimer">Disclaimer</h1>
+<p>SafeDiscShim is purely designed as a compatibility tool: no security mechanisms are bypassed in the operation of this 
+tool and SafeDisc protected games still require their original discs in order to function, even when using this tool.
+Certain games may have additional compatibility issues outside of the SafeDisc protection; this tool makes no attempt to
+fix such issues.</p>]]></content>
+        <author>
+            <name>Rib</name>
+            <uri>https://github.com/RibShark</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Favorites in Navigation Pane 1.0]]></title>
         <id>https://windhawk.net/mods/favorites-in-navpane#f8474dd3112a1a393ad72a119ab662623bc36b6a</id>
@@ -266,23 +292,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
 <p>Customize the taskbar auto-hide speed and frame rate to make it feel less
 sluggish and janky.</p>
 <p><img src="https://i.imgur.com/x7pg5xX.gif" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#be73d3a4f2e28c78c621a1bb6f3de212d01c9514</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
-        <updated>2025-02-19T21:29:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>It's no longer necessary to enable auto-hide in the taskbar properties for the mod to work, the mod does that automatically.</li>
-<li>Added an option to apply the auto-hide logic only to foreground window.</li>
-<li>Added an option to exclude programs from the auto-hide logic, can be useful for programs which act as taskbar widgets or for buggy programs.</li>
-<li>Added an option to apply the mod only to the primary monitor taskbar.</li>
-<li>The "Auto-hide only when a window is maximized" mode was improved to hide the taskbar for fullscreen windows and snapped windows as well.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

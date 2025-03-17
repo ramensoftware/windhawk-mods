@@ -2692,6 +2692,29 @@
                 "version": "1.0.1"
             }
         },
+        "safediscshim": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1742252283000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1742252283000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86"
+                ],
+                "author": "Rib",
+                "description": "Run SafeDisc protected games on Windows 10 and above.",
+                "github": "https://github.com/RibShark",
+                "include": [
+                    "*"
+                ],
+                "name": "SafeDiscShim",
+                "version": "1.0"
+            }
+        },
         "shadowplay-do-not-disable": {
             "details": {
                 "defaultSorting": 4880,
