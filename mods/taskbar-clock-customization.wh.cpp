@@ -105,9 +105,15 @@ styles, such as the font color and size.
 - WeekdayFormat: dddd
   $name: Week day format
   $description: >-
-    Leave empty for the default format. For syntax refer to the following page:
+    Leave empty for the default format.
+    'custom' use 'WeekdayFormatCustom', otherwise for syntax refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
+- WeekdayFormatCustom: [M, T, W, R, F, S, U]
+  $name: Custom week day format day abbreviation, Monday through Sunday.
+  $description: >-
+    An array of 7 custom abbreviation strings for weekdays.
+    ≠7 items will revert all to the default [M, T, W, R, F, S, U]
 - TopLine: '%date% | %time%'
   $name: Top line
   $description: >-
@@ -372,6 +378,7 @@ struct {
     StringSetting timeFormat;
     StringSetting dateFormat;
     StringSetting weekdayFormat;
+    std::vector<StringSetting> WeekdayFormatCustom;
     StringSetting topLine;
     StringSetting bottomLine;
     StringSetting middleLine;
@@ -1179,15 +1186,48 @@ PCWSTR GetWeekdayFormattedWithExtra(std::vector<std::wstring>** extra) {
     if (g_weekdayFormatted.formatIndex != g_formatIndex) {
         const SYSTEMTIME* time = &g_formatTime;
 
-        auto weekdayFormatParts =
-            SplitTimeFormatString(g_settings.weekdayFormat.get());
+        auto weekdayFormatParts = SplitTimeFormatString(g_settings.weekdayFormat.get());
 
-        GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
+        if (weekdayFormatParts[0] == L"custom") {
+            SYSTEMTIME lt; GetLocalTime(&lt);
+            if (g_settings.WeekdayFormatCustom.size() == 7) {
+                StringSetting M = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]",0);
+                StringSetting T = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]",1);
+                StringSetting W = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]",2);
+                StringSetting R = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]",3);
+                StringSetting F = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]",4);
+                StringSetting S = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]",5);
+                StringSetting U = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]",6);
+                switch (lt.wDayOfWeek) { //Microsoft starts on Sunday=0
+                    case 1: wcscpy(g_weekdayFormatted.buffer, M); break;
+                    case 2: wcscpy(g_weekdayFormatted.buffer, T); break;
+                    case 3: wcscpy(g_weekdayFormatted.buffer, W); break;
+                    case 4: wcscpy(g_weekdayFormatted.buffer, R); break;
+                    case 5: wcscpy(g_weekdayFormatted.buffer, F); break;
+                    case 6: wcscpy(g_weekdayFormatted.buffer, S); break;
+                    case 0: wcscpy(g_weekdayFormatted.buffer, U); break;
+                    default:wcscpy(g_weekdayFormatted.buffer, L"?"); break;
+                }
+            } else {
+                switch (lt.wDayOfWeek) {
+                    case 1: wcscpy(g_weekdayFormatted.buffer, L"M"); break;
+                    case 2: wcscpy(g_weekdayFormatted.buffer, L"T"); break;
+                    case 3: wcscpy(g_weekdayFormatted.buffer, L"W"); break;
+                    case 4: wcscpy(g_weekdayFormatted.buffer, L"R"); break;
+                    case 5: wcscpy(g_weekdayFormatted.buffer, L"F"); break;
+                    case 6: wcscpy(g_weekdayFormatted.buffer, L"S"); break;
+                    case 0: wcscpy(g_weekdayFormatted.buffer, L"U"); break;
+                    default:wcscpy(g_weekdayFormatted.buffer, L"?"); break;
+                }
+            }
+        } else {
+            GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
                                  !weekdayFormatParts[0].empty()
                                      ? weekdayFormatParts[0].c_str()
                                      : nullptr,
                                  g_weekdayFormatted.buffer,
                                  ARRAYSIZE(g_weekdayFormatted.buffer), nullptr);
+        }
 
         g_weekdayFormattedExtra.resize(weekdayFormatParts.size() - 1);
         for (size_t i = 1; i < weekdayFormatParts.size(); i++) {
@@ -2827,6 +2867,13 @@ void LoadSettings() {
     g_timeFormattedTz.clear();
     g_dateFormattedTz.clear();
     g_weekdayFormattedTz.clear();
+
+    g_settings.WeekdayFormatCustom.clear();
+    for (int i = 0; i < 7; i++) {
+        StringSetting WeekdayName = Wh_GetStringSetting(L"WeekdayFormatCustom[%d]", i);
+        if (*WeekdayName == '\0') {break;}
+        g_settings.WeekdayFormatCustom.push_back(std::move(WeekdayName));
+    }
 
     g_settings.timeZones.clear();
     for (int i = 0;; i++) {
