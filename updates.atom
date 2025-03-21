@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-21T13:25:21.000Z</updated>
+    <updated>2025-03-21T14:09:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Control 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-control#066479c7768f6916417c24e9eea34a022182df0f</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
+        <updated>2025-03-21T14:09:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+<li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.2.17]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#b17320a6b8fe99338c82c8bcd7d948c9fabbb99d</id>
@@ -280,20 +294,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
         <author>
             <name>teknixstuff</name>
             <uri>https://github.com/teknixstuff</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnails#02024563da732b9cfee3d733a83c4144b03d5eb5</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
-        <updated>2025-02-21T21:06:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed support for the new thumbnail previews implementation on Windows 11 version 23H2.</li>
-<li>Fixed the list mode for the new thumbnail previews implementation in Windows 11.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

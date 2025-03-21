@@ -3633,13 +3633,13 @@
                 "published": 1652940665000,
                 "rating": 10,
                 "ratingUsers": 354,
-                "updated": 1716744702000,
+                "updated": 1742566197000,
                 "users": 30983
             },
             "featured": true,
             "metadata": {
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0602 -lcomctl32 -ldwmapi -lole32 -lversion",
+                "compilerOptions": "-DWINVER=0x0A00 -lcomctl32 -ldwmapi -lgdi32 -lole32 -lversion",
                 "description": "Control the system volume by scrolling over the taskbar",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -3648,7 +3648,7 @@
                 ],
                 "name": "Taskbar Volume Control",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.1"
+                "version": "1.2.2"
             }
         },
         "taskbar-wheel-cycle": {

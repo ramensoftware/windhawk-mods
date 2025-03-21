@@ -1,3 +1,8 @@
+## 1.2.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/066479c7768f6916417c24e9eea34a022182df0f/mods/taskbar-volume-control.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 preview builds.
+* The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.
+
 ## 1.2.1 ([May 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dbac51f369f38001f43dd37f3007ce7ebadcbd20/mods/taskbar-volume-control.wh.cpp))
 
 * Added an option to activate volume scrolling only when holding the Ctrl key.
