@@ -1,3 +1,10 @@
+## 1.4 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f235abdd918c4639a7631e9e228399b22c0b734b/mods/taskbar-labels.wh.cpp))
+
+* Added an option to customize the font family of the labels.
+* Added options to customize the running indicator height and vertical offset.
+* Fixed an incompatibility with recent Windows 11 preview builds.
+* Fixed misaligned running indicators when custom icon sizes are used (e.g. with the Taskbar height and icon size mod).
+
 ## 1.3.5 ([Dec 13, 2024](https://github.com/ramensoftware/windhawk-mods/blob/37fce381dc197fbd1858b833d6ca0475acb40a54/mods/taskbar-labels.wh.cpp))
 
 * Undid the fix of thumbnail labels incorrectly showing or not showing when using some modes, since the fix had unintended side effects.

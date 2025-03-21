@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-21T16:36:23.000Z</updated>
+    <updated>2025-03-21T16:53:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#f235abdd918c4639a7631e9e228399b22c0b734b</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2025-03-21T16:53:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to customize the font family of the labels.</li>
+<li>Added options to customize the running indicator height and vertical offset.</li>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+<li>Fixed misaligned running indicators when custom icon sizes are used (e.g. with the Taskbar height and icon size mod).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.5.2]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#a2cd3cd75b7491b7f38a2ea3cf51ae71f164f119</id>
@@ -280,20 +296,6 @@ keyboard, hovering the mouse over the taskbar will not unhide it. For example,
 the Win key or Ctrl+Esc will unhide the taskbar.</p>
 <p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.1.6]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#e7c61b93d603d644bf3a2263b59f350da851e664</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2025-02-24T19:59:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the 10JumpLists theme.</li>
-<li>Empty visual states can now be targeted, can be useful in cases when there's no active visual state.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
