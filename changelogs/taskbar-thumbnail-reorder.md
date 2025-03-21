@@ -1,3 +1,7 @@
+## 1.1.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4f601abc4c4dca4a0af11bc8e4f27b3175aee882/mods/taskbar-thumbnail-reorder.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 preview builds.
+
 ## 1.1.1 ([Feb 16, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5542d17a15bb7e47d3f6b4b779076c29d0782bd1/mods/taskbar-thumbnail-reorder.wh.cpp))
 
 * Fixed support for Windows 11 version 23H2, as well as several other older Windows versions.
