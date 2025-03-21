@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-21T18:53:02.000Z</updated>
+    <updated>2025-03-21T19:40:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#787a8c303d89449e75abd3f2a4677f26b7d16b0a</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2025-03-21T19:40:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to customize the start menu vertical alignment.</li>
+<li>Added an option to customize the clock container height.</li>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+<li>Fixed the new colored battery icon not being rotated.</li>
+<li>Fixed a bug which could cause the taskbar to become hidden on system startup.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray icon spacing 1.1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#62c7f65eaecd24f1e41e34d931666715f4d37566</id>
@@ -278,20 +295,6 @@ that with the ding sound, which is often more accurate in the context of the app
         <link href="https://windhawk.net/mods/msg-box-font-fix"/>
         <updated>2025-02-27T01:56:13.000Z</updated>
         <content type="html"><![CDATA[<p>Message Box Fix 2.1.1: Fix crashes on Windows 11 24H2</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Message Box Fix 2.1.0]]></title>
-        <id>https://windhawk.net/mods/msg-box-font-fix#911869c1f7d3038b58ada05b11f0552f11d49e61</id>
-        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
-        <updated>2025-02-25T22:37:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Refactor "Classic style" option into "Message box style" dropdown</li>
-<li>Add Windows 95/NT 4.0 message box style</li>
-</ul>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>

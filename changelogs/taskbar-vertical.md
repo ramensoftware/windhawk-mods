@@ -1,3 +1,11 @@
+## 1.3.4 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/787a8c303d89449e75abd3f2a4677f26b7d16b0a/mods/taskbar-vertical.wh.cpp))
+
+* Added an option to customize the start menu vertical alignment.
+* Added an option to customize the clock container height.
+* Fixed an incompatibility with recent Windows 11 preview builds.
+* Fixed the new colored battery icon not being rotated.
+* Fixed a bug which could cause the taskbar to become hidden on system startup.
+
 ## 1.3.3 ([Feb 8, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cf9709ca613ae552c8f1d4a3ed9a029f916a9344/mods/taskbar-vertical.wh.cpp))
 
 * Added support for the new thumbnail previews implementation in Windows.
