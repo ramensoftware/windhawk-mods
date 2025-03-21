@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-21T14:09:57.000Z</updated>
+    <updated>2025-03-21T16:36:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.5.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#a2cd3cd75b7491b7f38a2ea3cf51ae71f164f119</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2025-03-21T16:36:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+<li>Added an option to specify a custom list of week days.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Control 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-control#066479c7768f6916417c24e9eea34a022182df0f</id>
@@ -283,17 +297,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bring Back the Borders! 3.1.1]]></title>
-        <id>https://windhawk.net/mods/w11-dwm-fix#a90ce6cf038e5aeafd99229993834a486341e0da</id>
-        <link href="https://windhawk.net/mods/w11-dwm-fix"/>
-        <updated>2025-02-23T08:53:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Full rewrite of the mod.</p>]]></content>
-        <author>
-            <name>teknixstuff</name>
-            <uri>https://github.com/teknixstuff</uri>
         </author>
     </entry>
 </feed>
