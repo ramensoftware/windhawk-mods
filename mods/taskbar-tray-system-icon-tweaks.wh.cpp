@@ -2,7 +2,7 @@
 // @id              taskbar-tray-system-icon-tweaks
 // @name            Taskbar tray system icon tweaks
 // @description     Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the "Show desktop" button (Windows 11 only)
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -96,6 +96,7 @@ struct {
     int showDesktopButtonWidth;
 } g_settings;
 
+std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
@@ -588,56 +589,72 @@ void ApplyNonActivatableStackIconViewStyle(
 }
 
 void ApplyControlCenterButtonIconStyle(FrameworkElement systemTrayIconElement) {
-    FrameworkElement systemTrayTextIconContent = nullptr;
+    FrameworkElement contentGrid = nullptr;
 
     FrameworkElement child = systemTrayIconElement;
     if ((child = FindChildByName(child, L"ContainerGrid")) &&
-        (child = FindChildByName(child, L"ContentGrid")) &&
-        (child = FindChildByClassName(child, L"SystemTray.TextIconContent"))) {
-        systemTrayTextIconContent = child;
+        (child = FindChildByName(child, L"ContentGrid"))) {
+        contentGrid = child;
     } else {
-        Wh_Log(L"Failed to get SystemTray.TextIconContent");
+        Wh_Log(L"Failed to get ContentGrid");
         return;
     }
-
-    Controls::TextBlock innerTextBlock = nullptr;
-
-    child = systemTrayTextIconContent;
-    if ((child = FindChildByName(child, L"ContainerGrid")) &&
-        (child = FindChildByName(child, L"Base")) &&
-        (child = FindChildByName(child, L"InnerTextBlock"))) {
-        innerTextBlock = child.as<Controls::TextBlock>();
-    } else {
-        Wh_Log(L"Failed to get InnerTextBlock");
-        return;
-    }
-
-    auto text = innerTextBlock.Text();
-    auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
 
     bool hide = false;
-    if (!g_unloading) {
-        switch (systemTrayIconIdent) {
-            case SystemTrayIconIdent::kVolume:
-                hide = g_settings.hideVolumeIcon;
-                break;
-
-            case SystemTrayIconIdent::kNetwork:
-                hide = g_settings.hideNetworkIcon;
-                break;
-
-            case SystemTrayIconIdent::kBattery:
-                hide = g_settings.hideBatteryIcon;
-                break;
-
-            default:
-                Wh_Log(L"Failed");
-                break;
+    FrameworkElement systemTrayTextIconContent =
+        FindChildByClassName(contentGrid, L"SystemTray.BatteryIconContent");
+    if (systemTrayTextIconContent) {
+        if (!g_unloading) {
+            hide = g_settings.hideBatteryIcon;
         }
-    }
 
-    Wh_Log(L"System tray icon %d (%s), hide=%d", (int)systemTrayIconIdent,
-           StringToHex(text).c_str(), hide);
+        Wh_Log(L"System battery tray icon, hide=%d", hide);
+    } else {
+        systemTrayTextIconContent =
+            FindChildByClassName(contentGrid, L"SystemTray.TextIconContent");
+        if (!systemTrayTextIconContent) {
+            Wh_Log(L"Failed to get SystemTray.TextIconContent");
+            return;
+        }
+
+        Controls::TextBlock innerTextBlock = nullptr;
+
+        child = systemTrayTextIconContent;
+        if ((child = FindChildByName(child, L"ContainerGrid")) &&
+            (child = FindChildByName(child, L"Base")) &&
+            (child = FindChildByName(child, L"InnerTextBlock"))) {
+            innerTextBlock = child.as<Controls::TextBlock>();
+        } else {
+            Wh_Log(L"Failed to get InnerTextBlock");
+            return;
+        }
+
+        auto text = innerTextBlock.Text();
+        auto systemTrayIconIdent = IdentifySystemTrayIconFromText(text);
+
+        if (!g_unloading) {
+            switch (systemTrayIconIdent) {
+                case SystemTrayIconIdent::kVolume:
+                    hide = g_settings.hideVolumeIcon;
+                    break;
+
+                case SystemTrayIconIdent::kNetwork:
+                    hide = g_settings.hideNetworkIcon;
+                    break;
+
+                case SystemTrayIconIdent::kBattery:
+                    hide = g_settings.hideBatteryIcon;
+                    break;
+
+                default:
+                    Wh_Log(L"Failed");
+                    break;
+            }
+        }
+
+        Wh_Log(L"System tray icon %d (%s), hide=%d", (int)systemTrayIconIdent,
+               StringToHex(text).c_str(), hide);
+    }
 
     bool hidden =
         systemTrayTextIconContent.Visibility() == Visibility::Collapsed;
@@ -1367,24 +1384,7 @@ void ApplySettings() {
         &param);
 }
 
-bool HookTaskbarViewDllSymbols() {
-    WCHAR dllPath[MAX_PATH];
-    if (!GetWindowsDirectory(dllPath, ARRAYSIZE(dllPath))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return false;
-    }
-
-    wcscat_s(
-        dllPath, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-
-    HMODULE module =
-        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (!module) {
-        Wh_Log(L"Taskbar view module couldn't be loaded");
-        return false;
-    }
-
+bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
@@ -1395,6 +1395,39 @@ bool HookTaskbarViewDllSymbols() {
     };
 
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+    }
+
+    return module;
 }
 
 bool HookTaskbarDllSymbols() {
@@ -1427,8 +1460,21 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    if (!HookTaskbarViewDllSymbols()) {
-        return FALSE;
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllLoaded = true;
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Taskbar view module not loaded yet");
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                      "LoadLibraryExW");
+        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                           LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
     }
 
     if (!HookTaskbarDllSymbols()) {
@@ -1440,6 +1486,18 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
+
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
 
     ApplySettings();
 }
