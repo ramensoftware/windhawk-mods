@@ -1,3 +1,7 @@
+## 1.1.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/62c7f65eaecd24f1e41e34d931666715f4d37566/mods/taskbar-notification-icon-spacing.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 preview builds.
+
 ## 1.1.1 ([Dec 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/9c2f0424b09b758e4e82b06da5b4d94e206e05a4/mods/taskbar-notification-icon-spacing.wh.cpp))
 
 * Fixed buggy tray overflow placement when it's shown at the first time after system startup.
