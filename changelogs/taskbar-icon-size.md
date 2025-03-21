@@ -1,3 +1,7 @@
+## 1.2.17 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b17320a6b8fe99338c82c8bcd7d948c9fabbb99d/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 preview builds.
+
 ## 1.2.16 ([Oct 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/dfade00e1c4f9d0047b6b040ed8a08860b2421fe/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed a bug introduced in version 1.2.15, which mistakenly changes the width of elements such as the taskbar search box and the weather widget.

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-17T22:58:03.000Z</updated>
+    <updated>2025-03-21T13:25:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.2.17]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#b17320a6b8fe99338c82c8bcd7d948c9fabbb99d</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2025-03-21T13:25:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SafeDiscShim 1.0]]></title>
         <id>https://windhawk.net/mods/safediscshim#8c2f0e04d5f2f6892fa24eb7a11b1efbcc51504c</id>
@@ -278,20 +291,6 @@ or a similar tool), enable the relevant option in the mod's settings.</p>]]></co
 <li>Fixed support for the new thumbnail previews implementation on Windows 11 version 23H2.</li>
 <li>Fixed the list mode for the new thumbnail previews implementation in Windows 11.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide speed 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-speed#63ad574fe114bb2c0f8e8a40ac76341fb2205187</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-speed"/>
-        <updated>2025-02-20T18:57:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarautohidespeed">Taskbar auto-hide speed</h1>
-<p>Customize the taskbar auto-hide speed and frame rate to make it feel less
-sluggish and janky.</p>
-<p><img src="https://i.imgur.com/x7pg5xX.gif" alt="Demonstration" /></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
