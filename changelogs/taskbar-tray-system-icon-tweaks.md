@@ -1,3 +1,8 @@
+## 1.2.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/ccea9857952abe4d8288052ac3e2ebb3c2900d1c/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 preview builds.
+* Adjusted battery icon hiding to support the new colored battery icon.
+
 ## 1.2.1 ([Feb 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/430f707bfe33b708eb18a2018c9f3660f27705b4/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
 
 * Added a new option for Hide bell icon: When there are no new notifications and "Do not disturb" is off. With this option, the bell is always visible in "Do not disturb" mode.

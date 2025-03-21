@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-21T16:53:49.000Z</updated>
+    <updated>2025-03-21T18:40:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#ccea9857952abe4d8288052ac3e2ebb3c2900d1c</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
+        <updated>2025-03-21T18:40:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+<li>Adjusted battery icon hiding to support the new colored battery icon.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#f235abdd918c4639a7631e9e228399b22c0b734b</id>
@@ -283,22 +297,6 @@ So this mod prevents Teams from ever occupying that hotkey so that it remains av
         <author>
             <name>Yves Goergen</name>
             <uri>https://github.com/ygoe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#a964360a62a40333fb917ccea2c5513fe7e77b3b</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2025-02-24T21:13:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarkeyboardonlyautohide">Taskbar keyboard-only auto-hide</h1>
-<p>When taskbar auto-hide is enabled, the taskbar will only be unhidden with the
-keyboard, hovering the mouse over the taskbar will not unhide it. For example,
-the Win key or Ctrl+Esc will unhide the taskbar.</p>
-<p><strong>Note:</strong> To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
