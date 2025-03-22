@@ -16,6 +16,14 @@ Starting from Windows 10 version 1809, the borders of active windows aren't colo
 unless the user enables the option to color titlebars. This mod reverts that behavior
 and makes active borders always use the user's accent color regardless.
 
+## ⚠ Important usage note ⚠ 
+
+In order to use this mod, you must allow Windhawk to inject into the **dwm.exe** 
+system process. To do so, add it to the process inclusion list in the advanced 
+settings. If you do not do this, it will silently fail to inject.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
+
 **Preview**:
 
 ![Preview](https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win10-colored-borders-preview.png)
