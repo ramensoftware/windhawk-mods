@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-position
 // @name            Start button always on the left
 // @description     Forces the start button to be on the left of the taskbar, even when taskbar icons are centered (Windows 11 only)
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -49,6 +49,7 @@ Only Windows 11 is supported.
 
 #include <windhawk_utils.h>
 
+#include <atomic>
 #include <functional>
 
 #include <dwmapi.h>
@@ -69,6 +70,7 @@ struct {
     int startMenuWidth;
 } g_settings;
 
+std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 
 HWND g_startMenuWnd;
@@ -543,24 +545,7 @@ bool HookTaskbarDllSymbols() {
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
-bool HookTaskbarViewDllSymbols() {
-    WCHAR dllPath[MAX_PATH];
-    if (!GetWindowsDirectory(dllPath, ARRAYSIZE(dllPath))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return false;
-    }
-
-    wcscat_s(
-        dllPath, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-
-    HMODULE module =
-        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (!module) {
-        Wh_Log(L"Taskbar view module couldn't be loaded");
-        return false;
-    }
-
+bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
@@ -576,6 +561,39 @@ bool HookTaskbarViewDllSymbols() {
     };
 
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+    }
+
+    return module;
 }
 
 std::wstring GetProcessFileName(DWORD dwProcessId) {
@@ -743,18 +761,32 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!HookTaskbarViewDllSymbols()) {
-        return FALSE;
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllLoaded = true;
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Taskbar view module not loaded yet");
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                      "LoadLibraryExW");
+        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                           LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
     }
 
     HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
     if (dwmapiModule) {
-        FARPROC pDwmSetWindowAttribute =
-            GetProcAddress(dwmapiModule, "DwmSetWindowAttribute");
+        auto pDwmSetWindowAttribute =
+            (decltype(&DwmSetWindowAttribute))GetProcAddress(
+                dwmapiModule, "DwmSetWindowAttribute");
         if (pDwmSetWindowAttribute) {
-            Wh_SetFunctionHook((void*)pDwmSetWindowAttribute,
-                               (void*)DwmSetWindowAttribute_Hook,
-                               (void**)&DwmSetWindowAttribute_Original);
+            WindhawkUtils::Wh_SetFunctionHookT(pDwmSetWindowAttribute,
+                                               DwmSetWindowAttribute_Hook,
+                                               &DwmSetWindowAttribute_Original);
         }
     }
 
@@ -763,6 +795,18 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
+
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
 
     HWND hTaskbarWnd = GetTaskbarWnd();
     if (hTaskbarWnd) {
