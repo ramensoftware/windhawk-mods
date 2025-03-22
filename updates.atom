@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-22T20:08:46.000Z</updated>
+    <updated>2025-03-22T22:15:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#9e22c833002db2e8c8c002ea098d25805d09167c</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
+        <updated>2025-03-22T22:15:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for secondary taskbars.</li>
+<li>Added the "Fully hide" option. Normally, the taskbar is hidden to a thin line which can be clicked to unhide it. The new option makes it so that the taskbar is fully hidden on auto-hide, leaving no traces at all. With this option, the taskbar can only be unhidden via the keyboard.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start menu open location 1.0]]></title>
         <id>https://windhawk.net/mods/start-menu-open-location#7511e5a51e86a5addd0b66ec459ec61c54a6bc4e</id>
@@ -278,32 +292,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SafeDiscShim 1.0]]></title>
-        <id>https://windhawk.net/mods/safediscshim#8c2f0e04d5f2f6892fa24eb7a11b1efbcc51504c</id>
-        <link href="https://windhawk.net/mods/safediscshim"/>
-        <updated>2025-03-17T22:58:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="important">IMPORTANT</h1>
-<p>Windhawk needs to hook into <code>svchost.exe</code> for SafeDiscShim to work on certain games.
-Please navigate to Windhawk's Settings, Advanced settings, More advanced settings, and make sure that
-<code>svchost.exe</code> is in the Process inclusion list.</p>
-<h1 id="safediscshim">SafeDiscShim</h1>
-<p>SafeDiscShim is a compatibility tool that allows for SafeDisc protected games which utilize the insecure Macrovision
-Security Driver ("secdrv.sys") to run on modern versions of Windows which have said driver blacklisted. Previous methods
-to restore functionality to these games relied on forcefully installing the driver, potentially opening security risks.</p>
-<p>In contrast, this tool does not rely on any drivers to function. Instead, it automatically loads alongside SafeDisc
-protected games and intercepts any communication requests that would have been sent to the driver, instead sending the 
-expected response itself and allowing the game to boot.</p>
-<h1 id="disclaimer">Disclaimer</h1>
-<p>SafeDiscShim is purely designed as a compatibility tool: no security mechanisms are bypassed in the operation of this 
-tool and SafeDisc protected games still require their original discs in order to function, even when using this tool.
-Certain games may have additional compatibility issues outside of the SafeDisc protection; this tool makes no attempt to
-fix such issues.</p>]]></content>
-        <author>
-            <name>Rib</name>
-            <uri>https://github.com/RibShark</uri>
         </author>
     </entry>
 </feed>
