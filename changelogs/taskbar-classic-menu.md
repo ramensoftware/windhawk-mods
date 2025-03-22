@@ -1,3 +1,7 @@
+## 1.0.2 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5e211b73c192f73dca9e2cf45f7d4d4cad962761/mods/taskbar-classic-menu.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 preview builds.
+
 ## 1.0.1 ([Oct 22, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5edf7a5636ee40a9517e7034918c8e5c0a32f9bf/mods/taskbar-classic-menu.wh.cpp))
 
 * Fixed the mod not working in some cases. Specifically, if the Windows TaskbarShiftRightClickCrash feature flag was enabled, right click acted as a left click instead of showing the classic context menu.
