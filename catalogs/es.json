@@ -2869,6 +2869,31 @@
                 "version": "1.0.3"
             }
         },
+        "start-menu-open-location": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1742674126000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1742674126000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "description": "When clicking the Start button, opens the Start Menu on the monitor where the mouse cursor is located, or in a custom monitor of choice",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Start menu open location",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "suppress-run-box-error-message": {
             "details": {
                 "defaultSorting": 880,

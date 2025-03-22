@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-22T18:03:10.000Z</updated>
+    <updated>2025-03-22T20:08:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start menu open location 1.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-open-location#7511e5a51e86a5addd0b66ec459ec61c54a6bc4e</id>
+        <link href="https://windhawk.net/mods/start-menu-open-location"/>
+        <updated>2025-03-22T20:08:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startmenuopenlocation">Start menu open location</h1>
+<p>When clicking the Start button, opens the Start Menu on the monitor where the
+mouse cursor is located, or in a custom monitor of choice.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#c2a94e3b3f0465445cf6d789a48b2cd561fb8242</id>
@@ -291,21 +304,6 @@ fix such issues.</p>]]></content>
         <author>
             <name>Rib</name>
             <uri>https://github.com/RibShark</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Favorites in Navigation Pane 1.0]]></title>
-        <id>https://windhawk.net/mods/favorites-in-navpane#f8474dd3112a1a393ad72a119ab662623bc36b6a</id>
-        <link href="https://windhawk.net/mods/favorites-in-navpane"/>
-        <updated>2025-03-15T16:00:20.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="favoritesinnavigationpane">Favorites in Navigation Pane</h1>
-<p>Replaces Quick Access with Favorites in Navigation Pane.<br />
-Restarting Explorer is recommended after installing the mod.</p>
-<p><img src="https://i.imgur.com/UzRUf2P.png" alt="Favorites in Navigation Pane showing in Windows 10" /></p>
-<p><strong>NOTE:</strong> Only works on Windows 10.</p>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
