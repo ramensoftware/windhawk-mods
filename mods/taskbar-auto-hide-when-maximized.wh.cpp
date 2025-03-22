@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     Makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -382,8 +382,7 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
         return false;
     }
 
-    if (hWnd == GetShellWindow() || GetProp(hWnd, L"DesktopWindow") ||
-        IsTaskbarWindow(hWnd)) {
+    if (hWnd == GetShellWindow() || GetProp(hWnd, L"DesktopWindow")) {
         return false;
     }
 
@@ -410,6 +409,20 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
         return false;
     }
 
+    RECT windowRect;
+    DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
+                          sizeof(windowRect));
+
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    GetMonitorInfo(monitor, &monitorInfo);
+
+    // Don't keep the taskbar shown for a fullscreen window.
+    if (EqualRect(&windowRect, &monitorInfo.rcMonitor)) {
+        return true;
+    }
+
     // It makes sense to treat arranged windows (e.g. with Win+left) as
     // maximized, as they occupy the whole monitor height. Still check for
     // intersection, as a window can also just occupy the upper side of the
@@ -418,10 +431,6 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
         (g_settings.mode == Mode::maximized && isWindowArranged)) {
         RECT taskbarRect{};
         GetTaskbarRectForMonitor(monitor, &taskbarRect);
-
-        RECT windowRect{};
-        DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
-                              sizeof(windowRect));
 
         RECT intersectRect;
         if (IntersectRect(&intersectRect, &windowRect, &taskbarRect)) {
@@ -449,7 +458,13 @@ bool ShouldKeepTaskbarShown(HMONITOR monitor) {
 
     bool canHideTaskbar = false;
 
+    DWORD dwTaskbarThreadId = GetCurrentThreadId();
+
     auto enumWindowsProc = [&](HWND hWnd) -> BOOL {
+        if (GetWindowThreadProcessId(hWnd, nullptr) == dwTaskbarThreadId) {
+            return TRUE;
+        }
+
         canHideTaskbar = CanHideTaskbarForWindow(hWnd, monitor);
         return !canHideTaskbar;
     };
