@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-22T00:36:47.000Z</updated>
+    <updated>2025-03-22T00:41:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#bcd78f44d6de1412a8326190d1ddde140078505e</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2025-03-22T00:41:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#c57c0a2cb008722765cf652cd24c207fe8818e82</id>
@@ -285,20 +298,6 @@ mod gets rid of these redundant suffixes.</p>
         <content type="html"><![CDATA[<ul>
 <li>Added patterns for displaying additional time zones.</li>
 <li>Added a visibility option for the bottom clock line (Windows 11).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#430f707bfe33b708eb18a2018c9f3660f27705b4</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
-        <updated>2025-02-28T13:00:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a new option for Hide bell icon: When there are no new notifications and "Do not disturb" is off. With this option, the bell is always visible in "Do not disturb" mode.</li>
-<li>Fixed bell icon not hiding when the taskbar clock is hidden via the Windows taskbar settings.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
