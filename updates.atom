@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-22T13:30:20.000Z</updated>
+    <updated>2025-03-22T18:03:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#c2a94e3b3f0465445cf6d789a48b2cd561fb8242</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
+        <updated>2025-03-22T18:03:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hide the taskbar for fullscreen windows for the "Auto-hide only when a window is maximized" mode.</li>
+<li>Fixed taskbar thumbnails causing the taskbar to hide and then show up again right away (the fix in v1.2.1 wasn't complete).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-multirow#c6a46ecf54d34d4c0fe1919d8bd0aaccd03ef46b</id>
@@ -292,19 +306,6 @@ Restarting Explorer is recommended after installing the mod.</p>
         <author>
             <name>xalejandro</name>
             <uri>https://github.com/tetawaves</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic context menu on Windows 11 1.0.2]]></title>
-        <id>https://windhawk.net/mods/explorer-context-menu-classic#7f4b1793bb7134168006f53b0bea04e8a7c63aa8</id>
-        <link href="https://windhawk.net/mods/explorer-context-menu-classic"/>
-        <updated>2025-03-06T21:01:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with update KB5052093 for Windows 11 version 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

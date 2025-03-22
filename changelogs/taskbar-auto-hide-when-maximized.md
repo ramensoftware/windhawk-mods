@@ -1,3 +1,8 @@
+## 1.2.2 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c2a94e3b3f0465445cf6d789a48b2cd561fb8242/mods/taskbar-auto-hide-when-maximized.wh.cpp))
+
+* Hide the taskbar for fullscreen windows for the "Auto-hide only when a window is maximized" mode.
+* Fixed taskbar thumbnails causing the taskbar to hide and then show up again right away (the fix in v1.2.1 wasn't complete).
+
 ## 1.2.1 ([Mar 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/2a980f110766e76fe0095140c9010f8933f3918d/mods/taskbar-auto-hide-when-maximized.wh.cpp))
 
 * Fixed taskbar thumbnails causing the taskbar to hide and then show up again right away.
