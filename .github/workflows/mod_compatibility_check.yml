@@ -17,8 +17,6 @@ jobs:
       fail-fast: false
       matrix:
         version: [
-          # '1.3',  # Same compiler as 1.3.1.
-          '1.3.1',
           '1.4',
           '1.4.1',
           # '1.5',  # Same compiler as 1.5.1.
