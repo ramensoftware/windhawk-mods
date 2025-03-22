@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-22T11:13:24.000Z</updated>
+    <updated>2025-03-22T13:30:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#c6a46ecf54d34d4c0fe1919d8bd0aaccd03ef46b</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2025-03-22T13:30:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to have the start button occupy the full taskbar height.</li>
+<li>The mod now always switches to left icon alignment, since centered icons aren't supported.</li>
+<li>Fixed taskbar context menu positions for all but the first row.</li>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 Colored Borders 1.0.0]]></title>
         <id>https://windhawk.net/mods/win10-colored-borders#3fe558add16055138f02eff567773ca806b495e4</id>
@@ -286,23 +302,6 @@ Restarting Explorer is recommended after installing the mod.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with update KB5052093 for Windows 11 version 24H2.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove File Explorer Suffixes 1.0]]></title>
-        <id>https://windhawk.net/mods/file-explorer-remove-suffixes#d6867f752e2b1064f5e4bf596f92a1c893cb9e81</id>
-        <link href="https://windhawk.net/mods/file-explorer-remove-suffixes"/>
-        <updated>2025-03-02T22:39:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="removefileexplorersuffixes">Remove File Explorer Suffixes</h1>
-<p>Windows appends a " - File Explorer" suffix for each folder on the taskbar, this
-mod gets rid of these redundant suffixes.</p>
-<p><img src="https://i.imgur.com/ErUN0YU.png" alt="Before" /><br />
-<em>Before</em></p>
-<p><img src="https://i.imgur.com/tblTr3Q.png" alt="After" /><br />
-<em>After</em></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

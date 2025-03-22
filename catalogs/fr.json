@@ -3347,7 +3347,7 @@
                 "published": 1733602163000,
                 "rating": 9,
                 "ratingUsers": 8,
-                "updated": 1733602163000,
+                "updated": 1742650220000,
                 "users": 855
             },
             "metadata": {
@@ -3364,7 +3364,7 @@
                 ],
                 "name": "Multirow taskbar for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "taskbar-notification-icon-spacing": {
