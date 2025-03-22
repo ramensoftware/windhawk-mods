@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-keyboard-only
 // @name            Taskbar keyboard-only auto-hide
 // @description     When taskbar auto-hide is enabled, the taskbar will only be unhidden with the keyboard, hovering the mouse over the taskbar will not unhide it
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -33,16 +33,32 @@ or a similar tool), enable the relevant option in the mod's settings.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- fullyHide: false
+  $name: Fully hide
+  $description: >-
+    Normally, the taskbar is hidden to a thin line which can be clicked to
+    unhide it. This option makes it so that the taskbar is fully hidden on
+    auto-hide, leaving no traces at all. With this option, the taskbar can only
+    be unhidden via the keyboard.
+- oldTaskbarOnWin11: false
+  $name: Customize the old taskbar on Windows 11
+  $description: >-
+    Enable this option to customize the old taskbar on Windows 11 (if using
+    ExplorerPatcher or a similar tool).
+*/
+// ==/WindhawkModSettings==
+
 #include <windhawk_utils.h>
 
 #include <psapi.h>
 
 #include <atomic>
+#include <vector>
 
 struct {
-    int showSpeedup;
-    int hideSpeedup;
-    int frameRate;
+    bool fullyHide;
     bool oldTaskbarOnWin11;
 } g_settings;
 
@@ -58,14 +74,123 @@ WinVersion g_winVersion;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
-using TrayUI_SetUnhideTimer_t = void(WINAPI*)(void* pThis,
-                                              long param1,
-                                              long param2);
-TrayUI_SetUnhideTimer_t TrayUI_SetUnhideTimer_Original;
-void WINAPI TrayUI_SetUnhideTimer_Hook(void* pThis, long param1, long param2) {
+enum {
+    kTrayUITimerHide = 2,
+    kTrayUITimerUnhide = 3,
+};
+
+bool IsTaskbarWindow(HWND hWnd) {
+    WCHAR szClassName[32];
+    if (!GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
+        return false;
+    }
+
+    return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 ||
+           _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+HWND GetTaskbarWnd() {
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+
+    DWORD processId = 0;
+    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
+        processId != GetCurrentProcessId()) {
+        return nullptr;
+    }
+
+    return hTaskbarWnd;
+}
+
+HWND FindTaskbarWindows(std::vector<HWND>* secondaryTaskbarWindows) {
+    secondaryTaskbarWindows->clear();
+
+    HWND hTaskbarWnd = GetTaskbarWnd();
+    if (!hTaskbarWnd) {
+        return nullptr;
+    }
+
+    DWORD taskbarThreadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
+    if (!taskbarThreadId) {
+        return nullptr;
+    }
+
+    auto enumWindowsProc = [&secondaryTaskbarWindows](HWND hWnd) -> BOOL {
+        WCHAR szClassName[32];
+        if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+            return TRUE;
+        }
+
+        if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+            secondaryTaskbarWindows->push_back(hWnd);
+        }
+
+        return TRUE;
+    };
+
+    EnumThreadWindows(
+        taskbarThreadId,
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
+            return proc(hWnd);
+        },
+        reinterpret_cast<LPARAM>(&enumWindowsProc));
+
+    return hTaskbarWnd;
+}
+
+using ShowWindow_t = decltype(&ShowWindow);
+ShowWindow_t ShowWindow_Original;
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    if (g_settings.fullyHide && IsTaskbarWindow(hWnd)) {
+        Wh_Log(L">");
+        return TRUE;
+    }
+
+    BOOL ret = ShowWindow_Original(hWnd, nCmdShow);
+
+    return ret;
+}
+
+using SetTimer_t = decltype(&SetTimer);
+SetTimer_t SetTimer_Original;
+UINT_PTR WINAPI SetTimer_Hook(HWND hWnd,
+                              UINT_PTR nIDEvent,
+                              UINT uElapse,
+                              TIMERPROC lpTimerFunc) {
+    if (nIDEvent == kTrayUITimerUnhide && IsTaskbarWindow(hWnd)) {
+        Wh_Log(L">");
+        return 1;
+    }
+
+    UINT_PTR ret = SetTimer_Original(hWnd, nIDEvent, uElapse, lpTimerFunc);
+
+    return ret;
+}
+
+using TrayUI_SlideWindow_t = void(WINAPI*)(void* pThis,
+                                           HWND hWnd,
+                                           const RECT* rc,
+                                           HMONITOR monitor,
+                                           bool show,
+                                           bool flag);
+TrayUI_SlideWindow_t TrayUI_SlideWindow_Original;
+void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
+                                    HWND hWnd,
+                                    const RECT* rc,
+                                    HMONITOR monitor,
+                                    bool show,
+                                    bool flag) {
     Wh_Log(L">");
 
-    // TrayUI_SetUnhideTimer_Original(pThis, param1, param2);
+    if (show && g_settings.fullyHide) {
+        ShowWindow_Original(hWnd, SW_SHOWNA);
+    }
+
+    TrayUI_SlideWindow_Original(pThis, hWnd, rc, monitor, show, flag);
+
+    if (!show && g_settings.fullyHide) {
+        ShowWindow_Original(hWnd, SW_HIDE);
+    }
 }
 
 bool HookTaskbarSymbols() {
@@ -83,9 +208,9 @@ bool HookTaskbarSymbols() {
     // Taskbar.dll, explorer.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(public: virtual void __cdecl TrayUI::SetUnhideTimer(long,long))"},
-            &TrayUI_SetUnhideTimer_Original,
-            TrayUI_SetUnhideTimer_Hook,
+            {LR"(public: virtual void __cdecl TrayUI::SlideWindow(struct HWND__ *,struct tagRECT const *,struct HMONITOR__ *,bool,bool))"},
+            &TrayUI_SlideWindow_Original,
+            TrayUI_SlideWindow_Hook,
         },
     };
 
@@ -180,8 +305,8 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
     }
 
     EXPLORER_PATCHER_HOOK hooks[] = {
-        {R"(?SetUnhideTimer@TrayUI@@UEAAXJJ@Z)",
-         &TrayUI_SetUnhideTimer_Original, TrayUI_SetUnhideTimer_Hook},
+        {R"(?SlideWindow@TrayUI@@UEAAXPEAUHWND__@@PEBUtagRECT@@PEAUHMONITOR__@@_N3@Z)",
+         &TrayUI_SlideWindow_Original, TrayUI_SlideWindow_Hook},
     };
 
     bool succeeded = true;
@@ -269,6 +394,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 void LoadSettings() {
+    g_settings.fullyHide = Wh_GetIntSetting(L"fullyHide");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
@@ -309,9 +435,24 @@ BOOL Wh_ModInit() {
                                        LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
 
+    WindhawkUtils::Wh_SetFunctionHookT(ShowWindow, ShowWindow_Hook,
+                                       &ShowWindow_Original);
+
+    WindhawkUtils::Wh_SetFunctionHookT(SetTimer, SetTimer_Hook,
+                                       &SetTimer_Original);
+
     g_initialized = true;
 
     return TRUE;
+}
+
+void ShowAllTaskbars(int nCmdShow) {
+    std::vector<HWND> secondaryTaskbarWindows;
+    HWND taskbarWindow = FindTaskbarWindows(&secondaryTaskbarWindows);
+    ShowWindow_Original(taskbarWindow, nCmdShow);
+    for (HWND hWnd : secondaryTaskbarWindows) {
+        ShowWindow_Original(hWnd, nCmdShow);
+    }
 }
 
 void Wh_ModAfterInit() {
@@ -322,18 +463,35 @@ void Wh_ModAfterInit() {
     if (!g_explorerPatcherInitialized) {
         HandleLoadedExplorerPatcher();
     }
+
+    if (g_settings.fullyHide) {
+        ShowAllTaskbars(SW_HIDE);
+    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    if (g_settings.fullyHide) {
+        ShowAllTaskbars(SW_SHOWNA);
+    }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
     bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+    bool prevFullyHide = g_settings.fullyHide;
 
     LoadSettings();
+
+    if (g_settings.fullyHide != prevFullyHide) {
+        if (g_settings.fullyHide) {
+            ShowAllTaskbars(SW_HIDE);
+        } else {
+            ShowAllTaskbars(SW_SHOWNA);
+        }
+    }
 
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
 
