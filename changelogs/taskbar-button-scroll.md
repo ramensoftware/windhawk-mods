@@ -1,3 +1,7 @@
+## 1.1.2 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/45104fb3435b9364f9905ad4e1bd8053739ec139/mods/taskbar-button-scroll.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 preview builds.
+
 ## 1.1.1 ([Feb 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b6614250291822a82219a5eacb2d5bd68959936b/mods/taskbar-button-scroll.wh.cpp))
 
 * The aero peek effect is now canceled when scrolling over thumbnails (for the new thumbnail previews implementation in Windows 11).

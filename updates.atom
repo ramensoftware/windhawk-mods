@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-22T00:41:26.000Z</updated>
+    <updated>2025-03-22T00:47:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-scroll#45104fb3435b9364f9905ad4e1bd8053739ec139</id>
+        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
+        <updated>2025-03-22T00:47:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.8]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#bcd78f44d6de1412a8326190d1ddde140078505e</id>
@@ -284,20 +297,6 @@ mod gets rid of these redundant suffixes.</p>
         <updated>2025-03-01T16:54:32.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Change the Visible option for the top/bottom clock line to Hidden, to prevent the bottom line from being hidden by default after updating to version 1.5.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#67c1039afeda68ee5efd3c6a0e5cabe2de082557</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2025-03-01T16:07:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added patterns for displaying additional time zones.</li>
-<li>Added a visibility option for the bottom clock line (Windows 11).</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

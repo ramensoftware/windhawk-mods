@@ -3068,7 +3068,7 @@
                 "published": 1682233932000,
                 "rating": 10,
                 "ratingUsers": 39,
-                "updated": 1739555161000,
+                "updated": 1742604443000,
                 "users": 1226
             },
             "metadata": {
@@ -3076,7 +3076,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lcomctl32 -loleaut32 -lole32 -lruntimeobject -lversion",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion",
                 "description": "Minimize/restore by scrolling the mouse wheel over taskbar buttons and thumbnail previews (Windows 11 only)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -3085,7 +3085,7 @@
                 ],
                 "name": "Taskbar minimize/restore on scroll",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.1"
+                "version": "1.1.2"
             }
         },
         "taskbar-classic-menu": {
