@@ -2,7 +2,7 @@
 // @id              taskbar-multirow
 // @name            Multirow taskbar for Windows 11
 // @description     Span taskbar items across multiple rows, just like it was possible before Windows 11
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -32,8 +32,6 @@ Windows 11.
 * The mod doesn't change the taskbar height, it only makes the task list span
   across multiple rows. To change the taskbar height, use the [Taskbar height
   and icon size](https://windhawk.net/mods/taskbar-icon-size) mod.
-* The mod works best with "Taskbar alignment" set to "Left" in the taskbar
-  settings in Windows.
 
 ![Screenshot](https://i.imgur.com/ZpzoDXy.png)
 */
@@ -43,18 +41,24 @@ Windows 11.
 /*
 - rows: 2
   $name: Rows
+- fullHeightStartButton: true
+  $name: Full-height start button
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
+#include <atomic>
 #include <functional>
 #include <unordered_map>
 #include <vector>
 
+#include <windowsx.h>
+
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/base.h>
@@ -63,8 +67,10 @@ using namespace winrt::Windows::UI::Xaml;
 
 struct {
     int rows;
+    bool fullHeightStartButton;
 } g_settings;
 
+std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 
 struct TaskbarState {
@@ -143,7 +149,8 @@ TaskbarState* GetTaskbarState(XamlRoot xamlRoot) {
 
 void UpdateTaskbarFrameRepeaterMargin(FrameworkElement taskbarFrameRepeater,
                                       TaskbarState* taskbarState,
-                                      double widthWithoutExtent) {
+                                      double widthWithoutExtent,
+                                      bool forceUpdate = false) {
     double desiredMargin = 0;
 
     if (!g_unloading) {
@@ -159,7 +166,14 @@ void UpdateTaskbarFrameRepeaterMargin(FrameworkElement taskbarFrameRepeater,
     }
 
     auto margin = taskbarFrameRepeater.Margin();
-    if (margin.Right != desiredMargin) {
+    if (forceUpdate) {
+        Wh_Log(L"Re-setting margin.Right=%f (widthWithoutExtent=%f)",
+               desiredMargin, widthWithoutExtent);
+        margin.Right = desiredMargin + 1;
+        taskbarFrameRepeater.Margin(margin);
+        margin.Right = desiredMargin;
+        taskbarFrameRepeater.Margin(margin);
+    } else if (margin.Right != desiredMargin) {
         Wh_Log(L"Setting margin.Right=%f (widthWithoutExtent=%f)",
                desiredMargin, widthWithoutExtent);
         margin.Right = desiredMargin;
@@ -204,7 +218,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         taskbarFrameElement.Width() - systemTrayFrameWidth;
 
     UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
-                                     widthWithoutExtent);
+                                     widthWithoutExtent, /*forceUpdate=*/true);
 
     return true;
 }
@@ -322,7 +336,7 @@ bool RunFromWindowThread(HWND hWnd,
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
@@ -354,7 +368,7 @@ void ApplySettingsFromTaskbarThread() {
 
     EnumThreadWindows(
         GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             WCHAR szClassName[32];
             if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
                 return TRUE;
@@ -382,13 +396,65 @@ void ApplySettingsFromTaskbarThread() {
             return TRUE;
         },
         0);
+
+    // Touch a registry value to trigger a watcher for the settings.
+    constexpr WCHAR kTempValueName[] = L"_temp_windhawk_" WH_MOD_ID;
+    HKEY hSubKey;
+    LONG result = RegOpenKeyEx(
+        HKEY_CURRENT_USER,
+        LR"(SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced)", 0,
+        KEY_WRITE, &hSubKey);
+    if (result == ERROR_SUCCESS) {
+        if (RegSetValueEx(hSubKey, kTempValueName, 0, REG_SZ, (const BYTE*)L"",
+                          sizeof(WCHAR)) != ERROR_SUCCESS) {
+            Wh_Log(L"Failed to create temp value");
+        } else if (RegDeleteValue(hSubKey, kTempValueName) != ERROR_SUCCESS) {
+            Wh_Log(L"Failed to remove temp value");
+        }
+
+        RegCloseKey(hSubKey);
+    } else {
+        Wh_Log(L"Failed to open subkey: %d", result);
+    }
 }
 
 void ApplySettings(HWND hTaskbarWnd) {
     RunFromWindowThread(
         hTaskbarWnd,
-        [](void* pParam) WINAPI -> void { ApplySettingsFromTaskbarThread(); },
-        0);
+        [](void* pParam) -> void { ApplySettingsFromTaskbarThread(); }, 0);
+}
+
+using CTaskListWnd_ComputeJumpViewPosition_t =
+    HRESULT(WINAPI*)(void* pThis,
+                     void* taskBtnGroup,
+                     int param2,
+                     winrt::Windows::Foundation::Point* point,
+                     HorizontalAlignment* horizontalAlignment,
+                     VerticalAlignment* verticalAlignment);
+CTaskListWnd_ComputeJumpViewPosition_t
+    CTaskListWnd_ComputeJumpViewPosition_Original;
+HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
+    void* pThis,
+    void* taskBtnGroup,
+    int param2,
+    winrt::Windows::Foundation::Point* point,
+    HorizontalAlignment* horizontalAlignment,
+    VerticalAlignment* verticalAlignment) {
+    Wh_Log(L">");
+
+    HRESULT ret = CTaskListWnd_ComputeJumpViewPosition_Original(
+        pThis, taskBtnGroup, param2, point, horizontalAlignment,
+        verticalAlignment);
+
+    DWORD messagePos = GetMessagePos();
+    POINT pt{
+        GET_X_LPARAM(messagePos),
+        GET_Y_LPARAM(messagePos),
+    };
+
+    point->X = pt.x;
+
+    return ret;
 }
 
 using IUIElement_Arrange_t =
@@ -420,6 +486,26 @@ IUIElement_Arrange_Hook(void* pThis,
         return original();
     }
 
+    FrameworkElement startButton = nullptr;
+    if (g_settings.fullHeightStartButton) {
+        startButton =
+            EnumChildElements(taskbarFrameRepeater, [](FrameworkElement child) {
+                auto childClassName = winrt::get_class_name(child);
+                if (childClassName != L"Taskbar.ExperienceToggleButton") {
+                    return false;
+                }
+
+                auto automationId =
+                    Automation::AutomationProperties::GetAutomationId(child);
+                return automationId == L"StartButton";
+            });
+        if (element == startButton) {
+            return original();
+        }
+    }
+
+    double startButtonWidth = startButton ? startButton.ActualWidth() : 0;
+
     auto xamlRoot = taskbarFrameRepeater.XamlRoot();
 
     TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
@@ -450,8 +536,9 @@ IUIElement_Arrange_Hook(void* pThis,
          i++) {
         newRect.X -= widthWithoutExtent;
         if (newRect.X <= 0) {
-            taskbarState->rowOffsetAdjustment[i] = -newRect.X;
-            newRect.X = 0;
+            taskbarState->rowOffsetAdjustment[i] =
+                -newRect.X + startButtonWidth;
+            newRect.X = startButtonWidth;
         } else {
             newRect.X += taskbarState->rowOffsetAdjustment[i];
         }
@@ -504,6 +591,46 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
                                      widthWithoutExtent);
 }
 
+using RegGetValueW_t = decltype(&RegGetValueW);
+RegGetValueW_t RegGetValueW_Original;
+LONG WINAPI RegGetValueW_Hook(HKEY hkey,
+                              LPCWSTR lpSubKey,
+                              LPCWSTR lpValue,
+                              DWORD dwFlags,
+                              LPDWORD pdwType,
+                              PVOID pvData,
+                              LPDWORD pcbData) {
+    LONG ret = RegGetValueW_Original(hkey, lpSubKey, lpValue, dwFlags, pdwType,
+                                     pvData, pcbData);
+
+    if (hkey == HKEY_CURRENT_USER && lpSubKey &&
+        _wcsicmp(
+            lpSubKey,
+            LR"(SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced)") ==
+            0 &&
+        lpValue && _wcsicmp(lpValue, L"TaskbarAl") == 0 &&
+        dwFlags == RRF_RT_REG_DWORD && pvData && pcbData &&
+        *pcbData == sizeof(DWORD)) {
+        Wh_Log(L"> %u", ret);
+
+        if (!g_unloading) {
+            Wh_Log(L"Overriding");
+
+            *(DWORD*)pvData = 0;
+
+            if (pdwType) {
+                *pdwType = REG_DWORD;
+            }
+
+            ret = ERROR_SUCCESS;
+        } else {
+            Wh_Log(L"Returning original value: %u", *(DWORD*)pvData);
+        }
+    }
+
+    return ret;
+}
+
 bool HookTaskbarDllSymbols() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
@@ -532,6 +659,11 @@ bool HookTaskbarDllSymbols() {
             {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
             &std__Ref_count_base__Decref_Original,
         },
+        {
+            {LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
+            &CTaskListWnd_ComputeJumpViewPosition_Original,
+            CTaskListWnd_ComputeJumpViewPosition_Hook,
+        },
     };
 
     if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
@@ -542,24 +674,7 @@ bool HookTaskbarDllSymbols() {
     return true;
 }
 
-bool HookTaskbarViewDllSymbols() {
-    WCHAR dllPath[MAX_PATH];
-    if (!GetWindowsDirectory(dllPath, ARRAYSIZE(dllPath))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return false;
-    }
-
-    wcscat_s(
-        dllPath, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-
-    HMODULE module =
-        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (!module) {
-        Wh_Log(L"Taskbar view module couldn't be loaded");
-        return false;
-    }
-
+bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
@@ -582,8 +697,43 @@ bool HookTaskbarViewDllSymbols() {
     return true;
 }
 
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+    }
+
+    return module;
+}
+
 void LoadSettings() {
     g_settings.rows = Wh_GetIntSetting(L"rows");
+    g_settings.fullHeightStartButton =
+        Wh_GetIntSetting(L"fullHeightStartButton");
 }
 
 BOOL Wh_ModInit() {
@@ -595,15 +745,46 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!HookTaskbarViewDllSymbols()) {
-        return FALSE;
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllLoaded = true;
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Taskbar view module not loaded yet");
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                      "LoadLibraryExW");
+        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                           LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
     }
+
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseRegGetValueW = (decltype(&RegGetValueW))GetProcAddress(
+        kernelBaseModule, "RegGetValueW");
+    WindhawkUtils::Wh_SetFunctionHookT(
+        pKernelBaseRegGetValueW, RegGetValueW_Hook, &RegGetValueW_Original);
 
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
+
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
 
     HWND hTaskbarWnd = GetTaskbarWnd();
     if (hTaskbarWnd) {
