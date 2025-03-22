@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-22T01:47:05.000Z</updated>
+    <updated>2025-03-22T11:13:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Colored Borders 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win10-colored-borders#3fe558add16055138f02eff567773ca806b495e4</id>
+        <link href="https://windhawk.net/mods/win10-colored-borders"/>
+        <updated>2025-03-22T11:13:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows10coloredborders">Windows 10 Colored Borders</h1>
+<p>Starting from Windows 10 version 1809, the borders of active windows aren't colored
+unless the user enables the option to color titlebars. This mod reverts that behavior
+and makes active borders always use the user's accent color regardless.</p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In order to use this mod, you must allow Windhawk to inject into the <strong>dwm.exe</strong> 
+system process. To do so, add it to the process inclusion list in the advanced 
+settings. If you do not do this, it will silently fail to inject.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<p><strong>Preview</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win10-colored-borders-preview.png" alt="Preview" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar classic context menu 1.0.2]]></title>
         <id>https://windhawk.net/mods/taskbar-classic-menu#5e211b73c192f73dca9e2cf45f7d4d4cad962761</id>
@@ -282,19 +303,6 @@ mod gets rid of these redundant suffixes.</p>
 <em>Before</em></p>
 <p><img src="https://i.imgur.com/tblTr3Q.png" alt="After" /><br />
 <em>After</em></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle through taskbar windows on click 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-left-click-cycle#e98421129e3e78e3b6f7b5305e8c0ff9301c157a</id>
-        <link href="https://windhawk.net/mods/taskbar-left-click-cycle"/>
-        <updated>2025-03-02T21:17:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the new thumbnail previews implementation in Windows 11.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
