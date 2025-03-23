@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              windows-11-taskbar-styler
-// @name            Windows 11 Taskbar Styler
+// @id              windows-11-taskbar-styler-fork
+// @name            Windows 11 Taskbar Styler - Fork
 // @description     Customize the taskbar with themes contributed by others or create your own
 // @version         1.3.10
 // @author          m417z
@@ -73,6 +73,10 @@ Lucent](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/m
 [![21996Taskbar](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/21996Taskbar/screenshot.png)
 \
 21996Taskbar](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/21996Taskbar/README.md)
+
+[![TaskbarXII](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/TaskbarXII/preview1.png)
+\
+TaskbarXII](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/TaskbarXII/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 taskbar
 styling
@@ -222,6 +226,7 @@ code from the **TranslucentTB** project.
   - Lucent: Lucent (Accented Bar)
   - Lucent_variant_Light: Lucent (Light Bar)
   - 21996Taskbar: 21996Taskbar
+  - TaskbarXII: TaskbarXII
 - controlStyles:
   - - target: ""
       $name: Target
@@ -1008,6 +1013,37 @@ const Theme g_theme21996Taskbar = {{
         L"Opacity=0.5"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#BackgroundStroke", {
         L"Visibility=Collapsed"}},
+}};
+
+const Theme g_themeTaskbarXII = {{
+    ThemeTargetStyles{L"ScrollViewer > ScrollContentPresenter > Border > Grid", { L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemListLowColor}\" TintOpacity=\"0.1\" FallbackColor=\"{ThemeResource SystemChromeHighColor}\" />" }},
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame#TaskbarFrame", { L"HorizontalAlignment=Right", L"Transform3D:=<CompositeTransform3D TranslateX=\"-820\"/>", L"Width=Auto", L"Height=56" }},
+    ThemeTargetStyles{L"Taskbar.TaskbarFrame#TaskbarFrame > Grid", { L"Height=48", L"CornerRadius=4" }},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground#BackgroundControl", { L"Height=48", L"Transform3D:=<CompositeTransform3D TranslateX=\"156.5\"/>", L"Opacity=0.7" }},
+    ThemeTargetStyles{L"Taskbar.TaskbarBackground > Grid", { L"CornerRadius=4", L"Opacity=1" }},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.ItemsRepeater#TaskbarFrameRepeater", { L"Margin=0,0,3,0" }},
+    ThemeTargetStyles{L"Taskbar.SearchBoxButton > Taskbar.TaskListButtonPanel", { L"Margin=2,0,6,0" }},
+    ThemeTargetStyles{L"Taskbar.SearchBoxButton > Taskbar.TaskListButtonPanel > TextBlock", { L"Text=✦ Meow" }},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#BackgroundStroke", { L"Visibility=Collapsed" }},
+    // -------------------------------------------------------------------------------------------------------------
+    ThemeTargetStyles{L"Taskbar.AugmentedEntryPointButton > Taskbar.TaskListButtonPanel", { L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"0.6\" />", L"CornerRadius=4", L"Padding=0", L"Margin=0,0,7,0" }},
+    ThemeTargetStyles{L"Taskbar.AugmentedEntryPointButton > Taskbar.TaskListButtonPanel > Grid", { L"Margin=8,0,0,0" }},
+    ThemeTargetStyles{L"Border#LargeTicker1", { L"Margin=0,2,4,0" }},
+    ThemeTargetStyles{L"Border#LargeTicker1 > AdaptiveCards.Rendering.Uwp.WholeItemsPanel > Image", { L"MaxHeight=27", L"MaxWidth=27" }},                                           // weather icon
+    ThemeTargetStyles{L"Border#LargeTicker1 > AdaptiveCards.Rendering.Uwp.WholeItemsPanel > Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer", { L"MaxHeight=27", L"MaxWidth=27" }}, // weather icon
+    // -------------------------------------------------------------------------------------------------------------
+    ThemeTargetStyles{L"SystemTray.SystemTrayFrame", { L"HorizontalAlignment=Left", L"Transform3D:=<CompositeTransform3D TranslateX=\"1104.5\"/>" }},
+    ThemeTargetStyles{L"Grid#SystemTrayFrameGrid", { L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"0.6\" />", L"CornerRadius=4", L"Padding=8,3,0,3" }},
+    // -------------------------------------------------------------------------------------------------------------
+    ThemeTargetStyles{L"SystemTray.Stack#SecondaryClockStack", { L"Grid.Column=8" }},
+    ThemeTargetStyles{L"SystemTray.OmniButton#ControlCenterButton", { L"Grid.Column=4" }},
+    ThemeTargetStyles{L"SystemTray.OmniButton#NotificationCenterButton", { L"Grid.Column=5" }},
+    ThemeTargetStyles{L"SystemTray.Stack#MainStack", { L"Grid.Column=6" }},
+    ThemeTargetStyles{L"SystemTray.Stack#ShowDesktopStack", { L"Grid.Column=7"  }},
+    // -------------------------------------------------------------------------------------------------------------
+    ThemeTargetStyles{L"TextBlock#InnerTextBlock[Text=\uE971]", { L"Text=\uED14" }},
+    ThemeTargetStyles{L"TextBlock#TimeInnerTextBlock", { L"Transform3D:=<CompositeTransform3D TranslateY=\"10\"/>", L"FontSize=15", L"FontWeight=Bold", L"Margin=94,0,0,0" }},
+    ThemeTargetStyles{L"TextBlock#DateInnerTextBlock", { L"Transform3D:=<CompositeTransform3D TranslateY=\"-10\"/>", L"FontSize=15", L"FontWeight=SemiBold", L"HorizontalAlignment=Left" }},
 }};
 
 // clang-format on
@@ -2587,6 +2623,8 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeLucent_variant_Light;
     } else if (wcscmp(themeName, L"21996Taskbar") == 0) {
         theme = &g_theme21996Taskbar;
+    } else if (wcscmp(themeName, L"TaskbarXII") == 0) {
+        theme = &g_themeTaskbarXII;
     }
     Wh_FreeStringSetting(themeName);
 
