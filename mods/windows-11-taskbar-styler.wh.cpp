@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              windows-11-taskbar-styler-fork
-// @name            Windows 11 Taskbar Styler - Fork
+// @id              windows-11-taskbar-styler
+// @name            Windows 11 Taskbar Styler
 // @description     Customize the taskbar with themes contributed by others or create your own
 // @version         1.3.10
 // @author          m417z
