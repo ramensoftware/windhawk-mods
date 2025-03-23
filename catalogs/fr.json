@@ -2940,7 +2940,7 @@
                 "published": 1740431630000,
                 "rating": 10,
                 "ratingUsers": 8,
-                "updated": 1742681746000,
+                "updated": 1742755308000,
                 "users": 102
             },
             "metadata": {
@@ -2957,7 +2957,7 @@
                 ],
                 "name": "Taskbar keyboard-only auto-hide",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "taskbar-auto-hide-speed": {
