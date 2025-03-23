@@ -64,36 +64,54 @@ If you have request for new functions, suggestions or you are experiencing some 
 
 // ==WindhawkModSettings==
 /*
-- doubleClickAction: ACTION_NOTHING
-  $name: Double click / double tap on empty space
-  $options:
-  - ACTION_NOTHING: Nothing (default)
-  - ACTION_SHOW_DESKTOP: Show desktop
-  - ACTION_ALT_TAB: Ctrl+Alt+Tab
-  - ACTION_TASK_MANAGER: Task Manager
-  - ACTION_MUTE: Mute system volume
-  - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
-  - ACTION_WIN_TAB: Win+Tab
-  - ACTION_HIDE_ICONS: Hide desktop icons
-  - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
-  - ACTION_OPEN_START_MENU: Open Start menu
-  - ACTION_SEND_KEYPRESS: Virtual key press
-  - ACTION_START_PROCESS: Start application
-- middleClickAction: ACTION_NOTHING
-  $name: Middle click / triple tap on empty space
-  $options:
-  - ACTION_NOTHING: Nothing (default)
-  - ACTION_SHOW_DESKTOP: Show desktop
-  - ACTION_ALT_TAB: Ctrl+Alt+Tab
-  - ACTION_TASK_MANAGER: Task Manager
-  - ACTION_MUTE: Mute system volume
-  - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
-  - ACTION_WIN_TAB: Win+Tab
-  - ACTION_HIDE_ICONS: Hide desktop icons
-  - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
-  - ACTION_OPEN_START_MENU: Open Start menu
-  - ACTION_SEND_KEYPRESS: Virtual key press
-  - ACTION_START_PROCESS: Start application
+- TriggerActionOptions:
+  - - KeyboardTriggers: [none, lctrl, lshift, lalt, win, rctrl, rshift, ralt ]
+      $name: Keyboard
+      $description: Select keyboard keypress modifiers. If None is selected or added, this trigger gets ignored.
+      $options:
+      - none: None
+      - lctrl: Left Ctrl
+      - lshift: Left Shift
+      - lalt: Left Alt
+      - win: Win
+      - rctrl: Right Ctrl
+      - rshift: Right Shift
+      - ralt: Right Alt
+    - MouseTrigger: none
+      $name: Mouse
+      $description: Select mouse click trigger. If None is selected, this trigger gets ignored.
+      $options:
+      - none: None
+      - left: Mouse left button click
+      - leftDouble: Mouse left button double click
+      - middle: Mouse middle button click
+      - middleDouble: Mouse middle button double click
+      - right: Mouse right button click
+      - rightDouble: Mouse right button double click
+      - tap: Touchscreen single tap
+      - tabDouble: Touchscreen double tap
+      - tripleTap: Touchscreen triple tap
+    - Action: ACTION_NOTHING
+      $name: Action
+      $description: Action invoked on trigger
+      $options:
+      - ACTION_NOTHING: Nothing (default)
+      - ACTION_SHOW_DESKTOP: Show desktop
+      - ACTION_ALT_TAB: Ctrl+Alt+Tab
+      - ACTION_TASK_MANAGER: Task Manager
+      - ACTION_MUTE: Mute system volume
+      - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
+      - ACTION_WIN_TAB: Win+Tab
+      - ACTION_HIDE_ICONS: Hide desktop icons
+      - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+      - ACTION_OPEN_START_MENU: Open Start menu
+      - ACTION_SEND_KEYPRESS: Virtual key press
+      - ACTION_START_PROCESS: Start application
+    - AdditionalArgs: arg1;arg2
+      $name: Additional Args
+      $description: Additional arguments for selected action separated by semicolon. See mod's Details tab for more info about supported arguments for each action.
+  $name: Taskbar empty space actions
+  $description: "Using Keyboard and Mouse combo boxes select a trigger for certain Action. For example combination 'Left Ctrl + Double click + Task Manager' will open Windows Task Manager when user double clicks empty space on Taskbar while holding left Ctrl key pressed down. More actions can be setup with Add new item button."
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
@@ -158,6 +176,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <functional>
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -1109,17 +1128,26 @@ enum TaskBarButtonsState
     COMBINE_NEVER,
 };
 
+struct TriggerAction
+{
+    std::vector<std::wstring> keyboardTriggerNames; // List of keyboard triggers parsed from settings
+    std::wstring mouseTriggerName;                  // Mouse trigger parsed from settings
+    std::wstring actionName;                        // Name of the action parsed from settings
+
+    std::vector<std::function<bool()>> keyboardModifiers; // list of lambda functions (or other callable objects) that return a bool
+    std::function<void(HWND)> actionExecutor;             // function that executes the action
+};
+
 static struct
 {
     bool oldTaskbarOnWin11;
+    std::vector<TriggerAction> triggerActions;
+
+    // TODO: delete me
     TaskBarAction doubleClickTaskbarAction;
     TaskBarAction middleClickTaskbarAction;
-    TaskBarButtonsState primaryTaskBarButtonsState1;
-    TaskBarButtonsState primaryTaskBarButtonsState2;
-    TaskBarButtonsState secondaryTaskBarButtonsState1;
-    TaskBarButtonsState secondaryTaskBarButtonsState2;
-    std::vector<int> virtualKeypress;
-    std::wstring processToStart;
+    // std::vector<int> virtualKeypress;
+    // std::wstring processToStart;
 } g_settings;
 
 // wrapper to always call COM de-initialization
@@ -1157,6 +1185,33 @@ public:
 protected:
     bool initialized;
 } g_comInitializer;
+
+// few helpers to ease up working with strings
+namespace stringtools
+{
+    std::wstring ltrim(const std::wstring &s)
+    {
+        std::wstring result = s;
+        result.erase(result.begin(), std::find_if(result.begin(), result.end(), [](wchar_t ch)
+                                                  { return !std::iswspace(ch); }));
+        return result;
+    }
+
+    std::wstring rtrim(const std::wstring &s)
+    {
+        std::wstring result = s;
+        result.erase(std::find_if(result.rbegin(), result.rend(), [](wchar_t ch)
+                                  { return !std::iswspace(ch); })
+                         .base(),
+                     result.end());
+        return result;
+    }
+
+    std::wstring trim(const std::wstring &s)
+    {
+        return rtrim(ltrim(s));
+    }
+}
 
 bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
 
@@ -1338,14 +1393,37 @@ private:
 
 UINT_PTR gMouseClickTimer = (UINT_PTR)0;
 
-// since the mod can't be split to multiple files, the definition order becomes somehow complicated
+// =====================================================================
+// Forward declarations
 bool IsTaskbarWindow(HWND hWnd);
 bool IsDoubleClick();
 bool IsDoubleTap();
 bool IsTripleTap();
+bool IsKeyPressed(int vkCode);
 void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd);
 void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD);
 bool OnMouseClick(MouseClick click);
+bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
+bool GetTaskbarAutohideState();
+void SetTaskbarAutohide(bool enabled);
+void ToggleTaskbarAutohide();
+void ShowDesktop();
+void SendKeypress(std::vector<int> keys);
+void SendCtrlAltTabKeypress();
+void SendWinTabKeypress();
+bool ClickStartMenu();
+void OpenStartMenu();
+void OpenTaskManager(HWND taskbarhWnd);
+void ToggleVolMuted();
+void HideIcons();
+void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
+                           const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2);
+
+DWORD GetCombineTaskbarButtons(const wchar_t *optionName);
+bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option);
+void StartProcess(const std::wstring &command);
+
+std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
 
 // =====================================================================
 
@@ -1799,104 +1877,190 @@ BOOL WindowsVersionInit()
     return TRUE;
 }
 
-TaskBarAction ParseMouseActionSetting(const wchar_t *option)
+int GetVirtualKeyFromName(const std::wstring &keyName)
 {
-    LOG_TRACE();
-
-    const auto value = Wh_GetStringSetting(option);
-    const auto equals = [](const wchar_t *str1, const wchar_t *str2)
-    { return wcscmp(str1, str2) == 0; };
-
-    TaskBarAction action = ACTION_NOTHING;
-    if (equals(value, L"ACTION_NOTHING"))
-    {
-        action = ACTION_NOTHING;
-    }
-    else if (equals(value, L"ACTION_SHOW_DESKTOP"))
-    {
-        action = ACTION_SHOW_DESKTOP;
-    }
-    else if (equals(value, L"ACTION_ALT_TAB")) // do not brreak user settings with renaming the option
-    {
-        action = ACTION_CTRL_ALT_TAB;
-    }
-    else if (equals(value, L"ACTION_TASK_MANAGER"))
-    {
-        action = ACTION_TASK_MANAGER;
-    }
-    else if (equals(value, L"ACTION_MUTE"))
-    {
-        action = ACTION_MUTE;
-    }
-    else if (equals(value, L"ACTION_TASKBAR_AUTOHIDE"))
-    {
-        action = ACTION_TASKBAR_AUTOHIDE;
-    }
-    else if (equals(value, L"ACTION_WIN_TAB"))
-    {
-        action = ACTION_WIN_TAB;
-    }
-    else if (equals(value, L"ACTION_HIDE_ICONS"))
-    {
-        action = ACTION_HIDE_ICONS;
-    }
-    else if (equals(value, L"ACTION_COMBINE_TASKBAR_BUTTONS"))
-    {
-        action = ACTION_COMBINE_TASKBAR_BUTTONS;
-    }
-    else if (equals(value, L"ACTION_OPEN_START_MENU"))
-    {
-        action = ACTION_OPEN_START_MENU;
-    }
-    else if (equals(value, L"ACTION_SEND_KEYPRESS"))
-    {
-        action = ACTION_SEND_KEYPRESS;
-    }
-    else if (equals(value, L"ACTION_START_PROCESS"))
-    {
-        action = ACTION_START_PROCESS;
-    }
-    else
-    {
-        LOG_ERROR(L"Unknown action '%s' for option '%s'!", value, option);
-        action = ACTION_NOTHING;
-    }
-    Wh_FreeStringSetting(value);
-    LOG_DEBUG(L"Selected '%s' option %d", option, action);
-
-    return action;
+    if (keyName == L"lctrl")
+        return VK_LCONTROL;
+    if (keyName == L"rctrl")
+        return VK_RCONTROL;
+    if (keyName == L"lshift")
+        return VK_LSHIFT;
+    if (keyName == L"rshift")
+        return VK_RSHIFT;
+    if (keyName == L"lalt")
+        return VK_LMENU;
+    if (keyName == L"ralt")
+        return VK_RMENU;
+    if (keyName == L"win")
+        return VK_LWIN;
+    // Add more mappings as needed
+    return 0; // Return 0 for unrecognized key names
 }
 
-TaskBarButtonsState ParseTaskBarButtonsState(const wchar_t *option)
+std::vector<std::wstring> SplitArgs(const std::wstring &args)
+{
+    std::vector<std::wstring> result;
+
+    std::wstring args_ = stringtools::trim(args);
+    if (args_.empty())
+    {
+        return result;
+    }
+
+    size_t start = 0;
+    size_t end = args_.find(L';');
+    while (end != std::wstring::npos)
+    {
+        auto substring = stringtools::trim(args_.substr(start, end - start));
+        if (!substring.empty())
+        {
+            result.push_back(substring);
+        }
+        start = end + 1;
+        end = args_.find(L';', start);
+    }
+    auto substring = stringtools::trim(args_.substr(start));
+    if (!substring.empty())
+    {
+        result.push_back(substring);
+    }
+    return result;
+}
+
+std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName, const std::wstring &args)
 {
     LOG_TRACE();
 
-    const auto value = Wh_GetStringSetting(option);
-    const auto equals = [](const wchar_t *str1, const wchar_t *str2)
-    { return wcscmp(str1, str2) == 0; };
+    auto doNothing = [](HWND) { /* Do nothing */ };
 
-    TaskBarButtonsState state = COMBINE_ALWAYS;
-    if (equals(value, L"COMBINE_ALWAYS"))
+    if (actionName == L"ACTION_NOTHING")
     {
-        state = COMBINE_ALWAYS;
+        return doNothing;
     }
-    else if (equals(value, L"COMBINE_WHEN_FULL"))
+    else if (actionName == L"ACTION_SHOW_DESKTOP")
     {
-        state = COMBINE_WHEN_FULL;
+        return [](HWND)
+        { ShowDesktop(); };
     }
-    else if (equals(value, L"COMBINE_NEVER"))
+    else if (actionName == L"ACTION_CTRL_ALT_TAB")
     {
-        state = COMBINE_NEVER;
+        return [](HWND)
+        { SendCtrlAltTabKeypress(); };
     }
-    else
+    else if (actionName == L"ACTION_TASK_MANAGER")
     {
-        LOG_ERROR(L"Unknown state '%s' for option '%s'!", value, option);
-        state = COMBINE_ALWAYS;
+        return [](HWND hWnd)
+        { OpenTaskManager(hWnd); };
     }
-    LOG_DEBUG(L"Selected '%s' button state %d", option, state);
-    Wh_FreeStringSetting(value);
+    else if (actionName == L"ACTION_MUTE")
+    {
+        return [](HWND)
+        { ToggleVolMuted(); };
+    }
+    else if (actionName == L"ACTION_TASKBAR_AUTOHIDE")
+    {
+        return [](HWND)
+        { ToggleTaskbarAutohide(); };
+    }
+    else if (actionName == L"ACTION_WIN_TAB")
+    {
+        return [](HWND)
+        { SendWinTabKeypress(); };
+    }
+    else if (actionName == L"ACTION_HIDE_ICONS")
+    {
+        return [](HWND)
+        { HideIcons(); };
+    }
+    else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
+    {
+        auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
+        return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
+        { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
+    }
+    else if (actionName == L"ACTION_OPEN_START_MENU")
+    {
+        return [](HWND)
+        { OpenStartMenu(); };
+    }
+    else if (actionName == L"ACTION_SEND_KEYPRESS")
+    {
+        // TODO: Implement this
+        return doNothing;
+        // // Parse and validate key codes
+        // std::vector<int> keyCodes;
+        // ParseVirtualKeypressSetting(L"VirtualKeyPress", keyCodes);
 
-    return state;
+        // // Capture the parsed keyCodes by value
+        // return [keyCodes](HWND) {
+        //     LOG_INFO(L"Sending arbitrary keypress");
+        //     SendKeypress(keyCodes);
+        // };
+    }
+    else if (actionName == L"ACTION_START_PROCESS")
+    {
+        // TODO: Implement this
+        return doNothing;
+        // // Capture args by value
+        // return [cmd = args](HWND) {
+        //     StartProcess(cmd);
+        // };
+    }
+
+    LOG_ERROR(L"Unknown action '%s'", actionName.c_str());
+    return doNothing;
+}
+
+std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args)
+{
+    LOG_TRACE();
+
+    // defaults in case parsing fails
+    TaskBarButtonsState primaryTaskBarButtonsState1 = COMBINE_ALWAYS;
+    TaskBarButtonsState primaryTaskBarButtonsState2 = COMBINE_NEVER;
+    TaskBarButtonsState secondaryTaskBarButtonsState1 = COMBINE_ALWAYS;
+    TaskBarButtonsState secondaryTaskBarButtonsState2 = COMBINE_NEVER;
+
+    const auto argsSplit = SplitArgs(args);
+    if (argsSplit.size() != 4)
+    {
+        LOG_ERROR(L"Invalid number of arguments for taskbar buttons state setting. "
+                  "Expected format is: PRIMARY_STATE1;PRIMARY_STATE2;SECONDARY_STATE1;SECONDARY_STATE2");
+    }
+
+    for (const auto &arg : argsSplit)
+    {
+        if (arg == L"PRIMARY_COMBINE_ALWAYS")
+        {
+            primaryTaskBarButtonsState1 = COMBINE_ALWAYS;
+        }
+        else if (arg == L"PRIMARY_COMBINE_WHEN_FULL")
+        {
+            primaryTaskBarButtonsState1 = COMBINE_WHEN_FULL;
+        }
+        else if (arg == L"PRIMARY_COMBINE_NEVER")
+        {
+            primaryTaskBarButtonsState1 = COMBINE_NEVER;
+        }
+        else if (arg == L"SECONDARY_COMBINE_ALWAYS")
+        {
+            secondaryTaskBarButtonsState1 = COMBINE_ALWAYS;
+        }
+        else if (arg == L"SECONDARY_COMBINE_WHEN_FULL")
+        {
+            secondaryTaskBarButtonsState1 = COMBINE_WHEN_FULL;
+        }
+        else if (arg == L"SECONDARY_COMBINE_NEVER")
+        {
+            secondaryTaskBarButtonsState1 = COMBINE_NEVER;
+        }
+        else
+        {
+            LOG_ERROR(L"Unknown state '%s' for taskbar buttons state setting", arg.c_str());
+        }
+    }
+
+    return std::make_tuple(primaryTaskBarButtonsState1, primaryTaskBarButtonsState2, secondaryTaskBarButtonsState1, secondaryTaskBarButtonsState2);
 }
 
 unsigned int ParseVirtualKey(const wchar_t *value)
@@ -1918,56 +2082,119 @@ unsigned int ParseVirtualKey(const wchar_t *value)
     return keyCode;
 }
 
-void ParseVirtualKeypressSetting(const wchar_t *option, std::vector<int> &keys)
-{
-    LOG_TRACE();
+// void ParseVirtualKeypressSetting(const wchar_t *option, std::vector<int> &keys)
+// {
+//     LOG_TRACE();
 
-    keys.clear();
-    for (size_t i = 0; i < 10U; i++) // avoid infinite loop
-    {
-        const auto keyCodeStr = WindhawkUtils::StringSetting::make(L"VirtualKeyPress[%d]", i);
-        if (!keyCodeStr.get() || (keyCodeStr.get()[0] == L'\0'))
-        {
-            LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = NULL", i);
-            break; // no more keys
-        }
+//     keys.clear();
+//     for (size_t i = 0; i < 10U; i++) // avoid infinite loop
+//     {
+//         const auto keyCodeStr = WindhawkUtils::StringSetting::make(L"VirtualKeyPress[%d]", i);
+//         if (!keyCodeStr.get() || (keyCodeStr.get()[0] == L'\0'))
+//         {
+//             LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = NULL", i);
+//             break; // no more keys
+//         }
 
-        // sanity check of user input
-        if (std::wcslen(keyCodeStr) > 5)
-        {
-            LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from suspiciously long string!", i);
-            keys.clear();
-            return;
-        }
+//         // sanity check of user input
+//         if (std::wcslen(keyCodeStr) > 5)
+//         {
+//             LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from suspiciously long string!", i);
+//             keys.clear();
+//             return;
+//         }
 
-        const auto keyCode = ParseVirtualKey(keyCodeStr);
-        if (keyCode)
-        {
-            LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = %d", i, keyCode);
-            keys.push_back(keyCode);
-        }
-        else
-        {
-            LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from string '%s'", i, keyCodeStr.get());
-            keys.clear();
-            return;
-        }
-    }
-}
+//         const auto keyCode = ParseVirtualKey(keyCodeStr);
+//         if (keyCode)
+//         {
+//             LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = %d", i, keyCode);
+//             keys.push_back(keyCode);
+//         }
+//         else
+//         {
+//             LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from string '%s'", i, keyCodeStr.get());
+//             keys.clear();
+//             return;
+//         }
+//     }
+// }
 
 void LoadSettings()
 {
     LOG_TRACE();
 
+    using WindhawkUtils::StringSetting;
+
+    for (int i = 0; i < 50; i++) // the loop will get interrupted by empty item
+    {
+        std::vector<std::wstring> keyboardTriggers;
+        for (int j = 0; j < 50; j++) // the loop will get interrupted by empty item
+        {
+            auto keyboardTriggerStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].KeyboardTriggers[%d]", i, j)).get());
+            if (keyboardTriggerStr.empty())
+                break;
+            keyboardTriggers.push_back(keyboardTriggerStr);
+        }
+        auto mouseTriggerStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].MouseTrigger", i)));
+        auto actionStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].Action", i)));
+        auto additionalArgsStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].AdditionalArgs", i)));
+
+        // no other actions were added by user, end parsing
+        if (keyboardTriggers.empty() && mouseTriggerStr.empty() && actionStr.empty() && additionalArgsStr.empty())
+            break;
+
+        // if mouse trigger or action is missing, skip since the rest is irrelevant
+        if (mouseTriggerStr.empty() || actionStr.empty())
+            continue;
+
+#ifdef ENABLE_LOG_INFO
+        std::wstring logMessage = std::wstring(L"Settings: TriggerActionOptions[") + std::to_wstring(i) + std::wstring(L"] = ");
+        for (const auto &keyboardTrigger : keyboardTriggers)
+        {
+            logMessage += L"Key(";
+            logMessage += keyboardTrigger.c_str();
+            logMessage += L") + ";
+        }
+        logMessage += L"Mouse(";
+        logMessage += mouseTriggerStr.c_str();
+        logMessage += L") -> ";
+        logMessage += actionStr.c_str();
+        if (!additionalArgsStr.empty())
+        {
+            logMessage += L" (";
+            logMessage += additionalArgsStr.c_str();
+            logMessage += L")";
+        }
+        LOG_INFO(L"%s", logMessage.c_str());
+#endif
+
+        // parse trigger->action settings
+        TriggerAction triggerAction{};
+        for (const auto &keyboardTrigger : keyboardTriggers)
+        {
+            if (keyboardTrigger == L"none")
+                continue;
+
+            int keyCode = GetVirtualKeyFromName(keyboardTrigger);
+            if (keyCode == 0)
+            {
+                LOG_ERROR(L"Failed to parse virtual key code from string '%s'", keyboardTrigger.c_str());
+                continue;
+            }
+            triggerAction.keyboardTriggerNames.push_back(keyboardTrigger);
+            triggerAction.keyboardModifiers.push_back([keyCode]() -> bool
+                                                      { return IsKeyPressed(keyCode); });
+        }
+        triggerAction.mouseTriggerName = mouseTriggerStr;
+        triggerAction.actionName = actionStr;
+        triggerAction.actionExecutor = ParseMouseActionSetting(actionStr, additionalArgsStr);
+        g_settings.triggerActions.push_back(triggerAction);
+    }
+
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
-    g_settings.doubleClickTaskbarAction = ParseMouseActionSetting(L"doubleClickAction");
-    g_settings.middleClickTaskbarAction = ParseMouseActionSetting(L"middleClickAction");
-    g_settings.primaryTaskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State1");
-    g_settings.primaryTaskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.State2");
-    g_settings.secondaryTaskBarButtonsState1 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary1");
-    g_settings.secondaryTaskBarButtonsState2 = ParseTaskBarButtonsState(L"CombineTaskbarButtons.StateSecondary2");
-    ParseVirtualKeypressSetting(L"VirtualKeyPress", g_settings.virtualKeypress);
-    g_settings.processToStart = WindhawkUtils::StringSetting::make(L"StartProcess");
+
+    // ParseVirtualKeypressSetting(L"VirtualKeyPress", g_settings.virtualKeypress);
+    // g_settings.processToStart = WindhawkUtils::StringSetting::make(L"StartProcess");
 }
 
 /**
@@ -2295,7 +2522,7 @@ bool ClickStartMenu()
 void OpenStartMenu()
 {
     LOG_TRACE();
-    if (!ClickStartMenu())  // if user hide the start menu via other Windhawk mod, we can't click it
+    if (!ClickStartMenu()) // if user hide the start menu via other Windhawk mod, we can't click it
     {
         LOG_INFO(L"Sending Win keypress");
         SendKeypress({VK_LWIN});
@@ -2382,6 +2609,25 @@ void HideIcons()
     else
     {
         LOG_ERROR(L"Failed to send show/hide icons message - desktop window not found");
+    }
+}
+
+void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
+                           const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2)
+{
+    bool shallNotify = false;
+    // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
+    static bool zigzagPrimary = (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == primaryTaskBarButtonsState1);
+    zigzagPrimary = !zigzagPrimary;
+    shallNotify |= SetCombineTaskbarButtons(L"TaskbarGlomLevel",
+                                            zigzagPrimary ? primaryTaskBarButtonsState1 : primaryTaskBarButtonsState2);
+    static bool zigzagSecondary = (GetCombineTaskbarButtons(L"MMTaskbarGlomLevel") == secondaryTaskBarButtonsState1);
+    zigzagSecondary = !zigzagSecondary;
+    shallNotify |= SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
+                                            zigzagSecondary ? secondaryTaskBarButtonsState1 : secondaryTaskBarButtonsState2);
+    if (shallNotify)
+    {
+        SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
     }
 }
 
@@ -2577,6 +2823,11 @@ bool IsTripleTap()
     return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
 }
 
+bool IsKeyPressed(int vkCode)
+{
+    return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
+}
+
 void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
 {
     if (!KillTimer(NULL, gMouseClickTimer))
@@ -2598,73 +2849,7 @@ void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
 
 void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
 {
-    if (taskbarAction == ACTION_NOTHING)
-    {
-        return;
-    }
-
-    if (taskbarAction == ACTION_SHOW_DESKTOP)
-    {
-        ShowDesktop();
-    }
-    else if (taskbarAction == ACTION_CTRL_ALT_TAB)
-    {
-        SendCtrlAltTabKeypress();
-    }
-    else if (taskbarAction == ACTION_TASK_MANAGER)
-    {
-        OpenTaskManager(hWnd);
-    }
-    else if (taskbarAction == ACTION_MUTE)
-    {
-        ToggleVolMuted();
-    }
-    else if (taskbarAction == ACTION_TASKBAR_AUTOHIDE)
-    {
-        ToggleTaskbarAutohide();
-    }
-    else if (taskbarAction == ACTION_WIN_TAB)
-    {
-        SendWinTabKeypress();
-    }
-    else if (taskbarAction == ACTION_HIDE_ICONS)
-    {
-        HideIcons();
-    }
-    else if (taskbarAction == ACTION_COMBINE_TASKBAR_BUTTONS)
-    {
-        bool shallNotify = false;
-        // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
-        static bool zigzagPrimary = (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == g_settings.primaryTaskBarButtonsState1);
-        zigzagPrimary = !zigzagPrimary;
-        shallNotify |= SetCombineTaskbarButtons(L"TaskbarGlomLevel",
-                                 zigzagPrimary ? g_settings.primaryTaskBarButtonsState1 : g_settings.primaryTaskBarButtonsState2);
-        static bool zigzagSecondary = (GetCombineTaskbarButtons(L"MMTaskbarGlomLevel") == g_settings.secondaryTaskBarButtonsState1);
-        zigzagSecondary = !zigzagSecondary;
-        shallNotify |= SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
-                                 zigzagSecondary ? g_settings.secondaryTaskBarButtonsState1 : g_settings.secondaryTaskBarButtonsState2);
-        if(shallNotify)
-        {
-            SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
-        }
-    }
-    else if (taskbarAction == ACTION_OPEN_START_MENU)
-    {
-        OpenStartMenu();
-    }
-    else if (taskbarAction == ACTION_SEND_KEYPRESS)
-    {
-        LOG_INFO(L"Sending arbitrary keypress");
-        SendKeypress(g_settings.virtualKeypress);
-    }
-    else if (taskbarAction == ACTION_START_PROCESS)
-    {
-        StartProcess(g_settings.processToStart);
-    }
-    else
-    {
-        LOG_ERROR(L"Unknown taskbar action '%d'", taskbarAction);
-    }
+    // TODO: Implement this
 }
 
 // main body of the mod called every time a taskbar is clicked
