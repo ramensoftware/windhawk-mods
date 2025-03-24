@@ -37,6 +37,45 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Double-c
 8. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
 9. **Start application** - Starts arbitrary application or runs a command
 
+## TODO: write more info about optional args
+
+- CombineTaskbarButtons:
+  - State1: COMBINE_ALWAYS
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+    $name: Main taskbar state 1
+  - State2: COMBINE_NEVER
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+    $name: Main taskbar state 2
+  - StateSecondary1: COMBINE_ALWAYS
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+    $name: Secondary taskbar state 1
+  - StateSecondary2: COMBINE_NEVER
+    $options:
+    - COMBINE_ALWAYS: Always combine
+    - COMBINE_WHEN_FULL: Combine when taskbar is full
+    - COMBINE_NEVER: Never combine
+    $name: Secondary taskbar state 2
+  $name: Combine Taskbar Buttons toggle
+  $description: When toggle activated, switch between following states
+- VirtualKeyPress: ["0x5B", "0x45"]
+  $name: Virtual key press
+  $description: >-
+    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
+- StartProcess: "C:\\Windows\\System32\\notepad.exe"
+  $name: Start an application
+  $description: >-
+    Start arbitrary application or run a command. Use the executable name if it is in PATH. Otherwise use the full path to the application. Example: "C:\Windows\System32\notepad.exe". In case you want to execute shell command, use corresponding flag. Example: "cmd.exe /c echo Hello & pause".
+
+
 ## Example
 
 Following animation shows **Taskbar auto-hide** feature. Feature gets toggled whenever user double-clicks the empty space on a taskbar.
@@ -89,8 +128,8 @@ If you have request for new functions, suggestions or you are experiencing some 
       - right: Mouse right button click
       - rightDouble: Mouse right button double click
       - tap: Touchscreen single tap
-      - tabDouble: Touchscreen double tap
-      - tripleTap: Touchscreen triple tap
+      - tapDouble: Touchscreen double tap
+      - tapTriple: Touchscreen triple tap
     - Action: ACTION_NOTHING
       $name: Action
       $description: Action invoked on trigger
@@ -118,41 +157,6 @@ If you have request for new functions, suggestions or you are experiencing some 
     Enable this option to customize the old taskbar on Windows 11 (if using
     ExplorerPatcher or a similar tool). Note: For Windhawk versions older
     than 1.3, you have to disable and re-enable the mod to apply this option.
-- CombineTaskbarButtons:
-  - State1: COMBINE_ALWAYS
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Main taskbar state 1
-  - State2: COMBINE_NEVER
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Main taskbar state 2
-  - StateSecondary1: COMBINE_ALWAYS
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Secondary taskbar state 1
-  - StateSecondary2: COMBINE_NEVER
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Secondary taskbar state 2
-  $name: Combine Taskbar Buttons toggle
-  $description: When toggle activated, switch between following states
-- VirtualKeyPress: ["0x5B", "0x45"]
-  $name: Virtual key press
-  $description: >-
-    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
-- StartProcess: "C:\\Windows\\System32\\notepad.exe"
-  $name: Start an application
-  $description: >-
-    Start arbitrary application or run a command. Use the executable name if it is in PATH. Otherwise use the full path to the application. Example: "C:\Windows\System32\notepad.exe". In case you want to execute shell command, use corresponding flag. Example: "cmd.exe /c echo Hello & pause".
 */
 // ==/WindhawkModSettings==
 
@@ -975,7 +979,6 @@ static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition
 #define ENABLE_LOG_INFO // info messages will be enabled
 // #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
-
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
 // =====================================================================
@@ -1130,24 +1133,17 @@ enum TaskBarButtonsState
 
 struct TriggerAction
 {
-    std::vector<std::wstring> keyboardTriggerNames; // List of keyboard triggers parsed from settings
-    std::wstring mouseTriggerName;                  // Mouse trigger parsed from settings
-    std::wstring actionName;                        // Name of the action parsed from settings
+    std::wstring mouseTriggerName; // Mouse trigger parsed from settings
+    std::wstring actionName;       // Name of the action parsed from settings
 
-    std::vector<std::function<bool()>> keyboardModifiers; // list of lambda functions (or other callable objects) that return a bool
-    std::function<void(HWND)> actionExecutor;             // function that executes the action
+    std::vector<std::tuple<std::wstring, std::function<bool()>>> keyboardModifiers; // list of (name, keyboard modifier check function) tuples
+    std::function<void(HWND)> actionExecutor;                                       // function that executes the action
 };
 
 static struct
 {
     bool oldTaskbarOnWin11;
     std::vector<TriggerAction> triggerActions;
-
-    // TODO: delete me
-    TaskBarAction doubleClickTaskbarAction;
-    TaskBarAction middleClickTaskbarAction;
-    // std::vector<int> virtualKeypress;
-    // std::wstring processToStart;
 } g_settings;
 
 // wrapper to always call COM de-initialization
@@ -1395,12 +1391,13 @@ UINT_PTR gMouseClickTimer = (UINT_PTR)0;
 
 // =====================================================================
 // Forward declarations
+
 bool IsTaskbarWindow(HWND hWnd);
 bool IsDoubleClick();
 bool IsDoubleTap();
 bool IsTripleTap();
 bool IsKeyPressed(int vkCode);
-void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd);
+void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, HWND hWnd);
 void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD);
 bool OnMouseClick(MouseClick click);
 bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
@@ -1418,11 +1415,9 @@ void ToggleVolMuted();
 void HideIcons();
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2);
-
 DWORD GetCombineTaskbarButtons(const wchar_t *optionName);
 bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option);
 void StartProcess(const std::wstring &command);
-
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
 
 // =====================================================================
@@ -1927,90 +1922,6 @@ std::vector<std::wstring> SplitArgs(const std::wstring &args)
     return result;
 }
 
-std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName, const std::wstring &args)
-{
-    LOG_TRACE();
-
-    auto doNothing = [](HWND) { /* Do nothing */ };
-
-    if (actionName == L"ACTION_NOTHING")
-    {
-        return doNothing;
-    }
-    else if (actionName == L"ACTION_SHOW_DESKTOP")
-    {
-        return [](HWND)
-        { ShowDesktop(); };
-    }
-    else if (actionName == L"ACTION_CTRL_ALT_TAB")
-    {
-        return [](HWND)
-        { SendCtrlAltTabKeypress(); };
-    }
-    else if (actionName == L"ACTION_TASK_MANAGER")
-    {
-        return [](HWND hWnd)
-        { OpenTaskManager(hWnd); };
-    }
-    else if (actionName == L"ACTION_MUTE")
-    {
-        return [](HWND)
-        { ToggleVolMuted(); };
-    }
-    else if (actionName == L"ACTION_TASKBAR_AUTOHIDE")
-    {
-        return [](HWND)
-        { ToggleTaskbarAutohide(); };
-    }
-    else if (actionName == L"ACTION_WIN_TAB")
-    {
-        return [](HWND)
-        { SendWinTabKeypress(); };
-    }
-    else if (actionName == L"ACTION_HIDE_ICONS")
-    {
-        return [](HWND)
-        { HideIcons(); };
-    }
-    else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
-    {
-        auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
-        return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
-        { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
-    }
-    else if (actionName == L"ACTION_OPEN_START_MENU")
-    {
-        return [](HWND)
-        { OpenStartMenu(); };
-    }
-    else if (actionName == L"ACTION_SEND_KEYPRESS")
-    {
-        // TODO: Implement this
-        return doNothing;
-        // // Parse and validate key codes
-        // std::vector<int> keyCodes;
-        // ParseVirtualKeypressSetting(L"VirtualKeyPress", keyCodes);
-
-        // // Capture the parsed keyCodes by value
-        // return [keyCodes](HWND) {
-        //     LOG_INFO(L"Sending arbitrary keypress");
-        //     SendKeypress(keyCodes);
-        // };
-    }
-    else if (actionName == L"ACTION_START_PROCESS")
-    {
-        // TODO: Implement this
-        return doNothing;
-        // // Capture args by value
-        // return [cmd = args](HWND) {
-        //     StartProcess(cmd);
-        // };
-    }
-
-    LOG_ERROR(L"Unknown action '%s'", actionName.c_str());
-    return doNothing;
-}
-
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args)
 {
     LOG_TRACE();
@@ -2082,42 +1993,116 @@ unsigned int ParseVirtualKey(const wchar_t *value)
     return keyCode;
 }
 
-// void ParseVirtualKeypressSetting(const wchar_t *option, std::vector<int> &keys)
-// {
-//     LOG_TRACE();
+std::wstring ParseProcessArg(const std::wstring &args)
+{
+    LOG_TRACE();
 
-//     keys.clear();
-//     for (size_t i = 0; i < 10U; i++) // avoid infinite loop
-//     {
-//         const auto keyCodeStr = WindhawkUtils::StringSetting::make(L"VirtualKeyPress[%d]", i);
-//         if (!keyCodeStr.get() || (keyCodeStr.get()[0] == L'\0'))
-//         {
-//             LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = NULL", i);
-//             break; // no more keys
-//         }
+    const auto argsSplit = SplitArgs(args);
+    if (argsSplit.size() != 1)
+    {
+        LOG_ERROR(L"Invalid number of arguments for process setting. Expected format is: PROCESS_NAME");
+        return L"";
+    }
 
-//         // sanity check of user input
-//         if (std::wcslen(keyCodeStr) > 5)
-//         {
-//             LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from suspiciously long string!", i);
-//             keys.clear();
-//             return;
-//         }
+    return argsSplit[0];
+}
 
-//         const auto keyCode = ParseVirtualKey(keyCodeStr);
-//         if (keyCode)
-//         {
-//             LOG_DEBUG(L"Parsed VirtualKeyPress[%d] = %d", i, keyCode);
-//             keys.push_back(keyCode);
-//         }
-//         else
-//         {
-//             LOG_ERROR(L"Failed to parse virtual key code VirtualKeyPress[%d] from string '%s'", i, keyCodeStr.get());
-//             keys.clear();
-//             return;
-//         }
-//     }
-// }
+std::vector<int> ParseVirtualKeypressSetting(const std::wstring &args)
+{
+    LOG_TRACE();
+
+    std::vector<int> keys;
+
+    const auto argsSplit = SplitArgs(args);
+    for (const auto &arg : argsSplit)
+    {
+        const auto keyCode = ParseVirtualKey(arg.c_str());
+        if (keyCode)
+        {
+            keys.push_back(keyCode);
+        }
+    }
+
+    return keys;
+}
+
+std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName, const std::wstring &args)
+{
+    LOG_TRACE();
+
+    auto doNothing = [](HWND) { /* Do nothing */ };
+
+    if (actionName == L"ACTION_NOTHING")
+    {
+        return doNothing;
+    }
+    else if (actionName == L"ACTION_SHOW_DESKTOP")
+    {
+        return [](HWND)
+        { ShowDesktop(); };
+    }
+    else if (actionName == L"ACTION_CTRL_ALT_TAB")
+    {
+        return [](HWND)
+        { SendCtrlAltTabKeypress(); };
+    }
+    else if (actionName == L"ACTION_TASK_MANAGER")
+    {
+        return [](HWND hWnd)
+        { OpenTaskManager(hWnd); };
+    }
+    else if (actionName == L"ACTION_MUTE")
+    {
+        return [](HWND)
+        { ToggleVolMuted(); };
+    }
+    else if (actionName == L"ACTION_TASKBAR_AUTOHIDE")
+    {
+        return [](HWND)
+        { ToggleTaskbarAutohide(); };
+    }
+    else if (actionName == L"ACTION_WIN_TAB")
+    {
+        return [](HWND)
+        { SendWinTabKeypress(); };
+    }
+    else if (actionName == L"ACTION_HIDE_ICONS")
+    {
+        return [](HWND)
+        { HideIcons(); };
+    }
+    else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
+    {
+        auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
+        return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
+        { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
+    }
+    else if (actionName == L"ACTION_OPEN_START_MENU")
+    {
+        return [](HWND)
+        { OpenStartMenu(); };
+    }
+    else if (actionName == L"ACTION_SEND_KEYPRESS")
+    {
+        std::vector<int> keyCodes = ParseVirtualKeypressSetting(args);
+        return [keyCodes](HWND)
+        {
+            LOG_INFO(L"Sending arbitrary keypress");
+            SendKeypress(keyCodes);
+        };
+    }
+    else if (actionName == L"ACTION_START_PROCESS")
+    {
+        const auto cmd = ParseProcessArg(args);
+        return [cmd](HWND)
+        {
+            StartProcess(cmd);
+        };
+    }
+
+    LOG_ERROR(L"Unknown action '%s'", actionName.c_str());
+    return doNothing;
+}
 
 void LoadSettings()
 {
@@ -2125,6 +2110,7 @@ void LoadSettings()
 
     using WindhawkUtils::StringSetting;
 
+    g_settings.triggerActions.clear();
     for (int i = 0; i < 50; i++) // the loop will get interrupted by empty item
     {
         std::vector<std::wstring> keyboardTriggers;
@@ -2181,9 +2167,8 @@ void LoadSettings()
                 LOG_ERROR(L"Failed to parse virtual key code from string '%s'", keyboardTrigger.c_str());
                 continue;
             }
-            triggerAction.keyboardTriggerNames.push_back(keyboardTrigger);
-            triggerAction.keyboardModifiers.push_back([keyCode]() -> bool
-                                                      { return IsKeyPressed(keyCode); });
+            triggerAction.keyboardModifiers.push_back(std::make_tuple(keyboardTrigger, [keyCode]() -> bool
+                                                                      { return IsKeyPressed(keyCode); }));
         }
         triggerAction.mouseTriggerName = mouseTriggerStr;
         triggerAction.actionName = actionStr;
@@ -2192,9 +2177,6 @@ void LoadSettings()
     }
 
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
-
-    // ParseVirtualKeypressSetting(L"VirtualKeyPress", g_settings.virtualKeypress);
-    // g_settings.processToStart = WindhawkUtils::StringSetting::make(L"StartProcess");
 }
 
 /**
@@ -2838,18 +2820,53 @@ void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
 
     if (IsTripleTap())
     {
-        ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, g_mouseClickQueue[-1].hWnd);
+        ExecuteTaskbarAction(L"tapTriple", g_mouseClickQueue[-1].hWnd);
     }
     else
     {
-        ExecuteTaskbarAction(g_settings.doubleClickTaskbarAction, g_mouseClickQueue[-1].hWnd);
+        ExecuteTaskbarAction(L"tapDouble", g_mouseClickQueue[-1].hWnd);
     }
     g_mouseClickQueue.clear();
 }
 
-void ExecuteTaskbarAction(TaskBarAction taskbarAction, HWND hWnd)
+void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, HWND hWnd)
 {
-    // TODO: Implement this
+    LOG_TRACE();
+
+    LOG_DEBUG(L"Searching for action for trigger: %s", mouseTriggerName.c_str());
+    for (const auto &triggerAction : g_settings.triggerActions)
+    {
+        if (triggerAction.mouseTriggerName == mouseTriggerName)
+        {
+            LOG_DEBUG(L"Found action: %s", triggerAction.actionName.c_str());
+            bool allModifiersPressed = true;
+            for (const auto &[keyName, checkFunction] : triggerAction.keyboardModifiers)
+            {
+                if (!checkFunction || !checkFunction())
+                {
+                    LOG_DEBUG(L"Modifier '%s' not pressed (or defined)", keyName.c_str());
+                    allModifiersPressed = false;
+                    break;
+                }
+            }
+            if (allModifiersPressed)
+            {
+                if (triggerAction.actionExecutor)
+                {
+                    LOG_INFO(L"Executing action: %s", triggerAction.actionName.c_str());
+                    triggerAction.actionExecutor(hWnd);
+                }
+                else
+                {
+                    LOG_ERROR(L"Action executor is not set for action: %s", triggerAction.actionName.c_str());
+                }
+            }
+            else
+            {
+                LOG_DEBUG(L"Not all modifiers are pressed for action: %s", triggerAction.actionName.c_str());
+            }
+        }
+    }
 }
 
 // main body of the mod called every time a taskbar is clicked
@@ -2865,7 +2882,7 @@ bool OnMouseClick(MouseClick click)
     // directly handle middle click
     if (click.button == MouseClick::Button::MIDDLE)
     {
-        ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, click.hWnd);
+        ExecuteTaskbarAction(L"middle", click.hWnd);
     }
     // buffer left clicks to detect double and triple clicks
     else if (click.button == MouseClick::Button::LEFT)
@@ -2886,7 +2903,7 @@ bool OnMouseClick(MouseClick click)
             // even though ProcessTripleTap callback should be called within this thread, just to be sure and avoid race condition,
             // clear the queue to avoid executing the action twice
             g_mouseClickQueue.clear();
-            ExecuteTaskbarAction(g_settings.middleClickTaskbarAction, click.hWnd);
+            ExecuteTaskbarAction(L"tripleTap", click.hWnd);
         }
         else if (IsDoubleTap())
         {
@@ -2899,7 +2916,7 @@ bool OnMouseClick(MouseClick click)
         }
         else if (IsDoubleClick())
         {
-            ExecuteTaskbarAction(g_settings.doubleClickTaskbarAction, click.hWnd);
+            ExecuteTaskbarAction(L"leftDouble", click.hWnd);
             g_mouseClickQueue.clear();
         }
     }
