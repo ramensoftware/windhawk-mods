@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-keyboard-only
 // @name            Taskbar keyboard-only auto-hide
 // @description     When taskbar auto-hide is enabled, the taskbar will only be unhidden with the keyboard, hovering the mouse over the taskbar will not unhide it
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -147,6 +147,25 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     }
 
     BOOL ret = ShowWindow_Original(hWnd, nCmdShow);
+
+    return ret;
+}
+
+using IsWindowVisible_t = decltype(&IsWindowVisible);
+IsWindowVisible_t IsWindowVisible_Original;
+BOOL WINAPI IsWindowVisible_Hook(HWND hWnd) {
+    // Checked in CTaskListWnd::HandleWinNumHotKey, Win+num hotkeys don't work
+    // if the window is hidden. Return TRUE to make the hotkeys work.
+    if (g_settings.fullyHide) {
+        WCHAR szClassName[32];
+        if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+            _wcsicmp(szClassName, L"MSTaskSwWClass") == 0) {
+            Wh_Log(L">");
+            return TRUE;
+        }
+    }
+
+    BOOL ret = IsWindowVisible_Original(hWnd);
 
     return ret;
 }
@@ -437,6 +456,9 @@ BOOL Wh_ModInit() {
 
     WindhawkUtils::Wh_SetFunctionHookT(ShowWindow, ShowWindow_Hook,
                                        &ShowWindow_Original);
+
+    WindhawkUtils::Wh_SetFunctionHookT(IsWindowVisible, IsWindowVisible_Hook,
+                                       &IsWindowVisible_Original);
 
     WindhawkUtils::Wh_SetFunctionHookT(SetTimer, SetTimer_Hook,
                                        &SetTimer_Original);
