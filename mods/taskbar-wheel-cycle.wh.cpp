@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-wheel-cycle
 // @name            Cycle taskbar buttons with mouse wheel
-// @description     Use the mouse wheel while hovering over the taskbar to cycle between taskbar buttons (Windows 11 only)
-// @version         1.1.8
+// @description     Use the mouse wheel and/or keyboard shortcuts to cycle between taskbar buttons
+// @version         1.1.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -48,14 +48,25 @@ or a similar tool), enable the relevant option in the mod's settings.
   $name: Wrap around
 - reverseScrollingDirection: false
   $name: Reverse scrolling direction
+- enableMouseWheelCycling: true
+  $name: Enable mouse wheel cycling
+  $description: >-
+    Disable to only use keyboard shortcuts for cycling between taskbar buttons.
 - cycleLeftKeyboardShortcut: Alt+VK_OEM_4
   $name: Cycle left keyboard shortcut
   $description: >-
     Possible modifier keys: Alt, Ctrl, Shift, Win. For possible shortcut keys,
     refer to the following page:
     https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+
+    Set to an empty string to disable.
 - cycleRightKeyboardShortcut: Alt+VK_OEM_6
   $name: Cycle right keyboard shortcut
+- oldTaskbarOnWin11: false
+  $name: Customize the old taskbar on Windows 11
+  $description: >-
+    Enable this option to customize the old taskbar on Windows 11 (if using
+    ExplorerPatcher or a similar tool).
 */
 // ==/WindhawkModSettings==
 
@@ -73,7 +84,6 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 #include <algorithm>
 #include <atomic>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -81,23 +91,13 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 using namespace winrt::Windows::UI::Xaml;
 
-// https://stackoverflow.com/a/51274008
-template <auto fn>
-struct deleter_from_fn {
-    template <typename T>
-    constexpr void operator()(T* arg) const {
-        fn(arg);
-    }
-};
-using string_setting_unique_ptr =
-    std::unique_ptr<const WCHAR[], deleter_from_fn<Wh_FreeStringSetting>>;
-
 struct {
     bool skipMinimizedWindows;
     bool wrapAround;
     bool reverseScrollingDirection;
-    string_setting_unique_ptr cycleLeftKeyboardShortcut;
-    string_setting_unique_ptr cycleRightKeyboardShortcut;
+    bool enableMouseWheelCycling;
+    WindhawkUtils::StringSetting cycleLeftKeyboardShortcut;
+    WindhawkUtils::StringSetting cycleRightKeyboardShortcut;
     bool oldTaskbarOnWin11;
 } g_settings;
 
@@ -126,11 +126,30 @@ enum {
     kHotkeyIdRight,
 };
 
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
 HWND GetTaskBandWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    DWORD processId = 0;
-    if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &processId) &&
-        processId == GetCurrentProcessId()) {
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
         return (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
     }
 
@@ -878,6 +897,11 @@ void UnregisterHotkeys(HWND hWnd) {
 }
 
 void RegisterHotkeys(HWND hWnd) {
+    if (!*g_settings.cycleLeftKeyboardShortcut &&
+        !*g_settings.cycleRightKeyboardShortcut) {
+        return;
+    }
+
     UINT modifiers;
     UINT vk;
 
@@ -1027,7 +1051,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                                    WPARAM wParam,
                                    LPARAM lParam,
                                    bool* flag) {
-    if (Msg == WM_MOUSEWHEEL) {
+    if (Msg == WM_MOUSEWHEEL && g_settings.enableMouseWheelCycling) {
         HWND hTaskListWnd = TaskListFromTaskbarWnd(hWnd);
 
         RECT rc{};
@@ -1066,7 +1090,7 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
                                              UINT Msg,
                                              WPARAM wParam,
                                              LPARAM lParam) {
-    if (Msg == WM_MOUSEWHEEL) {
+    if (Msg == WM_MOUSEWHEEL && g_settings.enableMouseWheelCycling) {
         HWND hSecondaryTaskListWnd = TaskListFromSecondaryTaskbarWnd(hWnd);
 
         RECT rc{};
@@ -1106,6 +1130,10 @@ int TaskbarFrame_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
     auto original = [=]() {
         return TaskbarFrame_OnPointerWheelChanged_Original(pThis, pArgs);
     };
+
+    if (!g_settings.enableMouseWheelCycling) {
+        return original();
+    }
 
     winrt::Windows::Foundation::IInspectable taskbarFrame = nullptr;
     ((IUnknown*)pThis)
@@ -1163,10 +1191,12 @@ void LoadSettings() {
     g_settings.wrapAround = Wh_GetIntSetting(L"wrapAround");
     g_settings.reverseScrollingDirection =
         Wh_GetIntSetting(L"reverseScrollingDirection");
-    g_settings.cycleLeftKeyboardShortcut.reset(
-        Wh_GetStringSetting(L"cycleLeftKeyboardShortcut"));
-    g_settings.cycleRightKeyboardShortcut.reset(
-        Wh_GetStringSetting(L"cycleRightKeyboardShortcut"));
+    g_settings.enableMouseWheelCycling =
+        Wh_GetIntSetting(L"enableMouseWheelCycling");
+    g_settings.cycleLeftKeyboardShortcut =
+        WindhawkUtils::StringSetting::make(L"cycleLeftKeyboardShortcut");
+    g_settings.cycleRightKeyboardShortcut =
+        WindhawkUtils::StringSetting::make(L"cycleRightKeyboardShortcut");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
@@ -1198,7 +1228,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
@@ -1568,7 +1599,7 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");
