@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-23T18:41:48.000Z</updated>
+    <updated>2025-03-25T18:56:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.9]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#09b9d5016d082de95fdcbedcfd9e5ce8d0d19738</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2025-03-25T18:56:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Made mouse wheel cycling and keyboard shortcuts optional, so that only one of them can be selected and used.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+<li>Added an option to customize the old taskbar on Windows 11.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#20ab961f2e9e81c99927394bd0a6d1dcb3987de9</id>
@@ -274,20 +289,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
 <li>Added an option to specify a custom list of week days.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Control 1.2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-control#066479c7768f6916417c24e9eea34a022182df0f</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-control"/>
-        <updated>2025-03-21T14:09:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
-<li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
