@@ -4,13 +4,14 @@ import * as https from 'https';
 import * as path from 'path';
 import ModSourceUtils from './modSourceUtils';
 import { Feed } from 'feed';
+import { OutgoingHttpHeaders } from 'http';
 import showdown from 'showdown';
 
 // Inspired by https://gist.github.com/ktheory/df3440b01d4b9d3197180d5254d7fb65
-async function fetchJson(url: string) {
+async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
     return new Promise<any>((resolve, reject) => {
         const req = https.request(url,
-            { headers: { 'User-Agent': 'nodejs' } },
+            { headers: { 'User-Agent': 'nodejs', ...headers } },
             (res) => {
                 let body = '';
                 res.on('data', (chunk) => (body += chunk.toString()));
@@ -297,7 +298,9 @@ async function generateModCatalogs() {
     const enrichment = await fetchJson(enrichmentUrl);
 
     const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
-    const translateFiles = await fetchJson(translateFilesUrl);
+    const translateFiles = await fetchJson(translateFilesUrl, {
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+    });
 
     const modSourceUtils = new ModSourceUtils('mods');
 
