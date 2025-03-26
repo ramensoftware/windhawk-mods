@@ -2,7 +2,7 @@
 // @id              chromium-ncpaint-fix
 // @name            Chromium Frame Blackout Fix
 // @description     Fix Basic/Classic frames going black in Chromium/Electron/CEF apps
-// @version         0.1
+// @version         0.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -15,6 +15,7 @@
 /*
 # Chromium Frame Blackout Fix
 * Fix Basic/Classic frames going black in Chromium/Electron/CEF apps
+* Also fixes the client area misaligning issue when using basic themers with hardware-accelerated Chromium/Electron/CEF apps
 */
 // ==/WindhawkModReadme==
 
@@ -22,12 +23,21 @@
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+#include <windows.h>
 
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_NCPAINT) {
-        return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    switch (uMsg) {
+        case WM_NCPAINT:
+            return DefWindowProc(hWnd, uMsg, wParam, lParam);
+        case WM_DWMNCRENDERINGCHANGED:
+            // Fix issues with hardware accelerated apps and basic themers
+            RECT rect;
+            GetWindowRect(hWnd, &rect);
+            SetWindowPos(hWnd, NULL, rect.left, rect.top + 1, 0, 0, SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_NOSIZE);
+            SetWindowPos(hWnd, NULL, rect.left, rect.top, 0, 0, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_NOSIZE);
+        default:
+            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
