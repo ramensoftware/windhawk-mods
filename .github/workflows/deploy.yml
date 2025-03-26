@@ -57,6 +57,7 @@ jobs:
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WINDHAWK_MODS_LAST_DEPLOY_PATH: ${{ runner.temp }}\last_deploy
           WINDHAWK_PATH: ${{ runner.temp }}\windhawk
       - name: Deploy
