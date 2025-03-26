@@ -2,14 +2,14 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         0.7
+// @version         0.8
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
-// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -DWINVER=0x0A00
+// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32 -DWINVER=0x0A00
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -545,9 +545,19 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             }
             break;
         case WM_PAINT:
-            if (hWnd == g_mainHwnd && g_hwAccelerated && cte_settings.transparentrendering && !cte_settings.showframe) {
-                // Do not draw anything
-                ValidateRect(hWnd, NULL);
+            if (hWnd == g_mainHwnd && g_hwAccelerated && cte_settings.transparentrendering) {
+                if (!cte_settings.showframe) {
+                    // Do not draw anything
+                    ValidateRect(hWnd, NULL);
+                } else {
+                    // Draw black background on the GDI surface (behind the D3D surface) to get Aero Glass/Mica/Acrylic/whatever working properly
+                    PAINTSTRUCT ps;
+                    HDC hdc = BeginPaint(hWnd, &ps);
+                    RECT rect;
+                    GetClientRect(hWnd, &rect);
+                    FillRect(hdc, &rect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+                    EndPaint(hWnd, &ps);
+                }
                 return 0;
             }
             break;
@@ -1910,7 +1920,7 @@ int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) 
         AddValueToObj(initialConfigObj, u"forceextensions", cef_v8value_create_bool(cte_settings.forceextensions));
         AddValueToObj(initialConfigObj, u"allowuntested", cef_v8value_create_bool(cte_settings.allowuntested));
         AddValueToObj(retobj, u"initialOptions", initialConfigObj);
-        AddValueToObj(retobj, u"version", u"0.7");
+        AddValueToObj(retobj, u"version", u"0.8");
 
         *retval = retobj;
         return TRUE;
