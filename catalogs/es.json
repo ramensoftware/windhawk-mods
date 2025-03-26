@@ -246,12 +246,12 @@
                 "published": 1734116516000,
                 "rating": 10,
                 "ratingUsers": 15,
-                "updated": 1739172907000,
+                "updated": 1742992214000,
                 "users": 837
             },
             "metadata": {
                 "author": "Ingan121",
-                "compilerOptions": "-lcomctl32 -luxtheme -ldwmapi -DWINVER=0x0A00",
+                "compilerOptions": "-lcomctl32 -luxtheme -ldwmapi -lgdi32 -DWINVER=0x0A00",
                 "description": "Various tweaks for Spotify, including native frames, transparent windows, and more",
                 "github": "https://github.com/Ingan121",
                 "homepage": "https://www.ingan121.com/",
@@ -261,7 +261,7 @@
                 ],
                 "name": "CEF/Spotify Tweaks",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.7"
+                "version": "0.8"
             }
         },
         "center-titlebar": {
@@ -388,7 +388,7 @@
                 "published": 1736070368000,
                 "rating": 6,
                 "ratingUsers": 1,
-                "updated": 1736070368000,
+                "updated": 1742992237000,
                 "users": 146
             },
             "metadata": {
@@ -402,7 +402,7 @@
                 ],
                 "name": "Chromium Frame Blackout Fix",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.1"
+                "version": "0.2"
             }
         },
         "classic-browser-fix": {

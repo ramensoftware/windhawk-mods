@@ -1,3 +1,7 @@
+## 0.8 ([Mar 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e3cf3ac434db56bfb98c39e23f2215a8c4106600/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Fixed Aero Glass not working and showing a white background instead in some cases
+
 ## 0.7 ([Feb 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/da2e72abc1f05e34d0737578eb8fcc8a17780a59/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Add support for Spotify 1.2.57

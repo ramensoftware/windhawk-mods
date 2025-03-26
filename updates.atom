@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-25T18:56:08.000Z</updated>
+    <updated>2025-03-26T12:30:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chromium Frame Blackout Fix 0.2]]></title>
+        <id>https://windhawk.net/mods/chromium-ncpaint-fix#bc02464989ea03e9667f17108cdc965537fc9047</id>
+        <link href="https://windhawk.net/mods/chromium-ncpaint-fix"/>
+        <updated>2025-03-26T12:30:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Also fixes the client area misaligning issue when using basic themers with hardware-accelerated Chromium/Electron/CEF apps</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 0.8]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#e3cf3ac434db56bfb98c39e23f2215a8c4106600</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-03-26T12:30:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed Aero Glass not working and showing a white background instead in some cases</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.9]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#09b9d5016d082de95fdcbedcfd9e5ce8d0d19738</id>
@@ -259,36 +285,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
 <li>Adjusted battery icon hiding to support the new colored battery icon.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#f235abdd918c4639a7631e9e228399b22c0b734b</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2025-03-21T16:53:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to customize the font family of the labels.</li>
-<li>Added options to customize the running indicator height and vertical offset.</li>
-<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
-<li>Fixed misaligned running indicators when custom icon sizes are used (e.g. with the Taskbar height and icon size mod).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.5.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#a2cd3cd75b7491b7f38a2ea3cf51ae71f164f119</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2025-03-21T16:36:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
-<li>Added an option to specify a custom list of week days.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
