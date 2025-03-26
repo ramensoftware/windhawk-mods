@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-26T12:30:37.000Z</updated>
+    <updated>2025-03-26T22:33:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Show Desktop Button Aero Peek 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#bef04b3e280151725c8cd4aa97274cd825de9d50</id>
+        <link href="https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek"/>
+        <updated>2025-03-26T22:33:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarshowdesktopbuttonaeropeek">Taskbar Show Desktop Button Aero Peek</h1>
+<p>Enable Aero Peek when hovering over the Show Desktop button, like it was
+possible before Windows 11.</p>
+<p>Only Windows 11 is supported. This mod isn't needed for Windows 7 to 10, where
+this behavior is already present.</p>
+<p><img src="https://i.imgur.com/TsJX013.gif" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chromium Frame Blackout Fix 0.2]]></title>
         <id>https://windhawk.net/mods/chromium-ncpaint-fix#bc02464989ea03e9667f17108cdc965537fc9047</id>
@@ -271,20 +287,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <updated>2025-03-21T18:49:19.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#ccea9857952abe4d8288052ac3e2ebb3c2900d1c</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
-        <updated>2025-03-21T18:40:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
-<li>Adjusted battery icon hiding to support the new colored battery icon.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

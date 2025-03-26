@@ -3519,6 +3519,32 @@
                 "version": "1.0.1"
             }
         },
+        "taskbar-show-desktop-button-aero-peek": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1743028397000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1743028397000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Enable Aero Peek when hovering over the Show Desktop button, like it was possible before Windows 11",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Show Desktop Button Aero Peek",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-start-button-position": {
             "details": {
                 "defaultSorting": 23760,
