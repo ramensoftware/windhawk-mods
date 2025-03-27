@@ -74,7 +74,7 @@ Lucent](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/m
 \
 21996Taskbar](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/21996Taskbar/README.md)
 
-[![TaskbarXII](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/TaskbarXII/preview1.png)
+[![TaskbarXII](https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/main/Themes/TaskbarXII/screenshot.png)
 \
 TaskbarXII](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/blob/main/Themes/TaskbarXII/README.md)
 
