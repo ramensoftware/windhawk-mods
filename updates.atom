@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-26T22:33:17.000Z</updated>
+    <updated>2025-03-27T20:05:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Peek on "Show desktop" button hover 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#613c1cd91d21f205a1990e6101ac0891769e35aa</id>
+        <link href="https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek"/>
+        <updated>2025-03-27T20:05:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the hover not working on some regions of the "Show desktop" button.</li>
+<li>Improved mod name and description.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Show Desktop Button Aero Peek 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#bef04b3e280151725c8cd4aa97274cd825de9d50</id>
@@ -272,19 +286,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#62c7f65eaecd24f1e41e34d931666715f4d37566</id>
         <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
         <updated>2025-03-21T18:53:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Reorder 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-reorder#4f601abc4c4dca4a0af11bc8e4f27b3175aee882</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-reorder"/>
-        <updated>2025-03-21T18:49:19.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
 </ul>]]></content>

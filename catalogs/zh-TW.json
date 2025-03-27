@@ -3525,7 +3525,7 @@
                 "published": 1743028397000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1743028397000,
+                "updated": 1743105958000,
                 "users": 0
             },
             "metadata": {
@@ -3534,15 +3534,15 @@
                 ],
                 "author": "m417z",
                 "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-                "description": "Enable Aero Peek when hovering over the Show Desktop button, like it was possible before Windows 11",
+                "description": "Enable Aero Peek when hovering over the \"Show Desktop\" button, like it was possible before Windows 11",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Taskbar Show Desktop Button Aero Peek",
+                "name": "Aero Peek on \"Show desktop\" button hover",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-start-button-position": {
