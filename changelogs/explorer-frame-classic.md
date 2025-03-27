@@ -1,3 +1,9 @@
+## 1.0.7 ([Mar 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a711e63f4888424695b6d70a58c72861359ffe0a/mods/explorer-frame-classic.wh.cpp))
+
+* Fixed compatibility with new Windows 11 builds:
+  * Version 23H2 build 10.0.22621.5015 and newer.
+  * Version 24H2 build 10.0.26100.3360 and newer.
+
 ## 1.0.6 ([Oct 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3e436653f3acb9c679349057fec39842957d448d/mods/explorer-frame-classic.wh.cpp))
 
 * The fix from version 1.0.5 only worked for Windows 11 version 24H2 (incorrect height if the FileExplorerTabLineFix Windows flag is set). Now the fix works for Windows 11 version 23H2 as well.

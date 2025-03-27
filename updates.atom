@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-27T20:05:58.000Z</updated>
+    <updated>2025-03-27T21:20:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.7]]></title>
+        <id>https://windhawk.net/mods/explorer-frame-classic#a711e63f4888424695b6d70a58c72861359ffe0a</id>
+        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
+        <updated>2025-03-27T21:20:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with new Windows 11 builds:</li>
+<li>Version 23H2 build 10.0.22621.5015 and newer.</li>
+<li>Version 24H2 build 10.0.26100.3360 and newer.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aero Peek on "Show desktop" button hover 1.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#613c1cd91d21f205a1990e6101ac0891769e35aa</id>
@@ -275,19 +290,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
 <li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
 <li>Fixed the new colored battery icon not being rotated.</li>
 <li>Fixed a bug which could cause the taskbar to become hidden on system startup.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray icon spacing 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#62c7f65eaecd24f1e41e34d931666715f4d37566</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
-        <updated>2025-03-21T18:53:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
