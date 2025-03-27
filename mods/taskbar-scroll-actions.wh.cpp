@@ -1,12 +1,11 @@
 // ==WindhawkMod==
-// @id              taskbar-scroll-actions
+// @id              taskbar-extra-scroll-actions
 // @name            Taskbar Scroll Actions
 // @description     Assign actions for scrolling over the taskbar, including virtual desktop switching, monitor brightness control, and SDR brightness control on HDR displays
-// @version         1.3.0
-// @author          m417z
-// @github          https://github.com/m417z
-// @twitter         https://twitter.com/m417z
-// @homepage        https://m417z.com/
+// @version         1.1.0
+// @author          nairodorian(aka claude3.7*) + m417z
+// @github          https://github.com/m417z https://github.com/NairoDorian
+// @homepage        https://m417z.com/ https://nairodorian.com/
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lversion -ldxgi -ldwmapi
 // ==/WindhawkMod==
