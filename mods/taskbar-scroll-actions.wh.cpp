@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              taskbar-scroll-actions
 // @name            Taskbar Scroll Actions
-// @description     Assign actions for scrolling over the taskbar, including virtual desktop switching and monitor brightness control
-// @version         1.0.1
+// @description     Assign actions for scrolling over the taskbar, including virtual desktop switching, monitor brightness control, and SDR brightness control on HDR displays
+// @version         1.3.0
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lversion
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lversion -ldxgi -ldwmapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -23,23 +23,48 @@
 /*
 # Taskbar Scroll Actions
 
-Assign actions for scrolling over the taskbar, including virtual desktop
-switching and monitor brightness control.
+This mod allows you to assign actions to mouse wheel scrolling over the taskbar, including:
+- Switching between virtual desktops
+- Adjusting monitor brightness
+- Adjusting SDR content brightness on HDR displays
+- Master brightness control (intelligently adjusts the appropriate brightness based on display type)
 
-Currently, the following actions are supported:
+## Features
 
-* Switch virtual desktop
-* Change monitor brightness
+### Virtual Desktop Switching
+Scroll up or down on the taskbar to switch between virtual desktops.
 
-Also check out the following related mods:
+### Monitor Brightness Control
+Scroll up or down on the taskbar to increase or decrease monitor brightness using the standard Windows brightness control.
 
-* Taskbar Volume Control
-* Cycle taskbar buttons with mouse wheel
+### SDR Brightness Control on HDR Displays
+For HDR displays, scroll up or down on the taskbar to adjust the SDR content brightness. This is especially useful when:
+- You have an HDR display and find SDR content too dark or too bright
+- The standard brightness controls don't work when HDR is enabled
+- You switch between SDR and HDR content frequently
 
-**Note:** Some laptop touchpads might not support scrolling over the taskbar. A
-workaround is to use the "pinch to zoom" gesture. For details, check out [a
-relevant
-issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt-trigger-mouse-wheel-options).
+### Master Brightness Control (Intelligent)
+The master mode intelligently detects which display's taskbar you're scrolling on and automatically applies the appropriate brightness adjustment:
+- If scrolling on an HDR display's taskbar, it adjusts the SDR brightness for that specific monitor
+- If scrolling on a non-HDR display's taskbar, it adjusts the standard monitor brightness
+
+This intelligent approach is perfect for mixed display setups where you have both HDR and non-HDR monitors connected to your system.
+
+## Settings
+
+- **Scroll Action**: Choose between virtual desktop switching, monitor brightness control, SDR brightness control, or master brightness control.
+- **Scroll Area**: Define where scrolling should trigger the action (entire taskbar, notification area only, or taskbar without notification area).
+- **Scroll Step**: How many steps to change per scroll action.
+- **Reverse Scrolling Direction**: Reverse the direction of the scrolling action.
+- **Old Taskbar on Windows 11**: Enable if you're using the old Windows 10 taskbar on Windows 11 (e.g., with Explorer Patcher).
+- **Remember SDR to HDR Brightness**: When enabled, the mod will remember your SDR brightness setting between sessions.
+- **Maximum SDR Brightness**: Set the maximum value for SDR brightness (default max is 6.0).
+
+## Notes for SDR Brightness on HDR Displays
+- The SDR brightness range is from 1.0 to the maximum value you set (default 6.0)
+- Each scroll wheel tick changes the brightness by 0.1 (or more if you increase the scroll step)
+- This setting affects the same brightness level you can adjust in Windows 11 Settings > System > Display > HDR > SDR brightness balance
+- The master brightness control mode will intelligently detect whether you're scrolling on an HDR or non-HDR display's taskbar
 */
 // ==/WindhawkModReadme==
 
@@ -47,28 +72,34 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 /*
 - scrollAction: virtualDesktopSwitch
   $name: Scroll action
+  $description: The action to perform when scrolling over the taskbar
   $options:
   - virtualDesktopSwitch: Switch virtual desktop
   - brightnessChange: Change monitor brightness
+  - sdrToHdrBrightnessChange: Change SDR brightness on HDR displays
+  - masterBrightnessChange: Master brightness control (monitor + SDR/HDR brightness)
 - scrollArea: taskbar
   $name: Scroll area
+  $description: The area on which scrolling triggers the action
   $options:
-  - taskbar: The taskbar
-  - notificationArea: The notification area
+  - taskbar: The entire taskbar
+  - notificationArea: The notification area (system tray and clock)
   - taskbarWithoutNotificationArea: The taskbar without the notification area
 - scrollStep: 1
   $name: Scroll step
-  $description: >-
-    Allows to configure the change that will occur with each notch of mouse
-    wheel movement.
+  $description: How many steps to change per scroll action
+- storeCurrentSdrToHdrBrightness: true
+  $name: Remember SDR to HDR brightness
+  $description: Remember the last SDR to HDR brightness value between sessions
+- maxSdrBrightness: 6.0
+  $name: Maximum SDR brightness
+  $description: Maximum value for SDR brightness on HDR displays (default is 6.0, range 1.0-10.0)
 - reverseScrollingDirection: false
   $name: Reverse scrolling direction
+  $description: Reverse the direction of the scrolling action
 - oldTaskbarOnWin11: false
-  $name: Customize the old taskbar on Windows 11
-  $description: >-
-    Enable this option to customize the old taskbar on Windows 11 (if using
-    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
-    1.3, you have to disable and re-enable the mod to apply this option.
+  $name: Old taskbar on Windows 11
+  $description: Enable if you're using the old Windows 10 taskbar on Windows 11 (Explorer Patcher)
 */
 // ==/WindhawkModSettings==
 
@@ -79,12 +110,16 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 #include <comutil.h>
 #include <wbemcli.h>
 #include <windowsx.h>
+#include <dxgi1_6.h> // For checking HDR status
 
 #include <unordered_set>
+#include <unordered_map>
 
 enum class ScrollAction {
     virtualDesktopSwitch,
     brightnessChange,
+    sdrToHdrBrightnessChange, // New action for SDR brightness adjustment
+    masterBrightnessChange,   // Combined brightness adjustment (regular + SDR)
 };
 
 enum class ScrollArea {
@@ -93,13 +128,94 @@ enum class ScrollArea {
     taskbarWithoutNotificationArea,
 };
 
+// Typedefs for SDR to HDR brightness functionality
+typedef void (WINAPI *DwmpSDRToHDRBoostPtr_t)(HMONITOR hMonitor, double brightness);
+
+// Global variables for the SDR to HDR brightness functionality
+HMODULE g_hDwmApiDll = NULL;
+DwmpSDRToHDRBoostPtr_t g_pDwmpSDRToHDRBoost = NULL;
+double g_currentSdrToHdrBrightness = 1.0; // Default value
+
 struct {
     ScrollAction scrollAction;
     ScrollArea scrollArea;
     int scrollStep;
     bool reverseScrollingDirection;
     bool oldTaskbarOnWin11;
+    bool storeCurrentSdrToHdrBrightness; // New setting for remembering SDR brightness
+    double maxSdrBrightness; // Maximum SDR brightness setting
 } g_settings;
+
+// Add HDR detection and monitor state tracking
+typedef HRESULT (WINAPI *PFN_CreateDXGIFactory1)(REFIID riid, void **ppFactory);
+
+// Cache for HDR monitor status to avoid frequent checks
+struct MonitorState {
+    bool isHdr;
+    DWORD lastCheckTime;
+};
+
+std::unordered_map<HMONITOR, MonitorState> g_monitorHdrCache;
+
+// Define the callback structure for SDR brightness
+struct SDRBrightnessCallbackData {
+    DwmpSDRToHDRBoostPtr_t pFunc;
+    double brightness;
+};
+
+// Function to check if a monitor has HDR enabled
+bool IsMonitorHdrEnabled(HMONITOR hMonitor) {
+    // Check cache first to avoid frequent checks
+    auto it = g_monitorHdrCache.find(hMonitor);
+    if (it != g_monitorHdrCache.end()) {
+        // Only recheck after 5 seconds to avoid performance impact
+        if (GetTickCount() - it->second.lastCheckTime < 5000) {
+            return it->second.isHdr;
+        }
+    }
+
+    // Default to non-HDR if detection fails
+    bool isHdr = false;
+    
+    HMODULE hDXGI = LoadLibrary(L"dxgi.dll");
+    if (hDXGI) {
+        PFN_CreateDXGIFactory1 createDXGIFactory1 = 
+            (PFN_CreateDXGIFactory1)GetProcAddress(hDXGI, "CreateDXGIFactory1");
+        
+        if (createDXGIFactory1) {
+            IDXGIFactory1* pFactory = nullptr;
+            HRESULT hr = createDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&pFactory);
+            
+            if (SUCCEEDED(hr) && pFactory) {
+                IDXGIAdapter1* pAdapter = nullptr;
+                for (UINT i = 0; SUCCEEDED(pFactory->EnumAdapters1(i, &pAdapter)); i++) {
+                    IDXGIOutput* pOutput = nullptr;
+                    for (UINT j = 0; SUCCEEDED(pAdapter->EnumOutputs(j, &pOutput)); j++) {
+                        DXGI_OUTPUT_DESC desc;
+                        if (SUCCEEDED(pOutput->GetDesc(&desc)) && desc.Monitor == hMonitor) {
+                            IDXGIOutput6* pOutput6 = nullptr;
+                            if (SUCCEEDED(pOutput->QueryInterface(__uuidof(IDXGIOutput6), (void**)&pOutput6))) {
+                                DXGI_OUTPUT_DESC1 desc1;
+                                if (SUCCEEDED(pOutput6->GetDesc1(&desc1))) {
+                                    isHdr = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+                                }
+                                pOutput6->Release();
+                            }
+                        }
+                        pOutput->Release();
+                    }
+                    pAdapter->Release();
+                }
+                pFactory->Release();
+            }
+        }
+        FreeLibrary(hDXGI);
+    }
+    
+    // Cache the result
+    g_monitorHdrCache[hMonitor] = { isHdr, GetTickCount() };
+    return isHdr;
+}
 
 bool g_initialized = false;
 bool g_inputSiteProcHooked = false;
@@ -133,6 +249,86 @@ int g_nWinVersion;
 int g_nExplorerVersion;
 HWND g_hTaskbarWnd;
 DWORD g_dwTaskbarThreadId;
+
+// Function to initialize the SDR to HDR brightness adjustment
+bool InitializeSdrToHdrBrightness() {
+    if (g_pDwmpSDRToHDRBoost)
+        return true;
+
+    if (!g_hDwmApiDll) {
+        g_hDwmApiDll = LoadLibrary(L"dwmapi.dll");
+        if (!g_hDwmApiDll) {
+            Wh_Log(L"Failed to load dwmapi.dll");
+            return false;
+        }
+    }
+
+    // The function we need is at ordinal 171 (based on the ScreenBrightnessSetter)
+    FARPROC pFunc = GetProcAddress(g_hDwmApiDll, (LPCSTR)171);
+    if (!pFunc) {
+        Wh_Log(L"Failed to get DwmpSDRToHDRBoost function");
+        return false;
+    }
+
+    g_pDwmpSDRToHDRBoost = (DwmpSDRToHDRBoostPtr_t)pFunc;
+    
+    // Load saved brightness if enabled
+    if (g_settings.storeCurrentSdrToHdrBrightness) {
+        g_currentSdrToHdrBrightness = Wh_GetIntValue(L"CurrentSdrToHdrBrightness", 10) / 10.0;
+        if (g_currentSdrToHdrBrightness < 1.0 || g_currentSdrToHdrBrightness > 1000.0) {
+            g_currentSdrToHdrBrightness = 1.0;
+        }
+    }
+    
+    return true;
+}
+
+// Callback function for EnumDisplayMonitors with the correct stdcall convention
+BOOL CALLBACK MonitorEnumProcForSDRBrightness(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+    SDRBrightnessCallbackData* pData = reinterpret_cast<SDRBrightnessCallbackData*>(dwData);
+    pData->pFunc(hMonitor, pData->brightness);
+    return TRUE;
+}
+
+// Function to adjust the SDR to HDR brightness
+bool AdjustSdrToHdrBrightness(int clicks, HMONITOR targetMonitor = NULL) {
+    if (!InitializeSdrToHdrBrightness())
+        return false;
+
+    // The range for SDR to HDR brightness is typically 1.0 to max (configurable)
+    const double minBrightness = 1.0;
+    const double maxBrightness = g_settings.maxSdrBrightness;
+    const double step = 0.1; // Each scroll wheel click changes by 0.1
+    
+    // Calculate new brightness
+    g_currentSdrToHdrBrightness += clicks * step;
+    
+    // Clamp to min/max
+    if (g_currentSdrToHdrBrightness < minBrightness)
+        g_currentSdrToHdrBrightness = minBrightness;
+    if (g_currentSdrToHdrBrightness > maxBrightness)
+        g_currentSdrToHdrBrightness = maxBrightness;
+    
+    Wh_Log(L"Setting SDR to HDR brightness to %.1f", g_currentSdrToHdrBrightness);
+    
+    // Save the current brightness if enabled
+    if (g_settings.storeCurrentSdrToHdrBrightness) {
+        Wh_SetIntValue(L"CurrentSdrToHdrBrightness", (int)(g_currentSdrToHdrBrightness * 10));
+    }
+    
+    // Create a struct to pass data to the callback
+    SDRBrightnessCallbackData data = { g_pDwmpSDRToHDRBoost, g_currentSdrToHdrBrightness };
+    
+    if (targetMonitor) {
+        // Apply to the specific monitor only
+        g_pDwmpSDRToHDRBoost(targetMonitor, g_currentSdrToHdrBrightness);
+    } else {
+        // Apply to all monitors
+        EnumDisplayMonitors(NULL, NULL, MonitorEnumProcForSDRBrightness, reinterpret_cast<LPARAM>(&data));
+    }
+    
+    return true;
+}
 
 #pragma region functions
 
@@ -684,7 +880,7 @@ bool SwitchDesktopViaKeyboardShortcut(int clicks) {
     }
 
     INPUT* input = new INPUT[clicks * 2 + 4];
-    for (size_t i = 0; i < clicks * 2 + 4; i++) {
+    for (size_t i = 0; i < static_cast<size_t>(clicks) * 2 + 4; i++) {
         input[i].type = INPUT_KEYBOARD;
         input[i].ki.wScan = 0;
         input[i].ki.time = 0;
@@ -696,7 +892,7 @@ bool SwitchDesktopViaKeyboardShortcut(int clicks) {
     input[1].ki.wVk = VK_LCONTROL;
     input[1].ki.dwFlags = 0;
 
-    for (size_t i = 0; i < clicks; i++) {
+    for (size_t i = 0; i < static_cast<size_t>(clicks); i++) {
         input[2 + i * 2].ki.wVk = key;
         input[2 + i * 2].ki.dwFlags = 0;
         input[2 + i * 2 + 1].ki.wVk = key;
@@ -718,7 +914,8 @@ bool SwitchDesktopViaKeyboardShortcut(int clicks) {
 DWORD g_lastScrollTime;
 int g_lastScrollDeltaRemainder;
 
-void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam) {
+// Updated to handle monitor-specific brightness adjustment
+void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam, HMONITOR hMonitor = NULL) {
     int delta = GET_WHEEL_DELTA_WPARAM(wParam) * g_settings.scrollStep;
 
     if (g_settings.reverseScrollingDirection) {
@@ -746,6 +943,39 @@ void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam) {
                     SetBrightness(brightness + clicks);
                 } else {
                     Wh_Log(L"Error getting current brightness");
+                }
+                break;
+            }
+            
+            case ScrollAction::sdrToHdrBrightnessChange: {
+                AdjustSdrToHdrBrightness(clicks, hMonitor);
+                break;
+            }
+            
+            case ScrollAction::masterBrightnessChange: {
+                bool isHdrMonitor = false;
+                
+                // Check if the monitor we're scrolling on has HDR enabled
+                if (hMonitor) {
+                    isHdrMonitor = IsMonitorHdrEnabled(hMonitor);
+                }
+                
+                Wh_Log(L"Master brightness mode for monitor %p (HDR: %s)", 
+                       hMonitor, isHdrMonitor ? L"Yes" : L"No");
+                
+                if (isHdrMonitor) {
+                    // For HDR monitors, adjust SDR brightness for this specific monitor
+                    AdjustSdrToHdrBrightness(clicks, hMonitor);
+                } else {
+                    // For non-HDR monitors, adjust standard brightness
+                    int brightness = GetBrightness();
+                    if (brightness != -1) {
+                        Wh_Log(L"Master mode (non-HDR): Changing monitor brightness from %d to %d", 
+                               brightness, brightness + clicks);
+                        SetBrightness(brightness + clicks);
+                    } else {
+                        Wh_Log(L"Error getting current brightness");
+                    }
                 }
                 break;
             }
@@ -834,7 +1064,14 @@ bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     ZeroMemory(&input, sizeof(INPUT));
     SendInput(1, &input, sizeof(INPUT));
 
-    InvokeScrollAction(wParam, lParam);
+    // Get the monitor for the taskbar we're scrolling on
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    
+    // Store the monitor for use in InvokeScrollAction
+    thread_local static HMONITOR lastScrolledMonitor = NULL;
+    lastScrolledMonitor = hMonitor;
+
+    InvokeScrollAction(wParam, lParam, hMonitor);
 
     return true;
 }
@@ -853,9 +1090,13 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd,
 
     switch (uMsg) {
         case WM_MOUSEWHEEL:
-            if (g_nExplorerVersion < WIN_VERSION_11_21H2 &&
-                OnMouseWheel(hWnd, wParam, lParam)) {
-                result = 0;
+            if (g_nExplorerVersion < WIN_VERSION_11_21H2) {
+                HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                if (OnMouseWheel(hWnd, wParam, lParam)) {
+                    result = 0;
+                } else {
+                    result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+                }
             } else {
                 result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
@@ -885,9 +1126,11 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd,
     switch (uMsg) {
         case WM_POINTERWHEEL:
             if (HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-                IsTaskbarWindow(hRootWnd) &&
-                OnMouseWheel(hRootWnd, wParam, lParam)) {
-                return 0;
+                IsTaskbarWindow(hRootWnd)) {
+                HMONITOR hMonitor = MonitorFromWindow(hRootWnd, MONITOR_DEFAULTTONEAREST);
+                if (OnMouseWheel(hRootWnd, wParam, lParam)) {
+                    return 0;
+                }
             }
             break;
     }
@@ -1102,11 +1345,16 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
+// Updated to handle the new action and settings
 void LoadSettings() {
     PCWSTR scrollAction = Wh_GetStringSetting(L"scrollAction");
     g_settings.scrollAction = ScrollAction::virtualDesktopSwitch;
     if (wcscmp(scrollAction, L"brightnessChange") == 0) {
         g_settings.scrollAction = ScrollAction::brightnessChange;
+    } else if (wcscmp(scrollAction, L"sdrToHdrBrightnessChange") == 0) {
+        g_settings.scrollAction = ScrollAction::sdrToHdrBrightnessChange;
+    } else if (wcscmp(scrollAction, L"masterBrightnessChange") == 0) {
+        g_settings.scrollAction = ScrollAction::masterBrightnessChange;
     }
     Wh_FreeStringSetting(scrollAction);
 
@@ -1120,9 +1368,14 @@ void LoadSettings() {
     Wh_FreeStringSetting(scrollArea);
 
     g_settings.scrollStep = Wh_GetIntSetting(L"scrollStep");
-    g_settings.reverseScrollingDirection =
-        Wh_GetIntSetting(L"reverseScrollingDirection");
+    g_settings.reverseScrollingDirection = Wh_GetIntSetting(L"reverseScrollingDirection");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+    g_settings.storeCurrentSdrToHdrBrightness = Wh_GetIntSetting(L"storeCurrentSdrToHdrBrightness");
+    
+    // Load max SDR brightness (default 6.0, clamped between 1.0 and 10.0)
+    double maxBrightness = Wh_GetIntSetting(L"maxSdrBrightness");
+    if (maxBrightness < 1.0) maxBrightness = 6.0; // Use default if invalid
+    g_settings.maxSdrBrightness = maxBrightness < 1.0 ? 1.0 : (maxBrightness > 10000.0 ? 10.0 : maxBrightness);
 }
 
 BOOL Wh_ModInit() {
@@ -1169,6 +1422,14 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+// Added save for SDR brightness when mod is unloaded
+void Wh_ModBeforeUninit() {
+    if (g_settings.storeCurrentSdrToHdrBrightness) {
+        Wh_SetIntValue(L"CurrentSdrToHdrBrightness", (int)(g_currentSdrToHdrBrightness * 10));
+    }
+}
+
+// Updated to clean up resources for SDR brightness
 void Wh_ModUninit() {
     Wh_Log(L">");
 
@@ -1179,24 +1440,28 @@ void Wh_ModUninit() {
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
+
+    if (g_hDwmApiDll) {
+        FreeLibrary(g_hDwmApiDll);
+        g_hDwmApiDll = NULL;
+        g_pDwmpSDRToHDRBoost = NULL;
+    }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
     bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+    ScrollAction prevScrollAction = g_settings.scrollAction;
 
     LoadSettings();
 
-    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+    // If we're switching to/from SDR to HDR brightness, or changing taskbar style 
+    // on Win11, we need to reload the mod
+    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11 ||
+             (prevScrollAction != g_settings.scrollAction && 
+              (prevScrollAction == ScrollAction::sdrToHdrBrightnessChange || 
+               g_settings.scrollAction == ScrollAction::sdrToHdrBrightnessChange));
 
     return TRUE;
-}
-
-// For pre-1.3 Windhawk compatibility.
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"> pre-1.3");
-
-    BOOL bReload = FALSE;
-    Wh_ModSettingsChanged(&bReload);
 }
