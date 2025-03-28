@@ -13,13 +13,13 @@
 /*
 
 ### Acrylic (BlurBehind)
-![BlurBehind](https://imgur.com/a/8dnPOCt)
+![BlurBehind](https://i.imgur.com/S8OGRvc.png)
 ### Acrylic (SystemBackdrop)
-![Acrylic SystemBackdrop](https://imgur.com/a/KZTzP3Q)
+![Acrylic SystemBackdrop](https://i.imgur.com/66cAiEC.png)
 ### Mica
-![Mica](https://imgur.com/a/TJ5pP3m)
+![Mica](https://i.imgur.com/7BGDhJa.png)
 ### MicaAlt
-![MicaTabbed](https://imgur.com/a/EaeW86Z)
+![MicaTabbed](https://i.imgur.com/EeviFqO.png)
 
 # FAQ
 
