@@ -42,7 +42,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 - ThemeBackground: TRUE
   $name: Optimize windows theme
   $description: Fill with black color the file explorer background in order to render a clear translucent effect
-- type: none
+- type: Default
   $name: Effects
   $description: Windows 11 version >= 22621.xxx (22H2) is required
   $options:
@@ -100,6 +100,13 @@ enum WINDOWCOMPOSITIONATTRIB
 ACCENT_POLICY accent = {};
 WINCOMPATTRDATA attrib = {};
 DWM_BLURBEHIND bb = { 0 };
+
+static const UINT USE_IMMERSIVE_DARK_MODE = 20; // DWMWA_USE_IMMERSIVE_DARK_MODE
+static const UINT SYSTEMBACKDROP_TYPE = 38; // DWM_SYSTEMBACKDROP_TYPE
+static const UINT NONE = 1; // DWMSBT_NONE
+static const UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
+static const UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
+static const UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
 
 void NewWindowShown(HWND);
 BOOL IsWindowEligible(HWND);
@@ -169,21 +176,14 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
     CHAR TaskmgrClassName[256];
     GetClassNameA(hWnd, TaskmgrClassName, sizeof(TaskmgrClassName));
 
-    //Override Win11, TaskMgr explorer calls
+    // Override Win11, TaskMgr explorer calls
     if(g_BgType == BlurBehind && ((!strcmp(ExplorerClassName, "CabinetWClass"))))
-    {
-        DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_NONE;
-        return originalDwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
-    }
+        return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
+    // Apply AcrylicSystemBackdrop to TaskMgr only when Windows tries to render default Mica
     else if(g_BgType == AcrylicSystemBackdrop && (!strcmp(TaskmgrClassName , "TaskManagerWindow")))
-    {
-        // Apply AcrylicSystemBackdrop to TaskMgr only when Windows tries to render default Mica
-        if(dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE)
-        {
-            DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
-            return originalDwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
-        }
-    }
+        if(dwAttribute == SYSTEMBACKDROP_TYPE)
+            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
+
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
@@ -196,7 +196,7 @@ HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMar
     CHAR AeroWizardClassName[256];
     GetClassNameA(hWnd, AeroWizardClassName, sizeof(AeroWizardClassName));
 
-    //Override Win11 Taskmgr, explorer calls
+    // Override Win11 Taskmgr, explorer calls
     if((!strcmp(ExplorerClassName, "CabinetWClass")) || (!strcmp(AeroWizardClassName , "NativeHWNDHost")) || (!strcmp(TaskmgrClassName , "TaskManagerWindow")))
     {
         MARGINS margins = {-1, -1, -1, -1};
@@ -210,7 +210,7 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
     HRESULT hr = original_GetThemeColor(hTheme, iPartId, iStateId, iPropId, pColor);
     
     std::wstring ThemeClassName = GetThemeClass(hTheme);
-    //Set the background fill color to black for the API to make the Blur effect transparent
+    // Set the background fill color to black for the API to make the Blur effect transparent
     if (iPropId == TMT_FILLCOLOR) 
     {
         if(((ThemeClassName == L"ItemsView" || ThemeClassName == L"ExplorerStatusBar" || ThemeClassName == L"ExplorerNavPane")
@@ -224,7 +224,6 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
     return hr;
 }
 
-/*https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/Helper.cpp#L126*/
 std::wstring GetThemeClass(HTHEME hTheme) 
 {
     typedef HRESULT(WINAPI* pGetThemeClass)(HTHEME, LPCTSTR, int);
@@ -250,7 +249,7 @@ void EnableBlurBehind(HWND hWnd)
 {
     char TerminalClassName[256];
     GetClassNameA(hWnd, TerminalClassName, sizeof(TerminalClassName));
-    // Bypass Windows Terminal as it glitches its own acrylic material
+    // Not to Interfere with Windows Terminal acrylic
     if(strcmp(TerminalClassName, "CASCADIA_HOSTING_WINDOW_CLASS"))
     {
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
@@ -275,26 +274,23 @@ void EnableBlurBehind(HWND hWnd)
 
 void EnableSystemBackdropAcrylic(HWND hWnd)
 {
-    UINT type = 1;
-    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
-    DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
-    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &backdrop, sizeof(backdrop));
+    static const UINT type = 1;
+    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
+    DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
 }
 
 void EnableMica(HWND hWnd)
 {
-    UINT type = 1;
-    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
-    DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_MAINWINDOW;
-    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &backdrop, sizeof(backdrop));
+    static const UINT type = 1;
+    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
+    DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &MAINWINDOW, sizeof(MAINWINDOW));
 }
 
 void EnableMicaTabbed(HWND hWnd)
 {
-    UINT type = 1;
-    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
-    DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TABBEDWINDOW;
-    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &backdrop, sizeof(backdrop));
+    static const UINT type = 1;
+    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
+    DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &TABBEDWINDOW, sizeof(TABBEDWINDOW));
 }
 
 BOOL IsWindowEligible(HWND hWnd) 
@@ -323,7 +319,6 @@ BOOL IsWindowEligible(HWND hWnd)
 
 void NewWindowShown(HWND hWnd) 
 {
-    //BlurBehind requires FrameExtension  
     if(g_BgType == BlurBehind && IsWindowEligible(hWnd) && g_settings.ExtendFrame)
     {
         ApplyFrameExtension(hWnd);
