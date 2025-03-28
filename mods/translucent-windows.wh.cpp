@@ -42,7 +42,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 - ThemeBackground: TRUE
   $name: Optimize windows theme
   $description: Fill with black color the file explorer background in order to render a clear translucent effect
-- type: Default
+- type: none
   $name: Effects
   $description: Windows 11 version >= 22621.xxx (22H2) is required
   $options:
