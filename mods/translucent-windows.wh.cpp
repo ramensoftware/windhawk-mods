@@ -162,14 +162,6 @@ HRESULT(WINAPI*)(HWND,
                  DWORD);
 DwmSetWindowAttribute_t originalDwmSetWindowAttribute = nullptr;
 
-using RegQueryValueExW_t = LSTATUS (WINAPI*)(HKEY hKey,
-                                          LPCWSTR lpValueName,
-                                          LPDWORD lpReserved,
-                                          LPDWORD lpType,
-                                          LPBYTE lpData,
-                                          LPDWORD lpcbData);
-RegQueryValueExW_t OriginalRegQueryValueExW = nullptr;
-
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
     CHAR ExplorerClassName[256];
