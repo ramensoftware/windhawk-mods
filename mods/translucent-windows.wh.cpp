@@ -28,7 +28,7 @@
     - Energy saver disabled
 #
 * Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
-Light mode theme, HDR enabled or white background behind the window can cause of this problem. 
+Light mode theme, HDR enabled or white background behind the window can cause this. 
 This is because some GDI rendering operations do not preserve alpha channel values.
 
 * Acrylic blur behind effect may show a bleeding effect at the edges of a window when 
@@ -185,7 +185,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
 
 HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMarInset)
 {
-    // Override Win11 Taskmgr, explorer calls
+    // Override Win11 Taskmgr, explorer, aerowizard calls
     if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd,  L"NativeHWNDHost") || IsWindowClass(hWnd,  L"TaskManagerWindow"))
     {
         MARGINS margins = {-1, -1, -1, -1};
@@ -199,7 +199,7 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
     HRESULT hr = original_GetThemeColor(hTheme, iPartId, iStateId, iPropId, pColor);
     
     std::wstring ThemeClassName = GetThemeClass(hTheme);
-    // Set the background fill color to black for the API to make the Blur effect transparent
+    // Set the background fill color to black to make the Blur effect transparent
     if (iPropId == TMT_FILLCOLOR) 
     {
         if(((ThemeClassName == L"ItemsView" || ThemeClassName == L"ExplorerStatusBar" || ThemeClassName == L"ExplorerNavPane")
@@ -254,7 +254,7 @@ std::wstring GetThemeClass(HTHEME hTheme)
         HRESULT hr = GetClassName(hTheme, buffer, 255);
         return SUCCEEDED(hr) ? buffer : L"";
     }
-        return ret;
+    return ret;
 }
 
 void ApplyFrameExtension(HWND hWnd) 
@@ -265,7 +265,7 @@ void ApplyFrameExtension(HWND hWnd)
 
 void EnableBlurBehind(HWND hWnd)
 {
-    // Not to Interfere with Windows Terminal acrylic
+    // Not to interfere with Windows Terminal acrylic
     if(!(IsWindowClass(hWnd,  L"CASCADIA_HOSTING_WINDOW_CLASS")))
     {
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
