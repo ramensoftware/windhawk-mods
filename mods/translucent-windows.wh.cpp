@@ -177,9 +177,11 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
     // Override Win11, TaskMgr explorer calls
     if(g_BgType == BlurBehind && (IsWindowClass(hWnd, L"CabinetWClass")))
         return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
-    // Apply AcrylicSystemBackdrop to TaskMgr only when Windows tries to render default Mica
+    // Apply MicaAlt or Acrylic to TaskMgr only when Windows tries to render default Mica
     else if(g_BgType == AcrylicSystemBackdrop && IsWindowClass(hWnd,  L"TaskManagerWindow") && dwAttribute == SYSTEMBACKDROP_TYPE)
         return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
+    else if(g_BgType == MicaAlt && IsWindowClass(hWnd,  L"TaskManagerWindow") && dwAttribute == SYSTEMBACKDROP_TYPE)
+        return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TABBEDWINDOW, sizeof(TABBEDWINDOW));
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
