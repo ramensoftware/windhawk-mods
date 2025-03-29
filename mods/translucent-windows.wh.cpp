@@ -102,11 +102,14 @@ WINCOMPATTRDATA attrib = {};
 DWM_BLURBEHIND bb = { 0 };
 
 static const UINT USE_IMMERSIVE_DARK_MODE = 20; // DWMWA_USE_IMMERSIVE_DARK_MODE
+static const UINT ENABLE = 1;
 static const UINT SYSTEMBACKDROP_TYPE = 38; // DWM_SYSTEMBACKDROP_TYPE
 static const UINT NONE = 1; // DWMSBT_NONE
 static const UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static const UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
 static const UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
+
+using PUNICODE_STRING = PVOID;
 
 void NewWindowShown(HWND);
 BOOL IsWindowEligible(HWND);
@@ -117,6 +120,7 @@ void GetThemeColorHook();
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND, DWORD, LPCVOID, DWORD);
 HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND, const MARGINS*);
 HRESULT WINAPI HookedGetColorTheme(HTHEME, int, int, int, COLORREF*);
+HWND WINAPI HookedNtUserCreateWindowEx(DWORD dwExStyle, PUNICODE_STRING UnsafeClassName, LPCWSTR VersionedClass, PUNICODE_STRING UnsafeWindowName, DWORD dwStyle, LONG x, LONG y, LONG nWidth, LONG nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam, DWORD dwShowMode, DWORD dwUnknown1, DWORD dwUnknown2, VOID* qwUnknown3);
 void FillBackgroundElements();
 void ApplyFrameExtension(HWND);
 void EnableBlurBehind(HWND);
@@ -125,9 +129,8 @@ void EnableMica(HWND);
 void EnableMicaTabbed(HWND);
 void ApplyForExistingWindows();
 BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
+BOOL IsWindowClass(HWND, LPCWSTR);
 void LoadSettings();
-
-using PUNICODE_STRING = PVOID;
 
 using NtUserCreateWindowEx_t =
     HWND(WINAPI*)(DWORD dwExStyle,
@@ -171,33 +174,19 @@ DwmSetWindowAttribute_t originalDwmSetWindowAttribute = nullptr;
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    CHAR ExplorerClassName[256];
-    GetClassNameA(hWnd, ExplorerClassName, sizeof(ExplorerClassName));
-    CHAR TaskmgrClassName[256];
-    GetClassNameA(hWnd, TaskmgrClassName, sizeof(TaskmgrClassName));
-
     // Override Win11, TaskMgr explorer calls
-    if(g_BgType == BlurBehind && ((!strcmp(ExplorerClassName, "CabinetWClass"))))
+    if(g_BgType == BlurBehind && (IsWindowClass(hWnd, L"CabinetWClass")))
         return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
     // Apply AcrylicSystemBackdrop to TaskMgr only when Windows tries to render default Mica
-    else if(g_BgType == AcrylicSystemBackdrop && (!strcmp(TaskmgrClassName , "TaskManagerWindow")))
-        if(dwAttribute == SYSTEMBACKDROP_TYPE)
-            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
-
+    else if(g_BgType == AcrylicSystemBackdrop && IsWindowClass(hWnd,  L"TaskManagerWindow") && dwAttribute == SYSTEMBACKDROP_TYPE)
+        return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
 HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMarInset)
 {
-    CHAR ExplorerClassName[256];
-    GetClassNameA(hWnd, ExplorerClassName, sizeof(ExplorerClassName));
-    CHAR TaskmgrClassName[256];
-    GetClassNameA(hWnd, TaskmgrClassName, sizeof(TaskmgrClassName));
-    CHAR AeroWizardClassName[256];
-    GetClassNameA(hWnd, AeroWizardClassName, sizeof(AeroWizardClassName));
-
     // Override Win11 Taskmgr, explorer calls
-    if((!strcmp(ExplorerClassName, "CabinetWClass")) || (!strcmp(AeroWizardClassName , "NativeHWNDHost")) || (!strcmp(TaskmgrClassName , "TaskManagerWindow")))
+    if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd,  L"NativeHWNDHost") || IsWindowClass(hWnd,  L"TaskManagerWindow"))
     {
         MARGINS margins = {-1, -1, -1, -1};
         return OriginalDwmExtendFrameIntoClientArea(hWnd, &margins);
@@ -224,6 +213,35 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
     return hr;
 }
 
+HWND WINAPI HookedNtUserCreateWindowEx(DWORD dwExStyle,
+                                          PUNICODE_STRING UnsafeClassName,
+                                          LPCWSTR VersionedClass,
+                                          PUNICODE_STRING UnsafeWindowName,
+                                          DWORD dwStyle,
+                                          LONG x,
+                                          LONG y,
+                                          LONG nWidth,
+                                          LONG nHeight,
+                                          HWND hWndParent,
+                                          HMENU hMenu,
+                                          HINSTANCE hInstance,
+                                          LPVOID lpParam,
+                                          DWORD dwShowMode,
+                                          DWORD dwUnknown1,
+                                          DWORD dwUnknown2,
+                                          VOID* qwUnknown3) 
+{
+    HWND hWnd = NtUserCreateWindowEx_Original(
+        dwExStyle, UnsafeClassName, VersionedClass, UnsafeWindowName, dwStyle,
+        x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam,
+        dwShowMode, dwUnknown1, dwUnknown2, qwUnknown3);
+    
+    if(hWnd)
+        NewWindowShown(hWnd);
+
+    return hWnd;
+}
+
 std::wstring GetThemeClass(HTHEME hTheme) 
 {
     typedef HRESULT(WINAPI* pGetThemeClass)(HTHEME, LPCTSTR, int);
@@ -247,10 +265,8 @@ void ApplyFrameExtension(HWND hWnd)
 
 void EnableBlurBehind(HWND hWnd)
 {
-    char TerminalClassName[256];
-    GetClassNameA(hWnd, TerminalClassName, sizeof(TerminalClassName));
     // Not to Interfere with Windows Terminal acrylic
-    if(strcmp(TerminalClassName, "CASCADIA_HOSTING_WINDOW_CLASS"))
+    if(!(IsWindowClass(hWnd,  L"CASCADIA_HOSTING_WINDOW_CLASS")))
     {
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
 
@@ -274,22 +290,19 @@ void EnableBlurBehind(HWND hWnd)
 
 void EnableSystemBackdropAcrylic(HWND hWnd)
 {
-    static const UINT type = 1;
-    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
+    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(ENABLE));
     DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
 }
 
 void EnableMica(HWND hWnd)
 {
-    static const UINT type = 1;
-    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
+    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(ENABLE));
     DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &MAINWINDOW, sizeof(MAINWINDOW));
 }
 
 void EnableMicaTabbed(HWND hWnd)
 {
-    static const UINT type = 1;
-    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &type, sizeof(type));
+    DwmSetWindowAttribute(hWnd, USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(ENABLE));
     DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &TABBEDWINDOW, sizeof(TABBEDWINDOW));
 }
 
@@ -346,35 +359,6 @@ void NewWindowShown(HWND hWnd)
         ApplyFrameExtension(hWnd);
 }
 
-HWND WINAPI HookedNtUserCreateWindowEx(DWORD dwExStyle,
-                                          PUNICODE_STRING UnsafeClassName,
-                                          LPCWSTR VersionedClass,
-                                          PUNICODE_STRING UnsafeWindowName,
-                                          DWORD dwStyle,
-                                          LONG x,
-                                          LONG y,
-                                          LONG nWidth,
-                                          LONG nHeight,
-                                          HWND hWndParent,
-                                          HMENU hMenu,
-                                          HINSTANCE hInstance,
-                                          LPVOID lpParam,
-                                          DWORD dwShowMode,
-                                          DWORD dwUnknown1,
-                                          DWORD dwUnknown2,
-                                          VOID* qwUnknown3) 
-{
-    HWND hWnd = NtUserCreateWindowEx_Original(
-        dwExStyle, UnsafeClassName, VersionedClass, UnsafeWindowName, dwStyle,
-        x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam,
-        dwShowMode, dwUnknown1, dwUnknown2, qwUnknown3);
-    
-    if(hWnd)
-        NewWindowShown(hWnd);
-
-    return hWnd;
-}
-
 void DwmExpandFrameIntoClientAreaHook()
 {
     Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"dwmapi.dll"), "DwmExtendFrameIntoClientArea"),
@@ -421,6 +405,15 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
 void ApplyForExistingWindows()
 {
     EnumWindows(EnumWindowsProc, 0);
+}
+
+BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
+{
+    WCHAR ClassNameBuffer[256]; 
+    GetClassNameW(hWnd, ClassNameBuffer, sizeof(ClassNameBuffer));
+    if(!wcscmp(ClassName, ClassNameBuffer))
+        return TRUE;
+    return FALSE;
 }
 
 void LoadSettings(void)
