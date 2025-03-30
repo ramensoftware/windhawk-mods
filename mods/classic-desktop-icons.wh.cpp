@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.4
+// @version         1.4.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -388,54 +388,6 @@ void LoadSettings(void)
     settings.rcMargins.top = Wh_GetIntSetting(L"margin_top");
 }
 
-#ifdef _WIN64
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path"
-#else
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path-wow64"
-#endif
-
-#define COMCTL_582_SEARCH    L"microsoft.windows.common-controls_6595b64144ccf1df_5.82"
-
-/* Load the ComCtl32 module */
-HMODULE LoadComCtlModule(void)
-{
-    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
-    if (!hComCtl)
-    {
-        return NULL;
-    }
-
-    WCHAR szPath[MAX_PATH];
-    GetModuleFileNameW(hComCtl, szPath, MAX_PATH);
-
-    WCHAR szv6Path[MAX_PATH];
-    BOOL bNoCache = FALSE;
-    if (!Wh_GetStringValue(PATHCACHE_VALNAME, szv6Path, MAX_PATH))
-    {
-        bNoCache = TRUE;
-    }
-
-    /**
-      * the !bNoCache check here is nested because we only want to fall through
-      * to the cacher if the current comctl32 path is NOT 5.82.
-      */
-    if (wcsstr(szPath, COMCTL_582_SEARCH)
-    || wcsstr(szPath, L"\\Windows\\System32")
-    || wcsstr(szPath, L"\\Windows\\SysWOW64"))
-    {
-        if (!bNoCache)
-        {
-            hComCtl = LoadLibraryW(szv6Path);
-        }
-    }
-    else if (bNoCache || wcsicmp(szPath, szv6Path))
-    {
-        Wh_SetStringValue(PATHCACHE_VALNAME, szPath);
-    }
-
-    return hComCtl;
-}
-
 // Hooks used for removing the transparent selection ("marquee") rectangle
 // on only the desktop window.
 const WindhawkUtils::SYMBOL_HOOK comctl32DllHooks[] = {
@@ -482,8 +434,7 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hComCtl = LoadComCtlModule();
-
+    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
     if (!hComCtl)
     {
         Wh_Log(L"Failed to load comctl32.dll");
