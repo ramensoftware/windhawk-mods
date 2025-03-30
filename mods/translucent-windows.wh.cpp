@@ -44,7 +44,10 @@ maximized or snapped to the edge of the screen, this is caused by default by the
   $description: Fill with black color the file explorer background in order to render a clear translucent effect
 - type: none
   $name: Effects
-  $description: Windows 11 version >= 22621.xxx (22H2) is required
+  $description: >-
+      Windows 11 version >= 22621.xxx (22H2) is required.
+
+      ⚠ Be aware when changing the effect type from Acrylic BlurBehind, the affected windows will need to be reopened to see the change.
   $options:
   - none: Default
   - acrylicblur: Acrylic (BlurBehind)
