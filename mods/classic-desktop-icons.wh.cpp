@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.4
+// @version         1.4.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
