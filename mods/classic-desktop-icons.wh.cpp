@@ -438,7 +438,7 @@ HMODULE LoadComCtlModule(void)
 
 // Hooks used for removing the transparent selection ("marquee") rectangle
 // on only the desktop window.
-const WindhawkUtils::SYMBOL_HOOK comctl32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK comctl32DllHooks[] = {
     {
         // Manages drawing of the marquee selection, needs to be disabled
         {
@@ -466,7 +466,7 @@ const WindhawkUtils::SYMBOL_HOOK comctl32Hooks[] = {
     }
 };
 
-const WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
     {
         // Manages the working area of the desktop list view. We hook this to avoid double
         // padding when using the legacy behaviour.
