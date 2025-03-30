@@ -123,10 +123,13 @@ If you have request for new functions, suggestions or you are experiencing some 
       - none: None
       - left: Mouse left button click
       - leftDouble: Mouse left button double click
+      - leftTriple: Mouse left button triple click
       - middle: Mouse middle button click
       - middleDouble: Mouse middle button double click
+      - middleTriple: Mouse middle button triple click
       - right: Mouse right button click
       - rightDouble: Mouse right button double click
+      - rightTriple: Mouse right button triple click
       - tap: Touchscreen single tap
       - tapDouble: Touchscreen double tap
       - tapTriple: Touchscreen triple tap
@@ -1229,6 +1232,7 @@ struct MouseClick
     enum class Button
     {
         LEFT = 0,
+        RIGHT,
         MIDDLE,
         INVALID
     };
@@ -1393,12 +1397,17 @@ UINT_PTR gMouseClickTimer = (UINT_PTR)0;
 // Forward declarations
 
 bool IsTaskbarWindow(HWND hWnd);
-bool IsDoubleClick();
+bool IsSingleClick(const MouseClick::Button button);
+bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousClick, const MouseClick &currentClick);
+bool IsDoubleClick(const MouseClick::Button button);
+bool IsTripleClick(const MouseClick::Button button);
+bool IsSingleTap();
+bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick);
 bool IsDoubleTap();
 bool IsTripleTap();
 bool IsKeyPressed(int vkCode);
-void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, HWND hWnd);
-void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD);
+void ExecuteTaskbarAction(const std::wstring &mouseTriggerName);
+void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
 bool OnMouseClick(MouseClick click);
 bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
 bool GetTaskbarAutohideState();
@@ -1495,63 +1504,44 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     }
 
     // LOG_DEBUG(L"Message: 0x%x", uMsg);
+    LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
 
-    LRESULT result = 0;
-    switch (uMsg)
+    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN);
+    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN);
+    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN);
+    const bool isLeftDoubleClick = (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
+    const bool isRightDoubleClick = (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
+    const bool isMiddleDoubleClick = (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
+    if ((g_taskbarVersion == WIN_10_TASKBAR) &&
+        (isLeftButton || isRightButton || isMiddleButton || isLeftDoubleClick || isRightDoubleClick || isMiddleDoubleClick))
     {
-    // catch middle mouse button on both main and secondary taskbars
-    case WM_NCMBUTTONDOWN:
-    case WM_MBUTTONDOWN:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::MIDDLE, hWnd)))
+        MouseClick::Button button;
+        if (isLeftButton || isLeftDoubleClick)
         {
-            result = 0;
+            button = MouseClick::Button::LEFT;
+        }
+        else if (isRightButton || isRightDoubleClick)
+        {
+            button = MouseClick::Button::RIGHT;
         }
         else
         {
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            button = MouseClick::Button::MIDDLE;
         }
-        break;
 
-    case WM_LBUTTONDBLCLK:
-    case WM_NCLBUTTONDBLCLK:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)) &&
-            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)))
+        MouseClick::Type type = MouseClick::GetPointerType(wParam, lParam);
+        OnMouseClick(MouseClick(wParam, lParam, type, button, hWnd));
+        if (isLeftDoubleClick || isRightDoubleClick || isMiddleDoubleClick)
         {
-            result = 0;
+            OnMouseClick(MouseClick(wParam, lParam, type, button, hWnd));
         }
-        else
-        {
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        }
-        break;
-
-    case WM_LBUTTONDOWN:
-    case WM_NCLBUTTONDOWN:
-        if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(0, GetMessageExtraInfo()), MouseClick::Button::LEFT, hWnd)))
-        {
-            result = 0;
-        }
-        else
-        {
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        }
-        break;
-
-    case WM_NCDESTROY:
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-
+    }
+    else if (WM_NCDESTROY == uMsg)
+    {
         if (hWnd != g_hTaskbarWnd)
         {
             g_secondaryTaskbarWindows.erase(hWnd);
         }
-        break;
-
-    default:
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        break;
     }
 
     return result;
@@ -1569,21 +1559,30 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
         if (IsTaskbarWindow(hRootWnd))
         {
-            if (IS_POINTER_THIRDBUTTON_WPARAM(wParam) &&
-                OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), MouseClick::Button::MIDDLE, hRootWnd)))
+            MouseClick::Button button = MouseClick::Button::INVALID;
+            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
             {
-                return 0;
+                button = MouseClick::Button::LEFT;
             }
-            else if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam) &&
-                     OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), MouseClick::Button::LEFT, hRootWnd)))
+            else if (IS_POINTER_SECONDBUTTON_WPARAM(wParam))
             {
-                return 0;
+                button = MouseClick::Button::RIGHT;
             }
+            else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MIDDLE;
+            }
+            else
+            {
+                break;
+            }
+
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd));
         }
         break;
     }
 
-    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
+    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
 }
 
 BOOL SubclassTaskbarWindow(HWND hWnd)
@@ -2736,14 +2735,21 @@ bool IsTaskbarWindow(HWND hWnd)
     }
 }
 
-bool IsDoubleClick()
+bool IsSingleClick(const MouseClick::Button button)
+{
+    LOG_TRACE();
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
+    return (currentClick.type == MouseClick::Type::MOUSE) && (currentClick.button == button);
+}
+
+bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousClick, const MouseClick &currentClick)
 {
     LOG_TRACE();
 
-    const MouseClick &previousClick = g_mouseClickQueue[-2];
-    const MouseClick &currentClick = g_mouseClickQueue[-1];
-
-    if (previousClick.type != MouseClick::Type::MOUSE || currentClick.type != MouseClick::Type::MOUSE)
+    if (previousClick.type != MouseClick::Type::MOUSE ||
+        currentClick.type != MouseClick::Type::MOUSE ||
+        previousClick.button != button ||
+        currentClick.button != button)
     {
         return false;
     }
@@ -2760,6 +2766,27 @@ bool IsDoubleClick()
                   abs(previousClick.position.y - currentClick.position.y) <= MulDiv(GetSystemMetrics(SM_CYDOUBLECLK), dpi, 96) &&
                   ((currentClick.timestamp - previousClick.timestamp) <= GetDoubleClickTime());
     return result;
+}
+
+bool IsDoubleClick(const MouseClick::Button button)
+{
+    LOG_TRACE();
+    const MouseClick &previousClick = g_mouseClickQueue[-2];
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
+    return IsDoubleClick(button, previousClick, currentClick);
+}
+
+bool IsTripleClick(const MouseClick::Button button)
+{
+    LOG_TRACE();
+    return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleClick(button, g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
+}
+
+bool IsSingleTap()
+{
+    LOG_TRACE();
+    const MouseClick &currentClick = g_mouseClickQueue[-1];
+    return (currentClick.type == MouseClick::Type::TOUCH) && (currentClick.button == MouseClick::Button::LEFT);
 }
 
 bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick)
@@ -2810,7 +2837,7 @@ bool IsKeyPressed(int vkCode)
     return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
 }
 
-void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
+void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
 {
     if (!KillTimer(NULL, gMouseClickTimer))
     {
@@ -2818,20 +2845,69 @@ void CALLBACK ProcessTripleTap(HWND, UINT, UINT_PTR, DWORD)
     }
     gMouseClickTimer = 0;
 
-    if (IsTripleTap())
+    // mouse left button clicks
+    if (IsTripleClick(MouseClick::Button::LEFT)) // should never happen
     {
-        ExecuteTaskbarAction(L"tapTriple", g_mouseClickQueue[-1].hWnd);
+        ExecuteTaskbarAction(L"leftTriple");
     }
-    else
+    else if (IsDoubleClick(MouseClick::Button::LEFT))
     {
-        ExecuteTaskbarAction(L"tapDouble", g_mouseClickQueue[-1].hWnd);
+        ExecuteTaskbarAction(L"leftDouble");
     }
-    g_mouseClickQueue.clear();
+    else if (IsSingleClick(MouseClick::Button::LEFT))
+    {
+        ExecuteTaskbarAction(L"left");
+    }
+
+    // mouse right button clicks
+    else if (IsTripleClick(MouseClick::Button::RIGHT)) // should never happen
+    {
+        ExecuteTaskbarAction(L"rightTriple");
+    }
+    else if (IsDoubleClick(MouseClick::Button::RIGHT))
+    {
+        ExecuteTaskbarAction(L"rightDouble");
+    }
+    else if (IsSingleClick(MouseClick::Button::RIGHT))
+    {
+        ExecuteTaskbarAction(L"right");
+    }
+
+    // mouse middle button clicks
+    else if (IsTripleClick(MouseClick::Button::MIDDLE)) // should never happen
+    {
+        ExecuteTaskbarAction(L"middleTriple");
+    }
+    else if (IsDoubleClick(MouseClick::Button::MIDDLE))
+    {
+        ExecuteTaskbarAction(L"middleDouble");
+    }
+    else if (IsSingleClick(MouseClick::Button::MIDDLE))
+    {
+        ExecuteTaskbarAction(L"middle");
+    }
+
+    // touchscreen tap
+    else if (IsTripleTap()) // should never happen
+    {
+        ExecuteTaskbarAction(L"tapTriple");
+    }
+    else if (IsDoubleTap())
+    {
+        ExecuteTaskbarAction(L"tapDouble");
+    }
+    else if (IsSingleTap())
+    {
+        ExecuteTaskbarAction(L"tapSingle");
+    }
 }
 
-void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, HWND hWnd)
+void ExecuteTaskbarAction(const std::wstring &mouseTriggerName)
 {
     LOG_TRACE();
+
+    HWND hWnd = g_mouseClickQueue[-1].hWnd;
+    g_mouseClickQueue.clear();
 
     LOG_DEBUG(L"Searching for action for trigger: %s", mouseTriggerName.c_str());
     for (const auto &triggerAction : g_settings.triggerActions)
@@ -2879,48 +2955,40 @@ bool OnMouseClick(MouseClick click)
         return false;
     }
 
-    // directly handle middle click
-    if (click.button == MouseClick::Button::MIDDLE)
+    // if there is already a timer running, kill it (one click becomes double click, etc.)
+    if (gMouseClickTimer != NULL)
     {
-        ExecuteTaskbarAction(L"middle", click.hWnd);
+        if (!KillTimer(NULL, gMouseClickTimer))
+        {
+            LOG_ERROR(L"Failed to kill triple click timer");
+        }
+        gMouseClickTimer = NULL;
     }
-    // buffer left clicks to detect double and triple clicks
-    else if (click.button == MouseClick::Button::LEFT)
-    {
-        g_mouseClickQueue.push_back(click);
 
-        // mouse supports only double and middle click, touch supports double and triple taps (clicks)
-        if (IsTripleTap())
-        {
-            if (gMouseClickTimer != 0)
-            {
-                if (!KillTimer(NULL, gMouseClickTimer))
-                {
-                    LOG_ERROR(L"Failed to kill triple click timer");
-                }
-                gMouseClickTimer = 0;
-            }
-            // even though ProcessTripleTap callback should be called within this thread, just to be sure and avoid race condition,
-            // clear the queue to avoid executing the action twice
-            g_mouseClickQueue.clear();
-            ExecuteTaskbarAction(L"tripleTap", click.hWnd);
-        }
-        else if (IsDoubleTap())
-        {
-            // setup triple click timer if not running already
-            // if within given time another tap is detected, triple tap (middle click) is executed, else double click is executed
-            if (gMouseClickTimer == 0)
-            {
-                gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessTripleTap);
-            }
-        }
-        else if (IsDoubleClick())
-        {
-            ExecuteTaskbarAction(L"leftDouble", click.hWnd);
-            g_mouseClickQueue.clear();
-        }
+    if (IsTripleClick(MouseClick::Button::LEFT))
+    {
+        ExecuteTaskbarAction(L"leftTriple");
     }
-    return false;
+    else if (IsTripleClick(MouseClick::Button::RIGHT))
+    {
+        ExecuteTaskbarAction(L"rightTriple");
+    }
+    else if (IsTripleClick(MouseClick::Button::MIDDLE))
+    {
+        ExecuteTaskbarAction(L"middleTriple");
+    }
+    else if (IsTripleTap())
+    {
+        ExecuteTaskbarAction(L"tapTriple");
+    }
+    else
+    {
+        // single or double click -> chance to become double/triple click
+        g_mouseClickQueue.push_back(click);
+        gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessDelayedMouseClick);
+    }
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////
