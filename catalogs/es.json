@@ -3816,6 +3816,27 @@
                 "version": "1.0.0"
             }
         },
+        "translucent-windows": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1743352526000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1743352526000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Undisputed00x",
+                "compilerOptions": "-ldwmapi -luxtheme",
+                "description": "Enables native translucent effects on windows",
+                "github": "https://github.com/Undisputed00x",
+                "include": [
+                    "*"
+                ],
+                "name": "Translucent Windows",
+                "version": "1.0"
+            }
+        },
         "transparent-screensaver-fix": {
             "details": {
                 "defaultSorting": 3762,
