@@ -185,14 +185,18 @@ DwmSetWindowAttribute_t originalDwmSetWindowAttribute = nullptr;
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    // Override Win11, TaskMgr explorer calls
+    // Override Win11 File Explorer, W11 Task Manager or W11 Snipping Tool calls
     if(g_BgType == BlurBehind && (IsWindowClass(hWnd, L"CabinetWClass")))
         return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
-    // Apply MicaAlt or Acrylic to TaskMgr only when Windows tries to render default Mica
-    else if(g_BgType == AcrylicSystemBackdrop && IsWindowClass(hWnd,  L"TaskManagerWindow") && dwAttribute == SYSTEMBACKDROP_TYPE)
-        return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
-    else if(g_BgType == MicaAlt && IsWindowClass(hWnd,  L"TaskManagerWindow") && dwAttribute == SYSTEMBACKDROP_TYPE)
-        return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TABBEDWINDOW, sizeof(TABBEDWINDOW));
+    else if((IsWindowClass(hWnd,  L"TaskManagerWindow") || IsWindowClass(hWnd,  L"XamlWindow")) && dwAttribute == SYSTEMBACKDROP_TYPE)
+    {
+        if(g_BgType == AcrylicSystemBackdrop)
+            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
+        else if(g_BgType == MicaAlt)
+            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TABBEDWINDOW, sizeof(TABBEDWINDOW));
+        else if(g_BgType == Mica)
+            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &MAINWINDOW, sizeof(MAINWINDOW));
+    }
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
