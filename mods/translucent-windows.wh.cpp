@@ -185,10 +185,10 @@ DwmSetWindowAttribute_t originalDwmSetWindowAttribute = nullptr;
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    // Override Win11 File Explorer, W11 Task Manager or W11 Snipping Tool calls
+    // Override Win11 File Explorer, W11 Task Manager and W11 Snipping Tool calls
     if(g_BgType == BlurBehind && (IsWindowClass(hWnd, L"CabinetWClass")))
         return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
-    else if((IsWindowClass(hWnd,  L"TaskManagerWindow") || IsWindowClass(hWnd,  L"XamlWindow")) && dwAttribute == SYSTEMBACKDROP_TYPE)
+    else if((IsWindowClass(hWnd, L"TaskManagerWindow") || IsWindowClass(hWnd, L"XamlWindow")) && dwAttribute == SYSTEMBACKDROP_TYPE)
     {
         if(g_BgType == AcrylicSystemBackdrop)
             return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
@@ -203,7 +203,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
 HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMarInset)
 {
     // Override Win11 Taskmgr, explorer, aerowizard calls
-    if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd,  L"NativeHWNDHost") || IsWindowClass(hWnd,  L"TaskManagerWindow"))
+    if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"NativeHWNDHost") || IsWindowClass(hWnd, L"TaskManagerWindow"))
     {
         MARGINS margins = {-1, -1, -1, -1};
         return OriginalDwmExtendFrameIntoClientArea(hWnd, &margins);
@@ -282,8 +282,8 @@ void ApplyFrameExtension(HWND hWnd)
 
 void EnableBlurBehind(HWND hWnd)
 {
-    // Not to interfere with Windows Terminal acrylic
-    if(!(IsWindowClass(hWnd,  L"CASCADIA_HOSTING_WINDOW_CLASS")))
+    // Does not interfere with the Windows Terminal own acrylic
+    if(!(IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS")))
     {
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
 
