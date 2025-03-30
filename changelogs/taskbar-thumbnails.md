@@ -1,3 +1,7 @@
+## 1.1.4 ([Mar 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1cbf79b584cf28b6428e668ff7b8f05a71eef41a/mods/taskbar-thumbnails.wh.cpp))
+
+* Fixed compatibility with update KB5053656 for Windows 11 version 24H2.
+
 ## 1.1.3 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4dc720624324f36a1b24adc10f5794587e94891e/mods/taskbar-thumbnails.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.
