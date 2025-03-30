@@ -508,8 +508,8 @@ BOOL Wh_ModInit(void)
     {
         if (!WindhawkUtils::HookSymbols(
             hComCtl,
-            comctl32Hooks,
-            ARRAYSIZE(comctl32Hooks)
+            comctl32DllHooks,
+            ARRAYSIZE(comctl32DllHooks)
         ))
         {
             Wh_Log(L"Failed to hook one or more symbol functions in comctl32.dll");
@@ -519,8 +519,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hShell32,
-        shell32Hooks,
-        ARRAYSIZE(shell32Hooks)
+        shell32DllHooks,
+        ARRAYSIZE(shell32DllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in shell32.dll");
