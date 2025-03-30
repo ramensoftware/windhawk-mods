@@ -1,3 +1,8 @@
+## 1.4.1 ([Mar 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cc7ca22005465e4a90c14158515cc3dccc0fe0ee/mods/classic-desktop-icons.wh.cpp))
+
+Remove unneeded `LoadComCtlModule` function, Explorer is always
+manifested to load Common Controls 6.0
+
 ## 1.4 ([Mar 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cbb294bc3f2c7de8473dd7e209eabd12e788c2cf/mods/classic-desktop-icons.wh.cpp))
 
 - Control classic selection style with an option
