@@ -434,7 +434,7 @@ void RestoreWindowCustomizations(HWND hWnd)
     if(!(IsWindowClass(hWnd,  L"TaskManagerWindow")))
     {
         MARGINS margins = { 0, 0, 0, 0 };
-        DwmExtendFrameIntoClientArea(hWnd, &m);
+        DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
 }
 
