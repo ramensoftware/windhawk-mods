@@ -41,7 +41,10 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 /*
 - ThemeBackground: FALSE
   $name: Optimize windows theme
-  $description: Fill with black color the file explorer background in order to render a clear translucent effect
+  $description: >-
+      Fill with black color the file explorer background in order to render a clear translucent effect.
+
+      ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
 - type: none
   $name: Effects
   $description: >-
