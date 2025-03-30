@@ -39,7 +39,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 
 // ==WindhawkModSettings==
 /*
-- ThemeBackground: TRUE
+- ThemeBackground: FALSE
   $name: Optimize windows theme
   $description: Fill with black color the file explorer background in order to render a clear translucent effect
 - type: none
@@ -51,9 +51,12 @@ maximized or snapped to the edge of the screen, this is caused by default by the
   - acrylicsystem: Acrylic (SystemBackdrop)
   - mica: Mica
   - mica_tabbed: MicaAlt
-- ExtendFrame: TRUE
+- ExtendFrame: FALSE
   $name: Extend effects into entire window
-  $description: Extends the effects into the entire window background using DwmExtendFrameIntoClientArea.
+  $description: >-
+    Extends the effects into the entire window background using DwmExtendFrameIntoClientArea. (Required for BlurBehind)
+    
+    ⚠ Be aware when disabling this option, the affected windows will need to be reopened to see the change.
 */
 // ==/WindhawkModSettings==
 
@@ -282,7 +285,7 @@ void EnableBlurBehind(HWND hWnd)
         attrib.Attrib = WCA_ACCENT_POLICY;
         attrib.pvData = &accent;
         attrib.cbData = sizeof(accent);
-
+        
         auto SetWindowCompositionAttribute = (pSetWindowCompositionAttribute)
             GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
         if (SetWindowCompositionAttribute) 
@@ -467,7 +470,7 @@ BOOL Wh_ModInit(void)
     return TRUE;
 }
 
-BOOL Wh_ModAfterInit() 
+void Wh_ModAfterInit() 
 {
     #ifdef _WIN64
         const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
@@ -477,7 +480,6 @@ BOOL Wh_ModAfterInit()
     bool isInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
     if (!isInitialThread)
         ApplyForExistingWindows();
-    return TRUE;
 }
 
 void Wh_ModUninit(void) 
@@ -488,7 +490,6 @@ void Wh_ModUninit(void)
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
 {
     Wh_Log(L"SettingsChanged");
-    LoadSettings();
     *bReload = TRUE;
     return TRUE;
 }
