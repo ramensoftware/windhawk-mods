@@ -47,7 +47,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
   $description: >-
       Windows 11 version >= 22621.xxx (22H2) is required.
 
-      ⚠ Be aware when changing the effect type from Acrylic BlurBehind, the affected windows will need to be reopened to see the change.
+      ⚠ Be aware when changing the effect type from Acrylic BlurBehind or back to Default, the affected windows will need to be reopened to see the change.
   $options:
   - none: Default
   - acrylicblur: Acrylic (BlurBehind)
@@ -59,7 +59,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
   $description: >-
     Extends the effects into the entire window background using DwmExtendFrameIntoClientArea. (Required for BlurBehind)
     
-    ⚠ Be aware when disabling this option, the affected windows will need to be reopened to see the change.
+    ⚠ Be aware when disabling this option with Acrylic BlurBehind effects enabled, the affected windows will need to be reopened to see the change.
 */
 // ==/WindhawkModSettings==
 
@@ -69,8 +69,9 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 #include <string>
 
 struct{
-    BOOL FillBg = TRUE;
-    BOOL ExtendFrame = TRUE;
+    BOOL FillBg = FALSE;
+    BOOL ExtendFrame = FALSE;
+    BOOL Unload = FALSE;
 } g_settings;
 
 enum BACKGROUNDTYPE
@@ -136,6 +137,7 @@ void EnableMicaTabbed(HWND);
 void ApplyForExistingWindows();
 BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
 BOOL IsWindowClass(HWND, LPCWSTR);
+void RestoreRestoreWindowCustomizations(HWND);
 void LoadSettings();
 
 using NtUserCreateWindowEx_t =
@@ -338,6 +340,15 @@ BOOL IsWindowEligible(HWND hWnd)
     return TRUE;
 }
 
+BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
+{
+    WCHAR ClassNameBuffer[256]; 
+    GetClassNameW(hWnd, ClassNameBuffer, sizeof(ClassNameBuffer));
+    if(!wcscmp(ClassName, ClassNameBuffer))
+        return TRUE;
+    return FALSE;
+}
+
 void NewWindowShown(HWND hWnd) 
 {
     if(g_BgType == BlurBehind && IsWindowEligible(hWnd) && g_settings.ExtendFrame)
@@ -404,6 +415,8 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
         HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
         if (hParentWnd && hParentWnd != GetDesktopWindow())
             return TRUE;
+        else if(g_settings.Unload)
+            RestoreRestoreWindowCustomizations(hWnd);
         else
             NewWindowShown(hWnd);
     }
@@ -415,13 +428,14 @@ void ApplyForExistingWindows()
     EnumWindows(EnumWindowsProc, 0);
 }
 
-BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
+void RestoreRestoreWindowCustomizations(HWND hWnd)
 {
-    WCHAR ClassNameBuffer[256]; 
-    GetClassNameW(hWnd, ClassNameBuffer, sizeof(ClassNameBuffer));
-    if(!wcscmp(ClassName, ClassNameBuffer))
-        return TRUE;
-    return FALSE;
+    // Restore Frame Extension
+    if(!(IsWindowClass(hWnd,  L"TaskManagerWindow")))
+    {
+        MARGINS margins = { 0, 0, 0, 0 };
+        DwmExtendFrameIntoClientArea(hWnd, &m);
+    }
 }
 
 void LoadSettings(void)
@@ -487,7 +501,8 @@ void Wh_ModAfterInit()
 
 void Wh_ModUninit(void) 
 {
-
+    g_settings.Unload = TRUE;
+    ApplyForExistingWindows();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
