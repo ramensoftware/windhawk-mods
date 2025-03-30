@@ -137,7 +137,7 @@ void EnableMicaTabbed(HWND);
 void ApplyForExistingWindows();
 BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
 BOOL IsWindowClass(HWND, LPCWSTR);
-void RestoreRestoreWindowCustomizations(HWND);
+void RestoreWindowCustomizations(HWND);
 void LoadSettings();
 
 using NtUserCreateWindowEx_t =
@@ -416,7 +416,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
         if (hParentWnd && hParentWnd != GetDesktopWindow())
             return TRUE;
         else if(g_settings.Unload)
-            RestoreRestoreWindowCustomizations(hWnd);
+            RestoreWindowCustomizations(hWnd);
         else
             NewWindowShown(hWnd);
     }
@@ -428,7 +428,7 @@ void ApplyForExistingWindows()
     EnumWindows(EnumWindowsProc, 0);
 }
 
-void RestoreRestoreWindowCustomizations(HWND hWnd)
+void RestoreWindowCustomizations(HWND hWnd)
 {
     // Restore Frame Extension
     if(!(IsWindowClass(hWnd,  L"TaskManagerWindow")))
