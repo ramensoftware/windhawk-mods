@@ -2656,7 +2656,7 @@
                 "published": 1739537994000,
                 "rating": 6,
                 "ratingUsers": 2,
-                "updated": 1739537994000,
+                "updated": 1743441688000,
                 "users": 268
             },
             "metadata": {
@@ -2668,7 +2668,7 @@
                     "*"
                 ],
                 "name": "Restore Button Pulse Animation",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "ribbon-caption-icon-fix": {
