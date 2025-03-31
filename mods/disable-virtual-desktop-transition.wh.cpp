@@ -1,28 +1,32 @@
 // ==WindhawkMod==
 // @id              disable-virtual-desktop-transition
 // @name            Disable Virtual Desktop Transition Animation
-// @description     Disables the animation when switching between virtual desktops on Windows 10.
-// @version         1.0
+// @description     Disables the animation when switching between virtual desktops on Windows 10 and Windows 11.
+// @version         1.1
 // @author          Isabella Lulamoon (kawapure)
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
 // @homepage        https://kawapure.github.io
 // @include         dwm.exe
+// @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lkernel32 -lwevtapi
+// @compilerOptions -lkernel32 -lwevtapi -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Disable Virtual Desktop Transition Animation
 
-This mod disables the animation seen when switching between virtual desktops in Windows 10.
+This mod disables the animation seen when switching between virtual desktops in Windows 10 and Windows 11.
 
 ## ⚠ Important usage note ⚠ 
   
-In order to use this mod, you must allow Windhawk to inject into the **dwm.exe** 
-system process. To do so, add it to the process inclusion list in the advanced 
+In order to use this mod, you must allow Windhawk to inject into the **dwm.exe**
+system process on Windows 10. To do so, add it to the process inclusion list in the advanced 
 settings. If you do not do this, it will silently fail to inject.
+
+This step is only required for using this mod on Windows 10. It should work on Windows 11
+without this step because they moved the animation to Explorer in Windows 11.
   
 ![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png) 
 */
@@ -32,12 +36,14 @@ settings. If you do not do this, it will silently fail to inject.
 #include <minwindef.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
+#include <windows.h>
 #include <winevt.h>
 #include <processthreadsapi.h>
+#include <shlwapi.h>
 
 LPCWSTR g_kMsgBoxTitle = L"Disable Virtual Desktop Transition Animation (Windhawk mod)";
 
-LPCWSTR g_kNoInjectMsg =
+LPCWSTR g_kNoInjectDwmMsg =
     L"DWM was unexpectedly restarted. The mod will not be reinjected to avoid a potential "
     L"crash loop. Please disable and re-enable the mod to force reinjection.";
 
@@ -107,9 +113,11 @@ public:
     inline static bool IsWindows11OrGreater()
     {
         return GetVersionInfo()->dwMajorVersion >= 10 &&
-               GetVersionInfo()->dwMinorVersion >= 22000;
+               GetVersionInfo()->dwBuildNumber >= 22000;
     }
 };
+
+//=== WINDOWS 10 HOOKS ============================================================================
 
 __declspec(noinline) HRESULT CVirtualDesktop__Initialize(void *pThis, void *a2)
 {
@@ -125,6 +133,8 @@ void *__cdecl CVirtualDesktopSwitch__CVirtualDesktopSwitch_hook(void *pThis)
 {
     void *pAnim = CVirtualDesktopSwitch__CVirtualDesktopSwitch_orig(pThis);
 
+    Wh_Log(L"hi");
+
     /*
      * CVirtualDesktop inherits the Initialize() method from CStoryboard, so we need to
      * create our own copy of the virtual function table to replace this with our own
@@ -137,6 +147,9 @@ void *__cdecl CVirtualDesktopSwitch__CVirtualDesktopSwitch_hook(void *pThis)
 
     return pAnim;
 }
+
+//=================================================================================================
+
 
 bool HasDwminitWarningRecently()
 {
@@ -181,17 +194,7 @@ EXTERN_C void CALLBACK MsgDwmStartupReject()
 {
     MessageBoxW(
         nullptr,
-        g_kNoInjectMsg,
-        g_kMsgBoxTitle,
-        MB_OK
-    );
-}
-
-EXTERN_C void CALLBACK MsgWindows11Unsupported()
-{
-    MessageBoxW(
-        nullptr,
-        L"Windows 11 is not currently supported by this mod.",
+        g_kNoInjectDwmMsg,
         g_kMsgBoxTitle,
         MB_OK
     );
@@ -207,11 +210,23 @@ EXTERN_C void CALLBACK MsgWindowsVersionUnsupported()
     );
 }
 
-EXTERN_C void CALLBACK MsgSymbolDownloadFailure()
+EXTERN_C void CALLBACK MsgSymbolDownloadFailureUdwm()
 {
     MessageBoxW(
         nullptr,
         L"Failed to install symbol hooks for uDWM.dll. Symbols may not be available "
+        L"for your version of Windows yet, or there was likely an issue connecting to "
+        L"the internet.",
+        g_kMsgBoxTitle,
+        MB_OK
+    );
+}
+
+EXTERN_C void CALLBACK MsgSymbolDownloadFailureTwinuipcshell()
+{
+    MessageBoxW(
+        nullptr,
+        L"Failed to install symbol hooks for TWinUI.PCShell.dll. Symbols may not be available "
         L"for your version of Windows yet, or there was likely an issue connecting to "
         L"the internet.",
         g_kMsgBoxTitle,
@@ -227,6 +242,9 @@ BOOL Wh_ModInit();
  *
  * Additionally, rundll32 can fail to work for a couple seconds after DWM starts up.
  * I am not sure why this is, but in these cases, we need to additionally defer execution.
+ *
+ * For convenience, this behaviour is still used for displaying message boxes to the user
+ * when the mod is injected into Explorer on Windows 11.
  *
  * @param szProcedureName  Name of the procedure in this module to execute.
  * @param fDeferExec       Defer execution via CMD
@@ -270,23 +288,88 @@ void OpenSafeStartupMessageBox(LPCWSTR szProcedureName, bool fDeferExec = false)
     );
 }
 
+bool InjectIntoDwm()
+{
+    return !CVersionHelper::IsWindows11OrGreater() && CVersionHelper::IsWindows10OrGreater();
+}
+
+bool InjectIntoExplorer()
+{
+    return CVersionHelper::IsWindows11OrGreater();
+}
+
+//=== WINDOWS 11 HOOKS ============================================================================
+
+HRESULT (*CVirtualDesktopManager__SwitchDesktop)(void *pThis, struct IVirtualDesktop *pVirtualDesktop);
+HRESULT (*CVirtualDesktopManager__SwitchDesktopWithAnimation_orig)(void *pThis, struct IVirtualDesktop *pVirtualDesktop);
+HRESULT CVirtualDesktopManager__SwitchDesktopWithAnimation_hook(void *pThis, struct IVirtualDesktop *pVirtualDesktop)
+{
+    return CVirtualDesktopManager__SwitchDesktop(pThis, pVirtualDesktop);
+}
+
+// Whether or not we should lie about the user having animations enabled.
+bool g_fLieAboutClientAreaAnimation = false;
+
+// SPI hook to lie about client area animation.
+using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
+SystemParametersInfoW_t SystemParametersInfo_orig;
+WINBOOL SystemParametersInfoW_hook(UINT uiAction,
+                              UINT uiParam,
+                              PVOID pvParam,
+                              UINT fWinIni)
+{
+    if (g_fLieAboutClientAreaAnimation && uiAction == SPI_GETCLIENTAREAANIMATION)
+    {
+        if (pvParam)
+        {
+            *(BOOL *)pvParam = FALSE;
+        }
+
+        return FALSE;
+    }
+
+    return SystemParametersInfo_orig(uiAction, uiParam, pvParam, fWinIni);
+}
+
+HRESULT (*CVirtualDesktopHotkeyHandler___CycleInDirection_orig)(void *pThis, int eDirection);
+HRESULT CVirtualDesktopHotkeyHandler___CycleInDirection_hook(void *pThis, int eDirection)
+{
+    g_fLieAboutClientAreaAnimation = true;
+    HRESULT hr = CVirtualDesktopHotkeyHandler___CycleInDirection_orig(pThis, eDirection);
+    g_fLieAboutClientAreaAnimation = false;
+    return hr;
+}
+
+//=================================================================================================
+
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit()
 {
-    if (HasDwminitWarningRecently())
+    WCHAR szLoadedModule[MAX_PATH];
+    GetModuleFileNameW(GetModuleHandle(0), szLoadedModule, sizeof(szLoadedModule));
+    Wh_Log(L"Loaded into module: %s", szLoadedModule);
+
+    if (StrStrI(szLoadedModule, L"\\explorer.exe") != nullptr && InjectIntoDwm())
     {
-        Wh_Log(L"%s", g_kNoInjectMsg);
+        // We load into explorer.exe only on Windows 11 since the virtual desktop
+        // animation code was moved to TWinUI.PCShell and is hosted by the shell.
+        return FALSE;
+    }
+    else if (StrStrI(szLoadedModule, L"\\dwm.exe") != nullptr && InjectIntoExplorer())
+    {
+        // We load into dwm.exe in Windows 10, but not Windows 11.
+        return FALSE;
+    }
+
+    if (InjectIntoDwm() && HasDwminitWarningRecently())
+    {
+        Wh_Log(L"%s", g_kNoInjectDwmMsg);
         OpenSafeStartupMessageBox(L"MsgDwmStartupReject", true);
         return FALSE;
     }
 
-    if (CVersionHelper::IsWindows11OrGreater())
-    {
-        OpenSafeStartupMessageBox(L"MsgWindows11Unsupported");
-        return FALSE;
-    }
-    else if (!CVersionHelper::IsWindows10OrGreater())
+    if (!CVersionHelper::IsWindows10OrGreater())
     {
         OpenSafeStartupMessageBox(L"MsgWindowsVersionUnsupported");
         return FALSE;
@@ -294,23 +377,68 @@ BOOL Wh_ModInit()
 
     Wh_Log(L"Init");
 
-    WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
-        {
-            {
-                L"public: __cdecl CVirtualDesktopSwitch::CVirtualDesktopSwitch(void)"
-            },
-            (void **)&CVirtualDesktopSwitch__CVirtualDesktopSwitch_orig,
-            (void *)CVirtualDesktopSwitch__CVirtualDesktopSwitch_hook
-        }
-    };
-
-    if (!WindhawkUtils::HookSymbols(GetModuleHandleW(L"udwm.dll"), udwmDllHooks, ARRAYSIZE(udwmDllHooks)))
+    if (InjectIntoDwm())
     {
-        Wh_Log(L"Failed to successfully install all symbol hooks for uDWM.dll");
+        // On Windows 10, we install hooks into uDWM.
+        WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
+            {
+                {
+                    L"public: __cdecl CVirtualDesktopSwitch::CVirtualDesktopSwitch(void)"
+                },
+                (void **)&CVirtualDesktopSwitch__CVirtualDesktopSwitch_orig,
+                (void *)CVirtualDesktopSwitch__CVirtualDesktopSwitch_hook
+            }
+        };
+
+        if (!WindhawkUtils::HookSymbols(GetModuleHandleW(L"udwm.dll"), udwmDllHooks, ARRAYSIZE(udwmDllHooks)))
+        {
+            Wh_Log(L"Failed to successfully install all symbol hooks for uDWM.dll");
+            
+            OpenSafeStartupMessageBox(L"MsgSymbolDownloadFailureUdwm");
+            return FALSE;
+        };
+    }
+    else if (InjectIntoExplorer())
+    {
+        // Hook SPI for convenience:
+        WindhawkUtils::Wh_SetFunctionHookT(
+            SystemParametersInfoW, 
+            SystemParametersInfoW_hook, 
+            &SystemParametersInfo_orig
+        );
+
+        // On Windows 11, we install hooks into TWinUI.PCShell.
+        WindhawkUtils::SYMBOL_HOOK twinui_pcshellHooks[] = {
+            {
+                {
+                    L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *)"
+                },
+                (void **)&CVirtualDesktopManager__SwitchDesktopWithAnimation_orig,
+                (void *)CVirtualDesktopManager__SwitchDesktopWithAnimation_hook
+            },
+            {
+                {
+                    L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktop(struct IVirtualDesktop *)"
+                },
+                (void **)&CVirtualDesktopManager__SwitchDesktop
+            },
+            {
+                {
+                    L"private: long __cdecl CVirtualDesktopHotkeyHandler::_CycleInDirection(enum VirtualDesktopSwitchDirection)"
+                },
+                (void **)&CVirtualDesktopHotkeyHandler___CycleInDirection_orig,
+                (void *)CVirtualDesktopHotkeyHandler___CycleInDirection_hook
+            },
+        };
         
-        OpenSafeStartupMessageBox(L"MsgSymbolDownloadFailure");
-        return FALSE;
-    };
+        if (!WindhawkUtils::HookSymbols(LoadLibraryW(L"twinui.pcshell.dll"), twinui_pcshellHooks, ARRAYSIZE(twinui_pcshellHooks)))
+        {
+            Wh_Log(L"Failed to successfully install all symbol hooks for TWinUI.PCShell.dll");
+            
+            OpenSafeStartupMessageBox(L"MsgSymbolDownloadFailureTwinuipcshell");
+            return FALSE;
+        };
+    }
 
     return TRUE;
 }
