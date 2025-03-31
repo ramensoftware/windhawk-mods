@@ -408,6 +408,7 @@ BOOL Wh_ModInit()
         );
 
         // On Windows 11, we install hooks into TWinUI.PCShell.
+        // twinui.pcshell.dll
         WindhawkUtils::SYMBOL_HOOK twinui_pcshellHooks[] = {
             {
                 {
