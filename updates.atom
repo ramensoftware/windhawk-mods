@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-03-30T19:04:13.000Z</updated>
+    <updated>2025-03-31T10:45:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.6.5]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#ca9dd8c687a23f9d2ff185604e937009269aea4e</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2025-03-31T10:45:10.000Z</updated>
+        <content type="html"><![CDATA[<p>Revise <code>LoadComCtlModule</code> to not use registry caching</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Desktop Icons 1.4.1]]></title>
         <id>https://windhawk.net/mods/classic-desktop-icons#cc7ca22005465e4a90c14158515cc3dccc0fe0ee</id>
@@ -288,19 +299,6 @@ settings. If you do not do this, it will silently fail to inject.</p>
         <id>https://windhawk.net/mods/taskbar-left-click-cycle#7f2b9d2f53250388d0b9417ede518d0c13f4a1a5</id>
         <link href="https://windhawk.net/mods/taskbar-left-click-cycle"/>
         <updated>2025-03-22T01:33:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar minimize/restore on scroll 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-button-scroll#45104fb3435b9364f9905ad4e1bd8053739ec139</id>
-        <link href="https://windhawk.net/mods/taskbar-button-scroll"/>
-        <updated>2025-03-22T00:47:23.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an incompatibility with recent Windows 11 preview builds.</li>
 </ul>]]></content>

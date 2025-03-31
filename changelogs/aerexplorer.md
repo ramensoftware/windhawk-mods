@@ -1,3 +1,7 @@
+## 1.6.5 ([Mar 31, 2025](https://github.com/ramensoftware/windhawk-mods/blob/ca9dd8c687a23f9d2ff185604e937009269aea4e/mods/aerexplorer.wh.cpp))
+
+Revise `LoadComCtlModule` to not use registry caching
+
 ## 1.6.4 ([Aug 25, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a5291e5c748ccaf5b11b04412683a5d23601b9fc/mods/aerexplorer.wh.cpp))
 
 Seamless CPL transition without forcing separate process mode
