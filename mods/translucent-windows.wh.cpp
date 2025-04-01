@@ -537,8 +537,8 @@ void RestoreWindowCustomizations(HWND hWnd)
         MARGINS margins = { 0, 0, 0, 0 };
         DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
-    // Manually restore border color
-    g_settings.BorderColor = 0x00463A33;
+    // Restore border color
+    g_settings.BorderColor = COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, BORDER_COLOR , &g_settings.BorderColor, sizeof(g_settings.BorderColor));
 }
 
