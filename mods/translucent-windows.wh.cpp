@@ -68,7 +68,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - titlerbarstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = FF0000 (transparency values not available)
+      $description: Color in RGB format e.g. Red = FF0000 or SystemAccentColor = 1
   $name: Titlebar color
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
@@ -79,7 +79,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - titlerbarcolorstyles: "FF0000"
       $name: Color
-      $description: Color in hexadecimal RGB format e.g. Red = FF0000 (transparency values not available)
+      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
   $name: Titlebar text color
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required.
@@ -92,7 +92,12 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - borderstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = FF0000 or Transparent = 0
+      $description: >-
+        Color in RGB format e.g. Red = FF0000
+
+        Transparent = 0
+        
+        SystemAccentColor = 1
     - MenuBorderColor: FALSE
       $name: Expand colored border to classic context menus
       $description: Enable this option of you want colored borders on windows classic context menus
@@ -164,6 +169,8 @@ static const UINT NONE = 1; // DWMSBT_NONE
 static const UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static const UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
 static const UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
+static const UINT COLOR_DEFAULT = 0xFFFFFFFF; // DWMWA_COLOR_DEFAULT
+static const UINT COLOR_NONE = 0xFFFFFFFE; // DWMWA_COLOR_NONE
 
 
 using PUNICODE_STRING = PVOID;
@@ -535,15 +542,31 @@ void RestoreWindowCustomizations(HWND hWnd)
     DwmSetWindowAttribute(hWnd, BORDER_COLOR , &g_settings.BorderColor, sizeof(g_settings.BorderColor));
 }
 
-BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) {
-    
+BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
+{
     if (!hexColor)
         return FALSE;
 
     if (hexColor[0] == L'0' && hexColor[1] == L'\0') {
-        outColor = 0xFFFFFFFE; // Transparent
+        outColor = COLOR_NONE;
         return TRUE;
     }
+    else if (hexColor[0] == L'1' && hexColor[1] == L'\0') {
+        DWORD colorization;
+        BOOL opaque;
+        if (SUCCEEDED(DwmGetColorizationColor(&colorization, &opaque))) 
+        {
+            outColor = RGB(
+                (colorization >> 16) & 0xFF,
+                (colorization >> 8) & 0xFF,
+                colorization & 0xFF
+            );
+            return TRUE;
+        }
+        outColor = COLOR_DEFAULT;
+        return FALSE;
+    }
+
 
     LPCWSTR p = hexColor;
     INT length = 0;
