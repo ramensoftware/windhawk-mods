@@ -572,6 +572,7 @@ void LoadSettings(void)
     {
         LPCWSTR pszTitlberStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles");
         g_settings.TitlebarFlag = GetColorSetting(pszTitlberStyle, g_settings.TitlebarColor);
+        Wh_FreeStringSetting(pszTitlberStyle);
     }
 
     g_settings.BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
@@ -579,11 +580,10 @@ void LoadSettings(void)
     {
         LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"BorderColor.borderstyles");
         g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderColor);
+        Wh_FreeStringSetting(pszBorderStyle);
     }
 
-    Wh_FreeStringSetting(pszStyle);
-    Wh_FreeStringSetting(pszTitlberStyle);
-    Wh_FreeStringSetting(pszBorderStyle);
+    Wh_FreeStringSetting(pszStyle);    
 }
 
 BOOL Wh_ModInit(void) 
