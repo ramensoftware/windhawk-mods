@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              translucent-windows-fork
-// @name            Translucent Windows - Fork
+// @id              translucent-windows
+// @name            Translucent Windows
 // @description     Enables native translucent effects on windows
 // @version         1.1
 // @author          Undisputed00x
@@ -87,8 +87,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 #include <dwmapi.h>
 #include <vssym32.h>
 #include <uxtheme.h>
-#include <windhawk_api.h>
-#include <winnt.h>
 #include <string>
 
 struct{
