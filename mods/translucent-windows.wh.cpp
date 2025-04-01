@@ -70,10 +70,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Color
       $description: Color in RGB format e.g. Red = FF0000 or SystemAccentColor = 1
   $name: Titlebar color
-  $description: >-
-      Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
-
-      ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
+  $description: Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
 - TitlebarTextColor:
     - ColorTitlebarText: FALSE
       $name: Enable
@@ -85,8 +82,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       Windows 11 version >= 22000.xxx (21H2) is required.
 
       NOTE: This settings affects only Win32 windows. Since Win11 24H2 File Explorer changed titlebar text rendering to DirectWrite API. To modify the text color of File Explorer title bar, use Windhawk's File Explorer Styler mod.
-
-      ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
 - BorderColor:
     - ColorBorder: FALSE
       $name: Enable
@@ -537,12 +532,14 @@ void RestoreWindowCustomizations(HWND hWnd)
         MARGINS margins = { 0, 0, 0, 0 };
         DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
-    // Restore border color
     g_settings.BorderColor = COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, BORDER_COLOR , &g_settings.BorderColor, sizeof(g_settings.BorderColor));
     
     g_settings.TitlebarColor = COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, CAPTION_COLOR , &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
+
+    g_settings.CaptionTextColor = COLOR_DEFAULT;
+    DwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR , &g_settings.CaptionTextColor, sizeof(g_settings.CaptionTextColor));
 }
 
 BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
