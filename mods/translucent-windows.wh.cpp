@@ -185,7 +185,7 @@ void EnableSystemBackdropAcrylic(HWND);
 void EnableMica(HWND);
 void EnableMicaTabbed(HWND);
 void EnableColoredTitlebar(HWND);
-void EnableCaptioTextColor(HWND);
+void EnableCaptionTextColor(HWND);
 void EnableColoredBorder(HWND);
 void ApplyForExistingWindows();
 BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
@@ -398,7 +398,7 @@ void EnableColoredTitlebar(HWND hWnd)
     DwmSetWindowAttribute(hWnd, CAPTION_COLOR, &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
 }
 
-void EnableCaptioTextColor(HWND hWnd)
+void EnableCaptionTextColor(HWND hWnd)
 {
     DwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR, &g_settings.CaptionTextColor, sizeof(g_settings.CaptionTextColor));
 }
@@ -451,7 +451,7 @@ void NewWindowShown(HWND hWnd)
         ApplyFrameExtension(hWnd);
 
     if(g_settings.CaptionTextFlag)
-        EnableCaptioTextColor(hWnd);
+        EnableCaptionTextColor(hWnd);
 
     if(g_settings.BorderFlag)
         EnableColoredBorder(hWnd); 
