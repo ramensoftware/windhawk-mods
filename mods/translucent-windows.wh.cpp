@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id              translucent-windows
-// @name            Translucent Windows
+// @id              translucent-windows-fork
+// @name            Translucent Windows - Fork
 // @description     Enables native translucent effects on windows
-// @version         1.0
+// @version         1.1
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -27,6 +27,8 @@
     - Transparency effects enabled
     - Energy saver disabled
 #
+* It is highly recommended to use the mod with black/dark window themes like the perfect black Rectify11 theme.
+
 * Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
 Light mode theme, HDR enabled or white background behind the window can cause this. 
 This is because some GDI rendering operations do not preserve alpha channel values.
@@ -61,20 +63,42 @@ maximized or snapped to the edge of the screen, this is caused by default by the
   $name: Extend effects into entire window
   $description: >-
     Extends the effects into the entire window background using DwmExtendFrameIntoClientArea. (Required for BlurBehind)
-    
-    ⚠ Be aware when disabling this option with Acrylic BlurBehind effects enabled, the affected windows will need to be reopened to see the change.
+- TitlebarColor:
+    - ColorTitlebar: FALSE
+      $name: Enable
+    - titlerbarstyles: "FF0000"
+      $name: Color
+      $description: Color in RGB format e.g. Red = 0000FF (transparency values not available)
+  $description: >-
+      Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
+
+      ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
+- BorderColor:
+    - ColorBorder: FALSE
+      $name: Enable
+    - borderstyles: "FF0000"
+      $name: Color
+      $description: Color in RGB format e.g. Red = 0000FF (transparency values not available)
+  $description: >-
+      Windows 11 version >= 22000.xxx (21H2) is required.
 */
 // ==/WindhawkModSettings==
 
 #include <dwmapi.h>
 #include <vssym32.h>
 #include <uxtheme.h>
+#include <windhawk_api.h>
+#include <winnt.h>
 #include <string>
 
 struct{
     BOOL FillBg = FALSE;
     BOOL ExtendFrame = FALSE;
     BOOL Unload = FALSE;
+    BOOL TitlebarFlag = FALSE;
+    BOOL BorderFlag = FALSE;
+    COLORREF TitlebarColor;
+    COLORREF BorderColor;
 } g_settings;
 
 enum BACKGROUNDTYPE
@@ -112,12 +136,16 @@ WINCOMPATTRDATA attrib = {};
 DWM_BLURBEHIND bb = { 0 };
 
 static const UINT USE_IMMERSIVE_DARK_MODE = 20; // DWMWA_USE_IMMERSIVE_DARK_MODE
+static const UINT CAPTION_COLOR = 35; // DWMWA_CAPTION_COLOR
+static const UINT BORDER_COLOR = 34; // DWMWA_BORDER_COLOR
 static const UINT ENABLE = 1;
 static const UINT SYSTEMBACKDROP_TYPE = 38; // DWM_SYSTEMBACKDROP_TYPE
+static const UINT AUTO = 0; // DWMSBT_AUTO
 static const UINT NONE = 1; // DWMSBT_NONE
 static const UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static const UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
 static const UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
+
 
 using PUNICODE_STRING = PVOID;
 
@@ -137,9 +165,12 @@ void EnableBlurBehind(HWND);
 void EnableSystemBackdropAcrylic(HWND);
 void EnableMica(HWND);
 void EnableMicaTabbed(HWND);
+void EnableColoredTitlebar(HWND);
+void EnableColoredBorder(HWND);
 void ApplyForExistingWindows();
 BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
 BOOL IsWindowClass(HWND, LPCWSTR);
+BOOL GetColorSetting(LPCWSTR, COLORREF&);
 void RestoreWindowCustomizations(HWND);
 void LoadSettings();
 
@@ -185,18 +216,29 @@ DwmSetWindowAttribute_t originalDwmSetWindowAttribute = nullptr;
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    // Override Win11 File Explorer, W11 Task Manager and W11 Snipping Tool calls
-    if(g_BgType == BlurBehind && (IsWindowClass(hWnd, L"CabinetWClass")))
-        return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
-    else if((IsWindowClass(hWnd, L"TaskManagerWindow") || IsWindowClass(hWnd, L"XamlWindow")) && dwAttribute == SYSTEMBACKDROP_TYPE)
+    if(!g_settings.TitlebarFlag)
     {
-        if(g_BgType == AcrylicSystemBackdrop)
-            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
-        else if(g_BgType == MicaAlt)
-            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TABBEDWINDOW, sizeof(TABBEDWINDOW));
-        else if(g_BgType == Mica)
-            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &MAINWINDOW, sizeof(MAINWINDOW));
+        if(g_BgType == BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && g_settings.ExtendFrame && !g_settings.BorderFlag)
+            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
+        else if(g_BgType == BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && g_settings.ExtendFrame && g_settings.BorderFlag)
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+        else if(dwAttribute == SYSTEMBACKDROP_TYPE)
+        {
+            if(g_BgType == AcrylicSystemBackdrop)
+                return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
+            else if(g_BgType == MicaAlt)
+                return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TABBEDWINDOW, sizeof(TABBEDWINDOW));
+            else if(g_BgType == Mica)
+                return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &MAINWINDOW, sizeof(MAINWINDOW));
+        }
     }
+    else if((IsWindowClass(hWnd, L"CabinetWClass")|| IsWindowClass(hWnd, L"TaskManagerWindow")) && (dwAttribute == CAPTION_COLOR || dwAttribute == SYSTEMBACKDROP_TYPE))
+            return originalDwmSetWindowAttribute(hWnd, CAPTION_COLOR, &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
+
+    // Effects on VS Studio, Windows Terminal and probably other.
+    if(g_settings.BorderFlag && dwAttribute == BORDER_COLOR)
+        return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
@@ -323,6 +365,16 @@ void EnableMicaTabbed(HWND hWnd)
     DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &TABBEDWINDOW, sizeof(TABBEDWINDOW));
 }
 
+void EnableColoredTitlebar(HWND hWnd)
+{
+    DwmSetWindowAttribute(hWnd, CAPTION_COLOR, &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
+}
+
+void EnableColoredBorder(HWND hWnd)
+{
+    DwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+}
+
 BOOL IsWindowEligible(HWND hWnd) 
 {
     LONG_PTR styleEx = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
@@ -358,33 +410,31 @@ BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
 
 void NewWindowShown(HWND hWnd) 
 {
-    if(g_BgType == BlurBehind && IsWindowEligible(hWnd) && g_settings.ExtendFrame)
-    {
-        ApplyFrameExtension(hWnd);
-        EnableBlurBehind(hWnd);
-    }
-    if(g_BgType == AcrylicSystemBackdrop && IsWindowEligible(hWnd))
-    {
-        if(g_settings.ExtendFrame)  
-            ApplyFrameExtension(hWnd);
-        EnableSystemBackdropAcrylic(hWnd);
-    }
-    if(g_BgType == Mica && IsWindowEligible(hWnd))
-    {
-        if(g_settings.ExtendFrame)  
-            ApplyFrameExtension(hWnd);
-        EnableMica(hWnd);
-    }
-    else if(g_BgType == MicaAlt && IsWindowEligible(hWnd))
-    {
-        if(g_settings.ExtendFrame)  
-            ApplyFrameExtension(hWnd);
-        EnableMicaTabbed(hWnd);
-    }
-    else if(IsWindowEligible(hWnd) && g_settings.ExtendFrame)
-        ApplyFrameExtension(hWnd);
-}
+    if(!IsWindowEligible(hWnd))
+        return;
 
+    if(g_settings.ExtendFrame)
+        ApplyFrameExtension(hWnd);
+
+    if(g_settings.BorderFlag)
+        EnableColoredBorder(hWnd); 
+
+    if(!g_settings.TitlebarFlag)
+    {
+        if(g_BgType == BlurBehind && g_settings.ExtendFrame)
+            EnableBlurBehind(hWnd);
+        else if(g_BgType == AcrylicSystemBackdrop)
+            EnableSystemBackdropAcrylic(hWnd);
+        else if(g_BgType == Mica)
+            EnableMica(hWnd);
+        else if(g_BgType == MicaAlt)
+            EnableMicaTabbed(hWnd);
+    }
+    else
+        EnableColoredTitlebar(hWnd);
+
+    
+}
 void DwmExpandFrameIntoClientAreaHook()
 {
     Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"dwmapi.dll"), "DwmExtendFrameIntoClientArea"),
@@ -437,12 +487,60 @@ void ApplyForExistingWindows()
 
 void RestoreWindowCustomizations(HWND hWnd)
 {
-    // Restore Frame Extension
+    // Manually restore frame extension
     if(!(IsWindowClass(hWnd,  L"TaskManagerWindow")))
     {
         MARGINS margins = { 0, 0, 0, 0 };
         DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
+    // Manually restore border color
+    g_settings.BorderColor = 0x00463A33;
+    DwmSetWindowAttribute(hWnd, BORDER_COLOR , &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+}
+
+BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) {
+    
+    if (!hexColor)
+        return FALSE;
+
+    const wchar_t* p = hexColor;
+    int length = 0;
+    while (*p++) {
+        if (++length > 6) {
+            return false;
+        }
+    }
+    if (length != 6) {
+        return false;
+    }
+
+    BYTE r, g, b;
+    
+    auto convertComponent = [](wchar_t c1, wchar_t c2, BYTE& out) -> BOOL {
+        auto charToValue = [](wchar_t c) -> BYTE {
+            if (c >= L'0' && c <= L'9') return c - L'0';
+            if (c >= L'A' && c <= L'F') return 10 + (c - L'A');
+            if (c >= L'a' && c <= L'f') return 10 + (c - L'a');
+            return 0xFF;
+        };
+
+        BYTE high = charToValue(c1);
+        BYTE low = charToValue(c2);
+        if (high == 0xFF || low == 0xFF) {
+            return FALSE;
+        }
+        out = (high << 4) | low;
+        return true;
+    };
+
+    if (!convertComponent(hexColor[0], hexColor[1], r) ||
+        !convertComponent(hexColor[2], hexColor[3], g) ||
+        !convertComponent(hexColor[4], hexColor[5], b)) {
+        return FALSE;
+    }
+
+    outColor = RGB(r, g, b);
+    return TRUE;
 }
 
 void LoadSettings(void)
@@ -465,13 +563,24 @@ void LoadSettings(void)
     
     g_settings.ExtendFrame = Wh_GetIntSetting(L"ExtendFrame");
     if(g_settings.ExtendFrame)
-    {
         DwmExpandFrameIntoClientAreaHook();
-        DwmSetWindowAttributeHook();
+
+    DwmSetWindowAttributeHook();
+
+    g_settings.TitlebarFlag = Wh_GetIntSetting(L"TitlebarColor.ColorTitlebar");
+    if(g_settings.TitlebarFlag)
+    {
+        LPCWSTR pszTitlberStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles");
+        g_settings.TitlebarFlag = GetColorSetting(pszTitlberStyle, g_settings.TitlebarColor);
     }
-    else if(g_BgType != BlurBehind)
-        DwmSetWindowAttributeHook();
-    
+
+    g_settings.BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
+    if(g_settings.BorderFlag)
+    {
+        LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"BorderColor.borderstyles");
+        g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderColor);
+    }
+
     Wh_FreeStringSetting(pszStyle);
 }
 
@@ -514,7 +623,7 @@ void Wh_ModUninit(void)
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
 {
-    Wh_Log(L"SettingsChanged");
+    //Wh_Log(L"SettingsChanged");
     *bReload = TRUE;
     return TRUE;
 }
