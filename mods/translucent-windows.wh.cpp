@@ -540,6 +540,9 @@ void RestoreWindowCustomizations(HWND hWnd)
     // Restore border color
     g_settings.BorderColor = COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, BORDER_COLOR , &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+    
+    g_settings.TitlebarColor = COLOR_DEFAULT;
+    DwmSetWindowAttribute(hWnd, CAPTION_COLOR , &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
 }
 
 BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
