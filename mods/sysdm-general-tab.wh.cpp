@@ -604,7 +604,7 @@ LPWSTR WINAPI AddCommas64(INT64 n, LPWSTR pszResult)
     Int64ToStr(n, szTemp);
 
     if (GetNumberFormatW(LOCALE_USER_DEFAULT, 0, szTemp, &nfmt, pszResult, ARRAYSIZE(szTemp)) == 0)
-        lstrcpyW(pszResult, szTemp);
+        StringCchCopyW(pszResult, MAX_PATH szTemp); // assuming MAX_PATH
 
     return pszResult;
 }
