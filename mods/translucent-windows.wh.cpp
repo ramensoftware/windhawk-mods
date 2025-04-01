@@ -68,7 +68,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - titlerbarstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
   $name: Titlebar color
   $description: Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
 - TitlebarTextColor:
@@ -88,7 +88,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
     - borderstyles: "FF0000"
       $name: Color
       $description: >-
-        Color in RGB format e.g. Red = FF0000
+        Color in hexadecimal RGB format e.g. Red = FF0000
 
         Transparent = 0
         
