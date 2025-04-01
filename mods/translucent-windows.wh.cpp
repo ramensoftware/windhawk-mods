@@ -68,7 +68,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - titlerbarstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = 0000FF (transparency values not available)
+      $description: Color in RGB format e.g. Red = FF0000 (transparency values not available)
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
 
@@ -78,7 +78,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - borderstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = 0000FF (transparency values not available)
+      $description: Color in RGB format e.g. Red = FF0000 (transparency values not available)
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required.
 */
@@ -501,21 +501,21 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) {
     if (!hexColor)
         return FALSE;
 
-    const wchar_t* p = hexColor;
+    LPCWSTR p = hexColor;
     int length = 0;
     while (*p++) {
         if (++length > 6) {
-            return false;
+            return FALSE;
         }
     }
     if (length != 6) {
-        return false;
+        return FALSE;
     }
 
     BYTE r, g, b;
     
-    auto convertComponent = [](wchar_t c1, wchar_t c2, BYTE& out) -> BOOL {
-        auto charToValue = [](wchar_t c) -> BYTE {
+    auto convertComponent = [](WCHAR c1, WCHAR c2, BYTE& out) -> BOOL {
+        auto charToValue = [](WCHAR c) -> BYTE {
             if (c >= L'0' && c <= L'9') return c - L'0';
             if (c >= L'A' && c <= L'F') return 10 + (c - L'A');
             if (c >= L'a' && c <= L'f') return 10 + (c - L'a');
@@ -528,7 +528,7 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) {
             return FALSE;
         }
         out = (high << 4) | low;
-        return true;
+        return TRUE;
     };
 
     if (!convertComponent(hexColor[0], hexColor[1], r) ||
@@ -621,7 +621,7 @@ void Wh_ModUninit(void)
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
 {
-    //Wh_Log(L"SettingsChanged");
+    Wh_Log(L"SettingsChanged");
     *bReload = TRUE;
     return TRUE;
 }
