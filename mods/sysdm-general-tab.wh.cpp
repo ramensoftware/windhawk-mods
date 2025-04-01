@@ -1142,10 +1142,22 @@ HPROPSHEETPAGE CreateGeneralPage()
     return CreatePropertySheetPageW(&psp);
 }
 
+bool g_fHasAlreadyOpened = false;
+
 using PropertySheetW_t = decltype(&PropertySheetW);
 PropertySheetW_t PropertySheetW_orig;
 INT_PTR WINAPI PropertySheetW_hook(LPCPROPSHEETHEADERW pPropSheet)
 {
+    Wh_Log(L"Entered function."); // This is useful for debugging purposes, even by the end user.
+
+    // If we've marked that we're already open, then let other property
+    // sheets be created without modification. This is to avoid redoing
+    // the changes extraneously on child dialogs.
+    if (g_fHasAlreadyOpened)
+    {
+        return PropertySheetW_orig(pPropSheet);
+    }
+
     // Create the "general" tab.
     HPROPSHEETPAGE hpspGeneral = CreateGeneralPage();
 
@@ -1169,7 +1181,7 @@ INT_PTR WINAPI PropertySheetW_hook(LPCPROPSHEETHEADERW pPropSheet)
         psh.pStartPage = 0;
     }
 
-    Wh_Log(L"4");
+    g_fHasAlreadyOpened = true;
     return PropertySheetW_orig(&psh);
 }
 
