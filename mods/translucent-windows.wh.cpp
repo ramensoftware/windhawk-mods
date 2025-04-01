@@ -92,7 +92,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - borderstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = FF0000 (transparency values not available)
+      $description: Color in RGB format e.g. Red = FF0000 or Transparent = 0
     - MenuBorderColor: FALSE
       $name: Expand colored border to classic context menus
       $description: Enable this option of you want colored borders on windows classic context menus
@@ -539,6 +539,11 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) {
     
     if (!hexColor)
         return FALSE;
+
+    if (hexColor[0] == L'0' && hexColor[1] == L'\0') {
+        outColor = 0xFFFFFFFE; // Transparent
+        return TRUE;
+    }
 
     LPCWSTR p = hexColor;
     INT length = 0;
