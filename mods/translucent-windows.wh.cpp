@@ -582,6 +582,8 @@ void LoadSettings(void)
     }
 
     Wh_FreeStringSetting(pszStyle);
+    Wh_FreeStringSetting(pszTitlberStyle);
+    Wh_FreeStringSetting(pszBorderStyle);
 }
 
 BOOL Wh_ModInit(void) 
