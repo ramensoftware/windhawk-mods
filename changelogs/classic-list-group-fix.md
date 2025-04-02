@@ -1,3 +1,7 @@
+## 1.1.1 ([Apr 2, 2025](https://github.com/ramensoftware/windhawk-mods/blob/37479b14fd4a35d62fdb2fec9d9e0d66f8978c57/mods/classic-list-group-fix.wh.cpp))
+
+Revise `LoadComCtlModule` to not use registry caching
+
 ## 1.1.0 ([Oct 8, 2024](https://github.com/ramensoftware/windhawk-mods/blob/733d035afe561ca4d014aa436c66d536a2702696/mods/classic-list-group-fix.wh.cpp))
 
 - Add option to visually hide the collapse button

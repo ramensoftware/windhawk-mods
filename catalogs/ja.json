@@ -551,7 +551,7 @@
                 "published": 1710657910000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1728376730000,
+                "updated": 1743557016000,
                 "users": 98
             },
             "metadata": {
@@ -563,7 +563,7 @@
                     "*"
                 ],
                 "name": "Classic List Group Fix",
-                "version": "1.1.0"
+                "version": "1.1.1"
             }
         },
         "classic-maximized-windows-fix": {

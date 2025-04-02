@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-01T09:05:04.000Z</updated>
+    <updated>2025-04-02T01:23:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic List Group Fix 1.1.1]]></title>
+        <id>https://windhawk.net/mods/classic-list-group-fix#37479b14fd4a35d62fdb2fec9d9e0d66f8978c57</id>
+        <link href="https://windhawk.net/mods/classic-list-group-fix"/>
+        <updated>2025-04-02T01:23:36.000Z</updated>
+        <content type="html"><![CDATA[<p>Revise <code>LoadComCtlModule</code> to not use registry caching</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.1]]></title>
         <id>https://windhawk.net/mods/translucent-windows#f37b34243dbc6240ffb8bc7fe459f1b87556878a</id>
@@ -283,27 +294,6 @@ mouse cursor is located, or in a custom monitor of choice.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Colored Borders 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-colored-borders#3fe558add16055138f02eff567773ca806b495e4</id>
-        <link href="https://windhawk.net/mods/win10-colored-borders"/>
-        <updated>2025-03-22T11:13:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows10coloredborders">Windows 10 Colored Borders</h1>
-<p>Starting from Windows 10 version 1809, the borders of active windows aren't colored
-unless the user enables the option to color titlebars. This mod reverts that behavior
-and makes active borders always use the user's accent color regardless.</p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>In order to use this mod, you must allow Windhawk to inject into the <strong>dwm.exe</strong> 
-system process. To do so, add it to the process inclusion list in the advanced 
-settings. If you do not do this, it will silently fail to inject.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
-<p><strong>Preview</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win10-colored-borders-preview.png" alt="Preview" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
