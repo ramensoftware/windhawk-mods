@@ -1295,4 +1295,8 @@ void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
     Wh_FreeStringSetting(g_settings.pszXpSysdm);
+    Wh_FreeStringSetting(g_settings.pszCustomOsName);
+    Wh_FreeStringSetting(g_settings.pszCustomOsVer1);
+    Wh_FreeStringSetting(g_settings.pszCustomOsVer2);
+    Wh_FreeStringSetting(g_settings.pszCustomOsVer3);
 }
