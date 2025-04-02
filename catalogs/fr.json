@@ -1240,7 +1240,7 @@
                 "published": 1700542256000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1720203182000,
+                "updated": 1743591500000,
                 "users": 231
             },
             "metadata": {
@@ -1251,7 +1251,7 @@
                     "*"
                 ],
                 "name": "DWM Unextend Frames",
-                "version": "1.3.0"
+                "version": "1.3.1"
             }
         },
         "edge-window-tab-manager-block": {

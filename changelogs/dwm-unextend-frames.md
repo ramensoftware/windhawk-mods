@@ -1,3 +1,8 @@
+## 1.3.1 ([Apr 2, 2025](https://github.com/ramensoftware/windhawk-mods/blob/114e00141dacdebaa58ddc47ac1f33fba4ba20ab/mods/dwm-unextend-frames.wh.cpp))
+
+- Revise `LoadComCtlModule` to not use registry caching
+- Revise `Wh_ModInit` to match standards
+
 ## 1.3.0 ([Jul 5, 2024](https://github.com/ramensoftware/windhawk-mods/blob/b5539c2babd5da816922a73d3bfcfd9258e68546/mods/dwm-unextend-frames.wh.cpp))
 
 Add option to only apply to secure desktop
