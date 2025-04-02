@@ -9,11 +9,9 @@
 // @homepage        https://kawapure.github.io
 // @include         SystemPropertiesAdvanced.exe
 // @include         SystemPropertiesComputerName.exe
-// @include         SystemPropertiesDataExecutionPrevention.exe
 // @include         SystemPropertiesHardware.exe
-// @include         SystemPropertiesPerformance.exe
-// @include         SystemPropertiesProtection.exe
 // @include         SystemPropertiesRemote.exe
+// @include         SystemPropertiesProtection.exe
 // @include         control.exe
 // @compilerOptions -lcomctl32 -lshlwapi -lole32 -loleaut32 -lntdll -lwbemuuid -lversion -lgdi32
 // ==/WindhawkMod==
