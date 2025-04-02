@@ -210,7 +210,7 @@ HRESULT _GetOemFile(LPWSTR szOemFile, UINT cchOemFile, DWORD dwFlags)
             else
             {
                 // 9X OEM information fallback:
-                if (!GetWindowsDirectoryW(szOemFile, ARRAYSIZE(szOemFile)))
+                if (!GetWindowsDirectoryW(szOemFile, cchOemFile))
                 {
                     hr = E_FAIL;
                 }
