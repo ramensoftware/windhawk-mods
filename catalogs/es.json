@@ -2921,7 +2921,7 @@
                 "published": 1743602490000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1743602490000,
+                "updated": 1743607180000,
                 "users": 0
             },
             "metadata": {
@@ -2940,7 +2940,7 @@
                 ],
                 "name": "System Properties \"General\" Tab",
                 "twitter": "https://twitter.com/kawaipure",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "syslistview32-enabler": {

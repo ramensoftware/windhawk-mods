@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-02T14:01:30.000Z</updated>
+    <updated>2025-04-02T15:19:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[System Properties "General" Tab 1.1]]></title>
+        <id>https://windhawk.net/mods/sysdm-general-tab#9d6927c8478d7af98c180d73cbe4fec020df474a</id>
+        <link href="https://windhawk.net/mods/sysdm-general-tab"/>
+        <updated>2025-04-02T15:19:40.000Z</updated>
+        <content type="html"><![CDATA[<p>This update makes process creation abide by the contract Windhawk sets.</p>
+<p>It is not guaranteed for process-creation hooks to be installed during the execution of Wh<em>ModInit. Sometimes they are available, but the contract states that they should only be considered as available starting from Wh</em>ModAfterInit.</p>
+<p>https://github.com/ramensoftware/windhawk/wiki/Mod-lifetime</p>]]></content>
+        <author>
+            <name>Isabella Lulamoon (kawapure)</name>
+            <uri>https://github.com/kawapure</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[System Properties "General" Tab 1.0]]></title>
         <id>https://windhawk.net/mods/sysdm-general-tab#61e7bed5c756991ab03e58a4542c71d8d864b5a4</id>
@@ -282,20 +295,6 @@ this behavior is already present.</p>
         <updated>2025-03-23T18:41:48.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed Win+num hotkeys not working when the "Fully hide" option is enabled.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#9e22c833002db2e8c8c002ea098d25805d09167c</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2025-03-22T22:15:46.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for secondary taskbars.</li>
-<li>Added the "Fully hide" option. Normally, the taskbar is hidden to a thin line which can be clicked to unhide it. The new option makes it so that the taskbar is fully hidden on auto-hide, leaving no traces at all. With this option, the taskbar can only be unhidden via the keyboard.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
