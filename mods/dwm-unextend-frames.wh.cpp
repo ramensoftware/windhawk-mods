@@ -2,7 +2,7 @@
 // @id              dwm-unextend-frames
 // @name            DWM Unextend Frames
 // @description     Makes applications think DWM is disabled
-// @version         1.3.0
+// @version         1.3.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -14,8 +14,6 @@
 This mod makes applications think DWM is disabled when in reality it
 is not. This is useful for anyone doing a setup with non-DWM frames
 (Classic, XP, Vista/7 Basic).
-
-**This mod requires Windhawk v1.4 or greater.**
 
 **Before**:
 
@@ -36,7 +34,6 @@ is not. This is useful for anyone doing a setup with non-DWM frames
 // ==/WindhawkModSettings==
 
 #include <dwmapi.h>
-#include <processthreadsapi.h>
 #include <windhawk_utils.h>
 
 #ifdef _WIN64
@@ -214,63 +211,40 @@ if (!WindhawkUtils::Wh_SetFunctionHookT(                                    \
     return FALSE;                                                           \
 }
 
-#ifdef _WIN64
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path"
-#else
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path-wow64"
-#endif
-
-#define COMCTL_582_SEARCH    L"microsoft.windows.common-controls_6595b64144ccf1df_5.82"
-
-/* Load the ComCtl32 module */
+/**
+  * Loads comctl32.dll, version 6.0.
+  * This uses an activation context that uses shell32.dll's manifest
+  * to load 6.0, even in apps which don't have the proper manifest for
+  * it.
+  */
 HMODULE LoadComCtlModule(void)
 {
+    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    ACTCTXW actCtx = { sizeof(actCtx) };
+    actCtx.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID | ACTCTX_FLAG_HMODULE_VALID;
+    actCtx.lpResourceName = MAKEINTRESOURCEW(124);
+    actCtx.hModule = hShell32;
+    HANDLE hActCtx = CreateActCtxW(&actCtx);
+    ULONG_PTR ulCookie;
+    ActivateActCtx(hActCtx, &ulCookie);
     HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
-    if (!hComCtl)
-    {
-        return NULL;
-    }
-
-    WCHAR szPath[MAX_PATH];
-    GetModuleFileNameW(hComCtl, szPath, MAX_PATH);
-
-    WCHAR szv6Path[MAX_PATH];
-    BOOL bNoCache = FALSE;
-    if (!Wh_GetStringValue(PATHCACHE_VALNAME, szv6Path, MAX_PATH))
-    {
-        bNoCache = TRUE;
-    }
-
-    /**
-      * the !bNoCache check here is nested because we only want to fall through
-      * to the cacher if the current comctl32 path is NOT 5.82.
-      */
-    if (wcsstr(szPath, COMCTL_582_SEARCH)
-    || wcsstr(szPath, L"\\Windows\\System32")
-    || wcsstr(szPath, L"\\Windows\\SysWOW64"))
-    {
-        if (!bNoCache)
-        {
-            hComCtl = LoadLibraryW(szv6Path);
-        }
-    }
-    else if (bNoCache || wcsicmp(szPath, szv6Path))
-    {
-        Wh_SetStringValue(PATHCACHE_VALNAME, szPath);
-    }
-
+    DeactivateActCtx(0, ulCookie);
+    ReleaseActCtx(hActCtx);
+    FreeLibrary(hShell32);
     return hComCtl;
 }
 
-const WindhawkUtils::SYMBOL_HOOK comctl32_hook = {
+const WindhawkUtils::SYMBOL_HOOK comctl32DllHooks[] = {
     {
-        L"public: long "
-        STHISCALL
-        L" DirectUI::DUIXmlParser::_InitializeTables(void)"
-    },
-    &DirectUI_DUIXmlParser__InitializeTables_orig,
-    DirectUI_DUIXmlParser__InitializeTables_hook,
-    false
+        {
+            L"public: long "
+            STHISCALL
+            L" DirectUI::DUIXmlParser::_InitializeTables(void)"
+        },
+        &DirectUI_DUIXmlParser__InitializeTables_orig,
+        DirectUI_DUIXmlParser__InitializeTables_hook,
+        false
+    }
 };
 
 void LoadSettings(void)
@@ -303,8 +277,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hComCtl,
-        &comctl32_hook,
-        1
+        comctl32DllHooks,
+        ARRAYSIZE(comctl32DllHooks)
     ))
     {
         Wh_Log(L"Failed to hook DirectUI::DUIXmlParser::_InitializeTables in comctl32.dll");
