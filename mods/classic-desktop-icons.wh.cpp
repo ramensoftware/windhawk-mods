@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.3.0
+// @version         1.4.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -16,7 +16,11 @@
 
 This mod will enable classic theme on desktop icons when themes are enabled,
 and will optionally let you restore the Windows 2000 behavior of rendering
-the desktop color on the items' labels.
+the desktop color on the items' labels, and will let restore the behavior
+of desktop icons prior to Windows 7.
+
+In general, you can use this mod for making your desktop feel like Windows
+Vista, Windows XP, Windows 2000, or other old versions of Windows.
 
 ## For label backgrounds to show, you must DISABLE desktop icon label shadows.
 
@@ -30,32 +34,65 @@ the desktop color on the items' labels.
 
 ![Windows 2000 style desktop icons](https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-2k-style.png)
 
-*Mod originally authored by Taniko Yamamoto.*
+*Mod originally authored by Taniko Yamamoto.*  
+*Contributions from [Isabella Lulamoon (kawapure)](//github.com/kawapure).*
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- oldselection: true
+  $name: Classic selection effect
+  $description: >
+    Instead of using a theme bitmap background, selection is shown by changing the color
+    of the label background and icon, like Windows XP and prior.
 - background: false
   $name: Desktop color as label background
-  $description: Renders the desktop color on the labels' backgrounds, like Windows 2000.
+  $description: >
+    Renders the desktop color on the labels' backgrounds, like Windows 2000.
+    This requires disabling desktop icon shadows in advanced system settings performance
+    settings.
 - noselect: false
   $name: Non-translucent selection rectangle
   $description: Force the desktop to use a non-translucent selection rectangle, like Windows XP.
+- margin_top: 0
+  $name: Top margin of the desktop in pixels
+  $description: For Windows Vista and prior, this is 0. Since Windows 7, this is 5.
+- limit_to_working_space: true
+  $name: Limit the desktop view to the working space on single-monitor systems
+  $description: > 
+    The selection rectangle cannot go behind the taskbar or other appbars (i.e. pinned Sidebar).
+    This is the case on single-monitor systems before Windows 7.
 */
 // ==/WindhawkModSettings==
 
+#include <synchapi.h>
 #include <uxtheme.h>
+#include <windhawk_api.h>
 #include <windhawk_utils.h>
+#include <windows.h>
+#include <winnt.h>
 
 struct
 {
+    BOOL fOldSelection;
     BOOL background;
     BOOL noselect;
+    BOOL fLimitToWorkingSpace;
+    RECT rcMargins;
 } settings;
+
+// This is a constant value which has not changed since Windows 7. I'll just cheat
+// a little bit and store a copy, because I doubt this will change any time soon.
+const RECT g_rcOriginalMargins { 4, 5, 0, 0 };
 
 HWND g_hWndDesktop = NULL;
 BOOL g_bSubclassed = FALSE;
+
+bool ShouldLimitWorkingArea()
+{
+    return settings.fLimitToWorkingSpace && GetSystemMetrics(SM_CMONITORS) <= 1;
+}
 
 // Cheap hack:
 void *g_pReportDisabledDoubleBufferingListView = nullptr;
@@ -137,6 +174,54 @@ void CLVDrawManager___PaintWorkArea_hook(void *pThis, HDC hdcTarget, RECT *pRect
     }
 }
 
+HMONITOR GetPrimaryMonitor()
+{
+    POINT pt = {0,0};
+    return MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY); 
+}
+
+bool GetMonitorRects(HMONITOR hMonitor, LPRECT prc, bool fGetWorkingArea)
+{
+    if (!hMonitor || !prc)
+        return false;
+
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (GetMonitorInfoW(hMonitor, &mi))
+    {
+        if (fGetWorkingArea)
+        {
+            *prc = mi.rcWork;
+        }
+        else
+        {
+            *prc = mi.rcMonitor;
+        }
+        
+        return true;
+    }
+    
+    *prc = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+    return true;
+}
+
+HRESULT (*CDesktopBrowser__SetDesktopWorkAreas_orig)(void *pThis, HWND hWnd, RECT *pRect);
+HRESULT CDesktopBrowser__SetDesktopWorkAreas_hook(void *pThis, HWND hWnd, RECT *pRect)
+{
+    // If we're limiting the size of the desktop window to the working space, then we
+    // don't want to set the work area, since that will duplicate the padding.
+    if (ShouldLimitWorkingArea())
+    {
+        RECT rc = *pRect;
+        rc.right -= rc.left;
+        rc.bottom -= rc.top;
+        rc.left = rc.top = 0;
+        return CDesktopBrowser__SetDesktopWorkAreas_orig(pThis, hWnd, &rc);
+    }
+
+    return CDesktopBrowser__SetDesktopWorkAreas_orig(pThis, hWnd, pRect);
+}
+
 /**
   * UpdateDesktop references DesktopSubclassProc
   * and vice-versa, so we need to define one before
@@ -152,7 +237,7 @@ LRESULT CALLBACK DesktopSubclassProc(
     DWORD_PTR dwRefData
 )
 {
-    if (uMsg == WM_SETREDRAW || uMsg == LVM_GETITEMCOUNT)
+    if (uMsg == WM_SETREDRAW || uMsg == LVM_GETITEMCOUNT || uMsg == WM_SIZE)
     {
         UpdateDesktop();
     }
@@ -160,13 +245,24 @@ LRESULT CALLBACK DesktopSubclassProc(
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+// Undocumented list view messages:
+// https://www.geoffchappell.com/studies/windows/shell/comctl32/controls/listview/messages/index.htm
+#define LVM_SETVIEWMARGINS 0x105A
+#define LVM_GETVIEWMARGINS 0x105B
+
 void UpdateDesktop(void)
 {
     if (g_hWndDesktop != NULL)
     {
         /* Untheme the desktop */
-        SetWindowTheme(g_hWndDesktop, NULL, NULL);
-        SendMessageW(g_hWndDesktop, WM_THEMECHANGED, 0, 0);
+        if (settings.fOldSelection)
+        {
+            SetWindowTheme(g_hWndDesktop, NULL, NULL);
+            SendMessageW(g_hWndDesktop, WM_THEMECHANGED, 0, 0);
+        }
+
+        // Set the margin of the desktop view:
+        SendMessageW(g_hWndDesktop, LVM_SETVIEWMARGINS, 0, (LPARAM)&settings.rcMargins);
 
         /* Apply the desktop background color */
         if (settings.background)
@@ -177,6 +273,27 @@ void UpdateDesktop(void)
                 NULL,
                 GetSysColor(COLOR_BACKGROUND)
             );
+        }
+
+        // Update the size if we're limiting to the working space:
+        if (ShouldLimitWorkingArea())
+        {
+            RECT rcWorkArea;
+            if (GetMonitorRects(GetPrimaryMonitor(), &rcWorkArea, true))
+            {
+                SetWindowPos(
+                    // We want to change the position of the DefView window and not the
+                    // SysListView32, or else the margin will be doubled on left and top
+                    // taskbars (for some reason).
+                    GetParent(g_hWndDesktop),
+                    nullptr,
+                    rcWorkArea.left,
+                    rcWorkArea.top,
+                    rcWorkArea.right - rcWorkArea.left,
+                    rcWorkArea.bottom - rcWorkArea.top,
+                    SWP_NOZORDER | SWP_NOACTIVATE
+                );
+            }
         }
 
         /* Subclass to update label backgrounds (they get removed normally) */
@@ -262,61 +379,18 @@ HWND WINAPI CreateWindowExW_hook(
 
 void LoadSettings(void)
 {
+    settings.fOldSelection = Wh_GetIntSetting(L"oldselection");
     settings.background = Wh_GetIntSetting(L"background");
     settings.noselect = Wh_GetIntSetting(L"noselect");
-}
+    settings.fLimitToWorkingSpace = Wh_GetIntSetting(L"limit_to_working_space");
 
-#ifdef _WIN64
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path"
-#else
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path-wow64"
-#endif
-
-#define COMCTL_582_SEARCH    L"microsoft.windows.common-controls_6595b64144ccf1df_5.82"
-
-/* Load the ComCtl32 module */
-HMODULE LoadComCtlModule(void)
-{
-    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
-    if (!hComCtl)
-    {
-        return NULL;
-    }
-
-    WCHAR szPath[MAX_PATH];
-    GetModuleFileNameW(hComCtl, szPath, MAX_PATH);
-
-    WCHAR szv6Path[MAX_PATH];
-    BOOL bNoCache = FALSE;
-    if (!Wh_GetStringValue(PATHCACHE_VALNAME, szv6Path, MAX_PATH))
-    {
-        bNoCache = TRUE;
-    }
-
-    /**
-      * the !bNoCache check here is nested because we only want to fall through
-      * to the cacher if the current comctl32 path is NOT 5.82.
-      */
-    if (wcsstr(szPath, COMCTL_582_SEARCH)
-    || wcsstr(szPath, L"\\Windows\\System32")
-    || wcsstr(szPath, L"\\Windows\\SysWOW64"))
-    {
-        if (!bNoCache)
-        {
-            hComCtl = LoadLibraryW(szv6Path);
-        }
-    }
-    else if (bNoCache || wcsicmp(szPath, szv6Path))
-    {
-        Wh_SetStringValue(PATHCACHE_VALNAME, szPath);
-    }
-
-    return hComCtl;
+    settings.rcMargins = { 0 };
+    settings.rcMargins.top = Wh_GetIntSetting(L"margin_top");
 }
 
 // Hooks used for removing the transparent selection ("marquee") rectangle
 // on only the desktop window.
-const WindhawkUtils::SYMBOL_HOOK marqueeHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK comctl32DllHooks[] = {
     {
         // Manages drawing of the marquee selection, needs to be disabled
         {
@@ -344,23 +418,35 @@ const WindhawkUtils::SYMBOL_HOOK marqueeHooks[] = {
     }
 };
 
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+    {
+        // Manages the working area of the desktop list view. We hook this to avoid double
+        // padding when using the legacy behaviour.
+        {
+            L"protected: long __cdecl CDesktopBrowser::SetDesktopWorkAreas(struct HWND__ *,struct tagRECT *)"
+        },
+        &CDesktopBrowser__SetDesktopWorkAreas_orig,
+        CDesktopBrowser__SetDesktopWorkAreas_hook
+    },
+};
+
 BOOL Wh_ModInit(void) 
 {
     LoadSettings();
 
-    HMODULE hComCtl = LoadComCtlModule();
-
+    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
     if (!hComCtl)
     {
         Wh_Log(L"Failed to load comctl32.dll");
         return FALSE;
     }
 
-    /* Initially update the desktop if it already exists. */
-    g_hWndDesktop = FindDesktopWindow();
-    if (g_hWndDesktop != NULL)
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+
+    if (!hShell32)
     {
-        UpdateDesktop();
+        Wh_Log(L"Failed to load shell32.dll");
+        return FALSE;
     }
 
     Wh_SetFunctionHook(
@@ -373,8 +459,8 @@ BOOL Wh_ModInit(void)
     {
         if (!WindhawkUtils::HookSymbols(
             hComCtl,
-            marqueeHooks,
-            ARRAYSIZE(marqueeHooks)
+            comctl32DllHooks,
+            ARRAYSIZE(comctl32DllHooks)
         ))
         {
             Wh_Log(L"Failed to hook one or more symbol functions in comctl32.dll");
@@ -382,11 +468,52 @@ BOOL Wh_ModInit(void)
         };
     }
 
+    if (!WindhawkUtils::HookSymbols(
+        hShell32,
+        shell32DllHooks,
+        ARRAYSIZE(shell32DllHooks)
+    ))
+    {
+        Wh_Log(L"Failed to hook one or more symbol functions in shell32.dll");
+        return FALSE;
+    };
+
+    /* Initially update the desktop if it already exists. */
+    g_hWndDesktop = FindDesktopWindow();
+    if (g_hWndDesktop != NULL)
+    {
+        UpdateDesktop();
+    }
+
     return TRUE;
+}
+
+void Wh_ModAfterInit(void)
+{
+    /* Initially update the desktop if it already exists. */
+    g_hWndDesktop = FindDesktopWindow();
+    if (g_hWndDesktop != NULL)
+    {
+        // Since this means that Explorer is already up, and we're initialising
+        // the mod, we need to correct the working area if the user wishes.
+        // We cannot broadcast this message as Explorer is starting up, as it seems
+        // to have a tendency to cause an access violation within shell32.
+        if (ShouldLimitWorkingArea())
+        {
+            SendMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0);
+        }
+    }
 }
 
 void Wh_ModUninit(void)
 {
+    // Unlimit and update the working space.
+    if (settings.fLimitToWorkingSpace)
+    {
+        settings.fLimitToWorkingSpace = false;
+        SendMessageW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0);
+    }
+
     /* Remove subclass */
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hWndDesktop, DesktopSubclassProc);
 
@@ -400,6 +527,9 @@ void Wh_ModUninit(void)
             CLR_NONE
         );
     }
+
+    // Restore the original desktop margins:
+    SendMessageW(g_hWndDesktop, LVM_SETVIEWMARGINS, 0, (LPARAM)&g_rcOriginalMargins);
 
     /* Retheme desktop */
     SetWindowTheme(g_hWndDesktop, L"Desktop", NULL);
