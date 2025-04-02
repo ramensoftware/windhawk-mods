@@ -2,7 +2,7 @@
 // @id              sysdm-general-tab
 // @name            System Properties "General" Tab
 // @description     Restores the "General" tab to the system properties dialog (sysdm.cpl).
-// @version         1.0
+// @version         1.1
 // @author          Isabella Lulamoon (kawapure)
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
@@ -1196,6 +1196,8 @@ void LoadSettings()
     g_settings.fRamInKilobytes = Wh_GetIntSetting(L"ram_in_kilobytes");
 }
 
+bool g_fExecutingInControlExe = false;
+
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit()
@@ -1208,30 +1210,15 @@ BOOL Wh_ModInit()
 
     if (StrStrI(szLoadedModule, L"\\control.exe") != nullptr)
     {
-        // We're loading into control.exe, so do hack to see what control.exe is trying
+        // We're loading into control.exe, so do a hack to see what control.exe is trying
         // to bring up and take over if we need to. Otherwise, bail out - we have no
         // work to do in a control.exe instance other than redirection.
         LPCWSTR szCommandLine = GetCommandLineW();
         if (StrStrI(szCommandLine, L"sysdm.cpl") != nullptr)
         {
-            Wh_Log(L"Opening sysdm.cpl from control.exe.");
-
-            // control.exe is hardcoded to open SystemPropertiesComputerName.exe from the
-            // system folder in Windows 10. We'll repeat this behaviour, but pass an
-            // argument so we know to change the default tab.
-            WCHAR szPath[MAX_PATH];
-            GetSystemDirectoryW(szPath, ARRAYSIZE(szPath));
-            StringCchCatW(szPath, ARRAYSIZE(szPath), L"\\SystemPropertiesComputerName.exe");
-            ShellExecuteW(
-                nullptr,
-                L"open",
-                szPath,
-                L"/opengeneraltab",
-                nullptr,
-                SW_SHOW
-            );
-
-            TerminateProcess(GetCurrentProcess(), 0);
+            Wh_Log(L"Since we're executing in control.exe, we're deferring a process creation "
+                   L"for Wh_ModAfterInit.");
+            g_fExecutingInControlExe = true;
             return TRUE;
         }
 
@@ -1286,6 +1273,40 @@ BOOL Wh_ModInit()
     );
 
     return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    if (g_fExecutingInControlExe)
+    {
+        /*
+         * In order to be 100% certain that the Windhawk engine has installed its internal
+         * process creation hooks, spawning processes needs to be done from Wh_ModAfterInit.
+         *
+         * Barring this case, the mod still works for the most part, but there are cases
+         * where it will consistently fail to inject, such as in the case of running the
+         * program as administrator.
+         */
+
+        Wh_Log(L"Opening sysdm.cpl from control.exe.");
+
+        // control.exe is hardcoded to open SystemPropertiesComputerName.exe from the
+        // system folder in Windows 10. We'll repeat this behaviour, but pass an
+        // argument so we know to change the default tab.
+        WCHAR szPath[MAX_PATH];
+        GetSystemDirectoryW(szPath, ARRAYSIZE(szPath));
+        StringCchCatW(szPath, ARRAYSIZE(szPath), L"\\SystemPropertiesComputerName.exe");
+        ShellExecuteW(
+            nullptr,
+            L"open",
+            szPath,
+            L"/opengeneraltab",
+            nullptr,
+            SW_SHOW
+        );
+
+        TerminateProcess(GetCurrentProcess(), 0);
+    }
 }
 
 // The mod is being unloaded, free all allocated resources.
