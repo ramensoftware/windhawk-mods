@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects on windows
-// @version         1.1
+// @version         1.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -68,18 +68,34 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - titlerbarstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = FF0000 (transparency values not available)
+      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
   $name: Titlebar color
+  $description: Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
+- TitlebarTextColor:
+    - ColorTitlebarText: FALSE
+      $name: Enable
+    - titlerbarcolorstyles: "FF0000"
+      $name: Color
+      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+  $name: Titlebar text color
   $description: >-
-      Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
+      Windows 11 version >= 22000.xxx (21H2) is required.
 
-      ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
+      NOTE: This settings affects only Win32 windows. Since Win11 24H2 File Explorer changed titlebar text rendering to DirectWrite API. To modify the text color of File Explorer title bar, use Windhawk's File Explorer Styler mod.
 - BorderColor:
     - ColorBorder: FALSE
       $name: Enable
     - borderstyles: "FF0000"
       $name: Color
-      $description: Color in RGB format e.g. Red = FF0000 (transparency values not available)
+      $description: >-
+        Color in hexadecimal RGB format e.g. Red = FF0000
+
+        Transparent = 0
+        
+        SystemAccentColor = 1
+    - MenuBorderColor: FALSE
+      $name: Expand colored border to classic context menus
+      $description: Enable this option of you want colored borders on windows classic context menus
   $name: Border color
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required.
@@ -96,9 +112,12 @@ struct{
     BOOL ExtendFrame = FALSE;
     BOOL Unload = FALSE;
     BOOL TitlebarFlag = FALSE;
+    BOOL CaptionTextFlag = FALSE;
     BOOL BorderFlag = FALSE;
-    COLORREF TitlebarColor;
-    COLORREF BorderColor;
+    BOOL MenuBorderFlag = FALSE;
+    COLORREF TitlebarColor = NULL;
+    COLORREF CaptionTextColor = NULL;
+    COLORREF BorderColor = NULL;
 } g_settings;
 
 enum BACKGROUNDTYPE
@@ -137,14 +156,16 @@ DWM_BLURBEHIND bb = { 0 };
 
 static const UINT USE_IMMERSIVE_DARK_MODE = 20; // DWMWA_USE_IMMERSIVE_DARK_MODE
 static const UINT CAPTION_COLOR = 35; // DWMWA_CAPTION_COLOR
+static const UINT CAPTION_TEXT_COLOR = 36; // DWMWA_TEXT_COLOR
 static const UINT BORDER_COLOR = 34; // DWMWA_BORDER_COLOR
 static const UINT ENABLE = 1;
 static const UINT SYSTEMBACKDROP_TYPE = 38; // DWM_SYSTEMBACKDROP_TYPE
-static const UINT AUTO = 0; // DWMSBT_AUTO
 static const UINT NONE = 1; // DWMSBT_NONE
 static const UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static const UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
 static const UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
+static const UINT COLOR_DEFAULT = 0xFFFFFFFF; // DWMWA_COLOR_DEFAULT
+static const UINT COLOR_NONE = 0xFFFFFFFE; // DWMWA_COLOR_NONE
 
 
 using PUNICODE_STRING = PVOID;
@@ -166,6 +187,7 @@ void EnableSystemBackdropAcrylic(HWND);
 void EnableMica(HWND);
 void EnableMicaTabbed(HWND);
 void EnableColoredTitlebar(HWND);
+void EnableCaptionTextColor(HWND);
 void EnableColoredBorder(HWND);
 void ApplyForExistingWindows();
 BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
@@ -218,10 +240,13 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
 {
     if(!g_settings.TitlebarFlag)
     {
-        if(g_BgType == BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && g_settings.ExtendFrame && !g_settings.BorderFlag)
-            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
-        else if(g_BgType == BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && g_settings.ExtendFrame && g_settings.BorderFlag)
-            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+        if(g_BgType == BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && g_settings.ExtendFrame)
+        {
+            if(!g_settings.BorderFlag)
+                return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
+            else
+                return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+        }           
         else if(dwAttribute == SYSTEMBACKDROP_TYPE)
         {
             if(g_BgType == AcrylicSystemBackdrop)
@@ -235,10 +260,15 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
     else if((IsWindowClass(hWnd, L"CabinetWClass")|| IsWindowClass(hWnd, L"TaskManagerWindow")) && (dwAttribute == CAPTION_COLOR || dwAttribute == SYSTEMBACKDROP_TYPE))
             return originalDwmSetWindowAttribute(hWnd, CAPTION_COLOR, &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
 
-    // Effects on VS Studio, Windows Terminal and probably other.
+    // Effects on VS Studio, Windows Terminal ...
     if(g_settings.BorderFlag && dwAttribute == BORDER_COLOR)
-        return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
-
+    {
+        // Windows classic context menu
+        if(g_settings.MenuBorderFlag && IsWindowClass(hWnd, L"#32768"))
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+        else if(!IsWindowClass(hWnd, L"#32768"))
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+    }
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
@@ -370,6 +400,12 @@ void EnableColoredTitlebar(HWND hWnd)
     DwmSetWindowAttribute(hWnd, CAPTION_COLOR, &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
 }
 
+void EnableCaptionTextColor(HWND hWnd)
+{
+    DwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR, &g_settings.CaptionTextColor, sizeof(g_settings.CaptionTextColor));
+}
+
+
 void EnableColoredBorder(HWND hWnd)
 {
     DwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
@@ -415,6 +451,9 @@ void NewWindowShown(HWND hWnd)
 
     if(g_settings.ExtendFrame)
         ApplyFrameExtension(hWnd);
+
+    if(g_settings.CaptionTextFlag)
+        EnableCaptionTextColor(hWnd);
 
     if(g_settings.BorderFlag)
         EnableColoredBorder(hWnd); 
@@ -493,18 +532,44 @@ void RestoreWindowCustomizations(HWND hWnd)
         MARGINS margins = { 0, 0, 0, 0 };
         DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
-    // Manually restore border color
-    g_settings.BorderColor = 0x00463A33;
+    g_settings.BorderColor = COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, BORDER_COLOR , &g_settings.BorderColor, sizeof(g_settings.BorderColor));
+    
+    g_settings.TitlebarColor = COLOR_DEFAULT;
+    DwmSetWindowAttribute(hWnd, CAPTION_COLOR , &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
+
+    g_settings.CaptionTextColor = COLOR_DEFAULT;
+    DwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR , &g_settings.CaptionTextColor, sizeof(g_settings.CaptionTextColor));
 }
 
-BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) {
-    
+BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
+{
     if (!hexColor)
         return FALSE;
 
+    if (hexColor[0] == L'0' && hexColor[1] == L'\0') {
+        outColor = COLOR_NONE;
+        return TRUE;
+    }
+    else if (hexColor[0] == L'1' && hexColor[1] == L'\0') {
+        DWORD colorization;
+        BOOL opaque;
+        if (SUCCEEDED(DwmGetColorizationColor(&colorization, &opaque))) 
+        {
+            outColor = RGB(
+                (colorization >> 16) & 0xFF,
+                (colorization >> 8) & 0xFF,
+                colorization & 0xFF
+            );
+            return TRUE;
+        }
+        outColor = COLOR_DEFAULT;
+        return FALSE;
+    }
+
+
     LPCWSTR p = hexColor;
-    int length = 0;
+    INT length = 0;
     while (*p++) {
         if (++length > 6) {
             return FALSE;
@@ -575,6 +640,14 @@ void LoadSettings(void)
         Wh_FreeStringSetting(pszTitlberStyle);
     }
 
+    g_settings.CaptionTextFlag = Wh_GetIntSetting(L"TitlebarTextColor.ColorTitlebarText");
+    if(g_settings.CaptionTextFlag)
+    {
+        LPCWSTR pszTitlebarTextColorStyle = Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles");
+        g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionTextColor);
+        Wh_FreeStringSetting(pszTitlebarTextColorStyle);
+    }
+
     g_settings.BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
     if(g_settings.BorderFlag)
     {
@@ -582,6 +655,8 @@ void LoadSettings(void)
         g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderColor);
         Wh_FreeStringSetting(pszBorderStyle);
     }
+
+    g_settings.MenuBorderFlag = Wh_GetIntSetting(L"BorderColor.MenuBorderColor");
 
     Wh_FreeStringSetting(pszStyle);    
 }
