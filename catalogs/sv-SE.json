@@ -2915,6 +2915,34 @@
                 "version": "1.0.0"
             }
         },
+        "sysdm-general-tab": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1743602490000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1743602490000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Isabella Lulamoon (kawapure)",
+                "compilerOptions": "-lcomctl32 -lshlwapi -lole32 -loleaut32 -lntdll -lwbemuuid -lversion -lgdi32",
+                "description": "Restores the \"General\" tab to the system properties dialog (sysdm.cpl).",
+                "github": "https://github.com/kawapure",
+                "homepage": "https://kawapure.github.io",
+                "include": [
+                    "SystemPropertiesAdvanced.exe",
+                    "SystemPropertiesComputerName.exe",
+                    "SystemPropertiesHardware.exe",
+                    "SystemPropertiesRemote.exe",
+                    "SystemPropertiesProtection.exe",
+                    "control.exe"
+                ],
+                "name": "System Properties \"General\" Tab",
+                "twitter": "https://twitter.com/kawaipure",
+                "version": "1.0"
+            }
+        },
         "syslistview32-enabler": {
             "details": {
                 "defaultSorting": 2590,
