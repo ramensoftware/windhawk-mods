@@ -51,6 +51,7 @@ items, or drag items into it, and its vertical height was uncapped so it was pro
 #include <windowsx.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
+#include <exdisp.h>
 #include <string>
 
 HMODULE g_hInstExplorerFrame = nullptr;
@@ -125,6 +126,18 @@ public:
     }
 
     DWORD &GetVisibleBands() { return GetVisibleBands(this); }
+
+    // Offset can be found in CInternetToolbar::_OnCommand
+    static IWebBrowser2 *&GetPtrIE(CInternetToolbar *pThis)
+    {
+#ifdef _WIN64
+        return *((IWebBrowser2 **)((size_t *)pThis + 32));
+#else
+        return *((IWebBrowser2 **)((DWORD *)pThis + 36));
+#endif
+    }
+
+    IWebBrowser2 *&GetPtrIE() { return GetPtrIE(this); }
 };
 
 class CShellBrowser
@@ -180,9 +193,6 @@ void (*CInternetToolbar___ShowVisible)(CInternetToolbar *pThis, DWORD dwNewVisib
 void (*CInternetToolbar___ShowContextMenu_orig)(CInternetToolbar *pThis, HWND hWnd, LPARAM lParam, RECT *prc);
 void CInternetToolbar___ShowContextMenu_hook(CInternetToolbar *pThis, HWND hWnd, LPARAM lParam, RECT *prc)
 {
-    Wh_Log(L"hi :3");
-    Wh_Log(L"pThis %p", pThis);
-
     g_dwInterceptMenuCreationThreadId = GetCurrentThreadId();
     g_pInternetToolbar = pThis;
 
@@ -203,15 +213,12 @@ void CInternetToolbar___OnCommand_hook(CInternetToolbar *pThis, WPARAM wParam, L
 
     if (idCmd == FCIDM_VIEWLINKS)
     {
-        Wh_Log(L"Visible bands before: %x", pThis->GetVisibleBands());
         // For some reason, it will only immediately refresh if VBF_BRAND is passed here too.
         pThis->GetVisibleBands() ^= VBF_LINKS | VBF_BRAND;
-        Wh_Log(L"Visible bands after: %x", pThis->GetVisibleBands());
 
-        // clean this up later
         if (!(pThis->GetVisibleBands() & ~VBF_BRAND))
         {
-            (*(void (__fastcall **)(size_t, size_t))(**((size_t **)pThis + 32) + 376LL))(*((size_t *)pThis + 32), 0LL);
+            pThis->GetPtrIE()->put_ToolBar(FALSE);
         }
         
         CInternetToolbar___ShowVisible(pThis, pThis->GetVisibleBands(), TRUE);
@@ -237,8 +244,6 @@ void CShellBrowser___OnViewMenuPopup_hook(CShellBrowser *pThis, HMENU hMenu)
 HRESULT (*CShellBrowser___OnCommand_orig)(CShellBrowser *pThis, WPARAM wParam, LPARAM lParam);
 HRESULT CShellBrowser___OnCommand_hook(CShellBrowser *pThis, WPARAM wParam, LPARAM lParam)
 {
-    Wh_Log(L"meow :3");
-
     if (wParam == FCIDM_VIEWLINKS)
     {
         CInternetToolbar *pInternetToolbar = (CInternetToolbar *)((BYTE *)pThis->GetPtrInternetToolbar() - 128);
