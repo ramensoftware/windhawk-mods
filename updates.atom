@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-02T15:19:40.000Z</updated>
+    <updated>2025-04-05T19:58:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-toolbar-links-item#d4f6575790261ab1b1d13b62ca3fc879a42a4776</id>
+        <link href="https://windhawk.net/mods/explorer-toolbar-links-item"/>
+        <updated>2025-04-05T19:58:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fileexplorertoolbarlinksitem">File Explorer Toolbar Links Item</h1>
+<p>This mod restores the ability to display the "Links" toolbar, hidden since Windows Vista, in Windows 10 and 11.</p>
+<p>The links toolbar can be used to provide a custom set of quick links that the user can access across the top of
+any File Explorer window.</p>
+<p><img src="https://raw.githubusercontent.com/kawapure/images/refs/heads/main/linksbar.png" alt="Preview image" /></p>
+<h2 id="whatsthedifferencebetweenthisandsomeregistrypatch">What's the difference between this and some registry patch?</h2>
+<p>This restores the actual hidden Links toolbar with all of its special handlers. <strong>It functions perfectly</strong>, just like
+it did in Windows 98, 2000, and XP. For a technical explanation, <a href="https://winclassic.net/thread/2913/explorer-toolbar-funtional-modern-windows">please see this thread on WinClassic.</a></p>
+<p>Adding the CLSID for the toolbar will install it as an external toolbar, which has a few bugs. You cannot reorder
+items, or drag items into it, and its vertical height was uncapped so it was prone to looking visually broken.</p>]]></content>
+        <author>
+            <name>Isabella Lulamoon (kawapure)</name>
+            <uri>https://github.com/kawapure</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[System Properties "General" Tab 1.1]]></title>
         <id>https://windhawk.net/mods/sysdm-general-tab#9d6927c8478d7af98c180d73cbe4fec020df474a</id>
@@ -282,19 +302,6 @@ this behavior is already present.</p>
 <li>Made mouse wheel cycling and keyboard shortcuts optional, so that only one of them can be selected and used.</li>
 <li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 <li>Added an option to customize the old taskbar on Windows 11.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#20ab961f2e9e81c99927394bd0a6d1dcb3987de9</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
-        <updated>2025-03-23T18:41:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed Win+num hotkeys not working when the "Fully hide" option is enabled.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

@@ -1428,6 +1428,32 @@
                 "version": "1.0"
             }
         },
+        "explorer-toolbar-links-item": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1743883131000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1743883131000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Isabella Lulamoon (kawapure)",
+                "compilerOptions": "-luser32 -lole32 -luuid",
+                "description": "Restores the ability to display the hidden \"Links\" toolbar in Windows 10 and 11.",
+                "github": "https://github.com/kawapure",
+                "homepage": "https://kawapure.github.io",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "File Explorer Toolbar Links Item",
+                "twitter": "https://twitter.com/kawaipure",
+                "version": "1.0"
+            }
+        },
         "explorerframe-fixes-for-win11-22h2plus": {
             "details": {
                 "defaultSorting": 9730,
