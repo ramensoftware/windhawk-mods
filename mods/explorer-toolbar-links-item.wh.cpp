@@ -2,7 +2,7 @@
 // @id              explorer-toolbar-links-item
 // @name            File Explorer Toolbar Links Item
 // @description     Restores the ability to display the hidden "Links" toolbar in Windows 10 and 11.
-// @version         1.0
+// @version         1.0.1
 // @author          Isabella Lulamoon (kawapure)
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
@@ -304,14 +304,12 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
 
-    HMODULE hmExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
+    g_hInstExplorerFrame = LoadLibraryW(L"ExplorerFrame.dll");
 
-    if (!hmExplorerFrame)
+    if (!g_hInstExplorerFrame)
     {
         MOD_CANCEL_INIT_AND_SHOW_USER_ERROR(L"Failed to find the handle to ExplorerFrame.dll.");
     }
-
-    g_hInstExplorerFrame = hmExplorerFrame;
 
     // Precondition checks are done, so proceed with initialising the mod now:
     LoadSettings();
@@ -325,7 +323,7 @@ BOOL Wh_ModInit()
         MOD_CANCEL_INIT_AND_SHOW_USER_ERROR(L"Failed to install hooks for LoadMenuW.");
     }
 
-    if (!WindhawkUtils::HookSymbols(hmExplorerFrame, ARRAY_SIZE_ARGS(c_rgHooksExplorerFrame)))
+    if (!WindhawkUtils::HookSymbols(g_hInstExplorerFrame, ARRAY_SIZE_ARGS(c_rgHooksExplorerFrame)))
     {
         MOD_CANCEL_INIT_AND_SHOW_USER_ERROR(L"Failed to install hooks for ExplorerFrame.dll.");
     }
@@ -337,6 +335,7 @@ BOOL Wh_ModInit()
 void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
+    FreeLibrary(g_hInstExplorerFrame);
 }
 
 BOOL Wh_ModSettingsChanged()
