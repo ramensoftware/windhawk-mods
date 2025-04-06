@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-05T19:58:51.000Z</updated>
+    <updated>2025-04-06T08:16:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.0.1]]></title>
+        <id>https://windhawk.net/mods/explorer-toolbar-links-item#a432147b52de3b822a673d6750654548de8d2f92</id>
+        <link href="https://windhawk.net/mods/explorer-toolbar-links-item"/>
+        <updated>2025-04-06T08:16:04.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixed a minor injection issue that some users may experience.</p>]]></content>
+        <author>
+            <name>Isabella Lulamoon (kawapure)</name>
+            <uri>https://github.com/kawapure</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-toolbar-links-item#d4f6575790261ab1b1d13b62ca3fc879a42a4776</id>
@@ -291,21 +302,6 @@ this behavior is already present.</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.9]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#09b9d5016d082de95fdcbedcfd9e5ce8d0d19738</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2025-03-25T18:56:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Made mouse wheel cycling and keyboard shortcuts optional, so that only one of them can be selected and used.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-<li>Added an option to customize the old taskbar on Windows 11.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
