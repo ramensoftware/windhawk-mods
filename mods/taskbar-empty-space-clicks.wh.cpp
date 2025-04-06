@@ -21,7 +21,7 @@
 /*
 # Click on empty taskbar space
 
-This mod lets you assign an action to a mouse click on Windows taskbar. Double-click and middle-click actions are supported. Additionally double tap and triple tap on touch screens are supported. This mod only modifies behaviour when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Both primary and secondary taskbars are supported.
+This mod lets you assign an action to a mouse click on Windows taskbar. Single, double and triple clicks are supported - both mouse and touchscreen clicks. You can also assign a keyboard modifier to the action. For example, you can set up a double click on the taskbar to open Task Manager while holding down the Ctrl key. The mod is designed to be as flexible as possible. You can assign any action to any mouse click or touch screen tap. You can also assign multiple actions to the same trigger. This mod reacts when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Click events are normally forwarded to the system, so you can still use the taskbar as usual. Both primary and secondary taskbars are supported.
 
 ## Supported actions:
 
@@ -37,50 +37,62 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Double-c
 8. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
 9. **Start application** - Starts arbitrary application or runs a command
 
-## TODO: write more info about optional args
-
-- CombineTaskbarButtons:
-  - State1: COMBINE_ALWAYS
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Main taskbar state 1
-  - State2: COMBINE_NEVER
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Main taskbar state 2
-  - StateSecondary1: COMBINE_ALWAYS
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Secondary taskbar state 1
-  - StateSecondary2: COMBINE_NEVER
-    $options:
-    - COMBINE_ALWAYS: Always combine
-    - COMBINE_WHEN_FULL: Combine when taskbar is full
-    - COMBINE_NEVER: Never combine
-    $name: Secondary taskbar state 2
-  $name: Combine Taskbar Buttons toggle
-  $description: When toggle activated, switch between following states
-- VirtualKeyPress: ["0x5B", "0x45"]
-  $name: Virtual key press
-  $description: >-
-    Send custom virtual key press to the system. Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in win32 inputdev docs (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
-- StartProcess: "C:\\Windows\\System32\\notepad.exe"
-  $name: Start an application
-  $description: >-
-    Start arbitrary application or run a command. Use the executable name if it is in PATH. Otherwise use the full path to the application. Example: "C:\Windows\System32\notepad.exe". In case you want to execute shell command, use corresponding flag. Example: "cmd.exe /c echo Hello & pause".
-
-
-## Example
+### Example
 
 Following animation shows **Taskbar auto-hide** feature. Feature gets toggled whenever user double-clicks the empty space on a taskbar.
 
 ![Demonstration of Toggle taskbar autohide mod for Windhawk](https://i.imgur.com/BRQrVnX.gif)
+
+## Supported triggers:
+
+- **Keyboard** - Optional. Keyboard keypress modifiers. If None is selected or added, the modifier gets ignored.
+    - **Left Ctrl** - Left Ctrl key
+    - **Left Shift** - Left Shift key
+    - **Left Alt** - Left Alt key
+    - **Win** - Windows key
+    - **Right Ctrl** - Right Ctrl key
+    - **Right Shift** - Right Shift key
+    - **Right Alt** - Right Alt key
+- **Mouse** - Required. Mouse click or touchscreen tap trigger. If None is selected, the whole trigger+action gets ignored.
+    - **Left** - Mouse left button click
+    - **Left Double** - Mouse left button double click
+    - **Left Triple** - Mouse left button triple click
+    - **Middle** - Mouse middle button click
+    - **Middle Double** - Mouse middle button double click
+    - **Middle Triple** - Mouse middle button triple click
+    - **Right** - Mouse right button click
+    - **Right Double** - Mouse right button double click
+    - **Right Triple** - Mouse right button triple click
+    - **Tap** - Touchscreen single tap
+    - **Tap Double** - Touchscreen double tap
+    - **Tap Triple** - Touchscreen triple tap
+
+## Additional arguments:
+
+Some actions support or require additional arguments. You can set them in the Settings menu. Arguments are separated by semicolon. For example: "arg1;arg2".
+
+1. Show desktop - no additional arguments supported
+2. Ctrl+Alt+Tab - no additional arguments supported
+3. Task Manager - no additional arguments supported
+4. Mute system volume - no additional arguments supported
+5. Taskbar auto-hide - no additional arguments supported
+6. Win+Tab - no additional arguments supported
+7. Hide desktop icons - no additional arguments supported
+7. Combine Taskbar buttons - `primaryTaskBarButtonsState1;primaryTaskBarButtonsState2;secondaryTaskBarButtonsState1;secondaryTaskBarButtonsState2`
+    - primaryTaskBarButtonsState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+    - primaryTaskBarButtonsState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+    - secondaryTaskBarButtonsState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+    - secondaryTaskBarButtonsState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+    - Example: `COMBINE_ALWAYS;COMBINE_WHEN_FULL;COMBINE_ALWAYS;COMBINE_NEVER`
+7. Open Start menu - no additional arguments supported
+8. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
+    - Example: `0x5B;0x45`
+    - Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in [win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
+9. Start application - `applicationPath`
+    - Example: `C:\Windows\System32\notepad.exe arg1`
+    - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
+    - Example: `cmd.exe /c echo Hello & pause`
+    - Takes and executes the whole applicationPath string. No semicolons are parsed! Only leading and trailing white characters are removed. You can use full path to the application or just the executable name if it is in PATH. In case you want to execute shell command, use cmd.exe with corresponding flag.
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
@@ -2071,14 +2083,12 @@ std::wstring ParseProcessArg(const std::wstring &args)
 {
     LOG_TRACE();
 
-    const auto argsSplit = SplitArgs(args);
-    if (argsSplit.size() != 1)
+    auto cmd = stringtools::trim(args);     // take the whole string as command
+    if (cmd.empty())
     {
-        LOG_ERROR(L"Invalid number of arguments for process setting. Expected format is: PROCESS_NAME");
-        return L"";
+        LOG_ERROR(L"Empty process name / command");
     }
-
-    return argsSplit[0];
+    return cmd;
 }
 
 std::vector<int> ParseVirtualKeypressSetting(const std::wstring &args)
@@ -2750,13 +2760,39 @@ void StartProcess(const std::wstring &command)
         return;
     }
 
-    LOG_INFO(L"Starting process: %s", command.c_str());
+    std::vector<std::wstring> args = SplitArgs(command);
+    if (args.empty())
+    {
+        LOG_DEBUG(L"Command parsing resulted in empty arguments, nothing to start");
+        return;
+    }
+
+    // First argument is the executable path/name
+    std::wstring executable = args[0];
+    
+    // Build command line with remaining arguments
+    std::wstring commandLine = executable;
+    for (size_t i = 1; i < args.size(); i++)
+    {
+        // Add quotes around arguments that contain spaces
+        if (args[i].find(L' ') != std::wstring::npos && 
+            (args[i].front() != L'"' || args[i].back() != L'"'))
+        {
+            commandLine += L" \"" + args[i] + L"\"";
+        }
+        else
+        {
+            commandLine += L" " + args[i];
+        }
+    }
+
+    LOG_INFO(L"Starting process: %s", commandLine.c_str());
 
     STARTUPINFO si{};
     PROCESS_INFORMATION pi{};
     si.cb = sizeof(si);
 
-    if (!CreateProcess(NULL, (LPWSTR)command.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+    if (!CreateProcess(NULL, (LPWSTR)commandLine.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
     {
         DWORD error = GetLastError();
         LOG_ERROR(L"Failed to start process - CreateProcess failed with error code: %d", error);
