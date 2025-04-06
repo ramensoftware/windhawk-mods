@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
-// @description     Trigger custom action when empty space on a taskbar is double/middle clicked
+// @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
 // @version         2.0
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
@@ -96,7 +96,7 @@ Some actions support or require additional arguments. You can set them in the Se
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
-- Windows 11 23H2 - latest major
+- Windows 11 24H2 - latest major (prior versions are not tested, but should work as well)
 
 I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
 
