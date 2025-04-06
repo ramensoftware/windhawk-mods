@@ -993,7 +993,7 @@ static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
-// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
@@ -1592,7 +1592,8 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     }
 
     // LOG_DEBUG(L"Message: 0x%x", uMsg);
-    LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
+
+    LRESULT result = 0;
 
     const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN);
     const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN);
@@ -1619,17 +1620,40 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 
         MouseClick::Type type = MouseClick::GetPointerType(wParam, lParam);
         OnMouseClick(MouseClick(wParam, lParam, type, button, hWnd));
-        if (isLeftDoubleClick || isRightDoubleClick || isMiddleDoubleClick)
-        {
-            OnMouseClick(MouseClick(wParam, lParam, type, button, hWnd));
-        }
     }
+    
+    else if(VK_RMENU == uMsg)   // avoid opening right click menu when performing a right click action
+    {
+        const auto& lastClick = g_mouseClickQueue[-1];
+        if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+        {
+            for (const auto &triggerAction : g_settings.triggerActions)
+            {
+                if (triggerAction.mouseTriggerName.find(L"right", 0) == 0) // Check if mouseTriggerName starts with "right"
+                {
+                    bool modifiersPressed = (lastClick.keyModifiersState == triggerAction.extepctedKeyModifiersState);
+                    if (modifiersPressed)
+                    {
+                        LOG_INFO("Suppressing VK_RMENU");
+                        return 0;       // suppress the right click menu (otherwise a double click would be impossible)
+                    }
+                }
+            }
+        }
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);   // show the right click menu
+    }
+    
     else if (WM_NCDESTROY == uMsg)
     {
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam); 
         if (hWnd != g_hTaskbarWnd)
         {
             g_secondaryTaskbarWindows.erase(hWnd);
         }
+    }
+    else 
+    {
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam); 
     }
 
     return result;
