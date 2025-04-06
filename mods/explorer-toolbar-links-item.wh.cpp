@@ -8,6 +8,7 @@
 // @twitter         https://twitter.com/kawaipure
 // @homepage        https://kawapure.github.io
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -luser32 -lole32 -luuid
 // ==/WindhawkMod==
 
@@ -337,8 +338,8 @@ void Wh_ModUninit()
     FreeLibrary(g_hInstExplorerFrame);
 }
 
-BOOL Wh_ModSettingsChanged(BOOL *pfReload)
+BOOL Wh_ModSettingsChanged()
 {
-    *pfReload = TRUE;
+    LoadSettings();
     return TRUE;
 }
