@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is double/middle clicked
-// @version         1.9
+// @version         2.0
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -184,6 +184,7 @@ If you have request for new functions, suggestions or you are experiencing some 
 #include <unordered_set>
 #include <vector>
 #include <functional>
+#include <algorithm>
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -1111,22 +1112,20 @@ enum TaskBarVersion
 };
 const wchar_t *TaskBarVersionNames[] = {L"WIN_10_TASKBAR", L"WIN_11_TASKBAR", L"UNKNOWN_TASKBAR"};
 
-enum TaskBarAction
+// Enum for key modifiers used to detect specific key states during input events.
+enum KeyModifier
 {
-    ACTION_NOTHING = 0,
-    ACTION_SHOW_DESKTOP,
-    ACTION_CTRL_ALT_TAB,
-    ACTION_TASK_MANAGER,
-    ACTION_MUTE,
-    ACTION_TASKBAR_AUTOHIDE,
-    ACTION_WIN_TAB,
-    ACTION_HIDE_ICONS,
-    ACTION_COMBINE_TASKBAR_BUTTONS,
-    ACTION_OPEN_START_MENU,
-    ACTION_SEND_KEYPRESS,
-    ACTION_START_PROCESS
+    KEY_MODIFIER_LCTRL = 0,
+    KEY_MODIFIER_RCTRL,
+    KEY_MODIFIER_LALT,
+    KEY_MODIFIER_RALT,
+    KEY_MODIFIER_LSHIFT,
+    KEY_MODIFIER_RSHIFT,
+    KEY_MODIFIER_LWIN,
+    KEY_MODIFIER_INVALID
 };
 
+// Enum for taskbar buttons state used to determine how to combine (or not) taskbar buttons.
 enum TaskBarButtonsState
 {
     COMBINE_ALWAYS = 0,
@@ -1134,13 +1133,13 @@ enum TaskBarButtonsState
     COMBINE_NEVER,
 };
 
+// structure that wraps around what action should be done under which conditions
 struct TriggerAction
 {
-    std::wstring mouseTriggerName; // Mouse trigger parsed from settings
-    std::wstring actionName;       // Name of the action parsed from settings
-
-    std::vector<std::tuple<std::wstring, std::function<bool()>>> keyboardModifiers; // list of (name, keyboard modifier check function) tuples
-    std::function<void(HWND)> actionExecutor;                                       // function that executes the action
+    std::wstring mouseTriggerName;            // Mouse trigger parsed from settings - represents what kind of button click should be detected
+    std::wstring actionName;                  // Name of the action parsed from settings
+    uint32_t extepctedKeyModifiersState;      // expected state (bitmask) of the key modifiers that should be checked
+    std::function<void(HWND)> actionExecutor; // function that executes the action
 };
 
 static struct
@@ -1212,7 +1211,8 @@ namespace stringtools
     }
 }
 
-bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
+void SetBit(uint32_t &value, uint32_t bit);
+bool GetBit(const uint32_t &value, uint32_t bit);
 
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
@@ -1244,7 +1244,7 @@ struct MouseClick
         INVALID
     };
 
-    MouseClick() : type(Type::INVALID), button(Button::INVALID), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(NULL)
+    MouseClick() : type(Type::INVALID), button(Button::INVALID), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(NULL), keyModifiersState(0)
     {
     }
 
@@ -1278,8 +1278,39 @@ struct MouseClick
                        (wcscmp(className.GetBSTR(), L"Taskbar.TaskbarFrameAutomationPeer") == 0) ||   // Windows 11 taskbar
                        (wcscmp(className.GetBSTR(), L"Windows.UI.Input.InputSite.WindowClass") == 0); // Windows 11 21H2 taskbar
 
-        LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld, type=%d, btn=%d, element=%s, isEmptySpace=%d",
-                  position.x, position.y, static_cast<int>(type), static_cast<int>(button), className.GetBSTR(), onEmptySpace);
+        keyModifiersState = GetKeyModifiersState();
+
+#ifdef ENABLE_LOG_DEBUG
+        std::wstring keyModifiersStateBinRepr = L"0b";
+        for (int i = 7; i >= 0; --i)
+        {
+            keyModifiersStateBinRepr += GetBit(keyModifiersState, i) ? L'1' : L'0';
+        }
+        LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld, type=%d, btn=%d, element=%s, isEmptySpace=%d, keyModifiersState=%s",
+                  position.x, position.y, static_cast<int>(type), static_cast<int>(button), className.GetBSTR(), onEmptySpace, keyModifiersStateBinRepr.c_str());
+#endif
+    }
+
+    static bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation)
+    {
+        LOG_TRACE();
+
+        // old Windows mouse handling of WM_MBUTTONDOWN message
+        if (g_taskbarVersion == WIN_10_TASKBAR)
+        {
+            // message carries mouse position relative to the client window so use GetCursorPos() instead
+            if (!GetCursorPos(&pointerLocation))
+            {
+                LOG_ERROR(L"Failed to get mouse position");
+                return false;
+            }
+        }
+        else
+        {
+            pointerLocation.x = GET_X_LPARAM(lParam);
+            pointerLocation.y = GET_Y_LPARAM(lParam);
+        }
+        return true;
     }
 
     static MouseClick::Type GetPointerType(WPARAM wParam, LPARAM lParam)
@@ -1325,12 +1356,56 @@ struct MouseClick
         return type;
     }
 
+    static uint32_t GetKeyModifiersState()
+    {
+        // Get all key states at once
+        BYTE keyState[256] = {0};
+        if (!GetKeyboardState(keyState))
+        {
+            LOG_ERROR(L"Failed to retrieve keyboard state");
+            return 0U;
+        }
+
+        uint32_t currentKeyModifiersState = 0U;
+        // Check for each modifier key if it is pressed
+        if (keyState[VK_LCONTROL] & 0x80)
+        {
+            SetBit(currentKeyModifiersState, KEY_MODIFIER_LCTRL);
+        }
+        if (keyState[VK_LSHIFT] & 0x80)
+        {
+            SetBit(currentKeyModifiersState, KEY_MODIFIER_LSHIFT);
+        }
+        if (keyState[VK_LMENU] & 0x80)
+        {
+            SetBit(currentKeyModifiersState, KEY_MODIFIER_LALT);
+        }
+        if (keyState[VK_LWIN] & 0x80)
+        {
+            SetBit(currentKeyModifiersState, KEY_MODIFIER_LWIN);
+        }
+        if (keyState[VK_RCONTROL] & 0x80)
+        {
+            SetBit(currentKeyModifiersState, KEY_MODIFIER_RCTRL);
+        }
+        if (keyState[VK_RSHIFT] & 0x80)
+        {
+            SetBit(currentKeyModifiersState, KEY_MODIFIER_RSHIFT);
+        }
+        if (keyState[VK_RMENU] & 0x80)
+        {
+            SetBit(currentKeyModifiersState, KEY_MODIFIER_RALT);
+        }
+        return currentKeyModifiersState;
+    }
+
     Type type;
     Button button;
     POINT position;
     DWORD timestamp;
     bool onEmptySpace;
     HWND hWnd;
+    uint32_t keyModifiersState;
 };
 
 // simple ring buffer to store last 3 mouse clicks with python-like index access
@@ -1396,6 +1471,7 @@ UINT_PTR gMouseClickTimer = (UINT_PTR)0;
 // =====================================================================
 // Forward declarations
 
+KeyModifier GetKeyModifierFromName(const std::wstring &keyName);
 bool IsTaskbarWindow(HWND hWnd);
 bool IsSingleClick(const MouseClick::Button button);
 bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousClick, const MouseClick &currentClick);
@@ -1406,10 +1482,9 @@ bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick
 bool IsDoubleTap();
 bool IsTripleTap();
 bool IsKeyPressed(int vkCode);
-void ExecuteTaskbarAction(const std::wstring &mouseTriggerName);
+void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks);
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
 bool OnMouseClick(MouseClick click);
-bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation);
 bool GetTaskbarAutohideState();
 void SetTaskbarAutohide(bool enabled);
 void ToggleTaskbarAutohide();
@@ -1871,24 +1946,24 @@ BOOL WindowsVersionInit()
     return TRUE;
 }
 
-int GetVirtualKeyFromName(const std::wstring &keyName)
+KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
 {
     if (keyName == L"lctrl")
-        return VK_LCONTROL;
+        return KEY_MODIFIER_LCTRL;
     if (keyName == L"rctrl")
-        return VK_RCONTROL;
+        return KEY_MODIFIER_RCTRL;
     if (keyName == L"lshift")
-        return VK_LSHIFT;
+        return KEY_MODIFIER_LSHIFT;
     if (keyName == L"rshift")
-        return VK_RSHIFT;
+        return KEY_MODIFIER_RSHIFT;
     if (keyName == L"lalt")
-        return VK_LMENU;
+        return KEY_MODIFIER_LALT;
     if (keyName == L"ralt")
-        return VK_RMENU;
+        return KEY_MODIFIER_RALT;
     if (keyName == L"win")
-        return VK_LWIN;
-    // Add more mappings as needed
-    return 0; // Return 0 for unrecognized key names
+        return KEY_MODIFIER_LWIN;
+    LOG_ERROR(L"Unknown key name '%s'", keyName.c_str());
+    return KEY_MODIFIER_INVALID; // Return 0 for unrecognized key names
 }
 
 std::vector<std::wstring> SplitArgs(const std::wstring &args)
@@ -2155,19 +2230,17 @@ void LoadSettings()
 
         // parse trigger->action settings
         TriggerAction triggerAction{};
+        triggerAction.extepctedKeyModifiersState = 0U;
         for (const auto &keyboardTrigger : keyboardTriggers)
         {
             if (keyboardTrigger == L"none")
                 continue;
 
-            int keyCode = GetVirtualKeyFromName(keyboardTrigger);
-            if (keyCode == 0)
+            KeyModifier keyModifier = GetKeyModifierFromName(keyboardTrigger);
+            if (keyModifier != KEY_MODIFIER_INVALID)
             {
-                LOG_ERROR(L"Failed to parse virtual key code from string '%s'", keyboardTrigger.c_str());
-                continue;
+                SetBit(triggerAction.extepctedKeyModifiersState, keyModifier);
             }
-            triggerAction.keyboardModifiers.push_back(std::make_tuple(keyboardTrigger, [keyCode]() -> bool
-                                                                      { return IsKeyPressed(keyCode); }));
         }
         triggerAction.mouseTriggerName = mouseTriggerStr;
         triggerAction.actionName = actionStr;
@@ -2223,28 +2296,6 @@ HWND FindDesktopWindow()
         return NULL;
     }
     return hChildWnd;
-}
-
-bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation)
-{
-    LOG_TRACE();
-
-    // old Windows mouse handling of WM_MBUTTONDOWN message
-    if (g_taskbarVersion == WIN_10_TASKBAR)
-    {
-        // message carries mouse position relative to the client window so use GetCursorPos() instead
-        if (!GetCursorPos(&pointerLocation))
-        {
-            LOG_ERROR(L"Failed to get mouse position");
-            return false;
-        }
-    }
-    else
-    {
-        pointerLocation.x = GET_X_LPARAM(lParam);
-        pointerLocation.y = GET_Y_LPARAM(lParam);
-    }
-    return true;
 }
 
 bool GetTaskbarAutohideState()
@@ -2735,6 +2786,16 @@ bool IsTaskbarWindow(HWND hWnd)
     }
 }
 
+void SetBit(uint32_t &value, uint32_t bit)
+{
+    value |= (1U << bit);
+}
+
+bool GetBit(const uint32_t &value, uint32_t bit)
+{
+    return (value & (1U << bit)) != 0;
+}
+
 bool IsSingleClick(const MouseClick::Button button)
 {
     LOG_TRACE();
@@ -2848,66 +2909,65 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     // mouse left button clicks
     if (IsTripleClick(MouseClick::Button::LEFT)) // should never happen
     {
-        ExecuteTaskbarAction(L"leftTriple");
+        ExecuteTaskbarAction(L"leftTriple", 3);
     }
     else if (IsDoubleClick(MouseClick::Button::LEFT))
     {
-        ExecuteTaskbarAction(L"leftDouble");
+        ExecuteTaskbarAction(L"leftDouble", 2);
     }
     else if (IsSingleClick(MouseClick::Button::LEFT))
     {
-        ExecuteTaskbarAction(L"left");
+        ExecuteTaskbarAction(L"left", 1);
     }
 
     // mouse right button clicks
     else if (IsTripleClick(MouseClick::Button::RIGHT)) // should never happen
     {
-        ExecuteTaskbarAction(L"rightTriple");
+        ExecuteTaskbarAction(L"rightTriple", 3);
     }
     else if (IsDoubleClick(MouseClick::Button::RIGHT))
     {
-        ExecuteTaskbarAction(L"rightDouble");
+        ExecuteTaskbarAction(L"rightDouble", 2);
     }
     else if (IsSingleClick(MouseClick::Button::RIGHT))
     {
-        ExecuteTaskbarAction(L"right");
+        ExecuteTaskbarAction(L"right", 1);
     }
 
     // mouse middle button clicks
     else if (IsTripleClick(MouseClick::Button::MIDDLE)) // should never happen
     {
-        ExecuteTaskbarAction(L"middleTriple");
+        ExecuteTaskbarAction(L"middleTriple", 3);
     }
     else if (IsDoubleClick(MouseClick::Button::MIDDLE))
     {
-        ExecuteTaskbarAction(L"middleDouble");
+        ExecuteTaskbarAction(L"middleDouble", 2);
     }
     else if (IsSingleClick(MouseClick::Button::MIDDLE))
     {
-        ExecuteTaskbarAction(L"middle");
+        ExecuteTaskbarAction(L"middle", 1);
     }
 
     // touchscreen tap
     else if (IsTripleTap()) // should never happen
     {
-        ExecuteTaskbarAction(L"tapTriple");
+        ExecuteTaskbarAction(L"tapTriple", 3);
     }
     else if (IsDoubleTap())
     {
-        ExecuteTaskbarAction(L"tapDouble");
+        ExecuteTaskbarAction(L"tapDouble", 2);
     }
     else if (IsSingleTap())
     {
-        ExecuteTaskbarAction(L"tapSingle");
+        ExecuteTaskbarAction(L"tapSingle", 1);
     }
 }
 
-void ExecuteTaskbarAction(const std::wstring &mouseTriggerName)
+void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks)
 {
     LOG_TRACE();
 
     HWND hWnd = g_mouseClickQueue[-1].hWnd;
-    g_mouseClickQueue.clear();
 
     LOG_DEBUG(L"Searching for action for trigger: %s", mouseTriggerName.c_str());
     for (const auto &triggerAction : g_settings.triggerActions)
@@ -2916,14 +2976,11 @@ void ExecuteTaskbarAction(const std::wstring &mouseTriggerName)
         {
             LOG_DEBUG(L"Found action: %s", triggerAction.actionName.c_str());
             bool allModifiersPressed = true;
-            for (const auto &[keyName, checkFunction] : triggerAction.keyboardModifiers)
+            for (int i = 1; i <= numClicks; i++)
             {
-                if (!checkFunction || !checkFunction())
-                {
-                    LOG_DEBUG(L"Modifier '%s' not pressed (or defined)", keyName.c_str());
-                    allModifiersPressed = false;
-                    break;
-                }
+                allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.extepctedKeyModifiersState);
+                LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u",
+                          i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.extepctedKeyModifiersState);
             }
             if (allModifiersPressed)
             {
@@ -2943,6 +3000,7 @@ void ExecuteTaskbarAction(const std::wstring &mouseTriggerName)
             }
         }
     }
+    g_mouseClickQueue.clear();
 }
 
 // main body of the mod called every time a taskbar is clicked
@@ -2965,26 +3023,26 @@ bool OnMouseClick(MouseClick click)
         gMouseClickTimer = NULL;
     }
 
+    g_mouseClickQueue.push_back(click);
     if (IsTripleClick(MouseClick::Button::LEFT))
     {
-        ExecuteTaskbarAction(L"leftTriple");
+        ExecuteTaskbarAction(L"leftTriple", 3);
     }
     else if (IsTripleClick(MouseClick::Button::RIGHT))
     {
-        ExecuteTaskbarAction(L"rightTriple");
+        ExecuteTaskbarAction(L"rightTriple", 3);
     }
     else if (IsTripleClick(MouseClick::Button::MIDDLE))
     {
-        ExecuteTaskbarAction(L"middleTriple");
+        ExecuteTaskbarAction(L"middleTriple", 3);
     }
     else if (IsTripleTap())
     {
-        ExecuteTaskbarAction(L"tapTriple");
+        ExecuteTaskbarAction(L"tapTriple", 3);
     }
     else
     {
         // single or double click -> chance to become double/triple click
-        g_mouseClickQueue.push_back(click);
         gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessDelayedMouseClick);
     }
 
