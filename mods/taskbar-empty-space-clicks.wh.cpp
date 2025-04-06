@@ -69,7 +69,7 @@ Following animation shows **Taskbar auto-hide** feature. Feature gets toggled wh
 
 ## Additional arguments:
 
-Some actions support or require additional arguments. You can set them in the Settings menu. Arguments are separated by semicolon. For example: "arg1;arg2".
+Some actions support or require additional arguments. You can set them in the Settings menu. Arguments are separated by semicolon. For example: `arg1;arg2`.
 
 1. Show desktop - no additional arguments supported
 2. Ctrl+Alt+Tab - no additional arguments supported
@@ -89,7 +89,7 @@ Some actions support or require additional arguments. You can set them in the Se
     - Example: `0x5B;0x45`
     - Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in [win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
 9. Start application - `applicationPath`
-    - Example: `C:\Windows\System32\notepad.exe arg1`
+    - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt`
     - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
     - Example: `cmd.exe /c echo Hello & pause`
     - Takes and executes the whole applicationPath string. No semicolons are parsed! Only leading and trailing white characters are removed. You can use full path to the application or just the executable name if it is in PATH. In case you want to execute shell command, use cmd.exe with corresponding flag.
@@ -1143,6 +1143,7 @@ enum TaskBarButtonsState
     COMBINE_ALWAYS = 0,
     COMBINE_WHEN_FULL,
     COMBINE_NEVER,
+    COMBINE_INVALID
 };
 
 // structure that wraps around what action should be done under which conditions
@@ -2013,10 +2014,10 @@ std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBa
     LOG_TRACE();
 
     // defaults in case parsing fails
-    TaskBarButtonsState primaryTaskBarButtonsState1 = COMBINE_ALWAYS;
-    TaskBarButtonsState primaryTaskBarButtonsState2 = COMBINE_NEVER;
-    TaskBarButtonsState secondaryTaskBarButtonsState1 = COMBINE_ALWAYS;
-    TaskBarButtonsState secondaryTaskBarButtonsState2 = COMBINE_NEVER;
+    TaskBarButtonsState primaryTaskBarButtonsState1 = COMBINE_INVALID;
+    TaskBarButtonsState primaryTaskBarButtonsState2 = COMBINE_INVALID;
+    TaskBarButtonsState secondaryTaskBarButtonsState1 = COMBINE_INVALID;
+    TaskBarButtonsState secondaryTaskBarButtonsState2 = COMBINE_INVALID;
 
     const auto argsSplit = SplitArgs(args);
     if (argsSplit.size() != 4)
@@ -2025,37 +2026,36 @@ std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBa
                   "Expected format is: PRIMARY_STATE1;PRIMARY_STATE2;SECONDARY_STATE1;SECONDARY_STATE2");
     }
 
-    for (const auto &arg : argsSplit)
+    auto parseTaskBarButtonState = [](const std::wstring &arg) -> TaskBarButtonsState
     {
-        if (arg == L"PRIMARY_COMBINE_ALWAYS")
+        if (arg == L"COMBINE_ALWAYS")
         {
-            primaryTaskBarButtonsState1 = COMBINE_ALWAYS;
+            return COMBINE_ALWAYS;
         }
-        else if (arg == L"PRIMARY_COMBINE_WHEN_FULL")
+        else if (arg == L"COMBINE_WHEN_FULL")
         {
-            primaryTaskBarButtonsState1 = COMBINE_WHEN_FULL;
+            return COMBINE_WHEN_FULL;
         }
-        else if (arg == L"PRIMARY_COMBINE_NEVER")
+        else if (arg == L"COMBINE_NEVER")
         {
-            primaryTaskBarButtonsState1 = COMBINE_NEVER;
-        }
-        else if (arg == L"SECONDARY_COMBINE_ALWAYS")
-        {
-            secondaryTaskBarButtonsState1 = COMBINE_ALWAYS;
-        }
-        else if (arg == L"SECONDARY_COMBINE_WHEN_FULL")
-        {
-            secondaryTaskBarButtonsState1 = COMBINE_WHEN_FULL;
-        }
-        else if (arg == L"SECONDARY_COMBINE_NEVER")
-        {
-            secondaryTaskBarButtonsState1 = COMBINE_NEVER;
+            return COMBINE_NEVER;
         }
         else
         {
             LOG_ERROR(L"Unknown state '%s' for taskbar buttons state setting", arg.c_str());
+            return COMBINE_INVALID; // Default value in case of error
         }
-    }
+    };
+
+    // even if the parsing fails, we parse as much as we can (e.g. user is not interested in secondary taskbar buttons state)
+    if (argsSplit.size() >= 1)
+        primaryTaskBarButtonsState1 = parseTaskBarButtonState(argsSplit[0]);
+    if (argsSplit.size() >= 2)
+        primaryTaskBarButtonsState2 = parseTaskBarButtonState(argsSplit[1]);
+    if (argsSplit.size() >= 3)
+        secondaryTaskBarButtonsState1 = parseTaskBarButtonState(argsSplit[2]);
+    if (argsSplit.size() >= 4)
+        secondaryTaskBarButtonsState2 = parseTaskBarButtonState(argsSplit[3]);
 
     return std::make_tuple(primaryTaskBarButtonsState1, primaryTaskBarButtonsState2, secondaryTaskBarButtonsState1, secondaryTaskBarButtonsState2);
 }
@@ -2083,7 +2083,7 @@ std::wstring ParseProcessArg(const std::wstring &args)
 {
     LOG_TRACE();
 
-    auto cmd = stringtools::trim(args);     // take the whole string as command
+    auto cmd = stringtools::trim(args); // take the whole string as command
     if (cmd.empty())
     {
         LOG_ERROR(L"Empty process name / command");
@@ -2125,7 +2125,7 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
         return [](HWND)
         { ShowDesktop(); };
     }
-    else if (actionName == L"ACTION_CTRL_ALT_TAB")
+    else if (actionName == L"ACTION_ALT_TAB")
     {
         return [](HWND)
         { SendCtrlAltTabKeypress(); };
@@ -2658,15 +2658,22 @@ void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2)
 {
     bool shallNotify = false;
-    // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
-    static bool zigzagPrimary = (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == primaryTaskBarButtonsState1);
-    zigzagPrimary = !zigzagPrimary;
-    shallNotify |= SetCombineTaskbarButtons(L"TaskbarGlomLevel",
-                                            zigzagPrimary ? primaryTaskBarButtonsState1 : primaryTaskBarButtonsState2);
-    static bool zigzagSecondary = (GetCombineTaskbarButtons(L"MMTaskbarGlomLevel") == secondaryTaskBarButtonsState1);
-    zigzagSecondary = !zigzagSecondary;
-    shallNotify |= SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
-                                            zigzagSecondary ? secondaryTaskBarButtonsState1 : secondaryTaskBarButtonsState2);
+    if ((primaryTaskBarButtonsState1 != COMBINE_INVALID) && (primaryTaskBarButtonsState2 != COMBINE_INVALID))
+    {
+        // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
+        static bool zigzagPrimary = (GetCombineTaskbarButtons(L"TaskbarGlomLevel") == primaryTaskBarButtonsState1);
+        zigzagPrimary = !zigzagPrimary;
+        shallNotify |= SetCombineTaskbarButtons(L"TaskbarGlomLevel",
+                                                zigzagPrimary ? primaryTaskBarButtonsState1 : primaryTaskBarButtonsState2);
+    }
+    if ((secondaryTaskBarButtonsState1 != COMBINE_INVALID) && (secondaryTaskBarButtonsState2 != COMBINE_INVALID))
+    {
+        // get the initial state so that first click actually toggles to the other state (avoid switching to a state that is already set)
+        static bool zigzagSecondary = (GetCombineTaskbarButtons(L"MMTaskbarGlomLevel") == secondaryTaskBarButtonsState1);
+        zigzagSecondary = !zigzagSecondary;
+        shallNotify |= SetCombineTaskbarButtons(L"MMTaskbarGlomLevel",
+                                                zigzagSecondary ? secondaryTaskBarButtonsState1 : secondaryTaskBarButtonsState2);
+    }
     if (shallNotify)
     {
         SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
@@ -2769,13 +2776,13 @@ void StartProcess(const std::wstring &command)
 
     // First argument is the executable path/name
     std::wstring executable = args[0];
-    
+
     // Build command line with remaining arguments
     std::wstring commandLine = executable;
     for (size_t i = 1; i < args.size(); i++)
     {
         // Add quotes around arguments that contain spaces
-        if (args[i].find(L' ') != std::wstring::npos && 
+        if (args[i].find(L' ') != std::wstring::npos &&
             (args[i].front() != L'"' || args[i].back() != L'"'))
         {
             commandLine += L" \"" + args[i] + L"\"";
