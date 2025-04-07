@@ -2,11 +2,11 @@
 // @id              favorites-in-navpane
 // @name            Favorites in Navigation Pane
 // @description     Replaces Windows 10 Quick Access with Favorites in Navigation Pane
-// @version         1.0
+// @version         1.0.1
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
-// @compilerOptions -lcomctl32 -lshlwapi -lntdll
+// @compilerOptions -lcomctl32 -lshlwapi -lntdll -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -104,7 +104,8 @@ HRESULT WriteOrderRegistry(IStream *pStream)
                 if (SUCCEEDED(hr))
                 {
                     hr = RegSetValueExW(hKey, L"Order", 0, REG_BINARY, lpData, streamSize.QuadPart);
-                }   
+                }
+                RegCloseKey(hKey);
             }
             delete[] lpData;
         }
@@ -121,6 +122,7 @@ BOOL IsIShellItemFavorites(IShellItem *pIShellItem)
         pIShellItem->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &pszName);
         if (!wcscmp(L"::{323CA680-C24D-4099-B94D-446DD2D7249E}", pszName))
         {
+            CoTaskMemFree(pszName);
             return true;
         }
     }
@@ -243,7 +245,7 @@ HRESULT STDCALL CProperTreeHost_PersistChildItemsOrder_hook(void *pThis, int a2,
     HRESULT hr = CProperTreeHost_PersistChildItemsOrder_orig(pThis, a2, pIShellItem);
     if (IsIShellItemFavorites(pIShellItem))
     {
-        return 0x80004001;
+        return E_NOTIMPL;
     }
 
     return hr;
