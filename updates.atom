@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-07T10:45:06.000Z</updated>
+    <updated>2025-04-07T16:23:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Favorites in Navigation Pane 1.0.1]]></title>
+        <id>https://windhawk.net/mods/favorites-in-navpane#10f1463d8bd2609b6278c5c548c58a1ed8ffcd98</id>
+        <link href="https://windhawk.net/mods/favorites-in-navpane"/>
+        <updated>2025-04-07T16:23:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix memory leak</li>
+<li>Make sure to close registry key</li>
+</ul>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.1]]></title>
         <id>https://windhawk.net/mods/explorer-toolbar-links-item#94bda638328d60ba4b4d259215bf791a9b69108d</id>
@@ -294,22 +308,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 <li>Fixed the hover not working on some regions of the "Show desktop" button.</li>
 <li>Improved mod name and description.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Show Desktop Button Aero Peek 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#bef04b3e280151725c8cd4aa97274cd825de9d50</id>
-        <link href="https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek"/>
-        <updated>2025-03-26T22:33:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarshowdesktopbuttonaeropeek">Taskbar Show Desktop Button Aero Peek</h1>
-<p>Enable Aero Peek when hovering over the Show Desktop button, like it was
-possible before Windows 11.</p>
-<p>Only Windows 11 is supported. This mod isn't needed for Windows 7 to 10, where
-this behavior is already present.</p>
-<p><img src="https://i.imgur.com/TsJX013.gif" alt="Demonstration" /></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

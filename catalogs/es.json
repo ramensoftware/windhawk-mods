@@ -1551,19 +1551,19 @@
                 "published": 1742054420000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1742054420000,
+                "updated": 1744043013000,
                 "users": 109
             },
             "metadata": {
                 "author": "xalejandro",
-                "compilerOptions": "-lcomctl32 -lshlwapi -lntdll",
+                "compilerOptions": "-lcomctl32 -lshlwapi -lntdll -lole32",
                 "description": "Replaces Windows 10 Quick Access with Favorites in Navigation Pane",
                 "github": "https://github.com/tetawaves",
                 "include": [
                     "*"
                 ],
                 "name": "Favorites in Navigation Pane",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "file-explorer-remove-suffixes": {
