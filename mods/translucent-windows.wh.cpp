@@ -167,7 +167,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 #include <vssym32.h>
 #include <uxtheme.h>
 #include <string>
-#include <unordered_map>
 
 struct Settings{
     BOOL FillBg = FALSE;
@@ -191,8 +190,6 @@ struct Settings{
     } BgType = Default;
 
 } g_settings;
-
-std::unordered_map<DWORD, std::unique_ptr<Settings>> SettingsMap;
 
 /*https://gist.github.com/xv/43bd4c944202a593ac8ec6daa299b471*/
 struct ACCENT_POLICY 
@@ -254,9 +251,9 @@ void EnableBlurBehind(HWND);
 void EnableSystemBackdropAcrylic(HWND);
 void EnableMica(HWND);
 void EnableMicaTabbed(HWND);
-void EnableColoredTitlebar(DWORD, HWND);
-void EnableCaptionTextColor(DWORD, HWND);
-void EnableColoredBorder(DWORD, HWND);
+void EnableColoredTitlebar(HWND);
+void EnableCaptionTextColor(HWND);
+void EnableColoredBorder(HWND);
 void ApplyForExistingWindows();
 BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
 BOOL IsWindowClass(HWND, LPCWSTR);
@@ -306,53 +303,47 @@ DwmSetWindowAttribute_t originalDwmSetWindowAttribute = nullptr;
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    DWORD CurrProcID = GetCurrentProcessId();
-    DWORD Proc = SettingsMap.contains(CurrProcID) ? CurrProcID : NULL;
-    
-    if(!SettingsMap[Proc]->TitlebarFlag)
+    if(!g_settings.TitlebarFlag)
     {
-        if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && SettingsMap[Proc]->ExtendFrame)
+        if(g_settings.BgType == g_settings.BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && g_settings.ExtendFrame)
         {
-            if(SettingsMap[Proc]->CaptionTextFlag && dwAttribute == CAPTION_TEXT_COLOR)
-                return originalDwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR, &SettingsMap[Proc]->CaptionTextColor, sizeof(SettingsMap[Proc]->CaptionTextColor));
+            if(g_settings.CaptionTextFlag && dwAttribute == CAPTION_TEXT_COLOR)
+                return originalDwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR, &g_settings.CaptionTextColor, sizeof(g_settings.CaptionTextColor));
 
-            if(!SettingsMap[Proc]->BorderFlag)
+            if(!g_settings.BorderFlag)
                 return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
             else
-                return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &SettingsMap[Proc]->BorderColor, sizeof(SettingsMap[Proc]->BorderColor));
+                return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
         }           
         else if(dwAttribute == SYSTEMBACKDROP_TYPE)
         {
-            if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->AcrylicSystemBackdrop)
+            if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
                 return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(TRANSIENTWINDOW));
-            else if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->MicaAlt)
+            else if(g_settings.BgType == g_settings.MicaAlt)
                 return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &TABBEDWINDOW, sizeof(TABBEDWINDOW));
-            else if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->Mica)
+            else if(g_settings.BgType == g_settings.Mica)
                 return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &MAINWINDOW, sizeof(MAINWINDOW));
         }
     }
     else if((IsWindowClass(hWnd, L"CabinetWClass")|| IsWindowClass(hWnd, L"TaskManagerWindow")) && (dwAttribute == CAPTION_COLOR || dwAttribute == SYSTEMBACKDROP_TYPE))
-            return originalDwmSetWindowAttribute(hWnd, CAPTION_COLOR, &SettingsMap[Proc]->TitlebarColor, sizeof(SettingsMap[Proc]->TitlebarColor));
+            return originalDwmSetWindowAttribute(hWnd, CAPTION_COLOR, &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
     
     // Effects on VS Studio, Windows Terminal ...
-    if(SettingsMap[Proc]->BorderFlag && dwAttribute == BORDER_COLOR)
+    if(g_settings.BorderFlag && dwAttribute == BORDER_COLOR)
     {
         // Windows classic context menu
-        if(SettingsMap[Proc]->MenuBorderFlag && IsWindowClass(hWnd, L"#32768"))
-            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &SettingsMap[Proc]->BorderColor, sizeof(SettingsMap[Proc]->BorderColor));
+        if(g_settings.MenuBorderFlag && IsWindowClass(hWnd, L"#32768"))
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
         else if(!IsWindowClass(hWnd, L"#32768"))
-            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &SettingsMap[Proc]->BorderColor, sizeof(SettingsMap[Proc]->BorderColor));
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
     }
     
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
 HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMarInset)
-{
-    DWORD CurrProcID = GetCurrentProcessId();
-    DWORD Proc = SettingsMap.contains(CurrProcID) ? CurrProcID : NULL;
-    
-    if(SettingsMap[Proc]->ExtendFrame)
+{   
+    if(g_settings.ExtendFrame)
     {
         // Override Win11 Taskmgr, explorer, aerowizard calls
         if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"NativeHWNDHost") || IsWindowClass(hWnd, L"TaskManagerWindow"))
@@ -476,19 +467,19 @@ void EnableMicaTabbed(HWND hWnd)
     DwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE , &TABBEDWINDOW, sizeof(TABBEDWINDOW));
 }
 
-void EnableColoredTitlebar(DWORD ProcID, HWND hWnd)
+void EnableColoredTitlebar(HWND hWnd)
 {
-    DwmSetWindowAttribute(hWnd, CAPTION_COLOR, &SettingsMap[ProcID]->TitlebarColor, sizeof(SettingsMap[ProcID]->TitlebarColor));
+    DwmSetWindowAttribute(hWnd, CAPTION_COLOR, &g_settings.TitlebarColor, sizeof(g_settings.TitlebarColor));
 }
 
-void EnableCaptionTextColor(DWORD ProcID, HWND hWnd)
+void EnableCaptionTextColor(HWND hWnd)
 {
-    DwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR, &SettingsMap[ProcID]->CaptionTextColor, sizeof(SettingsMap[ProcID]->CaptionTextColor));
+    DwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR, &g_settings.CaptionTextColor, sizeof(g_settings.CaptionTextColor));
 }
 
-void EnableColoredBorder(DWORD ProcID, HWND hWnd)
+void EnableColoredBorder(HWND hWnd)
 {
-    DwmSetWindowAttribute(hWnd, BORDER_COLOR, &SettingsMap[ProcID]->BorderColor, sizeof(SettingsMap[ProcID]->BorderColor));
+    DwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderColor, sizeof(g_settings.BorderColor));
 }
 
 BOOL IsWindowEligible(HWND hWnd) 
@@ -529,32 +520,28 @@ void NewWindowShown(HWND hWnd)
     if(!IsWindowEligible(hWnd))
         return;
 
-    DWORD CurrProcID = GetCurrentProcessId();
-    DWORD Proc = SettingsMap.contains(CurrProcID) ? CurrProcID : NULL;
-
-
-    if(SettingsMap[Proc]->ExtendFrame)
+    if(g_settings.ExtendFrame)
         ApplyFrameExtension(hWnd);
 
-    if(SettingsMap[Proc]->CaptionTextFlag)
-        EnableCaptionTextColor(Proc, hWnd);
+    if(g_settings.CaptionTextFlag)
+        EnableCaptionTextColor(hWnd);
 
-    if(SettingsMap[Proc]->BorderFlag)
-        EnableColoredBorder(Proc, hWnd); 
+    if(g_settings.BorderFlag)
+        EnableColoredBorder(hWnd); 
 
-    if(!SettingsMap[Proc]->TitlebarFlag)
+    if(!g_settings.TitlebarFlag)
     {
-        if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->BlurBehind && SettingsMap[Proc]->ExtendFrame)
+        if(g_settings.BgType == g_settings.BlurBehind && g_settings.ExtendFrame)
             EnableBlurBehind(hWnd);
-        else if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->AcrylicSystemBackdrop)
+        else if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
             EnableSystemBackdropAcrylic(hWnd);
-        else if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->Mica)
+        else if(g_settings.BgType == g_settings.Mica)
             EnableMica(hWnd);
-        else if(SettingsMap[Proc]->BgType == SettingsMap[Proc]->MicaAlt)
+        else if(g_settings.BgType == g_settings.MicaAlt)
             EnableMicaTabbed(hWnd);
     }
     else
-        EnableColoredTitlebar(Proc, hWnd);
+        EnableColoredTitlebar(hWnd);
 }
 
 void DwmExpandFrameIntoClientAreaHook()
@@ -705,61 +692,55 @@ void GetCurrProcInfo(std::wstring& outName, DWORD& outPID) {
 
 void LoadSettings(void)
 {
-    SettingsMap.clear();
-
-    auto GlobalSettings = std::make_unique<Settings>();
-
-    GlobalSettings->FillBg = Wh_GetIntSetting(L"ThemeBackground");
-    if(GlobalSettings->FillBg)
+    g_settings.FillBg = Wh_GetIntSetting(L"ThemeBackground");
+    if(g_settings.FillBg)
         FillBackgroundElements();
     
     LPCWSTR pszStyle = Wh_GetStringSetting(L"type");
     if (0 == wcscmp(pszStyle, L"acrylicblur"))
-        GlobalSettings->BgType = GlobalSettings->BlurBehind;
+        g_settings.BgType = g_settings.BlurBehind;
     else if (0 == wcscmp(pszStyle, L"acrylicsystem"))
-        GlobalSettings->BgType = GlobalSettings->AcrylicSystemBackdrop;
+        g_settings.BgType = g_settings.AcrylicSystemBackdrop;
     else if (0 == wcscmp(pszStyle, L"mica"))
-        GlobalSettings->BgType = GlobalSettings->Mica;
+        g_settings.BgType = g_settings.Mica;
     else if (0 == wcscmp(pszStyle, L"mica_tabbed"))
-        GlobalSettings->BgType = GlobalSettings->MicaAlt;
+        g_settings.BgType = g_settings.MicaAlt;
     else 
-        GlobalSettings->BgType = GlobalSettings->Default;
+        g_settings.BgType = g_settings.Default;
     
-    GlobalSettings->ExtendFrame = Wh_GetIntSetting(L"ExtendFrame");
-    if(GlobalSettings->ExtendFrame)
+    g_settings.ExtendFrame = Wh_GetIntSetting(L"ExtendFrame");
+    if(g_settings.ExtendFrame)
         DwmExpandFrameIntoClientAreaHook();
 
     DwmSetWindowAttributeHook();
 
-    GlobalSettings->TitlebarFlag = Wh_GetIntSetting(L"TitlebarColor.ColorTitlebar");
-    if(GlobalSettings->TitlebarFlag)
+    g_settings.TitlebarFlag = Wh_GetIntSetting(L"TitlebarColor.ColorTitlebar");
+    if(g_settings.TitlebarFlag)
     {
         LPCWSTR pszTitlebarStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles");
-        GlobalSettings->TitlebarFlag = GetColorSetting(pszTitlebarStyle, GlobalSettings->TitlebarColor);
+        g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarColor);
         Wh_FreeStringSetting(pszTitlebarStyle);
     }
 
-    GlobalSettings->CaptionTextFlag = Wh_GetIntSetting(L"TitlebarTextColor.ColorTitlebarText");
-    if(GlobalSettings->CaptionTextFlag)
+    g_settings.CaptionTextFlag = Wh_GetIntSetting(L"TitlebarTextColor.ColorTitlebarText");
+    if(g_settings.CaptionTextFlag)
     {
         LPCWSTR pszTitlebarTextColorStyle = Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles");
-        GlobalSettings->CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, GlobalSettings->CaptionTextColor);
+        g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionTextColor);
         Wh_FreeStringSetting(pszTitlebarTextColorStyle);
     }
 
-    GlobalSettings->BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
-    if(GlobalSettings->BorderFlag)
+    g_settings.BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
+    if(g_settings.BorderFlag)
     {
         LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"BorderColor.borderstyles");
-        GlobalSettings->BorderFlag = GetColorSetting(pszBorderStyle, GlobalSettings->BorderColor);
+        g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderColor);
         Wh_FreeStringSetting(pszBorderStyle);
     }
 
-    GlobalSettings->MenuBorderFlag = Wh_GetIntSetting(L"BorderColor.MenuBorderColor");
+    g_settings.MenuBorderFlag = Wh_GetIntSetting(L"BorderColor.MenuBorderColor");
 
     Wh_FreeStringSetting(pszStyle);
-
-    SettingsMap.emplace(NULL, std::move(GlobalSettings));
 
     // Process Rules
 
@@ -776,56 +757,52 @@ void LoadSettings(void)
         {
             std::wstring ruledproc = program;
             GetProcStrFromPath(ruledproc);
-
-            auto RuledSettings = std::make_unique<Settings>();
             
             if(currproc == ruledproc)
             {
                 LPCWSTR pszStyle = Wh_GetStringSetting(L"RuledPrograms[%d].type", i);
                 if (0 == wcscmp(pszStyle, L"acrylicblur"))
-                    RuledSettings->BgType = RuledSettings->BlurBehind;
+                    g_settings.BgType = g_settings.BlurBehind;
                 else if (0 == wcscmp(pszStyle, L"acrylicsystem"))
-                    RuledSettings->BgType = RuledSettings->AcrylicSystemBackdrop;
+                    g_settings.BgType = g_settings.AcrylicSystemBackdrop;
                 else if (0 == wcscmp(pszStyle, L"mica"))
-                    RuledSettings->BgType = RuledSettings->Mica;
+                    g_settings.BgType = g_settings.Mica;
                 else if (0 == wcscmp(pszStyle, L"mica_tabbed"))
-                    RuledSettings->BgType = RuledSettings->MicaAlt;
+                    g_settings.BgType = g_settings.MicaAlt;
                 else 
-                    RuledSettings->BgType = RuledSettings->Default;
+                    g_settings.BgType = g_settings.Default;
                 
                 Wh_FreeStringSetting(pszStyle);
                 
-                RuledSettings->ExtendFrame = Wh_GetIntSetting(L"RuledPrograms[%d].ExtendFrame", i);
-                if(RuledSettings->ExtendFrame)
+                g_settings.ExtendFrame = Wh_GetIntSetting(L"RuledPrograms[%d].ExtendFrame", i);
+                if(g_settings.ExtendFrame)
                     DwmExpandFrameIntoClientAreaHook();
                 
-                RuledSettings->TitlebarFlag = Wh_GetIntSetting(L"RuledPrograms[%d].TitlebarColor.ColorTitlebar", i);
-                if(RuledSettings->TitlebarFlag)
+                g_settings.TitlebarFlag = Wh_GetIntSetting(L"RuledPrograms[%d].TitlebarColor.ColorTitlebar", i);
+                if(g_settings.TitlebarFlag)
                 {
                     LPCWSTR pszTitlebarStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarColor.titlerbarstyles", i);
-                    RuledSettings->TitlebarFlag = GetColorSetting(pszTitlebarStyle, RuledSettings->TitlebarColor);
+                    g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarColor);
                     Wh_FreeStringSetting(pszTitlebarStyle);
                 }
 
-                RuledSettings->CaptionTextFlag = Wh_GetIntSetting(L"RuledPrograms[%d].TitlebarTextColor.ColorTitlebarText", i);
-                if(RuledSettings->CaptionTextFlag)
+                g_settings.CaptionTextFlag = Wh_GetIntSetting(L"RuledPrograms[%d].TitlebarTextColor.ColorTitlebarText", i);
+                if(g_settings.CaptionTextFlag)
                 {
                     LPCWSTR pszTitlebarTextColorStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarTextColor.titlerbarcolorstyles", i);
-                    RuledSettings->CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, RuledSettings->CaptionTextColor);
+                    g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionTextColor);
                     Wh_FreeStringSetting(pszTitlebarTextColorStyle);
                 }
 
-                RuledSettings->BorderFlag = Wh_GetIntSetting(L"RuledPrograms[%d].BorderColor.ColorBorder", i);
-                if(RuledSettings->BorderFlag)
+                g_settings.BorderFlag = Wh_GetIntSetting(L"RuledPrograms[%d].BorderColor.ColorBorder", i);
+                if(g_settings.BorderFlag)
                 {
                     LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles", i);
-                    RuledSettings->BorderFlag = GetColorSetting(pszBorderStyle, RuledSettings->BorderColor);
+                    g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderColor);
                     Wh_FreeStringSetting(pszBorderStyle);
                 }
 
-                RuledSettings->MenuBorderFlag = RuledSettings->BorderFlag;
-
-                SettingsMap.emplace(currProcID, std::move(RuledSettings));
+                g_settings.MenuBorderFlag = g_settings.BorderFlag;
             }
         }
 
