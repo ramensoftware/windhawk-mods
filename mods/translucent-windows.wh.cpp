@@ -734,9 +734,9 @@ void LoadSettings(void)
     GlobalSettings->TitlebarFlag = Wh_GetIntSetting(L"TitlebarColor.ColorTitlebar");
     if(GlobalSettings->TitlebarFlag)
     {
-        LPCWSTR pszTitleberStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles");
-        GlobalSettings->TitlebarFlag = GetColorSetting(pszTitleberStyle, GlobalSettings->TitlebarColor);
-        Wh_FreeStringSetting(pszTitleberStyle);
+        LPCWSTR pszTitlebarStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles");
+        GlobalSettings->TitlebarFlag = GetColorSetting(pszTitlebarStyle, GlobalSettings->TitlebarColor);
+        Wh_FreeStringSetting(pszTitlebarStyle);
     }
 
     GlobalSettings->CaptionTextFlag = Wh_GetIntSetting(L"TitlebarTextColor.ColorTitlebarText");
