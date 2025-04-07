@@ -1,3 +1,9 @@
+## 1.3 ([Apr 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/901ab88551bbba9ff79f8e1b8e7e5aeb29edb982/mods/translucent-windows.wh.cpp))
+
+* Add rules for processes
+* Fix Control Panel title bar text color not being applied when using Acrylic Blur Behind
+* Fix Snipping Tool not being affected by mod
+
 ## 1.2 ([Apr 2, 2025](https://github.com/ramensoftware/windhawk-mods/blob/193118c7ae5451a3536bf39e1f029b4c701e7c76/mods/translucent-windows.wh.cpp))
 
 * Added support for windows caption text color modification
