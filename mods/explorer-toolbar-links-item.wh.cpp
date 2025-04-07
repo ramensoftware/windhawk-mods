@@ -2,7 +2,7 @@
 // @id              explorer-toolbar-links-item
 // @name            File Explorer Toolbar Links Item
 // @description     Restores the ability to display the hidden "Links" toolbar in Windows 10 and 11.
-// @version         1.0.1
+// @version         1.1
 // @author          Isabella Lulamoon (kawapure)
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
@@ -17,11 +17,16 @@
 # File Explorer Toolbar Links Item
 
 This mod restores the ability to display the "Links" toolbar, hidden since Windows Vista, in Windows 10 and 11.
+This mod is based [on the work of AsumiLuna, which you can see on the WinClassic forums here.](https://winclassic.net/thread/2913/explorer-toolbar-funtional-modern-windows)
 
 The links toolbar can be used to provide a custom set of quick links that the user can access across the top of
 any File Explorer window.
 
 ![Preview image](https://raw.githubusercontent.com/kawapure/images/refs/heads/main/linksbar.png)
+
+You can also enable it through the Ribbon UI via the "Options" dropdown in the "View" tab:
+
+![Ribbon UI enablement position preview image](https://raw.githubusercontent.com/kawapure/images/refs/heads/main/linksbar_ribbon.png)
 
 ## What's the difference between this and some registry patch?
 
@@ -53,18 +58,113 @@ items, or drag items into it, and its vertical height was uncapped so it was pro
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <exdisp.h>
+#include <winscard.h>
 #include <string>
+#include <shobjidl.h>
+#include <initguid.h>
+
+class CVersionHelper
+{
+public:
+	// Data structure returned by GetVersionInfo().
+	struct VersionStruct
+	{
+		bool isInitialized = false;
+		DWORD dwMajorVersion = 0;
+		DWORD dwMinorVersion = 0;
+		DWORD dwBuildNumber = 0;
+		DWORD dwPlatformId = 0;
+	};
+
+	typedef void (WINAPI *RtlGetVersion_t)(OSVERSIONINFOEXW *);
+
+	// Gets the precise OS version.
+	static const VersionStruct *GetVersionInfo()
+	{
+		static VersionStruct s_versionStruct = { 0 };
+
+		// Skip if cached.
+		if (!s_versionStruct.isInitialized)
+		{
+			HMODULE hMod = LoadLibraryW(L"ntdll.dll");
+
+			if (hMod)
+			{
+				RtlGetVersion_t func = (RtlGetVersion_t)GetProcAddress(hMod, "RtlGetVersion");
+
+				if (!func)
+				{
+					FreeLibrary(hMod);
+
+					// TODO: error handling.
+					return &s_versionStruct;
+				}
+
+				OSVERSIONINFOEXW osVersionInfo = { 0 };
+				osVersionInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEXW);
+
+				func(&osVersionInfo);
+
+				s_versionStruct.dwBuildNumber = osVersionInfo.dwBuildNumber;
+				s_versionStruct.dwMajorVersion = osVersionInfo.dwMajorVersion;
+				s_versionStruct.dwMinorVersion = osVersionInfo.dwMinorVersion;
+				s_versionStruct.dwPlatformId = osVersionInfo.dwPlatformId;
+
+				s_versionStruct.isInitialized = true;
+
+				FreeLibrary(hMod);
+			}
+		}
+
+		return &s_versionStruct;
+	}
+
+	// Specific version helpers.
+	inline static bool IsWindows10OrGreater()
+	{
+		return GetVersionInfo()->dwMajorVersion >= 10 &&
+			   GetVersionInfo()->dwBuildNumber >= 10240;
+	}
+
+    inline static bool IsWindows11OrGreater()
+    {
+        return GetVersionInfo()->dwMajorVersion >= 10 &&
+               GetVersionInfo()->dwBuildNumber >= 22000;
+    }
+};
+
+// Architecture calling convention declarations:
+#ifdef _WIN64
+#   define THISCALL  __cdecl
+#   define STHISCALL L"__cdecl"
+
+#   define STDCALL  __cdecl
+#   define SSTDCALL L"__cdecl"
+#else
+#   define THISCALL  __thiscall
+#   define STHISCALL L"__thiscall"
+
+#   define STDCALL  __stdcall
+#   define SSTDCALL L"__stdcall"
+#endif
 
 HMODULE g_hInstExplorerFrame = nullptr;
 std::wstring g_spszLinksText;
 
 #define MOD_CANCEL_INIT_AND_SHOW_USER_ERROR(msg) \
+    Wh_Log(L"Failed to load mod: %s", msg);      \
     MessageBoxW(nullptr,                         \
             msg,                                 \
             kErrorTitle,                         \
             MB_OK                                \
         );                                       \
     return FALSE
+
+#ifdef _WIN64
+    #define FOR_64_32(for64, for32) for64
+#else
+    #define FOR_64_32(for64, for32) for32
+#endif
 
 #define ARRAY_SIZE_ARGS(arr) arr, ARRAYSIZE(arr)
 
@@ -148,13 +248,36 @@ public:
     static CInternetToolbar *&GetPtrInternetToolbar(CShellBrowser *pThis)
     {
 #if _WIN64
-        return **(CInternetToolbar ***)((size_t *)pThis + 92);
+        if (CVersionHelper::IsWindows11OrGreater())
+        {
+            return **(CInternetToolbar ***)((size_t *)pThis + 93);
+        }
+        else
+        {
+            return **(CInternetToolbar ***)((size_t *)pThis + 92);
+        }
 #else
         return **(CInternetToolbar ***)(((BYTE *)pThis + 404));
 #endif
     }
 
     CInternetToolbar *&GetPtrInternetToolbar() { return GetPtrInternetToolbar(this); }
+};
+
+class CLegacyBarsGalleryItem : public IObjectWithSite
+{
+public:
+    // Offset can be found in CLegacyBarsGalleryItem::CLegacyBarsGalleryItem
+    static DWORD &GetMenuId(CLegacyBarsGalleryItem *pThis)
+    {
+#if _WIN64
+        return *((DWORD *)pThis + 24);
+#else
+        return *((DWORD *)pThis + 19);
+#endif
+    }
+
+    DWORD &GetMenuId() { return GetMenuId(this); }
 };
 
 // LoadMenuW hook useful globals:
@@ -165,6 +288,7 @@ using LoadMenuW_t = decltype(&LoadMenuW);
 LoadMenuW_t LoadMenuW_orig;
 HMENU WINAPI LoadMenuW_hook(HINSTANCE hInstance, LPCWSTR lpMenuName)
 {
+    Wh_Log(L"Entered method.");
     HMENU hMenu = LoadMenuW_orig(hInstance, lpMenuName);
 
     if (g_dwInterceptMenuCreationThreadId == GetCurrentThreadId() && lpMenuName == MAKEINTRESOURCEW(IDM_ITBAR))
@@ -189,11 +313,12 @@ HMENU WINAPI LoadMenuW_hook(HINSTANCE hInstance, LPCWSTR lpMenuName)
     return hMenu;
 }
 
-void (*CInternetToolbar___ShowVisible)(CInternetToolbar *pThis, DWORD dwNewVisibleItemFlags, BOOL fNotifyShellBrowser);
+void (THISCALL *CInternetToolbar___ShowVisible)(CInternetToolbar *pThis, DWORD dwNewVisibleItemFlags, BOOL fNotifyShellBrowser);
 
-void (*CInternetToolbar___ShowContextMenu_orig)(CInternetToolbar *pThis, HWND hWnd, LPARAM lParam, RECT *prc);
-void CInternetToolbar___ShowContextMenu_hook(CInternetToolbar *pThis, HWND hWnd, LPARAM lParam, RECT *prc)
+void (THISCALL *CInternetToolbar___ShowContextMenu_orig)(CInternetToolbar *pThis, HWND hWnd, LPARAM lParam, RECT *prc);
+void THISCALL CInternetToolbar___ShowContextMenu_hook(CInternetToolbar *pThis, HWND hWnd, LPARAM lParam, RECT *prc)
 {
+    Wh_Log(L"Entered method.");
     g_dwInterceptMenuCreationThreadId = GetCurrentThreadId();
     g_pInternetToolbar = pThis;
 
@@ -203,9 +328,10 @@ void CInternetToolbar___ShowContextMenu_hook(CInternetToolbar *pThis, HWND hWnd,
     g_pInternetToolbar = nullptr;
 }
 
-void (*CInternetToolbar___OnCommand_orig)(CInternetToolbar *pThis, WPARAM wParam, LPARAM lParam);
-void CInternetToolbar___OnCommand_hook(CInternetToolbar *pThis, WPARAM wParam, LPARAM lParam)
+void (THISCALL *CInternetToolbar___OnCommand_orig)(CInternetToolbar *pThis, WPARAM wParam, LPARAM lParam);
+void THISCALL CInternetToolbar___OnCommand_hook(CInternetToolbar *pThis, WPARAM wParam, LPARAM lParam)
 {
+    Wh_Log(L"Entered method.");
     UINT idCmd = GET_WM_COMMAND_ID(wParam, lParam);
 
     // Run the original first since it does some work that we wanna do and won't really
@@ -226,9 +352,24 @@ void CInternetToolbar___OnCommand_hook(CInternetToolbar *pThis, WPARAM wParam, L
     }
 }
 
-void (*CShellBrowser___OnViewMenuPopup_orig)(CShellBrowser *pThis, HMENU hMenu);
-void CShellBrowser___OnViewMenuPopup_hook(CShellBrowser *pThis, HMENU hMenu)
+bool g_fLieAboutToolbarPopulation = false;
+BOOL (STDCALL *PopulateItbarToolbarBands_orig)(HMENU hMenu, IUnknown *pUnk);
+BOOL STDCALL PopulateItbarToolbarBands_hook(HMENU hMenu, IUnknown *pUnk)
 {
+    Wh_Log(L"Entered method.");
+    if (g_fLieAboutToolbarPopulation)
+    {
+        PopulateItbarToolbarBands_orig(hMenu, pUnk);
+        return TRUE;
+    }
+
+    return PopulateItbarToolbarBands_orig(hMenu, pUnk);
+}
+
+void (THISCALL *CShellBrowser___OnViewMenuPopup_orig)(CShellBrowser *pThis, HMENU hMenu);
+void THISCALL CShellBrowser___OnViewMenuPopup_hook(CShellBrowser *pThis, HMENU hMenu)
+{
+    Wh_Log(L"Entered method.");
     g_dwInterceptMenuCreationThreadId = GetCurrentThreadId();
 
     // There is a constant offset of 128 here. Without looking into it, I presume this is
@@ -236,46 +377,93 @@ void CShellBrowser___OnViewMenuPopup_hook(CShellBrowser *pThis, HMENU hMenu)
     // base pointer of the class, but I haven't completely looked into it.
     g_pInternetToolbar = (CInternetToolbar *)((BYTE *)pThis->GetPtrInternetToolbar() - 128);
 
+    // Make PopulateItbarToolbarBands lie about its result so that the toolbars menu isn't
+    // removed from the result; we want to keep the menu when the Links toolbar is available.
+    g_fLieAboutToolbarPopulation = true;
+
     CShellBrowser___OnViewMenuPopup_orig(pThis, hMenu);
 
+    g_fLieAboutToolbarPopulation = false;
     g_dwInterceptMenuCreationThreadId = 0;
     g_pInternetToolbar = nullptr;
 }
 
-HRESULT (*CShellBrowser___OnCommand_orig)(CShellBrowser *pThis, WPARAM wParam, LPARAM lParam);
-HRESULT CShellBrowser___OnCommand_hook(CShellBrowser *pThis, WPARAM wParam, LPARAM lParam)
+void (THISCALL *CShellBrowser___InvalidateRibbonCommandSet)(CShellBrowser *pThis, int eCommandSet);
+
+HRESULT (THISCALL *CShellBrowser___OnCommand_orig)(CShellBrowser *pThis, WPARAM wParam, LPARAM lParam);
+HRESULT THISCALL CShellBrowser___OnCommand_hook(CShellBrowser *pThis, WPARAM wParam, LPARAM lParam)
 {
+    Wh_Log(L"Entered method.");
     if (wParam == FCIDM_VIEWLINKS)
     {
         CInternetToolbar *pInternetToolbar = (CInternetToolbar *)((BYTE *)pThis->GetPtrInternetToolbar() - 128);
 
         CInternetToolbar___OnCommand_hook(pInternetToolbar, FCIDM_VIEWLINKS, 0);
+
+        // NOTE: This does not update the selected item if the user then goes on to manage the
+        // visible toolbars through any other means (i.e. using the Internet Toolbar context
+        // menu). This is not my mistake. Microsoft messed this up.
+        CShellBrowser___InvalidateRibbonCommandSet(pThis, 7);
         return S_OK;
     }
 
     return CShellBrowser___OnCommand_orig(pThis, wParam, lParam);
 }
 
+HRESULT (THISCALL *CShellBrowser__GetLegacyBarsMenu_orig)(CShellBrowser *pThis, HMENU *phMenu);
+HRESULT THISCALL CShellBrowser__GetLegacyBarsMenu_hook(CShellBrowser *pThis, HMENU *phMenu)
+{
+    Wh_Log(L"Entered method.");
+    HRESULT hr = CShellBrowser__GetLegacyBarsMenu_orig(pThis, phMenu);
+
+    // Adjust vftable:
+    CShellBrowser *pThisAdj = (CShellBrowser *)((size_t *)pThis - 36);
+
+    if (SUCCEEDED(hr))
+    {
+        InsertMenuW(*phMenu, 0, MF_BYPOSITION, FCIDM_VIEWLINKS, g_spszLinksText.c_str());
+
+        CInternetToolbar *pInternetToolbar = (CInternetToolbar *)((BYTE *)pThisAdj->GetPtrInternetToolbar() - 128);
+
+        CheckMenuItem(*phMenu, FCIDM_VIEWLINKS, 
+            pInternetToolbar->GetVisibleBands() & VBF_LINKS 
+                ? MF_CHECKED 
+                : MF_UNCHECKED
+        );
+    }
+
+    return hr;
+}
+
 // ExplorerFrame.dll
 WindhawkUtils::SYMBOL_HOOK c_rgHooksExplorerFrame[] = {
     {
         // CInternetToolbar::_ShowContextMenu creates the Internet Toolbar context menu for when
-        // the user right clicks on a toolbar (i.e. the menu bar). 
+        // the user right clicks on a toolbar (i.e. the menu bar).
         {
-            L"protected: void __cdecl CInternetToolbar::_ShowContextMenu(struct HWND__ *,__int64,struct tagRECT const *)"
+            FOR_64_32(
+                L"protected: void __cdecl CInternetToolbar::_ShowContextMenu(struct HWND__ *,__int64,struct tagRECT const *)",
+                L"protected: void __thiscall CInternetToolbar::_ShowContextMenu(struct HWND__ *,long,struct tagRECT const *)"
+            )
         },
         &CInternetToolbar___ShowContextMenu_orig,
         CInternetToolbar___ShowContextMenu_hook
     },
     {
         {
-            L"protected: void __cdecl CInternetToolbar::_ShowVisible(unsigned long,int)"
+            FOR_64_32(
+                L"protected: void __cdecl CInternetToolbar::_ShowVisible(unsigned long,int)",
+                L"protected: void __thiscall CInternetToolbar::_ShowVisible(unsigned long,int)"
+            )
         },
         &CInternetToolbar___ShowVisible
     },
     {
         {
-            L"protected: void __cdecl CInternetToolbar::_OnCommand(unsigned __int64,__int64)"
+            FOR_64_32(
+                L"protected: void __cdecl CInternetToolbar::_OnCommand(unsigned __int64,__int64)",
+                L"protected: void __thiscall CInternetToolbar::_OnCommand(unsigned int,long)"
+            )
         },
         &CInternetToolbar___OnCommand_orig,
         CInternetToolbar___OnCommand_hook
@@ -284,17 +472,56 @@ WindhawkUtils::SYMBOL_HOOK c_rgHooksExplorerFrame[] = {
         // CShellBrowser::_OnViewMenuPopup creates the Internet Toolbar context menu for when
         // the user opens the toolbars menu from 
         {
-            L"private: void __cdecl CShellBrowser::_OnViewMenuPopup(struct HMENU__ *)"
+            FOR_64_32(
+                L"private: void __cdecl CShellBrowser::_OnViewMenuPopup(struct HMENU__ *)",
+                L"private: void __thiscall CShellBrowser::_OnViewMenuPopup(struct HMENU__ *)"
+            )
         },
         &CShellBrowser___OnViewMenuPopup_orig,
         CShellBrowser___OnViewMenuPopup_hook
     },
     {
         {
-            L"private: __int64 __cdecl CShellBrowser::_OnCommand(unsigned __int64,__int64)"
+            FOR_64_32(
+                L"private: __int64 __cdecl CShellBrowser::_OnCommand(unsigned __int64,__int64)",
+                L"private: long __thiscall CShellBrowser::_OnCommand(unsigned int,long)"
+            )
         },
         &CShellBrowser___OnCommand_orig,
         CShellBrowser___OnCommand_hook
+    },
+    {
+        // Response is a boolean indicating if any toolbars are installed.
+        // We control this response in some cases to make the toolbars menu always display.
+        {
+            FOR_64_32(
+                L"int __cdecl PopulateItbarToolbarBands(struct HMENU__ *,struct IUnknown *)",
+                L"int __stdcall PopulateItbarToolbarBands(struct HMENU__ *,struct IUnknown *)"
+            )
+        },
+        &PopulateItbarToolbarBands_orig,
+        PopulateItbarToolbarBands_hook
+    },
+    {
+        // Used to get the menu for Ribbon UI.
+        {
+            FOR_64_32(
+                L"public: virtual long __cdecl CShellBrowser::GetLegacyBarsMenu(struct HMENU__ * *)",
+                L"public: virtual long __stdcall CShellBrowser::GetLegacyBarsMenu(struct HMENU__ * *)"
+            )
+        },
+        &CShellBrowser__GetLegacyBarsMenu_orig,
+        CShellBrowser__GetLegacyBarsMenu_hook
+    },
+    {
+        // Used to update the menu item states for Ribbon UI.
+        {
+            FOR_64_32(
+                L"private: void __cdecl CShellBrowser::_InvalidateRibbonCommandSet(enum COMMAND_SET)",
+                L"private: void __thiscall CShellBrowser::_InvalidateRibbonCommandSet(enum COMMAND_SET)"
+            )
+        },
+        &CShellBrowser___InvalidateRibbonCommandSet
     },
 };
 
