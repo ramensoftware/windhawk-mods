@@ -100,12 +100,12 @@ HRESULT WriteOrderRegistry(IStream *pStream)
             if (SUCCEEDED(hr)) 
             {
                 HKEY hKey;
-                hr = RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Modules\\CommonPlaces\\", 0, KEY_SET_VALUE, &hKey);
+                hr = HRESULT_FROM_WIN32(RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Modules\\CommonPlaces\\", 0, KEY_SET_VALUE, &hKey));
                 if (SUCCEEDED(hr))
                 {
-                    hr = RegSetValueExW(hKey, L"Order", 0, REG_BINARY, lpData, streamSize.QuadPart);
+                    hr = HRESULT_FROM_WIN32(RegSetValueExW(hKey, L"Order", 0, REG_BINARY, lpData, streamSize.QuadPart));
+                    RegCloseKey(hKey);
                 }
-                RegCloseKey(hKey);
             }
             delete[] lpData;
         }
