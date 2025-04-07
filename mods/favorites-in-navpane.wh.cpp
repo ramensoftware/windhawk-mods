@@ -116,18 +116,17 @@ HRESULT WriteOrderRegistry(IStream *pStream)
 
 BOOL IsIShellItemFavorites(IShellItem *pIShellItem)
 {
+    BOOL isFavorites = FALSE;
+    
     if (pIShellItem)
     {
         LPWSTR pszName;
         pIShellItem->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &pszName);
-        if (!wcscmp(L"::{323CA680-C24D-4099-B94D-446DD2D7249E}", pszName))
-        {
-            CoTaskMemFree(pszName);
-            return true;
-        }
+        isFavorites = !wcscmp(L"::{323CA680-C24D-4099-B94D-446DD2D7249E}", pszName);
+        CoTaskMemFree(pszName);
     }
 
-    return false;    
+    return isFavorites;    
 }
 
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/spoof-light-dark-theme.wh.cpp
