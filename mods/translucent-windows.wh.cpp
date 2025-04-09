@@ -353,11 +353,11 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
         {
             if(g_settings.CaptionTextFlag && dwAttribute == CAPTION_TEXT_COLOR)
                 return originalDwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(g_settings.g_CaptionColor));
-
-            if(!g_settings.BorderFlag)
-                return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
-            else
+            
+            if(g_settings.BorderFlag && dwAttribute == BORDER_COLOR)
                 return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
+                
+            return originalDwmSetWindowAttribute(hWnd, SYSTEMBACKDROP_TYPE, &NONE, sizeof(NONE));
         }           
         else if(dwAttribute == SYSTEMBACKDROP_TYPE)
         {
@@ -377,7 +377,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
     {
         // Windows classic context menu
         if(g_settings.MenuBorderFlag && IsWindowClass(hWnd, L"#32768"))
-            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(g_settings.BorderActiveColor));
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
         else if(!IsWindowClass(hWnd, L"#32768"))
             return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
     }
@@ -576,6 +576,7 @@ void UnsubclassWindow(HWND hWnd)
 
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
+
     switch (uMsg)
     {
         case WM_ACTIVATE:
@@ -627,13 +628,6 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         case WM_NCDESTROY:
         {
             UnsubclassWindow(hWnd);
-            break;
-        }
-        default:
-        {
-            if (uMsg == g_unsubclassRegisteredMessage)
-                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-
             break;
         }
     }
@@ -1000,7 +994,7 @@ void Wh_ModUninit(void)
     }
 
     for (HWND hWnd : subclassedWindows)
-        SendMessage(hWnd, g_unsubclassRegisteredMessage, 0, 0);
+        UnsubclassWindow(hWnd);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
