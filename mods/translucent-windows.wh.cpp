@@ -377,7 +377,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
     {
         // Windows classic context menu
         if(g_settings.MenuBorderFlag && IsWindowClass(hWnd, L"#32768"))
-            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(g_settings.BorderActiveColor));
         else if(!IsWindowClass(hWnd, L"#32768"))
             return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
     }
@@ -576,7 +576,6 @@ void UnsubclassWindow(HWND hWnd)
 
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
-
     switch (uMsg)
     {
         case WM_ACTIVATE:
