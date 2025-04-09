@@ -191,6 +191,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <dwmapi.h>
 #include <vssym32.h>
 #include <uxtheme.h>
@@ -301,7 +302,7 @@ BOOL CALLBACK EnumWindowsProc(HWND, LPARAM);
 BOOL IsWindowClass(HWND, LPCWSTR);
 BOOL GetColorSetting(LPCWSTR, COLORREF&);
 void RestoreWindowCustomizations(HWND);
-LRESULT CALLBACK SubclassProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
+LRESULT CALLBACK SubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
 void LoadSettings();
 
 using NtUserCreateWindowEx_t =
@@ -563,7 +564,7 @@ BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
 
 void UnsubclassWindow(HWND hWnd)
 {
-    RemoveWindowSubclass(hWnd, SubclassProc, 0);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
 
     std::lock_guard<std::mutex> guard(g_subclassedWindowsMutex);
 
@@ -573,7 +574,7 @@ void UnsubclassWindow(HWND hWnd)
     }
 }
 
-LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
 {
     switch (uMsg)
     {
@@ -630,9 +631,9 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         }
         default:
         {
-            if (uMsg == g_unsubclassRegisteredMessage) {
-                RemoveWindowSubclass(hWnd, SubclassProc, 0);
-            }
+            if (uMsg == g_unsubclassRegisteredMessage)
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+
             break;
         }
     }
@@ -668,7 +669,7 @@ void NewWindowShown(HWND hWnd)
         EnableColoredTitlebar(hWnd);
     
     if(g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.TitlebarFlag)
-        if(SetWindowSubclass(hWnd, SubclassProc, 0, 0))
+        if(WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0))
             g_subclassedWindows.insert(hWnd);
 }
 
