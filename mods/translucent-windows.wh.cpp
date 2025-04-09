@@ -108,8 +108,8 @@ maximized or snapped to the edge of the screen, this is caused by default by the
         
         SystemAccentColor = 1
     - MenuBorderColor: FALSE
-      $name: Expand colored border to classic context menus
-      $description: Enable this option of you want colored borders on windows classic context menus
+      $name: Extend colored borders to classic context menus and taskbar thumbnails
+      $description: Enable this option to get colored borders on windows classic context menus and taskbar thumbnails
   $name: Border color
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required.
@@ -375,10 +375,10 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
     // Effects on VS Studio, Windows Terminal ...
     if(g_settings.BorderFlag && dwAttribute == BORDER_COLOR)
     {
-        // Windows classic context menu
-        if(g_settings.MenuBorderFlag && IsWindowClass(hWnd, L"#32768"))
+        // Windows classic context menu & taskbar tnumbnail
+        if(g_settings.MenuBorderFlag && (IsWindowClass(hWnd, L"#32768") || IsWindowClass(hWnd, L"TaskListThumbnailWnd")))
             return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(g_settings.BorderActiveColor));
-        else if(!IsWindowClass(hWnd, L"#32768"))
+        else if(!(IsWindowClass(hWnd, L"#32768") || IsWindowClass(hWnd, L"TaskListThumbnailWnd")))
             return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
     }
     
