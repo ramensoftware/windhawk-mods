@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-07T16:23:33.000Z</updated>
+    <updated>2025-04-10T11:01:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.4]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#3af9d8212ade28ef23003557cbd9ad77db77acf2</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2025-04-10T11:01:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added color options for active and inactive window states</li>
+<li>Merge taskbar thumbnails border coloring with classic context menus setting</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Favorites in Navigation Pane 1.0.1]]></title>
         <id>https://windhawk.net/mods/favorites-in-navpane#10f1463d8bd2609b6278c5c548c58a1ed8ffcd98</id>
@@ -293,20 +307,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 <li>Fixed compatibility with new Windows 11 builds:</li>
 <li>Version 23H2 build 10.0.22621.5015 and newer.</li>
 <li>Version 24H2 build 10.0.26100.3360 and newer.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aero Peek on "Show desktop" button hover 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek#613c1cd91d21f205a1990e6101ac0891769e35aa</id>
-        <link href="https://windhawk.net/mods/taskbar-show-desktop-button-aero-peek"/>
-        <updated>2025-03-27T20:05:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the hover not working on some regions of the "Show desktop" button.</li>
-<li>Improved mod name and description.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

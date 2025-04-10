@@ -1,3 +1,8 @@
+## 1.4 ([Apr 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3af9d8212ade28ef23003557cbd9ad77db77acf2/mods/translucent-windows.wh.cpp))
+
+* Added color options for active and inactive window states
+* Merge taskbar thumbnails border coloring with classic context menus setting
+
 ## 1.3 ([Apr 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/901ab88551bbba9ff79f8e1b8e7e5aeb29edb982/mods/translucent-windows.wh.cpp))
 
 * Add rules for processes
