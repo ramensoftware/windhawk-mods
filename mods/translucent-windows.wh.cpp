@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.4
+// @version         1.4.1
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -44,14 +44,12 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 - ThemeBackground: FALSE
   $name: Optimize windows theme
   $description: >-
-      Fill with black color the file explorer background in order to render a clear translucent effect.
-
+     Fill with black color the file explorer background in order to render a clear translucent effect.
       ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
 - type: none
   $name: Effects
   $description: >-
-      Windows 11 version >= 22621.xxx (22H2) is required.
-
+     Windows 11 version >= 22621.xxx (22H2) is required.
       ⚠ Be aware when changing the effect type from Acrylic BlurBehind or back to Default, the affected windows will need to be reopened to see the change.
   $options:
   - none: Default
@@ -68,10 +66,14 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - titlerbarstyles_active: "FF0000"
       $name: Focused window color
-      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+      $description: >-
+       Color in hexadecimal RGB format e.g. Red = FF0000
+        SystemAccentColor = 2
     - titlerbarstyles_inactive: "00FFFF"
       $name: Unfocused window color
-      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+      $description: >-
+       Color in hexadecimal RGB format e.g. Red = FF0000
+        SystemAccentColor = 2
   $name: Titlebar color
   $description: Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
 - TitlebarTextColor:
@@ -79,14 +81,19 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       $name: Enable
     - titlerbarcolorstyles_active: "FF0000"
       $name: Focused window color
-      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+      $description: >-
+       Color in hexadecimal RGB format e.g. Red = FF0000
+        Default = 1
+        SystemAccentColor = 2
     - titlerbarcolorstyles_inactive: "00FFFF"
       $name: Unfocused window color
-      $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+      $description: >-
+       Color in hexadecimal RGB format e.g. Red = FF0000
+        Default = 1
+        SystemAccentColor = 2
   $name: Titlebar text color
   $description: >-
-      Windows 11 version >= 22000.xxx (21H2) is required.
-
+     Windows 11 version >= 22000.xxx (21H2) is required.
       NOTE: This settings affects only Win32 windows. Since Win11 24H2 File Explorer changed titlebar text rendering to DirectWrite API. To modify the text color of File Explorer title bar, use Windhawk's File Explorer Styler mod.
 - BorderColor:
     - ColorBorder: FALSE
@@ -94,22 +101,20 @@ maximized or snapped to the edge of the screen, this is caused by default by the
     - borderstyles_active: "FF0000"
       $name: Focused window color
       $description: >-
-        Color in hexadecimal RGB format e.g. Red = FF0000
-
+       Color in hexadecimal RGB format e.g. Red = FF0000
         Transparent = 0
-        
-        SystemAccentColor = 1
+        Default = 1
+        SystemAccentColor = 2
     - borderstyles_inactive: "00FFFF"
       $name: Unfocused window color
       $description: >-
-        Color in hexadecimal RGB format e.g. Red = FF0000
-
+       Color in hexadecimal RGB format e.g. Red = FF0000
         Transparent = 0
-        
-        SystemAccentColor = 1
+        Default = 1
+        SystemAccentColor = 2
     - MenuBorderColor: FALSE
       $name: Extend colored borders to classic context menus and taskbar thumbnails
-      $description: Enable this option to get colored borders on windows classic context menus and taskbar thumbnails
+      $description: Enable this option to get colored borders on windows classic context menus and taskbar thumbnails.
   $name: Border color
   $description: >-
       Windows 11 version >= 22000.xxx (21H2) is required.
@@ -117,17 +122,14 @@ maximized or snapped to the edge of the screen, this is caused by default by the
     - - target: "mspaint.exe"
         $name: Process
         $description: >-
-          Entries can be process names or paths, for example:
-
+         Entries can be process names or paths, for example:
           mspaint.exe
-
           C:\Windows\System32\notepad.exe
       - type: none
         $name: Effects
         $description: >-
-            Windows 11 version >= 22621.xxx (22H2) is required.
-
-            ⚠ Be aware when changing the effect type from Acrylic BlurBehind or back to Default, the affected windows will need to be reopened to see the change.
+         Windows 11 version >= 22621.xxx (22H2) is required.
+          ⚠ Be aware when changing the effect type from Acrylic BlurBehind or back to Default, the affected windows will need to be reopened to see the change.
         $options:
           - none: Default
           - acrylicblur: Acrylic (BlurBehind)
@@ -143,10 +145,14 @@ maximized or snapped to the edge of the screen, this is caused by default by the
             $name: Enable
           - titlerbarstyles_active: "FF0000"
             $name: Focused window color
-            $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+            $description: >-
+             Color in hexadecimal RGB format e.g. Red = FF0000
+              SystemAccentColor = 2
           - titlerbarstyles_inactive: "00FFFF"
             $name: Unfocused window color
-            $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+            $description: >-
+             Color in hexadecimal RGB format e.g. Red = FF0000
+              SystemAccentColor = 2
         $name: Titlebar color
         $description: Windows 11 version >= 22000.xxx (21H2) is required. Overrides effects settings
       - TitlebarTextColor:
@@ -154,14 +160,19 @@ maximized or snapped to the edge of the screen, this is caused by default by the
             $name: Enable
           - titlerbarcolorstyles_active: "FF0000"
             $name: Focused window color
-            $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+            $description: >-
+             Color in hexadecimal RGB format e.g. Red = FF0000
+              Default = 1
+              SystemAccentColor = 2
           - titlerbarcolorstyles_inactive: "00FFFF"
             $name: Unfocused window color
-            $description: Color in hexadecimal RGB format e.g. Red = FF0000 or SystemAccentColor = 1
+            $description: >-
+             Color in hexadecimal RGB format e.g. Red = FF0000
+              Default = 1
+              SystemAccentColor = 2
         $name: Titlebar text color
         $description: >-
-          Windows 11 version >= 22000.xxx (21H2) is required.
-
+         Windows 11 version >= 22000.xxx (21H2) is required.
           NOTE: This settings affects only Win32 windows. Since Win11 24H2 File Explorer changed titlebar text rendering to DirectWrite API. To modify the text color of File Explorer title bar, use Windhawk's File Explorer Styler mod.
       - BorderColor:
           - ColorBorder: FALSE
@@ -169,19 +180,17 @@ maximized or snapped to the edge of the screen, this is caused by default by the
           - borderstyles_active: "FF0000"
             $name: Focused window color
             $description: >-
-              Color in hexadecimal RGB format e.g. Red = FF0000
-
+             Color in hexadecimal RGB format e.g. Red = FF0000
               Transparent = 0
-            
-              SystemAccentColor = 1
+              Default = 1
+              SystemAccentColor = 2
           - borderstyles_inactive: "00FFFF"
             $name: Unfocused window color
             $description: >-
-              Color in hexadecimal RGB format e.g. Red = FF0000
-
+             Color in hexadecimal RGB format e.g. Red = FF0000
               Transparent = 0
-            
-              SystemAccentColor = 1
+              Default = 1
+              SystemAccentColor = 2
         $name: Border color
         $description: >-
            Windows 11 version >= 22000.xxx (21H2) is required.
@@ -724,18 +733,40 @@ void RestoreWindowCustomizations(HWND hWnd)
 
     g_settings.CaptionActiveTextColor = COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, CAPTION_TEXT_COLOR , &g_settings.CaptionActiveTextColor, sizeof(g_settings.CaptionActiveTextColor));
+
+    // Disabling BlurBehind temp workaround
+    bb.fEnable = FALSE;
+    DwmEnableBlurBehindWindow(hWnd, &bb);
+
+    accent.AccentState = 0;
+    accent.AccentFlags = FALSE;
+
+    attrib.Attrib = WCA_ACCENT_POLICY;
+    attrib.pvData = &accent;
+    attrib.cbData = sizeof(accent);
+
+    typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
+    auto SetWindowCompositionAttribute = (pSetWindowCompositionAttribute)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
+    if (SetWindowCompositionAttribute) 
+        SetWindowCompositionAttribute(hWnd, &attrib);
 }
 
 BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
 {
     if (!hexColor)
         return FALSE;
-
-    if (hexColor[0] == L'0' && hexColor[1] == L'\0') {
+    if (hexColor[0] == L'0' && hexColor[1] == L'\0')
+    {
         outColor = COLOR_NONE;
         return TRUE;
     }
-    else if (hexColor[0] == L'1' && hexColor[1] == L'\0') {
+    else if (hexColor[0] == L'1' && hexColor[1] == L'\0') 
+    {
+        outColor = COLOR_DEFAULT;
+        return TRUE;
+    }
+    else if (hexColor[0] == L'2' && hexColor[1] == L'\0') 
+    {
         DWORD colorization;
         BOOL opaque;
         if (SUCCEEDED(DwmGetColorizationColor(&colorization, &opaque))) 
@@ -833,7 +864,12 @@ void LoadSettings(void)
         LPCWSTR pszTitlebarStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_active");
         g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarActiveColor);
         pszTitlebarStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_inactive");
-        g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarInactiveColor);
+        g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
+
+        if ((g_settings.TitlebarActiveColor == COLOR_DEFAULT || g_settings.TitlebarActiveColor == COLOR_NONE) ||
+            (g_settings.TitlebarInactiveColor == COLOR_DEFAULT || g_settings.TitlebarInactiveColor == COLOR_NONE))
+                g_settings.TitlebarFlag = FALSE;
+
         Wh_FreeStringSetting(pszTitlebarStyle);
     }
 
@@ -843,7 +879,8 @@ void LoadSettings(void)
         LPCWSTR pszTitlebarTextColorStyle = Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_active");
         g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
         pszTitlebarTextColorStyle = Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_inactive");
-        g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor);
+        g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
+
         Wh_FreeStringSetting(pszTitlebarTextColorStyle);
     }
 
@@ -853,7 +890,8 @@ void LoadSettings(void)
         LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"BorderColor.borderstyles_active");
         g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderActiveColor);
         pszBorderStyle = Wh_GetStringSetting(L"BorderColor.borderstyles_inactive");
-        g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderInactiveColor);
+        g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
+
         Wh_FreeStringSetting(pszBorderStyle);
     }
 
@@ -903,7 +941,12 @@ void LoadSettings(void)
                     LPCWSTR pszTitlebarStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarColor.Titlerbarstyles_active", i);
                     g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarActiveColor);
                     pszTitlebarStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarColor.Titlerbarstyles_inactive", i);
-                    g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarInactiveColor);
+                    g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
+
+                    if ((g_settings.TitlebarActiveColor == COLOR_DEFAULT || g_settings.TitlebarActiveColor == COLOR_NONE) ||
+                        (g_settings.TitlebarInactiveColor == COLOR_DEFAULT || g_settings.TitlebarInactiveColor == COLOR_NONE))
+                            g_settings.TitlebarFlag = FALSE;
+
                     Wh_FreeStringSetting(pszTitlebarStyle);
                 }
 
@@ -913,7 +956,7 @@ void LoadSettings(void)
                     LPCWSTR pszTitlebarTextColorStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarTextColor.titlerbarcolorstyles_active", i);
                     g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
                     pszTitlebarTextColorStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarTextColor.titlerbarcolorstyles_inactive", i);
-                    g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor);
+                    g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
                     Wh_FreeStringSetting(pszTitlebarTextColorStyle);
                 }
 
@@ -923,7 +966,7 @@ void LoadSettings(void)
                     LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles_active", i);
                     g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderActiveColor);
                     pszBorderStyle = Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles_inactive", i);
-                    g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderInactiveColor);
+                    g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
                     Wh_FreeStringSetting(pszBorderStyle);
                 }
 
