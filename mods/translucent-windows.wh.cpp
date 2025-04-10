@@ -213,7 +213,6 @@ static constexpr UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
 static constexpr UINT COLOR_DEFAULT = 0xFFFFFFFF; // DWMWA_COLOR_DEFAULT
 static constexpr UINT COLOR_NONE = 0xFFFFFFFE; // DWMWA_COLOR_NONE
 
-UINT g_unsubclassRegisteredMessage = RegisterWindowMessage(L"Windhawk_Unsubclass");
 std::mutex g_subclassedWindowsMutex;
 std::unordered_set<HWND> g_subclassedWindows;
 
@@ -560,18 +559,6 @@ BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
     if(!wcscmp(ClassName, ClassNameBuffer))
         return TRUE;
     return FALSE;
-}
-
-void UnsubclassWindow(HWND hWnd)
-{
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-
-    std::lock_guard<std::mutex> guard(g_subclassedWindowsMutex);
-
-    auto it = g_subclassedWindows.find(hWnd);
-    if (it != g_subclassedWindows.end()) {
-        g_subclassedWindows.erase(it);
-    }
 }
 
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
