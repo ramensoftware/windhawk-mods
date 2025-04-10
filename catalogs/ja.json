@@ -3877,7 +3877,7 @@
                 "published": 1743352526000,
                 "rating": 10,
                 "ratingUsers": 16,
-                "updated": 1744282864000,
+                "updated": 1744319341000,
                 "users": 473
             },
             "metadata": {
@@ -3889,7 +3889,7 @@
                     "*"
                 ],
                 "name": "Translucent Windows",
-                "version": "1.4"
+                "version": "1.4.1"
             }
         },
         "transparent-screensaver-fix": {

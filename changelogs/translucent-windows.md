@@ -1,3 +1,9 @@
+## 1.4.1 ([Apr 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6d80a4ec94be318d3dfafdf9ef0b0f0b80185222/mods/translucent-windows.wh.cpp))
+
+* Fix bug where previously both window states colors were needed to apply color effects
+* Added a workaround solution for unloading the BlurBehind effect
+* Added default color option support
+
 ## 1.4 ([Apr 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3af9d8212ade28ef23003557cbd9ad77db77acf2/mods/translucent-windows.wh.cpp))
 
 * Added color options for active and inactive window states
