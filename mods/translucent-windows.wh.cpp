@@ -626,7 +626,8 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         }
         case WM_NCDESTROY:
         {
-            UnsubclassWindow(hWnd);
+            std::lock_guard<std::mutex> guard(g_subclassedWindowsMutex);
+            g_subclassedWindows.erase(hWnd);
             break;
         }
     }
@@ -663,7 +664,10 @@ void NewWindowShown(HWND hWnd)
     
     if(g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.TitlebarFlag)
         if(WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0))
+        {
+            std::lock_guard<std::mutex> guard(g_subclassedWindowsMutex);
             g_subclassedWindows.insert(hWnd);
+        }
 }
 
 void DwmExpandFrameIntoClientAreaHook()
@@ -993,7 +997,7 @@ void Wh_ModUninit(void)
     }
 
     for (HWND hWnd : subclassedWindows)
-        UnsubclassWindow(hWnd);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
