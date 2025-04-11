@@ -1,3 +1,11 @@
+## 1.1.1 ([Apr 11, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5e2643ce30dbd3e7f47f4b9f68693bc8b125cd93/mods/explorer-toolbar-links-item.wh.cpp))
+
+Injection broke in a patch update to 26100. 26100 RTM, as well as all prior Windows 11 builds, are just fine.
+
+The method `CShellBrowser::_OnViewMenuPopup`, as well as its sole caller `_OnInitMenuPopup`, were inlined into the sole caller `WndProcBS`. As an easy workaround, I simply hooked the window procedure and checked the arguments in the same way as would result in calling `_OnInitMenuPopup`, which produces the same effect.
+
+No other changes were made for this update.
+
 ## 1.1 ([Apr 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/94bda638328d60ba4b4d259215bf791a9b69108d/mods/explorer-toolbar-links-item.wh.cpp))
 
 This update adds support for WoW64 (unfortunately, 32-bit Windows 10 seems

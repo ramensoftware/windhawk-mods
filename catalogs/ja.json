@@ -1434,7 +1434,7 @@
                 "published": 1743883131000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1744022706000,
+                "updated": 1744339309000,
                 "users": 38
             },
             "metadata": {
@@ -1451,7 +1451,7 @@
                 ],
                 "name": "File Explorer Toolbar Links Item",
                 "twitter": "https://twitter.com/kawaipure",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "explorerframe-fixes-for-win11-22h2plus": {

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-10T21:09:01.000Z</updated>
+    <updated>2025-04-11T02:41:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.1.1]]></title>
+        <id>https://windhawk.net/mods/explorer-toolbar-links-item#5e2643ce30dbd3e7f47f4b9f68693bc8b125cd93</id>
+        <link href="https://windhawk.net/mods/explorer-toolbar-links-item"/>
+        <updated>2025-04-11T02:41:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Injection broke in a patch update to 26100. 26100 RTM, as well as all prior Windows 11 builds, are just fine.</p>
+<p>The method <code>CShellBrowser::_OnViewMenuPopup</code>, as well as its sole caller <code>_OnInitMenuPopup</code>, were inlined into the sole caller <code>WndProcBS</code>. As an easy workaround, I simply hooked the window procedure and checked the arguments in the same way as would result in calling <code>_OnInitMenuPopup</code>, which produces the same effect.</p>
+<p>No other changes were made for this update.</p>]]></content>
+        <author>
+            <name>Isabella Lulamoon (kawapure)</name>
+            <uri>https://github.com/kawapure</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.4.1]]></title>
         <id>https://windhawk.net/mods/translucent-windows#6d80a4ec94be318d3dfafdf9ef0b0f0b80185222</id>
@@ -280,37 +293,6 @@ All changes thanks to @kawapure</li>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.0]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#9dde9190d290ba16ca4de17293a09cb3cb3d8c23</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-03-30T16:35:26.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="acrylicblurbehind">Acrylic (BlurBehind)</h3>
-<p><img src="https://i.imgur.com/S8OGRvc.png" alt="BlurBehind" /></p>
-<h3 id="acrylicsystembackdrop">Acrylic (SystemBackdrop)</h3>
-<p><img src="https://i.imgur.com/66cAiEC.png" alt="Acrylic SystemBackdrop" /></p>
-<h3 id="mica">Mica</h3>
-<p><img src="https://i.imgur.com/7BGDhJa.png" alt="Mica" /></p>
-<h3 id="micaalt">MicaAlt</h3>
-<p><img src="https://i.imgur.com/EeviFqO.png" alt="MicaTabbed" /></p>
-<h1 id="faq">FAQ</h1>
-<ul>
-<li><p>Prerequisited windows settings to enable the background effects</p>
-<ul>
-<li>Transparency effects enabled</li>
-<li>Energy saver disabled
-#</li></ul></li>
-<li><p>Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
-Light mode theme, HDR enabled or white background behind the window can cause this. 
-This is because some GDI rendering operations do not preserve alpha channel values.</p></li>
-<li><p>Acrylic blur behind effect may show a bleeding effect at the edges of a window when 
-maximized or snapped to the edge of the screen, this is caused by default by the windows DWMAPI.</p></li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>
