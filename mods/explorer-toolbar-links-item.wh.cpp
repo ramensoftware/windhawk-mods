@@ -2,7 +2,7 @@
 // @id              explorer-toolbar-links-item
 // @name            File Explorer Toolbar Links Item
 // @description     Restores the ability to display the hidden "Links" toolbar in Windows 10 and 11.
-// @version         1.1
+// @version         1.1.1
 // @author          Isabella Lulamoon (kawapure)
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
@@ -187,6 +187,9 @@ constexpr LPCWSTR kErrorTitle = L"Windhawk :: BrowseUI Links Item mod";
 // String resource ID for the "&Links" text in ExplorerFrame.dll:
 #define IDS_LINKS 0x3352
 
+// Menu item ID for the "Views" > "Toolbars" menu bar submenu
+#define IDM_VIEWS_TOOLBARS 0x8080
+
 void LoadSettings()
 {
     WindhawkUtils::StringSetting spszCustomLocalizedLinkText =
@@ -366,26 +369,35 @@ BOOL STDCALL PopulateItbarToolbarBands_hook(HMENU hMenu, IUnknown *pUnk)
     return PopulateItbarToolbarBands_orig(hMenu, pUnk);
 }
 
-void (THISCALL *CShellBrowser___OnViewMenuPopup_orig)(CShellBrowser *pThis, HMENU hMenu);
-void THISCALL CShellBrowser___OnViewMenuPopup_hook(CShellBrowser *pThis, HMENU hMenu)
+LRESULT (THISCALL *CShellBrowser__WndProcBS_orig)(CShellBrowser *pThis, HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT THISCALL CShellBrowser__WndProcBS_hook(CShellBrowser *pThis, HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    Wh_Log(L"Entered method.");
-    g_dwInterceptMenuCreationThreadId = GetCurrentThreadId();
+    if (uMsg == WM_INITMENUPOPUP)
+    {
+        Wh_Log(L"A menu is being initialised. Enabling \"View\" > \"Toolbars\" menu hooks...");
+        g_dwInterceptMenuCreationThreadId = GetCurrentThreadId();
 
-    // There is a constant offset of 128 here. Without looking into it, I presume this is
-    // the base class CBaseBar, since calling QueryInterface will not even get the proper
-    // base pointer of the class, but I haven't completely looked into it.
-    g_pInternetToolbar = (CInternetToolbar *)((BYTE *)pThis->GetPtrInternetToolbar() - 128);
+        // There is a constant offset of 128 here. Without looking into it, I presume this is
+        // the base class CBaseBar, since calling QueryInterface will not even get the proper
+        // base pointer of the class, but I haven't completely looked into it.
+        g_pInternetToolbar = (CInternetToolbar *)((BYTE *)pThis->GetPtrInternetToolbar() - 128);
 
-    // Make PopulateItbarToolbarBands lie about its result so that the toolbars menu isn't
-    // removed from the result; we want to keep the menu when the Links toolbar is available.
-    g_fLieAboutToolbarPopulation = true;
+        // Make PopulateItbarToolbarBands lie about its result so that the toolbars menu isn't
+        // removed from the result; we want to keep the menu when the Links toolbar is available.
+        g_fLieAboutToolbarPopulation = true;
+    }
 
-    CShellBrowser___OnViewMenuPopup_orig(pThis, hMenu);
+    auto result = CShellBrowser__WndProcBS_orig(pThis, hWnd, uMsg, wParam, lParam);
 
-    g_fLieAboutToolbarPopulation = false;
-    g_dwInterceptMenuCreationThreadId = 0;
-    g_pInternetToolbar = nullptr;
+    if (uMsg == WM_INITMENUPOPUP)
+    {
+        Wh_Log(L"A menu has been initialised. Disabling \"View\" > \"Toolbars\" menu hooks...");
+        g_fLieAboutToolbarPopulation = false;
+        g_dwInterceptMenuCreationThreadId = 0;
+        g_pInternetToolbar = nullptr;
+    }
+
+    return result;
 }
 
 void (THISCALL *CShellBrowser___InvalidateRibbonCommandSet)(CShellBrowser *pThis, int eCommandSet);
@@ -470,15 +482,17 @@ WindhawkUtils::SYMBOL_HOOK c_rgHooksExplorerFrame[] = {
     },
     {
         // CShellBrowser::_OnViewMenuPopup creates the Internet Toolbar context menu for when
-        // the user opens the toolbars menu from 
+        // the user opens the toolbars menu from the views menu.
+        // Note that this method is sometimes inlined into CShellBrowser::WndProcBS, so we will
+        // hook that instead.
         {
             FOR_64_32(
-                L"private: void __cdecl CShellBrowser::_OnViewMenuPopup(struct HMENU__ *)",
-                L"private: void __thiscall CShellBrowser::_OnViewMenuPopup(struct HMENU__ *)"
+                L"public: __int64 __cdecl CShellBrowser::WndProcBS(struct HWND__ *,unsigned int,unsigned __int64,__int64)",
+                L"public: long __thiscall CShellBrowser::WndProcBS(struct HWND__ *,unsigned int,unsigned int,long)"
             )
         },
-        &CShellBrowser___OnViewMenuPopup_orig,
-        CShellBrowser___OnViewMenuPopup_hook
+        &CShellBrowser__WndProcBS_orig,
+        CShellBrowser__WndProcBS_hook
     },
     {
         {
