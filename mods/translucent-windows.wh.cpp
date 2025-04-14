@@ -202,7 +202,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <dwmapi.h>
 #include <vssym32.h>
@@ -211,7 +210,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 #include <mutex>
 #include <unordered_set>
 #include <commctrl.h>
-#include <windows.h>
 
 static constexpr UINT USE_IMMERSIVE_DARK_MODE = 20; // DWMWA_USE_IMMERSIVE_DARK_MODE
 static constexpr UINT CAPTION_COLOR = 35; // DWMWA_CAPTION_COLOR
