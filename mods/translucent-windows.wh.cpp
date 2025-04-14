@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.4.1
+// @version         1.4.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -27,6 +27,8 @@
     - Transparency effects enabled
     - Energy saver disabled
 #
+* The background effects do not affect modern windows (UWP/WinUI)
+
 * It is highly recommended to use the mod with black/dark window themes like the perfect black Rectify11 theme.
 
 * Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
@@ -355,6 +357,13 @@ DwmSetWindowAttribute_t originalDwmSetWindowAttribute = nullptr;
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
+    if(g_settings.BorderFlag && dwAttribute == BORDER_COLOR && g_settings.MenuBorderFlag && 
+      (IsWindowClass(hWnd, L"#32768") || IsWindowClass(hWnd, L"TaskListThumbnailWnd")))
+            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(g_settings.BorderActiveColor));
+
+    if(!IsWindowEligible(hWnd))
+        return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
+    
     if(!g_settings.TitlebarFlag)
     {
         if(g_settings.BgType == g_settings.BlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && g_settings.ExtendFrame)
@@ -382,19 +391,16 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
     
     // Effects on VS Studio, Windows Terminal ...
     if(g_settings.BorderFlag && dwAttribute == BORDER_COLOR)
-    {
-        // Windows classic context menu & taskbar tnumbnail
-        if(g_settings.MenuBorderFlag && (IsWindowClass(hWnd, L"#32768") || IsWindowClass(hWnd, L"TaskListThumbnailWnd")))
-            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(g_settings.BorderActiveColor));
-        else if(!(IsWindowClass(hWnd, L"#32768") || IsWindowClass(hWnd, L"TaskListThumbnailWnd")))
-            return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
-    }
+        return originalDwmSetWindowAttribute(hWnd, BORDER_COLOR, &g_settings.g_BorderColor, sizeof(g_settings.g_BorderColor));
     
     return originalDwmSetWindowAttribute(hWnd, dwAttribute, pvAttribute, cbAttribute);
 }
 
 HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMarInset)
-{   
+{
+    if(!IsWindowEligible(hWnd))
+        return OriginalDwmExtendFrameIntoClientArea(hWnd, pMarInset);
+    
     if(g_settings.ExtendFrame)
     {
         // Override Win11 Taskmgr, explorer, aerowizard calls
@@ -478,8 +484,8 @@ void ApplyFrameExtension(HWND hWnd)
 
 void EnableBlurBehind(HWND hWnd)
 {
-    // Does not interfere with the Windows Terminal own acrylic
-    if(!(IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS")))
+    // Does not interfere with the Windows Terminal, GameBar overlay
+    if(!(IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS") || IsWindowClass(hWnd, L"ApplicationFrameWindow")))
     {
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
 
@@ -538,7 +544,7 @@ void EnableColoredBorder(HWND hWnd)
 }
 
 BOOL IsWindowEligible(HWND hWnd) 
-{
+{   
     LONG_PTR styleEx = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
 
@@ -718,6 +724,9 @@ void ApplyForExistingWindows()
 
 void RestoreWindowCustomizations(HWND hWnd)
 {
+    if(!IsWindowEligible(hWnd))
+        return;
+    
     // Manually restore frame extension
     if(!(IsWindowClass(hWnd,  L"TaskManagerWindow")))
     {
@@ -739,7 +748,6 @@ void RestoreWindowCustomizations(HWND hWnd)
     DwmEnableBlurBehindWindow(hWnd, &bb);
 
     accent.AccentState = 0;
-    accent.AccentFlags = FALSE;
 
     attrib.Attrib = WCA_ACCENT_POLICY;
     attrib.pvData = &accent;
@@ -781,28 +789,30 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
         outColor = COLOR_DEFAULT;
         return FALSE;
     }
-
-    if (wcslen(hexColor) != 6)
-        return FALSE;
-    
-    auto hexToByte = [](WCHAR c) -> int {
-        if (c >= L'0' && c <= L'9') return c - L'0';
-        if (c >= L'A' && c <= L'F') return 10 + (c - L'A');
-        if (c >= L'a' && c <= L'f') return 10 + (c - L'a');
-        return -1;
-    };
-
-    BYTE rgb[3];
-    for (int i = 0; i < 3; ++i) {
-        int high = hexToByte(hexColor[i * 2]);
-        int low  = hexToByte(hexColor[i * 2 + 1]);
-        if (high < 0 || low < 0)
+    else 
+    {
+        if (wcslen(hexColor) != 6)
             return FALSE;
-        rgb[i] = (high << 4) | low;
-    }
+        
+        auto hexToByte = [](WCHAR c) -> int {
+            if (c >= L'0' && c <= L'9') return c - L'0';
+            if (c >= L'A' && c <= L'F') return 10 + (c - L'A');
+            if (c >= L'a' && c <= L'f') return 10 + (c - L'a');
+            return -1;
+        };
 
-    outColor = RGB(rgb[0], rgb[1], rgb[2]);
-    return TRUE;
+        BYTE rgb[3];
+        for (int i = 0; i < 3; ++i) {
+            int high = hexToByte(hexColor[i * 2]);
+            int low  = hexToByte(hexColor[i * 2 + 1]);
+            if (high < 0 || low < 0)
+                return FALSE;
+            rgb[i] = (high << 4) | low;
+        }
+
+        outColor = RGB(rgb[0], rgb[1], rgb[2]);
+        return TRUE;
+    }
 }
 
 void GetProcStrFromPath(std::wstring& path) {
