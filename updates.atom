@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-11T02:41:49.000Z</updated>
+    <updated>2025-04-14T23:17:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.4.2]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#afa6754ba136a6adbf459f0386bc7f13c68a707c</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2025-04-14T23:17:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Apply a workaround solution for background effects in windows Game Bar transparent overlay </li>
+<li>Limit mod unloading to appropriate windows, fixes a bug during BlurBehind effect unloading</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.1.1]]></title>
         <id>https://windhawk.net/mods/explorer-toolbar-links-item#5e2643ce30dbd3e7f47f4b9f68693bc8b125cd93</id>
@@ -277,22 +291,6 @@ manifested to load Common Controls 6.0</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Desktop Icons 1.4]]></title>
-        <id>https://windhawk.net/mods/classic-desktop-icons#cbb294bc3f2c7de8473dd7e209eabd12e788c2cf</id>
-        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
-        <updated>2025-03-30T17:08:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Control classic selection style with an option</li>
-<li>Add option to change top margin of the desktop view</li>
-<li>Add option to restrict the desktop view to the working area on single-monitor systems
-All changes thanks to @kawapure</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

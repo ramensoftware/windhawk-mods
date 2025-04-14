@@ -1,3 +1,8 @@
+## 1.4.2 ([Apr 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/afa6754ba136a6adbf459f0386bc7f13c68a707c/mods/translucent-windows.wh.cpp))
+
+* Apply a workaround solution for background effects in windows Game Bar transparent overlay 
+* Limit mod unloading to appropriate windows, fixes a bug during BlurBehind effect unloading
+
 ## 1.4.1 ([Apr 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6d80a4ec94be318d3dfafdf9ef0b0f0b80185222/mods/translucent-windows.wh.cpp))
 
 * Fix bug where previously both window states colors were needed to apply color effects
