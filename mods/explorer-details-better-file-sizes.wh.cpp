@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.8
+// @version         1.4.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -136,7 +136,10 @@ KiB?](https://devblogs.microsoft.com/oldnewthing/20090611-00/?p=17933).
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string_view>
 #include <vector>
+
+using namespace std::string_view_literals;
 
 #include <initguid.h>
 
@@ -165,7 +168,8 @@ bool g_isEverything;
 HMODULE g_propsysModule;
 std::atomic<int> g_hookRefCount;
 
-thread_local bool g_inCFileOperation_PerformOperations;
+thread_local bool g_inCRecursiveFolderOperation_Prepare;
+thread_local bool g_inCRecursiveFolderOperation_Do;
 
 auto hookRefCountScope() {
     g_hookRefCount++;
@@ -1185,19 +1189,24 @@ PCWSTR g_gsQueryStatus[] = {
     L"Zero-size reparse point",
 };
 
-HANDLE g_everything4Wh_Thread;
+std::mutex g_everything4Wh_ThreadMutex;
+std::atomic<HANDLE> g_everything4Wh_Thread;
 HANDLE g_everything4Wh_ThreadReadyEvent;
 
-bool IsReparse(PCWSTR FolderPath) {
+bool IsUncPath(PCWSTR folderPath) {
+    return folderPath[0] == L'\\' && folderPath[1] == L'\\';
+}
+
+bool IsReparse(PCWSTR folderPath) {
     WIN32_FILE_ATTRIBUTE_DATA fad = {};
-    return GetFileAttributesEx(FolderPath, GetFileExInfoStandard, &fad) &&
+    return GetFileAttributesEx(folderPath, GetFileExInfoStandard, &fad) &&
            (fad.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
 }
 
 // Code based on:
 // https://github.com/transmission/transmission/blob/f2aeb11b0733957d8d77d7038daa3ae88442dd5b/libtransmission/file-win32.cc
 std::wstring NativePathToPath(std::wstring_view wide_path) {
-    constexpr std::wstring_view NativeUncPathPrefix{L"\\\\?\\UNC\\"};
+    constexpr auto NativeUncPathPrefix = L"\\\\?\\UNC\\"sv;
     if (wide_path.starts_with(NativeUncPathPrefix)) {
         wide_path.remove_prefix(std::size(NativeUncPathPrefix));
         std::wstring result{L"\\\\"};
@@ -1205,7 +1214,7 @@ std::wstring NativePathToPath(std::wstring_view wide_path) {
         return result;
     }
 
-    constexpr std::wstring_view NativeLocalPathPrefix{L"\\\\?\\"};
+    constexpr auto NativeLocalPathPrefix = L"\\\\?\\"sv;
     if (wide_path.starts_with(NativeLocalPathPrefix)) {
         wide_path.remove_prefix(std::size(NativeLocalPathPrefix));
         return std::wstring{wide_path};
@@ -1245,6 +1254,8 @@ std::wstring ResolvePath(PCWSTR path) {
     return result;
 }
 
+DWORD WINAPI Everything4Wh_Thread(void* parameter);
+
 unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
     *size = 0;
 
@@ -1269,12 +1280,6 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
         return ES_QUERY_OK;
     }
 
-    HWND hReceiverWnd = g_gsReceiverWnd;
-
-    if (!hReceiverWnd) {
-        return ES_QUERY_NO_PLUGIN_IPC;
-    }
-
     HWND hEverything = FindWindow(EVERYTHING_IPC_WNDCLASSW_15A, nullptr);
 
     if (!hEverything) {
@@ -1283,6 +1288,33 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
 
     if (!hEverything) {
         return ES_QUERY_NO_ES_IPC;
+    }
+
+    if (!g_everything4Wh_Thread) {
+        std::lock_guard<std::mutex> guard(g_everything4Wh_ThreadMutex);
+
+        if (!g_everything4Wh_Thread) {
+            g_everything4Wh_ThreadReadyEvent =
+                CreateEvent(nullptr, TRUE, FALSE, nullptr);
+
+            g_everything4Wh_Thread = CreateThread(
+                nullptr, 0, Everything4Wh_Thread, nullptr, 0, nullptr);
+            if (g_everything4Wh_Thread) {
+                // Wait for a message queue to be created.
+                WaitForSingleObject(g_everything4Wh_ThreadReadyEvent, INFINITE);
+                CloseHandle(g_everything4Wh_ThreadReadyEvent);
+            } else {
+                Wh_Log(L"CreateThread failed: %d", GetLastError());
+            }
+
+            g_everything4Wh_ThreadReadyEvent = nullptr;
+        }
+    }
+
+    HWND hReceiverWnd = g_gsReceiverWnd;
+
+    if (!hReceiverWnd) {
+        return ES_QUERY_NO_PLUGIN_IPC;
     }
 
     DWORD dwSize = sizeof(EVERYTHING_IPC_QUERY2) +
@@ -1591,16 +1623,37 @@ std::optional<ULONGLONG> CalculateFolderSize(IShellFolder2* shellFolder) {
     return totalSize;
 }
 
-bool GetFolderPathFromIShellFolder(IShellFolder2* shellFolder,
-                                   WCHAR path[MAX_PATH]) {
+std::wstring GetFolderPathFromIShellFolder(IShellFolder2* shellFolder) {
     LPITEMIDLIST pidl;
     HRESULT hr = SHGetIDListFromObject(shellFolder, &pidl);
-    if (SUCCEEDED(hr)) {
-        bool succeeded = SHGetPathFromIDList(pidl, path);
-        CoTaskMemFree(pidl);
-        return succeeded;
+    if (FAILED(hr)) {
+        return {};
     }
-    return false;
+
+    std::wstring path;
+    path.resize(MAX_PATH);
+    while (
+        !SHGetPathFromIDListEx(pidl, &path[0], path.size(), GPFIDL_DEFAULT)) {
+        // The maximum path length is documented to be "approximately" 32,767.
+        if (path.size() >= 32767 + 256) {
+            CoTaskMemFree(pidl);
+            return {};
+        }
+
+        path.resize(path.size() * 2);
+    }
+
+    path.resize(wcslen(path.c_str()));
+    CoTaskMemFree(pidl);
+
+    // SHGetPathFromIDListEx() for long path returns path with super path prefix
+    // "\\\\?\\".
+    constexpr auto kSuperPathPrefix = L"\\\\?\\"sv;
+    if (path.starts_with(kSuperPathPrefix)) {
+        path = path.substr(kSuperPathPrefix.size());
+    }
+
+    return path;
 }
 
 using CFSFolder__GetSize_t = HRESULT(WINAPI*)(void* pCFSFolder,
@@ -1616,7 +1669,8 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
 
     HRESULT ret = CFSFolder__GetSize_Original(pCFSFolder, itemidChild, idFolder,
                                               propVariant);
-    if (g_inCFileOperation_PerformOperations || ret != S_OK ||
+    if (g_inCRecursiveFolderOperation_Prepare ||
+        g_inCRecursiveFolderOperation_Do || ret != S_OK ||
         propVariant->vt != VT_EMPTY) {
         return ret;
     }
@@ -1665,20 +1719,28 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
             Wh_Log(L"Failed: %08X", hr);
         } else if (g_settings.calculateFolderSizes ==
                    CalculateFolderSizes::everything) {
-            WCHAR path[MAX_PATH];
-            if (GetFolderPathFromIShellFolder(childFolder.get(), path)) {
-                Wh_Log(L"Getting size for %s", path);
+            const auto path = GetFolderPathFromIShellFolder(childFolder.get());
+            if (!path.empty()) {
+                Wh_Log(L"Getting size for %s", path.c_str());
 
                 int64_t size;
-                unsigned result = Everything4Wh_GetFileSize(path, &size);
+                unsigned result =
+                    Everything4Wh_GetFileSize(path.c_str(), &size);
 
                 // Regular reparse points are indexed with size 0, and
                 // ES_QUERY_ZERO_SIZE_REPARSE_POINT is returned when querying
                 // the link itself. Subfolders of reparse points aren't indexed,
                 // so ES_QUERY_NO_INDEX is returned in this case.
+                //
+                // Avoid resolving UNC folders which are not indexed as it can
+                // be slow, and will be done for all folders if the UNC host
+                // isn't indexed.
                 if (result == ES_QUERY_ZERO_SIZE_REPARSE_POINT ||
-                    result == ES_QUERY_NO_INDEX) {
-                    auto resolved = ResolvePath(path);
+                    (result == ES_QUERY_NO_INDEX && !IsUncPath(path.c_str()))) {
+                    Wh_Log(L"Resolving path due to status: %s",
+                           g_gsQueryStatus[result]);
+
+                    auto resolved = ResolvePath(path.c_str());
                     if (resolved.empty()) {
                         Wh_Log(L"Failed to resolve path");
                     } else if (resolved == path) {
@@ -1726,16 +1788,30 @@ HRESULT WINAPI CFSFolder__GetSize_Hook(void* pCFSFolder,
     return S_OK;
 }
 
-using CFileOperation_PerformOperations_t = HRESULT(WINAPI*)(void* pThis);
-CFileOperation_PerformOperations_t CFileOperation_PerformOperations_Original;
-HRESULT WINAPI CFileOperation_PerformOperations_Hook(void* pThis) {
+using CRecursiveFolderOperation_Prepare_t = HRESULT(__thiscall*)(void* pThis);
+CRecursiveFolderOperation_Prepare_t CRecursiveFolderOperation_Prepare_Original;
+HRESULT __thiscall CRecursiveFolderOperation_Prepare_Hook(void* pThis) {
     auto hookScope = hookRefCountScope();
 
-    g_inCFileOperation_PerformOperations = true;
+    g_inCRecursiveFolderOperation_Prepare = true;
 
-    HRESULT ret = CFileOperation_PerformOperations_Original(pThis);
+    HRESULT ret = CRecursiveFolderOperation_Prepare_Original(pThis);
 
-    g_inCFileOperation_PerformOperations = false;
+    g_inCRecursiveFolderOperation_Prepare = false;
+
+    return ret;
+}
+
+using CRecursiveFolderOperation_Do_t = HRESULT(__thiscall*)(void* pThis);
+CRecursiveFolderOperation_Do_t CRecursiveFolderOperation_Do_Original;
+HRESULT __thiscall CRecursiveFolderOperation_Do_Hook(void* pThis) {
+    auto hookScope = hookRefCountScope();
+
+    g_inCRecursiveFolderOperation_Do = true;
+
+    HRESULT ret = CRecursiveFolderOperation_Do_Original(pThis);
+
+    g_inCRecursiveFolderOperation_Do = false;
 
     return ret;
 }
@@ -1970,16 +2046,20 @@ HRESULT WINAPI PSFormatForDisplay_Hook(const PROPERTYKEY& propkey,
                                        cchText);
 }
 
-using PSStrFormatKBSizeW_t = void*(WINAPI*)(size_t size,
+using PSStrFormatKBSizeW_t = void*(WINAPI*)(ULONGLONG size,
                                             LPWSTR pwszText,
                                             DWORD cchText);
 PSStrFormatKBSizeW_t PSStrFormatKBSizeW_Original;
-void* WINAPI PSStrFormatKBSizeW_Hook(size_t size,
+void* WINAPI PSStrFormatKBSizeW_Hook(ULONGLONG size,
                                      LPWSTR pwszText,
                                      DWORD cchText) {
     Wh_Log(L">");
 
     void* ret = PSStrFormatKBSizeW_Original(size, pwszText, cchText);
+
+    if (!pwszText || cchText == 0) {
+        return ret;
+    }
 
     int len = wcslen(pwszText);
     if (len < 2 || (size_t)len + 1 > cchText - 1 || pwszText[len - 2] != 'K' ||
@@ -2052,13 +2132,24 @@ bool HookWindowsStorageSymbols() {
         {
             {
 #ifdef _WIN64
-                LR"(public: virtual long __cdecl CFileOperation::PerformOperations(void))",
+                LR"(public: long __cdecl CRecursiveFolderOperation::Prepare(void))",
 #else
-                LR"(public: virtual long __stdcall CFileOperation::PerformOperations(void))",
+                LR"(public: long __thiscall CRecursiveFolderOperation::Prepare(void))",
 #endif
             },
-            &CFileOperation_PerformOperations_Original,
-            CFileOperation_PerformOperations_Hook,
+            &CRecursiveFolderOperation_Prepare_Original,
+            CRecursiveFolderOperation_Prepare_Hook,
+        },
+        {
+            {
+#ifdef _WIN64
+                LR"(public: virtual long __cdecl CRecursiveFolderOperation::Do(void))",
+#else
+                LR"(public: virtual long __thiscall CRecursiveFolderOperation::Do(void))",
+#endif
+            },
+            &CRecursiveFolderOperation_Do_Original,
+            CRecursiveFolderOperation_Do_Hook,
         },
         {
             {
@@ -2361,7 +2452,8 @@ BOOL Wh_ModInit() {
             default:
                 if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
                     moduleFileName++;
-                    if (_wcsicmp(moduleFileName, L"Everything.exe") == 0) {
+                    if (_wcsicmp(moduleFileName, L"Everything.exe") == 0 ||
+                        _wcsicmp(moduleFileName, L"Everything64.exe") == 0) {
                         isEverything = true;
                     }
                 } else {
@@ -2434,30 +2526,17 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    if (g_settings.calculateFolderSizes == CalculateFolderSizes::everything) {
-        g_everything4Wh_ThreadReadyEvent =
-            CreateEvent(nullptr, TRUE, FALSE, nullptr);
-        g_everything4Wh_Thread =
-            CreateThread(nullptr, 0, Everything4Wh_Thread, nullptr, 0, nullptr);
-    }
-}
-
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_everything4Wh_Thread) {
-        // Wait for a message queue to be created.
-        WaitForSingleObject(g_everything4Wh_ThreadReadyEvent, INFINITE);
-        CloseHandle(g_everything4Wh_ThreadReadyEvent);
-        PostThreadMessage(GetThreadId(g_everything4Wh_Thread), WM_APP, 0, 0);
-        WaitForSingleObject(g_everything4Wh_Thread, INFINITE);
-        CloseHandle(g_everything4Wh_Thread);
-        g_everything4Wh_Thread = nullptr;
-    }
-
     while (g_hookRefCount > 0) {
         Sleep(200);
+    }
+
+    if (HANDLE thread = g_everything4Wh_Thread.exchange(nullptr)) {
+        PostThreadMessage(GetThreadId(thread), WM_APP, 0, 0);
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
 }
 
