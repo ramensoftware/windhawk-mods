@@ -1,3 +1,13 @@
+## 1.4.9 ([Apr 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7ae6bca49f773eef9966ceedc8e9e2495f896463/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Added support for long paths.
+* Reduced footprint for processes which never use a file list control.
+* Reduced footprint if "Everything" 1.4 isn't used. That's yet another reason to switch to "[Everything" 1.5 Alpha](https://www.voidtools.com/forum/viewtopic.php?t=9787), which is also about 20x faster at size query operations. Despite the "Alpha" label, it's stable for daily use according to users' feedback and my own experience.
+* Fixed a crash in 32-bit programs when the "Use IEC terms" option is enabled and the "Use MB/GB for large files" option isn't enabled.
+* Fixed Everything hanging in some cases if its executable name is Everything64.exe and not Everything.exe.
+* Fixed slow file list loading when browsing slow network share folders.
+* Fixed Explorer showing incorrect operation sizes in some cases, such as when extracting files from a 7-Zip archive.
+
 ## 1.4.8 ([Feb 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/712276e60d0edae88611fcebec9f9119298e7ba0/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Fixed "Everything" 1.5.0.1384a or newer hanging when browsing for files in "Everything" itself using the system dialog.

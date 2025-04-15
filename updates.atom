@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-15T07:38:32.000Z</updated>
+    <updated>2025-04-15T20:43:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.9]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#7ae6bca49f773eef9966ceedc8e9e2495f896463</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2025-04-15T20:43:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for long paths.</li>
+<li>Reduced footprint for processes which never use a file list control.</li>
+<li>Reduced footprint if "Everything" 1.4 isn't used. That's yet another reason to switch to "<a href="https://www.voidtools.com/forum/viewtopic.php?t=9787">Everything" 1.5 Alpha</a>, which is also about 20x faster at size query operations. Despite the "Alpha" label, it's stable for daily use according to users' feedback and my own experience.</li>
+<li>Fixed a crash in 32-bit programs when the "Use IEC terms" option is enabled and the "Use MB/GB for large files" option isn't enabled.</li>
+<li>Fixed Everything hanging in some cases if its executable name is Everything64.exe and not Everything.exe.</li>
+<li>Fixed slow file list loading when browsing slow network share folders.</li>
+<li>Fixed Explorer showing incorrect operation sizes in some cases, such as when extracting files from a 7-Zip archive.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.x Alt+Tab Loader 2.1.0]]></title>
         <id>https://windhawk.net/mods/win7-alttab-loader#c3ac7043865e3f5ae95949ebe5d1b3ce81db8cde</id>
@@ -280,18 +299,6 @@ of Windows which is the same language as what you currently have installed for d
         <link href="https://windhawk.net/mods/aerexplorer"/>
         <updated>2025-03-31T10:45:10.000Z</updated>
         <content type="html"><![CDATA[<p>Revise <code>LoadComCtlModule</code> to not use registry caching</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Desktop Icons 1.4.1]]></title>
-        <id>https://windhawk.net/mods/classic-desktop-icons#cc7ca22005465e4a90c14158515cc3dccc0fe0ee</id>
-        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
-        <updated>2025-03-30T19:04:13.000Z</updated>
-        <content type="html"><![CDATA[<p>Remove unneeded <code>LoadComCtlModule</code> function, Explorer is always
-manifested to load Common Controls 6.0</p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
