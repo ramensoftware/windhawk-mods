@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win7-alttab-loader
-// @name            Windows 7 Alt+Tab Loader
-// @description     Loads Windows 7 Alt+Tab on Windows 10.
-// @version         2.0.0
+// @name            Windows 7/8.x Alt+Tab Loader
+// @description     Loads Windows 7/8.x Alt+Tab on Windows 10.
+// @version         2.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -12,20 +12,29 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 7 Alt+Tab Loader
-This mod allows the Windows 7 Alt+Tab UI to work on Windows 10.
+# Windows 7/8.x Alt+Tab Loader
+This mod allows the Windows 7/8.x Alt+Tab UI to work on Windows 10.
 
 # ⚠ IMPORTANT: PREREQUISITES! ⚠
-- You will need a copy of `AltTab.dll` from Windows 7 (x64). Once you have this, drop it into `%SystemRoot%\System32`.
-- You will also need an msstyles theme with a proper `AltTab` class, or else it will not render properly (Windows 3.x System font, weird looking selection, transparent background on basic theme)
+- You will need a copy of `AltTab.dll` from Windows 7 or 8.x (x64). Once you have this, drop it into `%SystemRoot%\System32`.
+- You will need a copy of `AltTab.dll.mui` from the same OS in your language (e.g. `en-US`). Once you have this, drop it into the correct MUI folder
+  (e.g. `%SystemRoot%\System32\en-US`).
+- You will also need an msstyles theme with a proper `AltTab` class, or else it will fail to display the Alt+Tab UI.
   - [Here is a Windows 7 theme with proper classes.](https://www.deviantart.com/vaporvance/art/Aero10-for-Windows-10-1903-22H2-909711949)
   - You can make one with Windows Style Builder, which allows you to add classes to theme, or you can base on one that already does, and edit using
   msstyleEditor (recommended).
 - Once you have all these and install this mod, you will need to restart `explorer.exe` for the Windows 7 Alt+Tab UI to load.
-  - You will also need to restart `explorer.exe` to use the mod.
+  - You will also need to restart `explorer.exe` after disabling the mod to return to the Windows 10 Alt+Tab UI.
+
+**Windows 7**:
 
 ![DWM (with thumbnails)](https://raw.githubusercontent.com/aubymori/images/main/win7-alt-tab-dwm.png)
+
 ![Basic (no thumbnails)](https://raw.githubusercontent.com/aubymori/images/main/win7-alt-tab-basic.png)
+
+**Windows 8**:
+
+![Windows 8](https://raw.githubusercontent.com/aubymori/images/main/win8-alt-tab.png)
 
 *Original Windhawk mod by ephemeralViolette, original implementation in ExplorerPatcher by valinet.*
 */
@@ -72,50 +81,6 @@ BOOL WINAPI IsWindowEnabled_hook(HWND hWnd)
         return FALSE;
 
 	return TRUE;
-}
-
-void removechar(wchar_t *str, wchar_t c)
-{
-    wchar_t *src, *dst;
-    for (src = dst = str; *src != L'\0'; src++)
-    {
-        *dst = *src;
-        if (*dst != c) dst++;
-    }
-    *dst = L'\0';
-}
-
-/* Load strings without the MUI */
-int (WINAPI *LoadStringW_orig)(HINSTANCE, UINT, LPWSTR, int);
-int WINAPI LoadStringW_hook(HINSTANCE hInstance, UINT uId, LPWSTR lpBuffer, int cchBufferMax)
-{
-    if (hInstance == g_hAltTab)
-    {
-        switch (uId)
-        {
-            case 0x3E8:
-                swprintf_s(lpBuffer, cchBufferMax, L"AltTab");
-                return 6;
-            case 0x3EA:
-            {
-                HMODULE hExplorerFrame = GetModuleHandleW(L"ExplorerFrame.dll");
-                if (hExplorerFrame)
-                {
-                    WCHAR szDesktop[MAX_PATH];
-                    LoadStringW_orig(hExplorerFrame, 13140, szDesktop, MAX_PATH);
-                    removechar(szDesktop, L'&');
-                    wcscpy_s(lpBuffer, cchBufferMax, szDesktop);
-                    return wcslen(lpBuffer);
-                }
-                else
-                {
-                    swprintf_s(lpBuffer, cchBufferMax, L"Desktop");
-                    return 7;
-                }
-            }
-        }
-    }
-    return LoadStringW_orig(hInstance, uId, lpBuffer, cchBufferMax);
 }
 
 /* I don't know what this does but it's in the original so I'll keep it. */
@@ -230,6 +195,34 @@ void WINAPI CWindowInfo__GetIconProc_hook(
     CWindowInfo__GetIconProc_orig(hWnd, uMsg, upParam, lResult);
 }
 
+/* Convert shifted Windows 8.1 Immersive color IDs to the Vibranium enum */
+COLORREF (*CImmersiveColor_GetColor_orig)(UINT);
+COLORREF CImmersiveColor_GetColor_hook(UINT colorType)
+{
+    switch (colorType)
+    {
+        case 45: // IMCLR_SaturatedAltTabBackground
+            colorType = 54;
+            break;
+        case 181: // IMCLR_SaturatedFocusRect
+            colorType = 252;
+            break;
+        case 184: // IMCLR_SaturatedPrimaryText
+            colorType = 255;
+            break;
+        case 201: // IMCLR_SaturatedAltTabHoverRect
+            colorType = 272;
+            break;
+        case 202: // IMCLR_SaturatedAltTabPressedRect
+            colorType = 273;
+            break;
+        case 442: // IMCLR_HardwareWin8Pillarbox
+            colorType = 570;
+            break;
+    }
+    return CImmersiveColor_GetColor_orig(colorType);
+}
+
 const WindhawkUtils::SYMBOL_HOOK altTabDllHooks[] = {
     {
         {
@@ -238,6 +231,14 @@ const WindhawkUtils::SYMBOL_HOOK altTabDllHooks[] = {
         &CWindowInfo__GetIconProc_orig,
         CWindowInfo__GetIconProc_hook,
         false
+    },
+    {
+        {
+            L"public: static unsigned long __cdecl CImmersiveColor::GetColor(enum IMMERSIVE_COLOR_TYPE)"
+        },
+        &CImmersiveColor_GetColor_orig,
+        CImmersiveColor_GetColor_hook,
+        true
     }
 };
 
@@ -246,7 +247,24 @@ BOOL Wh_ModInit(void)
     g_hAltTab = LoadLibraryW(L"AltTab.dll");
     if (!g_hAltTab)
     {
-        Wh_Log(L"Failed to load AltTab.dll");
+        MessageBoxW(
+            NULL,
+            L"Failed to load AltTab.dll. Did you copy it over properly? Check the README for instructions.",
+            L"Windhawk - Windows 7/8.x Alt Tab Loader",
+            MB_ICONERROR
+        );
+        return FALSE;
+    }
+
+    WCHAR szTest[256];
+    if (!LoadStringW(g_hAltTab, 1000, szTest, 256))
+    {
+        MessageBoxW(
+            NULL,
+            L"Failed to load strings from AltTab.dll. Did you copy the MUI over properly? Check the README for instructions.",
+            L"Windhawk - Windows 7/8.x Alt Tab Loader",
+            MB_ICONERROR
+        );
         return FALSE;
     }
 
@@ -259,11 +277,6 @@ BOOL Wh_ModInit(void)
         (void *)IsWindowEnabled,
         (void *)IsWindowEnabled_hook,
         (void **)&IsWindowEnabled_orig
-    );
-    Wh_SetFunctionHook(
-        (void *)LoadStringW,
-        (void *)LoadStringW_hook,
-        (void **)&LoadStringW_orig
     );
     Wh_SetFunctionHook(
         (void *)PostMessageW,
@@ -309,7 +322,7 @@ BOOL Wh_ModInit(void)
         {
             if (SUCCEEDED(g_pAltTabSSO->Exec(&CGID_ShellServiceObject, 2, 0, NULL, NULL)))
             {
-                Wh_Log(L"Using Windows 7 Alt+Tab");
+                Wh_Log(L"Using Windows 7/8.x Alt+Tab");
                 bSucceeded = true;
             }
             else
@@ -344,4 +357,6 @@ void Wh_ModUninit(void)
 {
     if (g_pAltTabSSO)
         g_pAltTabSSO->Release();
+    if (g_hAltTab)
+        FreeLibrary(g_hAltTab);
 }
