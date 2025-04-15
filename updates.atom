@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-14T23:17:02.000Z</updated>
+    <updated>2025-04-15T07:38:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.x Alt+Tab Loader 2.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-alttab-loader#c3ac7043865e3f5ae95949ebe5d1b3ce81db8cde</id>
+        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
+        <updated>2025-04-15T07:38:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Remove the <code>LoadStringW</code> hook hack. Users must now supply an MUI file.</li>
+<li>Add error message boxes for AltTab.dll or its string resources failing to load.</li>
+<li>Support Windows 8.x's AltTab.dll</li>
+<li>Change mod name to reflect this</li>
+<li>Slightly revise README to be more clear and accurate</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.4.2]]></title>
         <id>https://windhawk.net/mods/translucent-windows#afa6754ba136a6adbf459f0386bc7f13c68a707c</id>
@@ -278,19 +295,6 @@ manifested to load Common Controls 6.0</p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnails#1cbf79b584cf28b6428e668ff7b8f05a71eef41a</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
-        <updated>2025-03-30T17:16:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with update KB5053656 for Windows 11 version 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

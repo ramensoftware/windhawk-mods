@@ -1,3 +1,11 @@
+## 2.1.0 ([Apr 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c3ac7043865e3f5ae95949ebe5d1b3ce81db8cde/mods/win7-alttab-loader.wh.cpp))
+
+- Remove the `LoadStringW` hook hack. Users must now supply an MUI file.
+- Add error message boxes for AltTab.dll or its string resources failing to load.
+- Support Windows 8.x's AltTab.dll
+  - Change mod name to reflect this
+- Slightly revise README to be more clear and accurate
+
 ## 2.0.0 ([Aug 26, 2024](https://github.com/ramensoftware/windhawk-mods/blob/a1ef83e2b24d3b147686d269bf92c7c37c7feaa0/mods/win7-alttab-loader.wh.cpp))
 
 - Complete rewrite
