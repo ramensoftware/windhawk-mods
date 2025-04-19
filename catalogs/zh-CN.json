@@ -308,6 +308,27 @@
                 "version": "1.0.0"
             }
         },
+        "chinese-ime-fixed-mode": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1745078170000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1745078170000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "barry",
+                "compilerOptions": "-limm32",
+                "description": "Forces Microsoft Pinyin IME to stay in Chinese mode",
+                "github": "https://github.com/barrypp",
+                "include": [
+                    "*"
+                ],
+                "name": "Chinese IME fixed mode",
+                "version": "1.0.4"
+            }
+        },
         "chrome-ui-tweaks": {
             "details": {
                 "defaultSorting": 6410,
