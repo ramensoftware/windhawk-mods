@@ -2,29 +2,41 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const modMetadataParams = {
-	singleValue: {
-		'id': true,
-		'version': true,
-		'github': true,
-		'twitter': true,
-		'homepage': true,
-		'compilerOptions': true,
-	},
-	singleValueLocalizable: {
-		'name': true,
-		'description': true,
-		'author': true,
-	},
-	multiValue: {
-		'include': true,
-		'exclude': true,
-		'architecture': true,
-	}
-};
+	singleValue: [
+		'id',
+		'version',
+		'github',
+		'twitter',
+		'homepage',
+		'compilerOptions',
+		'license',
+		'donateUrl',
+	],
+	singleValueLocalizable: [
+		'name',
+		'description',
+		'author',
+	],
+	multiValue: [
+		'include',
+		'exclude',
+		'architecture',
+	],
+} as const;
 
-type ModMetadataParamsSingleValue = keyof typeof modMetadataParams.singleValue;
-type ModMetadataParamsSingleValueLocalizable = keyof typeof modMetadataParams.singleValueLocalizable;
-type ModMetadataParamsMultiValue = keyof typeof modMetadataParams.multiValue;
+type ModMetadataParamsSingleValue = typeof modMetadataParams.singleValue[number];
+type ModMetadataParamsSingleValueLocalizable = typeof modMetadataParams.singleValueLocalizable[number];
+type ModMetadataParamsMultiValue = typeof modMetadataParams.multiValue[number];
+
+function isModMetadataParamsSingleValue(k: string): k is ModMetadataParamsSingleValue {
+	return modMetadataParams.singleValue.includes(k as any);
+}
+function isModMetadataParamsSingleValueLocalizable(k: string): k is ModMetadataParamsSingleValueLocalizable {
+	return modMetadataParams.singleValueLocalizable.includes(k as any);
+}
+function isModMetadataParamsMultiValue(k: string): k is ModMetadataParamsMultiValue {
+	return modMetadataParams.multiValue.includes(k as any);
+}
 
 type ModMetadata = Partial<
 	Record<ModMetadataParamsSingleValue, string> &
@@ -97,7 +109,7 @@ export default class ModSourceUtils {
 				continue;
 			}
 
-			const match = lineTrimmed.match(/^\/\/[ \t]+@([a-zA-Z]+)(?::([a-z]{2}(?:-[A-Z]{2})?))?[ \t]+(.*)$/);
+			const match = lineTrimmed.match(/^\/\/[ \t]+@(_?[a-zA-Z]+)(?::([a-z]{2}(?:-[A-Z]{2})?))?[ \t]+(.*)$/);
 			if (!match) {
 				const lineTruncated = lineTrimmed.length > 20 ? (lineTrimmed.slice(0, 17) + '...') : lineTrimmed;
 				throw new Error('Couldn\'t parse metadata line: ' + lineTruncated);
@@ -141,7 +153,9 @@ export default class ModSourceUtils {
 
 		const supportedArchitecture = [
 			'x86',
-			'x86-64'
+			'x86-64',
+			'amd64',
+			'arm64'
 		];
 		for (const architecture of metadata.architecture || []) {
 			if (!supportedArchitecture.includes(architecture)) {
@@ -155,51 +169,48 @@ export default class ModSourceUtils {
 
 		const result: ModMetadata = {};
 
-		for (const [metadataKey, metadataValue] of Object.entries(metadataRaw)) {
-			let localizable = false;
-			let array = false;
-
-			if (metadataKey in modMetadataParams.singleValue) {
-				// Default params.
-			} else if (metadataKey in modMetadataParams.singleValueLocalizable) {
-				localizable = true;
-			} else if (metadataKey in modMetadataParams.multiValue) {
-				array = true;
-			} else {
-				throw new Error(`Unsupported metadata parameter: ${metadataKey}`);
+		for (const [metadataKeyRaw, metadataValue] of Object.entries(metadataRaw)) {
+			if (metadataValue.length === 0) {
+				throw new Error(`Missing metadata parameter: ${metadataKeyRaw}`);
 			}
 
-			const candidates: typeof metadataValue = [];
-			const languages = new Set<string | null>();
+			const metadataKey = metadataKeyRaw.replace(/^_/, '');
 
-			for (const item of metadataValue) {
-				if (localizable) {
+			if (isModMetadataParamsSingleValueLocalizable(metadataKey)) {
+				const languages = new Set<string | null>();
+				for (const item of metadataValue) {
 					if (languages.has(item.language)) {
 						throw new Error(`Duplicate metadata parameter: ${metadataKey}` + (item.language !== null ? `:${item.language}` : ''));
 					}
 
 					languages.add(item.language);
-				} else if (item.language !== null) {
-					throw new Error(`Metadata parameter can't be localized: ${metadataKey}:${item.language}`);
 				}
 
-				candidates.push(item);
-			}
+				result[metadataKey] = this.getBestLanguageMatch(language, metadataValue).value;
+			} else if (isModMetadataParamsMultiValue(metadataKey)) {
+				for (const item of metadataValue) {
+					if (item.language !== null) {
+						throw new Error(`Metadata parameter can't be localized: ${metadataKey}:${item.language}`);
+					}
+				}
 
-			if (candidates.length === 0) {
-				continue;
-			}
+				result[metadataKey] = metadataValue.map(x => x.value);
+			} else if (isModMetadataParamsSingleValue(metadataKey)) {
+				for (const item of metadataValue) {
+					if (item.language !== null) {
+						throw new Error(`Metadata parameter can't be localized: ${metadataKey}:${item.language}`);
+					}
+				}
 
-			if (localizable) {
-				result[metadataKey as ModMetadataParamsSingleValueLocalizable] = this.getBestLanguageMatch(language, candidates).value;
-			} else if (array) {
-				result[metadataKey as ModMetadataParamsMultiValue] = candidates.map(x => x.value);
-			} else {
-				if (candidates.length > 1) {
+				if (metadataValue.length > 1) {
 					throw new Error(`Duplicate metadata parameter: ${metadataKey}`);
 				}
 
-				result[metadataKey as ModMetadataParamsSingleValue] = candidates[0].value;
+				result[metadataKey] = metadataValue[0].value;
+			} else if (metadataKeyRaw.startsWith('_')) {
+				// Ignore for forward compatibility.
+			} else {
+				throw new Error(`Unsupported metadata parameter: ${metadataKey}`);
 			}
 		}
 
