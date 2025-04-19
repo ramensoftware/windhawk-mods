@@ -28,8 +28,7 @@ Forces dark mode for all win32 menus to create a more consistent UI. Requires Wi
 ![After10](https://i.imgur.com/MUqVAcG.png)
 ![Menubar](https://raw.githubusercontent.com/MGGSK/DarkMenus/main/Images/menubar.png)
 
-#### The code for dark menubars is based on the [win32-darkmode](https://github.com/adzm/win32-darkmode) repository.
-#### Create a [issue](https://github.com/MGGSK/DarkMenus/issues) or [discussion](https://github.com/MGGSK/DarkMenus/discussions) to send feedback.
+The code for dark menubars is based on [win32-darkmode](https://github.com/adzm/win32-darkmode) and [notepad++](https://github.com/notepad-plus-plus/notepad-plus-plus). Create a [issue](https://github.com/MGGSK/DarkMenus/issues) or [discussion](https://github.com/MGGSK/DarkMenus/discussions) to send feedback.
 */
 // ==/WindhawkModReadme==
 
@@ -41,14 +40,12 @@ Forces dark mode for all win32 menus to create a more consistent UI. Requires Wi
   $options:
   - ForceDark: Always
   - AllowDark: Only when Windows is in dark mode
-  - ForceLight: Never
 
   $name:de-DE: Wann soll der Dunkle Modus aktiviert sein?
   $description:de-DE: Setzen sie auf "Systemeinstellung verwenden" wenn sie oft zwischen den Dunklen und Hellen Modus wechseln oder ein Program wie Auto Dark Mode verwenden.
   $options:de-DE:
   - ForceDark: Immer
   - AllowDark: Systemeinstellung verwenden
-  - ForceLight: Nie
 */
 // ==/WindhawkModSettings==
 
@@ -106,12 +103,40 @@ struct UAHDRAWMENUITEM
 	UAHMENUITEM umi;
 };
 
+//Code based on https://github.com/notepad-plus-plus/notepad-plus-plus/blob/bab3573be708bb908b8080e3e2007ea78a7f1932/PowerEditor/src/NppDarkMode.cpp
+#pragma region CodeBasedOnNotepad++
+
+void DrawUAHMenuNCBottomLine(HWND hWnd)
+{
+	MENUBARINFO mbi = { sizeof(mbi) };
+	if (!GetMenuBarInfo(hWnd, OBJID_MENU, 0, &mbi))
+		return;
+
+	RECT rcClient;
+	GetClientRect(hWnd, &rcClient);
+	MapWindowPoints(hWnd, nullptr, (LPPOINT)&rcClient, 2);
+
+	RECT rcWindow;
+	GetWindowRect(hWnd, &rcWindow);
+
+	OffsetRect(&rcClient, -rcWindow.left, -rcWindow.top);
+
+	// the rcBar is offset by the window rect
+	RECT rcAnnoyingLine = rcClient;
+	rcAnnoyingLine.bottom = rcAnnoyingLine.top;
+	rcAnnoyingLine.top--;
+
+	HDC hdc = GetWindowDC(hWnd);
+	FillRect(hdc, &rcAnnoyingLine, brBackground);
+	ReleaseDC(hWnd, hdc);
+}
+
+#pragma endregion CodeBasedOnNotepad++
+
 //Code based on https://github.com/adzm/win32-darkmode/blob/darkmenubar/win32-darkmode/win32-darkmode.cpp
-//MIT license, see LICENSE
-//Copyright(c) 2021 adzm / Adam D. Walling
 #pragma region CodeBasedOnWin32DarkMode
 
-HTHEME menuTheme = nullptr;
+HTHEME g_menuTheme = nullptr;
 
 //Processes messages related to custom menubar drawing.
 //Returns true if handled, false to continue with normal processing
@@ -176,20 +201,20 @@ bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRE
         if (pUDMI->dis.itemState & ODS_NOACCEL)
             dwFlags |= DT_HIDEPREFIX;
 
-        if (!menuTheme)
-            menuTheme = OpenThemeData(hWnd, L"Menu");
+        if (!g_menuTheme)
+            g_menuTheme = OpenThemeData(hWnd, L"Menu");
 
         const DTTOPTS opts { sizeof(opts), DTT_TEXTCOLOR, iTextStateID != MBI_DISABLED ? crItemForeground : crItemDisabled };
 
         FillRect(pUDMI->um.hdc, &pUDMI->dis.rcItem, *pbrBackground);
-        DrawThemeTextEx(menuTheme, pUDMI->um.hdc, MENU_BARITEM, MBI_NORMAL, menuString, mii.cch, dwFlags, &pUDMI->dis.rcItem, &opts);
+        DrawThemeTextEx(g_menuTheme, pUDMI->um.hdc, MENU_BARITEM, MBI_NORMAL, menuString, mii.cch, dwFlags, &pUDMI->dis.rcItem, &opts);
 
         return true;
     }
     case WM_THEMECHANGED:
     {
-        CloseThemeData(menuTheme);
-        menuTheme = nullptr;
+        CloseThemeData(g_menuTheme);
+        g_menuTheme = nullptr;
         return false;
     }
     default:
@@ -209,6 +234,13 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     LRESULT lResult = 0;
     if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
         return lResult;
+
+    if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
+    {
+        lResult = DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
+        DrawUAHMenuNCBottomLine(hWnd);
+        return lResult;
+    }
 
     return DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
 }
