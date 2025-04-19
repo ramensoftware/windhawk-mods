@@ -17,6 +17,29 @@ MOD_COMPATIBILITY_WIN7_FLAGS = [
     '-DNTDDI_VERSION=0x06010000',
 ]
 
+HOOK_SYMBOLS_ARM64_PATCH = (
+    re.escape(
+        R'''#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+'''
+    ),
+    R'''#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#elif defined(_M_ARM64)
+        L"symbol-arm64-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+''',
+)
+
 MOD_COMPATIBILITY = {
     'accent-color-sync': [
         {'versions': ['1.1'], 'compiler_flags': ['-include', 'string']},
@@ -40,6 +63,9 @@ MOD_COMPATIBILITY = {
             ],
         },
     ],
+    'alt-tab-delayer': [
+        {'versions': ['1.0.0', '1.1.0'], 'compiler_flags': ['-include', 'atomic']},
+    ],
     'basic-themer': [
         {'versions': ['1.0.0', '1.1.0'], 'compiler_flags': ['-include', 'vector']},
     ],
@@ -57,6 +83,7 @@ MOD_COMPATIBILITY = {
             'versions': ['1.0', '1.0.1', '1.0.2', '1.0.3', '1.1'],
             'compiler_flags': ['-lruntimeobject'],
         },
+        {'versions': ['1.1.3'], 'compiler_flags': ['-include', 'cmath']},
     ],
     'classic-maximized-windows-fix': [
         {
@@ -71,10 +98,7 @@ MOD_COMPATIBILITY = {
         },
     ],
     'classic-taskdlg-fix': [
-        {
-            'versions': ['1.1.0'],
-            'compiler_flags': MOD_COMPATIBILITY_WIN7_FLAGS,
-        },
+        {'versions': ['1.1.0'], 'compiler_flags': MOD_COMPATIBILITY_WIN7_FLAGS},
     ],
     'dwm-ghost-mods': [
         {
@@ -107,6 +131,10 @@ MOD_COMPATIBILITY = {
             'versions': ['0.4', '0.5', '0.6', '0.7'],
             'compiler_flags': ['-include', 'vector'],
         },
+        {'versions': ['0.7.1'], 'compiler_flags': ['-include', 'atomic']},
+    ],
+    'sysdm-general-tab': [
+        {'versions': ['1.0', '1.1'], 'compiler_flags': ['-include', 'cmath']},
     ],
     'taskbar-button-scroll': [
         {
@@ -192,12 +220,80 @@ MOD_COMPATIBILITY = {
     'windows-7-clock-spacing': [
         {'versions': ['1.0.0'], 'compiler_flags': ['-include', 'vector']},
     ],
+    # HOOK_SYMBOLS_ARM64_PATCH
+    'pinned-items-double-click': [
+        {'versions': ['1.0.1'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'taskbar-button-click': [
+        {'versions': ['1.0.6', '1.0.7'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'taskbar-button-scroll': [
+        {'versions': ['1.0.6'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'taskbar-clock-customization': [
+        {'versions': ['1.3.3', '1.4'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'taskbar-grouping': [
+        {
+            'versions': ['1.3.2', '1.3.3', '1.3.4', '1.3.5', '1.3.6', '1.3.7'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
+    'taskbar-icon-size': [
+        {
+            'versions': [
+                '1.2.6',
+                '1.2.7',
+                '1.2.8',
+                '1.2.9',
+                '1.2.10',
+                '1.2.11',
+                '1.2.12',
+                '1.2.13',
+                '1.2.14',
+                '1.2.15',
+                '1.2.16',
+            ],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
+    'taskbar-labels': [
+        {
+            'versions': ['1.2.5', '1.3', '1.3.1', '1.3.2', '1.3.3', '1.3.4', '1.3.5'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
+    'taskbar-notification-icon-spacing': [
+        {'versions': ['1.0.2'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'taskbar-thumbnail-reorder': [
+        {'versions': ['1.0.7', '1.0.8'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'taskbar-vertical': [
+        {'versions': ['1.0'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'taskbar-wheel-cycle': [
+        {
+            'versions': ['1.1.3', '1.1.4', '1.1.5'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
+    'virtual-desktop-taskbar-order': [
+        {
+            'versions': ['1.0.2', '1.0.3', '1.0.4'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
+    'windows-11-taskbar-styler': [
+        {'versions': ['1.3.2'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
 }
 
 
 class Architecture(Enum):
     x86 = 1
     x86_64 = 2
+    ARM64 = 3
 
 
 @dataclass
@@ -284,8 +380,13 @@ def get_mod_info(path: Path) -> ModInfo:
             elif key == 'architecture':
                 if value == 'x86':
                     architectures.add(Architecture.x86)
+                elif value == 'amd64':
+                    architectures.add(Architecture.x86_64)
+                elif value == 'arm64':
+                    architectures.add(Architecture.ARM64)
                 elif value == 'x86-64':
                     architectures.add(Architecture.x86_64)
+                    architectures.add(Architecture.ARM64)
                 else:
                     raise RuntimeError(f'Invalid architecture: {value}')
 
@@ -296,7 +397,11 @@ def get_mod_info(path: Path) -> ModInfo:
         raise RuntimeError('@version is not specified')
 
     if not architectures:
-        architectures = {Architecture.x86, Architecture.x86_64}
+        architectures = {
+            Architecture.x86,
+            Architecture.x86_64,
+            Architecture.ARM64,
+        }
 
     return ModInfo(id, version, compiler_options, architectures)
 
@@ -308,7 +413,11 @@ def compile_mod(
 
     windhawk_version = get_file_version(windhawk_dir / 'windhawk.exe')
 
-    compiler_path = windhawk_dir / 'Compiler' / 'bin' / 'g++.exe'
+    compiler_path = windhawk_dir / 'Compiler' / 'bin'
+    if windhawk_version < str_to_file_version('1.6.0.0'):
+        compiler_path /= 'g++.exe'
+    else:
+        compiler_path /= 'clang++.exe'
 
     engine_relative_path = get_engine_path(windhawk_dir)
     if engine_relative_path is None:
@@ -336,17 +445,26 @@ def compile_mod(
     succeeded = True
 
     for arch in mod_info.architectures:
+        if arch == Architecture.ARM64 and windhawk_version < str_to_file_version(
+            '1.6.0.0'
+        ):
+            continue
+
         engine_lib_path = windhawk_dir / engine_relative_path
         if arch == Architecture.x86:
             engine_lib_path /= '32'
         elif arch == Architecture.x86_64:
             engine_lib_path /= '64'
+        elif arch == Architecture.ARM64:
+            engine_lib_path /= 'arm64'
         engine_lib_path /= 'windhawk.lib'
 
         if arch == Architecture.x86:
             compiler_target = 'i686-w64-mingw32'
         elif arch == Architecture.x86_64:
             compiler_target = 'x86_64-w64-mingw32'
+        elif arch == Architecture.ARM64:
+            compiler_target = 'aarch64-w64-mingw32'
 
         cpp_version = 23
         if windhawk_version < str_to_file_version('1.5.0.0'):
@@ -398,14 +516,14 @@ def compile_mod(
             'windhawk_api.h',
             '-target',
             compiler_target,
-			'-Wl,--export-all-symbols',
+            '-Wl,--export-all-symbols',
             '-o',
             output_paths[arch],
             *extra_args,
             *compatibility_compiler_flags,
         ]
 
-        print(f'Running compiler, extra args: {extra_args}')
+        print(f'Running compiler, target: {compiler_target}, extra args: {extra_args}')
         result = subprocess.call([compiler_path, *compiler_args])
 
         if mod_file_temp:
@@ -429,6 +547,7 @@ def main():
 
     parser.add_argument('-o32', '--output-32', type=Path, required=True)
     parser.add_argument('-o64', '--output-64', type=Path, required=True)
+    parser.add_argument('-oarm64', '--output-arm64', type=Path, required=True)
 
     args = parser.parse_args()
 
@@ -441,6 +560,7 @@ def main():
     output_paths: dict[Architecture, Path] = {
         Architecture.x86: args.output_32,
         Architecture.x86_64: args.output_64,
+        Architecture.ARM64: args.output_arm64,
     }
 
     failed = []
