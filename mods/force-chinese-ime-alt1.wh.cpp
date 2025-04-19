@@ -2,7 +2,7 @@
 // @id              force-chinese-ime-alt1
 // @name            Force Chinese IME Mode - alt1
 // @description     Forces Microsoft Pinyin IME to stay in Chinese mode
-// @version         1.0.2
+// @version         1.0.3
 // @author          barry
 // @github          https://github.com/barrypp
 // @include         *
@@ -28,7 +28,7 @@ set_IME_mode trigger by MSUIM.Msg.Private
 #define IMC_SETCONVERSIONMODE 0x0002
 #endif
 
-UINT WM_MSUIM_Msg_Private = 0xc05a;
+UINT WM_MSUIM_Msg_Private = RegisterWindowMessageW(L"MSUIM.Msg.Private");
 void set_IME_mode()
 {
     HKL hkl = GetKeyboardLayout(0);
@@ -104,19 +104,19 @@ LRESULT WINAPI DispatchMessageW_Hook(CONST MSG* lpMsg)
     return DispatchMessageW_Original(lpMsg);
 }
 
-using RegisterWindowMessageW_t = decltype(&RegisterWindowMessageW);
-RegisterWindowMessageW_t RegisterWindowMessageW_Original;
-UINT WINAPI RegisterWindowMessageW_Hook(LPCWSTR lpString) 
-{
-    UINT r = RegisterWindowMessageW_Original(lpString);
-    if (0 == lstrcmpW(lpString,L"MSUIM.Msg.Private"))
-    {
-        Wh_Log(L"r, %x, msg, %s",r,lpString);
-        WM_MSUIM_Msg_Private = r;
-        Wh_RemoveFunctionHook((void*)RegisterWindowMessageW);
-    }
-    return r;
-}
+// using RegisterWindowMessageW_t = decltype(&RegisterWindowMessageW);
+// RegisterWindowMessageW_t RegisterWindowMessageW_Original;
+// UINT WINAPI RegisterWindowMessageW_Hook(LPCWSTR lpString) 
+// {
+//     UINT r = RegisterWindowMessageW_Original(lpString);
+//     if (0 == lstrcmpW(lpString,L"MSUIM.Msg.Private"))
+//     {
+//         Wh_Log(L"r, %x, msg, %s",r,lpString);
+//         WM_MSUIM_Msg_Private = r;
+//         //Wh_RemoveFunctionHook((void*)RegisterWindowMessageW);
+//     }
+//     return r;
+// }
 
 void Wh_ModUninit()
 {
@@ -136,11 +136,11 @@ BOOL Wh_ModInit() {
         &DispatchMessageW_Original // Pass original function pointer here
     );    
 
-    WindhawkUtils::SetFunctionHook(
-        RegisterWindowMessageW,
-        RegisterWindowMessageW_Hook,
-        &RegisterWindowMessageW_Original // Pass original function pointer here
-    );        
+    // WindhawkUtils::SetFunctionHook(
+    //     RegisterWindowMessageW,
+    //     RegisterWindowMessageW_Hook,
+    //     &RegisterWindowMessageW_Original // Pass original function pointer here
+    // );        
 
     //Wh_Log(L"WindhawkUtils::SetFunctionHook, r, %d", r);
     return TRUE;
