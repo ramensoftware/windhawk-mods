@@ -93,7 +93,7 @@ function findCachedMod(modId: string, version: string, arch: string) {
     return fs.existsSync(modFile) ? modFile : null;
 }
 
-function compileMod(modFilePath: string, output32FilePath: string, output64FilePath: string) {
+function compileMod(modFilePath: string, output32FilePath: string, output64FilePath: string, outputArm64FilePath: string) {
     const windhawkPath = process.env.WINDHAWK_PATH;
     if (!windhawkPath) {
         throw new Error('WINDHAWK_PATH is not set');
@@ -109,6 +109,8 @@ function compileMod(modFilePath: string, output32FilePath: string, output64FileP
         output32FilePath,
         '-o64',
         output64FilePath,
+        '-oarm64',
+        outputArm64FilePath,
     ], { encoding: 'utf8', stdio: 'inherit' });
     if (result.status !== 0) {
         throw new Error('Compiling ' + modFilePath + ' failed with status ' + result.status);
@@ -170,12 +172,20 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
 
         const modVersionCompiled32FilePath = path.join(modDir, `${metadata.version}_32.dll`);
         const modVersionCompiled64FilePath = path.join(modDir, `${metadata.version}_64.dll`);
+        const modVersionCompiledArm64FilePath = path.join(modDir, `${metadata.version}_arm64.dll`);
         const cachedMod32Path = findCachedMod(modId, metadata.version, '32');
         const cachedMod64Path = findCachedMod(modId, metadata.version, '64');
-        if (cachedMod32Path || cachedMod64Path) {
+        const cachedModArm64Path = findCachedMod(modId, metadata.version, 'arm64');
+        if (cachedMod32Path || cachedMod64Path || cachedModArm64Path) {
             const modHas32 = metadata.architecture?.includes('x86') ?? true;
-            const modHas64 = metadata.architecture?.includes('x86-64') ?? true;
-            if (modHas32 != !!cachedMod32Path || modHas64 != !!cachedMod64Path) {
+            const modHas64 = 
+                (metadata.architecture?.includes('x86-64') ?? true) ||
+                (metadata.architecture?.includes('amd64') ?? true);
+            const modHasArm64 =
+                // (metadata.architecture?.includes('x86-64') ?? true) ||
+                // (metadata.architecture?.includes('arm64') ?? true);
+                false; // Temporarily no arm64 support.
+            if (modHas32 != !!cachedMod32Path || modHas64 != !!cachedMod64Path || modHasArm64 != !!cachedModArm64Path) {
                 throw new Error(`Mod ${modId} architecture mismatch`);
             }
 
@@ -186,8 +196,12 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
             if (cachedMod64Path) {
                 fs.copyFileSync(cachedMod64Path, modVersionCompiled64FilePath);
             }
+
+            if (cachedModArm64Path) {
+                fs.copyFileSync(cachedModArm64Path, modVersionCompiledArm64FilePath);
+            }
         } else {
-            compileMod(modVersionFilePath, modVersionCompiled32FilePath, modVersionCompiled64FilePath);
+            compileMod(modVersionFilePath, modVersionCompiled32FilePath, modVersionCompiled64FilePath, modVersionCompiledArm64FilePath);
         }
 
         const commitTime = parseInt(gitExec([
