@@ -133,12 +133,10 @@
 */
 
 #include <libloaderapi.h>
-#include <minwindef.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <condition_variable>
 #include <cstdint>
-#include <string>
 #include <thread>
 #include <mutex>
 #include <regex>
