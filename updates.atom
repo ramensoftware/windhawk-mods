@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-19T15:56:10.000Z</updated>
+    <updated>2025-04-20T14:49:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 0.9]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#1d248fdd4964e037fc00cb9799cd5fb55fe92f77</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-04-20T14:49:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.62</li>
+<li>Fix the <code>query()</code> API function not getting the latest option changes</li>
+<li>Now this mod uses a more proper way of changing the minimum window size</li>
+<li>JavaScript <code>window.resizeTo()</code> should work fine for smaller sizes, and the resize cursor should always be shown when hovering over window borders</li>
+<li>As a result, this feature no longer works on Spotify versions older than 1.1.71</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chinese IME fixed mode 1.0.4]]></title>
         <id>https://windhawk.net/mods/chinese-ime-fixed-mode#52dd9956bf33a98494b675899e959a6aaf4f16ce</id>
@@ -301,18 +318,6 @@ of Windows which is the same language as what you currently have installed for d
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Virtual Desktop Transition Animation 1.1]]></title>
-        <id>https://windhawk.net/mods/disable-virtual-desktop-transition#bcc31d6dbb7a99877da5ddf191dbe9737f49e0f6</id>
-        <link href="https://windhawk.net/mods/disable-virtual-desktop-transition"/>
-        <updated>2025-03-31T11:14:07.000Z</updated>
-        <content type="html"><![CDATA[<p>This update adds support for Windows 11. I tested on <code>10.0.22631.2428</code>, but the Windows 11 approach is general enough that it should work for all versions.</p>
-<p>In Windows 11, they moved the animation to reside in <code>TWinUI.PCShell.dll</code>, which is loaded into the main shell process <code>explorer.exe</code>. In Windows 10, it resided in <code>uDWM.dll</code> which ran in <code>dwm.exe</code>.</p>]]></content>
-        <author>
-            <name>Isabella Lulamoon (kawapure)</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>
