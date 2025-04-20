@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         0.8
+// @version         0.9
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -31,17 +31,18 @@
 * Force enable Chrome extension support
 * Use the settings tab on the mod details page to configure the features
 ## Notes
-* Supported CEF versions: 90.4 to 131
+* Supported CEF versions: 90.4 to 134
     * This mod won't work with versions before 90.4
     * Versions after 132 may work but are not tested
     * Variant of this mod using copy-pasted CEF structs instead of hardcoded offsets is available at [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them to the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.57 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.62 (newer versions may work)
 * Spotify notes:
-    * Old releases are available [here](https://docs.google.com/spreadsheets/d/1wztO1L4zvNykBRw7X4jxP8pvo11oQjT0O5DvZ_-S4Ok/edit?pli=1&gid=803394557#gid=803394557)
+    * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
     * 1.1.68-1.1.70: Window control hiding doesn't work
+    * 1.1.71: First version to support the `Ignore minimum window size` option
     * 1.2.7: First version to use Library X UI by default
     * 1.2.13: Last version to have the old UI
     * 1.2.28: First version to support Chrome runtime (disabled by default)
@@ -99,7 +100,7 @@
 90.6: 1.1.60-1.1.62
 91.1: 1.1.63-1.1.67
 91.3: 1.1.68-1.1.70
-94: 1.1.71
+94: 1.1.71-1.1.72
 95: 1.1.74-1.1.75
 96: 1.1.76
 98: 1.1.81
@@ -127,7 +128,8 @@
 128: 1.2.47-1.2.48
 129: 1.2.49-1.2.50
 130: 1.2.51-1.2.52
-131: 1.2.53, 1.2.55-1.2.57
+131: 1.2.53, 1.2.55-1.2.61
+134: 1.2.62
 */
 
 #include <libloaderapi.h>
@@ -153,7 +155,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 131
+#define LAST_TESTED_CEF_VERSION 134
 
 // Win11 only DWM attributes for Windhawk 1.4
 #define DWMWA_USE_HOSTBACKDROPBRUSH 17
@@ -220,7 +222,7 @@ cte_offset_t get_window_handle_offsets[] = {
     {124, ANY_MINOR, 0x18c, 0x318},
     {130, ANY_MINOR, 0x18c, 0x318},
     {131, ANY_MINOR, 0x194, 0x328},
-    {132, ANY_MINOR, 0x194, 0x328}
+    {136, ANY_MINOR, 0x194, 0x328}
 };
 
 cte_offset_t set_background_color_offsets[] = {
@@ -234,6 +236,7 @@ int add_child_view_offset = NULL;
 int get_window_handle_offset = NULL;
 int set_background_color_offset = NULL;
 
+BOOL g_isSpotify = FALSE;
 BOOL g_isSpotifyRenderer = FALSE;
 
 HWND g_mainHwnd = NULL;
@@ -270,6 +273,17 @@ struct cte_queryResponse_t {
     BOOL speedModSupported;
     double playbackSpeed;
     BOOL immediateSpeedChange;
+
+    BOOL showframe;
+    BOOL showframeonothers;
+    BOOL showmenu;
+    BOOL showcontrols;
+    BOOL transparentcontrols;
+    BOOL ignoreminsize;
+    BOOL transparentrendering;
+    BOOL noforceddarkmode;
+    BOOL forceextensions;
+    BOOL allowuntested;
 } g_queryResponse;
 
 #pragma region CEF structs (as minimal and cross-version compatible as possible)
@@ -332,11 +346,16 @@ typedef struct _cef_size_t {
 typedef struct _cef_view_delegate_t {
   cef_base_ref_counted_t base;
   cef_size_t(CEF_CALLBACK* get_preferred_size)(struct _cef_view_delegate_t* self);
+  cef_size_t(CEF_CALLBACK* get_minimum_size)(struct _cef_view_delegate_t* self, struct _cef_view_t* view);
 } cef_view_delegate_t;
 
 typedef struct _cef_panel_delegate_t {
   cef_view_delegate_t base;
 } cef_panel_delegate_t;
+
+typedef struct _cef_window_delegate_t {
+  cef_panel_delegate_t base;
+} cef_window_delegate_t;
 
 typedef struct _cef_basetime_t {
   int64_t val;
@@ -526,22 +545,6 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 }
             } else if (cte_settings.showframeonothers == TRUE) {
                 return DefWindowProc(hWnd, uMsg, wParam, lParam);
-            }
-            break;
-        case WM_GETMINMAXINFO:
-            if (g_minWidth != -1 && g_minHeight != -1) {
-                RECT windowRect, clientRect;
-                GetWindowRect(hWnd, &windowRect);
-                GetClientRect(hWnd, &clientRect);
-                MINMAXINFO* mmi = (MINMAXINFO*)lParam;
-                mmi->ptMinTrackSize.x = g_minWidth + (windowRect.right - windowRect.left) - (clientRect.right - clientRect.left);
-                mmi->ptMinTrackSize.y = g_minHeight + (windowRect.bottom - windowRect.top) - (clientRect.bottom - clientRect.top);
-                return 0;
-            } else if (cte_settings.ignoreminsize == TRUE) {
-                MINMAXINFO* mmi = (MINMAXINFO*)lParam;
-                mmi->ptMinTrackSize.x = 0;
-                mmi->ptMinTrackSize.y = 0;
-                return 0;
             }
             break;
         case WM_PAINT:
@@ -935,11 +938,31 @@ int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _
     return 0;
 }
 
+typedef cef_size_t CEF_CALLBACK (*get_minimum_size_t)(struct _cef_view_delegate_t* self, struct _cef_view_t* view);
+cef_size_t CEF_CALLBACK get_minimum_size_hook(struct _cef_view_delegate_t* self, struct _cef_view_t* view) {
+    //Wh_Log(L"get_minimum_size_hook");
+    cef_size_t* size = (cef_size_t*)calloc(1, sizeof(cef_size_t));
+    if (g_minWidth == -1 || g_minHeight == -1) {
+        if (cte_settings.ignoreminsize) {
+            size->width = 0;
+            size->height = 0;
+        } else {
+            size->width = 800;
+            size->height = 600;
+        }
+    } else {
+        float dpi = GetDpiForWindow(g_mainHwnd);
+        size->width = g_minWidth / (dpi / 96);
+        size->height = g_minHeight / (dpi / 96);
+    }
+    return *size;
+}
+
 typedef cef_window_handle_t CEF_CALLBACK (*get_window_handle_t)(struct _cef_window_t* self);
 
-typedef _cef_window_t* CEF_EXPORT (*cef_window_create_top_level_t)(void* delegate);
+typedef _cef_window_t* CEF_EXPORT (*cef_window_create_top_level_t)(cef_window_delegate_t* delegate);
 cef_window_create_top_level_t CEF_EXPORT cef_window_create_top_level_original;
-_cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(void* delegate) {
+_cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(cef_window_delegate_t* delegate) {
     Wh_Log(L"cef_window_create_top_level_hook");
 
     BOOL is_frameless_hooked = FALSE;
@@ -960,11 +983,14 @@ _cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(void* delegate) {
             }
         }
         if (g_mainHwnd == NULL) {
-            g_pipeThread = std::thread([=]() {
-                CreateNamedPipeServer();
-            });
-            g_pipeThread.detach();
             g_mainHwnd = hWnd;
+            if (g_isSpotify) {
+                delegate->base.base.get_minimum_size = get_minimum_size_hook;
+                g_pipeThread = std::thread([=]() {
+                    CreateNamedPipeServer();
+                });
+                g_pipeThread.detach();
+            }
         }
     } else {
         // Just subclass everything again if get_window_handle is not available
@@ -1347,8 +1373,8 @@ void HandleWindhawkComm(LPCWSTR command) {
             return;
         }
         wchar_t queryResponse[256];
-        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:dwmBackdropEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
-        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:dwmBackdropEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
+        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
             cte_settings.showframe,
             cte_settings.showframeonothers,
             cte_settings.showmenu,
@@ -1356,6 +1382,9 @@ void HandleWindhawkComm(LPCWSTR command) {
             cte_settings.transparentcontrols,
             cte_settings.transparentrendering,
             cte_settings.ignoreminsize,
+            cte_settings.noforceddarkmode,
+            cte_settings.forceextensions,
+            cte_settings.allowuntested,
             IsZoomed(g_mainHwnd),
             GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST,
             GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_LAYERED,
@@ -1532,14 +1561,17 @@ int ConnectToNamedPipe() {
                         buffer[bytesRead / sizeof(wchar_t)] = L'\0';
                         Wh_Log(L"Received message: %s", buffer);
                         if (wcsncmp(buffer, L"/WH:QueryResponse:", 18) == 0) {
-                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
-                                &cte_settings.showframe,
-                                &cte_settings.showframeonothers,
-                                &cte_settings.showmenu,
-                                &cte_settings.showcontrols,
-                                &cte_settings.transparentcontrols,
-                                &cte_settings.transparentrendering,
-                                &cte_settings.ignoreminsize,
+                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+                                &g_queryResponse.showframe,
+                                &g_queryResponse.showframeonothers,
+                                &g_queryResponse.showmenu,
+                                &g_queryResponse.showcontrols,
+                                &g_queryResponse.transparentcontrols,
+                                &g_queryResponse.transparentrendering,
+                                &g_queryResponse.ignoreminsize,
+                                &g_queryResponse.noforceddarkmode,
+                                &g_queryResponse.forceextensions,
+                                &g_queryResponse.allowuntested,
                                 &g_queryResponse.isMaximized,
                                 &g_queryResponse.isTopMost,
                                 &g_queryResponse.isLayered,
@@ -1553,7 +1585,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.dpi,
                                 &g_queryResponse.speedModSupported,
                                 &g_queryResponse.playbackSpeed,
-                                &g_queryResponse.immediateSpeedChange) == 21
+                                &g_queryResponse.immediateSpeedChange) == 24
                             ) {
                                 g_queryResponse.success = TRUE;
                             }
@@ -1832,16 +1864,16 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
         if (g_queryResponse.success) {
             cef_v8value_t* retobj = cef_v8value_create_object(NULL, NULL);
             cef_v8value_t* configObj = cef_v8value_create_object(NULL, NULL);
-            AddValueToObj(configObj, u"showframe", cef_v8value_create_bool(cte_settings.showframe));
-            AddValueToObj(configObj, u"showframeonothers", cef_v8value_create_bool(cte_settings.showframeonothers));
-            AddValueToObj(configObj, u"showmenu", cef_v8value_create_bool(cte_settings.showmenu));
-            AddValueToObj(configObj, u"showcontrols", cef_v8value_create_bool(cte_settings.showcontrols));
-            AddValueToObj(configObj, u"transparentcontrols", cef_v8value_create_bool(cte_settings.transparentcontrols));
-            AddValueToObj(configObj, u"transparentrendering", cef_v8value_create_bool(cte_settings.transparentrendering));
-            AddValueToObj(configObj, u"ignoreminsize", cef_v8value_create_bool(cte_settings.ignoreminsize));
-            AddValueToObj(configObj, u"noforceddarkmode", cef_v8value_create_bool(cte_settings.noforceddarkmode));
-            AddValueToObj(configObj, u"forceextensions", cef_v8value_create_bool(cte_settings.forceextensions));
-            AddValueToObj(configObj, u"allowuntested", cef_v8value_create_bool(cte_settings.allowuntested));
+            AddValueToObj(configObj, u"showframe", cef_v8value_create_bool(g_queryResponse.showframe));
+            AddValueToObj(configObj, u"showframeonothers", cef_v8value_create_bool(g_queryResponse.showframeonothers));
+            AddValueToObj(configObj, u"showmenu", cef_v8value_create_bool(g_queryResponse.showmenu));
+            AddValueToObj(configObj, u"showcontrols", cef_v8value_create_bool(g_queryResponse.showcontrols));
+            AddValueToObj(configObj, u"transparentcontrols", cef_v8value_create_bool(g_queryResponse.transparentcontrols));
+            AddValueToObj(configObj, u"transparentrendering", cef_v8value_create_bool(g_queryResponse.transparentrendering));
+            AddValueToObj(configObj, u"ignoreminsize", cef_v8value_create_bool(g_queryResponse.ignoreminsize));
+            AddValueToObj(configObj, u"noforceddarkmode", cef_v8value_create_bool(g_queryResponse.noforceddarkmode));
+            AddValueToObj(configObj, u"forceextensions", cef_v8value_create_bool(g_queryResponse.forceextensions));
+            AddValueToObj(configObj, u"allowuntested", cef_v8value_create_bool(g_queryResponse.allowuntested));
             AddValueToObj(retobj, u"options", configObj);
             AddValueToObj(retobj, u"isMaximized", cef_v8value_create_bool(g_queryResponse.isMaximized));
             AddValueToObj(retobj, u"isTopMost", cef_v8value_create_bool(g_queryResponse.isTopMost));
@@ -1920,7 +1952,8 @@ int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) 
         AddValueToObj(initialConfigObj, u"forceextensions", cef_v8value_create_bool(cte_settings.forceextensions));
         AddValueToObj(initialConfigObj, u"allowuntested", cef_v8value_create_bool(cte_settings.allowuntested));
         AddValueToObj(retobj, u"initialOptions", initialConfigObj);
-        AddValueToObj(retobj, u"version", u"0.8");
+        std::wstring stdModVer(WH_MOD_VERSION);
+        AddValueToObj(retobj, u"version", std::u16string(stdModVer.begin(), stdModVer.end()));
 
         *retval = retobj;
         return TRUE;
@@ -1977,9 +2010,32 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
     return cef_v8value_create_function_original(name, handler);
 };
 
-BOOL InitSpotifyRendererHooks(HMODULE cefModule) {
+BOOL InitSpotifyRendererHooks(HMODULE cefModule, int major) {
     g_isSpotifyRenderer = TRUE;
     Wh_Log(L"Initializing Spotify renderer hooks");
+
+    // CEF 134 / Spotify 1.2.62 changed the names of these exported functions for some reason
+    std::string v8FuncPrefix = "cef_v8value_";
+    if (major >= 134) {
+        v8FuncPrefix = "cef_v8_value_";
+    }
+    cef_v8value_create_function_t cef_v8value_create_function = (cef_v8value_create_function_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_function").c_str());
+    if (!cef_v8value_create_function) {
+        v8FuncPrefix = "cef_v8_value_";
+        cef_v8value_create_function = (cef_v8value_create_function_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_function").c_str());
+    }
+    cef_v8value_create_bool = (cef_v8value_create_bool_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_bool").c_str());
+    cef_v8value_create_int = (cef_v8value_create_int_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_int").c_str());
+    cef_v8value_create_double = (cef_v8value_create_double_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_double").c_str());
+    cef_v8value_create_string = (cef_v8value_create_string_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_string").c_str());
+    cef_v8value_create_object = (cef_v8value_create_object_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_object").c_str());
+    cef_v8value_create_array = (cef_v8value_create_array_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_array").c_str());
+
+    // Returning after connecting to the pipe crashes the renderer, so get these functions first
+    if (!cef_v8value_create_function || !cef_v8value_create_bool || !cef_v8value_create_int || !cef_v8value_create_double || !cef_v8value_create_string || !cef_v8value_create_object || !cef_v8value_create_array) {
+        Wh_Log(L"Failed to get CEF functions");
+        return FALSE;
+    }
 
     if (ConnectToNamedPipe() == 0) {
         Wh_Log(L"Connected to named pipe");
@@ -1988,18 +2044,6 @@ BOOL InitSpotifyRendererHooks(HMODULE cefModule) {
         return FALSE;
     }
 
-    cef_v8value_create_function_t cef_v8value_create_function = (cef_v8value_create_function_t)GetProcAddress(cefModule, "cef_v8value_create_function");
-    cef_v8value_create_bool = (cef_v8value_create_bool_t)GetProcAddress(cefModule, "cef_v8value_create_bool");
-    cef_v8value_create_int = (cef_v8value_create_int_t)GetProcAddress(cefModule, "cef_v8value_create_int");
-    cef_v8value_create_double = (cef_v8value_create_double_t)GetProcAddress(cefModule, "cef_v8value_create_double");
-    cef_v8value_create_string = (cef_v8value_create_string_t)GetProcAddress(cefModule, "cef_v8value_create_string");
-    cef_v8value_create_object = (cef_v8value_create_object_t)GetProcAddress(cefModule, "cef_v8value_create_object");
-    cef_v8value_create_array = (cef_v8value_create_array_t)GetProcAddress(cefModule, "cef_v8value_create_array");
-
-    if (!cef_v8value_create_function || !cef_v8value_create_bool || !cef_v8value_create_int || !cef_v8value_create_double || !cef_v8value_create_string || !cef_v8value_create_object || !cef_v8value_create_array) {
-        Wh_Log(L"Failed to get CEF functions");
-        return FALSE;
-    }
     Wh_SetFunctionHook((void*)cef_v8value_create_function, (void*)cef_v8value_create_function_hook,
                        (void**)&cef_v8value_create_function_original);
 
@@ -2075,8 +2119,8 @@ BOOL Wh_ModInit() {
     // Check if the app is Spotify
     wchar_t exeName[MAX_PATH];
     GetModuleFileName(NULL, exeName, MAX_PATH);
-    BOOL isSpotify = wcsstr(_wcsupr(exeName), L"SPOTIFY.EXE") != NULL;
-    if (isSpotify) {
+    g_isSpotify = wcsstr(_wcsupr(exeName), L"SPOTIFY.EXE") != NULL;
+    if (g_isSpotify) {
         Wh_Log(L"Spotify detected");
     }
 
@@ -2106,12 +2150,12 @@ BOOL Wh_ModInit() {
     // Check if this process is auxilliary process by checking if the arguments contain --type=
     LPWSTR args = GetCommandLineW();
     if (wcsstr(args, L"--type=") != NULL) {
-        if (isSpotify && isInitialThread &&
+        if (g_isSpotify && isInitialThread &&
             major >= 108 && isTestedVersion &&
             wcsstr(args, L"--type=renderer") != NULL &&
             wcsstr(args, L"--extension-process") == NULL
         ) {
-            return InitSpotifyRendererHooks(cefModule);
+            return InitSpotifyRendererHooks(cefModule, major);
         }
         Wh_Log(L"Auxilliary process detected, skipping.");
         return FALSE;
@@ -2122,7 +2166,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"is_frameless offset: %#x", is_frameless_offset);
     get_window_handle_offset = FindOffset(major, minor, get_window_handle_offsets, ARRAYSIZE(get_window_handle_offsets), cte_settings.allowuntested);
     Wh_Log(L"get_window_handle offset: %#x", get_window_handle_offset);
-    if (isSpotify) {
+    if (g_isSpotify) {
         add_child_view_offset = FindOffset(major, minor, add_child_view_offsets, ARRAYSIZE(add_child_view_offsets));
         Wh_Log(L"add_child_view offset: %#x", add_child_view_offset);
         set_background_color_offset = FindOffset(major, minor, set_background_color_offsets, ARRAYSIZE(set_background_color_offsets));
@@ -2137,7 +2181,7 @@ BOOL Wh_ModInit() {
                        (void**)&cef_window_create_top_level_original);
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook,
                        (void**)&CreateWindowExW_original);
-    if (isSpotify) {
+    if (g_isSpotify) {
         Wh_SetFunctionHook((void*)cef_panel_create, (void*)cef_panel_create_hook,
                            (void**)&cef_panel_create_original);
         Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
