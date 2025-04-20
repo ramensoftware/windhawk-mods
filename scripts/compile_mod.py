@@ -43,6 +43,7 @@ HOOK_SYMBOLS_ARM64_PATCH = (
 MOD_COMPATIBILITY = {
     'accent-color-sync': [
         {'versions': ['1.1'], 'compiler_flags': ['-include', 'string']},
+        {'versions': ['1.3', '1.31'], 'compiler_flags': ['-include', 'cmath']},
     ],
     'aerexplorer': [
         {
@@ -126,6 +127,9 @@ MOD_COMPATIBILITY = {
             'compiler_flags': [*MOD_COMPATIBILITY_WIN7_FLAGS, '-include', 'vector'],
         },
     ],
+    'pinned-items-double-click': [
+        {'versions': ['1.0.1'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
     'sib-plusplus-tweaker': [
         {
             'versions': ['0.4', '0.5', '0.6', '0.7'],
@@ -135,6 +139,9 @@ MOD_COMPATIBILITY = {
     ],
     'sysdm-general-tab': [
         {'versions': ['1.0', '1.1'], 'compiler_flags': ['-include', 'cmath']},
+    ],
+    'taskbar-button-click': [
+        {'versions': ['1.0.6', '1.0.7'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'taskbar-button-scroll': [
         {
@@ -146,8 +153,13 @@ MOD_COMPATIBILITY = {
             ],
         },
         {
-            'versions': ['1.0.2', '1.0.3', '1.0.4', '1.0.5', '1.0.6'],
+            'versions': ['1.0.2', '1.0.3', '1.0.4', '1.0.5'],
             'compiler_flags': ['-lruntimeobject'],
+        },
+        {
+            'versions': ['1.0.6'],
+            'compiler_flags': ['-lruntimeobject'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
         },
     ],
     'taskbar-clock-customization': [
@@ -160,78 +172,18 @@ MOD_COMPATIBILITY = {
                 '1.3',
                 '1.3.1',
                 '1.3.2',
-                '1.3.3',
             ],
             'compiler_flags': ['-lruntimeobject'],
         },
+        {
+            'versions': ['1.3.3'],
+            'compiler_flags': ['-lruntimeobject'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+        {'versions': ['1.4'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'taskbar-empty-space-clicks': [
         {'versions': ['1.0', '1.1', '1.2', '1.3'], 'compiler_flags': ['-DUIATYPES_H']},
-    ],
-    'taskbar-icon-size': [
-        {'versions': ['1.2', '1.2.1', '1.2.2'], 'compiler_flags': ['-lruntimeobject']},
-        {
-            'versions': ['1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8'],
-            'compiler_flags': ['-lruntimeobject', '-include', 'functional'],
-        },
-    ],
-    'taskbar-notification-icon-spacing': [
-        {'versions': ['1.0', '1.0.1', '1.0.2'], 'compiler_flags': ['-lruntimeobject']},
-    ],
-    'taskbar-vertical': [
-        {
-            'versions': ['1.0'],
-            'compiler_flags': [
-                '-lruntimeobject',
-                '-include',
-                'functional',
-            ],
-            'patches': [
-                (
-                    re.escape(
-                        'HookSymbols(module, symbolHooks, symbolHooksCount, &options)'
-                    ),
-                    'HookSymbols(module, symbolHooks, symbolHooksCount)',
-                ),
-                (
-                    re.escape('return HookSymbolsWithOnlineCacheFallback('),
-                    'return HookSymbols(',
-                ),
-            ],
-        },
-    ],
-    'taskbar-wheel-cycle': [
-        {
-            'versions': ['1.0', '1.1', '1.1.1', '1.1.2', '1.1.3'],
-            'compiler_flags': ['-lruntimeobject'],
-        },
-    ],
-    'win7-alttab-loader': [
-        {
-            'versions': ['1.0', '1.0.1', '1.0.2'],
-            'patches': [
-                (
-                    re.escape('Wh_FindFirstSymbol(module, server, &symbol)'),
-                    'Wh_FindFirstSymbol(module, nullptr, &symbol)',
-                ),
-            ],
-        },
-    ],
-    'windows-7-clock-spacing': [
-        {'versions': ['1.0.0'], 'compiler_flags': ['-include', 'vector']},
-    ],
-    # HOOK_SYMBOLS_ARM64_PATCH
-    'pinned-items-double-click': [
-        {'versions': ['1.0.1'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
-    ],
-    'taskbar-button-click': [
-        {'versions': ['1.0.6', '1.0.7'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
-    ],
-    'taskbar-button-scroll': [
-        {'versions': ['1.0.6'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
-    ],
-    'taskbar-clock-customization': [
-        {'versions': ['1.3.3', '1.4'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'taskbar-grouping': [
         {
@@ -240,11 +192,22 @@ MOD_COMPATIBILITY = {
         },
     ],
     'taskbar-icon-size': [
+        {'versions': ['1.2', '1.2.1', '1.2.2'], 'compiler_flags': ['-lruntimeobject']},
+        {
+            'versions': ['1.2.3', '1.2.4', '1.2.5'],
+            'compiler_flags': ['-lruntimeobject', '-include', 'functional'],
+        },
         {
             'versions': [
                 '1.2.6',
                 '1.2.7',
                 '1.2.8',
+            ],
+            'compiler_flags': ['-lruntimeobject', '-include', 'functional'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+        {
+            'versions': [
                 '1.2.9',
                 '1.2.10',
                 '1.2.11',
@@ -264,19 +227,50 @@ MOD_COMPATIBILITY = {
         },
     ],
     'taskbar-notification-icon-spacing': [
-        {'versions': ['1.0.2'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+        {'versions': ['1.0', '1.0.1'], 'compiler_flags': ['-lruntimeobject']},
+        {
+            'versions': ['1.0.2'],
+            'compiler_flags': ['-lruntimeobject'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
     ],
     'taskbar-thumbnail-reorder': [
         {'versions': ['1.0.7', '1.0.8'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'taskbar-vertical': [
-        {'versions': ['1.0'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+        {
+            'versions': ['1.0'],
+            'compiler_flags': [
+                '-lruntimeobject',
+                '-include',
+                'functional',
+            ],
+            'patches': [
+                HOOK_SYMBOLS_ARM64_PATCH,
+                (
+                    re.escape(
+                        'HookSymbols(module, symbolHooks, symbolHooksCount, &options)'
+                    ),
+                    'HookSymbols(module, symbolHooks, symbolHooksCount)',
+                ),
+                (
+                    re.escape('return HookSymbolsWithOnlineCacheFallback('),
+                    'return HookSymbols(',
+                ),
+            ],
+        },
     ],
     'taskbar-wheel-cycle': [
         {
-            'versions': ['1.1.3', '1.1.4', '1.1.5'],
+            'versions': ['1.0', '1.1', '1.1.1', '1.1.2'],
+            'compiler_flags': ['-lruntimeobject'],
+        },
+        {
+            'versions': ['1.1.3'],
+            'compiler_flags': ['-lruntimeobject'],
             'patches': [HOOK_SYMBOLS_ARM64_PATCH],
         },
+        {'versions': ['1.1.4', '1.1.5'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'virtual-desktop-taskbar-order': [
         {
@@ -284,8 +278,22 @@ MOD_COMPATIBILITY = {
             'patches': [HOOK_SYMBOLS_ARM64_PATCH],
         },
     ],
+    'win7-alttab-loader': [
+        {
+            'versions': ['1.0', '1.0.1', '1.0.2'],
+            'patches': [
+                (
+                    re.escape('Wh_FindFirstSymbol(module, server, &symbol)'),
+                    'Wh_FindFirstSymbol(module, nullptr, &symbol)',
+                ),
+            ],
+        },
+    ],
     'windows-11-taskbar-styler': [
         {'versions': ['1.3.2'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'windows-7-clock-spacing': [
+        {'versions': ['1.0.0'], 'compiler_flags': ['-include', 'vector']},
     ],
 }
 
