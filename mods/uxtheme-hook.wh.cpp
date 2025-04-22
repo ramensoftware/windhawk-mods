@@ -59,7 +59,6 @@ the colors in control panel might be weird sometimes. works fine if you leave co
 #include <uxtheme.h>
 #include <windows.h>
 #include <initguid.h>
-#include <shlobj.h>
 
 #ifdef _WIN64
 #define STDCALL  __cdecl
@@ -148,6 +147,9 @@ int WINAPI SetSysColors_hook(int cElements, const INT *lpaElements, const COLORR
     return SetSysColors_orig(cElements, lpaElements, lpaRgbValues);
 }
 
+// compatibility with windhawk 1.4
+DEFINE_GUID(IID_IApplicationActivationManager, 0x2e941141, 0x7f97, 0x4756, 0xba,0x1d, 0x9d,0xec,0xde,0x89,0x4a,0x3d);
+DEFINE_GUID(CLSID_ApplicationActivationManager, 0x45ba127d, 0x10a8, 0x46ea, 0x8a,0xb7, 0x56,0xea,0x90,0x78,0x94,0x3c);
 
 using CoCreateInstance_t = decltype(&CoCreateInstance);
 CoCreateInstance_t CoCreateInstance_orig;
