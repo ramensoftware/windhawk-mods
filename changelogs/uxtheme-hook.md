@@ -1,3 +1,9 @@
+## 1.3 ([Apr 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f72d105e2420a3d9145edf8ce3756f12cd0dce0c/mods/uxtheme-hook.wh.cpp))
+
+- Prevent launching settings on theme apply
+- Fix SetSysColors hook, by getting the value from registry
+- Update FAQ
+
 ## 1.2 ([Mar 2, 2025](https://github.com/ramensoftware/windhawk-mods/blob/dda17325767a2dca87159c656b176e9e4c360663/mods/uxtheme-hook.wh.cpp))
 
 * Add FAQ

@@ -4008,12 +4008,12 @@
                 "published": 1720341593000,
                 "rating": 10,
                 "ratingUsers": 12,
-                "updated": 1740908824000,
+                "updated": 1745395884000,
                 "users": 1361
             },
             "metadata": {
                 "author": "rounk-ctrl",
-                "compilerOptions": "-luxtheme -lgdi32",
+                "compilerOptions": "-luxtheme -lgdi32 -lole32",
                 "description": "Allows you to apply custom themes",
                 "github": "https://github.com/rounk-ctrl",
                 "include": [
@@ -4024,7 +4024,7 @@
                     "rundll32.exe"
                 ],
                 "name": "UXTheme hook",
-                "version": "1.2"
+                "version": "1.3"
             }
         },
         "version-spoof": {
