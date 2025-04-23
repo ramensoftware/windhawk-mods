@@ -136,10 +136,8 @@ int WINAPI SetSysColors_hook(int cElements, const INT *lpaElements, const COLORR
     HKEY hKey;
     if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\DefaultColors\\Standard", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
     {
-        if (RegQueryInfoKey(hKey, NULL, NULL, NULL, NULL, NULL, NULL, &elemCount, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
-        {
-            RegCloseKey(hKey);
-        }
+        RegQueryInfoKey(hKey, NULL, NULL, NULL, NULL, NULL, NULL, &elemCount, NULL, NULL, NULL, NULL);
+        RegCloseKey(hKey);
     }
 
     // logonui
