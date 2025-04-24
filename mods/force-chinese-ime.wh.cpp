@@ -2,7 +2,7 @@
 // @id              force-chinese-ime
 // @name            Force Chinese IME Mode Legacy
 // @description     Forces Microsoft Pinyin IME to stay in Chinese mode
-// @version         1.0.1
+// @version         1.0.2
 // @author          u3l6
 // @github          https://github.com/u3l6
 // @include         *
