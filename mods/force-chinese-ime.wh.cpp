@@ -1,33 +1,18 @@
 // ==WindhawkMod==
 // @id              force-chinese-ime
-// @name            Force Chinese IME Mode
+// @name            Force Chinese IME Mode Legacy
 // @description     Forces Microsoft Pinyin IME to stay in Chinese mode
 // @version         1.0.1
 // @author          u3l6
 // @github          https://github.com/u3l6
-// @twitter         https://x.com/u_3l6
 // @include         *
 // @compilerOptions -limm32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Force Chinese IME Mode | 强制中文输入法
-
-## ⚠️This mod is a work in progress and features may not work. It may change a lot in the future, so there is no need to provide feedback now.⚠️
-## ⚠️该mod仍在开发中，可能无法实现功能。它以后可能会有重大变化，所以目前不需要提供反馈。⚠️
-
-## Feature | 功能
-This mod forces the Microsoft Pinyin IME to stay in Chinese input mode, preventing unwanted mode switches.  
-这个 mod 强制微软拼音输入法保持在中文输入模式，防止出现不必要的模式切换。
-### Before | 使用前
-The input mode often switches irregular while using Microsoft Pinyin IME.  
-使用微软拼音输入法时输入模式经常无规则切换。
-![before](https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/Before.png)
-### After | 使用后
-It can ensure that when using the Microsoft Pinyin IME, English will never be entered using the input box.  
-可以确保在微软拼音输入法的时候，使用输入框永远不会输入英文。
-![after](https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/After.png)
+# Force Chinese IME Mode Legacy | 强制中文输入法(旧版)
+## ⚠️This mod is deprecated. Please use the new version: [Chinese IME fixed mode](https://windhawk.net/mods/chinese-ime-fixed-mode).
 */
 // ==/WindhawkModReadme==
 
