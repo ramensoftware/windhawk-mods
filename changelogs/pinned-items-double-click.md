@@ -1,3 +1,7 @@
+## 1.0.2 ([Apr 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e592dd67b1e1d8b5715ef9d333ade8086ff75581/mods/pinned-items-double-click.wh.cpp))
+
+* Added support for the ExplorerPatcher taskbar.
+
 ## 1.0.1 ([May 4, 2024](https://github.com/ramensoftware/windhawk-mods/blob/544193af43e9c3b22c8442070eed58c7ddb2bd88/mods/pinned-items-double-click.wh.cpp))
 
 * Added an online symbol cache mechanism as a temporary workaround for the unavailable Microsoft symbols. Currently, this makes the mod work on Windows 11 versions 22631.3447 and 22631.3527. For more details, refer to [the relevant blog post](https://ramensoftware.com/windhawk-and-symbol-download-errors).

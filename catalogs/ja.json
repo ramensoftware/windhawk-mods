@@ -2526,7 +2526,7 @@
                 "published": 1682167233000,
                 "rating": 10,
                 "ratingUsers": 22,
-                "updated": 1714856366000,
+                "updated": 1745874255000,
                 "users": 526
             },
             "metadata": {
@@ -2534,7 +2534,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lversion -lwininet",
+                "compilerOptions": "-lversion",
                 "description": "Only open pinned items when double clicking on them to avoid accidental clicks",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -2543,7 +2543,7 @@
                 ],
                 "name": "Open pinned items with double click",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "regedit-auto-trim-whitespace-on-navigation-bar": {
