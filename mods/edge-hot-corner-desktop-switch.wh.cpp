@@ -4,7 +4,7 @@
 // @description     Switches virtual desktops when the mouse hovers at the left or right screen edge for a moment.
 // @version         0.1
 // @author          You
-// @github          https://github.com/yourusername/edge-hot-corner-desktop-switch
+// @github          https://github.com/sanskarprasad
 // @homepage        https://your-personal-homepage.example.com/edge-hot-corner-desktop-switch
 // @include         explorer.exe
 // ==/WindhawkMod==
