@@ -2,7 +2,7 @@
 // @id              edge-hot-corner-desktop-switch
 // @name            Edge Hot-Corners Desktop Switch
 // @description     Switches virtual desktops when the mouse hovers at the left or right screen edge for a moment.
-// @version         0.1
+// @version         0.2
 // @author          Sanskar Prasad
 // @github          https://github.com/sanskarprasad
 // @include         explorer.exe
