@@ -182,9 +182,8 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
                 (metadata.architecture?.includes('x86-64') ?? true) ||
                 (metadata.architecture?.includes('amd64') ?? true);
             const modHasArm64 =
-                // (metadata.architecture?.includes('x86-64') ?? true) ||
-                // (metadata.architecture?.includes('arm64') ?? true);
-                false; // Temporarily no arm64 support.
+                (metadata.architecture?.includes('x86-64') ?? true) ||
+                (metadata.architecture?.includes('arm64') ?? true);
             if (modHas32 != !!cachedMod32Path || modHas64 != !!cachedMod64Path || modHasArm64 != !!cachedModArm64Path) {
                 throw new Error(`Mod ${modId} architecture mismatch`);
             }
