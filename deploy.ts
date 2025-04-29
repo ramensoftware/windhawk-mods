@@ -84,9 +84,6 @@ function getModModifiedTime(modId: string) {
 }
 
 function findCachedMod(modId: string, version: string, arch: string) {
-    // Temporarily disabled for recompiling all mods.
-    return null;
-
     const lastDeployPath = process.env.WINDHAWK_MODS_LAST_DEPLOY_PATH;
     if (!lastDeployPath) {
         throw new Error('WINDHAWK_MODS_LAST_DEPLOY_PATH is not set');
