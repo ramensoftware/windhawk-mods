@@ -28,10 +28,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-          cache: 'pip'
-          cache-dependency-path: '.github/requirements.txt'
-      - name: Install Python dependencies
-        run: python -m pip install -r .github/requirements.txt
       - name: Clone last deployed content
         run: |
           git clone --branch pages --single-branch --depth 1 https://github.com/ramensoftware/windhawk-mods.git "${{ runner.temp }}/last_deploy"
