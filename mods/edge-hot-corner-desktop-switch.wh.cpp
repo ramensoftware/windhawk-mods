@@ -70,7 +70,6 @@ void SimulateDesktopSwitch(int direction) {
     HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (hTaskbarWnd) {
         SetForegroundWindow(hTaskbarWnd);
-        Sleep(50);
     }
 
     WORD vkDir = (direction < 0 ? VK_LEFT : VK_RIGHT);
