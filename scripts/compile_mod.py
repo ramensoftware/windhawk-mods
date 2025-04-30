@@ -446,11 +446,11 @@ def get_file_version_info(pathname: Path, prop_names: List[str],
 
 def get_file_version(path: Path) -> tuple[int, int, int, int]:
     info = get_file_version_info(path, ['FileVersion'])
-    parts = info['FileVersion'].split('.')
+    parts = [int(x) for x in info['FileVersion'].split('.')]
     if len(parts) < 1 or len(parts) > 4:
         raise RuntimeError(f'Invalid file version: {info["FileVersion"]}')
     while len(parts) < 4:
-        parts.append('0')
+        parts.append(0)
     return (parts[0], parts[1], parts[2], parts[3])
 
 
