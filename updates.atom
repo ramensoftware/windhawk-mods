@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-04-28T21:04:15.000Z</updated>
+    <updated>2025-04-30T21:54:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Edge Hot-Corners Desktop Switch 0.2]]></title>
+        <id>https://windhawk.net/mods/edge-hot-corner-desktop-switch#35d83479873db11a4a1b538ad1eb5a044c4355f5</id>
+        <link href="https://windhawk.net/mods/edge-hot-corner-desktop-switch"/>
+        <updated>2025-04-30T21:54:52.000Z</updated>
+        <content type="html"><![CDATA[<p>Initial release.</p>]]></content>
+        <author>
+            <name>Sanskar Prasad</name>
+            <uri>https://github.com/sanskarprasad</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Open pinned items with double click 1.0.2]]></title>
         <id>https://windhawk.net/mods/pinned-items-double-click#e592dd67b1e1d8b5715ef9d333ade8086ff75581</id>
@@ -305,20 +316,6 @@ of Windows which is the same language as what you currently have installed for d
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[DWM Unextend Frames 1.3.1]]></title>
-        <id>https://windhawk.net/mods/dwm-unextend-frames#114e00141dacdebaa58ddc47ac1f33fba4ba20ab</id>
-        <link href="https://windhawk.net/mods/dwm-unextend-frames"/>
-        <updated>2025-04-02T10:58:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Revise <code>LoadComCtlModule</code> to not use registry caching</li>
-<li>Revise <code>Wh_ModInit</code> to match standards</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
