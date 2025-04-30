@@ -162,8 +162,13 @@ DWORD WINAPI MonitorThread(LPVOID) {
 }
 
 BOOL Wh_ModInit() {
-    if (!FindCurrentProcessTaskbarWnd())
-        return FALSE;
+    if (!FindCurrentProcessTaskbarWnd()) {
+        HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (hTaskbarWnd) {
+            // The taskbar exists, but it's not owned by the current process.
+            return FALSE;
+        }
+    }
 
     Wh_Log(L"EdgeHotCorner: Initializing mod");
     LoadSettings();
