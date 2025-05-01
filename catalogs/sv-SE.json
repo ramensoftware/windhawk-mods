@@ -3406,6 +3406,31 @@
                 "version": "1.2.17"
             }
         },
+        "taskbar-jump-list-on-cursor-pos": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1746116897000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1746116897000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "description": "Open the taskbar jump list context menus near the mouse cursor, not in the middle of the taskbar group",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar jump list on cursor pos",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-labels": {
             "details": {
                 "defaultSorting": 161810,
