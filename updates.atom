@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-01T16:28:17.000Z</updated>
+    <updated>2025-05-01T16:44:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.0]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#8e961324620af4d91f28d77ed0daf1ce57485f0b</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2025-05-01T16:44:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11fileexplorerstyler">Windows 11 File Explorer Styler</h1>
+<p>Customize the File Explorer with themes contributed by others or create your
+own.</p>
+<p>Also check out the <strong>Windows 11 Taskbar Styler</strong>, <strong>Windows 11 Start Menu
+Styler</strong> and <strong>Windows 11 Notification Center Styler</strong> mods.</p>
+<p><strong>Note</strong>: This mod requires Windhawk v1.6 or newer.</p>
+<h2 id="themes">Themes</h2>
+<p>No themes are currently integrated into the mod.</p>
+<h2 id="advancedstyling">Advanced styling</h2>
+<p>Aside from themes, the settings have two sections: control styles and resource
+variables. Control styles allow to override styles, such as size and color, for
+the target elements. Resource variables allow to override predefined variables.
+For a more detailed explanation and examples, refer to the sections below.</p>
+<p>The <a href="https://ramensoftware.com/uwpspy">UWPSpy</a> tool can be used to inspect the
+file explorer control elements in real time, and experiment with various styles.</p>
+<h3 id="controlstyles">Control styles</h3>
+<p>Each entry has a target control and a list of styles.</p>
+<p>The target control is written as <code>Class</code> or <code>Class#Name</code>, i.e. the target
+control class name (the tag name in XAML resource files), such as
+<code>FileExplorerExtensions.NavigationBarControl</code> or <code>Rectangle</code>, optionally
+followed by <code>#</code> and the target control's name (<code>x:Name</code> attribute in XAML
+resource files). The target control can also include:</p>
+<ul>
+<li>Child control index, for example: <code>Class#Name[2]</code> will only match the relevant
+control that's also the second child among all of its parent's child controls.</li>
+<li>Control properties, for example:
+<code>Class#Name[Property1=Value1][Property2=Value2]</code>.</li>
+<li>Parent controls, separated by <code>&gt;</code>, for example: <code>ParentClass#ParentName &gt;
+Class#Name</code>.</li>
+<li>Visual state group name, for example: <code>Class#Name@VisualStateGroupName</code>. It
+can be specified for the target control or for a parent control, but can be
+specified only once per target. The visual state group can be used in styles
+as specified below.</li>
+</ul>
+<p><strong>Note</strong>: The target is evaluated only once. If, for example, the index or the
+properties of a control change, the target conditions aren't evaluated again.</p>
+<p>Each style is written as <code>Style=Value</code>, for example: <code>Height=5</code>. The <code>:=</code> syntax
+can be used to use XAML syntax, for example: <code>Fill:=&lt;SolidColorBrush
+Color="Red"/&gt;</code>. Specifying an empty value with the XAML syntax will clear the
+property value, for example: <code>Fill:=</code>. In addition, a visual state can be
+specified as following: <code>Style@VisualState=Value</code>, in which case the style will
+only apply when the visual state group specified in the target matches the
+specified visual state.</p>
+<h3 id="resourcevariables">Resource variables</h3>
+<p>Some variables, such as size and padding for various controls, are defined as
+resource variables.</p>
+<h2 id="implementationnotes">Implementation notes</h2>
+<p>The VisualTreeWatcher implementation is based on the
+<a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
+code from the <strong>TranslucentTB</strong> project.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar jump list on cursor pos 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-jump-list-on-cursor-pos#c8a8daa604830fe792c07a8f9d29a2b96ecaaa07</id>
@@ -300,21 +360,6 @@ does.</p>]]></content>
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.3]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#901ab88551bbba9ff79f8e1b8e7e5aeb29edb982</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-04-07T10:33:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add rules for processes</li>
-<li>Fix Control Panel title bar text color not being applied when using Acrylic Blur Behind</li>
-<li>Fix Snipping Tool not being affected by mod</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

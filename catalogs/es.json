@@ -4437,6 +4437,32 @@
                 "version": "1.0.1"
             }
         },
+        "windows-11-file-explorer-styler": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1746117865000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1746117865000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols",
+                "description": "Customize the File Explorer with themes contributed by others or create your own",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Windows 11 File Explorer Styler",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "windows-11-notification-center-styler": {
             "details": {
                 "defaultSorting": 566110,
