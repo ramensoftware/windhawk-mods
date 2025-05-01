@@ -10,7 +10,7 @@
 
 // ==WindhawkModSettings==
 /*
-- thresholdMs: 1000
+- thresholdMs: 700
   $name: Time threshold at edge (ms)
   $description: >
     Milliseconds the cursor must stay in the hot zone before
@@ -64,13 +64,37 @@ void LoadSettings() {
     settings.thresholdMs = Wh_GetIntSetting(L"thresholdMs");
     settings.edgeWidth   = Wh_GetIntSetting(L"edgeWidth");
 }
+bool IsForegroundWindowFullscreen()
+{
+    HWND hForeground = GetForegroundWindow();
+    if (!hForeground)
+        return false;
+
+    MONITORINFO mi = { sizeof(mi) };
+    HMONITOR hMonitor = MonitorFromWindow(hForeground, MONITOR_DEFAULTTONEAREST);
+    if (!GetMonitorInfo(hMonitor, &mi))
+        return false;
+
+    RECT fgRect;
+    if (!GetWindowRect(hForeground, &fgRect))
+        return false;
+
+    return EqualRect(&fgRect, &mi.rcMonitor);
+}
 
 void SimulateDesktopSwitch(int direction) {
-    // Force-focus the taskbar so SendInput will be accepted
+
+    if (IsForegroundWindowFullscreen()) {
+        Wh_Log(L"EdgeHotCorner: Skipped desktop switch due to fullscreen window");
+        return;
+    }
+
     HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (hTaskbarWnd) {
         SetForegroundWindow(hTaskbarWnd);
     }
+
+    
 
     WORD vkDir = (direction < 0 ? VK_LEFT : VK_RIGHT);
     INPUT inputs[6] = {};
@@ -179,6 +203,8 @@ BOOL Wh_ModInit() {
     }
     return TRUE;
 }
+
+
 
 void Wh_ModUninit() {
     Wh_Log(L"EdgeHotCorner: Uninitializing mod");
