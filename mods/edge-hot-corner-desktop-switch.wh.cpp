@@ -2,7 +2,7 @@
 // @id              edge-hot-corner-desktop-switch
 // @name            Edge Hot-Corners Desktop Switch
 // @description     Switches virtual desktops when the mouse hovers at the left or right screen edge for a moment.
-// @version         0.2
+// @version         0.3
 // @author          Sanskar Prasad
 // @github          https://github.com/sanskarprasad
 // @include         explorer.exe
@@ -10,7 +10,7 @@
 
 // ==WindhawkModSettings==
 /*
-- thresholdMs: 700
+- thresholdMs: 1000
   $name: Time threshold at edge (ms)
   $description: >
     Milliseconds the cursor must stay in the hot zone before
@@ -64,23 +64,6 @@ void LoadSettings() {
     settings.thresholdMs = Wh_GetIntSetting(L"thresholdMs");
     settings.edgeWidth   = Wh_GetIntSetting(L"edgeWidth");
 }
-bool IsForegroundWindowFullscreen()
-{
-    HWND hForeground = GetForegroundWindow();
-    if (!hForeground)
-        return false;
-
-    MONITORINFO mi = { sizeof(mi) };
-    HMONITOR hMonitor = MonitorFromWindow(hForeground, MONITOR_DEFAULTTONEAREST);
-    if (!GetMonitorInfo(hMonitor, &mi))
-        return false;
-
-    RECT fgRect;
-    if (!GetWindowRect(hForeground, &fgRect))
-        return false;
-
-    return EqualRect(&fgRect, &mi.rcMonitor);
-}
 
 void SimulateDesktopSwitch(int direction) {
 
@@ -93,8 +76,11 @@ void SimulateDesktopSwitch(int direction) {
     if (hTaskbarWnd) {
         SetForegroundWindow(hTaskbarWnd);
     }
-
-    
+    // Force-focus the taskbar so SendInput will be accepted
+    HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (hTaskbarWnd) {
+        SetForegroundWindow(hTaskbarWnd);
+    }
 
     WORD vkDir = (direction < 0 ? VK_LEFT : VK_RIGHT);
     INPUT inputs[6] = {};
@@ -204,7 +190,23 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+bool IsForegroundWindowFullscreen()
+{
+    HWND hForeground = GetForegroundWindow();
+    if (!hForeground)
+        return false;
 
+    MONITORINFO mi = { sizeof(mi) };
+    HMONITOR hMonitor = MonitorFromWindow(hForeground, MONITOR_DEFAULTTONEAREST);
+    if (!GetMonitorInfo(hMonitor, &mi))
+        return false;
+
+    RECT fgRect;
+    if (!GetWindowRect(hForeground, &fgRect))
+        return false;
+
+    return EqualRect(&fgRect, &mi.rcMonitor);
+}
 
 void Wh_ModUninit() {
     Wh_Log(L"EdgeHotCorner: Uninitializing mod");
