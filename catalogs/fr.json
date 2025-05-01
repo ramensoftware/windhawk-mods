@@ -1281,7 +1281,7 @@
                 "published": 1746050092000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1746050092000,
+                "updated": 1746095345000,
                 "users": 0
             },
             "metadata": {
@@ -1292,7 +1292,7 @@
                     "explorer.exe"
                 ],
                 "name": "Edge Hot-Corners Desktop Switch",
-                "version": "0.2"
+                "version": "0.3.1"
             }
         },
         "edge-window-tab-manager-block": {
