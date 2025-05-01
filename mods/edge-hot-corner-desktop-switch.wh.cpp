@@ -2,7 +2,7 @@
 // @id              edge-hot-corner-desktop-switch
 // @name            Edge Hot-Corners Desktop Switch
 // @description     Switches virtual desktops when the mouse hovers at the left or right screen edge for a moment.
-// @version         0.3
+// @version         0.3.1
 // @author          Sanskar Prasad
 // @github          https://github.com/sanskarprasad
 // @include         explorer.exe
@@ -10,7 +10,7 @@
 
 // ==WindhawkModSettings==
 /*
-- thresholdMs: 1000
+- thresholdMs: 700
   $name: Time threshold at edge (ms)
   $description: >
     Milliseconds the cursor must stay in the hot zone before
@@ -24,6 +24,7 @@
 // ==/WindhawkModSettings==
 
 #include <Windows.h>
+#include <Shobjidl.h> // for SHQueryUserNotificationState
 
 // #include <windhawk-sdk.h>
 
@@ -65,18 +66,28 @@ void LoadSettings() {
     settings.edgeWidth   = Wh_GetIntSetting(L"edgeWidth");
 }
 
-void SimulateDesktopSwitch(int direction) {
+bool IsInFullScreenMode() {
+    QUERY_USER_NOTIFICATION_STATE pquns;
+    if (FAILED(SHQueryUserNotificationState(&pquns))) {
+        return false;
+    }
 
-    if (IsForegroundWindowFullscreen()) {
+    switch (pquns) {
+        case QUNS_NOT_PRESENT:
+        case QUNS_BUSY:
+        case QUNS_RUNNING_D3D_FULL_SCREEN:
+            return true;
+    }
+
+    return false;
+}
+
+void SimulateDesktopSwitch(int direction) {
+    if (IsInFullScreenMode()) {
         Wh_Log(L"EdgeHotCorner: Skipped desktop switch due to fullscreen window");
         return;
     }
 
-    HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (hTaskbarWnd) {
-        SetForegroundWindow(hTaskbarWnd);
-    }
-    // Force-focus the taskbar so SendInput will be accepted
     HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (hTaskbarWnd) {
         SetForegroundWindow(hTaskbarWnd);
@@ -188,24 +199,6 @@ BOOL Wh_ModInit() {
         Wh_Log(L"EdgeHotCorner: Failed to create monitor thread");
     }
     return TRUE;
-}
-
-bool IsForegroundWindowFullscreen()
-{
-    HWND hForeground = GetForegroundWindow();
-    if (!hForeground)
-        return false;
-
-    MONITORINFO mi = { sizeof(mi) };
-    HMONITOR hMonitor = MonitorFromWindow(hForeground, MONITOR_DEFAULTTONEAREST);
-    if (!GetMonitorInfo(hMonitor, &mi))
-        return false;
-
-    RECT fgRect;
-    if (!GetWindowRect(hForeground, &fgRect))
-        return false;
-
-    return EqualRect(&fgRect, &mi.rcMonitor);
 }
 
 void Wh_ModUninit() {
