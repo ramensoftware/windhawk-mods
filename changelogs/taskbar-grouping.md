@@ -1,3 +1,8 @@
+## 1.3.9 ([May 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/fd599038b18456c3a0bee87e2f2e3b0e2d321dfb/mods/taskbar-grouping.wh.cpp))
+
+* Fixed jump list menus closing right after opening in some cases.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.3.8 ([Feb 12, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6dbf9a4b807f290ef52204bb86d9d091073e4bcf/mods/taskbar-grouping.wh.cpp))
 
 * Fixed pinned item icons not updating after the last window is closed. The bug happened with the "Use window icons" option, with multiple monitors when the "All monitors" taskbar configuration was used.
