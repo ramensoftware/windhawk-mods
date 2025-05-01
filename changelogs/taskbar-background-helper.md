@@ -1,3 +1,10 @@
+## 1.1 ([May 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3399052539fc8d9230110504c79c49fb980ee42d/mods/taskbar-background-helper.wh.cpp))
+
+* Added an option to use the current theme accent color for the taskbar background.
+* Added an option to ignore certain programs, even when maximized.
+* Fixed taskbar thumbnails causing the background to be applied when the "Only when maximized" option is enabled.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.0.3 ([Nov 3, 2024](https://github.com/ramensoftware/windhawk-mods/blob/ec00d6753b2fb4d370071ec57abe7481eb30aa95/mods/taskbar-background-helper.wh.cpp))
 
 * Fixed the mod always thinking there's a maximized window in some cases.
