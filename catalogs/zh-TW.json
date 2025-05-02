@@ -2937,7 +2937,7 @@
                 "published": 1647604671000,
                 "rating": 10,
                 "ratingUsers": 26,
-                "updated": 1738177318000,
+                "updated": 1746196761000,
                 "users": 3267
             },
             "metadata": {
@@ -2953,7 +2953,7 @@
                 ],
                 "name": "Show all apps by default in start menu",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.3"
+                "version": "1.0.4"
             }
         },
         "start-menu-open-location": {

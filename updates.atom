@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-01T16:44:25.000Z</updated>
+    <updated>2025-05-02T14:39:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Show all apps by default in start menu 1.0.4]]></title>
+        <id>https://windhawk.net/mods/start-menu-all-apps#f911ce31938d67ff8b6182ddbef99d6a8048b77f</id>
+        <link href="https://windhawk.net/mods/start-menu-all-apps"/>
+        <updated>2025-05-02T14:39:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with update KB5055627 for Windows 11 version 24H2.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.0]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#8e961324620af4d91f28d77ed0daf1ce57485f0b</id>
@@ -338,28 +351,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>xalejandro</name>
             <uri>https://github.com/tetawaves</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-toolbar-links-item#94bda638328d60ba4b4d259215bf791a9b69108d</id>
-        <link href="https://windhawk.net/mods/explorer-toolbar-links-item"/>
-        <updated>2025-04-07T10:45:06.000Z</updated>
-        <content type="html"><![CDATA[<p>This update adds support for WoW64 (unfortunately, 32-bit Windows 10 seems
-to ignore the symbol hooks), fixes a crash in Windows 11, and improves the
-user experience.</p>
-<p>The Links toolbar can now be enabled through "Options" dropdown in the View
-tab when using the Ribbon UI, like other toolbars can:</p>
-<p>https://raw.githubusercontent.com/kawapure/images/refs/heads/main/linksbar_ribbon.png</p>
-<p>Additionally, the toolbars menu now always appears in the views menu of the
-menu bar when the classic Explorer interface is enabled:</p>
-<p>https://raw.githubusercontent.com/kawapure/images/refs/heads/main/linksbar<em>views</em>menu.png</p>
-<p>All in all, these changes make the necessarily-hacky menu item show up in
-all the right places and behave just the same as any other toolbar option
-does.</p>]]></content>
-        <author>
-            <name>Isabella Lulamoon (kawapure)</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>
