@@ -67,8 +67,7 @@ void LoadSettings()
     settings.edgeWidth   = Wh_GetIntSetting(L"edgeWidth");
 }
 
-bool IsInFullScreenMode()
-{
+bool IsInFullScreenMode() {
     QUERY_USER_NOTIFICATION_STATE pquns;
     if (FAILED(SHQueryUserNotificationState(&pquns))) {
         return false;
@@ -83,8 +82,7 @@ bool IsInFullScreenMode()
     }
 }
 
-void SimulateDesktopSwitch(int direction)
-{
+void SimulateDesktopSwitch(int direction) {
     if (IsInFullScreenMode()) {
         Wh_Log(L"EdgeHotCorner: Skipped desktop switch due to fullscreen window");
         return;
@@ -98,28 +96,28 @@ void SimulateDesktopSwitch(int direction)
     WORD vkDir = (direction < 0 ? VK_LEFT : VK_RIGHT);
     INPUT inputs[6] = {};
 
-    inputs[0].type               = INPUT_KEYBOARD;
-    inputs[0].ki.wVk             = VK_LWIN;
-    inputs[0].ki.dwFlags         = KEYEVENTF_EXTENDEDKEY;
+    inputs[0].type       = INPUT_KEYBOARD;
+    inputs[0].ki.wVk     = VK_LWIN;
+    inputs[0].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
 
-    inputs[1].type               = INPUT_KEYBOARD;
-    inputs[1].ki.wVk             = VK_CONTROL;
+    inputs[1].type       = INPUT_KEYBOARD;
+    inputs[1].ki.wVk     = VK_CONTROL;
 
-    inputs[2].type               = INPUT_KEYBOARD;
-    inputs[2].ki.wVk             = vkDir;
-    inputs[2].ki.dwFlags         = KEYEVENTF_EXTENDEDKEY;
+    inputs[2].type       = INPUT_KEYBOARD;
+    inputs[2].ki.wVk     = vkDir;
+    inputs[2].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
 
-    inputs[3].type               = INPUT_KEYBOARD;
-    inputs[3].ki.wVk             = vkDir;
-    inputs[3].ki.dwFlags         = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
+    inputs[3].type       = INPUT_KEYBOARD;
+    inputs[3].ki.wVk     = vkDir;
+    inputs[3].ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
 
-    inputs[4].type               = INPUT_KEYBOARD;
-    inputs[4].ki.wVk             = VK_CONTROL;
-    inputs[4].ki.dwFlags         = KEYEVENTF_KEYUP;
+    inputs[4].type       = INPUT_KEYBOARD;
+    inputs[4].ki.wVk     = VK_CONTROL;
+    inputs[4].ki.dwFlags = KEYEVENTF_KEYUP;
 
-    inputs[5].type               = INPUT_KEYBOARD;
-    inputs[5].ki.wVk             = VK_LWIN;
-    inputs[5].ki.dwFlags         = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
+    inputs[5].type       = INPUT_KEYBOARD;
+    inputs[5].ki.wVk     = VK_LWIN;
+    inputs[5].ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
 
     UINT sent = SendInput(_countof(inputs), inputs, sizeof(INPUT));
     Wh_Log(
@@ -127,8 +125,7 @@ void SimulateDesktopSwitch(int direction)
         (direction < 0 ? L"Left" : L"Right"), sent);
 }
 
-DWORD WINAPI MonitorThread(LPVOID)
-{
+DWORD WINAPI MonitorThread(LPVOID) {
     // Compute global left/right edges once
     const int vsLeft  = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int vsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -179,8 +176,7 @@ DWORD WINAPI MonitorThread(LPVOID)
     return 0;
 }
 
-BOOL Wh_ModInit()
-{
+BOOL Wh_ModInit() {
     // Only load in the explorer.exe process that owns the taskbar
     if (!FindCurrentProcessTaskbarWnd()) {
         HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -200,8 +196,7 @@ BOOL Wh_ModInit()
     return TRUE;
 }
 
-void Wh_ModUninit()
-{
+void Wh_ModUninit() {
     Wh_Log(L"EdgeHotCorner: Uninitializing mod");
     g_Running = false;
     if (g_hThread) {
@@ -212,8 +207,7 @@ void Wh_ModUninit()
     Wh_Log(L"EdgeHotCorner: Mod shut down");
 }
 
-void Wh_ModSettingsChanged()
-{
+void Wh_ModSettingsChanged() {
     Wh_Log(L"EdgeHotCorner: Settings changed; reloading");
     LoadSettings();
 }
