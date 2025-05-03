@@ -6,7 +6,7 @@
 // @author          Roland Pihlakas
 // @github          https://github.com/levitation
 // @homepage        https://www.simplify.ee/
-// @compilerOptions -lgdi32 -luser32 -lshlwapi --optimize=0 --debug
+// @compilerOptions -lgdi32 -luser32 -lshlwapi
 // @include         brave.exe
 // @include         chrome.exe
 // @include         chromium.exe
