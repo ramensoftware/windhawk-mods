@@ -16,6 +16,14 @@
 // @include         opera.exe
 // ==/WindhawkMod==
 
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/levitation-opensource/my-windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/levitation-opensource/my-windhawk-mods/
+
 // ==WindhawkModReadme==
 /*
 # Fix browser text colors as well as Teams document viewer text colors under dark theme
