@@ -77,12 +77,6 @@ Unloading this mod while a browser is running is not recommended. Unloading the 
 #include <map>
 #include <unordered_set>
 
-
-#ifndef WH_MOD
-#define WH_MOD
-#include <mods_api.h>
-#endif
-
 #pragma endregion Includes
 
 
