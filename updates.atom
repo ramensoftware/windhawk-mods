@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-02T14:39:21.000Z</updated>
+    <updated>2025-05-04T07:49:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix browser and Teams text colors in dark mode 1.0]]></title>
+        <id>https://windhawk.net/mods/dark-theme-browser-colors-fix#f0a0be743d492524840adb9bbd51b3b56ae901f2</id>
+        <link href="https://windhawk.net/mods/dark-theme-browser-colors-fix"/>
+        <updated>2025-05-04T07:49:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fixbrowsertextcolorsaswellasteamsdocumentviewertextcolorsunderdarktheme">Fix browser text colors as well as Teams document viewer text colors under dark theme</h1>
+<p>Install this mod when you use dark theme in Windows and have occasionally problems with unreadable text color in your browser or Teams document viewer, such as bright text on white background or black text on dark background. </p>
+<p>This mod does not force color change on websites that specify their own colors. Only badly implemented web sites that accidentally (and inconsistently) try to use Windows colors will be adjusted. </p>
+<h2 id="howitworks">How it works</h2>
+<p>The odd-looking web sites that are unreadable under dark theme are that way because they try to use Windows colors, but do so inconsistently. Additionally, these sites assume that the Windows colors use bright theme. These sites are not dark theme aware.</p>
+<p>The mod works by emulating bright Windows 10 default color scheme for these web sites, to match their assumptions.</p>
+<p>The color adjustments made by this mod generally do not affect the browsers' or Teams main frame appearance. The mod might affect the Firefox menu highlight color in some computers. Additionally, the mod detects calls from file picker and does not replace the colors there.</p>
+<h2 id="installation">Installation</h2>
+<p>You may need to restart your browser after installing this mod for the adjustments to take effect, though some web sites in some browsers will be fixed immediately.</p>
+<p>Currently supported browsers are: Brave, Chrome, Chromium, Edge, Firefox, and Opera. And additionally Teams document viewer.</p>
+<p>Under mod's settings there is an option to apply color adjustments to all <code>msedgewebview*.exe</code> processes, not only to the ones related to <strong>Teams</strong>. This option is off by default. Browser colors are always adjusted regardless of this setting.</p>
+<h2 id="examplesofwhereitisuseful">Examples of where it is useful</h2>
+<p>You can test the following web sites before and after installing the mod: </p>
+<ul>
+<li>You can test Chromium-based browsers (Brave, Chrome, Edge, Opera) by opening Word documents under Sharepoint folders while "View -&gt; Dark Mode" button is off in the Online Word app toolbar.</li>
+<li>You can test Firefox by opening for example <a href="https://www.hexamail.com/about">https://www.hexamail.com/about</a> or <a href="https://transformer-circuits.pub/2025/april-update/index.html">https://transformer-circuits.pub/2025/april-update/index.html</a></li>
+<li>You can test Teams by opening Sharepoint office documents inside Teams document viewer.</li>
+</ul>
+<p>For some reason, these problems do not manifest in all computers with dark color scheme. I have multiple computers with similar setups, and in a few computer-and-browser combinations the issue did not manifest. But all targeted browsers have the problem in general.</p>
+<h2 id="notice">Notice</h2>
+<p>Unloading this mod while a browser is running is not recommended. Unloading the mod may crash these browser tabs that used default Windows colors. Though rest of the tabs will be probably fine.</p>]]></content>
+        <author>
+            <name>Roland Pihlakas</name>
+            <uri>https://github.com/levitation</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Show all apps by default in start menu 1.0.4]]></title>
         <id>https://windhawk.net/mods/start-menu-all-apps#f911ce31938d67ff8b6182ddbef99d6a8048b77f</id>
@@ -337,20 +368,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Favorites in Navigation Pane 1.0.1]]></title>
-        <id>https://windhawk.net/mods/favorites-in-navpane#10f1463d8bd2609b6278c5c548c58a1ed8ffcd98</id>
-        <link href="https://windhawk.net/mods/favorites-in-navpane"/>
-        <updated>2025-04-07T16:23:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix memory leak</li>
-<li>Make sure to close registry key</li>
-</ul>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>

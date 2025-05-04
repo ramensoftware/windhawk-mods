@@ -986,6 +986,34 @@
                 "version": "1.2"
             }
         },
+        "dark-theme-browser-colors-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1746344993000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1746344993000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Roland Pihlakas",
+                "compilerOptions": "-lgdi32 -luser32 -lshlwapi",
+                "description": "For dark theme users, fixes unreadable web sites with bright text on white background or black text on dark background. Likewise fixes Teams document viewer's text colors.",
+                "github": "https://github.com/levitation",
+                "homepage": "https://www.simplify.ee/",
+                "include": [
+                    "brave.exe",
+                    "chrome.exe",
+                    "chromium.exe",
+                    "firefox.exe",
+                    "msedge.exe",
+                    "msedgewebview*.exe",
+                    "opera.exe"
+                ],
+                "name": "Fix browser and Teams text colors in dark mode",
+                "version": "1.0"
+            }
+        },
         "desktop-icons-view": {
             "details": {
                 "defaultSorting": 954,
