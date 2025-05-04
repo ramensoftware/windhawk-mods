@@ -39,7 +39,7 @@ The odd-looking web sites that are unreadable under dark theme are that way beca
 
 The mod works by emulating bright Windows color scheme for these web sites, to match their assumptions.
 
-The colour adjustments made by this mod do not affect the browsers' or Teams main frame appearance. Additionally, the mod detects calls from file picker and does not replace the colors there.
+The color adjustments made by this mod do not affect the browsers' or Teams main frame appearance. Additionally, the mod detects calls from file picker and does not replace the colors there.
 
 
 ## Installation
@@ -118,7 +118,8 @@ const wchar_t* filePickerDlls[] = {
     L"\\DUI70.dll",         //file list
     L"\\ExplorerFrame.dll", //file search box (at top right)
     L"\\uxtheme.dll",       //a dropdown opening from the file search box
-    L"\\ACLUI.dll"          //file permissions dialog
+    L"\\ACLUI.dll",         //file permissions dialog
+    L"\\comdlg32.dll"       //classic file picker (in case the Classic File Picker dialog mod is installed)
 };
 
 const COLORREF defaultWindowsColors[] = {   //Default Windows10 colors
