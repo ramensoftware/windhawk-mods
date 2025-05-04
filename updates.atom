@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-04T07:49:53.000Z</updated>
+    <updated>2025-05-04T08:34:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Make Task Manager Tabs Taller 1.0]]></title>
+        <id>https://windhawk.net/mods/taskmgr-taller-tab#24151daab7de419190f5ee8645cd99e36ac2bba7</id>
+        <link href="https://windhawk.net/mods/taskmgr-taller-tab"/>
+        <updated>2025-05-04T08:34:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="maketaskmanagertabstaller">Make Task Manager Tabs Taller</h1>
+<p>This mod makes the tab labels in Windows 10 Task Manager taller on high DPI screens, improving clickability.</p>
+<p>"An awesome ~~MobileSubstrate~~ WindHawk tweak!!"</p>
+<p><img src="https://raw.githubusercontent.com/JoeYe-233/images/refs/heads/main/taskmgr-taller-tab-before-after.png" alt="Before-And-After" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Increases the height of the tab labels in Task Manager.</li>
+<li>Enhances the clickability of the tab labels on high DPI screens.</li>
+<li>Retains the original functionality of Task Manager.</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<ol>
+<li>Compile and inject this mod into the Task Manager process.</li>
+<li>Run Task Manager and observe the taller tab labels.</li>
+</ol>
+<ul>
+<li>No options to configure, simply install and use.</li>
+</ul>
+<h2 id="author">Author</h2>
+<p>Joe Ye</p>]]></content>
+        <author>
+            <name>Joe Ye</name>
+            <uri>https://github.com/JoeYe-233</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix browser and Teams text colors in dark mode 1.0]]></title>
         <id>https://windhawk.net/mods/dark-theme-browser-colors-fix#f0a0be743d492524840adb9bbd51b3b56ae901f2</id>
@@ -350,20 +380,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
 <li>Fix bug where previously both window states colors were needed to apply color effects</li>
 <li>Added a workaround solution for unloading the BlurBehind effect</li>
 <li>Added default color option support</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.4]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#3af9d8212ade28ef23003557cbd9ad77db77acf2</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-04-10T11:01:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added color options for active and inactive window states</li>
-<li>Merge taskbar thumbnails border coloring with classic context menus setting</li>
 </ul>]]></content>
         <author>
             <name>Undisputed00x</name>
