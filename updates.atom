@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-04T08:34:12.000Z</updated>
+    <updated>2025-05-04T17:19:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab window delayer 1.2.0]]></title>
+        <id>https://windhawk.net/mods/alt-tab-delayer#b07c7e0d65abbbf7d10547608004595ce07189e0</id>
+        <link href="https://windhawk.net/mods/alt-tab-delayer"/>
+        <updated>2025-05-04T17:19:46.000Z</updated>
+        <content type="html"><![CDATA[<p>Add ARM64 support</p>]]></content>
+        <author>
+            <name>L3r0y</name>
+            <uri>https://github.com/L3r0yThingz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Make Task Manager Tabs Taller 1.0]]></title>
         <id>https://windhawk.net/mods/taskmgr-taller-tab#24151daab7de419190f5ee8645cd99e36ac2bba7</id>
@@ -369,21 +380,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.4.1]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#6d80a4ec94be318d3dfafdf9ef0b0f0b80185222</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-04-10T21:09:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix bug where previously both window states colors were needed to apply color effects</li>
-<li>Added a workaround solution for unloading the BlurBehind effect</li>
-<li>Added default color option support</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>
