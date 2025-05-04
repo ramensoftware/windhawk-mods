@@ -55,7 +55,15 @@ HWND WINAPI CreateWindowExW_Hook(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam
     );
-    TabCtrl_SetItemSize(hWnd, 100, 37); // 宽度为 100，高度为 37
+
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    //Ref: windhawk-mods/mods/explorer-name-windows.wh.cpp
+
+    if (bTextualClassName && _wcsicmp(lpClassName, L"SysTabControl32") == 0) {
+        //ensuring target control is a tab control "SysTabControl32"
+        TabCtrl_SetItemSize(hWnd, 100, 37); // width= 100，height= 37
+    }
+
     return hWnd;
 }
 
