@@ -35,9 +35,11 @@ This mod does not force color change on websites that specify their own colors. 
 
 ## How it works
 
-The mod works by emulating bright color scheme for these web sites, since the odd-looking web pages presumably were designed with bright theme and are not dark theme aware.
+The odd-looking web sites that are unreadable under dark theme are that way because they try to use Windows colors, but do so inconsistently. Additionally, these sites assume that the Windows colors use bright theme. These sites are not dark theme aware.
 
-The colour adjustments made by this mod do not affect the browsers' or Teams main frame appearance. Additionally, the mod detects calls from file picker and does not replace the colours there.
+The mod works by emulating bright Windows color scheme for these web sites, to match their assumptions.
+
+The colour adjustments made by this mod do not affect the browsers' or Teams main frame appearance. Additionally, the mod detects calls from file picker and does not replace the colors there.
 
 
 ## Installation
@@ -56,7 +58,7 @@ You can test the following web sites before and after installing the mod:
 * You can test Firefox by opening for example [https://www.hexamail.com/about](https://www.hexamail.com/about) or [https://transformer-circuits.pub/2025/april-update/index.html](https://transformer-circuits.pub/2025/april-update/index.html)
 * You can test Teams by opening Sharepoint office documents inside Teams document viewer.
 
-For some reason, these problems do not manifest in all computers with dark color scheme. I have multiple computers with similar setups, but in a few computer-and-browser combinations the issue did not manifest.
+For some reason, these problems do not manifest in all computers with dark color scheme. I have multiple computers with similar setups, and in a few computer-and-browser combinations the issue did not manifest. But all targeted browsers have the problem in general.
 
 
 ## Notice
@@ -151,7 +153,7 @@ const COLORREF defaultWindowsColors[] = {   //Default Windows10 colors
     0x00000000, //23
 
     0x00E1FFFF, //24
-    0x00000000, //25 - unused
+    0x00000000, //25 - unused in GetSysColor, GetSysColorBrush, and GetThemeSysColor, but used for TMT_BUTTONALTERNATEFACE in GetThemeSysColorBrush
     0x00CC6600, //26
     0x00EAD1B9, //27
 
