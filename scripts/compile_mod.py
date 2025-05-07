@@ -1,4 +1,5 @@
 import argparse
+import ctypes
 import re
 import subprocess
 import sys
@@ -8,8 +9,6 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
-import win32api
-
 MOD_COMPATIBILITY_WIN7_FLAGS = [
     '-DWINVER=0x0601',
     '-D_WIN32_WINNT=0x0601',
@@ -17,9 +16,33 @@ MOD_COMPATIBILITY_WIN7_FLAGS = [
     '-DNTDDI_VERSION=0x06010000',
 ]
 
+HOOK_SYMBOLS_ARM64_PATCH = (
+    re.escape(
+        R'''#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+'''
+    ),
+    R'''#if defined(_M_IX86)
+        L"symbol-x86-cache-";
+#elif defined(_M_X64)
+        L"symbol-cache-";
+#elif defined(_M_ARM64)
+        L"symbol-arm64-cache-";
+#else
+#error "Unsupported architecture"
+#endif
+''',
+)
+
 MOD_COMPATIBILITY = {
     'accent-color-sync': [
         {'versions': ['1.1'], 'compiler_flags': ['-include', 'string']},
+        {'versions': ['1.3', '1.31'], 'compiler_flags': ['-include', 'cmath']},
     ],
     'aerexplorer': [
         {
@@ -40,6 +63,9 @@ MOD_COMPATIBILITY = {
             ],
         },
     ],
+    'alt-tab-delayer': [
+        {'versions': ['1.0.0', '1.1.0'], 'compiler_flags': ['-include', 'atomic']},
+    ],
     'basic-themer': [
         {'versions': ['1.0.0', '1.1.0'], 'compiler_flags': ['-include', 'vector']},
     ],
@@ -57,6 +83,7 @@ MOD_COMPATIBILITY = {
             'versions': ['1.0', '1.0.1', '1.0.2', '1.0.3', '1.1'],
             'compiler_flags': ['-lruntimeobject'],
         },
+        {'versions': ['1.1.3'], 'compiler_flags': ['-include', 'cmath']},
     ],
     'classic-maximized-windows-fix': [
         {
@@ -71,10 +98,7 @@ MOD_COMPATIBILITY = {
         },
     ],
     'classic-taskdlg-fix': [
-        {
-            'versions': ['1.1.0'],
-            'compiler_flags': MOD_COMPATIBILITY_WIN7_FLAGS,
-        },
+        {'versions': ['1.1.0'], 'compiler_flags': MOD_COMPATIBILITY_WIN7_FLAGS},
     ],
     'dwm-ghost-mods': [
         {
@@ -102,11 +126,21 @@ MOD_COMPATIBILITY = {
             'compiler_flags': [*MOD_COMPATIBILITY_WIN7_FLAGS, '-include', 'vector'],
         },
     ],
+    'pinned-items-double-click': [
+        {'versions': ['1.0.1'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
     'sib-plusplus-tweaker': [
         {
             'versions': ['0.4', '0.5', '0.6', '0.7'],
             'compiler_flags': ['-include', 'vector'],
         },
+        {'versions': ['0.7.1'], 'compiler_flags': ['-include', 'atomic']},
+    ],
+    'sysdm-general-tab': [
+        {'versions': ['1.0', '1.1'], 'compiler_flags': ['-include', 'cmath']},
+    ],
+    'taskbar-button-click': [
+        {'versions': ['1.0.6', '1.0.7'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'taskbar-button-scroll': [
         {
@@ -118,8 +152,13 @@ MOD_COMPATIBILITY = {
             ],
         },
         {
-            'versions': ['1.0.2', '1.0.3', '1.0.4', '1.0.5', '1.0.6'],
+            'versions': ['1.0.2', '1.0.3', '1.0.4', '1.0.5'],
             'compiler_flags': ['-lruntimeobject'],
+        },
+        {
+            'versions': ['1.0.6'],
+            'compiler_flags': ['-lruntimeobject'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
         },
     ],
     'taskbar-clock-customization': [
@@ -132,23 +171,70 @@ MOD_COMPATIBILITY = {
                 '1.3',
                 '1.3.1',
                 '1.3.2',
-                '1.3.3',
             ],
             'compiler_flags': ['-lruntimeobject'],
         },
+        {
+            'versions': ['1.3.3'],
+            'compiler_flags': ['-lruntimeobject'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+        {'versions': ['1.4'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'taskbar-empty-space-clicks': [
         {'versions': ['1.0', '1.1', '1.2', '1.3'], 'compiler_flags': ['-DUIATYPES_H']},
     ],
+    'taskbar-grouping': [
+        {
+            'versions': ['1.3.2', '1.3.3', '1.3.4', '1.3.5', '1.3.6', '1.3.7'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
     'taskbar-icon-size': [
         {'versions': ['1.2', '1.2.1', '1.2.2'], 'compiler_flags': ['-lruntimeobject']},
         {
-            'versions': ['1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8'],
+            'versions': ['1.2.3', '1.2.4', '1.2.5'],
             'compiler_flags': ['-lruntimeobject', '-include', 'functional'],
+        },
+        {
+            'versions': [
+                '1.2.6',
+                '1.2.7',
+                '1.2.8',
+            ],
+            'compiler_flags': ['-lruntimeobject', '-include', 'functional'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+        {
+            'versions': [
+                '1.2.9',
+                '1.2.10',
+                '1.2.11',
+                '1.2.12',
+                '1.2.13',
+                '1.2.14',
+                '1.2.15',
+                '1.2.16',
+            ],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
+    'taskbar-labels': [
+        {
+            'versions': ['1.2.5', '1.3', '1.3.1', '1.3.2', '1.3.3', '1.3.4', '1.3.5'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
         },
     ],
     'taskbar-notification-icon-spacing': [
-        {'versions': ['1.0', '1.0.1', '1.0.2'], 'compiler_flags': ['-lruntimeobject']},
+        {'versions': ['1.0', '1.0.1'], 'compiler_flags': ['-lruntimeobject']},
+        {
+            'versions': ['1.0.2'],
+            'compiler_flags': ['-lruntimeobject'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+    ],
+    'taskbar-thumbnail-reorder': [
+        {'versions': ['1.0.7', '1.0.8'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
     ],
     'taskbar-vertical': [
         {
@@ -159,6 +245,7 @@ MOD_COMPATIBILITY = {
                 'functional',
             ],
             'patches': [
+                HOOK_SYMBOLS_ARM64_PATCH,
                 (
                     re.escape(
                         'HookSymbols(module, symbolHooks, symbolHooksCount, &options)'
@@ -174,8 +261,20 @@ MOD_COMPATIBILITY = {
     ],
     'taskbar-wheel-cycle': [
         {
-            'versions': ['1.0', '1.1', '1.1.1', '1.1.2', '1.1.3'],
+            'versions': ['1.0', '1.1', '1.1.1', '1.1.2'],
             'compiler_flags': ['-lruntimeobject'],
+        },
+        {
+            'versions': ['1.1.3'],
+            'compiler_flags': ['-lruntimeobject'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
+        },
+        {'versions': ['1.1.4', '1.1.5'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
+    'virtual-desktop-taskbar-order': [
+        {
+            'versions': ['1.0.2', '1.0.3', '1.0.4'],
+            'patches': [HOOK_SYMBOLS_ARM64_PATCH],
         },
     ],
     'win7-alttab-loader': [
@@ -189,6 +288,9 @@ MOD_COMPATIBILITY = {
             ],
         },
     ],
+    'windows-11-taskbar-styler': [
+        {'versions': ['1.3.2'], 'patches': [HOOK_SYMBOLS_ARM64_PATCH]},
+    ],
     'windows-7-clock-spacing': [
         {'versions': ['1.0.0'], 'compiler_flags': ['-include', 'vector']},
     ],
@@ -198,6 +300,7 @@ MOD_COMPATIBILITY = {
 class Architecture(Enum):
     x86 = 1
     x86_64 = 2
+    ARM64 = 3
 
 
 @dataclass
@@ -215,16 +318,140 @@ def get_engine_path(windhawk_dir: Path) -> Optional[str]:
     return match.group(1) if match else None
 
 
+# returns the requested version information from the given file
+#
+# if language, codepage are None, the first translation in the translation table
+# is used instead, as well as common fallback translations
+#
+# Reference: https://stackoverflow.com/a/56266129
+def get_file_version_info(pathname: Path, prop_names: List[str],
+                          language: int | None = None, codepage: int | None = None):
+    # VerQueryValue() returns an array of that for VarFileInfo\Translation
+    #
+    class LANGANDCODEPAGE(ctypes.Structure):
+        _fields_ = [
+            ("wLanguage", ctypes.c_uint16),
+            ("wCodePage", ctypes.c_uint16)]
+
+    # avoid some path length limitations by using a resolved path
+    wstr_file = ctypes.wstring_at(str(pathname.resolve(strict=True)))
+
+    # getting the size in bytes of the file version info buffer
+    size = ctypes.windll.version.GetFileVersionInfoSizeExW(2, wstr_file, None)
+    if size == 0:
+        e = ctypes.WinError()
+        if e.winerror == 1813:
+            # ERROR_RESOURCE_TYPE_NOT_FOUND
+            return {}
+        raise e
+
+    buffer = ctypes.create_string_buffer(size)
+
+    # getting the file version info data
+    if ctypes.windll.version.GetFileVersionInfoExW(2, wstr_file, None, size, buffer) == 0:
+        raise ctypes.WinError()
+
+    # VerQueryValue() wants a pointer to a void* and DWORD; used both for
+    # getting the default translation (if necessary) and getting the actual data
+    # below
+    value = ctypes.c_void_p(0)
+    value_size = ctypes.c_uint(0)
+
+    translations = []
+
+    if language is None and codepage is None:
+        # file version information can contain much more than the version
+        # number (copyright, application name, etc.) and these are all
+        # translatable
+        #
+        # the following arbitrarily gets the first language and codepage from
+        # the list
+        ret = ctypes.windll.version.VerQueryValueW(
+            buffer, ctypes.wstring_at(R"\VarFileInfo\Translation"),
+            ctypes.byref(value), ctypes.byref(value_size))
+
+        if ret == 0:
+            e = ctypes.WinError()
+            if e.winerror == 1813:
+                # ERROR_RESOURCE_TYPE_NOT_FOUND
+                first_language, first_codepage = None, None
+            else:
+                raise e
+        else:
+            # value points to a byte inside buffer, value_size is the size in bytes
+            # of that particular section
+
+            # casting the void* to a LANGANDCODEPAGE*
+            lcp = ctypes.cast(value, ctypes.POINTER(LANGANDCODEPAGE))
+
+            first_language, first_codepage = lcp.contents.wLanguage, lcp.contents.wCodePage
+
+            translation = first_language, first_codepage
+            translations.append(translation)
+
+        # use fallback values the same way sigcheck does
+        translation = first_language, 1252
+        if first_language and translation not in translations:
+            translations.append(translation)
+
+        translation = 1033, 1252
+        if translation not in translations:
+            translations.append(translation)
+
+        translation = 1033, first_codepage
+        if first_codepage and translation not in translations:
+            translations.append(translation)
+    else:
+        assert language is not None and codepage is not None
+        translation = language, codepage
+        translations.append(translation)
+
+    # getting the actual data
+    result = {}
+    for prop_name in prop_names:
+        for language_id, codepage_id in translations:
+            # formatting language and codepage to something like "040904b0"
+            translation = "{0:04x}{1:04x}".format(language_id, codepage_id)
+
+            res = ctypes.windll.version.VerQueryValueW(
+                buffer, ctypes.wstring_at("\\StringFileInfo\\" + translation + "\\" + prop_name),
+                ctypes.byref(value), ctypes.byref(value_size))
+
+            if res == 0:
+                e = ctypes.WinError()
+                if e.winerror == 1813:
+                    # ERROR_RESOURCE_TYPE_NOT_FOUND
+                    continue
+                raise e
+
+            # value points to a string of value_size characters, minus one for the
+            # terminating null
+            prop = ctypes.wstring_at(value.value, value_size.value - 1)
+
+            # some resource strings contain null characters, but they indicate the
+            # end of the string for most tools; removing them
+            #
+            # example:
+            # imjppsgf.fil
+            # https://www.virustotal.com/gui/file/42deb76551bc087d791eac266a6570032246ec78f4471e7a8922ceb7eb2e91c3/details
+            # FileVersion: '15.0.2271.1000\x001000'
+            # FileDescription: '\u5370[...]\u3002\x00System Dictionary File'
+            prop = prop.split('\0', 1)[0]
+
+            result[prop_name] = prop
+            break
+
+    return result
+
+
 def get_file_version(path: Path) -> tuple[int, int, int, int]:
-    info = win32api.GetFileVersionInfo(str(path), '\\')
-    ms = info['FileVersionMS']
-    ls = info['FileVersionLS']
-    return (
-        win32api.HIWORD(ms),
-        win32api.LOWORD(ms),
-        win32api.HIWORD(ls),
-        win32api.LOWORD(ls),
-    )
+    info = get_file_version_info(path, ['FileVersion'])
+    parts = [int(x) for x in info['FileVersion'].split('.')]
+    if len(parts) < 1 or len(parts) > 4:
+        raise RuntimeError(f'Invalid file version: {info["FileVersion"]}')
+    while len(parts) < 4:
+        parts.append(0)
+    return (parts[0], parts[1], parts[2], parts[3])
 
 
 def str_to_file_version(version: str) -> tuple[int, int, int, int]:
@@ -284,8 +511,13 @@ def get_mod_info(path: Path) -> ModInfo:
             elif key == 'architecture':
                 if value == 'x86':
                     architectures.add(Architecture.x86)
+                elif value == 'amd64':
+                    architectures.add(Architecture.x86_64)
+                elif value == 'arm64':
+                    architectures.add(Architecture.ARM64)
                 elif value == 'x86-64':
                     architectures.add(Architecture.x86_64)
+                    architectures.add(Architecture.ARM64)
                 else:
                     raise RuntimeError(f'Invalid architecture: {value}')
 
@@ -296,7 +528,11 @@ def get_mod_info(path: Path) -> ModInfo:
         raise RuntimeError('@version is not specified')
 
     if not architectures:
-        architectures = {Architecture.x86, Architecture.x86_64}
+        architectures = {
+            Architecture.x86,
+            Architecture.x86_64,
+            Architecture.ARM64,
+        }
 
     return ModInfo(id, version, compiler_options, architectures)
 
@@ -308,7 +544,11 @@ def compile_mod(
 
     windhawk_version = get_file_version(windhawk_dir / 'windhawk.exe')
 
-    compiler_path = windhawk_dir / 'Compiler' / 'bin' / 'g++.exe'
+    compiler_path = windhawk_dir / 'Compiler' / 'bin'
+    if windhawk_version < str_to_file_version('1.6.0.0'):
+        compiler_path /= 'g++.exe'
+    else:
+        compiler_path /= 'clang++.exe'
 
     engine_relative_path = get_engine_path(windhawk_dir)
     if engine_relative_path is None:
@@ -336,17 +576,26 @@ def compile_mod(
     succeeded = True
 
     for arch in mod_info.architectures:
+        if arch == Architecture.ARM64 and windhawk_version < str_to_file_version(
+            '1.6.0.0'
+        ):
+            continue
+
         engine_lib_path = windhawk_dir / engine_relative_path
         if arch == Architecture.x86:
             engine_lib_path /= '32'
         elif arch == Architecture.x86_64:
             engine_lib_path /= '64'
+        elif arch == Architecture.ARM64:
+            engine_lib_path /= 'arm64'
         engine_lib_path /= 'windhawk.lib'
 
         if arch == Architecture.x86:
             compiler_target = 'i686-w64-mingw32'
         elif arch == Architecture.x86_64:
             compiler_target = 'x86_64-w64-mingw32'
+        elif arch == Architecture.ARM64:
+            compiler_target = 'aarch64-w64-mingw32'
 
         cpp_version = 23
         if windhawk_version < str_to_file_version('1.5.0.0'):
@@ -398,14 +647,14 @@ def compile_mod(
             'windhawk_api.h',
             '-target',
             compiler_target,
-			'-Wl,--export-all-symbols',
+            '-Wl,--export-all-symbols',
             '-o',
             output_paths[arch],
             *extra_args,
             *compatibility_compiler_flags,
         ]
 
-        print(f'Running compiler, extra args: {extra_args}')
+        print(f'Running compiler, target: {compiler_target}, extra args: {extra_args}')
         result = subprocess.call([compiler_path, *compiler_args])
 
         if mod_file_temp:
@@ -429,6 +678,7 @@ def main():
 
     parser.add_argument('-o32', '--output-32', type=Path, required=True)
     parser.add_argument('-o64', '--output-64', type=Path, required=True)
+    parser.add_argument('-oarm64', '--output-arm64', type=Path, required=True)
 
     args = parser.parse_args()
 
@@ -441,6 +691,7 @@ def main():
     output_paths: dict[Architecture, Path] = {
         Architecture.x86: args.output_32,
         Architecture.x86_64: args.output_64,
+        Architecture.ARM64: args.output_arm64,
     }
 
     failed = []
