@@ -1,3 +1,10 @@
+## 1.2 ([May 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c34430995b5cd76960f30692a94afba87a2f4215/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added style constants which can be defined once and used in multiple styles.
+* Improved handling of commented targets and styles (starting with `//`), and added details about this in the mod's description.
+* Added the Matter theme.
+* Updated the TranslucentShell theme.
+
 ## 1.1.6 ([Feb 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e7c61b93d603d644bf3a2263b59f350da851e664/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Updated the 10JumpLists theme.
