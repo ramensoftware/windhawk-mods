@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-04T17:19:46.000Z</updated>
+    <updated>2025-05-09T12:01:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.4]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#29917c376199d3312e355f1b001dc3108040b7ca</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2025-05-09T12:01:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added style constants which can be defined once and used in multiple styles.</li>
+<li>Added a built-in blur brush object, <code>WindhawkBlur</code>, which supports the <code>BlurAmount</code> and <code>TintColor</code> properties. For example: <code>Fill:=&lt;WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/&gt;</code>.</li>
+<li>Improved handling of commented targets and styles (starting with <code>//</code>), and added details about this in the mod's description.</li>
+<li>Added themes: BottomDensy, TaskbarXII, xdark.</li>
+<li>Updated themes: DockLike, 21996Taskbar.</li>
+<li>The DockLike theme now applies correctly when a new monitor is attached.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab window delayer 1.2.0]]></title>
         <id>https://windhawk.net/mods/alt-tab-delayer#b07c7e0d65abbbf7d10547608004595ce07189e0</id>
@@ -367,19 +386,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Toolbar Links Item 1.1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-toolbar-links-item#5e2643ce30dbd3e7f47f4b9f68693bc8b125cd93</id>
-        <link href="https://windhawk.net/mods/explorer-toolbar-links-item"/>
-        <updated>2025-04-11T02:41:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Injection broke in a patch update to 26100. 26100 RTM, as well as all prior Windows 11 builds, are just fine.</p>
-<p>The method <code>CShellBrowser::_OnViewMenuPopup</code>, as well as its sole caller <code>_OnInitMenuPopup</code>, were inlined into the sole caller <code>WndProcBS</code>. As an easy workaround, I simply hooked the window procedure and checked the arguments in the same way as would result in calling <code>_OnInitMenuPopup</code>, which produces the same effect.</p>
-<p>No other changes were made for this update.</p>]]></content>
-        <author>
-            <name>Isabella Lulamoon (kawapure)</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,13 @@
+## 1.4 ([May 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/29917c376199d3312e355f1b001dc3108040b7ca/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added style constants which can be defined once and used in multiple styles.
+* Added a built-in blur brush object, `WindhawkBlur`, which supports the `BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`.
+* Improved handling of commented targets and styles (starting with `//`), and added details about this in the mod's description.
+* Added themes: BottomDensy, TaskbarXII, xdark.
+* Updated themes: DockLike, 21996Taskbar.
+  * The DockLike theme now applies correctly when a new monitor is attached.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.3.10 ([Feb 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/969985c9efc19788571d93e85240a260c5ab0fc7/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Improved support for the new thumbnail previews implementation in Windows 11 for the following themes: WinXP, TranslucentTaskbar, Squircle, RosePine, DockLike, CleanSlate, Lucent.
