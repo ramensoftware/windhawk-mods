@@ -2,7 +2,7 @@
 // @id              windows-11-file-explorer-styler
 // @name            Windows 11 File Explorer Styler
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -34,7 +34,19 @@ Styler** and **Windows 11 Notification Center Styler** mods.
 
 ## Themes
 
-No themes are currently integrated into the mod.
+Themes are collections of styles. The following themes are integrated into the
+mod and can be selected in the settings:
+
+[![Minimal
+Explorer11](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/Minimal%20Explorer11/screenshot-small.png)
+\
+Minimal
+Explorer11](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Minimal%20Explorer11/README.md)
+
+More themes can be found in the **Themes** section of [The Windows 11 file
+explorer styling
+guide](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/README.md#themes).
+Contributions of new themes are welcome!
 
 ## Advanced styling
 
@@ -45,6 +57,12 @@ For a more detailed explanation and examples, refer to the sections below.
 
 The [UWPSpy](https://ramensoftware.com/uwpspy) tool can be used to inspect the
 file explorer control elements in real time, and experiment with various styles.
+To target file explorer with UWPSpy, select the `explorer.exe` process and the
+WinUI 3 target framework.
+
+For a collection of commonly requested file explorer styling customizations,
+check out [The Windows 11 file explorer styling
+guide](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/README.md).
 
 ### Control styles
 
@@ -77,6 +95,9 @@ specified as following: `Style@VisualState=Value`, in which case the style will
 only apply when the visual state group specified in the target matches the
 specified visual state.
 
+Targets and styles starting with two slashes (`//`) are ignored. This can be
+useful for temporarily disabling a target or style.
+
 ### Resource variables
 
 Some variables, such as size and padding for various controls, are defined as
@@ -92,12 +113,36 @@ code from the **TranslucentTB** project.
 
 // ==WindhawkModSettings==
 /*
+- theme: ""
+  $name: Theme
+  $description: >-
+    Themes are collections of styles. For details about the themes below, or for
+    information about submitting your own theme, refer to the relevant section
+    in the mod details.
+  $options:
+  - "": None
+  - Minimal Explorer11: Minimal Explorer11
 - controlStyles:
   - - target: ""
       $name: Target
     - styles: [""]
       $name: Styles
   $name: Control styles
+- styleConstants: [""]
+  $name: Style constants
+  $description: >-
+    Constants which can be defined once and used in multiple styles.
+
+    Each entry contains a style name and value, separated by '=', for example:
+
+    mainColor=#fafad2
+
+    The constant can then be used in style definitions by prepending '$', for
+    example:
+
+    Fill=$mainColor
+
+    Background:=<AcrylicBrush TintColor="$mainColor" TintOpacity="0.3" />
 - resourceVariables:
   - - variableKey: ""
       $name: Variable key
@@ -115,16 +160,115 @@ code from the **TranslucentTB** project.
 #include <xamlom.h>
 
 #include <atomic>
+#include <vector>
 
 #undef GetCurrentTime
 
 #include <winrt/Microsoft.UI.Xaml.h>
 
+struct ThemeTargetStyles {
+    PCWSTR target;
+    std::vector<PCWSTR> styles;
+};
+
+struct Theme {
+    std::vector<ThemeTargetStyles> targetStyles;
+    int explorerFrameContainerHeight = 0;
+};
+
+// clang-format off
+
+const Theme g_themeMinimal_Explorer11 = {{
+    ThemeTargetStyles{L"AppBarButton#backButton > Grid#Root@CommonStates > Border#AppBarButtonInnerBorder", {
+        L"Background@Normal:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.07\"/>",
+        L"Background@PointerOver:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.12\"/>",
+        L"Background@Pressed:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.12\"/>",
+        L"Background@Disabled:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.05\"/>"}},
+    ThemeTargetStyles{L"AppBarButton#forwardButton > Grid#Root@CommonStates > Border#AppBarButtonInnerBorder", {
+        L"Background@Normal:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.05\"/>",
+        L"Background@PointerOver:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.12\"/>",
+        L"Background@Pressed:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.12\"/>",
+        L"Background@Disabled:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.05\"/>"}},
+    ThemeTargetStyles{L"AppBarButton#refreshButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"AppBarButton#upButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Border#BottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.AddressBarControl > Grid#PART_LayoutRoot > Grid#NormalModeGrid", {
+        L"BorderThickness=0,0,0,1",
+        L"BorderBrush=#A0A0A0"}},
+    ThemeTargetStyles{L"Grid#DetailsViewControlRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#LeftBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border#RightBottomBorderLine", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail > Grid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"TabViewItem", {
+        L"Margin=0,0,3,0"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot", {
+        L"CornerRadius=4",
+        L"Margin=0,-3,0,3",
+        L"Height=28"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Grid#TabContainer", {
+        L"Background=Transparent",
+        L"BorderBrush=Transparent"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot@CommonStates", {
+        L"Background@Selected:=<SolidColorBrush Color=\"#808080\" Opacity=\"0.35\"/>",
+        L"Background@PointerOverSelected:=<SolidColorBrush Color=\"#808080\" Opacity=\"0.35\"/>",
+        L"Background@PointerOver:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.13\"/>",
+        L"Background@Normal:=<AcrylicBrush TintColor=\"Transparent\" Opacity=\"0.05\"/>",
+        L"Background@PressedSelected:=<SolidColorBrush Color=\"#808080\" Opacity=\"0.35\"/>"}},
+    ThemeTargetStyles{L"Grid#FileExplorerAddressBarGrid", {
+        L"Grid.ColumnSpan=2",
+        L"Margin=0,0,10,0"}},
+    ThemeTargetStyles{L"AutoSuggestBox#FileExplorerSearchBox", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"AppBarButton#backButton > Grid#Root", {
+        L"Padding=2"}},
+    ThemeTargetStyles{L"AppBarButton#forwardButton > Grid#Root", {
+        L"Padding=2"}},
+    ThemeTargetStyles{L"AppBarButton#forwardButton > Grid#Root > Grid#ContentRoot > Viewbox#ContentViewbox", {
+        L"Margin=9"}},
+    ThemeTargetStyles{L"AppBarButton#backButton > Grid#Root > Grid#ContentRoot > Viewbox#ContentViewbox", {
+        L"Margin=9"}},
+    ThemeTargetStyles{L"Grid#PART_LayoutRoot", {
+        L"MinHeight=28",
+        L"Height=28"}},
+    ThemeTargetStyles{L"Grid#TabContainerGrid > Border > Button#AddButton", {
+        L"Margin=0,0,20,4"}},
+    ThemeTargetStyles{L"Border#ScrollIncreaseButtonContainer", {
+        L"Margin=0,0,0,4"}},
+    ThemeTargetStyles{L"Border#ScrollDecreaseButtonContainer", {
+        L"Margin=0,0,0,4"}},
+    ThemeTargetStyles{L"Grid#FileExplorerAddressBarGrid", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl#NavigationBarControl", {
+        L"Grid.Row=0",
+        L"Grid.RowSpan=2"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.FileExplorerTabControl", {
+        L"Margin=100,0,0,-15",
+        L"Grid.RowSpan=2"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl > Grid#NavigationBarControlGrid", {
+        L"Margin=0,0,0,-18",
+        L"Background=Transparent",
+        L"Width=100",
+        L"HorizontalAlignment=0"}},
+}, /*explorerFrameContainerHeight=*/42};
+
+// clang-format on
+
 struct {
     int explorerFrameContainerHeight;
 } g_settings;
 
-bool g_windowsUIFileExplorerSymbolsHooked;
+int g_themeExplorerFrameContainerHeight;
 
 std::atomic<bool> g_initialized;
 thread_local bool g_initializedForThread;
@@ -508,6 +652,8 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <variant>
 #include <vector>
 
+using namespace std::string_view_literals;
+
 #include <commctrl.h>
 #include <roapi.h>
 #include <winstring.h>
@@ -559,10 +705,12 @@ struct StyleRule {
 
 using PropertyOverridesUnresolved = std::vector<StyleRule>;
 
+using PropertyOverrideValue = winrt::Windows::Foundation::IInspectable;
+
 // Property -> visual state -> value.
-using PropertyOverrides = std::unordered_map<
-    DependencyProperty,
-    std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>>;
+using PropertyOverrides =
+    std::unordered_map<DependencyProperty,
+                       std::unordered_map<std::wstring, PropertyOverrideValue>>;
 
 using PropertyOverridesMaybeUnresolved =
     std::variant<PropertyOverridesUnresolved, PropertyOverrides>;
@@ -578,7 +726,7 @@ thread_local std::vector<ElementCustomizationRules>
 
 struct ElementPropertyCustomizationState {
     std::optional<winrt::Windows::Foundation::IInspectable> originalValue;
-    std::optional<winrt::Windows::Foundation::IInspectable> customValue;
+    std::optional<PropertyOverrideValue> customValue;
     int64_t propertyChangedToken = 0;
 };
 
@@ -628,7 +776,8 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 
 void SetOrClearValue(DependencyObject elementDo,
                      DependencyProperty property,
-                     winrt::Windows::Foundation::IInspectable value) {
+                     const PropertyOverrideValue& overrideValue) {
+    winrt::Windows::Foundation::IInspectable value = overrideValue;
     if (value == DependencyProperty::UnsetValue()) {
         elementDo.ClearValue(property);
         return;
@@ -805,11 +954,12 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             uint32_t i = 0;
             for (const auto& rule : styleRules) {
-                const auto setter = style.Setters().GetAt(i++).as<Setter>();
+                const auto setter = style.Setters().GetAt(i).as<Setter>();
                 propertyOverrides[setter.Property()][rule.visualState] =
                     rule.isXamlValue && rule.value.empty()
                         ? DependencyProperty::UnsetValue()
                         : setter.Value();
+                i++;
             }
         }
 
@@ -1076,39 +1226,41 @@ void ApplyCustomizationsForVisualStateGroup(
             SetOrClearValue(element, property, it->second);
         }
 
-        propertyCustomizationState.propertyChangedToken =
-            elementDo.RegisterPropertyChangedCallback(
-                property,
-                [&propertyCustomizationState](DependencyObject sender,
-                                              DependencyProperty property) {
-                    if (g_elementPropertyModifying) {
-                        return;
-                    }
+        propertyCustomizationState
+            .propertyChangedToken = elementDo.RegisterPropertyChangedCallback(
+            property,
+            [&propertyCustomizationState](DependencyObject sender,
+                                          DependencyProperty property) {
+                if (g_elementPropertyModifying) {
+                    return;
+                }
 
-                    auto element = sender.try_as<FrameworkElement>();
-                    if (!element) {
-                        return;
-                    }
+                auto element = sender.try_as<FrameworkElement>();
+                if (!element) {
+                    return;
+                }
 
-                    if (!propertyCustomizationState.customValue) {
-                        return;
-                    }
+                if (!propertyCustomizationState.customValue) {
+                    return;
+                }
 
-                    Wh_Log(L"Re-applying style for %s",
-                           winrt::get_class_name(element).c_str());
+                Wh_Log(L"Re-applying style for %s",
+                       winrt::get_class_name(element).c_str());
 
-                    auto localValue =
-                        ReadLocalValueWithWorkaround(element, property);
+                auto localValue =
+                    ReadLocalValueWithWorkaround(element, property);
 
-                    if (*propertyCustomizationState.customValue != localValue) {
-                        propertyCustomizationState.originalValue = localValue;
-                    }
+                // The comment below is for clang format.
+                if (*propertyCustomizationState.customValue !=
+                    localValue /*.......................................*/) {
+                    propertyCustomizationState.originalValue = localValue;
+                }
 
-                    g_elementPropertyModifying = true;
-                    SetOrClearValue(element, property,
-                                    *propertyCustomizationState.customValue);
-                    g_elementPropertyModifying = false;
-                });
+                g_elementPropertyModifying = true;
+                SetOrClearValue(element, property,
+                                *propertyCustomizationState.customValue);
+                g_elementPropertyModifying = false;
+            });
     }
 
     if (visualStateGroup) {
@@ -1267,6 +1419,84 @@ void CleanupCustomizations(InstanceHandle handle) {
 
         g_elementsCustomizationState.erase(it);
     }
+}
+
+using StyleConstant = std::pair<std::wstring, std::wstring>;
+using StyleConstants = std::vector<StyleConstant>;
+
+StyleConstants LoadStyleConstants() {
+    StyleConstants result;
+
+    for (int i = 0;; i++) {
+        string_setting_unique_ptr constantSetting(
+            Wh_GetStringSetting(L"styleConstants[%d]", i));
+        if (!*constantSetting.get()) {
+            break;
+        }
+
+        // Skip if commented.
+        if (constantSetting[0] == L'/' && constantSetting[1] == L'/') {
+            continue;
+        }
+
+        std::wstring_view constant = constantSetting.get();
+
+        auto eqPos = constant.find(L'=');
+        if (eqPos == constant.npos) {
+            Wh_Log(L"Skipping entry with no '=': %.*s",
+                   static_cast<int>(constant.length()), constant.data());
+            continue;
+        }
+
+        auto key = TrimStringView(constant.substr(0, eqPos));
+        auto val = TrimStringView(constant.substr(eqPos + 1));
+
+        result.push_back({std::wstring(key), std::wstring(val)});
+    }
+
+    // Reverse the order to allow overriding definitions with the same name.
+    std::reverse(result.begin(), result.end());
+
+    // Sort by name length to replace long names first.
+    std::stable_sort(result.begin(), result.end(),
+                     [](const StyleConstant& a, const StyleConstant& b) {
+                         return a.first.size() > b.first.size();
+                     });
+
+    return result;
+}
+
+std::wstring ApplyStyleConstants(std::wstring_view style,
+                                 const StyleConstants& styleConstants) {
+    std::wstring result;
+
+    size_t lastPos = 0;
+    size_t findPos;
+
+    while ((findPos = style.find('$', lastPos)) != style.npos) {
+        result.append(style, lastPos, findPos - lastPos);
+
+        const StyleConstant* constant = nullptr;
+        for (const auto& s : styleConstants) {
+            if (s.first == style.substr(findPos + 1, s.first.size())) {
+                constant = &s;
+                break;
+            }
+        }
+
+        if (constant) {
+            result += constant->second;
+            lastPos = findPos + 1 + constant->first.size();
+        } else {
+            result += '$';
+            lastPos = findPos + 1;
+        }
+    }
+
+    // Care for the rest after last occurrence.
+    result += style.substr(lastPos);
+
+    return result;
 }
 
 ElementMatcher ElementMatcherFromString(std::wstring_view str) {
@@ -1454,11 +1684,18 @@ void AddElementCustomizationRules(std::wstring_view target,
         std::move(elementCustomizationRules));
 }
 
-bool ProcessSingleTargetStylesFromSettings(int index) {
+bool ProcessSingleTargetStylesFromSettings(
+    int index,
+    const StyleConstants& styleConstants) {
     string_setting_unique_ptr targetStringSetting(
         Wh_GetStringSetting(L"controlStyles[%d].target", index));
     if (!*targetStringSetting.get()) {
         return false;
+    }
+
+    // Skip if commented.
+    if (targetStringSetting[0] == L'/' && targetStringSetting[1] == L'/') {
+        return true;
     }
 
     Wh_Log(L"Processing styles for %s", targetStringSetting.get());
@@ -1477,7 +1714,8 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
             continue;
         }
 
-        styles.push_back(styleSetting.get());
+        styles.push_back(
+            ApplyStyleConstants(styleSetting.get(), styleConstants));
     }
 
     if (styles.size() > 0) {
@@ -1489,9 +1727,42 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
 }
 
 void ProcessAllStylesFromSettings() {
+    PCWSTR themeName = Wh_GetStringSetting(L"theme");
+    const Theme* theme = nullptr;
+    if (wcscmp(themeName, L"Minimal Explorer11") == 0) {
+        theme = &g_themeMinimal_Explorer11;
+    }
+    Wh_FreeStringSetting(themeName);
+
+    StyleConstants styleConstants = LoadStyleConstants();
+
+    if (theme) {
+        for (const auto& themeTargetStyle : theme->targetStyles) {
+            try {
+                std::vector<std::wstring> styles;
+                styles.reserve(themeTargetStyle.styles.size());
+                for (const auto& s : themeTargetStyle.styles) {
+                    styles.push_back(ApplyStyleConstants(s, styleConstants));
+                }
+
+                AddElementCustomizationRules(themeTargetStyle.target,
+                                             std::move(styles));
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error %08X", ex.code());
+            } catch (std::exception const& ex) {
+                Wh_Log(L"Error: %S", ex.what());
+            }
+        }
+
+        g_themeExplorerFrameContainerHeight =
+            theme->explorerFrameContainerHeight;
+    } else {
+        g_themeExplorerFrameContainerHeight = 0;
+    }
+
     for (int i = 0;; i++) {
         try {
-            if (!ProcessSingleTargetStylesFromSettings(i)) {
+            if (!ProcessSingleTargetStylesFromSettings(i, styleConstants)) {
                 break;
             }
         } catch (winrt::hresult_error const& ex) {
@@ -1824,10 +2095,14 @@ XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Hook(void* pThis,
         XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Original(pThis,
                                                                        size);
 
-    if (SUCCEEDED(ret) && g_settings.explorerFrameContainerHeight) {
+    int explorerFrameContainerHeight = g_settings.explorerFrameContainerHeight;
+    if (!explorerFrameContainerHeight) {
+        explorerFrameContainerHeight = g_themeExplorerFrameContainerHeight;
+    }
+
+    if (SUCCEEDED(ret) && explorerFrameContainerHeight) {
         int originalCy = size->cy;
-        size->cy =
-            MulDiv(size->cy, g_settings.explorerFrameContainerHeight, 136);
+        size->cy = MulDiv(size->cy, explorerFrameContainerHeight, 136);
         Wh_Log(L"%d -> %d", originalCy, size->cy);
     }
 
@@ -1890,10 +2165,7 @@ BOOL Wh_ModInit() {
         }
     }
 
-    if (g_settings.explorerFrameContainerHeight &&
-        HookWindowsUIFileExplorerSymbols()) {
-        g_windowsUIFileExplorerSymbolsHooked = true;
-    }
+    HookWindowsUIFileExplorerSymbols();
 
     return TRUE;
 }
@@ -1950,11 +2222,4 @@ void Wh_ModSettingsChanged() {
     }
 
     LoadSettings();
-
-    if (!g_windowsUIFileExplorerSymbolsHooked &&
-        g_settings.explorerFrameContainerHeight &&
-        HookWindowsUIFileExplorerSymbols()) {
-        Wh_ApplyHookOperations();
-        g_windowsUIFileExplorerSymbolsHooked = true;
-    }
 }
