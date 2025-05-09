@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-when-maximized
 // @name            Taskbar auto-hide when maximized
 // @description     Makes the taskbar auto-hide only when a window is maximized or intersects the taskbar
-// @version         1.2.2
+// @version         1.2.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -82,6 +82,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 #include <atomic>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -111,11 +112,20 @@ WinVersion g_winVersion;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
-bool g_wasAutoHideEnabled;
+bool g_wasAutoHideProcessed;
+bool g_wasAutoHideDisabled;
 std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_map<void*, HWND> g_taskbarsKeptShown;
 UINT_PTR g_pendingEventsTimer;
+
+// TrayUI::_HandleTrayPrivateSettingMessage
+constexpr UINT kHandleTrayPrivateSettingMessage = WM_USER + 0x1CA;
+
+enum {
+    kTrayPrivateSettingAutoHideGet = 3,
+    kTrayPrivateSettingAutoHideSet = 4,
+};
 
 constexpr WCHAR kUpdateTaskbarStatePendingTickCount[] =
     L"Windhawk_UpdateTaskbarStatePendingTickCount_" WH_MOD_ID;
@@ -157,38 +167,23 @@ bool IsWindowCloaked(HWND hwnd) {
            isCloaked;
 }
 
-bool SetTaskbarAutoHide(bool set) {
-    APPBARDATA appBarData;
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    // Both ABM_GETSTATE and ABM_SETSTATE require cbSize to be set.
-    appBarData.cbSize = sizeof(APPBARDATA);
-
-    // Get state.
-    UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &appBarData);
-
-    // Determine auto hide state.
-    if (set) {
-        appBarData.lParam = state | ABS_AUTOHIDE;
-    } else {
-        appBarData.lParam = state & ~ABS_AUTOHIDE;
-    }
-
-    if (appBarData.lParam != state) {
-        // Set state.
-        SHAppBarMessage(ABM_SETSTATE, &appBarData);
-    }
-
-    return state & ABS_AUTOHIDE;
-}
-
-HWND GetTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-
-    DWORD processId = 0;
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
-        processId != GetCurrentProcessId()) {
-        return nullptr;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
 }
@@ -206,7 +201,7 @@ bool IsTaskbarWindow(HWND hWnd) {
 HWND FindTaskbarWindows(std::unordered_set<HWND>* secondaryTaskbarWindows) {
     secondaryTaskbarWindows->clear();
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         return nullptr;
     }
@@ -243,7 +238,7 @@ HWND FindTaskbarWindows(std::unordered_set<HWND>* secondaryTaskbarWindows) {
 bool GetTaskbarRectForMonitor(HMONITOR monitor, RECT* rect) {
     SetRectEmpty(rect);
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         return false;
     }
@@ -376,7 +371,10 @@ bool IsWindowExcluded(HWND hWnd) {
     return false;
 }
 
-bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
+bool CanHideTaskbarForWindow(HWND hWnd,
+                             HMONITOR monitor,
+                             const MONITORINFO* monitorInfo,
+                             const RECT* taskbarRect) {
     if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd) ||
         (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
         return false;
@@ -409,17 +407,12 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
         return false;
     }
 
-    RECT windowRect;
+    RECT windowRect{};
     DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
                           sizeof(windowRect));
 
-    MONITORINFO monitorInfo{
-        .cbSize = sizeof(MONITORINFO),
-    };
-    GetMonitorInfo(monitor, &monitorInfo);
-
     // Don't keep the taskbar shown for a fullscreen window.
-    if (EqualRect(&windowRect, &monitorInfo.rcMonitor)) {
+    if (EqualRect(&windowRect, &monitorInfo->rcMonitor)) {
         return true;
     }
 
@@ -429,11 +422,8 @@ bool CanHideTaskbarForWindow(HWND hWnd, HMONITOR monitor) {
     // screen (e.g. Win+left, Win+up).
     if (g_settings.mode == Mode::intersected ||
         (g_settings.mode == Mode::maximized && isWindowArranged)) {
-        RECT taskbarRect{};
-        GetTaskbarRectForMonitor(monitor, &taskbarRect);
-
         RECT intersectRect;
-        if (IntersectRect(&intersectRect, &windowRect, &taskbarRect)) {
+        if (IntersectRect(&intersectRect, &windowRect, taskbarRect)) {
             return true;
         }
     }
@@ -451,9 +441,19 @@ bool ShouldKeepTaskbarShown(HMONITOR monitor) {
         return true;
     }
 
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    GetMonitorInfo(monitor, &monitorInfo);
+
+    RECT taskbarRect{};
+    GetTaskbarRectForMonitor(monitor, &taskbarRect);
+
     if (g_settings.foregroundWindowOnly) {
         HWND hForegroundWnd = GetForegroundWindow();
-        return !CanHideTaskbarForWindow(hForegroundWnd, monitor);
+        return !hForegroundWnd ||
+               !CanHideTaskbarForWindow(hForegroundWnd, monitor, &monitorInfo,
+                                        &taskbarRect);
     }
 
     bool canHideTaskbar = false;
@@ -465,8 +465,14 @@ bool ShouldKeepTaskbarShown(HMONITOR monitor) {
             return TRUE;
         }
 
-        canHideTaskbar = CanHideTaskbarForWindow(hWnd, monitor);
-        return !canHideTaskbar;
+        canHideTaskbar =
+            CanHideTaskbarForWindow(hWnd, monitor, &monitorInfo, &taskbarRect);
+        if (!canHideTaskbar) {
+            return TRUE;
+        }
+
+        Wh_Log(L"Can hide taskbar for window %p", hWnd);
+        return FALSE;
     };
 
     EnumWindows(
@@ -644,6 +650,14 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     if (Msg == WM_NCCREATE) {
         Wh_Log(L"WM_NCCREATE: %08X", (DWORD)(ULONG_PTR)hWnd);
         AdjustTaskbar(hWnd);
+    } else if (Msg == kHandleTrayPrivateSettingMessage) {
+        // Prevent auto-hide from being disabled while the mod is loaded.
+        if ((DWORD)wParam == 4) {
+            BOOL bSetAutoHideEnabled = (BOOL)lParam;
+            if (!bSetAutoHideEnabled) {
+                return 0;
+            }
+        }
     } else if (Msg == g_getTaskbarRectRegisteredMsg) {
         HMONITOR monitor = (HMONITOR)wParam;
         RECT* rect = (RECT*)lParam;
@@ -657,6 +671,17 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
             SetRectEmpty(rect);
         }
     } else if (Msg == g_updateTaskbarStateRegisteredMsg) {
+        if (!g_wasAutoHideProcessed) {
+            g_wasAutoHideProcessed = true;
+            g_wasAutoHideDisabled =
+                !SendMessage(hWnd, kHandleTrayPrivateSettingMessage,
+                             kTrayPrivateSettingAutoHideGet, 0);
+            if (g_wasAutoHideDisabled) {
+                SendMessage(hWnd, kHandleTrayPrivateSettingMessage,
+                            kTrayPrivateSettingAutoHideSet, TRUE);
+            }
+        }
+
         HMONITOR monitor = TrayUI_GetStuckMonitor_Original(pThis);
         bool keepShown = ShouldKeepTaskbarShown(monitor);
 
@@ -1224,8 +1249,6 @@ void Wh_ModAfterInit() {
         HandleLoadedExplorerPatcher();
     }
 
-    g_wasAutoHideEnabled = SetTaskbarAutoHide(true);
-
     WNDCLASS wndclass;
     if (GetClassInfo(GetModuleHandle(nullptr), L"Shell_TrayWnd", &wndclass)) {
         AdjustAllTaskbars();
@@ -1242,8 +1265,12 @@ void Wh_ModUninit() {
         g_winEventHookThread = nullptr;
     }
 
-    if (!g_wasAutoHideEnabled) {
-        SetTaskbarAutoHide(false);
+    if (g_wasAutoHideDisabled) {
+        HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+        if (hTaskbarWnd) {
+            SendMessage(hTaskbarWnd, kHandleTrayPrivateSettingMessage,
+                        kTrayPrivateSettingAutoHideSet, FALSE);
+        }
     }
 }
 
