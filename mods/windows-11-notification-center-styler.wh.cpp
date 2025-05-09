@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center with themes contributed by others or create your own
-// @version         1.1.6
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -47,6 +47,10 @@ Unified](https://github.com/ramensoftware/windows-11-notification-center-styling
 [![10JumpLists](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/10JumpLists/screenshot-small.png)
 \
 10JumpLists](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/10JumpLists/README.md)
+
+[![Matter](https://raw.githubusercontent.com/ramensoftware/windows-11-notification-center-styling-guide/main/Themes/Matter/screenshot-small.png)
+\
+Matter](https://github.com/ramensoftware/windows-11-notification-center-styling-guide/blob/main/Themes/Matter/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11
 notification center styling
@@ -98,6 +102,9 @@ property value, for example: `Fill:=`. In addition, a visual state can be
 specified as following: `Style@VisualState=Value`, in which case the style will
 only apply when the visual state group specified in the target matches the
 specified visual state.
+
+Targets and styles starting with two slashes (`//`) are ignored. This can be
+useful for temporarily disabling a target or style.
 
 A couple of practical examples:
 
@@ -164,12 +171,28 @@ code from the **TranslucentTB** project.
   - TranslucentShell: TranslucentShell
   - Unified: Unified
   - 10JumpLists: 10JumpLists
+  - Matter: Matter
 - controlStyles:
   - - target: ""
       $name: Target
     - styles: [""]
       $name: Styles
   $name: Control styles
+- styleConstants: [""]
+  $name: Style constants
+  $description: >-
+    Constants which can be defined once and used in multiple styles.
+
+    Each entry contains a style name and value, separated by '=', for example:
+
+    mainColor=#fafad2
+
+    The constant can then be used in style definitions by prepending '$', for
+    example:
+
+    Fill=$mainColor
+
+    Background:=<AcrylicBrush TintColor="$mainColor" TintOpacity="0.3" />
 - resourceVariables:
   - - variableKey: ""
       $name: Variable key
@@ -259,6 +282,25 @@ const Theme g_themeTranslucentShell = {{
         L"FocusVisualPrimaryThickness=0,0,0,0"}},
     ThemeTargetStyles{L"ActionCenter.FlexibleItemView", {
         L"CornerRadius=15"}},
+    ThemeTargetStyles{L"ControlCenter.MediaTransportControls#MediaTransportControls > Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
+        L"Height=470"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AlbumTextAndArtContainer", {
+        L"Height=350"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ThumbnailImage", {
+        L"Width=300",
+        L"Height=300",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Top",
+        L"Grid.Column=1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ThumbnailImage > Windows.UI.Xaml.Controls.Border", {
+        L"CornerRadius=10"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer", {
+        L"VerticalAlignment=Bottom",
+        L"Grid.Column=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#TitleText", {
+        L"TextAlignment=Center"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#SubtitleText", {
+        L"TextAlignment=Center"}},
 }};
 
 const Theme g_themeUnified = {{
@@ -351,6 +393,179 @@ const Theme g_theme10JumpLists = {{
         L"Background@PointerOver:=<AcrylicBrush TintColor=\"{ThemeResource SystemListLowColor}\" TintOpacity=\"1\" Opacity=\"0.5\" FallbackColor=\"{ThemeResource SystemListLowColor}\"/>",
         L"Background@Pressed:=<AcrylicBrush TintColor=\"{ThemeResource SystemListLowColor}\" TintOpacity=\"1\" Opacity=\"0.9\" FallbackColor=\"{ThemeResource SystemListMediumColor}\"/>",
         L"CornerRadius=0"}},
+}};
+
+const Theme g_themeMatter = {{
+    ThemeTargetStyles{L"Grid#NotificationCenterGrid", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=17"}},
+    ThemeTargetStyles{L"Grid#CalendarCenterGrid", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=17"}},
+    ThemeTargetStyles{L"ScrollViewer#CalendarControlScrollViewer", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=14",
+        L"Margin=-10,11,-10,-14"}},
+    ThemeTargetStyles{L"Border#CalendarHeaderMinimizedOverlay", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=18"}},
+    ThemeTargetStyles{L"ActionCenter.FocusSessionControl#FocusSessionControl > Grid#FocusGrid", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=14",
+        L"Margin=6,7,6,6"}},
+    ThemeTargetStyles{L"MenuFlyoutPresenter", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=12",
+        L"Padding=1,2,1,2"}},
+    ThemeTargetStyles{L"Border#JumpListRestyledAcrylic", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=12",
+        L"Margin=-2,-2,-2,-2"}},
+    ThemeTargetStyles{L"Grid#ControlCenterRegion", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"CornerRadius=17",
+        L"BorderThickness=0,0,0,0"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent", {
+        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent > Grid > Border", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=14",
+        L"Margin=8,0,8,2"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot", {
+        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot > ContentPresenter#PageHeader", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=14",
+        L"Margin=7,7,7,7"}},
+    ThemeTargetStyles{L"ScrollViewer#ListContent", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=14",
+        L"Margin=8,0,8,0"}},
+    ThemeTargetStyles{L"ActionCenter.FlexibleToastView#FlexibleNormalToastView", {
+        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=16"}},
+    ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=8"}},
+    ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
+        L"CornerRadius=6"}},
+    ThemeTargetStyles{L"ActionCenter.FlexibleItemView", {
+        L"CornerRadius=16"}},
+    ThemeTargetStyles{L"QuickActions.AccessibleToggleButton#ToggleButton", {
+        L"CornerRadius=13",
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"QuickActions.AccessibleToggleButton#SplitL2Button", {
+        L"CornerRadius =13",
+        L"Margin=4,0,-4,0",
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"Grid#NotificationCenterTopBanner", {
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"CornerRadius=14",
+        L"Margin=7,7,7,7"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#L1Grid > Border", {
+        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ContentPresenter", {
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#FooterButton[AutomationProperties.Name = Edit quick settings] ", {
+        L"Margin = 0,0,8,0",
+        L"CornerRadius = 12"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button[AutomationProperties.AutomationId = Microsoft.QuickAction.Battery] ", {
+        L"Margin = 2,0,0,0",
+        L"CornerRadius = 12"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#FooterButton[AutomationProperties.Name = All settings] ", {
+        L"Margin = 0,0,-1,0",
+        L"CornerRadius = 13"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button[AutomationProperties.AutomationId = Microsoft.QuickAction.Volume] ", {
+        L"CornerRadius = 10"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#VolumeL2Button[AutomationProperties.Name = Select a sound output] ", {
+        L"CornerRadius = 10"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#HorizontalTrackRect", {
+        L"Height  = 8",
+        L"Margin = 6,-1,12,0",
+        L"Fill := <AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#HorizontalDecreaseRect", {
+        L"Height  =8",
+        L"Margin = 6,-1,-10,0",
+        L"Fill:=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" />"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Ellipse#SliderInnerThumb", {
+        L"Height = 12",
+        L"Width = 12",
+        L"Margin = -1,0,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.Thumb#HorizontalThumb", {
+        L"Height = 18",
+        L"Width = 18",
+        L"Margin = 0,-1,0,0",
+        L"Visibility  = 1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
+        L"Height=470",
+        L"CornerRadius = 17",
+        L"BorderThickness  = 0 ",
+        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AlbumTextAndArtContainer", {
+        L"Height=347"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ThumbnailImage", {
+        L"Width=300",
+        L"Height=300",
+        L"HorizontalAlignment=Center",
+        L"VerticalAlignment=Top",
+        L"Grid.Column=1",
+        L"Margin=0,2,0,0",
+        L"CornerRadius = 14"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer", {
+        L"VerticalAlignment=Bottom",
+        L"Margin = 0,5,0,-5"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#Title", {
+        L"TextAlignment=Center",
+        L"FontFamily = Tektur",
+        L"FontSize = 18"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#Subtitle", {
+        L"TextAlignment=Center",
+        L"FontFamily = Montserrat",
+        L"Margin = 0,3,0,0",
+        L"FontWeight= 600"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListView#MediaButtonsListView", {
+        L"VerticalAlignment=Top",
+        L"Height=48",
+        L"Margin = 0,12,0,-12"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.RepeatButton#PreviousButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter@CommonStates", {
+        L"Background@Normal:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background@PointerOver:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.3\" Opacity=\"1\" FallbackColor=\"#333333\"/>",
+        L"Background@Pressed:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Width=40",
+        L"Height= 30",
+        L"CornerRadius = 6",
+        L"Margin = 15,0,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PlayPauseButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter@CommonStates", {
+        L"Background@Normal:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background@PointerOver:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.3\" Opacity=\"1\" FallbackColor=\"#333333\"/>",
+        L"Background@Pressed:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Width=40",
+        L"Height = 40",
+        L"CornerRadius = 8",
+        L"Margin = -10,0,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.RepeatButton#NextButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter@CommonStates", {
+        L"Background@Normal:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background@PointerOver:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.3\" Opacity=\"1\" FallbackColor=\"#333333\"/>",
+        L"Background@Pressed:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Width=40",
+        L"Height = 30",
+        L"CornerRadius = 6",
+        L"Margin = -20,0,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.TextBlock#AppNameText", {
+        L"FontFamily = Tektur",
+        L"FontSize = 16"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Image#IconImage", {
+        L"Height = 20",
+        L"Width = 20"}},
+    ThemeTargetStyles{L"Grid#MediaTransportControlsRoot", {
+        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
 }};
 
 // clang-format on
@@ -733,6 +948,8 @@ HRESULT InjectWindhawkTAP() noexcept
 #include <variant>
 #include <vector>
 
+using namespace std::string_view_literals;
+
 #include <commctrl.h>
 #include <roapi.h>
 #include <winstring.h>
@@ -791,10 +1008,12 @@ struct StyleRule {
 
 using PropertyOverridesUnresolved = std::vector<StyleRule>;
 
+using PropertyOverrideValue = winrt::Windows::Foundation::IInspectable;
+
 // Property -> visual state -> value.
-using PropertyOverrides = std::unordered_map<
-    DependencyProperty,
-    std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>>;
+using PropertyOverrides =
+    std::unordered_map<DependencyProperty,
+                       std::unordered_map<std::wstring, PropertyOverrideValue>>;
 
 using PropertyOverridesMaybeUnresolved =
     std::variant<PropertyOverridesUnresolved, PropertyOverrides>;
@@ -810,7 +1029,7 @@ thread_local std::vector<ElementCustomizationRules>
 
 struct ElementPropertyCustomizationState {
     std::optional<winrt::Windows::Foundation::IInspectable> originalValue;
-    std::optional<winrt::Windows::Foundation::IInspectable> customValue;
+    std::optional<PropertyOverrideValue> customValue;
     int64_t propertyChangedToken = 0;
 };
 
@@ -857,7 +1076,8 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 
 void SetOrClearValue(DependencyObject elementDo,
                      DependencyProperty property,
-                     winrt::Windows::Foundation::IInspectable value) {
+                     const PropertyOverrideValue& overrideValue) {
+    winrt::Windows::Foundation::IInspectable value = overrideValue;
     if (value == DependencyProperty::UnsetValue()) {
         elementDo.ClearValue(property);
         return;
@@ -1063,11 +1283,12 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             uint32_t i = 0;
             for (const auto& rule : styleRules) {
-                const auto setter = style.Setters().GetAt(i++).as<Setter>();
+                const auto setter = style.Setters().GetAt(i).as<Setter>();
                 propertyOverrides[setter.Property()][rule.visualState] =
                     rule.isXamlValue && rule.value.empty()
                         ? DependencyProperty::UnsetValue()
                         : setter.Value();
+                i++;
             }
         }
 
@@ -1342,39 +1563,41 @@ void ApplyCustomizationsForVisualStateGroup(
             SetOrClearValue(element, property, it->second);
         }
 
-        propertyCustomizationState.propertyChangedToken =
-            elementDo.RegisterPropertyChangedCallback(
-                property,
-                [&propertyCustomizationState](DependencyObject sender,
-                                              DependencyProperty property) {
-                    if (g_elementPropertyModifying) {
-                        return;
-                    }
+        propertyCustomizationState
+            .propertyChangedToken = elementDo.RegisterPropertyChangedCallback(
+            property,
+            [&propertyCustomizationState](DependencyObject sender,
+                                          DependencyProperty property) {
+                if (g_elementPropertyModifying) {
+                    return;
+                }
 
-                    auto element = sender.try_as<FrameworkElement>();
-                    if (!element) {
-                        return;
-                    }
+                auto element = sender.try_as<FrameworkElement>();
+                if (!element) {
+                    return;
+                }
 
-                    if (!propertyCustomizationState.customValue) {
-                        return;
-                    }
+                if (!propertyCustomizationState.customValue) {
+                    return;
+                }
 
-                    Wh_Log(L"Re-applying style for %s",
-                           winrt::get_class_name(element).c_str());
+                Wh_Log(L"Re-applying style for %s",
+                       winrt::get_class_name(element).c_str());
 
-                    auto localValue =
-                        ReadLocalValueWithWorkaround(element, property);
+                auto localValue =
+                    ReadLocalValueWithWorkaround(element, property);
 
-                    if (*propertyCustomizationState.customValue != localValue) {
-                        propertyCustomizationState.originalValue = localValue;
-                    }
+                // The comment below is for clang format.
+                if (*propertyCustomizationState.customValue !=
+                    localValue /*.......................................*/) {
+                    propertyCustomizationState.originalValue = localValue;
+                }
 
-                    g_elementPropertyModifying = true;
-                    SetOrClearValue(element, property,
-                                    *propertyCustomizationState.customValue);
-                    g_elementPropertyModifying = false;
-                });
+                g_elementPropertyModifying = true;
+                SetOrClearValue(element, property,
+                                *propertyCustomizationState.customValue);
+                g_elementPropertyModifying = false;
+            });
     }
 
     if (visualStateGroup) {
@@ -1533,6 +1756,84 @@ void CleanupCustomizations(InstanceHandle handle) {
 
         g_elementsCustomizationState.erase(it);
     }
+}
+
+using StyleConstant = std::pair<std::wstring, std::wstring>;
+using StyleConstants = std::vector<StyleConstant>;
+
+StyleConstants LoadStyleConstants() {
+    StyleConstants result;
+
+    for (int i = 0;; i++) {
+        string_setting_unique_ptr constantSetting(
+            Wh_GetStringSetting(L"styleConstants[%d]", i));
+        if (!*constantSetting.get()) {
+            break;
+        }
+
+        // Skip if commented.
+        if (constantSetting[0] == L'/' && constantSetting[1] == L'/') {
+            continue;
+        }
+
+        std::wstring_view constant = constantSetting.get();
+
+        auto eqPos = constant.find(L'=');
+        if (eqPos == constant.npos) {
+            Wh_Log(L"Skipping entry with no '=': %.*s",
+                   static_cast<int>(constant.length()), constant.data());
+            continue;
+        }
+
+        auto key = TrimStringView(constant.substr(0, eqPos));
+        auto val = TrimStringView(constant.substr(eqPos + 1));
+
+        result.push_back({std::wstring(key), std::wstring(val)});
+    }
+
+    // Reverse the order to allow overriding definitions with the same name.
+    std::reverse(result.begin(), result.end());
+
+    // Sort by name length to replace long names first.
+    std::stable_sort(result.begin(), result.end(),
+                     [](const StyleConstant& a, const StyleConstant& b) {
+                         return a.first.size() > b.first.size();
+                     });
+
+    return result;
+}
+
+std::wstring ApplyStyleConstants(std::wstring_view style,
+                                 const StyleConstants& styleConstants) {
+    std::wstring result;
+
+    size_t lastPos = 0;
+    size_t findPos;
+
+    while ((findPos = style.find('$', lastPos)) != style.npos) {
+        result.append(style, lastPos, findPos - lastPos);
+
+        const StyleConstant* constant = nullptr;
+        for (const auto& s : styleConstants) {
+            if (s.first == style.substr(findPos + 1, s.first.size())) {
+                constant = &s;
+                break;
+            }
+        }
+
+        if (constant) {
+            result += constant->second;
+            lastPos = findPos + 1 + constant->first.size();
+        } else {
+            result += '$';
+            lastPos = findPos + 1;
+        }
+    }
+
+    // Care for the rest after last occurrence.
+    result += style.substr(lastPos);
+
+    return result;
 }
 
 ElementMatcher ElementMatcherFromString(std::wstring_view str) {
@@ -1720,11 +2021,18 @@ void AddElementCustomizationRules(std::wstring_view target,
         std::move(elementCustomizationRules));
 }
 
-bool ProcessSingleTargetStylesFromSettings(int index) {
+bool ProcessSingleTargetStylesFromSettings(
+    int index,
+    const StyleConstants& styleConstants) {
     string_setting_unique_ptr targetStringSetting(
         Wh_GetStringSetting(L"controlStyles[%d].target", index));
     if (!*targetStringSetting.get()) {
         return false;
+    }
+
+    // Skip if commented.
+    if (targetStringSetting[0] == L'/' && targetStringSetting[1] == L'/') {
+        return true;
     }
 
     Wh_Log(L"Processing styles for %s", targetStringSetting.get());
@@ -1743,7 +2051,8 @@ bool ProcessSingleTargetStylesFromSettings(int index) {
             continue;
         }
 
-        styles.push_back(styleSetting.get());
+        styles.push_back(
+            ApplyStyleConstants(styleSetting.get(), styleConstants));
     }
 
     if (styles.size() > 0) {
@@ -1763,15 +2072,22 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeUnified;
     } else if (wcscmp(themeName, L"10JumpLists") == 0) {
         theme = &g_theme10JumpLists;
+    } else if (wcscmp(themeName, L"Matter") == 0) {
+        theme = &g_themeMatter;
     }
     Wh_FreeStringSetting(themeName);
+
+    StyleConstants styleConstants = LoadStyleConstants();
 
     if (theme) {
         for (const auto& themeTargetStyle : theme->targetStyles) {
             try {
-                std::vector<std::wstring> styles{
-                    themeTargetStyle.styles.begin(),
-                    themeTargetStyle.styles.end()};
+                std::vector<std::wstring> styles;
+                styles.reserve(themeTargetStyle.styles.size());
+                for (const auto& s : themeTargetStyle.styles) {
+                    styles.push_back(ApplyStyleConstants(s, styleConstants));
+                }
+
                 AddElementCustomizationRules(themeTargetStyle.target,
                                              std::move(styles));
             } catch (winrt::hresult_error const& ex) {
@@ -1784,7 +2100,7 @@ void ProcessAllStylesFromSettings() {
 
     for (int i = 0;; i++) {
         try {
-            if (!ProcessSingleTargetStylesFromSettings(i)) {
+            if (!ProcessSingleTargetStylesFromSettings(i, styleConstants)) {
                 break;
             }
         } catch (winrt::hresult_error const& ex) {
