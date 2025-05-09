@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-09T18:11:51.000Z</updated>
+    <updated>2025-05-09T19:36:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#d01044de4128b7fafc768e340b116b2c129b660a</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2025-05-09T19:36:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added style constants which can be defined once and used in multiple styles.</li>
+<li>Improved handling of commented targets and styles (starting with <code>//</code>), and added details about this in the mod's description.</li>
+<li>Added the first theme: Minimal Explorer11!</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.2]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#c34430995b5cd76960f30692a94afba87a2f4215</id>
@@ -367,25 +382,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>barry</name>
             <uri>https://github.com/barrypp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.9]]></title>
-        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#7ae6bca49f773eef9966ceedc8e9e2495f896463</id>
-        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
-        <updated>2025-04-15T20:43:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for long paths.</li>
-<li>Reduced footprint for processes which never use a file list control.</li>
-<li>Reduced footprint if "Everything" 1.4 isn't used. That's yet another reason to switch to <a href="https://www.voidtools.com/forum/viewtopic.php?t=9787">"Everything" 1.5 Alpha</a>, which is also about 20x faster at size query operations. Despite the "Alpha" label, it's stable for daily use according to users' feedback and my own experience.</li>
-<li>Fixed a crash in 32-bit programs when the "Use IEC terms" option is enabled and the "Use MB/GB for large files" option isn't enabled.</li>
-<li>Fixed Everything hanging in some cases if its executable name is Everything64.exe and not Everything.exe.</li>
-<li>Fixed slow file list loading when browsing slow network share folders.</li>
-<li>Fixed Explorer showing incorrect operation sizes in some cases, such as when extracting files from a 7-Zip archive.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
