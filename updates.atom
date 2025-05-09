@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-09T12:01:52.000Z</updated>
+    <updated>2025-05-09T16:50:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#f8c259486b46a48a4fd3d8ddc0dee2ee98a4b4e1</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
+        <updated>2025-05-09T16:50:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The mod no longer permanently changes the system auto-hide settings.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+<li>Fixed a possible crash on Windows startup (only observed in Windows 10).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.4]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#29917c376199d3312e355f1b001dc3108040b7ca</id>
@@ -372,20 +387,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.4.2]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#afa6754ba136a6adbf459f0386bc7f13c68a707c</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-04-14T23:17:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Apply a workaround solution for background effects in windows Game Bar transparent overlay </li>
-<li>Limit mod unloading to appropriate windows, fixes a bug during BlurBehind effect unloading</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

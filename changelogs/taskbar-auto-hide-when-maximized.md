@@ -1,3 +1,9 @@
+## 1.2.3 ([May 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f8c259486b46a48a4fd3d8ddc0dee2ee98a4b4e1/mods/taskbar-auto-hide-when-maximized.wh.cpp))
+
+* The mod no longer permanently changes the system auto-hide settings.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+* Fixed a possible crash on Windows startup (only observed in Windows 10).
+
 ## 1.2.2 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c2a94e3b3f0465445cf6d789a48b2cd561fb8242/mods/taskbar-auto-hide-when-maximized.wh.cpp))
 
 * Hide the taskbar for fullscreen windows for the "Auto-hide only when a window is maximized" mode.
