@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-10T11:51:39.000Z</updated>
+    <updated>2025-05-10T16:03:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#5e41b17208d957cf8b3dbfcc837c24ceb2e2eaa7</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2025-05-10T16:03:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option for customizing text trimming (ellipsis/clip).</li>
+<li>Added an option to hide the running indicator by setting the running indicator height to -1.</li>
+<li>Improved compatibility with the "Taskbar height and icon size" mod.</li>
+<li>Fixed the mod not applying on startup in some cases.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Size 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-size#c9b1f1bef25be1607f4960ec5b156d8ab661ec66</id>
@@ -364,23 +381,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>rounk-ctrl</name>
             <uri>https://github.com/rounk-ctrl</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CEF/Spotify Tweaks 0.9]]></title>
-        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#1d248fdd4964e037fc00cb9799cd5fb55fe92f77</id>
-        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
-        <updated>2025-04-20T14:49:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for Spotify 1.2.62</li>
-<li>Fix the <code>query()</code> API function not getting the latest option changes</li>
-<li>Now this mod uses a more proper way of changing the minimum window size</li>
-<li>JavaScript <code>window.resizeTo()</code> should work fine for smaller sizes, and the resize cursor should always be shown when hovering over window borders</li>
-<li>As a result, this feature no longer works on Spotify versions older than 1.1.71</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

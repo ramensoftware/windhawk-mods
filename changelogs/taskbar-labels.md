@@ -1,3 +1,11 @@
+## 1.4.1 ([May 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5e41b17208d957cf8b3dbfcc837c24ceb2e2eaa7/mods/taskbar-labels.wh.cpp))
+
+* Added an option for customizing text trimming (ellipsis/clip).
+* Added an option to hide the running indicator by setting the running indicator height to -1.
+* Improved compatibility with the "Taskbar height and icon size" mod.
+* Fixed the mod not applying on startup in some cases.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.4 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f235abdd918c4639a7631e9e228399b22c0b734b/mods/taskbar-labels.wh.cpp))
 
 * Added an option to customize the font family of the labels.
