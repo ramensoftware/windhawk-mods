@@ -3766,6 +3766,32 @@
                 "version": "1.1.2"
             }
         },
+        "taskbar-thumbnail-size": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1746877899000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1746877899000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Customize the size of the new taskbar thumbnails in Windows 11",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Thumbnail Size",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-thumbnails": {
             "details": {
                 "defaultSorting": 15080,

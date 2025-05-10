@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-09T19:36:04.000Z</updated>
+    <updated>2025-05-10T11:51:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Size 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-size#c9b1f1bef25be1607f4960ec5b156d8ab661ec66</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-size"/>
+        <updated>2025-05-10T11:51:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarthumbnailsize">Taskbar Thumbnail Size</h1>
+<p>Customize the size of the new taskbar thumbnails in Windows 11.</p>
+<p>For older Windows versions, the size of taskbar thumbnails can be changed via the registry:</p>
+<ul>
+<li><a href="https://www.elevenforum.com/t/change-size-of-taskbar-thumbnail-previews-in-windows-11.6340/">Change Size of Taskbar Thumbnail Previews in Windows
+11</a>
+(before Windows 11 version 24H2)</li>
+<li><a href="https://www.tenforums.com/tutorials/26105-change-size-taskbar-thumbnails-windows-10-a.html">How to Change the Size of Taskbar Thumbnails in Windows
+10</a></li>
+</ul>
+<p><img src="https://i.imgur.com/nGxrBYG.png" alt="Demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.1]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#d01044de4128b7fafc768e340b116b2c129b660a</id>
@@ -360,28 +381,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chinese IME fixed mode 1.0.4]]></title>
-        <id>https://windhawk.net/mods/chinese-ime-fixed-mode#52dd9956bf33a98494b675899e959a6aaf4f16ce</id>
-        <link href="https://windhawk.net/mods/chinese-ime-fixed-mode"/>
-        <updated>2025-04-19T15:56:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="forcechineseimemode">Force Chinese IME Mode | 强制中文输入法</h1>
-<h2 id="baseonhttpswindhawknetmodsforcechineseimev101">base on https://windhawk.net/mods/force-chinese-ime v1.0.1</h2>
-<p>set<em>IME</em>mode trigger by MSUIM.Msg.Private</p>
-<h2 id="feature">Feature | 功能</h2>
-<p>This mod forces the Microsoft Pinyin IME to stay in Chinese input mode, preventing unwanted mode switches.<br />
-这个 mod 强制微软拼音输入法保持在中文输入模式，防止出现不必要的模式切换。</p>
-<h3 id="before">Before | 使用前</h3>
-<p>The input mode often switches irregular while using Microsoft Pinyin IME.<br />
-使用微软拼音输入法时输入模式经常无规则切换。</p>
-<h3 id="after">After | 使用后</h3>
-<p>It can ensure that when using the Microsoft Pinyin IME, English will never be entered using the input box.<br />
-可以确保在微软拼音输入法的时候，使用输入框永远不会输入英文。</p>]]></content>
-        <author>
-            <name>barry</name>
-            <uri>https://github.com/barrypp</uri>
         </author>
     </entry>
 </feed>
