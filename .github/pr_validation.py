@@ -350,6 +350,8 @@ def main():
     warnings = 0
 
     paths = [Path(p) for p in json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
+    if len(paths) == 0:
+        sys.exit('No files changed')
 
     added_count = int(os.environ['ADDED_FILES_COUNT'])
     modified_count = int(os.environ['MODIFIED_FILES_COUNT'])
