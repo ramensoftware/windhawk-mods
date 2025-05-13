@@ -5,12 +5,12 @@
     "mods": {
         "accent-color-sync": {
             "details": {
-                "defaultSorting": 3130,
+                "defaultSorting": 3190,
                 "published": 1721392103000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1729667984000,
-                "users": 313
+                "users": 319
             },
             "metadata": {
                 "architecture": [
@@ -33,7 +33,7 @@
                 "defaultSorting": 2470,
                 "published": 1694438292000,
                 "rating": 10,
-                "ratingUsers": 1,
+                "ratingUsers": 2,
                 "updated": 1694674676000,
                 "users": 247
             },
@@ -53,12 +53,12 @@
         },
         "aerexplorer": {
             "details": {
-                "defaultSorting": 14000,
+                "defaultSorting": 13980,
                 "published": 1713177639000,
                 "rating": 10,
                 "ratingUsers": 25,
                 "updated": 1743417910000,
-                "users": 1400
+                "users": 1398
             },
             "metadata": {
                 "author": "aubymori",
@@ -74,12 +74,12 @@
         },
         "aero-flyout-fix": {
             "details": {
-                "defaultSorting": 11090,
+                "defaultSorting": 10990,
                 "published": 1702982459000,
                 "rating": 10,
-                "ratingUsers": 7,
+                "ratingUsers": 6,
                 "updated": 1724502505000,
-                "users": 1109
+                "users": 1099
             },
             "metadata": {
                 "architecture": [
@@ -99,12 +99,12 @@
         },
         "aero-tray": {
             "details": {
-                "defaultSorting": 7866,
+                "defaultSorting": 7911,
                 "published": 1702929559000,
                 "rating": 9,
                 "ratingUsers": 3,
                 "updated": 1718988570000,
-                "users": 874
+                "users": 879
             },
             "metadata": {
                 "architecture": [
@@ -123,12 +123,12 @@
         },
         "alt-tab-delayer": {
             "details": {
-                "defaultSorting": 12890,
+                "defaultSorting": 13180,
                 "published": 1737657431000,
                 "rating": 10,
-                "ratingUsers": 29,
+                "ratingUsers": 32,
                 "updated": 1746379186000,
-                "users": 1289
+                "users": 1318
             },
             "metadata": {
                 "architecture": [
@@ -147,12 +147,12 @@
         },
         "alt-tab-per-monitor": {
             "details": {
-                "defaultSorting": 27160,
+                "defaultSorting": 27410,
                 "published": 1730148779000,
                 "rating": 10,
-                "ratingUsers": 42,
+                "ratingUsers": 43,
                 "updated": 1738869843000,
-                "users": 2716
+                "users": 2741
             },
             "metadata": {
                 "architecture": [
@@ -195,12 +195,12 @@
         },
         "basic-themer": {
             "details": {
-                "defaultSorting": 4160,
+                "defaultSorting": 4190,
                 "published": 1719423839000,
                 "rating": 10,
                 "ratingUsers": 5,
                 "updated": 1720265128000,
-                "users": 416
+                "users": 419
             },
             "metadata": {
                 "architecture": [
@@ -219,12 +219,12 @@
         },
         "ce-disable-process-button-flashing": {
             "details": {
-                "defaultSorting": 110,
+                "defaultSorting": 120,
                 "published": 1717491726000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1717498560000,
-                "users": 11
+                "users": 12
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -242,12 +242,12 @@
         },
         "cef-titlebar-enabler-universal": {
             "details": {
-                "defaultSorting": 13680,
+                "defaultSorting": 13970,
                 "published": 1734116516000,
                 "rating": 10,
-                "ratingUsers": 21,
+                "ratingUsers": 20,
                 "updated": 1745160543000,
-                "users": 1368
+                "users": 1397
             },
             "metadata": {
                 "author": "Ingan121",
@@ -266,12 +266,12 @@
         },
         "center-titlebar": {
             "details": {
-                "defaultSorting": 7870,
+                "defaultSorting": 7860,
                 "published": 1693684488000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1693684488000,
-                "users": 787
+                "users": 786
             },
             "metadata": {
                 "author": "rounk-ctrl",
@@ -286,12 +286,12 @@
         },
         "change-explorer-default-location": {
             "details": {
-                "defaultSorting": 3390,
+                "defaultSorting": 3440,
                 "published": 1718734451000,
                 "rating": 10,
                 "ratingUsers": 5,
                 "updated": 1718734451000,
-                "users": 339
+                "users": 344
             },
             "metadata": {
                 "architecture": [
@@ -310,12 +310,12 @@
         },
         "chinese-ime-fixed-mode": {
             "details": {
-                "defaultSorting": 290,
+                "defaultSorting": 330,
                 "published": 1745078170000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1745078170000,
-                "users": 29
+                "users": 33
             },
             "metadata": {
                 "author": "barry",
@@ -331,12 +331,12 @@
         },
         "chrome-ui-tweaks": {
             "details": {
-                "defaultSorting": 6600,
+                "defaultSorting": 6670,
                 "published": 1714820259000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1714820259000,
-                "users": 660
+                "users": 667
             },
             "metadata": {
                 "architecture": [
@@ -354,12 +354,12 @@
         },
         "chrome-wheel-scroll-tabs": {
             "details": {
-                "defaultSorting": 85350,
+                "defaultSorting": 85590,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 109,
+                "ratingUsers": 113,
                 "updated": 1732217907000,
-                "users": 8535
+                "users": 8559
             },
             "featured": true,
             "metadata": {
@@ -381,12 +381,12 @@
         },
         "chromium-native-titlebar": {
             "details": {
-                "defaultSorting": 700,
+                "defaultSorting": 680,
                 "published": 1739537800000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1739582662000,
-                "users": 70
+                "users": 68
             },
             "metadata": {
                 "author": "Anixx",
@@ -405,12 +405,12 @@
         },
         "chromium-ncpaint-fix": {
             "details": {
-                "defaultSorting": 1044,
+                "defaultSorting": 1080,
                 "published": 1736070368000,
                 "rating": 6,
                 "ratingUsers": 1,
                 "updated": 1742992237000,
-                "users": 174
+                "users": 180
             },
             "metadata": {
                 "author": "Ingan121",
@@ -428,12 +428,12 @@
         },
         "classic-browser-fix": {
             "details": {
-                "defaultSorting": 792,
+                "defaultSorting": 819,
                 "published": 1706897392000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1736247128000,
-                "users": 88
+                "users": 91
             },
             "metadata": {
                 "author": "Anixx",
@@ -455,12 +455,12 @@
         },
         "classic-clock-button-behavior": {
             "details": {
-                "defaultSorting": 729,
+                "defaultSorting": 756,
                 "published": 1725724030000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1725724030000,
-                "users": 81
+                "users": 84
             },
             "metadata": {
                 "architecture": [
@@ -500,12 +500,12 @@
         },
         "classic-desktop-icons": {
             "details": {
-                "defaultSorting": 8100,
+                "defaultSorting": 8060,
                 "published": 1694937060000,
                 "rating": 10,
                 "ratingUsers": 5,
                 "updated": 1743361453000,
-                "users": 810
+                "users": 806
             },
             "metadata": {
                 "architecture": [
@@ -524,12 +524,12 @@
         },
         "classic-explorer-treeview": {
             "details": {
-                "defaultSorting": 4820,
+                "defaultSorting": 4900,
                 "published": 1708354597000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1736864594000,
-                "users": 482
+                "users": 490
             },
             "metadata": {
                 "architecture": [
@@ -589,12 +589,12 @@
         },
         "classic-maximized-windows-fix": {
             "details": {
-                "defaultSorting": 819,
+                "defaultSorting": 855,
                 "published": 1694245393000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1703577817000,
-                "users": 91
+                "users": 95
             },
             "metadata": {
                 "author": "ephemeralViolette",
@@ -643,12 +643,12 @@
         },
         "classic-start-menu-folders-icon": {
             "details": {
-                "defaultSorting": 810,
+                "defaultSorting": 846,
                 "published": 1738189438000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1738189438000,
-                "users": 90
+                "users": 94
             },
             "metadata": {
                 "author": "xalejandro",
@@ -663,12 +663,12 @@
         },
         "classic-taskbar-background-fix": {
             "details": {
-                "defaultSorting": 740,
+                "defaultSorting": 750,
                 "published": 1723893068000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1725517602000,
-                "users": 74
+                "users": 75
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -685,12 +685,12 @@
         },
         "classic-taskbar-buttons-lite": {
             "details": {
-                "defaultSorting": 1470,
+                "defaultSorting": 1540,
                 "published": 1708239757000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1737801083000,
-                "users": 147
+                "users": 154
             },
             "metadata": {
                 "author": "Anixx",
@@ -706,12 +706,12 @@
         },
         "classic-taskbar-buttons-lite-vs-without-spacing": {
             "details": {
-                "defaultSorting": 1110,
+                "defaultSorting": 1140,
                 "published": 1712417550000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1712417550000,
-                "users": 111
+                "users": 114
             },
             "metadata": {
                 "author": "OrthodoxWin32",
@@ -727,12 +727,12 @@
         },
         "classic-taskbar-context-menu": {
             "details": {
-                "defaultSorting": 3510,
+                "defaultSorting": 3540,
                 "published": 1676627538000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1677657525000,
-                "users": 351
+                "users": 354
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -748,12 +748,12 @@
         },
         "classic-taskdlg-fix": {
             "details": {
-                "defaultSorting": 1710,
+                "defaultSorting": 1719,
                 "published": 1699388969000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1699388969000,
-                "users": 190
+                "users": 191
             },
             "metadata": {
                 "author": "aubymori",
@@ -768,12 +768,12 @@
         },
         "classic-theme-enable": {
             "details": {
-                "defaultSorting": 1600,
+                "defaultSorting": 1620,
                 "published": 1706702888000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1731151885000,
-                "users": 160
+                "users": 162
             },
             "metadata": {
                 "author": "Anixx",
@@ -789,12 +789,12 @@
         },
         "classic-theme-enable-with-extended-compatibility": {
             "details": {
-                "defaultSorting": 1152,
+                "defaultSorting": 1188,
                 "published": 1724346656000,
                 "rating": 9,
                 "ratingUsers": 2,
                 "updated": 1728717182000,
-                "users": 128
+                "users": 132
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -832,12 +832,12 @@
         },
         "classic-theme-transparency-fix": {
             "details": {
-                "defaultSorting": 2555,
+                "defaultSorting": 2632,
                 "published": 1711437875000,
                 "rating": 7,
                 "ratingUsers": 2,
                 "updated": 1711437875000,
-                "users": 365
+                "users": 376
             },
             "metadata": {
                 "author": "anixx",
@@ -853,12 +853,12 @@
         },
         "classic-uwp-fix": {
             "details": {
-                "defaultSorting": 2960,
+                "defaultSorting": 2980,
                 "published": 1706895197000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1709191248000,
-                "users": 296
+                "users": 298
             },
             "metadata": {
                 "architecture": [
@@ -880,12 +880,12 @@
         },
         "clientedge-in-apps": {
             "details": {
-                "defaultSorting": 2061,
+                "defaultSorting": 2115,
                 "published": 1708969659000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1720265473000,
-                "users": 229
+                "users": 235
             },
             "metadata": {
                 "author": "anixx",
@@ -900,12 +900,12 @@
         },
         "console-error-to-ding": {
             "details": {
-                "defaultSorting": 666,
+                "defaultSorting": 684,
                 "published": 1740722760000,
                 "rating": 9,
                 "ratingUsers": 3,
                 "updated": 1740722760000,
-                "users": 74
+                "users": 76
             },
             "metadata": {
                 "author": "aubymori",
@@ -921,12 +921,12 @@
         },
         "custom-desktop-watermark": {
             "details": {
-                "defaultSorting": 2180,
+                "defaultSorting": 2190,
                 "published": 1726697955000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1731717697000,
-                "users": 218
+                "users": 219
             },
             "metadata": {
                 "architecture": [
@@ -945,12 +945,12 @@
         },
         "custom-shutdown-dialog": {
             "details": {
-                "defaultSorting": 2330,
+                "defaultSorting": 2106,
                 "published": 1699159361000,
-                "rating": 10,
-                "ratingUsers": 1,
+                "rating": 0,
+                "ratingUsers": 0,
                 "updated": 1731264428000,
-                "users": 233
+                "users": 234
             },
             "metadata": {
                 "architecture": [
@@ -968,12 +968,12 @@
         },
         "dark-menus": {
             "details": {
-                "defaultSorting": 59750,
+                "defaultSorting": 60120,
                 "published": 1733519825000,
                 "rating": 10,
-                "ratingUsers": 62,
+                "ratingUsers": 61,
                 "updated": 1737403027000,
-                "users": 5975
+                "users": 6012
             },
             "metadata": {
                 "author": "Mgg Sk",
@@ -988,12 +988,12 @@
         },
         "dark-theme-browser-colors-fix": {
             "details": {
-                "defaultSorting": 1000,
+                "defaultSorting": 1050,
                 "published": 1746344993000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1746344993000,
-                "users": 100
+                "users": 105
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -1042,12 +1042,12 @@
         },
         "desktop-watermark-tweaks": {
             "details": {
-                "defaultSorting": 2740,
+                "defaultSorting": 2710,
                 "published": 1714023231000,
                 "rating": 10,
-                "ratingUsers": 6,
+                "ratingUsers": 5,
                 "updated": 1714023231000,
-                "users": 274
+                "users": 271
             },
             "metadata": {
                 "architecture": [
@@ -1065,12 +1065,12 @@
         },
         "disable-feedback-hub-hotkey": {
             "details": {
-                "defaultSorting": 29150,
+                "defaultSorting": 29310,
                 "published": 1677930361000,
                 "rating": 10,
-                "ratingUsers": 26,
+                "ratingUsers": 27,
                 "updated": 1677930361000,
-                "users": 2915
+                "users": 2931
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -1085,12 +1085,12 @@
         },
         "disable-immersive-context-menus": {
             "details": {
-                "defaultSorting": 7220,
+                "defaultSorting": 7270,
                 "published": 1678030978000,
                 "rating": 10,
                 "ratingUsers": 8,
                 "updated": 1678030978000,
-                "users": 722
+                "users": 727
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -1105,12 +1105,12 @@
         },
         "disable-ms-teams-hotkey": {
             "details": {
-                "defaultSorting": 576,
+                "defaultSorting": 594,
                 "published": 1740500380000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1740500380000,
-                "users": 64
+                "users": 66
             },
             "metadata": {
                 "author": "Yves Goergen",
@@ -1126,12 +1126,12 @@
         },
         "disable-navigation-bar": {
             "details": {
-                "defaultSorting": 1230,
+                "defaultSorting": 1220,
                 "published": 1677864781000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1677864781000,
-                "users": 123
+                "users": 122
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -1146,12 +1146,12 @@
         },
         "disable-office-hotkeys": {
             "details": {
-                "defaultSorting": 6156,
+                "defaultSorting": 6228,
                 "published": 1677930544000,
                 "rating": 9,
                 "ratingUsers": 7,
                 "updated": 1677930544000,
-                "users": 684
+                "users": 692
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -1191,12 +1191,12 @@
         },
         "disable-virtual-desktop-transition": {
             "details": {
-                "defaultSorting": 1278,
+                "defaultSorting": 1296,
                 "published": 1733758433000,
                 "rating": 9,
                 "ratingUsers": 8,
                 "updated": 1743419647000,
-                "users": 142
+                "users": 144
             },
             "metadata": {
                 "architecture": [
@@ -1218,12 +1218,12 @@
         },
         "disk-pie-chart": {
             "details": {
-                "defaultSorting": 5230,
+                "defaultSorting": 5360,
                 "published": 1739611048000,
                 "rating": 10,
                 "ratingUsers": 7,
                 "updated": 1739611048000,
-                "users": 523
+                "users": 536
             },
             "metadata": {
                 "author": "aubymori",
@@ -1239,12 +1239,12 @@
         },
         "dot-hide": {
             "details": {
-                "defaultSorting": 5570,
+                "defaultSorting": 5550,
                 "published": 1705055192000,
                 "rating": 10,
                 "ratingUsers": 6,
                 "updated": 1705055192000,
-                "users": 557
+                "users": 555
             },
             "metadata": {
                 "author": "Tomer Zait (realgam3)",
@@ -1261,12 +1261,12 @@
         },
         "dwm-ghost-mods": {
             "details": {
-                "defaultSorting": 1930,
+                "defaultSorting": 1950,
                 "published": 1690150313000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1703564688000,
-                "users": 193
+                "users": 195
             },
             "metadata": {
                 "architecture": [
@@ -1285,12 +1285,12 @@
         },
         "dwm-unextend-frames": {
             "details": {
-                "defaultSorting": 2410,
+                "defaultSorting": 2490,
                 "published": 1700542256000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1743591500000,
-                "users": 241
+                "users": 249
             },
             "metadata": {
                 "author": "aubymori",
@@ -1305,12 +1305,12 @@
         },
         "edge-hot-corner-desktop-switch": {
             "details": {
-                "defaultSorting": 300,
+                "defaultSorting": 280,
                 "published": 1746050092000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1746095345000,
-                "users": 30
+                "users": 28
             },
             "metadata": {
                 "author": "Sanskar Prasad",
@@ -1325,12 +1325,12 @@
         },
         "edge-window-tab-manager-block": {
             "details": {
-                "defaultSorting": 6300,
+                "defaultSorting": 6380,
                 "published": 1720468060000,
                 "rating": 10,
                 "ratingUsers": 6,
                 "updated": 1720468060000,
-                "users": 630
+                "users": 638
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -1347,12 +1347,12 @@
         },
         "eradicate-immersive-menus": {
             "details": {
-                "defaultSorting": 15740,
+                "defaultSorting": 15810,
                 "published": 1699155263000,
                 "rating": 10,
-                "ratingUsers": 15,
+                "ratingUsers": 14,
                 "updated": 1713243502000,
-                "users": 1574
+                "users": 1581
             },
             "metadata": {
                 "author": "aubymori",
@@ -1377,12 +1377,12 @@
         },
         "explorer-32px-icons": {
             "details": {
-                "defaultSorting": 4080,
+                "defaultSorting": 4130,
                 "published": 1699148737000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1699148737000,
-                "users": 408
+                "users": 413
             },
             "metadata": {
                 "author": "aubymori",
@@ -1397,12 +1397,12 @@
         },
         "explorer-context-menu-classic": {
             "details": {
-                "defaultSorting": 97690,
+                "defaultSorting": 98790,
                 "published": 1728722786000,
                 "rating": 10,
                 "ratingUsers": 96,
                 "updated": 1741294863000,
-                "users": 9769
+                "users": 9879
             },
             "metadata": {
                 "architecture": [
@@ -1422,12 +1422,12 @@
         },
         "explorer-details-better-file-sizes": {
             "details": {
-                "defaultSorting": 363890,
+                "defaultSorting": 366380,
                 "published": 1730231151000,
                 "rating": 10,
-                "ratingUsers": 496,
+                "ratingUsers": 500,
                 "updated": 1744749837000,
-                "users": 36389
+                "users": 36638
             },
             "featured": true,
             "metadata": {
@@ -1450,12 +1450,12 @@
         },
         "explorer-frame-classic": {
             "details": {
-                "defaultSorting": 43930,
+                "defaultSorting": 44180,
                 "published": 1696691422000,
                 "rating": 10,
-                "ratingUsers": 67,
+                "ratingUsers": 68,
                 "updated": 1743110448000,
-                "users": 4393
+                "users": 4418
             },
             "metadata": {
                 "architecture": [
@@ -1476,12 +1476,12 @@
         },
         "explorer-name-windows": {
             "details": {
-                "defaultSorting": 4780,
+                "defaultSorting": 4810,
                 "published": 1712874444000,
                 "rating": 10,
                 "ratingUsers": 8,
                 "updated": 1712874444000,
-                "users": 478
+                "users": 481
             },
             "metadata": {
                 "author": "m417z",
@@ -1499,12 +1499,12 @@
         },
         "explorer-toolbar-links-item": {
             "details": {
-                "defaultSorting": 1130,
+                "defaultSorting": 1190,
                 "published": 1743883131000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1744339309000,
-                "users": 113
+                "users": 119
             },
             "metadata": {
                 "architecture": [
@@ -1525,12 +1525,12 @@
         },
         "explorerframe-fixes-for-win11-22h2plus": {
             "details": {
-                "defaultSorting": 10760,
+                "defaultSorting": 10810,
                 "published": 1723726056000,
                 "rating": 10,
-                "ratingUsers": 8,
+                "ratingUsers": 9,
                 "updated": 1739658844000,
-                "users": 1076
+                "users": 1081
             },
             "metadata": {
                 "architecture": [
@@ -1549,12 +1549,12 @@
         },
         "extension-change-no-warning": {
             "details": {
-                "defaultSorting": 50120,
+                "defaultSorting": 50500,
                 "published": 1713878371000,
                 "rating": 10,
-                "ratingUsers": 67,
+                "ratingUsers": 68,
                 "updated": 1713878371000,
-                "users": 5012
+                "users": 5050
             },
             "metadata": {
                 "author": "m417z",
@@ -1571,12 +1571,12 @@
         },
         "fake-explorer-path": {
             "details": {
-                "defaultSorting": 2250,
+                "defaultSorting": 2260,
                 "published": 1725191708000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1725195955000,
-                "users": 225
+                "users": 226
             },
             "metadata": {
                 "author": "Anixx",
@@ -1591,12 +1591,12 @@
         },
         "fake-high-contrast": {
             "details": {
-                "defaultSorting": 350,
+                "defaultSorting": 370,
                 "published": 1707753405000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1707753405000,
-                "users": 35
+                "users": 37
             },
             "metadata": {
                 "author": "Ingan121",
@@ -1637,12 +1637,12 @@
         },
         "file-explorer-remove-suffixes": {
             "details": {
-                "defaultSorting": 16790,
+                "defaultSorting": 17120,
                 "published": 1740955143000,
                 "rating": 10,
                 "ratingUsers": 36,
                 "updated": 1740955143000,
-                "users": 1679
+                "users": 1712
             },
             "metadata": {
                 "author": "m417z",
@@ -1659,12 +1659,12 @@
         },
         "fix-basic-caption-text": {
             "details": {
-                "defaultSorting": 4380,
+                "defaultSorting": 4440,
                 "published": 1700125078000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1731656219000,
-                "users": 438
+                "users": 444
             },
             "metadata": {
                 "author": "aubymori",
@@ -1680,12 +1680,12 @@
         },
         "fix-darkmode-listviews": {
             "details": {
-                "defaultSorting": 20490,
+                "defaultSorting": 20480,
                 "published": 1697208051000,
                 "rating": 10,
                 "ratingUsers": 14,
                 "updated": 1697208051000,
-                "users": 2049
+                "users": 2048
             },
             "metadata": {
                 "author": "Reabstraction",
@@ -1701,12 +1701,12 @@
         },
         "fix-qt-scrollbar-grippers": {
             "details": {
-                "defaultSorting": 585,
+                "defaultSorting": 594,
                 "published": 1722712367000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1729865391000,
-                "users": 65
+                "users": 66
             },
             "metadata": {
                 "author": "kawapure",
@@ -1725,12 +1725,12 @@
         },
         "fix-strips": {
             "details": {
-                "defaultSorting": 207,
+                "defaultSorting": 216,
                 "published": 1726033105000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1726033105000,
-                "users": 23
+                "users": 24
             },
             "metadata": {
                 "author": "OliveIsTyping",
@@ -1746,12 +1746,12 @@
         },
         "flight-simulator-focus-helper": {
             "details": {
-                "defaultSorting": 279,
+                "defaultSorting": 297,
                 "published": 1688766152000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1689709104000,
-                "users": 31
+                "users": 33
             },
             "metadata": {
                 "author": "m417z",
@@ -1790,12 +1790,12 @@
         },
         "force-thick-frames": {
             "details": {
-                "defaultSorting": 9420,
+                "defaultSorting": 9460,
                 "published": 1688844521000,
                 "rating": 10,
-                "ratingUsers": 3,
+                "ratingUsers": 2,
                 "updated": 1688844521000,
-                "users": 942
+                "users": 946
             },
             "metadata": {
                 "author": "Alcatel",
@@ -1813,12 +1813,12 @@
         },
         "hide-action-center-icon": {
             "details": {
-                "defaultSorting": 780,
+                "defaultSorting": 770,
                 "published": 1710579606000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1735906077000,
-                "users": 78
+                "users": 77
             },
             "metadata": {
                 "author": "anixx",
@@ -1833,12 +1833,12 @@
         },
         "hide-search-bar": {
             "details": {
-                "defaultSorting": 3591,
+                "defaultSorting": 3618,
                 "published": 1676481572000,
                 "rating": 9,
                 "ratingUsers": 3,
                 "updated": 1677950123000,
-                "users": 399
+                "users": 402
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -1854,12 +1854,12 @@
         },
         "hold-teams-meeting-thumbnail-in-place": {
             "details": {
-                "defaultSorting": 387,
+                "defaultSorting": 396,
                 "published": 1728664619000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1728664619000,
-                "users": 43
+                "users": 44
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -1877,12 +1877,12 @@
         },
         "icon-resource-redirect": {
             "details": {
-                "defaultSorting": 15885,
+                "defaultSorting": 15966,
                 "published": 1713005692000,
                 "rating": 9,
-                "ratingUsers": 34,
+                "ratingUsers": 35,
                 "updated": 1731273169000,
-                "users": 1765
+                "users": 1774
             },
             "metadata": {
                 "author": "m417z",
@@ -1900,12 +1900,12 @@
         },
         "icon16bitfix": {
             "details": {
-                "defaultSorting": 3840,
+                "defaultSorting": 3860,
                 "published": 1708239950000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1739622078000,
-                "users": 384
+                "users": 386
             },
             "metadata": {
                 "author": "anixx",
@@ -1920,12 +1920,12 @@
         },
         "ignore-focus-loss": {
             "details": {
-                "defaultSorting": 8170,
+                "defaultSorting": 8200,
                 "published": 1673179779000,
                 "rating": 10,
                 "ratingUsers": 8,
                 "updated": 1673179779000,
-                "users": 817
+                "users": 820
             },
             "metadata": {
                 "author": "Vasher",
@@ -1938,12 +1938,12 @@
         },
         "isretailready-false": {
             "details": {
-                "defaultSorting": 207,
+                "defaultSorting": 198,
                 "published": 1718890611000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1718890611000,
-                "users": 23
+                "users": 22
             },
             "metadata": {
                 "author": "Jevil7452",
@@ -1958,12 +1958,12 @@
         },
         "legacy-alt-tab": {
             "details": {
-                "defaultSorting": 1143,
+                "defaultSorting": 1161,
                 "published": 1723297622000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1736441410000,
-                "users": 127
+                "users": 129
             },
             "metadata": {
                 "author": "Anixx",
@@ -1978,12 +1978,12 @@
         },
         "legacy-file-copy": {
             "details": {
-                "defaultSorting": 16360,
+                "defaultSorting": 16490,
                 "published": 1675346734000,
                 "rating": 10,
-                "ratingUsers": 13,
+                "ratingUsers": 12,
                 "updated": 1675346734000,
-                "users": 1636
+                "users": 1649
             },
             "metadata": {
                 "architecture": [
@@ -2002,12 +2002,12 @@
         },
         "legacy-search-bar": {
             "details": {
-                "defaultSorting": 1179,
+                "defaultSorting": 1188,
                 "published": 1700726411000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1700726411000,
-                "users": 131
+                "users": 132
             },
             "metadata": {
                 "author": "aubymori",
@@ -2022,12 +2022,12 @@
         },
         "lines-in-mmc": {
             "details": {
-                "defaultSorting": 870,
+                "defaultSorting": 880,
                 "published": 1725108288000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1725108584000,
-                "users": 87
+                "users": 88
             },
             "metadata": {
                 "author": "anixx",
@@ -2063,12 +2063,12 @@
         },
         "lm-mediakey-explorer-fix": {
             "details": {
-                "defaultSorting": 4100,
+                "defaultSorting": 4120,
                 "published": 1664663103000,
                 "rating": 10,
                 "ratingUsers": 7,
                 "updated": 1728139542000,
-                "users": 410
+                "users": 412
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -2084,12 +2084,12 @@
         },
         "lm-ppee-wow64": {
             "details": {
-                "defaultSorting": 1130,
+                "defaultSorting": 1140,
                 "published": 1696362574000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1696852054000,
-                "users": 113
+                "users": 114
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -2106,12 +2106,12 @@
         },
         "lm-regedit-multi-instance": {
             "details": {
-                "defaultSorting": 2910,
+                "defaultSorting": 2890,
                 "published": 1686183999000,
                 "rating": 10,
                 "ratingUsers": 8,
                 "updated": 1686183999000,
-                "users": 291
+                "users": 289
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -2127,12 +2127,12 @@
         },
         "lm-vmplayer-vnc": {
             "details": {
-                "defaultSorting": 570,
+                "defaultSorting": 580,
                 "published": 1672692734000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1672692734000,
-                "users": 57
+                "users": 58
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -2148,12 +2148,12 @@
         },
         "lm-vs-solution-icon": {
             "details": {
-                "defaultSorting": 1540,
+                "defaultSorting": 1580,
                 "published": 1650743841000,
                 "rating": 10,
                 "ratingUsers": 6,
                 "updated": 1660152079000,
-                "users": 154
+                "users": 158
             },
             "metadata": {
                 "author": "Mark Jansen",
@@ -2170,12 +2170,12 @@
         },
         "logon-logoff-shutdown-sounds": {
             "details": {
-                "defaultSorting": 19760,
+                "defaultSorting": 19900,
                 "published": 1725792150000,
                 "rating": 10,
-                "ratingUsers": 18,
+                "ratingUsers": 20,
                 "updated": 1738708669000,
-                "users": 1976
+                "users": 1990
             },
             "metadata": {
                 "author": "Toru the Red Fox",
@@ -2192,12 +2192,12 @@
         },
         "magnifier-mod": {
             "details": {
-                "defaultSorting": 18,
+                "defaultSorting": 27,
                 "published": 1737058005000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1737493649000,
-                "users": 2
+                "users": 3
             },
             "metadata": {
                 "author": "00face",
@@ -2214,12 +2214,12 @@
         },
         "maintain-flux-colour-temperature": {
             "details": {
-                "defaultSorting": 600,
+                "defaultSorting": 620,
                 "published": 1720345866000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1720345866000,
-                "users": 60
+                "users": 62
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -2236,12 +2236,12 @@
         },
         "modernize-folder-picker-dialog": {
             "details": {
-                "defaultSorting": 143100,
+                "defaultSorting": 143760,
                 "published": 1716835371000,
                 "rating": 10,
                 "ratingUsers": 118,
                 "updated": 1716835371000,
-                "users": 14310
+                "users": 14376
             },
             "metadata": {
                 "author": "aubymori",
@@ -2257,12 +2257,12 @@
         },
         "more-space-in-language-indicator": {
             "details": {
-                "defaultSorting": 710,
+                "defaultSorting": 720,
                 "published": 1680351727000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1680351727000,
-                "users": 71
+                "users": 72
             },
             "metadata": {
                 "author": "m417z",
@@ -2279,12 +2279,12 @@
         },
         "msg-box-font-fix": {
             "details": {
-                "defaultSorting": 11630,
+                "defaultSorting": 11750,
                 "published": 1693642476000,
                 "rating": 10,
-                "ratingUsers": 9,
+                "ratingUsers": 10,
                 "updated": 1740621373000,
-                "users": 1163
+                "users": 1175
             },
             "metadata": {
                 "author": "aubymori",
@@ -2300,12 +2300,12 @@
         },
         "mspaint-dark": {
             "details": {
-                "defaultSorting": 19848,
+                "defaultSorting": 19768,
                 "published": 1675042345000,
                 "rating": 8,
                 "ratingUsers": 21,
                 "updated": 1675107343000,
-                "users": 2481
+                "users": 2471
             },
             "metadata": {
                 "architecture": [
@@ -2348,12 +2348,12 @@
         },
         "no-focus-rectangle": {
             "details": {
-                "defaultSorting": 53230,
+                "defaultSorting": 53450,
                 "published": 1676392345000,
                 "rating": 10,
-                "ratingUsers": 100,
+                "ratingUsers": 102,
                 "updated": 1677162292000,
-                "users": 5323
+                "users": 5345
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -2369,12 +2369,12 @@
         },
         "no-hidden-cursor": {
             "details": {
-                "defaultSorting": 1520,
+                "defaultSorting": 1480,
                 "published": 1677399865000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1677399865000,
-                "users": 152
+                "users": 148
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -2386,12 +2386,12 @@
         },
         "no-run-icon": {
             "details": {
-                "defaultSorting": 4200,
+                "defaultSorting": 4270,
                 "published": 1699161562000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1699161562000,
-                "users": 420
+                "users": 427
             },
             "metadata": {
                 "author": "aubymori",
@@ -2406,12 +2406,12 @@
         },
         "no-taskbar-item-glow": {
             "details": {
-                "defaultSorting": 630,
+                "defaultSorting": 610,
                 "published": 1695580544000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1695580544000,
-                "users": 63
+                "users": 61
             },
             "metadata": {
                 "architecture": [
@@ -2449,12 +2449,12 @@
         },
         "notepad-dark-mode": {
             "details": {
-                "defaultSorting": 85780,
+                "defaultSorting": 86150,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 70,
                 "updated": 1646604429000,
-                "users": 8578
+                "users": 8615
             },
             "metadata": {
                 "author": "m417z",
@@ -2472,12 +2472,12 @@
         },
         "notepad-remove-launch-new-app-banner": {
             "details": {
-                "defaultSorting": 790,
+                "defaultSorting": 810,
                 "published": 1719859404000,
                 "rating": 10,
                 "ratingUsers": 3,
                 "updated": 1719859404000,
-                "users": 79
+                "users": 81
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -2494,12 +2494,12 @@
         },
         "notifications-placement": {
             "details": {
-                "defaultSorting": 35020,
+                "defaultSorting": 35170,
                 "published": 1725643905000,
                 "rating": 10,
                 "ratingUsers": 56,
                 "updated": 1735666754000,
-                "users": 3502
+                "users": 3517
             },
             "metadata": {
                 "architecture": [
@@ -2521,12 +2521,12 @@
         },
         "old-this-pc-commands": {
             "details": {
-                "defaultSorting": 7880,
+                "defaultSorting": 7870,
                 "published": 1702159772000,
                 "rating": 10,
-                "ratingUsers": 8,
+                "ratingUsers": 7,
                 "updated": 1725818997000,
-                "users": 788
+                "users": 787
             },
             "metadata": {
                 "architecture": [
@@ -2545,12 +2545,12 @@
         },
         "per-app-language-preferences": {
             "details": {
-                "defaultSorting": 666,
+                "defaultSorting": 693,
                 "published": 1731512140000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1739257911000,
-                "users": 74
+                "users": 77
             },
             "metadata": {
                 "architecture": [
@@ -2570,12 +2570,12 @@
         },
         "pinned-items-double-click": {
             "details": {
-                "defaultSorting": 5520,
+                "defaultSorting": 5580,
                 "published": 1682167233000,
                 "rating": 10,
                 "ratingUsers": 20,
                 "updated": 1745874255000,
-                "users": 552
+                "users": 558
             },
             "metadata": {
                 "architecture": [
@@ -2596,12 +2596,12 @@
         },
         "regedit-auto-trim-whitespace-on-navigation-bar": {
             "details": {
-                "defaultSorting": 1200,
+                "defaultSorting": 1230,
                 "published": 1717097416000,
                 "rating": 10,
                 "ratingUsers": 5,
                 "updated": 1717097416000,
-                "users": 120
+                "users": 123
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -2617,12 +2617,12 @@
         },
         "regedit-disable-beep": {
             "details": {
-                "defaultSorting": 680,
+                "defaultSorting": 710,
                 "published": 1717144071000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1717144071000,
-                "users": 68
+                "users": 71
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -2638,12 +2638,12 @@
         },
         "regedit-fix-copy-key-name": {
             "details": {
-                "defaultSorting": 1120,
+                "defaultSorting": 1096,
                 "published": 1717097524000,
                 "rating": 8,
                 "ratingUsers": 1,
                 "updated": 1717097524000,
-                "users": 140
+                "users": 137
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -2658,12 +2658,12 @@
         },
         "remove-command-bar": {
             "details": {
-                "defaultSorting": 1057,
+                "defaultSorting": 1071,
                 "published": 1713423953000,
                 "rating": 7,
                 "ratingUsers": 3,
                 "updated": 1728231790000,
-                "users": 151
+                "users": 153
             },
             "metadata": {
                 "architecture": [
@@ -2681,12 +2681,12 @@
         },
         "remove-ms-store-open-with": {
             "details": {
-                "defaultSorting": 46770,
+                "defaultSorting": 47060,
                 "published": 1718733038000,
                 "rating": 10,
                 "ratingUsers": 41,
                 "updated": 1718733038000,
-                "users": 4677
+                "users": 4706
             },
             "metadata": {
                 "author": "aubymori",
@@ -2702,12 +2702,12 @@
         },
         "remove-quotes-from-ctrl-shift-c": {
             "details": {
-                "defaultSorting": 3375,
+                "defaultSorting": 3429,
                 "published": 1733929613000,
                 "rating": 9,
                 "ratingUsers": 11,
                 "updated": 1733929613000,
-                "users": 375
+                "users": 381
             },
             "metadata": {
                 "author": "draxas",
@@ -2722,12 +2722,12 @@
         },
         "remove-spotlight-shortcut": {
             "details": {
-                "defaultSorting": 639,
+                "defaultSorting": 648,
                 "published": 1734795129000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1734795129000,
-                "users": 71
+                "users": 72
             },
             "metadata": {
                 "architecture": [
@@ -2746,12 +2746,12 @@
         },
         "restore-button-pulse-anim": {
             "details": {
-                "defaultSorting": 3280,
+                "defaultSorting": 3310,
                 "published": 1739537994000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1743441688000,
-                "users": 328
+                "users": 331
             },
             "metadata": {
                 "author": "aubymori",
@@ -2767,12 +2767,12 @@
         },
         "ribbon-caption-icon-fix": {
             "details": {
-                "defaultSorting": 3150,
+                "defaultSorting": 3160,
                 "published": 1700466353000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1722203317000,
-                "users": 315
+                "users": 316
             },
             "metadata": {
                 "author": "山本たにこ",
@@ -2812,12 +2812,12 @@
         },
         "shadowplay-do-not-disable": {
             "details": {
-                "defaultSorting": 7630,
+                "defaultSorting": 7780,
                 "published": 1733774874000,
                 "rating": 10,
-                "ratingUsers": 13,
+                "ratingUsers": 14,
                 "updated": 1733774874000,
-                "users": 763
+                "users": 778
             },
             "metadata": {
                 "author": "Temm",
@@ -2832,12 +2832,12 @@
         },
         "shadowplay-single-folder": {
             "details": {
-                "defaultSorting": 120,
+                "defaultSorting": 130,
                 "published": 1745679806000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1745679806000,
-                "users": 12
+                "users": 13
             },
             "metadata": {
                 "author": "yuma-dev",
@@ -2852,12 +2852,12 @@
         },
         "shrink-address-bar-height": {
             "details": {
-                "defaultSorting": 10260,
+                "defaultSorting": 10290,
                 "published": 1677861723000,
                 "rating": 10,
-                "ratingUsers": 10,
+                "ratingUsers": 11,
                 "updated": 1679051738000,
-                "users": 1026
+                "users": 1029
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -2872,12 +2872,12 @@
         },
         "sib-plusplus-tweaker": {
             "details": {
-                "defaultSorting": 3890,
+                "defaultSorting": 3930,
                 "published": 1719611831000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1727647480000,
-                "users": 389
+                "users": 393
             },
             "metadata": {
                 "architecture": [
@@ -2896,12 +2896,12 @@
         },
         "slick-window-arrangement": {
             "details": {
-                "defaultSorting": 180490,
+                "defaultSorting": 181700,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 252,
+                "ratingUsers": 254,
                 "updated": 1727762644000,
-                "users": 18049
+                "users": 18170
             },
             "featured": true,
             "metadata": {
@@ -2920,12 +2920,12 @@
         },
         "small-tray-icons-on-touch": {
             "details": {
-                "defaultSorting": 1290,
+                "defaultSorting": 1300,
                 "published": 1729521551000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1729521551000,
-                "users": 129
+                "users": 130
             },
             "metadata": {
                 "author": "aubymori",
@@ -2940,12 +2940,12 @@
         },
         "spoof-light-dark-theme": {
             "details": {
-                "defaultSorting": 1810,
+                "defaultSorting": 1820,
                 "published": 1739047328000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1739548651000,
-                "users": 181
+                "users": 182
             },
             "metadata": {
                 "author": "aubymori",
@@ -2961,12 +2961,12 @@
         },
         "start-menu-all-apps": {
             "details": {
-                "defaultSorting": 32790,
+                "defaultSorting": 32820,
                 "published": 1647604671000,
                 "rating": 10,
-                "ratingUsers": 25,
+                "ratingUsers": 27,
                 "updated": 1746196761000,
-                "users": 3279
+                "users": 3282
             },
             "metadata": {
                 "architecture": [
@@ -2986,12 +2986,12 @@
         },
         "start-menu-open-location": {
             "details": {
-                "defaultSorting": 2800,
+                "defaultSorting": 2880,
                 "published": 1742674126000,
                 "rating": 8,
                 "ratingUsers": 9,
                 "updated": 1742674126000,
-                "users": 350
+                "users": 360
             },
             "metadata": {
                 "architecture": [
@@ -3011,12 +3011,12 @@
         },
         "suppress-run-box-error-message": {
             "details": {
-                "defaultSorting": 850,
+                "defaultSorting": 880,
                 "published": 1716742333000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1716742333000,
-                "users": 85
+                "users": 88
             },
             "metadata": {
                 "author": "ItsProfessional",
@@ -3031,12 +3031,12 @@
         },
         "sysdm-general-tab": {
             "details": {
-                "defaultSorting": 890,
+                "defaultSorting": 960,
                 "published": 1743602490000,
                 "rating": 10,
                 "ratingUsers": 4,
                 "updated": 1743607180000,
-                "users": 89
+                "users": 96
             },
             "metadata": {
                 "author": "Isabella Lulamoon (kawapure)",
@@ -3059,12 +3059,12 @@
         },
         "syslistview32-enabler": {
             "details": {
-                "defaultSorting": 2450,
+                "defaultSorting": 2480,
                 "published": 1706689199000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1707130904000,
-                "users": 245
+                "users": 248
             },
             "metadata": {
                 "author": "anixx",
@@ -3079,12 +3079,12 @@
         },
         "taskbar-auto-hide-keyboard-only": {
             "details": {
-                "defaultSorting": 2250,
+                "defaultSorting": 2260,
                 "published": 1740431630000,
                 "rating": 10,
-                "ratingUsers": 13,
+                "ratingUsers": 12,
                 "updated": 1742755308000,
-                "users": 225
+                "users": 226
             },
             "metadata": {
                 "architecture": [
@@ -3105,12 +3105,12 @@
         },
         "taskbar-auto-hide-speed": {
             "details": {
-                "defaultSorting": 26980,
+                "defaultSorting": 27550,
                 "published": 1740077841000,
                 "rating": 10,
-                "ratingUsers": 67,
+                "ratingUsers": 70,
                 "updated": 1740077841000,
-                "users": 2698
+                "users": 2755
             },
             "metadata": {
                 "architecture": [
@@ -3131,12 +3131,12 @@
         },
         "taskbar-auto-hide-when-maximized": {
             "details": {
-                "defaultSorting": 59960,
+                "defaultSorting": 60480,
                 "published": 1729882023000,
                 "rating": 10,
-                "ratingUsers": 115,
+                "ratingUsers": 114,
                 "updated": 1746809412000,
-                "users": 5996
+                "users": 6048
             },
             "metadata": {
                 "architecture": [
@@ -3157,12 +3157,12 @@
         },
         "taskbar-autohide-better": {
             "details": {
-                "defaultSorting": 30740,
+                "defaultSorting": 30850,
                 "published": 1696232707000,
                 "rating": 10,
-                "ratingUsers": 25,
+                "ratingUsers": 26,
                 "updated": 1697199404000,
-                "users": 3074
+                "users": 3085
             },
             "metadata": {
                 "author": "Cirn09",
@@ -3179,12 +3179,12 @@
         },
         "taskbar-background-helper": {
             "details": {
-                "defaultSorting": 21490,
+                "defaultSorting": 21700,
                 "published": 1727557304000,
                 "rating": 10,
-                "ratingUsers": 26,
+                "ratingUsers": 27,
                 "updated": 1746113817000,
-                "users": 2149
+                "users": 2170
             },
             "metadata": {
                 "architecture": [
@@ -3205,12 +3205,12 @@
         },
         "taskbar-button-click": {
             "details": {
-                "defaultSorting": 149710,
+                "defaultSorting": 150500,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 187,
+                "ratingUsers": 190,
                 "updated": 1728681415000,
-                "users": 14971
+                "users": 15050
             },
             "featured": true,
             "metadata": {
@@ -3232,12 +3232,12 @@
         },
         "taskbar-button-scroll": {
             "details": {
-                "defaultSorting": 12249,
+                "defaultSorting": 12168,
                 "published": 1682233932000,
                 "rating": 9,
-                "ratingUsers": 39,
+                "ratingUsers": 37,
                 "updated": 1742604443000,
-                "users": 1361
+                "users": 1352
             },
             "metadata": {
                 "architecture": [
@@ -3258,12 +3258,12 @@
         },
         "taskbar-classic-menu": {
             "details": {
-                "defaultSorting": 4260,
+                "defaultSorting": 4360,
                 "published": 1728751303000,
                 "rating": 10,
                 "ratingUsers": 7,
                 "updated": 1742608025000,
-                "users": 426
+                "users": 436
             },
             "metadata": {
                 "architecture": [
@@ -3284,12 +3284,12 @@
         },
         "taskbar-clock-customization": {
             "details": {
-                "defaultSorting": 290700,
+                "defaultSorting": 291460,
                 "published": 1646604429000,
                 "rating": 10,
-                "ratingUsers": 412,
+                "ratingUsers": 415,
                 "updated": 1742574983000,
-                "users": 29070
+                "users": 29146
             },
             "featured": true,
             "metadata": {
@@ -3311,12 +3311,12 @@
         },
         "taskbar-disappearing-icon-fix-win11": {
             "details": {
-                "defaultSorting": 8840,
+                "defaultSorting": 9010,
                 "published": 1722243342000,
                 "rating": 10,
                 "ratingUsers": 16,
                 "updated": 1722243342000,
-                "users": 884
+                "users": 901
             },
             "metadata": {
                 "architecture": [
@@ -3335,12 +3335,12 @@
         },
         "taskbar-empty-space-clicks": {
             "details": {
-                "defaultSorting": 50250,
+                "defaultSorting": 50420,
                 "published": 1704123810000,
                 "rating": 10,
                 "ratingUsers": 102,
                 "updated": 1734267995000,
-                "users": 5025
+                "users": 5042
             },
             "metadata": {
                 "author": "m1lhaus",
@@ -3356,12 +3356,12 @@
         },
         "taskbar-grouping": {
             "details": {
-                "defaultSorting": 123960,
+                "defaultSorting": 124460,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 284,
                 "updated": 1746104535000,
-                "users": 12396
+                "users": 12446
             },
             "featured": true,
             "metadata": {
@@ -3383,12 +3383,12 @@
         },
         "taskbar-hung-rearrangement-fix": {
             "details": {
-                "defaultSorting": 1510,
+                "defaultSorting": 1530,
                 "published": 1729935848000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1729935848000,
-                "users": 151
+                "users": 153
             },
             "metadata": {
                 "architecture": [
@@ -3409,12 +3409,12 @@
         },
         "taskbar-icon-size": {
             "details": {
-                "defaultSorting": 1022510,
+                "defaultSorting": 1026160,
                 "published": 1657984524000,
                 "rating": 10,
-                "ratingUsers": 1451,
+                "ratingUsers": 1454,
                 "updated": 1742563521000,
-                "users": 102251
+                "users": 102616
             },
             "featured": true,
             "metadata": {
@@ -3461,12 +3461,12 @@
         },
         "taskbar-labels": {
             "details": {
-                "defaultSorting": 167940,
+                "defaultSorting": 168420,
                 "published": 1661149953000,
                 "rating": 10,
-                "ratingUsers": 239,
+                "ratingUsers": 240,
                 "updated": 1746893018000,
-                "users": 16794
+                "users": 16842
             },
             "featured": true,
             "metadata": {
@@ -3488,12 +3488,12 @@
         },
         "taskbar-language-indicator-layout-control": {
             "details": {
-                "defaultSorting": 927,
+                "defaultSorting": 945,
                 "published": 1728839079000,
                 "rating": 9,
                 "ratingUsers": 3,
                 "updated": 1728839079000,
-                "users": 103
+                "users": 105
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -3510,12 +3510,12 @@
         },
         "taskbar-left-click-cycle": {
             "details": {
-                "defaultSorting": 12040,
+                "defaultSorting": 12110,
                 "published": 1726228929000,
                 "rating": 10,
-                "ratingUsers": 41,
+                "ratingUsers": 42,
                 "updated": 1742607183000,
-                "users": 1204
+                "users": 1211
             },
             "metadata": {
                 "architecture": [
@@ -3536,12 +3536,12 @@
         },
         "taskbar-multirow": {
             "details": {
-                "defaultSorting": 11979,
+                "defaultSorting": 12105,
                 "published": 1733602163000,
                 "rating": 9,
                 "ratingUsers": 17,
                 "updated": 1742650220000,
-                "users": 1331
+                "users": 1345
             },
             "metadata": {
                 "architecture": [
@@ -3562,12 +3562,12 @@
         },
         "taskbar-notification-icon-spacing": {
             "details": {
-                "defaultSorting": 87460,
+                "defaultSorting": 88000,
                 "published": 1706376839000,
                 "rating": 10,
-                "ratingUsers": 188,
+                "ratingUsers": 187,
                 "updated": 1742583182000,
-                "users": 8746
+                "users": 8800
             },
             "metadata": {
                 "architecture": [
@@ -3588,12 +3588,12 @@
         },
         "taskbar-notification-icons-show-all": {
             "details": {
-                "defaultSorting": 27250,
+                "defaultSorting": 27380,
                 "published": 1724956331000,
                 "rating": 10,
-                "ratingUsers": 33,
+                "ratingUsers": 34,
                 "updated": 1724956331000,
-                "users": 2725
+                "users": 2738
             },
             "metadata": {
                 "architecture": [
@@ -3613,12 +3613,12 @@
         },
         "taskbar-on-top": {
             "details": {
-                "defaultSorting": 67730,
+                "defaultSorting": 68320,
                 "published": 1728056002000,
                 "rating": 10,
-                "ratingUsers": 120,
+                "ratingUsers": 119,
                 "updated": 1742603055000,
-                "users": 6773
+                "users": 6832
             },
             "metadata": {
                 "architecture": [
@@ -3639,12 +3639,12 @@
         },
         "taskbar-primary-on-secondary-monitor": {
             "details": {
-                "defaultSorting": 14340,
+                "defaultSorting": 14460,
                 "published": 1731791988000,
                 "rating": 10,
                 "ratingUsers": 31,
                 "updated": 1735667463000,
-                "users": 1434
+                "users": 1446
             },
             "metadata": {
                 "architecture": [
@@ -3666,12 +3666,12 @@
         },
         "taskbar-scroll-actions": {
             "details": {
-                "defaultSorting": 5904,
+                "defaultSorting": 5913,
                 "published": 1693239523000,
                 "rating": 9,
                 "ratingUsers": 9,
                 "updated": 1713981885000,
-                "users": 656
+                "users": 657
             },
             "metadata": {
                 "author": "m417z",
@@ -3689,12 +3689,12 @@
         },
         "taskbar-show-desktop-button-aero-peek": {
             "details": {
-                "defaultSorting": 7210,
+                "defaultSorting": 7350,
                 "published": 1743028397000,
                 "rating": 10,
                 "ratingUsers": 16,
                 "updated": 1743105958000,
-                "users": 721
+                "users": 735
             },
             "metadata": {
                 "architecture": [
@@ -3715,12 +3715,12 @@
         },
         "taskbar-start-button-position": {
             "details": {
-                "defaultSorting": 30850,
+                "defaultSorting": 31060,
                 "published": 1724520144000,
                 "rating": 10,
                 "ratingUsers": 43,
                 "updated": 1742603807000,
-                "users": 3085
+                "users": 3106
             },
             "metadata": {
                 "architecture": [
@@ -3741,12 +3741,12 @@
         },
         "taskbar-thumbnail-reorder": {
             "details": {
-                "defaultSorting": 93600,
+                "defaultSorting": 94120,
                 "published": 1657401939000,
                 "rating": 10,
-                "ratingUsers": 209,
+                "ratingUsers": 211,
                 "updated": 1742582959000,
-                "users": 9360
+                "users": 9412
             },
             "featured": true,
             "metadata": {
@@ -3768,12 +3768,12 @@
         },
         "taskbar-thumbnail-size": {
             "details": {
-                "defaultSorting": 450,
+                "defaultSorting": 780,
                 "published": 1746877899000,
                 "rating": 10,
                 "ratingUsers": 5,
                 "updated": 1746877899000,
-                "users": 45
+                "users": 78
             },
             "metadata": {
                 "architecture": [
@@ -3794,12 +3794,12 @@
         },
         "taskbar-thumbnails": {
             "details": {
-                "defaultSorting": 15450,
+                "defaultSorting": 15520,
                 "published": 1728339473000,
                 "rating": 10,
                 "ratingUsers": 36,
                 "updated": 1743354969000,
-                "users": 1545
+                "users": 1552
             },
             "metadata": {
                 "architecture": [
@@ -3820,12 +3820,12 @@
         },
         "taskbar-tray-system-icon-tweaks": {
             "details": {
-                "defaultSorting": 136010,
+                "defaultSorting": 136850,
                 "published": 1729973006000,
                 "rating": 10,
-                "ratingUsers": 207,
+                "ratingUsers": 208,
                 "updated": 1742582436000,
-                "users": 13601
+                "users": 13685
             },
             "metadata": {
                 "architecture": [
@@ -3846,12 +3846,12 @@
         },
         "taskbar-vertical": {
             "details": {
-                "defaultSorting": 68120,
+                "defaultSorting": 68410,
                 "published": 1718190574000,
                 "rating": 10,
-                "ratingUsers": 159,
+                "ratingUsers": 161,
                 "updated": 1742586043000,
-                "users": 6812
+                "users": 6841
             },
             "metadata": {
                 "architecture": [
@@ -3874,12 +3874,12 @@
         },
         "taskbar-volume-control": {
             "details": {
-                "defaultSorting": 367760,
+                "defaultSorting": 369000,
                 "published": 1652940665000,
                 "rating": 10,
-                "ratingUsers": 477,
+                "ratingUsers": 483,
                 "updated": 1742566197000,
-                "users": 36776
+                "users": 36900
             },
             "featured": true,
             "metadata": {
@@ -3898,12 +3898,12 @@
         },
         "taskbar-wheel-cycle": {
             "details": {
-                "defaultSorting": 19730,
+                "defaultSorting": 19700,
                 "published": 1682527457000,
                 "rating": 10,
                 "ratingUsers": 41,
                 "updated": 1742928968000,
-                "users": 1973
+                "users": 1970
             },
             "metadata": {
                 "architecture": [
@@ -3924,12 +3924,12 @@
         },
         "taskmgr-taller-tab": {
             "details": {
-                "defaultSorting": 350,
+                "defaultSorting": 390,
                 "published": 1746347652000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1746347652000,
-                "users": 35
+                "users": 39
             },
             "metadata": {
                 "author": "Joe Ye",
@@ -3944,12 +3944,12 @@
         },
         "text-replace": {
             "details": {
-                "defaultSorting": 6950,
+                "defaultSorting": 6183,
                 "published": 1646604429000,
-                "rating": 10,
-                "ratingUsers": 4,
+                "rating": 9,
+                "ratingUsers": 3,
                 "updated": 1646604429000,
-                "users": 695
+                "users": 687
             },
             "metadata": {
                 "author": "m417z",
@@ -3967,12 +3967,12 @@
         },
         "themed-regedit-listview": {
             "details": {
-                "defaultSorting": 13880,
+                "defaultSorting": 13850,
                 "published": 1695597864000,
                 "rating": 10,
                 "ratingUsers": 18,
                 "updated": 1695597864000,
-                "users": 1388
+                "users": 1385
             },
             "metadata": {
                 "author": "aubymori",
@@ -3988,12 +3988,12 @@
         },
         "timer-resolution-control": {
             "details": {
-                "defaultSorting": 2853,
+                "defaultSorting": 2862,
                 "published": 1646604429000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1646604429000,
-                "users": 317
+                "users": 318
             },
             "metadata": {
                 "author": "m417z",
@@ -4010,12 +4010,12 @@
         },
         "tortoisegit-progress-animation-background-fix": {
             "details": {
-                "defaultSorting": 530,
+                "defaultSorting": 550,
                 "published": 1732298725000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1732298725000,
-                "users": 53
+                "users": 55
             },
             "metadata": {
                 "author": "Roland Pihlakas",
@@ -4032,12 +4032,12 @@
         },
         "translucent-windows": {
             "details": {
-                "defaultSorting": 23787,
+                "defaultSorting": 24930,
                 "published": 1743352526000,
                 "rating": 9,
-                "ratingUsers": 45,
+                "ratingUsers": 47,
                 "updated": 1744672622000,
-                "users": 2643
+                "users": 2770
             },
             "metadata": {
                 "author": "Undisputed00x",
@@ -4053,12 +4053,12 @@
         },
         "transparent-screensaver-fix": {
             "details": {
-                "defaultSorting": 4023,
+                "defaultSorting": 4050,
                 "published": 1723929138000,
                 "rating": 9,
                 "ratingUsers": 12,
                 "updated": 1723929138000,
-                "users": 447
+                "users": 450
             },
             "metadata": {
                 "architecture": [
@@ -4076,12 +4076,12 @@
         },
         "uifile-override": {
             "details": {
-                "defaultSorting": 2104,
+                "defaultSorting": 2056,
                 "published": 1720335390000,
                 "rating": 8,
                 "ratingUsers": 1,
                 "updated": 1725695515000,
-                "users": 263
+                "users": 257
             },
             "metadata": {
                 "author": "xalejandro",
@@ -4097,10 +4097,10 @@
         },
         "unlock-taskmgr-server": {
             "details": {
-                "defaultSorting": 910,
+                "defaultSorting": 819,
                 "published": 1700814558000,
-                "rating": 10,
-                "ratingUsers": 1,
+                "rating": 0,
+                "ratingUsers": 0,
                 "updated": 1700814558000,
                 "users": 91
             },
@@ -4117,12 +4117,12 @@
         },
         "uwp-clean": {
             "details": {
-                "defaultSorting": 2570,
+                "defaultSorting": 2530,
                 "published": 1714023124000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1714023124000,
-                "users": 257
+                "users": 253
             },
             "metadata": {
                 "author": "Alcatel",
@@ -4142,12 +4142,12 @@
         },
         "uxtheme-hook": {
             "details": {
-                "defaultSorting": 16220,
+                "defaultSorting": 16320,
                 "published": 1720341593000,
                 "rating": 10,
                 "ratingUsers": 17,
                 "updated": 1745395884000,
-                "users": 1622
+                "users": 1632
             },
             "metadata": {
                 "author": "rounk-ctrl",
@@ -4167,12 +4167,12 @@
         },
         "version-spoof": {
             "details": {
-                "defaultSorting": 1390,
+                "defaultSorting": 1420,
                 "published": 1730211947000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1730211947000,
-                "users": 139
+                "users": 142
             },
             "metadata": {
                 "author": "aubymori",
@@ -4191,12 +4191,12 @@
         },
         "virtual-desktop-taskbar-order": {
             "details": {
-                "defaultSorting": 12654,
+                "defaultSorting": 12780,
                 "published": 1677867923000,
                 "rating": 9,
                 "ratingUsers": 35,
                 "updated": 1725909793000,
-                "users": 1406
+                "users": 1420
             },
             "metadata": {
                 "architecture": [
@@ -4264,12 +4264,12 @@
         },
         "vscode-tweaker": {
             "details": {
-                "defaultSorting": 1150,
+                "defaultSorting": 1170,
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1659090573000,
-                "users": 115
+                "users": 117
             },
             "metadata": {
                 "author": "m417z",
@@ -4287,12 +4287,12 @@
         },
         "w11-dwm-fix": {
             "details": {
-                "defaultSorting": 3420,
+                "defaultSorting": 3480,
                 "published": 1707592711000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1740300805000,
-                "users": 342
+                "users": 348
             },
             "metadata": {
                 "architecture": [
@@ -4312,12 +4312,12 @@
         },
         "win-d-per-monitor": {
             "details": {
-                "defaultSorting": 9450,
+                "defaultSorting": 9430,
                 "published": 1734370095000,
                 "rating": 10,
-                "ratingUsers": 18,
+                "ratingUsers": 17,
                 "updated": 1734370095000,
-                "users": 945
+                "users": 943
             },
             "metadata": {
                 "author": "easyatm",
@@ -4333,12 +4333,12 @@
         },
         "win10-colored-borders": {
             "details": {
-                "defaultSorting": 1458,
+                "defaultSorting": 1512,
                 "published": 1742642004000,
                 "rating": 9,
                 "ratingUsers": 7,
                 "updated": 1742642004000,
-                "users": 162
+                "users": 168
             },
             "metadata": {
                 "architecture": [
@@ -4356,12 +4356,12 @@
         },
         "win10-taskbar-on-win11": {
             "details": {
-                "defaultSorting": 2000,
+                "defaultSorting": 2100,
                 "published": 1723291741000,
                 "rating": 10,
-                "ratingUsers": 3,
+                "ratingUsers": 4,
                 "updated": 1726745627000,
-                "users": 200
+                "users": 210
             },
             "metadata": {
                 "author": "Anixx",
@@ -4376,12 +4376,12 @@
         },
         "win10-taskbar-on-win11-24h2": {
             "details": {
-                "defaultSorting": 2457,
+                "defaultSorting": 2529,
                 "published": 1725446830000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1731157978000,
-                "users": 273
+                "users": 281
             },
             "metadata": {
                 "architecture": [
@@ -4400,12 +4400,12 @@
         },
         "win32-tray-clock-experience": {
             "details": {
-                "defaultSorting": 7460,
+                "defaultSorting": 7380,
                 "published": 1703494264000,
                 "rating": 10,
-                "ratingUsers": 5,
+                "ratingUsers": 4,
                 "updated": 1703494264000,
-                "users": 746
+                "users": 738
             },
             "metadata": {
                 "architecture": [
@@ -4424,12 +4424,12 @@
         },
         "win7-alttab-loader": {
             "details": {
-                "defaultSorting": 4150,
+                "defaultSorting": 4080,
                 "published": 1690590362000,
                 "rating": 10,
-                "ratingUsers": 6,
+                "ratingUsers": 5,
                 "updated": 1744702712000,
-                "users": 415
+                "users": 408
             },
             "metadata": {
                 "architecture": [
@@ -4448,12 +4448,12 @@
         },
         "win7-command-bar": {
             "details": {
-                "defaultSorting": 6390,
+                "defaultSorting": 6430,
                 "published": 1677843666000,
                 "rating": 10,
                 "ratingUsers": 2,
                 "updated": 1677843666000,
-                "users": 639
+                "users": 643
             },
             "metadata": {
                 "architecture": [
@@ -4471,12 +4471,12 @@
         },
         "win7-dwm-disable": {
             "details": {
-                "defaultSorting": 180,
+                "defaultSorting": 189,
                 "published": 1718802077000,
                 "rating": 0,
                 "ratingUsers": 0,
                 "updated": 1718802077000,
-                "users": 20
+                "users": 21
             },
             "metadata": {
                 "author": "Jevil7452",
@@ -4489,12 +4489,12 @@
         },
         "win7-style-uac-dim": {
             "details": {
-                "defaultSorting": 7496,
+                "defaultSorting": 7600,
                 "published": 1719416300000,
                 "rating": 8,
                 "ratingUsers": 12,
                 "updated": 1719436894000,
-                "users": 937
+                "users": 950
             },
             "metadata": {
                 "architecture": [
@@ -4513,12 +4513,12 @@
         },
         "windows-11-file-explorer-styler": {
             "details": {
-                "defaultSorting": 4310,
+                "defaultSorting": 4950,
                 "published": 1746117865000,
                 "rating": 10,
-                "ratingUsers": 13,
+                "ratingUsers": 12,
                 "updated": 1746819364000,
-                "users": 431
+                "users": 495
             },
             "metadata": {
                 "architecture": [
@@ -4539,12 +4539,12 @@
         },
         "windows-11-notification-center-styler": {
             "details": {
-                "defaultSorting": 619480,
+                "defaultSorting": 624050,
                 "published": 1715436273000,
                 "rating": 10,
-                "ratingUsers": 428,
+                "ratingUsers": 432,
                 "updated": 1746814311000,
-                "users": 61948
+                "users": 62405
             },
             "metadata": {
                 "architecture": [
@@ -4566,12 +4566,12 @@
         },
         "windows-11-start-menu-styler": {
             "details": {
-                "defaultSorting": 1437460,
+                "defaultSorting": 1444860,
                 "published": 1703013948000,
                 "rating": 10,
-                "ratingUsers": 1457,
+                "ratingUsers": 1472,
                 "updated": 1738426744000,
-                "users": 143746
+                "users": 144486
             },
             "featured": true,
             "metadata": {
@@ -4595,12 +4595,12 @@
         },
         "windows-11-taskbar-styler": {
             "details": {
-                "defaultSorting": 1035171,
+                "defaultSorting": 1041390,
                 "published": 1684509250000,
                 "rating": 9,
-                "ratingUsers": 1415,
+                "ratingUsers": 1435,
                 "updated": 1746792112000,
-                "users": 115019
+                "users": 115710
             },
             "featured": true,
             "metadata": {
@@ -4622,12 +4622,12 @@
         },
         "windows-7-clock-spacing": {
             "details": {
-                "defaultSorting": 5250,
+                "defaultSorting": 5310,
                 "published": 1703050709000,
                 "rating": 10,
                 "ratingUsers": 1,
                 "updated": 1703050709000,
-                "users": 525
+                "users": 531
             },
             "metadata": {
                 "architecture": [
