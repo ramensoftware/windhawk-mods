@@ -2,7 +2,7 @@
 // @id              auto-hide-desktop-after-inactivity
 // @name            Auto Hide Desktop After Inactivity
 // @description     Automatically hides all windows and shows the desktop after a period of user inactivity
-// @version         0.5
+// @version         0.6
 // @author          alekseev2014s
 // @github          https://github.com/Alekseev2014s
 // @include         explorer.exe
@@ -13,39 +13,43 @@
 /*
 # Auto Hide Desktop After Inactivity
 
-This mod automatically minimizes all open windows and hides the desktop
-after a period of user inactivity. It's useful for shared environments,
-kiosks, or simply to reduce visual clutter after you're away from your PC.
+This mod automatically minimizes all open windows and shows the desktop
+after a period of user inactivity. It is useful for shared environments,
+kiosks, or simply to reduce visual clutter when you're away from your PC.
 
 ## Features
-- **Inactivity timeout**: Automatically hide the desktop after no input for a configurable number of seconds.
-- **Lock screen timeout**: Optionally lock the workstation after a longer period of inactivity.
-- **Fullscreen app detection**: Prevents the desktop from being hidden if a fullscreen application is active.
-- **Process exclusions**: You can specify a list of executable names (like `vlc.exe`) to ignore during monitoring.
+- **Inactivity timeout**: Automatically shows the desktop after a configurable number of seconds without input.
+- **Lock screen timeout**: Optionally locks the workstation after additional idle time.
+- **Fullscreen app detection**: Prevents the desktop from being shown if a fullscreen application is active (optional).
+- **Process exclusions**: Prevents desktop from hiding if any excluded program is currently focused.
+- **Smart restoration**: Moving the mouse restores the previous window state automatically.
 
 ## How it works
-- When the system is idle for the specified timeout, the mod simulates a `Win+D` keystroke to hide all windows and show the desktop.
-- If configured, after further inactivity, it automatically locks the workstation.
-- User input such as mouse movement or keyboard activity restores the previous window state.
-- Foreground fullscreen applications and excluded processes will prevent the desktop from being hidden.
+- After the inactivity timeout (`timeoutSeconds`), the desktop is shown by simulating the `Win+D` keystroke.
+- If `lockTimeoutSeconds` is configured, and idle time continues past this value, the workstation is locked.
+- The desktop is not shown if a fullscreen app is active (unless disabled), or if a specified excluded process is in the foreground.
+- After the desktop is shown, moving the mouse restores the previous window state.
+- Foreground fullscreen applications and excluded processes prevent activation of the mod.
 
-## Getting started
-1. Install the mod in Windhawk.
-2. Adjust the settings for:
-   - Timeout (in seconds)
-   - Lock timeout (optional)
-   - Excluded processes
-   - Fullscreen app handling
-3. Let the system idle and watch the desktop auto-hide behavior in action.
+## Configuration
+- `Inactivity timeout (seconds)`: Time of user inactivity after which the desktop will be shown.  
+  - Set to **0** to disable automatic desktop hiding.
+- `Lock screen timeout (seconds)`: Time of user inactivity after which the workstation will be locked.  
+  - Set to **0** to disable automatic locking.
+- `Excluded programs`: A list of process names (e.g., `vlc.exe`, `notepad.exe`) that will prevent desktop from being shown when focused.
+- `Ignore fullscreen applications`: If enabled, fullscreen apps block desktop hiding.
 
-## Example use cases
-- **Privacy**: Automatically hides sensitive windows when away.
-- **Kiosk mode**: Resets to desktop after inactivity.
-- **Clutter reduction**: Keeps your desktop clean when you're not using the PC.
+## Notes
+- Runs only in the main `explorer.exe` process (the one that owns the taskbar).
+- Uses `GetLastInputInfo` to track idle time.
+- Foreground process name is compared case-insensitively against the excluded list.
+- Fullscreen state is detected via `SHQueryUserNotificationState`.
 
 ## Troubleshooting
-- If the desktop is not hidden as expected, check that no fullscreen app or excluded process is active.
-- To ensure it only runs once, the mod uses a global mutex to avoid interfering with other `explorer.exe` instances.
+- If nothing happens after the timeout, ensure:
+  - No excluded process is in the foreground.
+  - No fullscreen app is active (unless ignored).
+  - Mod settings are configured correctly and saved.
 */
 // ==/WindhawkModReadme==
 
@@ -59,8 +63,8 @@ kiosks, or simply to reduce visual clutter after you're away from your PC.
   $name: Lock screen timeout (seconds)
   $description: The number of seconds of inactivity before locking the workstation.
 
-- excludeProcesses: ""
-  $name: Excluded processes
+- excludedPrograms: [excluded1.exe] 
+  $name: Excluded programs 
   $description: Semicolon-separated list of executable names to exclude from triggering desktop show (e.g. "vlc.exe;notepad.exe")
 
 - ignoreFullscreenApps: true
@@ -72,21 +76,26 @@ kiosks, or simply to reduce visual clutter after you're away from your PC.
 #include <windows.h>
 #include <vector>
 
+#define TIMEIOUT_HIDE_DEFAULT (300)
+#define TIMEIOUT_LOCK_DEFAULT (600)
+
 std::vector<HWND> g_minimizedWindows;
 std::vector<std::wstring> excludedProcessList;
 
-DWORD setting_timeoutSeconds = 300;
-DWORD setting_lockTimeoutSeconds = 600;
+DWORD setting_timeoutSeconds = TIMEIOUT_HIDE_DEFAULT;
+DWORD setting_lockTimeoutSeconds = TIMEIOUT_LOCK_DEFAULT;
 bool setting_ignoreFullscreenApps = true;
+
+bool timeoutHide = true;
+bool timeoutLock = true;
 
 constexpr DWORD kMouseMoveThreshold = 10;
 
+HANDLE hStopEvent = nullptr;
 HANDLE hThread = nullptr;
 bool stopThread = false;
 bool desktopShownByMod = false;
 POINT lastMousePos = {};
-
-HANDLE g_singletonMutex = nullptr;
 
 bool lockPending = false;
 DWORD timeDesktopShown = 0;
@@ -129,33 +138,63 @@ void RestoreWindows() {
     desktopShownByMod = false;
 }
 
+void LogExcludedProcesses() {
+    if (excludedProcessList.empty()) {
+        Wh_Log(L"Excluded processes list is empty");
+        return;
+    }
+
+    std::wstring message = L"Excluded processes:";
+
+    for (const auto& proc : excludedProcessList) {
+        message += L" " + proc;
+    }
+
+    Wh_Log(L"%s", message.c_str());
+}
+
 void LoadSettings() {
     int value;
     value = Wh_GetIntSetting(L"timeoutSeconds");
-    setting_timeoutSeconds = (value > 0) ? value : 300;
+    if (value > 4) {
+        setting_timeoutSeconds = value;
+    } else {
+        setting_timeoutSeconds = TIMEIOUT_HIDE_DEFAULT;
+        timeoutHide = false;
+    }
 
     value = Wh_GetIntSetting(L"lockTimeoutSeconds");
-    setting_lockTimeoutSeconds = (value >= 0) ? value : 0;
+        if (value > 5) {
+        setting_lockTimeoutSeconds = value;
+    } else {
+        setting_lockTimeoutSeconds = TIMEIOUT_LOCK_DEFAULT;
+        timeoutLock = false;
+    }
+
+    if (setting_timeoutSeconds >= setting_lockTimeoutSeconds) {
+        timeoutLock = false;
+    }
 
     setting_ignoreFullscreenApps = Wh_GetIntSetting(L"ignoreFullscreenApps");
 
-    const wchar_t* excludeList = Wh_GetStringSetting(L"excludeProcesses");
     excludedProcessList.clear();
-    if (excludeList && *excludeList) {
-        std::wstring listStr(excludeList);
-        size_t pos = 0;
-        while ((pos = listStr.find(L';')) != std::wstring::npos) {
-            std::wstring token = listStr.substr(0, pos);
-            if (!token.empty())
-                excludedProcessList.push_back(token);
-            listStr.erase(0, pos + 1);
+
+    for (int i = 0;; i++) {
+        wchar_t settingName[64];
+        swprintf(settingName, ARRAYSIZE(settingName), L"excludedPrograms[%d]", i);
+
+        const wchar_t* item = Wh_GetStringSetting(settingName);
+        if (!item || *item == L'\0') {
+            break;
         }
-        if (!listStr.empty())
-            excludedProcessList.push_back(listStr);
+
+        excludedProcessList.emplace_back(item);
     }
 
     Wh_Log(L"Settings loaded: timeoutSeconds = %d, lockTimeoutSeconds = %d",
         setting_timeoutSeconds, setting_lockTimeoutSeconds);
+
+    LogExcludedProcesses();
 }
 
 bool IsExcludedProcessRunning() {
@@ -195,19 +234,28 @@ bool IsExcludedProcessRunning() {
 }
 
 bool IsForegroundWindowFullscreen() {
-    HWND hwnd = GetForegroundWindow();
-    if (!hwnd || hwnd == GetShellWindow())
-        return false;
+    QUERY_USER_NOTIFICATION_STATE pquns; 
+    if (FAILED(SHQueryUserNotificationState(&pquns))) {
+        return false; 
+    }
+  
+    switch (pquns) {
+        case QUNS_NOT_PRESENT:
+        case QUNS_BUSY:
+        case QUNS_RUNNING_D3D_FULL_SCREEN:
+            return true;
 
-    MONITORINFO monitorInfo = { sizeof(monitorInfo) };
-    HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
-    if (!GetMonitorInfo(hMonitor, &monitorInfo))
-        return false;
+        case QUNS_PRESENTATION_MODE:
+        case QUNS_ACCEPTS_NOTIFICATIONS:
+        case QUNS_QUIET_TIME:
+        case QUNS_APP:
+            return false;
 
-    RECT windowRect;
-    GetWindowRect(hwnd, &windowRect);
-
-    return EqualRect(&windowRect, &monitorInfo.rcMonitor);
+        default:
+            Wh_Log(L"Unhandled QUERY_USER_NOTIFICATION_STATE: %d", pquns);
+    } 
+  
+    return false;
 }
 
 DWORD WINAPI MonitorThread(LPVOID) {
@@ -215,8 +263,10 @@ DWORD WINAPI MonitorThread(LPVOID) {
 
     DWORD effectiveLastInputTime = GetTickCount();
 
-    while (!stopThread) {
+    while (true) {
         LASTINPUTINFO lii = { sizeof(LASTINPUTINFO) };
+        DWORD waitTime = 200;
+
         if (GetLastInputInfo(&lii)) {
             DWORD currentTick = GetTickCount();
             DWORD systemLastInputTime = lii.dwTime;
@@ -230,7 +280,16 @@ DWORD WINAPI MonitorThread(LPVOID) {
             DWORD desktopTimeoutMs = setting_timeoutSeconds * 1000;
             DWORD lockTimeoutMs = setting_lockTimeoutSeconds * 1000;
 
-            if (idleTime >= lockTimeoutMs) {
+            if (desktopState == DesktopState::Normal) {
+                DWORD minTimeout = std::min(desktopTimeoutMs, lockTimeoutMs);
+                if (idleTime < minTimeout) {
+                    waitTime = std::min<DWORD>(minTimeout - idleTime, desktopTimeoutMs);
+                } else {
+                    waitTime = 0;
+                }
+            }
+
+            if (timeoutLock && idleTime >= lockTimeoutMs) {
                 Wh_Log(L"Locking workstation");
                 RestoreWindows();
                 LockWorkStation();
@@ -238,7 +297,8 @@ DWORD WINAPI MonitorThread(LPVOID) {
                 continue;
             }
 
-            if (desktopState == DesktopState::Normal &&
+            if (timeoutHide &&
+                desktopState == DesktopState::Normal &&
                 idleTime >= desktopTimeoutMs)
             {
                 if (setting_ignoreFullscreenApps && IsForegroundWindowFullscreen()) {
@@ -248,7 +308,7 @@ DWORD WINAPI MonitorThread(LPVOID) {
                     Wh_Log(L"Skipping hide: Excluded process detected");
                     effectiveLastInputTime = GetTickCount();
                 } else {
-                    Wh_Log(L"Inactivity detected, showing desktop");
+                    Wh_Log(L"Inactivity detected, hiding desktop");
                     HideDesktop();
                     desktopState = DesktopState::HiddenByMod;
                 }
@@ -268,42 +328,60 @@ DWORD WINAPI MonitorThread(LPVOID) {
                 }
             }
         }
+        if (waitTime < 200) waitTime = 200;
 
-        Sleep(200);
+        DWORD waitResult = WaitForSingleObject(hStopEvent, waitTime);
+        if (waitResult == WAIT_OBJECT_0) {
+            break;
+        }
     }
 
     Wh_Log(L"Monitor thread exiting");
     return 0;
 }
 
-bool IsMainExplorerProcess() {
-    g_singletonMutex = CreateMutexW(nullptr, TRUE, L"Global\\WH_AutoShowDesktop_Mutex");
-    if (g_singletonMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_singletonMutex);
-        g_singletonMutex = nullptr;
-        return false;
+static BOOL CALLBACK EnumTaskbarWndProc(HWND hWnd, LPARAM lParam)
+{
+    DWORD pid = 0;
+    WCHAR className[32] = { 0 };
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId() &&
+        GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"Shell_TrayWnd") == 0)
+    {
+        *reinterpret_cast<HWND*>(lParam) = hWnd;
+        return FALSE; // stop enumeration
     }
-    return true;
+    return TRUE; // continue
 }
 
-void CleanupSingletonMutex() {
-    if (g_singletonMutex) {
-        CloseHandle(g_singletonMutex);
-        g_singletonMutex = nullptr;
-    }
+static HWND FindCurrentProcessTaskbarWnd()
+{
+    HWND hTaskbarWnd = nullptr;
+    EnumWindows(EnumTaskbarWndProc, reinterpret_cast<LPARAM>(&hTaskbarWnd));
+    return hTaskbarWnd;
 }
 
 BOOL Wh_ModInit() {
+    if (!FindCurrentProcessTaskbarWnd()) {
+        HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (hTaskbarWnd) {
+            // The taskbar exists, but it's not owned by the current process.
+            return FALSE;
+        }
+    }
+
     LoadSettings();
 
-    if (!IsMainExplorerProcess())
-        return TRUE;
+    hStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!hStopEvent) {
+        return FALSE;
+    }
 
     stopThread = false;
     hThread = CreateThread(nullptr, 0, MonitorThread, nullptr, 0, nullptr);
 
     if (!hThread) {
-        CleanupSingletonMutex();
         return FALSE;
     }
 
@@ -311,7 +389,9 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    stopThread = true;
+    if (hStopEvent) {
+        SetEvent(hStopEvent);
+    }
 
     if (hThread) {
         WaitForSingleObject(hThread, INFINITE);
@@ -319,7 +399,10 @@ void Wh_ModUninit() {
         hThread = nullptr;
     }
 
-    CleanupSingletonMutex();
+    if (hStopEvent) {
+        CloseHandle(hStopEvent);
+        hStopEvent = nullptr;
+    }
 }
 
 void Wh_ModSettingsChanged() {
