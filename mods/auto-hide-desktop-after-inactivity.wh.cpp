@@ -14,8 +14,8 @@
 # Auto Hide Desktop After Inactivity
 
 This mod automatically minimizes all open windows and shows the desktop
-after a period of user inactivity. It is useful for shared environments,
-kiosks, or simply to reduce visual clutter when you're away from your PC.
+after a period of user inactivity. Optionally, it can also lock the workstation
+after continued inactivity. It is useful for shared environments, or simply to reduce visual clutter and protect your session when you're away from your PC.
 
 ## Features
 - **Inactivity timeout**: Automatically shows the desktop after a configurable number of seconds without input.
@@ -26,8 +26,8 @@ kiosks, or simply to reduce visual clutter when you're away from your PC.
 
 ## How it works
 - After the inactivity timeout (`timeoutSeconds`), the desktop is shown by simulating the `Win+D` keystroke.
-- If `lockTimeoutSeconds` is configured, and idle time continues past this value, the workstation is locked.
-- The desktop is not shown if a fullscreen app is active (unless disabled), or if a specified excluded process is in the foreground.
+- If `lockTimeoutSeconds` is configured and idle time continues past this value, the workstation is locked.
+- The desktop is not shown if a fullscreen app is active (unless disabled), or if a specified excluded process is in the focus.
 - After the desktop is shown, moving the mouse restores the previous window state.
 - Foreground fullscreen applications and excluded processes prevent activation of the mod.
 
@@ -36,7 +36,7 @@ kiosks, or simply to reduce visual clutter when you're away from your PC.
   - Set to **0** to disable automatic desktop hiding.
 - `Lock screen timeout (seconds)`: Time of user inactivity after which the workstation will be locked.  
   - Set to **0** to disable automatic locking.
-- `Excluded programs`: A list of process names (e.g., `vlc.exe`, `notepad.exe`) that will prevent desktop from being shown when focused.
+- `Excluded programs`: An array of process names (e.g., `vlc.exe`, `notepad.exe`) that will prevent the desktop from being shown or the system from being locked when focused.
 - `Ignore fullscreen applications`: If enabled, fullscreen apps block desktop hiding.
 
 ## Notes
@@ -183,6 +183,7 @@ void LoadSettings() {
         if (!item || *item == L'\0') {
             break;
         }
+        Wh_FreeStringSetting(item);
 
         excludedProcessList.emplace_back(item);
     }
