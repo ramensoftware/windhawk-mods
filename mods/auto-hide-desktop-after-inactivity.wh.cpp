@@ -171,10 +171,6 @@ void LoadSettings() {
         timeoutLock = false;
     }
 
-    if (setting_timeoutSeconds >= setting_lockTimeoutSeconds) {
-        timeoutLock = false;
-    }
-
     setting_ignoreFullscreenApps = Wh_GetIntSetting(L"ignoreFullscreenApps");
 
     excludedProcessList.clear();
@@ -289,7 +285,9 @@ DWORD WINAPI MonitorThread(LPVOID) {
                 }
             }
 
-            if (timeoutLock && idleTime >= lockTimeoutMs) {
+            if (timeoutLock && 
+                idleTime >= lockTimeoutMs &&
+                desktopState == DesktopState::HiddenByMod) {
                 Wh_Log(L"Locking workstation");
                 RestoreWindows();
                 LockWorkStation();
