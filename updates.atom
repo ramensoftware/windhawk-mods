@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-23T22:22:46.000Z</updated>
+    <updated>2025-05-23T23:35:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Theme Switcher 1.0.1]]></title>
+        <id>https://windhawk.net/mods/auto-theme-switcher#b7fcaa082c1c749bb3cdd7ab92ac6b677eab2697</id>
+        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
+        <updated>2025-05-23T23:35:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed changing theme not instantly updating the taskbar background</li>
+</ul>]]></content>
+        <author>
+            <name>tinodin</name>
+            <uri>https://github.com/tinodin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Theme Switcher 1.0]]></title>
         <id>https://windhawk.net/mods/auto-theme-switcher#3afd45f99c7c92b201a434255d5532ba6cd225df</id>
@@ -378,19 +391,6 @@ into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders f
         <author>
             <name>yuma-dev</name>
             <uri>https://github.com/yuma-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Force Chinese IME Mode Legacy 1.0.2]]></title>
-        <id>https://windhawk.net/mods/force-chinese-ime#7a9e5d9416a2bd1dff010f26d9eec6e2f02d8ba5</id>
-        <link href="https://windhawk.net/mods/force-chinese-ime"/>
-        <updated>2025-04-24T17:28:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Mark force-chinese-ime as deprecated</li>
-</ul>]]></content>
-        <author>
-            <name>u3l6</name>
-            <uri>https://github.com/u3l6</uri>
         </author>
     </entry>
 </feed>
