@@ -5,7 +5,7 @@
 // @version         1.0
 // @author          tinodin
 // @github          https://github.com/tinodin
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32
 // ==/WindhawkMod==
 
@@ -28,7 +28,6 @@
 #include <combaseapi.h>
 #include <comdef.h>
 #include <winrt/base.h>
-#define THEME_MUTEX_NAME L"Local\\OnlyOneExplorer"
 
 HANDLE g_timerThread = nullptr;
 HANDLE g_wakeEvent = nullptr;
@@ -143,7 +142,47 @@ void ApplyAppearance(Appearance appearance) {
 // Based on:
 // https://github.com/qwerty12/AutoHotkeyScripts/blob/a9423f59c945a3a031cb38b25cf461a34de9a6d3/SetThemeFromdotThemeFile.ahk
 void ApplyTheme(PCWSTR themePath) {
-    std::thread([=]() {
+    // {C04B329E-5823-4415-9C93-BA44688947B0}
+    constexpr winrt::guid CLSID_IThemeManager{
+        0xC04B329E,
+        0x5823,
+        0x4415,
+        {0x9C, 0x93, 0xBA, 0x44, 0x68, 0x89, 0x47, 0xB0}};
+
+    // {0646EBBE-C1B7-4045-8FD0-FFD65D3FC792}
+    constexpr winrt::guid IID_IThemeManager{
+        0x0646EBBE,
+        0xC1B7,
+        0x4045,
+        {0x8F, 0xD0, 0xFF, 0xD6, 0x5D, 0x3F, 0xC7, 0x92}};
+
+    winrt::com_ptr<IUnknown> pThemeManager;
+    HRESULT hr =
+        CoCreateInstance(CLSID_IThemeManager, nullptr, CLSCTX_INPROC_SERVER,
+                        IID_IThemeManager, pThemeManager.put_void());
+    if (FAILED(hr) || !pThemeManager) {
+        Wh_Log(L"[Theme] Failed to apply theme.");
+    }
+
+    _bstr_t bstrTheme(themePath);
+    void** vtable = *(void***)pThemeManager.get();
+    using ApplyThemeFunc = HRESULT(WINAPI*)(IUnknown*, BSTR);
+    ApplyThemeFunc ApplyThemeMethod = (ApplyThemeFunc)vtable[4];
+    hr = ApplyThemeMethod(pThemeManager.get(), bstrTheme);
+    if (FAILED(hr)) {
+        Wh_Log(L"[Theme] Failed to apply theme.");
+    }
+
+    Wh_Log(L"[Theme] Successfully applied theme");
+
+    if (Wh_GetIntSetting(L"LockScreen"))
+        ApplyLockScreen();
+}
+
+void ApplyThemeOrAppearance(bool useLightTheme) {
+    PCWSTR themePath = useLightTheme ? g_lightThemePath.c_str() : g_darkThemePath.c_str();
+
+    if (*themePath) {
         Wh_Log(L"[Theme] Waiting for explorer to load...");
         for (;;) {
             HWND progman = FindWindowW(L"Progman", nullptr);
@@ -154,51 +193,44 @@ void ApplyTheme(PCWSTR themePath) {
         }
         Wh_Log(L"[Theme] Explorer loaded");
 
-        if (!themePath || !*themePath) {
-            Wh_Log(L"[Theme] No theme path specified.");
+        if (IsThemeApplied(themePath)) {
+            Wh_Log(L"[Theme] Theme already applied.");
             return;
         }
 
         CoInitialize(nullptr);
-
-        // {C04B329E-5823-4415-9C93-BA44688947B0}
-        constexpr winrt::guid CLSID_IThemeManager{
-            0xC04B329E,
-            0x5823,
-            0x4415,
-            {0x9C, 0x93, 0xBA, 0x44, 0x68, 0x89, 0x47, 0xB0}};
-
-        // {0646EBBE-C1B7-4045-8FD0-FFD65D3FC792}
-        constexpr winrt::guid IID_IThemeManager{
-            0x0646EBBE,
-            0xC1B7,
-            0x4045,
-            {0x8F, 0xD0, 0xFF, 0xD6, 0x5D, 0x3F, 0xC7, 0x92}};
-
-        winrt::com_ptr<IUnknown> pThemeManager;
-        HRESULT hr =
-            CoCreateInstance(CLSID_IThemeManager, nullptr, CLSCTX_INPROC_SERVER,
-                            IID_IThemeManager, pThemeManager.put_void());
-        if (FAILED(hr) || !pThemeManager) {
-            Wh_Log(L"[Theme] Failed to apply theme.");
-        }
-
-        _bstr_t bstrTheme(themePath);
-        void** vtable = *(void***)pThemeManager.get();
-        using ApplyThemeFunc = HRESULT(WINAPI*)(IUnknown*, BSTR);
-        ApplyThemeFunc ApplyThemeMethod = (ApplyThemeFunc)vtable[4];
-        hr = ApplyThemeMethod(pThemeManager.get(), bstrTheme);
-        if (FAILED(hr)) {
-            Wh_Log(L"[Theme] Failed to apply theme.");
-        }
-
-        Wh_Log(L"[Theme] Successfully applied theme");
-
+        ApplyTheme(themePath);
         CoUninitialize();
+    } else {
+        if (IsAppearanceApplied(useLightTheme ? light : dark)) {
+            Wh_Log(L"[Theme] Appearance already applied.");
+            return;
+        }
+        ApplyAppearance(useLightTheme ? light : dark);
+    }
+} 
 
-        if (Wh_GetIntSetting(L"LockScreen"))
-            ApplyLockScreen();
-    }).detach();
+void ApplyCurrentTheme() {
+    time_t now = time(nullptr);
+    struct tm local;
+    localtime_s(&local, &now);
+
+    auto makeTime = [&](const SYSTEMTIME& st) {
+        struct tm t = local;
+        t.tm_hour = st.wHour; t.tm_min = st.wMinute; t.tm_sec = 0;
+        return mktime(&t);
+    };
+
+    time_t lightT = makeTime(g_lightTime);
+    time_t darkT = makeTime(g_darkTime);
+
+    bool isLightNow;
+    if (lightT < darkT)
+        isLightNow = now >= lightT && now < darkT;
+    else
+        isLightNow = now >= lightT || now < darkT;
+
+    ApplyThemeOrAppearance(isLightNow);
 }
 
 SYSTEMTIME ParseScheduleTime(PCWSTR timeStr) {
@@ -250,26 +282,15 @@ DWORD WINAPI ThemeScheduler(LPVOID) {
             continue;
         }
 
-        PCWSTR themePath = nextLight ? g_lightThemePath.c_str() : g_darkThemePath.c_str();
+        ApplyThemeOrAppearance(nextLight);
         
-        if (*themePath) {
-            if (IsThemeApplied(themePath)) {
-                Wh_Log(L"[Theme] Theme already applied.");
-                continue;
-            }
-            ApplyTheme(themePath);
-        } else {
-            if (IsAppearanceApplied(nextLight ? light : dark)) {
-                Wh_Log(L"[Theme] Appearance already applied.");
-                continue;
-            }
-            ApplyAppearance(nextLight ? light : dark);
-        }
     }
     return 0;
 }
 
 void StartScheduler() {
+    ApplyCurrentTheme();
+
     if (g_timerThread) {
         SetEvent(g_wakeEvent);
         return;
@@ -287,80 +308,35 @@ std::wstring TrimQuotes(const std::wstring& str) {
 }
 
 void LoadSettings() {
-    g_lightTime = ParseScheduleTime(Wh_GetStringSetting(L"Light"));
-    g_darkTime = ParseScheduleTime(Wh_GetStringSetting(L"Dark"));
+    auto rawLight = Wh_GetStringSetting(L"Light");
+    g_lightTime = ParseScheduleTime(rawLight);
+    if (rawLight) Wh_FreeStringSetting(rawLight);
+
+    auto rawDark = Wh_GetStringSetting(L"Dark");
+    g_darkTime = ParseScheduleTime(rawDark);
+    if (rawDark) Wh_FreeStringSetting(rawDark);
 
     auto rawLightPath = Wh_GetStringSetting(L"LightThemePath");
     g_lightThemePath = rawLightPath ? TrimQuotes(rawLightPath) : L"";
+    if (rawLightPath) Wh_FreeStringSetting(rawLightPath);
 
     auto rawDarkPath = Wh_GetStringSetting(L"DarkThemePath");
     g_darkThemePath = rawDarkPath ? TrimQuotes(rawDarkPath) : L"";
-
-    time_t now = time(nullptr);
-    struct tm local;
-    localtime_s(&local, &now);
-
-    auto makeTime = [&](const SYSTEMTIME& st) {
-        struct tm t = local;
-        t.tm_hour = st.wHour; t.tm_min = st.wMinute; t.tm_sec = 0;
-        return mktime(&t);
-    };
-
-    time_t lightT = makeTime(g_lightTime);
-    time_t darkT = makeTime(g_darkTime);
-
-    bool isLightNow;
-    if (lightT < darkT)
-        isLightNow = now >= lightT && now < darkT;
-    else
-        isLightNow = now >= lightT || now < darkT;
-    
-    PCWSTR themePath = isLightNow ? g_lightThemePath.c_str() : g_darkThemePath.c_str();
-    if (*themePath) {
-        if (IsThemeApplied(themePath)) {
-            Wh_Log(L"[Theme] Theme already applied.");
-            return;
-        }
-        ApplyTheme(themePath);
-    } else {
-        if (IsAppearanceApplied(isLightNow ? light : dark)) {
-            Wh_Log(L"[Theme] Appearance already applied.");
-            return;
-        }
-        ApplyAppearance(isLightNow ? light : dark);
-    }
-
-    StartScheduler();
+    if (rawDarkPath) Wh_FreeStringSetting(rawDarkPath);
 }
 
-HANDLE g_hMutex = nullptr;
-
-BOOL Wh_ModInit() {
-    g_hMutex = CreateMutexW(nullptr, FALSE, THEME_MUTEX_NAME);
-    if (!g_hMutex) {
-        return FALSE;
-    }
-
-    DWORD waitResult = WaitForSingleObject(g_hMutex, 0);
-    if (waitResult == WAIT_TIMEOUT) {
-        CloseHandle(g_hMutex);
-        g_hMutex = nullptr;
-        return FALSE;
-    }
-
+BOOL WhTool_ModInit() {
     LoadSettings();
+    StartScheduler();
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
-    if (g_hMutex && WaitForSingleObject(g_hMutex, 0) == WAIT_OBJECT_0) {
-        LoadSettings();
-    } else {
-        Wh_Log(L"[Theme] Settings changed ignored, not the owner.");
-    }
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+    StartScheduler();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_exitFlag = true;
     if (g_wakeEvent) SetEvent(g_wakeEvent);
     if (g_timerThread) {
@@ -368,10 +344,175 @@ void Wh_ModUninit() {
         CloseHandle(g_timerThread);
     }
     if (g_wakeEvent) CloseHandle(g_wakeEvent);
+}
 
-    if (g_hMutex) {
-        ReleaseMutex(g_hMutex);
-        CloseHandle(g_hMutex);
-        g_hMutex = nullptr;
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk-mods/pull/1916
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
