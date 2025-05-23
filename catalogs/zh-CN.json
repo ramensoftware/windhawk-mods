@@ -169,6 +169,27 @@
                 "version": "1.1.0"
             }
         },
+        "auto-theme-switcher": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1748038966000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1748038966000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "tinodin",
+                "compilerOptions": "-lole32 -loleaut32",
+                "description": "Automatically switch between light and dark mode/theme based on a set schedule",
+                "github": "https://github.com/tinodin",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Auto Theme Switcher",
+                "version": "1.0"
+            }
+        },
         "balloon-sound-fix": {
             "details": {
                 "defaultSorting": 1782,
