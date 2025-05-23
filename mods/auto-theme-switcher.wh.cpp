@@ -1,13 +1,38 @@
 // ==WindhawkMod==
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
-// @description     Automatically changes between light and dark mode/themes based on a set schedule
+// @description     Automatically switch between light and dark mode/theme based on a set schedule
 // @version         1.0
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Auto Theme Switcher
+
+Configure the schedule for light and dark mode/theme under settings  
+  (By default: `07:00` for light, `19:00` for dark)
+
+Provide paths to your desired `.theme` files  
+  (By default: `aero.theme` for light, `dark.theme` for dark)
+
+- Themes shipped with Windows are located in:  
+  `C:\Windows\Resources\Themes`
+
+- Saved or imported themes are located in:  
+  `C:\Users\user\AppData\Local\Microsoft\Windows\Themes`
+
+- If no `.theme` file is provided, the mod will default to only changing the appearance
+
+- To create custom `.theme` files, use the Personalization settings in Windows  
+  [Video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg)
+
+If you do not want the wallpaper to be applied to the lock screen, disable *Apply Wallpaper to Lock screen* under settings
+*/
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
