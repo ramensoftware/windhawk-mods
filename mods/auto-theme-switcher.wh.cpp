@@ -133,10 +133,6 @@ void ApplyAppearance(Appearance appearance) {
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
 
     Wh_Log(L"[Theme] Applied %s Mode.", appearance == light ? L"Light" : L"Dark");
-
-    // apply wallpaper to lock screen
-    if (Wh_GetIntSetting(L"LockScreen"))
-        ApplyLockScreen();
 }
 
 // Based on:
@@ -162,6 +158,7 @@ void ApplyTheme(PCWSTR themePath) {
                         IID_IThemeManager, pThemeManager.put_void());
     if (FAILED(hr) || !pThemeManager) {
         Wh_Log(L"[Theme] Failed to apply theme.");
+        return;
     }
 
     _bstr_t bstrTheme(themePath);
@@ -174,9 +171,6 @@ void ApplyTheme(PCWSTR themePath) {
     }
 
     Wh_Log(L"[Theme] Successfully applied theme");
-
-    if (Wh_GetIntSetting(L"LockScreen"))
-        ApplyLockScreen();
 }
 
 void ApplyThemeOrAppearance(bool useLightTheme) {
@@ -185,6 +179,9 @@ void ApplyThemeOrAppearance(bool useLightTheme) {
     if (*themePath) {
         Wh_Log(L"[Theme] Waiting for explorer to load...");
         for (;;) {
+            if (g_exitFlag) {
+                return;
+            }
             HWND progman = FindWindowW(L"Progman", nullptr);
             HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
             if (progman && tray && IsWindowVisible(tray))
@@ -201,12 +198,18 @@ void ApplyThemeOrAppearance(bool useLightTheme) {
         CoInitialize(nullptr);
         ApplyTheme(themePath);
         CoUninitialize();
+        
+        if (Wh_GetIntSetting(L"LockScreen"))
+        ApplyLockScreen();
     } else {
         if (IsAppearanceApplied(useLightTheme ? light : dark)) {
             Wh_Log(L"[Theme] Appearance already applied.");
             return;
         }
         ApplyAppearance(useLightTheme ? light : dark);
+        
+        if (Wh_GetIntSetting(L"LockScreen"))
+            ApplyLockScreen();
     }
 } 
 
