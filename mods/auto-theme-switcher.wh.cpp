@@ -23,7 +23,7 @@ Provide paths to your desired `.theme` files
   `C:\Windows\Resources\Themes`
 
 - Saved or imported themes are located in:  
-  `C:\Users\user\AppData\Local\Microsoft\Windows\Themes`
+  `%LOCALAPPDATA%\Microsoft\Windows\Themes`
 
 - If no `.theme` file is provided, the mod will default to only changing the appearance
 
