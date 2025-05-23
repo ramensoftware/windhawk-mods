@@ -2,7 +2,7 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark mode/theme based on a set schedule
-// @version         1.0
+// @version         1.0.1
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         windhawk.exe
@@ -150,11 +150,9 @@ bool IsThemeApplied(PCWSTR themePath) {
 void ApplyAppearance(Appearance appearance) {
     DWORD val = (appearance == light) ? 1 : 0;
 
-    // change appearance
     RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", REG_DWORD, &val, sizeof(val));
     RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"SystemUsesLightTheme", REG_DWORD, &val, sizeof(val));
 
-    // broadcast the change
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
 
     Wh_Log(L"[Theme] Applied %s Mode.", appearance == light ? L"Light" : L"Dark");
@@ -196,6 +194,8 @@ void ApplyTheme(PCWSTR themePath) {
     }
 
     Wh_Log(L"[Theme] Successfully applied theme");
+
+    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
 }
 
 void ApplyThemeOrAppearance(bool useLightTheme) {
