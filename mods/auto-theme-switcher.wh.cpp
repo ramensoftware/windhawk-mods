@@ -2,7 +2,7 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark mode/theme based on a set schedule
-// @version         1.0
+// @version         1.0.1
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         windhawk.exe
