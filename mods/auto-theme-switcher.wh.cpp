@@ -2,10 +2,10 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark mode/theme based on a set schedule
-// @version         1.0.1
+// @version         1.0.2
 // @author          tinodin
 // @github          https://github.com/tinodin
-// @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32
 // ==/WindhawkMod==
 
@@ -50,7 +50,6 @@ If you do not want the wallpaper to be applied to the lock screen, disable *Appl
 // ==/WindhawkModSettings==
 
 #include <fstream>
-#include <combaseapi.h>
 #include <comdef.h>
 #include <winrt/base.h>
 
@@ -225,7 +224,7 @@ void ApplyThemeOrAppearance(bool useLightTheme) {
         CoUninitialize();
         
         if (Wh_GetIntSetting(L"LockScreen"))
-        ApplyLockScreen();
+            ApplyLockScreen();
     } else {
         if (IsAppearanceApplied(useLightTheme ? light : dark)) {
             Wh_Log(L"[Theme] Appearance already applied.");
