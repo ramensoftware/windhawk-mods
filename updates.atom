@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-23T23:35:44.000Z</updated>
+    <updated>2025-05-24T17:29:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Theme Switcher 1.0.2]]></title>
+        <id>https://windhawk.net/mods/auto-theme-switcher#e31c921ed966e1c1f729016e4345cb20b57dd945</id>
+        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
+        <updated>2025-05-24T17:29:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed lock screen wallpaper not applying by injecting into explorer instead of windhawk</li>
+</ul>]]></content>
+        <author>
+            <name>tinodin</name>
+            <uri>https://github.com/tinodin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Theme Switcher 1.0.1]]></title>
         <id>https://windhawk.net/mods/auto-theme-switcher#b7fcaa082c1c749bb3cdd7ab92ac6b677eab2697</id>
@@ -378,19 +391,6 @@ the menu to always open just above the mouse cursor.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ShadowPlay Save Folder Override 1.1]]></title>
-        <id>https://windhawk.net/mods/shadowplay-single-folder#8c63a08f1a5c540f9061b4a896dfdf18a0bcd843</id>
-        <link href="https://windhawk.net/mods/shadowplay-single-folder"/>
-        <updated>2025-04-26T15:03:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="shadowplaysavefolderoverride">ShadowPlay Save Folder Override</h1>
-<p>This hooks into Nvidia ShadowPlay's file creation to redirect all saved clips
-into a single folder (e.g., C:\Users\USER\Videos), instead of separate folders for each game or source.</p>]]></content>
-        <author>
-            <name>yuma-dev</name>
-            <uri>https://github.com/yuma-dev</uri>
         </author>
     </entry>
 </feed>

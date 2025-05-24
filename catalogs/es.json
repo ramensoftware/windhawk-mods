@@ -175,7 +175,7 @@
                 "published": 1748038966000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1748043344000,
+                "updated": 1748107742000,
                 "users": 0
             },
             "metadata": {
@@ -184,10 +184,10 @@
                 "description": "Automatically switch between light and dark mode/theme based on a set schedule",
                 "github": "https://github.com/tinodin",
                 "include": [
-                    "windhawk.exe"
+                    "explorer.exe"
                 ],
                 "name": "Auto Theme Switcher",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "balloon-sound-fix": {
