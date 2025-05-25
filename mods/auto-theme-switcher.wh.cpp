@@ -2,7 +2,7 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark mode/theme based on a set schedule
-// @version         1.0.2
+// @version         1.0.3
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         explorer.exe
@@ -13,24 +13,27 @@
 /*
 # Auto Theme Switcher
 
-Configure the schedule for light and dark mode/theme under settings  
+Configure the schedule for light and dark mode/theme
   (By default: `07:00` for light, `19:00` for dark)
 
-Provide paths to your desired `.theme` files  
+Provide paths to your desired `.theme` files
   (By default: `aero.theme` for light, `dark.theme` for dark)
 
-- Themes shipped with Windows are located in:  
+- Themes shipped with Windows are located in:
   `C:\Windows\Resources\Themes`
 
-- Saved or imported themes are located in:  
+- Saved or imported themes are located in:
   `%LOCALAPPDATA%\Microsoft\Windows\Themes`
 
 - If no `.theme` file is provided, the mod will default to only changing the appearance
 
-- To create custom `.theme` files, use the Personalization settings in Windows  
+- To create custom `.theme` files, use the Personalization settings in Windows
   [Video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg)
 
-If you do not want the wallpaper to be applied to the lock screen, disable *Apply Wallpaper to Lock screen* under settings
+Provide path to your custom script (*.ps1; *.bat; *.cmd)
+- The script will be executed on every appearance/theme switch with -light/-dark argument
+
+If you do not want the wallpaper to be applied to the lock screen, disable *Apply Wallpaper to Lock screen*
 */
 // ==/WindhawkModReadme==
 
@@ -41,9 +44,11 @@ If you do not want the wallpaper to be applied to the lock screen, disable *Appl
 - Dark: 19:00
   $name: Dark mode time
 - LightThemePath: "C:\\Windows\\Resources\\Themes\\aero.theme"
-  $name: Light mode theme path (.theme)
+  $name: Light mode theme path (*.theme)
 - DarkThemePath: "C:\\Windows\\Resources\\Themes\\dark.theme"
-  $name: Dark mode theme path (.theme)
+  $name: Dark mode theme path (*.theme)
+- ScriptPath: ""
+  $name: Custom script path (*.ps1; *.bat; *.cmd)
 - LockScreen: true
   $name: Apply Wallpaper to Lock screen
 */
@@ -58,11 +63,52 @@ HANDLE g_wakeEvent = nullptr;
 bool g_exitFlag = false;
 SYSTEMTIME g_lightTime, g_darkTime;
 std::wstring g_lightThemePath, g_darkThemePath;
+std::wstring g_scriptPath;
 
 enum Appearance {
     light,
     dark
 };
+
+void ResetWorkingSet() {
+    HANDLE hProcess = GetCurrentProcess();
+    SetProcessWorkingSetSize(hProcess, SIZE_T(-1), SIZE_T(-1));
+}
+
+void RunScript(bool useLightTheme) {
+    if (GetFileAttributesW(g_scriptPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        Wh_Log(L"Script not found: %s", g_scriptPath.c_str());
+        return;
+    }
+
+    std::wstring ext = g_scriptPath.substr(g_scriptPath.find_last_of(L'.'));
+    std::wstring command;
+
+    if (_wcsicmp(ext.c_str(), L".ps1") == 0) {
+        command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"" + g_scriptPath + L"\" " + (useLightTheme ? L"-light" : L"-dark");
+    } else if (_wcsicmp(ext.c_str(), L".bat") == 0 || _wcsicmp(ext.c_str(), L".cmd") == 0) {
+        command = L"cmd.exe /c \"" + g_scriptPath + L"\" " + (useLightTheme ? L"-light" : L"-dark");
+    } else {
+        Wh_Log(L"Unsupported script extension: %s", ext.c_str());
+        return;
+    }
+
+    Wh_Log(L"Running script: %s", command.c_str());
+
+    STARTUPINFOW si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    if (CreateProcessW(nullptr,
+                       command.data(),
+                       nullptr, nullptr, FALSE,
+                       CREATE_NO_WINDOW,
+                       nullptr, nullptr,
+                       &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    } else {
+        Wh_Log(L"Failed to launch script");
+    }
+}
 
 void ApplyLockScreen() {
     std::wstring wallpaperPath;
@@ -91,7 +137,7 @@ void ApplyLockScreen() {
         RegCloseKey(hKey);
     }
 
-    Wh_Log(L"[Theme] Applied as Lock Screen");
+    Wh_Log(L"Applied as Lock Screen");
 }
 
 bool IsAppearanceApplied(Appearance appearance) {
@@ -154,7 +200,7 @@ void ApplyAppearance(Appearance appearance) {
 
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
 
-    Wh_Log(L"[Theme] Applied %s Mode.", appearance == light ? L"Light" : L"Dark");
+    Wh_Log(L"Applied %s Mode.", appearance == light ? L"Light" : L"Dark");
 }
 
 // Based on:
@@ -179,7 +225,7 @@ void ApplyTheme(PCWSTR themePath) {
         CoCreateInstance(CLSID_IThemeManager, nullptr, CLSCTX_INPROC_SERVER,
                         IID_IThemeManager, pThemeManager.put_void());
     if (FAILED(hr) || !pThemeManager) {
-        Wh_Log(L"[Theme] Failed to apply theme.");
+        Wh_Log(L"Failed to apply theme.");
         return;
     }
 
@@ -189,10 +235,10 @@ void ApplyTheme(PCWSTR themePath) {
     ApplyThemeFunc ApplyThemeMethod = (ApplyThemeFunc)vtable[4];
     hr = ApplyThemeMethod(pThemeManager.get(), bstrTheme);
     if (FAILED(hr)) {
-        Wh_Log(L"[Theme] Failed to apply theme.");
+        Wh_Log(L"Failed to apply theme.");
     }
 
-    Wh_Log(L"[Theme] Successfully applied theme");
+    Wh_Log(L"Successfully applied theme");
 
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
 }
@@ -201,7 +247,7 @@ void ApplyThemeOrAppearance(bool useLightTheme) {
     PCWSTR themePath = useLightTheme ? g_lightThemePath.c_str() : g_darkThemePath.c_str();
 
     if (*themePath) {
-        Wh_Log(L"[Theme] Waiting for explorer to load...");
+        Wh_Log(L"Waiting for explorer to load...");
         for (;;) {
             if (g_exitFlag) {
                 return;
@@ -212,10 +258,10 @@ void ApplyThemeOrAppearance(bool useLightTheme) {
                 break;
             Sleep(500);
         }
-        Wh_Log(L"[Theme] Explorer loaded");
+        Wh_Log(L"Explorer loaded");
 
         if (IsThemeApplied(themePath)) {
-            Wh_Log(L"[Theme] Theme already applied.");
+            Wh_Log(L"Theme already applied.");
             return;
         }
 
@@ -225,17 +271,27 @@ void ApplyThemeOrAppearance(bool useLightTheme) {
         
         if (Wh_GetIntSetting(L"LockScreen"))
             ApplyLockScreen();
+
+        if (!g_scriptPath.empty()) {
+            RunScript(useLightTheme);
+        }
     } else {
         if (IsAppearanceApplied(useLightTheme ? light : dark)) {
-            Wh_Log(L"[Theme] Appearance already applied.");
+            Wh_Log(L"Appearance already applied.");
             return;
         }
         ApplyAppearance(useLightTheme ? light : dark);
         
         if (Wh_GetIntSetting(L"LockScreen"))
             ApplyLockScreen();
+
+        if (!g_scriptPath.empty()) {
+            RunScript(useLightTheme);
+        }
     }
-} 
+
+    ResetWorkingSet();
+}
 
 void ApplyCurrentTheme() {
     time_t now = time(nullptr);
@@ -350,17 +406,23 @@ void LoadSettings() {
     auto rawDarkPath = Wh_GetStringSetting(L"DarkThemePath");
     g_darkThemePath = rawDarkPath ? TrimQuotes(rawDarkPath) : L"";
     if (rawDarkPath) Wh_FreeStringSetting(rawDarkPath);
+
+    auto rawScriptPath = Wh_GetStringSetting(L"ScriptPath");
+    g_scriptPath = rawScriptPath ? TrimQuotes(rawScriptPath) : L"";
+    if (rawScriptPath) Wh_FreeStringSetting(rawScriptPath);
 }
 
 BOOL WhTool_ModInit() {
     LoadSettings();
     StartScheduler();
+    ResetWorkingSet();
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
     LoadSettings();
     StartScheduler();
+    ResetWorkingSet();
 }
 
 void WhTool_ModUninit() {
