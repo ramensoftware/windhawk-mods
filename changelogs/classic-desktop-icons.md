@@ -1,3 +1,7 @@
+## 1.4.2 ([May 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bdad626e964738691119d2a07104bd58983957c0/mods/classic-desktop-icons.wh.cpp))
+
+- Fix bug with multiprocess Explorer
+
 ## 1.4.1 ([Mar 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cc7ca22005465e4a90c14158515cc3dccc0fe0ee/mods/classic-desktop-icons.wh.cpp))
 
 Remove unneeded `LoadComCtlModule` function, Explorer is always
