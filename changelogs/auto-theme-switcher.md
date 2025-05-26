@@ -1,3 +1,7 @@
+## 1.0.3 ([May 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4a12f25a8fd9ce15834bd2b9c29a34fda8d0a05f/mods/auto-theme-switcher.wh.cpp))
+
+- Add functionality to run custom scripts on switch with -light/-dark argument
+
 ## 1.0.2 ([May 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e31c921ed966e1c1f729016e4345cb20b57dd945/mods/auto-theme-switcher.wh.cpp))
 
 - Fixed lock screen wallpaper not applying by injecting into explorer instead of windhawk

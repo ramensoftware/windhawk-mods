@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-26T17:33:11.000Z</updated>
+    <updated>2025-05-26T17:39:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Theme Switcher 1.0.3]]></title>
+        <id>https://windhawk.net/mods/auto-theme-switcher#4a12f25a8fd9ce15834bd2b9c29a34fda8d0a05f</id>
+        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
+        <updated>2025-05-26T17:39:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add functionality to run custom scripts on switch with -light/-dark argument</li>
+</ul>]]></content>
+        <author>
+            <name>tinodin</name>
+            <uri>https://github.com/tinodin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 95/NT 4.0 Menubars 1.0.0]]></title>
         <id>https://windhawk.net/mods/win95-nt4-menubars#7d3ab99de6fc6d927ff1c124336bdd6e9283d56e</id>
@@ -381,20 +394,6 @@ the menu to always open just above the mouse cursor.</p>
 <li>Added an option to use the current theme accent color for the taskbar background.</li>
 <li>Added an option to ignore certain programs, even when maximized.</li>
 <li>Fixed taskbar thumbnails causing the background to be applied when the "Only when maximized" option is enabled.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.9]]></title>
-        <id>https://windhawk.net/mods/taskbar-grouping#fd599038b18456c3a0bee87e2f2e3b0e2d321dfb</id>
-        <link href="https://windhawk.net/mods/taskbar-grouping"/>
-        <updated>2025-05-01T13:02:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed jump list menus closing right after opening in some cases.</li>
 <li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 </ul>]]></content>
         <author>
