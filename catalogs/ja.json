@@ -4553,6 +4553,27 @@
                 "version": "1.0.1"
             }
         },
+        "win95-nt4-menubars": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1748280791000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1748280791000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -luxtheme",
+                "description": "Restores the appearance of menubars from Windows 95/NT 4.0",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Windows 95/NT 4.0 Menubars",
+                "version": "1.0.0"
+            }
+        },
         "windows-11-file-explorer-styler": {
             "details": {
                 "defaultSorting": 11990,

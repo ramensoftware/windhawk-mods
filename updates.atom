@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-26T16:42:41.000Z</updated>
+    <updated>2025-05-26T17:33:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 95/NT 4.0 Menubars 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win95-nt4-menubars#7d3ab99de6fc6d927ff1c124336bdd6e9283d56e</id>
+        <link href="https://windhawk.net/mods/win95-nt4-menubars"/>
+        <updated>2025-05-26T17:33:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows95nt40menubars">Windows 95/NT 4.0 Menubars</h1>
+<p>This mod restores the appearance of menubars from Windows 95/NT 4.0, in which
+they had no hover effect, and changed to the selection color while selected.</p>
+<p>This mod will only work with the classic theme.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win95-nt4-menubars-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/win95-nt4-menubars-after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Menubar 1.0]]></title>
         <id>https://windhawk.net/mods/classic-explorer-menubar#2a52a4e03dea43390da0c465a83b44b4fd957367</id>
@@ -382,17 +400,6 @@ the menu to always open just above the mouse cursor.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Edge Hot-Corners Desktop Switch 0.3.1]]></title>
-        <id>https://windhawk.net/mods/edge-hot-corner-desktop-switch#6d513abd8d17a039419817c9f8e0be1b5e4c5369</id>
-        <link href="https://windhawk.net/mods/edge-hot-corner-desktop-switch"/>
-        <updated>2025-05-01T10:29:05.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix issue for fullscreen apps. Now the mod will not work when in full screen.</p>]]></content>
-        <author>
-            <name>Sanskar Prasad</name>
-            <uri>https://github.com/sanskarprasad</uri>
         </author>
     </entry>
 </feed>
