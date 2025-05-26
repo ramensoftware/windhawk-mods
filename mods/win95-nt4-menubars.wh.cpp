@@ -241,6 +241,15 @@ bool UAHMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT 
             mii.cch = ARRAYSIZE(szMenuItemText);
             GetMenuItemInfoW(pDraw->um.hmenu, pDraw->umi.iPosition, TRUE, &mii);
 
+            if (pDraw->dis.itemState & ODS_NOACCEL)
+            {
+                WCHAR *pchAmpersand = wcschr(mii.dwTypeData, L'&');
+                if (pchAmpersand)
+                {
+                    wcscpy(pchAmpersand, pchAmpersand + 1);
+                }
+            }
+
             bool fDisabled = ((pDraw->dis.itemState & ODS_GRAYED) || (pDraw->dis.itemState & ODS_DISABLED));
             bool fSelected = !fDisabled && (pDraw->dis.itemState & ODS_SELECTED);
             int idBackground = fSelected ? COLOR_HIGHLIGHT : COLOR_MENU;
@@ -258,14 +267,14 @@ bool UAHMenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT 
             {
                 SetTextColor(hdc, GetSysColor(COLOR_3DHILIGHT));
                 OffsetRect(&pDraw->dis.rcItem, 1, 1);
-                DrawTextW(hdc, mii.dwTypeData, mii.cch, &pDraw->dis.rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                DrawTextW(hdc, mii.dwTypeData, -1, &pDraw->dis.rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
                 OffsetRect(&pDraw->dis.rcItem, -1, -1);
                 SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
-                DrawTextW(hdc, mii.dwTypeData, mii.cch, &pDraw->dis.rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                DrawTextW(hdc, mii.dwTypeData, -1, &pDraw->dis.rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
             }
             else
             {
-                DrawTextW(hdc, mii.dwTypeData, mii.cch, &pDraw->dis.rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                DrawTextW(hdc, mii.dwTypeData, -1, &pDraw->dis.rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
             }
 
             SetTextColor(hdc, crOld);
