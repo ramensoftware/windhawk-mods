@@ -543,6 +543,27 @@
                 "version": "1.4.2"
             }
         },
+        "classic-explorer-menubar": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1748277761000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1748277761000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "xalejandro",
+                "compilerOptions": "-luxtheme",
+                "description": "Turns off theming in Explorer menu bar",
+                "github": "https://github.com/tetawaves",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Explorer Menubar",
+                "version": "1.0"
+            }
+        },
         "classic-explorer-treeview": {
             "details": {
                 "defaultSorting": 5110,
