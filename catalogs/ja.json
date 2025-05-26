@@ -379,7 +379,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 116,
-                "updated": 1732217907000,
+                "updated": 1748284460000,
                 "users": 8857
             },
             "featured": true,
@@ -393,11 +393,12 @@
                     "chrome.exe",
                     "msedge.exe",
                     "opera.exe",
-                    "brave.exe"
+                    "brave.exe",
+                    "*\\YandexBrowser\\Application\\browser.exe"
                 ],
                 "name": "Chrome/Edge scroll tabs with mouse wheel",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "chromium-native-titlebar": {

@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-26T17:39:17.000Z</updated>
+    <updated>2025-05-26T18:34:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.2]]></title>
+        <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#d24cd9074413004acff7f87f7e9d6cab89210938</id>
+        <link href="https://windhawk.net/mods/chrome-wheel-scroll-tabs"/>
+        <updated>2025-05-26T18:34:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added options to limit the scroll area, which can be useful in case the mod incorrectly overrides the mouse wheel scrolling in areas where it shouldn't, e.g. in the page content area.</li>
+<li>Added support for Yandex Browser.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Theme Switcher 1.0.3]]></title>
         <id>https://windhawk.net/mods/auto-theme-switcher#4a12f25a8fd9ce15834bd2b9c29a34fda8d0a05f</id>
@@ -380,22 +394,6 @@ the menu to always open just above the mouse cursor.</p>
 <em>Before</em></p>
 <p><img src="https://i.imgur.com/4NcGU5O.png" alt="After" /><br />
 <em>After</em></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Background Helper 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-background-helper#3399052539fc8d9230110504c79c49fb980ee42d</id>
-        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
-        <updated>2025-05-01T15:36:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to use the current theme accent color for the taskbar background.</li>
-<li>Added an option to ignore certain programs, even when maximized.</li>
-<li>Fixed taskbar thumbnails causing the background to be applied when the "Only when maximized" option is enabled.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

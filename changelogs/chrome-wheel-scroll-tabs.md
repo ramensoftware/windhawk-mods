@@ -1,3 +1,8 @@
+## 1.2 ([May 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d24cd9074413004acff7f87f7e9d6cab89210938/mods/chrome-wheel-scroll-tabs.wh.cpp))
+
+* Added options to limit the scroll area, which can be useful in case the mod incorrectly overrides the mouse wheel scrolling in areas where it shouldn't, e.g. in the page content area.
+* Added support for Yandex Browser.
+
 ## 1.1 ([Nov 21, 2024](https://github.com/ramensoftware/windhawk-mods/blob/7fb455e856a1d5067bae96a727cd1e27a6af9ff3/mods/chrome-wheel-scroll-tabs.wh.cpp))
 
 * Added an option to switch between tabs when the mouse's horizontal scroll wheel is tilted or rotated.
