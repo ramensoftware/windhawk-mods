@@ -30,7 +30,7 @@ Provide paths to your desired `.theme` files
 - To create custom `.theme` files, use the Personalization settings in Windows
   [Video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg)
 
-Provide path to your custom script (*.ps1; *.bat; *.cmd)
+Provide path to your custom script
 - The script will be executed on every appearance/theme switch with -light/-dark argument
 
 If you do not want the wallpaper to be applied to the lock screen, disable *Apply Wallpaper to Lock screen*
@@ -48,7 +48,7 @@ If you do not want the wallpaper to be applied to the lock screen, disable *Appl
 - DarkThemePath: "C:\\Windows\\Resources\\Themes\\dark.theme"
   $name: Dark mode theme path (*.theme)
 - ScriptPath: ""
-  $name: Custom script path (*.ps1; *.bat; *.cmd)
+  $name: Custom script path
 - LockScreen: true
   $name: Apply Wallpaper to Lock screen
 */
@@ -81,32 +81,21 @@ void RunScript(bool useLightTheme) {
         return;
     }
 
-    std::wstring ext = g_scriptPath.substr(g_scriptPath.find_last_of(L'.'));
-    std::wstring command;
+    std::wstring params = useLightTheme ? L"-light" : L"-dark";
 
-    if (_wcsicmp(ext.c_str(), L".ps1") == 0) {
-        command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"" + g_scriptPath + L"\" " + (useLightTheme ? L"-light" : L"-dark");
-    } else if (_wcsicmp(ext.c_str(), L".bat") == 0 || _wcsicmp(ext.c_str(), L".cmd") == 0) {
-        command = L"cmd.exe /c \"" + g_scriptPath + L"\" " + (useLightTheme ? L"-light" : L"-dark");
-    } else {
-        Wh_Log(L"Unsupported script extension: %s", ext.c_str());
-        return;
+    if (g_scriptPath.size() >= 4 &&
+        _wcsicmp(g_scriptPath.data() + g_scriptPath.size() - 4, L".ps1") == 0)
+    {
+        std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -File \"" + g_scriptPath + L"\" " + params;
+        Wh_Log(L"Launching script: %s", args.c_str());
+        if ((INT_PTR)ShellExecuteW(nullptr, L"open", L"powershell.exe", args.c_str(), nullptr, SW_HIDE) <= 32)
+            Wh_Log(L"Failed to launch script");
     }
-
-    Wh_Log(L"Running script: %s", command.c_str());
-
-    STARTUPINFOW si = { sizeof(si) };
-    PROCESS_INFORMATION pi;
-    if (CreateProcessW(nullptr,
-                       command.data(),
-                       nullptr, nullptr, FALSE,
-                       CREATE_NO_WINDOW,
-                       nullptr, nullptr,
-                       &si, &pi)) {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-    } else {
-        Wh_Log(L"Failed to launch script");
+    else
+    {
+        Wh_Log(L"Launching script:: %s %s", g_scriptPath.c_str(), params.c_str());
+        if ((INT_PTR)ShellExecuteW(nullptr, L"open", g_scriptPath.c_str(), params.c_str(), nullptr, SW_HIDE) <= 32)
+            Wh_Log(L"Failed to launch script");
     }
 }
 
