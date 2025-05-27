@@ -1,3 +1,9 @@
+## 1.0.4 ([May 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/15e5d9838349e4b927ed8ac5433e9894ff6cda28/mods/auto-theme-switcher.wh.cpp))
+
+- Fixed switching after waking up from sleep
+- Improved checking if theme is applied
+- Added mode selection (Appearance, appearance + wallpapers, themes)
+
 ## 1.0.3 ([May 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4a12f25a8fd9ce15834bd2b9c29a34fda8d0a05f/mods/auto-theme-switcher.wh.cpp))
 
 - Add functionality to run custom scripts on switch with -light/-dark argument
