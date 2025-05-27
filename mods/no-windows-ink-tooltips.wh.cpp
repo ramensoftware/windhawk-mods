@@ -13,6 +13,14 @@
 This mod removes the tooltip that appears next to the cursor when any of the
 modifier keys are pressed while using a Windows Ink tablet by preventing the
 tooltip window from being created and updated.
+
+![Comparison](https://i.imgur.com/zT6C8o3.png)
+
+This mod requires injecting into DWM, which is a critical system process.
+To use it, you should allow Windhawk to inject to DWM by adding `dwm.exe`
+to the process inclusion list in the program's advanced settings.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
 // ==/WindhawkModReadme==
 
