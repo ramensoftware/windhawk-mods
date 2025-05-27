@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
-// @description     Automatically switch between light and dark mode/theme based on a set schedule
-// @version         1.0.3
+// @description     Automatically switch between light and dark appearance/wallpaper/theme based on a set schedule with custom script support
+// @version         1.0.4
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         explorer.exe
@@ -13,25 +13,23 @@
 /*
 # Auto Theme Switcher
 
-Configure the schedule for light and dark mode/theme
-  (By default: `07:00` for light, `19:00` for dark)
+Configure the schedule for light and dark (By default: `07:00` for light, `19:00` for dark)
 
-Provide paths to your desired `.theme` files
-  (By default: `aero.theme` for light, `dark.theme` for dark)
+Choose between 3 different modes (By default: `Switch between light and dark appearance`)
+- Switch between light and dark appearance
+- Switch between light and dark appearance + wallpapers
+    - Provide paths to wallpapers (By default: `img0.jpg` for light, `img19.jpg` for dark)
+- Switch between light and dark themes
+    - Provide paths to `.theme` files (By default: `aero.theme` for light, `dark.theme` for dark)
 
-- Themes shipped with Windows are located in:
-  `C:\Windows\Resources\Themes`
+    - Themes shipped with Windows are located in: `C:\Windows\Resources\Themes`
 
-- Saved or imported themes are located in:
-  `%LOCALAPPDATA%\Microsoft\Windows\Themes`
+    - Saved or imported themes are located in: `%LOCALAPPDATA%\Microsoft\Windows\Themes`
 
-- If no `.theme` file is provided, the mod will default to only changing the appearance
+    - To create custom `.theme` files, use the Personalization settings in Windows [Video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg)
 
-- To create custom `.theme` files, use the Personalization settings in Windows
-  [Video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg)
-
-Provide path to your custom script
-- The script will be executed on every appearance/theme switch with -light/-dark argument
+Provide path to custom script
+- The script will be executed on every switch with -light/-dark argument
 
 If you do not want the wallpaper to be applied to the lock screen, disable *Apply Wallpaper to Lock screen*
 */
@@ -43,10 +41,20 @@ If you do not want the wallpaper to be applied to the lock screen, disable *Appl
   $name: Light mode time
 - Dark: 19:00
   $name: Dark mode time
+- mode: appearance
+  $name: Mode
+  $options:
+  - appearance: Switch between light and dark appearance
+  - wallpaper: Switch between light and dark appearance + wallpapers
+  - theme: Switch between light and dark themes
+- LightWallpaperPath: "C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg"
+  $name: Light mode wallpaper path
+- DarkWallpaperPath: "C:\\Windows\\Web\\Wallpaper\\Windows\\img19.jpg"
+  $name: Dark mode wallpaper path
 - LightThemePath: "C:\\Windows\\Resources\\Themes\\aero.theme"
-  $name: Light mode theme path (*.theme)
+  $name: Light mode theme path
 - DarkThemePath: "C:\\Windows\\Resources\\Themes\\dark.theme"
-  $name: Dark mode theme path (*.theme)
+  $name: Dark mode theme path
 - ScriptPath: ""
   $name: Custom script path
 - LockScreen: true
@@ -58,10 +66,13 @@ If you do not want the wallpaper to be applied to the lock screen, disable *Appl
 #include <comdef.h>
 #include <winrt/base.h>
 
+HANDLE g_timer = nullptr;
 HANDLE g_timerThread = nullptr;
 HANDLE g_wakeEvent = nullptr;
 bool g_exitFlag = false;
 SYSTEMTIME g_lightTime, g_darkTime;
+std::wstring g_mode;
+std::wstring g_lightWallpaperPath, g_darkWallpaperPath;
 std::wstring g_lightThemePath, g_darkThemePath;
 std::wstring g_scriptPath;
 
@@ -77,7 +88,6 @@ void ResetWorkingSet() {
 
 void RunScript(bool useLightTheme) {
     if (GetFileAttributesW(g_scriptPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        Wh_Log(L"Script not found: %s", g_scriptPath.c_str());
         return;
     }
 
@@ -87,46 +97,61 @@ void RunScript(bool useLightTheme) {
         _wcsicmp(g_scriptPath.data() + g_scriptPath.size() - 4, L".ps1") == 0)
     {
         std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -File \"" + g_scriptPath + L"\" " + params;
-        Wh_Log(L"Launching script: %s", args.c_str());
-        if ((INT_PTR)ShellExecuteW(nullptr, L"open", L"powershell.exe", args.c_str(), nullptr, SW_HIDE) <= 32)
+        if ((INT_PTR)ShellExecuteW(nullptr, L"open", L"powershell.exe", args.c_str(), nullptr, SW_HIDE) <= 32) {
             Wh_Log(L"Failed to launch script");
+        } else {
+            Wh_Log(L"Successfully launched script: %s", args.c_str());
+        }
     }
     else
     {
-        Wh_Log(L"Launching script:: %s %s", g_scriptPath.c_str(), params.c_str());
-        if ((INT_PTR)ShellExecuteW(nullptr, L"open", g_scriptPath.c_str(), params.c_str(), nullptr, SW_HIDE) <= 32)
+        if ((INT_PTR)ShellExecuteW(nullptr, L"open", g_scriptPath.c_str(), params.c_str(), nullptr, SW_HIDE) <= 32) {
             Wh_Log(L"Failed to launch script");
+        } else {
+            Wh_Log(L"Successfully launched script: %s %s", g_scriptPath.c_str(), params.c_str());
+        }
     }
 }
 
 void ApplyLockScreen() {
-    std::wstring wallpaperPath;
     wchar_t currentWallpaper[MAX_PATH] = {0};
     DWORD size = sizeof(currentWallpaper);
 
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"WallPaper", RRF_RT_REG_SZ, nullptr, currentWallpaper, &size) != ERROR_SUCCESS)
-    {
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"WallPaper", RRF_RT_REG_SZ, nullptr, currentWallpaper, &size) != ERROR_SUCCESS) {
+        Wh_Log(L"Failed to apply lock Screen");
         return;
     }
-        
-    wallpaperPath = currentWallpaper;
 
+    std::wstring wallpaperPath = currentWallpaper;
     HKEY hKey;
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization", 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        RegSetValueExW(hKey, L"LockScreenImage", 0, REG_SZ, (const BYTE*)wallpaperPath.c_str(), (DWORD)((wallpaperPath.size() + 1) * sizeof(wchar_t)));
-        RegCloseKey(hKey);
-    }
 
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\PersonalizationCSP", 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS)
-    {
-        for (PCWSTR valueName : { L"LockScreenImagePath", L"LockScreenImageUrl" }) {
-            RegSetValueExW(hKey, valueName, 0, REG_SZ, (const BYTE*)wallpaperPath.c_str(), (DWORD)((wallpaperPath.size() + 1) * sizeof(wchar_t)));
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization", 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        if (RegSetValueExW(hKey, L"LockScreenImage", 0, REG_SZ, (const BYTE*)wallpaperPath.c_str(), (DWORD)((wallpaperPath.size() + 1) * sizeof(wchar_t))) != ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            Wh_Log(L"Failed to apply lock Screen");
+            return;
         }
         RegCloseKey(hKey);
+    } else {
+        Wh_Log(L"Failed to apply lock Screen");
+        return;
     }
 
-    Wh_Log(L"Applied as Lock Screen");
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\PersonalizationCSP", 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        for (PCWSTR valueName : { L"LockScreenImagePath", L"LockScreenImageUrl" }) {
+            if (RegSetValueExW(hKey, valueName, 0, REG_SZ, (const BYTE*)wallpaperPath.c_str(), (DWORD)((wallpaperPath.size() + 1) * sizeof(wchar_t))) != ERROR_SUCCESS) {
+                RegCloseKey(hKey);
+                Wh_Log(L"Failed to apply lock Screen");
+                return;
+            }
+        }
+        RegCloseKey(hKey);
+    } else {
+        Wh_Log(L"Failed to apply lock Screen");
+        return;
+    }
+
+    Wh_Log(L"Successfully applied lock Screen");
 }
 
 bool IsAppearanceApplied(Appearance appearance) {
@@ -137,6 +162,18 @@ bool IsAppearanceApplied(Appearance appearance) {
 
     RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &current, &size);
     return current == val;
+}
+
+bool IsWallpaperApplied(PCWSTR wallpaperPath) {
+    wchar_t currentWallpaper[MAX_PATH];
+    DWORD size = sizeof(currentWallpaper);
+
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"WallPaper", RRF_RT_REG_SZ, nullptr, currentWallpaper, &size) != ERROR_SUCCESS)
+    {
+        return false;
+    }
+
+    return _wcsicmp(currentWallpaper, wallpaperPath) == 0;
 }
 
 bool IsThemeApplied(PCWSTR themePath) {
@@ -184,12 +221,30 @@ bool IsThemeApplied(PCWSTR themePath) {
 void ApplyAppearance(Appearance appearance) {
     DWORD val = (appearance == light) ? 1 : 0;
 
-    RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", REG_DWORD, &val, sizeof(val));
-    RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"SystemUsesLightTheme", REG_DWORD, &val, sizeof(val));
+    if (
+        RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            L"AppsUseLightTheme", REG_DWORD, &val, sizeof(val)) == ERROR_SUCCESS &&
+        RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            L"SystemUsesLightTheme", REG_DWORD, &val, sizeof(val)) == ERROR_SUCCESS
+    ) {
+        Wh_Log(L"Successfully applied %s appearance", appearance == light ? L"light" : L"dark");
+    } else {
+        Wh_Log(L"Failed to apply %s appearance", appearance == light ? L"light" : L"dark");
+    }
 
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
+}
 
-    Wh_Log(L"Applied %s Mode.", appearance == light ? L"Light" : L"Dark");
+void ApplyWallpaper(PCWSTR wallpaperPath) {
+    if (SystemParametersInfoW(
+            SPI_SETDESKWALLPAPER,
+            0,
+            (PVOID)wallpaperPath,
+            SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE)) {
+        Wh_Log(L"Successfully applied wallpaper");
+    } else {
+        Wh_Log(L"Failed to apply wallpaper");
+    }
 }
 
 // Based on:
@@ -214,7 +269,7 @@ void ApplyTheme(PCWSTR themePath) {
         CoCreateInstance(CLSID_IThemeManager, nullptr, CLSCTX_INPROC_SERVER,
                         IID_IThemeManager, pThemeManager.put_void());
     if (FAILED(hr) || !pThemeManager) {
-        Wh_Log(L"Failed to apply theme.");
+        Wh_Log(L"Failed to apply theme");
         return;
     }
 
@@ -224,7 +279,7 @@ void ApplyTheme(PCWSTR themePath) {
     ApplyThemeFunc ApplyThemeMethod = (ApplyThemeFunc)vtable[4];
     hr = ApplyThemeMethod(pThemeManager.get(), bstrTheme);
     if (FAILED(hr)) {
-        Wh_Log(L"Failed to apply theme.");
+        Wh_Log(L"Failed to apply theme");
     }
 
     Wh_Log(L"Successfully applied theme");
@@ -232,57 +287,98 @@ void ApplyTheme(PCWSTR themePath) {
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
 }
 
-void ApplyThemeOrAppearance(bool useLightTheme) {
+void Apply(bool useLightTheme) {
+    PCWSTR wallpaperPath = useLightTheme ? g_lightWallpaperPath.c_str() : g_darkWallpaperPath.c_str();
     PCWSTR themePath = useLightTheme ? g_lightThemePath.c_str() : g_darkThemePath.c_str();
+    bool changed = false;
 
-    if (*themePath) {
-        Wh_Log(L"Waiting for explorer to load...");
-        for (;;) {
-            if (g_exitFlag) {
-                return;
+    if (g_mode == L"theme") {
+        if (*themePath) {
+            for (;;) {
+                if (g_exitFlag) return;
+                HWND progman = FindWindowW(L"Progman", nullptr);
+                HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                if (progman && tray && IsWindowVisible(tray))
+                    break;
+                Sleep(500);
             }
-            HWND progman = FindWindowW(L"Progman", nullptr);
-            HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-            if (progman && tray && IsWindowVisible(tray))
-                break;
-            Sleep(500);
-        }
-        Wh_Log(L"Explorer loaded");
+            if (!IsThemeApplied(themePath)) {
+                CoInitialize(nullptr);
+                ApplyTheme(themePath);
+                CoUninitialize();
+                changed = true;
+            } else {
+                wchar_t currentWallpaper[MAX_PATH] = {};
+                DWORD size = sizeof(currentWallpaper);
+                bool wallpaperMismatch = false;
 
-        if (IsThemeApplied(themePath)) {
-            Wh_Log(L"Theme already applied.");
-            return;
-        }
+                if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"WallPaper", RRF_RT_REG_SZ, nullptr, currentWallpaper, &size) == ERROR_SUCCESS) {
+                    std::wifstream file(themePath);
+                    if (file) {
+                        std::wstring line, wallpaperInTheme;
+                        bool inDesktop = false;
+                        while (std::getline(file, line)) {
+                            if (line.empty() || line[0] == L';') continue;
+                            if (line[0] == L'[') {
+                                inDesktop = (line == L"[Control Panel\\Desktop]");
+                                continue;
+                            }
+                            if (inDesktop && line.find(L"Wallpaper=") == 0) {
+                                wallpaperInTheme = line.substr(10);
+                                break;
+                            }
+                        }
+                        if (!wallpaperInTheme.empty()) {
+                            wchar_t expanded[MAX_PATH] = {};
+                            ExpandEnvironmentStringsW(wallpaperInTheme.c_str(), expanded, MAX_PATH);
+                            if (_wcsicmp(currentWallpaper, expanded) != 0) {
+                                ApplyWallpaper(expanded);
+                                changed = true;
+                                wallpaperMismatch = true;
+                            }
+                        }
+                    }
+                }
 
-        CoInitialize(nullptr);
-        ApplyTheme(themePath);
-        CoUninitialize();
-        
-        if (Wh_GetIntSetting(L"LockScreen"))
-            ApplyLockScreen();
-
-        if (!g_scriptPath.empty()) {
-            RunScript(useLightTheme);
+                if (wallpaperMismatch)
+                {
+                    Wh_Log(L"Successfully applied theme");
+                }
+                else {
+                    Wh_Log(L"Theme already applied");
+                }   
+            }
         }
     } else {
-        if (IsAppearanceApplied(useLightTheme ? light : dark)) {
-            Wh_Log(L"Appearance already applied.");
-            return;
+        if (g_mode == L"wallpaper" && *wallpaperPath) {
+            if (!IsWallpaperApplied(wallpaperPath)) {
+                ApplyWallpaper(wallpaperPath);
+                changed = true;
+            } else {
+                Wh_Log(L"Wallpaper already applied");
+            }
         }
-        ApplyAppearance(useLightTheme ? light : dark);
-        
-        if (Wh_GetIntSetting(L"LockScreen"))
-            ApplyLockScreen();
 
-        if (!g_scriptPath.empty()) {
-            RunScript(useLightTheme);
+        if (!IsAppearanceApplied(useLightTheme ? light : dark)) {
+            ApplyAppearance(useLightTheme ? light : dark);
+            changed = true;
+        } else {
+            Wh_Log(L"Appearance already applied");
         }
+    }
+
+    if (changed && Wh_GetIntSetting(L"LockScreen")) {
+        ApplyLockScreen();
+    }
+
+    if (changed && !g_scriptPath.empty()) {
+        RunScript(useLightTheme);
     }
 
     ResetWorkingSet();
 }
 
-void ApplyCurrentTheme() {
+void ApplyCurrent() {
     time_t now = time(nullptr);
     struct tm local;
     localtime_s(&local, &now);
@@ -302,7 +398,7 @@ void ApplyCurrentTheme() {
     else
         isLightNow = now >= lightT || now < darkT;
 
-    ApplyThemeOrAppearance(isLightNow);
+    Apply(isLightNow);
 }
 
 SYSTEMTIME ParseScheduleTime(PCWSTR timeStr) {
@@ -343,31 +439,43 @@ time_t GetNextSwitch(const SYSTEMTIME& light, const SYSTEMTIME& dark, bool& next
 }
 
 DWORD WINAPI ThemeScheduler(LPVOID) {
+    LARGE_INTEGER dueTime;
+    HANDLE handles[] = { g_wakeEvent, g_timer };
+
     while (!g_exitFlag) {
         bool nextLight;
-        time_t now = time(nullptr);
         time_t nextSwitch = GetNextSwitch(g_lightTime, g_darkTime, nextLight);
-        int waitTime = (int)(nextSwitch - now);
-        DWORD res = WaitForSingleObject(g_wakeEvent, waitTime * 1000);
+        time_t now = time(nullptr);
+        int secondsToWait = (int)(nextSwitch - now);
+        if (secondsToWait < 0) secondsToWait = 0;
+
+        dueTime.QuadPart = -((LONGLONG)secondsToWait * 10000000LL);
+
+        SetWaitableTimer(g_timer, &dueTime, 0, nullptr, nullptr, TRUE);
+
+        DWORD res = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
         if (res == WAIT_OBJECT_0) {
             if (g_exitFlag) break;
             continue;
         }
 
-        ApplyThemeOrAppearance(nextLight);
-        
+        Apply(nextLight);
     }
+
     return 0;
 }
 
 void StartScheduler() {
-    ApplyCurrentTheme();
+    ApplyCurrent();
 
     if (g_timerThread) {
         SetEvent(g_wakeEvent);
         return;
     }
+
     g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_timer = CreateWaitableTimerW(nullptr, TRUE, nullptr);
+
     g_timerThread = CreateThread(nullptr, 0, ThemeScheduler, nullptr, 0, nullptr);
 }
 
@@ -388,13 +496,25 @@ void LoadSettings() {
     g_darkTime = ParseScheduleTime(rawDark);
     if (rawDark) Wh_FreeStringSetting(rawDark);
 
-    auto rawLightPath = Wh_GetStringSetting(L"LightThemePath");
-    g_lightThemePath = rawLightPath ? TrimQuotes(rawLightPath) : L"";
-    if (rawLightPath) Wh_FreeStringSetting(rawLightPath);
+    auto rawMode = Wh_GetStringSetting(L"mode");
+    g_mode = rawMode ? std::wstring(rawMode) : L"appearance";
+    if (rawMode) Wh_FreeStringSetting(rawMode);
 
-    auto rawDarkPath = Wh_GetStringSetting(L"DarkThemePath");
-    g_darkThemePath = rawDarkPath ? TrimQuotes(rawDarkPath) : L"";
-    if (rawDarkPath) Wh_FreeStringSetting(rawDarkPath);
+    auto rawLightWallpaperPath = Wh_GetStringSetting(L"LightWallpaperPath");
+    g_lightWallpaperPath = rawLightWallpaperPath ? TrimQuotes(rawLightWallpaperPath) : L"";
+    if (rawLightWallpaperPath) Wh_FreeStringSetting(rawLightWallpaperPath);
+
+    auto rawDarkWallpaperPath = Wh_GetStringSetting(L"DarkWallpaperPath");
+    g_darkWallpaperPath = rawDarkWallpaperPath ? TrimQuotes(rawDarkWallpaperPath) : L"";
+    if (rawDarkWallpaperPath) Wh_FreeStringSetting(rawDarkWallpaperPath);
+
+    auto rawLightThemePath = Wh_GetStringSetting(L"LightThemePath");
+    g_lightThemePath = rawLightThemePath ? TrimQuotes(rawLightThemePath) : L"";
+    if (rawLightThemePath) Wh_FreeStringSetting(rawLightThemePath);
+
+    auto rawDarkThemePath = Wh_GetStringSetting(L"DarkThemePath");
+    g_darkThemePath = rawDarkThemePath ? TrimQuotes(rawDarkThemePath) : L"";
+    if (rawDarkThemePath) Wh_FreeStringSetting(rawDarkThemePath);
 
     auto rawScriptPath = Wh_GetStringSetting(L"ScriptPath");
     g_scriptPath = rawScriptPath ? TrimQuotes(rawScriptPath) : L"";
@@ -421,6 +541,7 @@ void WhTool_ModUninit() {
         WaitForSingleObject(g_timerThread, INFINITE);
         CloseHandle(g_timerThread);
     }
+    if (g_timer) CloseHandle(g_timer);
     if (g_wakeEvent) CloseHandle(g_wakeEvent);
 }
 
