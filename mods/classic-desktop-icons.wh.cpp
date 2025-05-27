@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.4.1
+// @version         1.4.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -306,17 +306,19 @@ void UpdateDesktop(void)
 
 HWND FindDesktopWindow(void)
 {
-    HWND baseWindow = FindWindowW(L"Progman", L"Program Manager");
-    if (baseWindow)
+    HWND hwndProgman = FindWindowW(L"Progman", L"Program Manager");
+    if (hwndProgman)
     {
-        HWND defView = FindWindowExW(baseWindow, 0, L"SHELLDLL_DefView", NULL);
-        if (defView)
+        HWND hwndDefView = FindWindowExW(hwndProgman, 0, L"SHELLDLL_DefView", NULL);
+        if (hwndDefView)
         {
-            HWND desktop = FindWindowExW(defView, 0, L"SysListView32", NULL);
-
-            if (desktop)
+            HWND hwndDesktop = FindWindowExW(hwndDefView, 0, L"SysListView32", NULL);
+            if (hwndDesktop)
             {
-                return desktop;
+                DWORD dwPID;
+                GetWindowThreadProcessId(hwndDesktop, &dwPID);
+                if (dwPID == GetCurrentProcessId())
+                    return hwndDesktop;
             }
         }
     }
