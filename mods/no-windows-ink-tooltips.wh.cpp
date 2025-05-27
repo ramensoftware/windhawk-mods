@@ -27,18 +27,18 @@ to the process inclusion list in the program's advanced settings.
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-long (*CTrackingTooltip_Initialize_orig)(void *pThis, const tagPOINT* point, unsigned short* unk);
-long CTrackingTooltip_Initialize_hook(void *pThis, const tagPOINT* point, unsigned short* unk){
+long __cdecl (*CTrackingTooltip_Initialize_orig)(void *pThis, const tagPOINT* point, unsigned short* unk);
+long __cdecl CTrackingTooltip_Initialize_hook(void *pThis, const tagPOINT* point, unsigned short* unk){
 	return 0;
 }
 
-void (*CTrackingTooltip_Update_orig)(void *pThis, const tagPOINT* point, unsigned short* unk);
-void CTrackingTooltip_Update_hook(void *pThis, const tagPOINT* point, unsigned short* unk){
+void __cdecl (*CTrackingTooltip_Update_orig)(void *pThis, const tagPOINT* point, unsigned short* unk);
+void __cdecl CTrackingTooltip_Update_hook(void *pThis, const tagPOINT* point, unsigned short* unk){
 	return;
 }
 
-void (*CTrackingTooltip_UpdateTooltipLocation_orig)(void *pThis);
-void CTrackingTooltip_UpdateTooltipLocation_hook(void *pThis){
+void __cdecl (*CTrackingTooltip_UpdateTooltipLocation_orig)(void *pThis);
+void __cdecl CTrackingTooltip_UpdateTooltipLocation_hook(void *pThis){
 	return;
 }
 
