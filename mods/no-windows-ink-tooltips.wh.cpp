@@ -72,6 +72,7 @@ const WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
 BOOL Wh_ModInit() {
 	if(!WindhawkUtils::HookSymbols(GetModuleHandleW(L"udwm.dll"), udwmDllHooks, ARRAYSIZE(udwmDllHooks))){
 		Wh_Log(L"Cannot hook uDWM.dll");
+		return FALSE;
 	}
 	return TRUE;
 }
