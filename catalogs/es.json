@@ -2470,6 +2470,26 @@
                 "version": "1.0.0"
             }
         },
+        "no-windows-ink-tooltips": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1748356166000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1748356166000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "wily-coyote",
+                "description": "Stops DWM from rendering Windows Ink key modifier tooltips",
+                "github": "https://github.com/wily-coyote",
+                "include": [
+                    "dwm.exe"
+                ],
+                "name": "Disable Windows Ink modifier tooltips",
+                "version": "1.0.0"
+            }
+        },
         "notepad-clientedge": {
             "details": {
                 "defaultSorting": 2196,

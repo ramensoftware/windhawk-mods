@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-26T18:34:20.000Z</updated>
+    <updated>2025-05-27T14:29:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Windows Ink modifier tooltips 1.0.0]]></title>
+        <id>https://windhawk.net/mods/no-windows-ink-tooltips#9eae2396a7de07045cc575c3428eac37b3069e9d</id>
+        <link href="https://windhawk.net/mods/no-windows-ink-tooltips"/>
+        <updated>2025-05-27T14:29:26.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod removes the tooltip that appears next to the cursor when any of the
+modifier keys are pressed while using a Windows Ink tablet by preventing the
+tooltip window from being created and updated.</p>
+<p><img src="https://i.imgur.com/zT6C8o3.png" alt="Comparison" /></p>
+<p>This mod requires injecting into DWM, which is a critical system process.
+To use it, you should allow Windhawk to inject to DWM by adding <code>dwm.exe</code>
+to the process inclusion list in the program's advanced settings.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>]]></content>
+        <author>
+            <name>wily-coyote</name>
+            <uri>https://github.com/wily-coyote</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.2]]></title>
         <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#d24cd9074413004acff7f87f7e9d6cab89210938</id>
@@ -373,27 +391,6 @@ resource variables.</p>
 <p>The VisualTreeWatcher implementation is based on the
 <a href="https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP">ExplorerTAP</a>
 code from the <strong>TranslucentTB</strong> project.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar jump list on cursor pos 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-jump-list-on-cursor-pos#c8a8daa604830fe792c07a8f9d29a2b96ecaaa07</id>
-        <link href="https://windhawk.net/mods/taskbar-jump-list-on-cursor-pos"/>
-        <updated>2025-05-01T16:28:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarjumplistoncursorpos">Taskbar jump list on cursor pos</h1>
-<p>Open the taskbar jump list context menus near the mouse cursor, not in the
-middle of the task group.</p>
-<p>When multiple instances of a program are grouped on the taskbar, right-clicking
-any icon opens the menu centered across all icons, not above the one clicked. As
-a result, extra cursor movement is required to reach the menu. This mod causes
-the menu to always open just above the mouse cursor.</p>
-<p><img src="https://i.imgur.com/Fe9K7v2.png" alt="Before" /><br />
-<em>Before</em></p>
-<p><img src="https://i.imgur.com/4NcGU5O.png" alt="After" /><br />
-<em>After</em></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
