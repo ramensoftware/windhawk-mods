@@ -27,16 +27,16 @@
 * Make Spotify's custom window controls transparent
 * Ignore the minimum window size set by Spotify
 * Change the playback speed
-* Enable transparent rendering to make the transparent parts of the web contents transparent
+* Enable transparent rendering to make the transparent parts of the web content transparent
 * Disable forced dark mode to prevent Spotify from forcing dark mode on the CEF UI & web contents
 * Force enable Chrome extension support
 * Use the settings tab on the mod details page to configure the features
 ## Notes
 * Supported CEF versions: 90.4 to 134
     * This mod won't work with versions before 90.4
-    * Versions after 132 may work but are not tested
-    * Variant of this mod using copy-pasted CEF structs instead of hardcoded offsets is available at [here](https://github.com/Ingan121/files/tree/master/cte)
-    * Copy required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them to the above variant to calculate the offsets
+    * Versions after 132 may work, but are not tested
+    * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
+    * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
 * Supported Spotify versions: 1.1.60 to 1.2.64 (newer versions may work)
 * Spotify notes:
@@ -109,7 +109,7 @@
   $name: Playback speed
   $name:ko-KR: 재생 속도
   $description: "Enter a decimal number. Value 1.0 represents a normal speed\n
-    Requires a x64 version of the Spotify client newer than 1.2.36\n
+    Requires an x64 version of the Spotify client newer than 1.2.36\n
     Spotify 1.2.36-1.2.44: The change will take effect from the next track\n
     Spotify 1.2.45+: The change will be applied immediately\n
     This feature is not available while playing on another device"
