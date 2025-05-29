@@ -68,7 +68,7 @@
 /*
 - showframe: true
   $name: Enable native frames and title bars on the main window*
-  $name:ko-KR: 메인 창에 시스템 제목 표시줄 및 테두리 사용
+  $name:ko-KR: 메인 창에 시스템 제목 표시줄 및 테두리 사용*
   $description: "(*): Requires a restart to take effect"
   $description:ko-KR: "(*): 다시 시작해야 적용됩니다"
 - showframeonothers: false
@@ -88,7 +88,7 @@
   $name:ko-KR: Spotify의 자체 창 제어 버튼을 투명하게 표시
 - transparentrendering: true
   $name: Enable transparent rendering*
-  $name:ko-KR: 투명 렌더링 사용
+  $name:ko-KR: 투명 렌더링 사용*
   $description: "Make the transparent parts of the web contents transparent\n
     Will use the ButtonFace color instead if the classic theme is being used and native frames are enabled\n
     Chrome runtime is required for this to work"
@@ -2218,7 +2218,7 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
     // This function exists on all Spotify versions supported by this mod
     // Reuse this function as a mod JS API's handler instead of allocating a new cef_v8handler_t* everytime
     // As this function's memory allocation is internally managed by Spotify
-    // And libcef.dll does not expose a function to create a internally managed V8 handlers
+    // And libcef.dll does not expose a function to create an internally managed V8 handlers
 
     // ... Yes, I should've used this function for API access from the beginning, obviously
     if (u"cancelCosmosRequest" == std::u16string(name->str, name->length)) {
