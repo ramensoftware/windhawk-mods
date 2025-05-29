@@ -267,12 +267,12 @@
                 "published": 1734116516000,
                 "rating": 10,
                 "ratingUsers": 24,
-                "updated": 1745160543000,
+                "updated": 1748515299000,
                 "users": 1639
             },
             "metadata": {
                 "author": "Ingan121",
-                "compilerOptions": "-lcomctl32 -luxtheme -ldwmapi -lgdi32 -DWINVER=0x0A00",
+                "compilerOptions": "-lcomctl32 -luxtheme -ldwmapi -lgdi32",
                 "description": "Various tweaks for Spotify, including native frames, transparent windows, and more",
                 "github": "https://github.com/Ingan121",
                 "homepage": "https://www.ingan121.com/",
@@ -282,7 +282,7 @@
                 ],
                 "name": "CEF/Spotify Tweaks",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.9"
+                "version": "1.0"
             }
         },
         "center-titlebar": {

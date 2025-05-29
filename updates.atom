@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-27T17:38:56.000Z</updated>
+    <updated>2025-05-29T10:41:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.0]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#363a9ab160fe2975c2fc1a7c359b488bbd43cc88</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-05-29T10:41:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a standalone playback speed changer in the Windhawk mod settings page</li>
+<li>Previously, this feature was only available via the JavaScript API</li>
+<li>Added support for Spotify 1.2.63 and 1.2.64, including the playback speed mod</li>
+<li>Added caching for memory patch offsets to improve the startup speed</li>
+<li>Added support for Windows 7 running older versions of the Spotify client (1.2.5 and below)</li>
+<li><code>--no-sandbox</code> is not required when running those older versions</li>
+<li>Note that non-DWM mode might look broken due to Chromium's classic custom frames. It is recommended to enable Aero and then use a basic themer for using the Basic/Classic frames</li>
+<li>You'll still need <code>--no-sandbox</code> when running newer versions with VxKex</li>
+<li>Fixed memory leaks in the renderer process caused by improperly managed V8 value memories</li>
+<li>Fixed the GPU acceleration status being detected wrongly and causing rendering issues when the hardware acceleration is enabled but unavailable</li>
+<li>Improved security by limiting the IPC pipe connection to the most recently spawned renderer</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Theme Switcher 1.0.4]]></title>
         <id>https://windhawk.net/mods/auto-theme-switcher#15e5d9838349e4b927ed8ac5433e9894ff6cda28</id>
@@ -336,19 +359,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
         <author>
             <name>Roland Pihlakas</name>
             <uri>https://github.com/levitation</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Show all apps by default in start menu 1.0.4]]></title>
-        <id>https://windhawk.net/mods/start-menu-all-apps#f911ce31938d67ff8b6182ddbef99d6a8048b77f</id>
-        <link href="https://windhawk.net/mods/start-menu-all-apps"/>
-        <updated>2025-05-02T14:39:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with update KB5055627 for Windows 11 version 24H2.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

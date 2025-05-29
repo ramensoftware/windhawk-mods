@@ -1,3 +1,17 @@
+## 1.0 ([May 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/363a9ab160fe2975c2fc1a7c359b488bbd43cc88/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Added a standalone playback speed changer in the Windhawk mod settings page
+  * Previously, this feature was only available via the JavaScript API
+* Added support for Spotify 1.2.63 and 1.2.64, including the playback speed mod
+* Added caching for memory patch offsets to improve the startup speed
+* Added support for Windows 7 running older versions of the Spotify client (1.2.5 and below)
+  * `--no-sandbox` is not required when running those older versions
+  * Note that non-DWM mode might look broken due to Chromium's classic custom frames. It is recommended to enable Aero and then use a basic themer for using the Basic/Classic frames
+  * You'll still need `--no-sandbox` when running newer versions with VxKex
+* Fixed memory leaks in the renderer process caused by improperly managed V8 value memories
+* Fixed the GPU acceleration status being detected wrongly and causing rendering issues when the hardware acceleration is enabled but unavailable
+* Improved security by limiting the IPC pipe connection to the most recently spawned renderer
+
 ## 0.9 ([Apr 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1d248fdd4964e037fc00cb9799cd5fb55fe92f77/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Add support for Spotify 1.2.62
