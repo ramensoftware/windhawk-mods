@@ -2,14 +2,14 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         0.9
+// @version         1.0
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
-// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32 -DWINVER=0x0A00
+// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -26,18 +26,19 @@
 * Hide the menu button or Spotify's custom window controls
 * Make Spotify's custom window controls transparent
 * Ignore the minimum window size set by Spotify
-* Enable transparent rendering to make the transparent parts of the web contents transparent
+* Change the playback speed
+* Enable transparent rendering to make the transparent parts of the web content transparent
 * Disable forced dark mode to prevent Spotify from forcing dark mode on the CEF UI & web contents
 * Force enable Chrome extension support
 * Use the settings tab on the mod details page to configure the features
 ## Notes
 * Supported CEF versions: 90.4 to 134
     * This mod won't work with versions before 90.4
-    * Versions after 132 may work but are not tested
-    * Variant of this mod using copy-pasted CEF structs instead of hardcoded offsets is available at [here](https://github.com/Ingan121/files/tree/master/cte)
-    * Copy required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them to the above variant to calculate the offsets
+    * Versions after 132 may work, but are not tested
+    * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
+    * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.62 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.64 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -67,32 +68,66 @@
 /*
 - showframe: true
   $name: Enable native frames and title bars on the main window*
+  $name:ko-KR: 메인 창에 시스템 제목 표시줄 및 테두리 사용*
   $description: "(*): Requires a restart to take effect"
+  $description:ko-KR: "(*): 다시 시작해야 적용됩니다"
 - showframeonothers: false
   $name: Enable native frames and title bars on other windows
+  $name:ko-KR: 다른 창에 시스템 제목 표시줄 및 테두리 사용
   $description: Includes Miniplayer, DevTools, etc.
 - showmenu: true
   $name: Show the menu button*
+  $name:ko-KR: 메뉴 버튼 표시*
   $description: Disabling this also prevents opening the Spotify menu with the Alt key
+  $description:ko-KR: 이 옵션을 사용하지 않으면 알트 키를 이용하여 Spotify 메뉴를 열 수 없게 됩니다
 - showcontrols: false
   $name: Show Spotify's custom window controls*
+  $name:ko-KR: Spotify의 자체 창 제어 버튼 표시*
 - transparentcontrols: false
   $name: Make Spotify's custom window controls transparent
+  $name:ko-KR: Spotify의 자체 창 제어 버튼을 투명하게 표시
 - transparentrendering: true
   $name: Enable transparent rendering*
-  $description: "Make the transparent parts of the web contents transparent\nWill use the ButtonFace color instead if the classic theme is being used and native frames are enabled\nChrome runtime is required for this to work"
+  $name:ko-KR: 투명 렌더링 사용*
+  $description: "Make the transparent parts of the web contents transparent\n
+    Will use the ButtonFace color instead if the classic theme is being used and native frames are enabled\n
+    Chrome runtime is required for this to work"
+  $description:ko-KR: "웹 컨텐츠의 투명한 영역을 투명하게 표시합니다\n
+    고전 테마를 사용중이고 시스템 제목 표시줄이 활성화되어있을 경우 버튼 색상을 대신 사용합니다\n
+    이 기능은 Chrome 런타임이 필요합니다"
 - noforceddarkmode: false
   $name: Disable forced dark mode*
+  $name:ko-KR: 강제 다크 모드 비활성화*
   $description: Prevents Spotify from forcing dark mode on the CEF UI & web contents
+  $description:ko-KR: Spotify가 CEF UI와 웹 컨텐츠에 다크 모드를 강제하는 것을 방지합니다
 - forceextensions: true
   $name: Force enable Chrome extensions*
+  $name:ko-KR: Chrome 확장 프로그램 강제 활성화*
   $description: Always enable Chrome extension support, regardless of the DevTools status
+  $description:ko-KR: 개발자 도구 상태에 관계 없이 항상 크롬 확장 프로그램 지원을 활성화합니다
+- playbackspeed: "1"
+  $name: Playback speed
+  $name:ko-KR: 재생 속도
+  $description: "Enter a decimal number. Value 1.0 represents a normal speed\n
+    Requires an x64 version of the Spotify client newer than 1.2.36\n
+    Spotify 1.2.36-1.2.44: The change will take effect from the next track\n
+    Spotify 1.2.45+: The change will be applied immediately\n
+    This feature is not available while playing on another device"
+  $description:ko-KR: "소수 값을 입력하세요. 1.0이 보통 재생 속도입니다\n
+    이 기능은 1.2.36 버전 이상의 x64 Spotify 클라이언트가 필요합니다\n
+    Spotify 1.2.36-1.2.44: 변경 사항은 다음 트랙부터 적용됩니다\n
+    Spotify 1.2.45+: 변경 사항은 즉시 적용됩니다\n
+    다른 기기에서 재생하는 동안에는 사용할 수 없습니다"
 - ignoreminsize: false
   $name: Ignore minimum window size
+  $name:ko-KR: 최소 창 크기 무시
   $description: Allows resizing the window below the minimum size set by Spotify
+  $description:ko-KR: Spotify가 정한 최소 크기 이하로 창의 크기를 조절하는 것을 허용합니다
 - allowuntested: false
   $name: (Advanced) Use unsafe methods on untested CEF versions*
+  $name:ko-KR: (고급) 검증되지 않은 CEF 버전에서 안전하지 않은 메서드 사용*
   $description: Allows calling unsafe functions on untested CEF versions. May cause crashes or other issues. If disabled, an inefficient alternative method will be used on untested versions. JS API will also be disabled on untested versions
+  $description:ko-KR: 검증되지 않은 CEF 버전에서 안전하지 않은 함수를 호출하는 것을 허용합니다. 충돌이나 다른 문제가 발생할 수 있습니다. 비활성화된 경우, 비효율적인 대체 방식이 대신 사용됩니다. JS API 또한 비활성화됩니다
 */
 // ==/WindhawkModSettings==
 
@@ -129,12 +164,13 @@
 129: 1.2.49-1.2.50
 130: 1.2.51-1.2.52
 131: 1.2.53, 1.2.55-1.2.61
-134: 1.2.62
+134: 1.2.62-1.2.64
 */
 
 #include <libloaderapi.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <thread>
@@ -149,6 +185,8 @@
 #include <windows.h>
 
 using namespace std::string_view_literals;
+
+#define NO_RENDERER_INJECTION FALSE
 
 #define CEF_CALLBACK __stdcall
 #define CEF_EXPORT __cdecl
@@ -242,13 +280,13 @@ BOOL g_isSpotifyRenderer = FALSE;
 HWND g_mainHwnd = NULL;
 int g_minWidth = -1;
 int g_minHeight = -1;
-BOOL g_hwAccelerated = FALSE;
 BOOL g_dwmBackdropEnabled = FALSE;
 BOOL g_titleLocked = FALSE;
 
 double g_playbackSpeed = 1.0;
 int64_t g_currentTrackPlayer = NULL;
 
+DWORD g_lastRendererPid = NULL;
 HANDLE g_hPipe = INVALID_HANDLE_VALUE;
 BOOL g_shouldClosePipe = FALSE;
 std::thread g_pipeThread;
@@ -516,6 +554,33 @@ BOOL IsDwmEnabled() {
     return dwmEnabled && dwmFrameEnabled;
 }
 
+// From various Windhawk mods by m417z
+UINT GetDpiForWindowWithFallback(HWND hWnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
+    static GetDpiForWindow_t pGetDpiForWindow = []() {
+        HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+        if (hUser32) {
+            return (GetDpiForWindow_t)GetProcAddress(hUser32,
+                                                     "GetDpiForWindow");
+        }
+
+        return (GetDpiForWindow_t) nullptr;
+    }();
+
+    UINT dpi = 96;
+    if (pGetDpiForWindow) {
+        dpi = pGetDpiForWindow(hWnd);
+    } else {
+        HDC hdc = GetDC(nullptr);
+        if (hdc) {
+            dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+            ReleaseDC(nullptr, hdc);
+        }
+    }
+
+    return dpi;
+}
+
 #pragma region Subclassing
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     // dwRefData is 1 if the window is created by cef_window_create_top_level
@@ -529,7 +594,7 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             }
             break;
         case WM_NCPAINT:
-            if (hWnd == g_mainHwnd && g_hwAccelerated && cte_settings.transparentrendering && !cte_settings.showframe && !IsDwmEnabled()) {
+            if (hWnd == g_mainHwnd && FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL && cte_settings.transparentrendering && !cte_settings.showframe && !IsDwmEnabled()) {
                 // Do not draw anything
                 return 0;
             }
@@ -548,7 +613,7 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             }
             break;
         case WM_PAINT:
-            if (hWnd == g_mainHwnd && g_hwAccelerated && cte_settings.transparentrendering) {
+            if (hWnd == g_mainHwnd && FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL && cte_settings.transparentrendering) {
                 if (!cte_settings.showframe) {
                     // Do not draw anything
                     ValidateRect(hWnd, NULL);
@@ -624,6 +689,13 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 #pragma endregion
 
 #pragma region Memory patches
+// Windhawk 1.4 fallback (it targets Windows 7 by default)
+#if _WIN32_WINNT < 0x0A00
+inline void Wh_DeleteValue(const wchar_t* key) {
+    Wh_SetIntValue(key, -1);
+}
+#endif
+
 // From https://windhawk.net/mods/visual-studio-anti-rich-header
 std::string ReplaceAll(std::string str, const std::string& from, const std::string& to)
 {
@@ -636,12 +708,12 @@ std::string ReplaceAll(std::string str, const std::string& from, const std::stri
 }
 
 // Pass an empty targetPatch to use it as a regex search
-int64_t PatchMemory(char* pbExecutable, const std::string& targetRegex, const std::vector<uint8_t>& targetPatch, int expectedSection = -1, int maxMatch = -1) {
+int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::string& targetRegex, const std::vector<uint8_t>& targetPatch, int expectedSection = -1, int maxMatch = -1) {
     IMAGE_DOS_HEADER* pDosHeader = (IMAGE_DOS_HEADER*)pbExecutable;
     IMAGE_NT_HEADERS* pNtHeader = (IMAGE_NT_HEADERS*)((char*)pDosHeader + pDosHeader->e_lfanew);
     IMAGE_SECTION_HEADER* pSectionHeader = (IMAGE_SECTION_HEADER*)((char*)&pNtHeader->OptionalHeader + pNtHeader->FileHeader.SizeOfOptionalHeader);
 
-    std::regex regex(ReplaceAll(targetRegex, ".", R"([\s\S])"));
+    std::regex regex(targetRegex, std::regex::optimize);
     std::match_results<std::string_view::const_iterator> match;
     bool foundAnyMatch = false;
 
@@ -650,17 +722,92 @@ int64_t PatchMemory(char* pbExecutable, const std::string& targetRegex, const st
             continue;
         }
 
+        int matchCount = 0;
+
+        // One or more cache was invalidated; prevent further caching with invalid indexes
+        bool noCachingForThisSession = false;
+
+        size_t moduleSize = pSectionHeader[i].VirtualAddress + pSectionHeader[i].SizeOfRawData;
+
+        std::wstring keyPrefix = identifier + L"_offset_";
+        if (targetPatch.size() == 0) {
+            std::wstring key = keyPrefix + L"0";
+            int64_t cachedOffset = Wh_GetIntValue(key.c_str(), -1);
+            if (cachedOffset != -1) {
+                if (cachedOffset < 0 || static_cast<size_t>(cachedOffset + targetRegex.size()) > moduleSize) {
+                    Wh_Log(L"Cache offset out of bounds; invalidating...");
+                    Wh_DeleteValue(key.c_str());
+                } else {
+                    std::string_view candidate(pbExecutable + cachedOffset, targetRegex.size());
+                    if (std::regex_search(candidate.begin(), candidate.end(), regex)) {
+                        char* addr = pbExecutable + cachedOffset;
+                        Wh_Log(L"Returning cached offset for function %s", identifier.c_str());
+                        return (int64_t)addr;
+                    } else {
+                        Wh_Log(L"Match not found at the cached offset; invalidating the cache...");
+                        Wh_DeleteValue(key.c_str());
+                    }
+                }
+            }
+        } else {
+            std::wstring key = keyPrefix + L"cnt";
+            int64_t cachedCount = Wh_GetIntValue(key.c_str(), -1);
+            if (cachedCount >= 0) {
+                bool allOk = true;
+                for (int i = 0; i < cachedCount; i++) {
+                    std::wstring key = keyPrefix + std::to_wstring(i);
+                    int64_t cachedOffset = Wh_GetIntValue(key.c_str(), -1);
+                    if (cachedOffset != -1) {
+                        if (cachedOffset < 0 || static_cast<size_t>(cachedOffset + targetRegex.size()) > moduleSize) {
+                            Wh_Log(L"Cache offset out of bounds; invalidating...");
+                            Wh_DeleteValue(key.c_str());
+                            allOk = false;
+                            continue;
+                        }
+                        std::string_view candidate(pbExecutable + cachedOffset, targetPatch.size());
+                        if (std::regex_search(candidate.begin(), candidate.end(), regex)) {
+                            char* addr = pbExecutable + cachedOffset;
+                            DWORD oldProtect;
+                            if (VirtualProtect(addr, targetPatch.size(), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                                memcpy(addr, targetPatch.data(), targetPatch.size());
+                                VirtualProtect(addr, targetPatch.size(), oldProtect, &oldProtect);
+                                Wh_Log(L"Patched cached offset for memory %s", identifier.c_str());
+                                foundAnyMatch = TRUE;
+                                matchCount++;
+                            }
+                        } else {
+                            Wh_Log(L"Match #%d not found at the cached offset; invalidating the cache...", i);
+                            Wh_DeleteValue(key.c_str());
+                            allOk = false;
+                        }
+                    } else {
+                        Wh_Log(L"Missing cached key: %s", key.c_str());
+                        allOk = false;
+                    }
+                }
+                if (allOk) {
+                    Wh_Log(L"Successfully patched all %d cached offsets for memory %s", cachedCount, identifier.c_str());
+                    return 1;
+                } else {
+                    // Invalidate everything for this - as match number is messed up when the offsets are partially missing
+                    Wh_Log(L"Failed to patch all %d cached offsets for memory %s; invalidating the cache...", cachedCount, identifier.c_str());
+                    Wh_DeleteValue(key.c_str());
+                    noCachingForThisSession = true;
+                }
+            }
+        }
+
         char* from = pbExecutable + pSectionHeader[i].VirtualAddress;
         char* to = from + pSectionHeader[i].SizeOfRawData;
 
         std::string_view search(from, to - from);
 
-        int matchCount = 0;
-
         while (std::regex_search(search.begin(), search.end(), match, regex)) {
             auto pos = from + match.position(0);
 
-            Wh_Log(L"Match found in section %d at position: %p", i, pos);
+            Wh_Log(L"Match #%d found in section %d at position: %p", matchCount, i, pos);
+            std::wstring key = keyPrefix + std::to_wstring(matchCount);
+            Wh_SetIntValue(key.c_str(), static_cast<int>(pos - pbExecutable));
 
             if (targetPatch.size() == 0) {
                 // Just return the address of the first match
@@ -683,7 +830,7 @@ int64_t PatchMemory(char* pbExecutable, const std::string& targetRegex, const st
             if (VirtualProtect(pos, targetPatch.size(), PAGE_EXECUTE_READWRITE, &dwOldProtect)) {
                 memcpy(pos, targetPatch.data(), targetPatch.size());
                 VirtualProtect(pos, targetPatch.size(), dwOldProtect, &dwOldProtect);
-                Wh_Log(L"Patch applied successfully.");
+                Wh_Log(L"Patch applied successfully for memory %s", identifier.c_str());
 
                 // // Log the bytes after patching
                 // std::string afterPatch(pos, targetPatch.size());
@@ -708,13 +855,18 @@ int64_t PatchMemory(char* pbExecutable, const std::string& targetRegex, const st
             from = pos + targetPatch.size();
             search = std::string_view(from, to - from);
         }
+
+        if (!noCachingForThisSession) {
+            std::wstring key = keyPrefix + L"cnt";
+            Wh_SetIntValue(key.c_str(), matchCount);
+        }
     }
 
     if (!foundAnyMatch) {
         Wh_Log(L"No match found for the regex pattern.");
     }
 
-    return foundAnyMatch;
+    return foundAnyMatch ? 1 : 0;
 }
 
 BOOL EnableTransparentRendering(char* pbExecutable) {
@@ -737,21 +889,21 @@ BOOL EnableTransparentRendering(char* pbExecutable) {
         targetPatch[5] = 0x8b;
     #endif
 
-    return PatchMemory(pbExecutable, targetRegex, targetPatch, 0, 4);
+    return PatchMemory(L"BgColor", pbExecutable, targetRegex, targetPatch, 0, 4);
 }
 
 BOOL DisableForcedDarkMode(char* pbExecutable) {
     std::string targetRegex = R"(force-dark-mode)";
     std::string targetPatch = "some-invalidarg";
     std::vector<uint8_t> targetPatchBytes(targetPatch.begin(), targetPatch.end());
-    return PatchMemory(pbExecutable, targetRegex, targetPatchBytes, 1, 1);
+    return PatchMemory(L"ForceDarkMode", pbExecutable, targetRegex, targetPatchBytes, 1, 1);
 }
 
 BOOL ForceEnableExtensions(char* pbExecutable) {
     std::string targetRegex = R"(disable-extensions)";
     std::string targetPatch = "enable-extensions!";
     std::vector<uint8_t> targetPatchBytes(targetPatch.begin(), targetPatch.end());
-    return PatchMemory(pbExecutable, targetRegex, targetPatchBytes, 1, 1);
+    return PatchMemory(L"DisableExtensions", pbExecutable, targetRegex, targetPatchBytes, 1, 1);
 }
 #pragma endregion
 
@@ -806,12 +958,27 @@ std::string_view getCodeSection(HMODULE chromeModule) {
 // We search the entire code section once per function,
 // to ensure we aren't hooking the wrong location.
 // Better safe than sorry, and it shouldn't cause noticeable delay on startup.
-const char* search_function_instructions(std::string_view code_section, function_search fsearch, LPCWSTR symbol_name) {
+const char* search_function_instructions(std::wstring identifier, std::string_view code_section, function_search fsearch) {
     if (code_section.size()==0) return 0;
-    Wh_Log(L"Searching for function %s", symbol_name);
-    const char* addr = unique_search(code_section, fsearch.search, symbol_name);
+
+    std::wstring key = identifier + L"_offset";
+    int cached_offset = Wh_GetIntValue(key.c_str(), -1);
+    auto prologue = fsearch.prologue;
+    if (cached_offset >= 0 && static_cast<size_t>(cached_offset + prologue.size()) < code_section.size()) {
+        std::string_view match_view = code_section.substr(cached_offset, prologue.size());
+        if (match_view == prologue) {
+            Wh_Log(L"Returning cached offset for function %s", identifier.c_str());
+            return code_section.data() + cached_offset;
+        } else {
+            Wh_Log(L"Match not found at the cached offset; invalidating the cache...");
+            Wh_DeleteValue(key.c_str());
+        }
+    }
+
+    Wh_Log(L"Searching for function %s", identifier.c_str());
+    const char* addr = unique_search(code_section, fsearch.search, identifier.c_str());
     if (addr == NULL) {
-        Wh_Log(L"Could not find function %s; is the mod up to date?", symbol_name);
+        Wh_Log(L"Could not find function %s; is the mod up to date?", identifier.c_str());
         return NULL;
     }
     Wh_Log(L"Instructions were found at address: %p", addr);
@@ -819,7 +986,6 @@ const char* search_function_instructions(std::string_view code_section, function
     const char* entry = addr - offset;
     // verify the prologue is what we expect; otherwise search for it
     // and verify it is preceded by 0xcc INT3 or 0xc3 RET (or ?? JMP)
-    auto prologue = fsearch.prologue;
     if (prologue != std::string_view{entry, prologue.size()}) {
         Wh_Log(L"Prologue not found where expected, searching...");
         // maybe function length changed due to different compilation
@@ -832,13 +998,14 @@ const char* search_function_instructions(std::string_view code_section, function
         }
     }
     if (entry) {
-        Wh_Log(L"Found entrypoint for function %s at addr %p", symbol_name, entry);
+        Wh_Log(L"Found entrypoint for function %s at addr %p", identifier.c_str(), entry);
         if (entry[-1]!=(char)0xcc && entry[-1]!=(char)0xc3) {
             Wh_Log(L"Warn: prologue not preceded by INT3 or RET");
         }
+        Wh_SetIntValue(key.c_str(), static_cast<int>(entry - code_section.data()));
         return entry;
     } else {
-        Wh_Log(L"Err: Couldn't locate function entry point for symbol %s", symbol_name);
+        Wh_Log(L"Err: Couldn't locate function entry point for symbol %s", identifier.c_str());
         // log_hexdump(addr - 0x40, 0x5);
         return NULL;
     }
@@ -885,6 +1052,12 @@ const std::string_view CreateTrackPlayer_instructions =
     "\x48\x8B\x01"sv // mov rax, [rcx]
     "\xFF\x50\x38"sv // call qword ptr [rax+38h]
     "\x48\x8D"sv;    // lea rdx, (followed by address of "yes" in .rdata)
+const std::string_view CreateTrackPlayer_instructions_2 = // Spotify 1.2.63+
+    "\x01"sv             // just a single byte before the instructions below, to distinguish from another match
+    "\x49\x8B\x0C\x24"sv // mov rcx, [r12]
+    "\x48\x8B\x01"sv     // mov rax, [rcx]
+    "\xFF\x50\x38"sv     // call qword ptr [rax+38h]
+    "\x48\x8D"sv;        // lea rdx, (followed by address of "yes" in .rdata)
 const std::string_view CreateTrackPlayer_prologue = "\x48\x8B\xC4USVWATAUAVAWH"sv;
 
 typedef char __fastcall (*SetPlaybackSpeed_t)(int64_t trackPlayer, double speed);
@@ -905,14 +1078,25 @@ BOOL HookCreateTrackPlayer(char* pbExecutable, BOOL shouldFindSetPlaybackSpeed) 
     std::string_view code_section = getCodeSection((HMODULE)pbExecutable);
     if (code_section.size() == 0) return FALSE;
     const char* addr = search_function_instructions(
+        L"CreateTrackPlayer",
         code_section,
         {
             .search = CreateTrackPlayer_instructions,
             .prologue = CreateTrackPlayer_prologue,
             .instr_offset = 0xBA0
-        },
-        L"CreateTrackPlayer"
+        }
     );
+    if (addr == NULL) {
+        addr = search_function_instructions(
+            L"CreateTrackPlayer",
+            code_section,
+            {
+                .search = CreateTrackPlayer_instructions_2,
+                .prologue = CreateTrackPlayer_prologue,
+                .instr_offset = 0xBA0
+            }
+        );
+    }
     if (addr == NULL) return FALSE;
     Wh_Log(L"Hooking CreateTrackPlayer at %p", addr);
     Wh_SetFunctionHook((void*)addr, (void*)CreateTrackPlayer_hook, (void**)&CreateTrackPlayer_original);
@@ -920,7 +1104,7 @@ BOOL HookCreateTrackPlayer(char* pbExecutable, BOOL shouldFindSetPlaybackSpeed) 
     // This only works on Spotify x64 1.2.45 and newer
     // Don't find SetPlaybackSpeed on a known unsupported version, as finding non-existent instructions will delay startup
     if (shouldFindSetPlaybackSpeed) {
-        SetPlaybackSpeed = (SetPlaybackSpeed_t)PatchMemory(pbExecutable, SetPlaybackSpeed_instructions, {}, 0, 1);
+        SetPlaybackSpeed = (SetPlaybackSpeed_t)PatchMemory(L"SetPlaybackSpeed", pbExecutable, SetPlaybackSpeed_instructions, {}, 0, 1);
         Wh_Log(L"SetPlaybackSpeed at %p", SetPlaybackSpeed);
     }
     return TRUE;
@@ -951,7 +1135,7 @@ cef_size_t CEF_CALLBACK get_minimum_size_hook(struct _cef_view_delegate_t* self,
             size->height = 600;
         }
     } else {
-        float dpi = GetDpiForWindow(g_mainHwnd);
+        float dpi = GetDpiForWindowWithFallback(g_mainHwnd);
         size->width = g_minWidth / (dpi / 96);
         size->height = g_minHeight / (dpi / 96);
     }
@@ -977,7 +1161,7 @@ _cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(cef_window_delegate_t
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, is_frameless_hooked ? 2 : 1)) {
             Wh_Log(L"Subclassed %p", hWnd);
-            if (g_hwAccelerated && cte_settings.transparentrendering) {
+            if (FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL && cte_settings.transparentrendering) {
                 InvalidateRect(hWnd, NULL, TRUE);
                 RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             }
@@ -986,10 +1170,12 @@ _cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(cef_window_delegate_t
             g_mainHwnd = hWnd;
             if (g_isSpotify) {
                 delegate->base.base.get_minimum_size = get_minimum_size_hook;
-                g_pipeThread = std::thread([=]() {
-                    CreateNamedPipeServer();
-                });
-                g_pipeThread.detach();
+                if (!NO_RENDERER_INJECTION) {
+                    g_pipeThread = std::thread([=]() {
+                        CreateNamedPipeServer();
+                    });
+                    g_pipeThread.detach();
+                }
             }
         }
     } else {
@@ -1139,9 +1325,11 @@ BOOL WINAPI CreateProcessW_hook(
         lpProcessInformation
     );
 
-    if (result && lpCommandLine && wcsstr(lpCommandLine, L"--type=gpu-process")) {
-        g_hwAccelerated = TRUE;
-        Wh_Log(L"GPU process detected, hardware acceleration enabled");
+    if (result && lpCommandLine) {
+        if (wcsstr(lpCommandLine, L"--type=renderer")) {
+            g_lastRendererPid = lpProcessInformation->dwProcessId;
+            Wh_Log(L"Renderer process detected");
+        }
     }
     Wh_Log(L"lpCommandLine: %s", lpCommandLine);
 
@@ -1168,6 +1356,7 @@ BOOL WINAPI CreateProcessAsUserW_hook(
 
     // Inject %PROGRAMDATA% to get Windhawk 1.5.1 and below to work with sandboxed renderers
     const wchar_t* lpEnvironmentCopy = (wchar_t*)lpEnvironment;
+    wchar_t* newEnv = NULL;
     if (lpCommandLine && wcsstr(lpCommandLine, L"--type=renderer")) {
         if (lpEnvironment) {
             const wchar_t* env = (const wchar_t*)lpEnvironment;
@@ -1194,7 +1383,7 @@ BOOL WINAPI CreateProcessAsUserW_hook(
                 std::wstring append = append1 + append2 + append3;
                 size_t appendLen = append.size();
 
-                wchar_t* newEnv = new wchar_t[envLen + appendLen];
+                newEnv = new wchar_t[envLen + appendLen];
                 memcpy(newEnv, lpEnvironment, envLen * sizeof(wchar_t));
                 memcpy(newEnv + envLen, append.c_str(), appendLen * sizeof(wchar_t));
 
@@ -1217,9 +1406,15 @@ BOOL WINAPI CreateProcessAsUserW_hook(
         lpProcessInformation
     );
 
-    if (result && lpCommandLine && wcsstr(lpCommandLine, L"--type=gpu-process")) {
-        g_hwAccelerated = TRUE;
-        Wh_Log(L"GPU process detected, hardware acceleration enabled");
+    if (newEnv) {
+        delete newEnv;
+    }
+
+    if (result && lpCommandLine) {
+        if (wcsstr(lpCommandLine, L"--type=renderer")) {
+            g_lastRendererPid = lpProcessInformation->dwProcessId;
+            Wh_Log(L"Renderer process detected");
+        }
     }
     Wh_Log(L"lpCommandLine: %s", lpCommandLine);
 
@@ -1391,11 +1586,11 @@ void HandleWindhawkComm(LPCWSTR command) {
             IsAppThemed() && IsThemeActive(),
             IsDwmEnabled(),
             g_dwmBackdropEnabled,
-            g_hwAccelerated,
+            FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL,
             g_minWidth,
             g_minHeight,
             g_titleLocked,
-            GetDpiForWindow(g_mainHwnd),
+            GetDpiForWindowWithFallback(g_mainHwnd),
             CreateTrackPlayer_original != NULL,
             g_playbackSpeed,
             SetPlaybackSpeed != NULL
@@ -1444,14 +1639,28 @@ void* GetSecurityDescriptorWithUser(const wchar_t* sddl_string, size_t* size) {
     return user_sec_desc;
 }
 
+// Note: VxKex somehow passes this, but sandboxed pipe connection won't work at all (even with hardcoded Win7 SDDL)
+// --no-sandbox is still necessary for Windows 7 users with VxKex
+bool SupportsWin10SIDs() {
+    const wchar_t* testSddl = L"D:(A;;GA;;;SY)(A;;GA;;;S-1-15-2-1)"; // AppContainer
+    PSECURITY_DESCRIPTOR psd = nullptr;
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(testSddl, SDDL_REVISION_1, &psd, nullptr)) {
+        LocalFree(psd);
+        return true;
+    }
+    return false;
+}
+
 const void* GetSecurityDescriptorForNamedPipeInstance(size_t* size) {
     // Get a security descriptor which grants the current user and SYSTEM full
     // access to the named pipe. Also grant AppContainer RW access through the ALL
     // APPLICATION PACKAGES SID (S-1-15-2-1). Finally add an Untrusted Mandatory
     // Label for non-AppContainer sandboxed users.
     static size_t sd_size;
-    static void* sec_desc = GetSecurityDescriptorWithUser(
-        L"D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)(A;;GA;;;LW)S:(ML;;;;;S-1-16-0)", &sd_size);
+    const wchar_t* sddl = SupportsWin10SIDs() ?
+        L"D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)(A;;GA;;;LW)S:(ML;;;;;S-1-16-0)" :
+        L"D:(A;;GA;;;SY)(A;;GRGW;;;WD)S:(ML;;NW;;;LW)"; // Lacks some SIDs such as AppContainer
+    static void* sec_desc = GetSecurityDescriptorWithUser(sddl, &sd_size);
 
     if (size)
         *size = sd_size;
@@ -1492,6 +1701,15 @@ void CreateNamedPipeServer() {
         BOOL connected = ConnectNamedPipe(g_hPipe, NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
 
         if (connected) {
+            DWORD clientPid = 0;
+            if (GetNamedPipeClientProcessId(g_hPipe, &clientPid)) {
+                if (clientPid != g_lastRendererPid) {
+                    Wh_Log(L"Rejected pipe connection from unexpected PID: %lu (expected %lu)", clientPid, g_lastRendererPid);
+                    CloseHandle(g_hPipe);
+                    continue;
+                }
+            }
+
             Wh_Log(L"Client connected, waiting for message...");
             wchar_t buffer[512];
             DWORD bytesRead;
@@ -1520,6 +1738,7 @@ void CreateNamedPipeServer() {
         Wh_Log(L"Closing pipe...");
         CloseHandle(g_hPipe);
         g_hPipe = INVALID_HANDLE_VALUE;
+        g_lastRendererPid = NULL;
     }
 
     LocalFree(pSecurityDescriptor);
@@ -1911,34 +2130,33 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
     return TRUE;
 }
 
+cef_v8handler_t* cancelCosmosRequest_v8handler;
 typedef int CEF_CALLBACK (*v8func_exec_t)(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception);
+v8func_exec_t CEF_CALLBACK cancelCosmosRequest_original;
 v8func_exec_t CEF_CALLBACK cancelEsperantoCall_original;
 v8func_exec_t CEF_CALLBACK _getSpotifyModule_original;
 
 int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) {
     cef_string_t* arg = arguments[0]->get_string_value(arguments[0]); // NULL when it's an empty string
-    if (arg != NULL && u"ctewh" == std::u16string(arg->str, arg->length)) {
+    if (arg != NULL && cancelCosmosRequest_v8handler != NULL && u"ctewh" == std::u16string(arg->str, arg->length)) {
         Wh_Log(L"CTEWH is being requested");
-        cef_v8handler_t* ctewh = (cef_v8handler_t*)calloc(1, sizeof(cef_v8handler_t));
-        ctewh->base.size = sizeof(cef_v8handler_t);
-        ctewh->execute = WindhawkCommV8Handler;
         cef_v8value_t* retobj = cef_v8value_create_object(NULL, NULL);
-        AddFunctionToObj(retobj, u"query", ctewh);
-        AddFunctionToObj(retobj, u"extendFrame", ctewh);
-        AddFunctionToObj(retobj, u"minimize", ctewh);
-        AddFunctionToObj(retobj, u"maximizeRestore", ctewh);
-        AddFunctionToObj(retobj, u"close", ctewh);
-        AddFunctionToObj(retobj, u"focus", ctewh);
-        AddFunctionToObj(retobj, u"setLayered", ctewh);
-        AddFunctionToObj(retobj, u"setBackdrop", ctewh);
-        AddFunctionToObj(retobj, u"resizeTo", ctewh);
-        AddFunctionToObj(retobj, u"setMinSize", ctewh);
-        AddFunctionToObj(retobj, u"setTopMost", ctewh);
-        AddFunctionToObj(retobj, u"setTitle", ctewh);
-        AddFunctionToObj(retobj, u"lockTitle", ctewh);
-        AddFunctionToObj(retobj, u"openSpotifyMenu", ctewh);
+        AddFunctionToObj(retobj, u"query", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"extendFrame", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"minimize", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"maximizeRestore", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"close", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"focus", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setLayered", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setBackdrop", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"resizeTo", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setMinSize", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setTopMost", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setTitle", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"lockTitle", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"openSpotifyMenu", cancelCosmosRequest_v8handler);
         #ifdef _WIN64
-        AddFunctionToObj(retobj, u"setPlaybackSpeed", ctewh);
+        AddFunctionToObj(retobj, u"setPlaybackSpeed", cancelCosmosRequest_v8handler);
         #endif
         cef_v8value_t* initialConfigObj = cef_v8value_create_object(NULL, NULL);
         AddValueToObj(initialConfigObj, u"showframe", cef_v8value_create_bool(cte_settings.showframe));
@@ -1959,6 +2177,20 @@ int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) 
         return TRUE;
     }
     return FALSE;
+}
+
+int CEF_CALLBACK cancelCosmosRequest_hook(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception) {
+    Wh_Log(L"cancelCosmosRequest_hook called with name: %s", name->str);
+    std::u16string nameStr(name->str, name->length);
+    if (nameStr != u"cancelCosmosRequest") {
+        return WindhawkCommV8Handler(self, name, object, argumentsCount, arguments, retval, exception);
+    }
+    if (argumentsCount == 1) {
+        if (InjectCTEV8Handler(arguments, retval)) { // why not?
+            return TRUE;
+        }
+    }
+    return cancelCosmosRequest_original(self, name, object, argumentsCount, arguments, retval, exception);
 }
 
 int CEF_CALLBACK cancelEsperantoCall_hook(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception) {
@@ -1983,6 +2215,23 @@ int CEF_CALLBACK _getSpotifyModule_hook(cef_v8handler_t* self, const cef_string_
 
 cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](const cef_string_t* name, cef_v8handler_t* handler) -> cef_v8value_t* {
     Wh_Log(L"cef_v8value_create_function called with name: %s", name->str);
+    // This function exists on all Spotify versions supported by this mod
+    // Reuse this function as a mod JS API's handler instead of allocating a new cef_v8handler_t* everytime
+    // As this function's memory allocation is internally managed by Spotify
+    // And libcef.dll does not expose a function to create an internally managed V8 handlers
+
+    // ... Yes, I should've used this function for API access from the beginning, obviously
+    if (u"cancelCosmosRequest" == std::u16string(name->str, name->length)) {
+        Wh_Log(L"cancelCosmosRequest is being created");
+        if (g_hPipe == INVALID_HANDLE_VALUE) {
+            // API won't be available if the pipe is not connected
+            return cef_v8value_create_function_original(name, handler);
+        }
+        cancelCosmosRequest_original = handler->execute;
+        handler->execute = cancelCosmosRequest_hook;
+        cancelCosmosRequest_v8handler = handler;
+        return cef_v8value_create_function_original(name, handler);
+    }
     // Originally _getSpotifyModule was hooked but that function was removed in Spotify 1.2.56, which was released while this mod was in development
     // So, we're hooking cancelEsperantoCall instead. The function choice and arguments are odd, as it was originally intended for _getSpotifyModule. Deal with it.
     if (u"cancelEsperantoCall" == std::u16string(name->str, name->length)) {
@@ -2062,6 +2311,59 @@ void LoadSettings() {
     cte_settings.noforceddarkmode = Wh_GetIntSetting(L"noforceddarkmode");
     cte_settings.forceextensions = Wh_GetIntSetting(L"forceextensions");
     cte_settings.allowuntested = Wh_GetIntSetting(L"allowuntested");
+}
+
+void ApplySpeedFromSettings(BOOL notifyInvalid = FALSE) {
+    PCWSTR newSpeedStr = Wh_GetStringSetting(L"playbackspeed");
+    Wh_Log(L"ApplySpeedFromSettings: %s", newSpeedStr);
+    if (*newSpeedStr == L'\0') {
+        g_playbackSpeed = 1;
+        #ifdef _WIN64
+            if (SetPlaybackSpeed != NULL && g_currentTrackPlayer != NULL) {
+                SetPlaybackSpeed(g_currentTrackPlayer, 1);
+            }
+        #endif
+        Wh_FreeStringSetting(newSpeedStr);
+        return;
+    }
+    try {
+        double newSpeed = std::stod(newSpeedStr);
+        Wh_FreeStringSetting(newSpeedStr);
+        if (fabs(newSpeed - g_playbackSpeed) > 1e-6) {
+            #ifdef _WIN64
+                if (CreateTrackPlayer_original == NULL) {
+                    if (notifyInvalid) {
+                        MessageBoxW(NULL, L"Changing the playback speed is not supported in this version of Spotify client", L"CEF/Spotify Tweaks", MB_OK);
+                    }
+                    return;
+                }
+                if (newSpeed <= 0 || newSpeed > 5.0) {
+                    if (notifyInvalid) {
+                        MessageBoxW(NULL, L"Playback speed must be faster than 0 and less than or equal to 5.0", L"CEF/Spotify Tweaks", MB_OK);
+                    }
+                    return;
+                }
+                g_playbackSpeed = newSpeed;
+                if (SetPlaybackSpeed != NULL && g_currentTrackPlayer != NULL) {
+                    SetPlaybackSpeed(g_currentTrackPlayer, newSpeed);
+                }
+            #else
+                if (notifyInvalid) {
+                    MessageBoxW(NULL, L"Changing the playback speed requires a x86-64 version of Spotify", L"CEF/Spotify Tweaks", MB_OK);
+                }
+            #endif
+        }
+    } catch (const std::invalid_argument& e) {
+        if (notifyInvalid) {
+            MessageBoxW(NULL, L"Playback speed must be entered as a decimal number like 0.25, 1.0, or 1.5", L"CEF/Spotify Tweaks", MB_OK);
+        }
+        Wh_FreeStringSetting(newSpeedStr);
+    } catch (const std::out_of_range& e) {
+        if (notifyInvalid) {
+            MessageBoxW(NULL, L"Playback speed must be faster than 0 and less than or equal to 5.0", L"CEF/Spotify Tweaks", MB_OK);
+        }
+        Wh_FreeStringSetting(newSpeedStr);
+    }
 }
 
 int FindOffset(int major, int minor, cte_offset_t offsets[], int offsets_size, BOOL allow_untested = TRUE) {
@@ -2151,7 +2453,7 @@ BOOL Wh_ModInit() {
     LPWSTR args = GetCommandLineW();
     if (wcsstr(args, L"--type=") != NULL) {
         if (g_isSpotify && isInitialThread &&
-            major >= 108 && isTestedVersion &&
+            major >= 108 && isTestedVersion && !NO_RENDERER_INJECTION &&
             wcsstr(args, L"--type=renderer") != NULL &&
             wcsstr(args, L"--extension-process") == NULL
         ) {
@@ -2214,6 +2516,7 @@ BOOL Wh_ModInit() {
         #ifdef _WIN64
         if (major >= 122 && isTestedVersion) {
             HookCreateTrackPlayer(pbExecutable, major >= 127);
+            ApplySpeedFromSettings(FALSE);
         }
         #endif
     }
@@ -2269,5 +2572,6 @@ void Wh_ModSettingsChanged() {
     }
     BOOL prev_transparentcontrols = cte_settings.transparentcontrols;
     LoadSettings();
+    ApplySpeedFromSettings(TRUE);
     EnumWindows(UpdateEnumWindowsProc, prev_transparentcontrols != cte_settings.transparentcontrols);
 }
