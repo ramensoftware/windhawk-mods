@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.1.2
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -109,10 +109,12 @@ std::atomic<int> g_hookCallCounter;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
 bool g_inCTaskListThumbnailWnd_LayoutThumbnails;
 bool g_inOverflowFlyoutModel_Show;
-bool g_inFlyoutFrame_UpdateFlyoutPosition;
 int g_lastTaskbarAlignment;
 
-winrt::Windows::Foundation::Size g_flyoutPositionSize;
+std::atomic<DWORD> g_UpdateFlyoutPosition_threadId;
+void* g_UpdateFlyoutPosition_pThis;
+
+winrt::Windows::Foundation::Size g_lastFlyoutPositionSize;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
@@ -199,14 +201,23 @@ bool GetMonitorRect(HMONITOR monitor, RECT* rc) {
            CopyRect(rc, &monitorInfo.rcMonitor);
 }
 
-HWND GetTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    DWORD processId = 0;
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
-        processId != GetCurrentProcessId()) {
-        return nullptr;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
 }
@@ -1054,28 +1065,13 @@ FlyoutFrame_UpdateFlyoutPosition_t FlyoutFrame_UpdateFlyoutPosition_Original;
 void WINAPI FlyoutFrame_UpdateFlyoutPosition_Hook(void* pThis) {
     Wh_Log(L">");
 
-    g_inFlyoutFrame_UpdateFlyoutPosition = true;
-    g_flyoutPositionSize = {};
+    g_UpdateFlyoutPosition_threadId = GetCurrentThreadId();
+    g_UpdateFlyoutPosition_pThis = pThis;
 
     FlyoutFrame_UpdateFlyoutPosition_Original(pThis);
 
-    g_inFlyoutFrame_UpdateFlyoutPosition = false;
-}
-
-using Grid_DesiredSize_t = winrt::Windows::Foundation::Size*(
-    WINAPI*)(void* pThis, winrt::Windows::Foundation::Size* size);
-Grid_DesiredSize_t Grid_DesiredSize_Original;
-winrt::Windows::Foundation::Size* WINAPI
-Grid_DesiredSize_Hook(void* pThis, winrt::Windows::Foundation::Size* size) {
-    Wh_Log(L">");
-
-    auto ret = Grid_DesiredSize_Original(pThis, size);
-
-    if (g_inFlyoutFrame_UpdateFlyoutPosition) {
-        g_flyoutPositionSize = *size;
-    }
-
-    return ret;
+    g_UpdateFlyoutPosition_threadId = 0;
+    g_UpdateFlyoutPosition_pThis = nullptr;
 }
 
 using MenuFlyout_ShowAt_t =
@@ -1270,21 +1266,37 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         UINT monitorDpiY = 96;
         GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
 
+        bool adjusted = false;
+
         WCHAR rootOwnerClassName[64];
         if (_wcsicmp(szClassName, L"Xaml_WindowedPopupClass") == 0 &&
             GetWindowThreadProcessId(hWnd, nullptr) ==
-                GetWindowThreadProcessId(GetTaskbarWnd(), nullptr) &&
+                GetWindowThreadProcessId(FindCurrentProcessTaskbarWnd(),
+                                         nullptr) &&
             GetClassName(GetAncestor(hWnd, GA_ROOTOWNER), rootOwnerClassName,
-                         ARRAYSIZE(rootOwnerClassName)) &&
-            _wcsicmp(rootOwnerClassName, L"XamlExplorerHostIslandWindow") ==
+                         ARRAYSIZE(rootOwnerClassName))) {
+            if (_wcsicmp(rootOwnerClassName, L"XamlExplorerHostIslandWindow") ==
                 0) {
-            // Probably hovering a XAML thumbnail preview, make it so that the
-            // tooltip doesn't cover the close button.
-            Y += cy + MulDiv(40, monitorDpiY, 96);
-        } else if (Y < monitorInfo.rcWork.top) {
-            Y = monitorInfo.rcWork.top;
-        } else if (Y > monitorInfo.rcWork.bottom - cy) {
-            Y = monitorInfo.rcWork.bottom - cy;
+                // Probably hovering a XAML thumbnail preview, make it so that
+                // the tooltip doesn't cover the thumbnail preview.
+                Y = monitorInfo.rcWork.top +
+                    MulDiv(10 + g_lastFlyoutPositionSize.Height, monitorDpiY,
+                           96);
+                adjusted = true;
+            } else if (_wcsicmp(rootOwnerClassName,
+                                L"TopLevelWindowForOverflowXamlIsland") == 0) {
+                // Don't adjust to prevent tooltips from covering the overflow
+                // flyout.
+                adjusted = true;
+            }
+        }
+
+        if (!adjusted) {
+            if (Y < monitorInfo.rcWork.top) {
+                Y = monitorInfo.rcWork.top;
+            } else if (Y > monitorInfo.rcWork.bottom - cy) {
+                Y = monitorInfo.rcWork.bottom - cy;
+            }
         }
     } else if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
         if (uFlags & SWP_NOMOVE) {
@@ -1338,7 +1350,8 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         HWND windowFromPoint = WindowFromPoint(pt);
         if (windowFromPoint &&
             GetWindowThreadProcessId(windowFromPoint, nullptr) ==
-                GetWindowThreadProcessId(GetTaskbarWnd(), nullptr)) {
+                GetWindowThreadProcessId(FindCurrentProcessTaskbarWnd(),
+                                         nullptr)) {
             WCHAR szClassNameFromPoint[64];
             if (GetClassName(windowFromPoint, szClassNameFromPoint,
                              ARRAYSIZE(szClassNameFromPoint)) &&
@@ -1364,6 +1377,81 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 
+using MoveWindow_t = decltype(&MoveWindow);
+MoveWindow_t MoveWindow_Original;
+BOOL WINAPI MoveWindow_Hook(HWND hWnd,
+                            int X,
+                            int Y,
+                            int nWidth,
+                            int nHeight,
+                            BOOL bRepaint) {
+    auto original = [=]() {
+        return MoveWindow_Original(hWnd, X, Y, nWidth, nHeight, bRepaint);
+    };
+
+    WCHAR szClassName[64];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+        return original();
+    }
+
+    if (_wcsicmp(szClassName, L"XamlExplorerHostIslandWindow") == 0) {
+        DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+        if (!threadId) {
+            return original();
+        }
+
+        HANDLE thread =
+            OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, threadId);
+        if (!thread) {
+            return original();
+        }
+
+        PWSTR threadDescription;
+        HRESULT hr = pGetThreadDescription
+                         ? pGetThreadDescription(thread, &threadDescription)
+                         : E_FAIL;
+        CloseHandle(thread);
+        if (FAILED(hr)) {
+            return original();
+        }
+
+        bool isMultitaskingView =
+            wcscmp(threadDescription, L"MultitaskingView") == 0;
+
+        LocalFree(threadDescription);
+
+        if (!isMultitaskingView) {
+            return original();
+        }
+
+        POINT pt;
+        GetCursorPos(&pt);
+
+        HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        if (GetTaskbarLocationForMonitor(monitor) == TaskbarLocation::bottom) {
+            return original();
+        }
+
+        MONITORINFO monitorInfo{
+            .cbSize = sizeof(MONITORINFO),
+        };
+        GetMonitorInfo(monitor, &monitorInfo);
+
+        UINT monitorDpiX = 96;
+        UINT monitorDpiY = 96;
+        GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
+        Y = monitorInfo.rcWork.top + MulDiv(12, monitorDpiY, 96);
+    } else {
+        return original();
+    }
+
+    Wh_Log(L"Adjusting pos for %s: %dx%d, %dx%d", szClassName, X, Y, X + nWidth,
+           Y + nHeight);
+
+    return MoveWindow_Original(hWnd, X, Y, nWidth, nHeight, bRepaint);
+}
+
 using MapWindowPoints_t = decltype(&MapWindowPoints);
 MapWindowPoints_t MapWindowPoints_Original;
 int WINAPI MapWindowPoints_Hook(HWND hWndFrom,
@@ -1372,11 +1460,38 @@ int WINAPI MapWindowPoints_Hook(HWND hWndFrom,
                                 UINT cPoints) {
     int ret = MapWindowPoints_Original(hWndFrom, hWndTo, lpPoints, cPoints);
 
-    if (!g_inFlyoutFrame_UpdateFlyoutPosition || cPoints != 1) {
+    if (GetCurrentThreadId() != g_UpdateFlyoutPosition_threadId ||
+        !g_UpdateFlyoutPosition_pThis || cPoints != 1) {
         return ret;
     }
 
     Wh_Log(L">");
+
+    FrameworkElement flyoutFrame = nullptr;
+    ((IUnknown**)g_UpdateFlyoutPosition_pThis)[1]->QueryInterface(
+        winrt::guid_of<FrameworkElement>(), winrt::put_abi(flyoutFrame));
+    if (!flyoutFrame) {
+        Wh_Log(L"Error getting flyoutFrame");
+        return ret;
+    }
+
+    FrameworkElement hoverFlyoutCanvas =
+        FindChildByName(flyoutFrame, L"HoverFlyoutCanvas");
+    if (!hoverFlyoutCanvas) {
+        Wh_Log(L"No HoverFlyoutCanvas");
+        return ret;
+    }
+
+    Controls::Grid hoverFlyoutGrid =
+        FindChildByName(hoverFlyoutCanvas, L"HoverFlyoutGrid")
+            .try_as<Controls::Grid>();
+    if (!hoverFlyoutGrid) {
+        Wh_Log(L"No HoverFlyoutGrid");
+        return ret;
+    }
+
+    auto flyoutPositionSize = hoverFlyoutGrid.DesiredSize();
+    g_lastFlyoutPositionSize = flyoutPositionSize;
 
     DWORD messagePos = GetMessagePos();
     POINT pt{
@@ -1398,7 +1513,7 @@ int WINAPI MapWindowPoints_Hook(HWND hWndFrom,
     UINT monitorDpiY = 96;
     GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
 
-    int flyoutHeight = MulDiv(g_flyoutPositionSize.Height, monitorDpiY, 96);
+    int flyoutHeight = MulDiv(flyoutPositionSize.Height, monitorDpiY, 96);
 
     // Align to bottom instead of top.
     lpPoints->y += flyoutHeight;
@@ -1562,7 +1677,7 @@ void LoadSettings() {
 }
 
 void ApplySettings() {
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         return;
     }
@@ -1631,14 +1746,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &FlyoutFrame_UpdateFlyoutPosition_Original,
             FlyoutFrame_UpdateFlyoutPosition_Hook,
-            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
-        },
-        {
-            {
-                LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::Windows::UI::Xaml::Controls::Grid>::DesiredSize(void)const )",
-            },
-            &Grid_DesiredSize_Original,
-            Grid_DesiredSize_Hook,
             true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
         },
         {
@@ -1803,6 +1910,9 @@ BOOL Wh_ModInit() {
 
     WindhawkUtils::Wh_SetFunctionHookT(SetWindowPos, SetWindowPos_Hook,
                                        &SetWindowPos_Original);
+
+    WindhawkUtils::Wh_SetFunctionHookT(MoveWindow, MoveWindow_Hook,
+                                       &MoveWindow_Original);
 
     WindhawkUtils::Wh_SetFunctionHookT(MapWindowPoints, MapWindowPoints_Hook,
                                        &MapWindowPoints_Original);
