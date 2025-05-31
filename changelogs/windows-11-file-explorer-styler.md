@@ -1,3 +1,8 @@
+## 1.2 ([May 31, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c08d8c4047fd99859a2d1449a2126ec56f20ec2d/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Added a built-in blur brush object, `WindhawkBlur`, which supports the `BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`.
+* Added themes: Tabless, NoCommandBar, MicaBar.
+
 ## 1.1 ([May 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d01044de4128b7fafc768e340b116b2c129b660a/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Added style constants which can be defined once and used in multiple styles.

@@ -4601,7 +4601,7 @@
                 "published": 1746117865000,
                 "rating": 10,
                 "ratingUsers": 21,
-                "updated": 1746819364000,
+                "updated": 1748721887000,
                 "users": 1481
             },
             "metadata": {
@@ -4618,7 +4618,7 @@
                 ],
                 "name": "Windows 11 File Explorer Styler",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "windows-11-notification-center-styler": {
