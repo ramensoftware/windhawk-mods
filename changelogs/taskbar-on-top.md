@@ -1,3 +1,11 @@
+## 1.1.3 ([May 31, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f696c21820a69cca5815ca7deca1f0a91675b5c0/mods/taskbar-on-top.wh.cpp))
+
+* Fixed tooltips covering the tray icons in the first row of the overflow popup.
+* Fixed the placement of thumbnail previews in recent Windows builds.
+* Improved the placement of thumbnail preview tooltips.
+* The task view popup is now shown at the top of the screen and not no the bottom.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.1.2 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7a9a61a0563a031b366c70f4e4620f7c97a371b4/mods/taskbar-on-top.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.
