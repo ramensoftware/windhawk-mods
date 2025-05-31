@@ -2,7 +2,7 @@
 // @id              windows-11-file-explorer-styler
 // @name            Windows 11 File Explorer Styler
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -42,6 +42,18 @@ Explorer11](https://raw.githubusercontent.com/ramensoftware/windows-11-file-expl
 \
 Minimal
 Explorer11](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Minimal%20Explorer11/README.md)
+
+[![Tabless](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/Tabless/screenshot-small.png)
+\
+Tabless](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Tabless/README.md)
+
+[![NoCommandBar](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/NoCommandBar/screenshot-small.png)
+\
+NoCommandBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/NoCommandBar/README.md)
+
+[![MicaBar](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/MicaBar/screenshot-small.png)
+\
+MicaBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/MicaBar/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 file
 explorer styling
@@ -95,6 +107,11 @@ specified as following: `Style@VisualState=Value`, in which case the style will
 only apply when the visual state group specified in the target matches the
 specified visual state.
 
+For the XAML syntax, in addition to the built-in taskbar objects, the mod
+provides a built-in blur brush via the `WindhawkBlur` object, which supports the
+`BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur
+BlurAmount="10" TintColor="#80FF00FF"/>`.
+
 Targets and styles starting with two slashes (`//`) are ignored. This can be
 useful for temporarily disabling a target or style.
 
@@ -108,6 +125,10 @@ resource variables.
 The VisualTreeWatcher implementation is based on the
 [ExplorerTAP](https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP)
 code from the **TranslucentTB** project.
+
+The `WindhawkBlur` brush object implementation is based on
+[XamlBlurBrush](https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp)
+from the **TranslucentTB** project.
 */
 // ==/WindhawkModReadme==
 
@@ -122,6 +143,9 @@ code from the **TranslucentTB** project.
   $options:
   - "": None
   - Minimal Explorer11: Minimal Explorer11
+  - Tabless: Tabless
+  - NoCommandBar: NoCommandBar
+  - MicaBar: MicaBar
 - controlStyles:
   - - target: ""
       $name: Target
@@ -173,6 +197,7 @@ struct ThemeTargetStyles {
 
 struct Theme {
     std::vector<ThemeTargetStyles> targetStyles;
+    std::vector<PCWSTR> styleConstants;
     int explorerFrameContainerHeight = 0;
 };
 
@@ -260,7 +285,60 @@ const Theme g_themeMinimal_Explorer11 = {{
         L"Background=Transparent",
         L"Width=100",
         L"HorizontalAlignment=0"}},
-}, /*explorerFrameContainerHeight=*/42};
+}, {}, /*explorerFrameContainerHeight=*/42};
+
+const Theme g_themeTabless = {{
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#CommandBarControlRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#ContentRoot", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
+        L"Grid.Row=$NavigationBarGrid"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Grid.Row=$CommandBarGrid"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainerGrid > Border", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainer > Microsoft.UI.Xaml.Controls.Button#CloseButton", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TabViewItem > Microsoft.UI.Xaml.Controls.Grid#LayoutRoot > Microsoft.UI.Xaml.Controls.Canvas", {
+        L"Opacity=0"}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource SystemChromeLowColor}\" />"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainer", {
+        L"BorderThickness=0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.ContentPresenter > Microsoft.UI.Xaml.Controls.StackPanel > Microsoft.UI.Xaml.Controls.TextBlock", {
+        L"FontFamily=Segoe UI, Segoe Fluent Icons",
+        L"FontWeight=Normal"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#CommandBarControlRootGrid", {
+        L"BorderThickness=0,0,0,1"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.FileExplorerTabControl", {
+        L"Height=36"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#TabContainer", {
+        L"Padding=1,0,0,1"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Viewbox#IconBox", {
+        L"Margin=0,0,4,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.TabViewItem", {
+        L"Margin=0,-8,0,0"}},
+}, {
+    L"NavigationBarGrid=2",
+    L"CommandBarGrid=1",
+}, /*explorerFrameContainerHeight=*/0};
+
+const Theme g_themeNoCommandBar = {{
+    ThemeTargetStyles{L"FileExplorerExtensions.CommandBarControl", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.NavigationBarControl", {
+        L"Grid.RowSpan=2",
+        L"Margin=0,0,0,1"}},
+}, {}, /*explorerFrameContainerHeight=*/87};
+
+const Theme g_themeMicaBar = {{
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background:=<SolidColorBrush Color=\"{ThemeResource LayerOnMicaBaseAltFillColorDefault}\"/>",
+        L"BorderThickness=0,0,0,1"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
+        L"Background=Transparent"}},
+}, {}, /*explorerFrameContainerHeight=*/0};
 
 // clang-format on
 
@@ -705,7 +783,13 @@ struct StyleRule {
 
 using PropertyOverridesUnresolved = std::vector<StyleRule>;
 
-using PropertyOverrideValue = winrt::Windows::Foundation::IInspectable;
+struct XamlBlurBrushParams {
+    float blurAmount;
+    wf::Numerics::float4 tint;
+};
+
+using PropertyOverrideValue =
+    std::variant<winrt::Windows::Foundation::IInspectable, XamlBlurBrushParams>;
 
 // Property -> visual state -> value.
 using PropertyOverrides =
@@ -774,10 +858,640 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     return value;
 }
 
+// Blur background implementation, copied from TranslucentTB.
+////////////////////////////////////////////////////////////////////////////////
+// clang-format off
+
+#include <initguid.h>
+
+#include <winrt/Microsoft.UI.Xaml.Hosting.h>
+
+namespace wfn = wf::Numerics;
+namespace wge = winrt::Windows::Graphics::Effects;
+namespace muc = winrt::Microsoft::UI::Composition;
+namespace muxh = mux::Hosting;
+
+template <> inline constexpr winrt::guid winrt::impl::guid_v<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>{
+    winrt::impl::guid_v<winrt::Windows::Foundation::IPropertyValue>
+};
+
+#ifndef E_BOUNDS
+#define E_BOUNDS (HRESULT)(0x8000000BL)
+#endif
+
+typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION
+{
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_SPEED = 0,
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED = 1,
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_QUALITY = 2,
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_FORCE_DWORD = 0xffffffff
+
+} MY_D2D1_GAUSSIANBLUR_OPTIMIZATION;
+
+////////////////////////////////////////////////////////////////////////////////
+// XamlBlurBrush.h
+#include <winrt/Windows.Foundation.Numerics.h>
+#include <winrt/Microsoft.UI.Composition.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
+
+class XamlBlurBrush : public mux::Media::XamlCompositionBrushBaseT<XamlBlurBrush>
+{
+public:
+	XamlBlurBrush(muc::Compositor compositor, float blurAmount, wfn::float4 tint);
+
+	void OnConnected();
+	void OnDisconnected();
+
+private:
+	muc::Compositor m_compositor;
+	float m_blurAmount;
+	wfn::float4 m_tint;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// CompositeEffect.h
+#include <d2d1effects.h>
+#include <d2d1_1.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Effects.h>
+// #include <windows.graphics.effects.interop.h>
+
+#include <windows.graphics.effects.h>
+#include <sdkddkver.h>
+
+#ifndef BUILD_WINDOWS
+namespace ABI {
+#endif
+namespace Windows {
+namespace Graphics {
+namespace Effects {
+
+typedef interface IGraphicsEffectSource                         IGraphicsEffectSource;
+typedef interface IGraphicsEffectD2D1Interop                    IGraphicsEffectD2D1Interop;
+
+
+typedef enum GRAPHICS_EFFECT_PROPERTY_MAPPING
+{
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_UNKNOWN,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORX,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORY,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORZ,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORW,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_RECT_TO_VECTOR4,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_RADIANS_TO_DEGREES,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLORMATRIX_ALPHA_MODE,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR3, 
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR4
+} GRAPHICS_EFFECT_PROPERTY_MAPPING;
+
+//+-----------------------------------------------------------------------------
+//
+//  Interface:
+//      IGraphicsEffectD2D1Interop
+//
+//  Synopsis:
+//      An interface providing a Interop counterpart to IGraphicsEffect
+//      and allowing for metadata queries.
+//
+//------------------------------------------------------------------------------
+
+#undef INTERFACE
+#define INTERFACE IGraphicsEffectD2D1Interop
+DECLARE_INTERFACE_IID_(IGraphicsEffectD2D1Interop, IUnknown, "2FC57384-A068-44D7-A331-30982FCF7177")
+{
+    STDMETHOD(GetEffectId)(
+        _Out_ GUID * id
+        ) PURE;
+
+    STDMETHOD(GetNamedPropertyMapping)(
+        LPCWSTR name,
+        _Out_ UINT * index,
+        _Out_ GRAPHICS_EFFECT_PROPERTY_MAPPING * mapping
+        ) PURE;
+
+    STDMETHOD(GetPropertyCount)(
+        _Out_ UINT * count
+        ) PURE;
+
+    STDMETHOD(GetProperty)(
+        UINT index,
+        _Outptr_ winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue> ** value
+        ) PURE;
+
+    STDMETHOD(GetSource)(
+        UINT index,
+        _Outptr_ IGraphicsEffectSource ** source
+        ) PURE;
+
+    STDMETHOD(GetSourceCount)(
+        _Out_ UINT * count
+        ) PURE;
+};
+
+
+} // namespace Effects
+} // namespace Graphics
+} // namespace Windows
+#ifndef BUILD_WINDOWS
+} // namespace ABI 
+#endif
+
+template <> inline constexpr winrt::guid winrt::impl::guid_v<ABI::Windows::Graphics::Effects::IGraphicsEffectD2D1Interop>{
+    0x2FC57384, 0xA068, 0x44D7, { 0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77 }
+};
+
+
+
+namespace awge = ABI::Windows::Graphics::Effects;
+
+struct CompositeEffect : winrt::implements<CompositeEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+	// IGraphicsEffectD2D1Interop
+	HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override;
+
+	// IGraphicsEffect
+	winrt::hstring Name();
+	void Name(winrt::hstring name);
+
+	std::vector<wge::IGraphicsEffectSource> Sources;
+	D2D1_COMPOSITE_MODE Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+private:
+	winrt::hstring m_name = L"CompositeEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// CompositeEffect.cpp
+HRESULT CompositeEffect::GetEffectId(GUID* id) noexcept
+{
+	if (id == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*id = CLSID_D2D1Composite;
+	return S_OK;
+}
+
+HRESULT CompositeEffect::GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept
+{
+	if (index == nullptr || mapping == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	const std::wstring_view nameView(name);
+	if (nameView == L"Mode")
+	{
+		*index = D2D1_COMPOSITE_PROP_MODE;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+
+	return E_INVALIDARG;
+}
+
+HRESULT CompositeEffect::GetPropertyCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 1;
+	return S_OK;
+}
+
+HRESULT CompositeEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept try
+{
+	if (value == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	switch (index)
+	{
+		case D2D1_COMPOSITE_PROP_MODE:
+			*value = wf::PropertyValue::CreateUInt32((UINT32)Mode).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		default:
+			return E_BOUNDS;
+	}
+
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT CompositeEffect::GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept try
+{
+	if (source == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	winrt::copy_to_abi(Sources.at(index), *reinterpret_cast<void**>(source));
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT CompositeEffect::GetSourceCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = static_cast<UINT>(Sources.size());
+	return S_OK;
+}
+
+winrt::hstring CompositeEffect::Name()
+{
+	return m_name;
+}
+
+void CompositeEffect::Name(winrt::hstring name)
+{
+	m_name = name;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// FloodEffect.h
+#include <d2d1effects.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Numerics.h>
+#include <winrt/Windows.Graphics.Effects.h>
+// #include <windows.graphics.effects.interop.h>
+
+namespace awge = ABI::Windows::Graphics::Effects;
+
+struct FloodEffect : winrt::implements<FloodEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+	// IGraphicsEffectD2D1Interop
+	HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override;
+
+	// IGraphicsEffect
+	winrt::hstring Name();
+	void Name(winrt::hstring name);
+
+	wfn::float4 Color = { 0.0f, 0.0f, 0.0f, 1.0f };
+private:
+	winrt::hstring m_name = L"FloodEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// FloodEffect.cpp
+HRESULT FloodEffect::GetEffectId(GUID* id) noexcept
+{
+	if (id == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*id = CLSID_D2D1Flood;
+	return S_OK;
+}
+
+HRESULT FloodEffect::GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept
+{
+	if (index == nullptr || mapping == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	const std::wstring_view nameView(name);
+	if (nameView == L"Color")
+	{
+		*index = D2D1_FLOOD_PROP_COLOR;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+
+	return E_INVALIDARG;
+}
+
+HRESULT FloodEffect::GetPropertyCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 1;
+	return S_OK;
+}
+
+HRESULT FloodEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept try
+{
+	if (value == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	switch (index)
+	{
+		case D2D1_FLOOD_PROP_COLOR:
+			*value = wf::PropertyValue::CreateSingleArray({ Color.x, Color.y, Color.z, Color.w }).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		default:
+			return E_BOUNDS;
+	}
+
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT FloodEffect::GetSource(UINT, awge::IGraphicsEffectSource** source) noexcept
+{
+	if (source == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	return E_BOUNDS;
+}
+
+HRESULT FloodEffect::GetSourceCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 0;
+	return S_OK;
+}
+
+winrt::hstring FloodEffect::Name()
+{
+	return m_name;
+}
+
+void FloodEffect::Name(winrt::hstring name)
+{
+	m_name = name;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// GaussianBlurEffect.h
+#include <d2d1effects.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Effects.h>
+// #include <windows.graphics.effects.interop.h>
+
+namespace wge = winrt::Windows::Graphics::Effects;
+namespace awge = ABI::Windows::Graphics::Effects;
+
+struct GaussianBlurEffect : winrt::implements<GaussianBlurEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+	// IGraphicsEffectD2D1Interop
+	HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override;
+
+	// IGraphicsEffect
+	winrt::hstring Name();
+	void Name(winrt::hstring name);
+
+	wge::IGraphicsEffectSource Source;
+
+	float BlurAmount = 3.0f;
+	MY_D2D1_GAUSSIANBLUR_OPTIMIZATION Optimization = MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED;
+	D2D1_BORDER_MODE BorderMode = D2D1_BORDER_MODE_SOFT;
+private:
+	winrt::hstring m_name = L"GaussianBlurEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// GaussianBlurEffect.cpp
+HRESULT GaussianBlurEffect::GetEffectId(GUID* id) noexcept
+{
+	if (id == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*id = CLSID_D2D1GaussianBlur;
+	return S_OK;
+}
+
+HRESULT GaussianBlurEffect::GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept
+{
+	if (index == nullptr || mapping == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	const std::wstring_view nameView(name);
+	if (nameView == L"BlurAmount")
+	{
+		*index = D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+	else if (nameView == L"Optimization")
+	{
+		*index = D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+	else if (nameView == L"BorderMode")
+	{
+		*index = D2D1_GAUSSIANBLUR_PROP_BORDER_MODE;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+
+	return E_INVALIDARG;
+}
+
+HRESULT GaussianBlurEffect::GetPropertyCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 3;
+	return S_OK;
+}
+
+HRESULT GaussianBlurEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept try
+{
+	if (value == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	switch (index)
+	{
+		case D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION:
+			*value = wf::PropertyValue::CreateSingle(BlurAmount).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		case D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION:
+			*value = wf::PropertyValue::CreateUInt32((UINT32)Optimization).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		case D2D1_GAUSSIANBLUR_PROP_BORDER_MODE:
+			*value = wf::PropertyValue::CreateUInt32((UINT32)BorderMode).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		default:
+			return E_BOUNDS;
+	}
+
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT GaussianBlurEffect::GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept
+{
+	if (source == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	if (index == 0)
+	{
+		winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source));
+		return S_OK;
+	}
+	else
+	{
+		return E_BOUNDS;
+	}
+}
+
+HRESULT GaussianBlurEffect::GetSourceCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 1;
+	return S_OK;
+}
+
+winrt::hstring GaussianBlurEffect::Name()
+{
+	return m_name;
+}
+
+void GaussianBlurEffect::Name(winrt::hstring name)
+{
+	m_name = name;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// XamlBlurBrush.cpp
+XamlBlurBrush::XamlBlurBrush(muc::Compositor compositor, float blurAmount, wfn::float4 tint) :
+	m_compositor(std::move(compositor)),
+	m_blurAmount(blurAmount),
+	m_tint(tint)
+{ }
+
+void XamlBlurBrush::OnConnected()
+{
+	if (!CompositionBrush())
+	{
+		auto backdropBrush = m_compositor.CreateBackdropBrush();
+
+		auto blurEffect = winrt::make_self<GaussianBlurEffect>();
+		blurEffect->Source = muc::CompositionEffectSourceParameter(L"backdrop");
+		blurEffect->BlurAmount = m_blurAmount;
+
+		auto floodEffect = winrt::make_self<FloodEffect>();
+		floodEffect->Color = m_tint;
+
+		auto compositeEffect = winrt::make_self<CompositeEffect>();
+		compositeEffect->Sources.push_back(*blurEffect);
+		compositeEffect->Sources.push_back(*floodEffect);
+		compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+
+		auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
+		auto blurBrush = factory.CreateBrush();
+		blurBrush.SetSourceParameter(L"backdrop", backdropBrush);
+
+		CompositionBrush(blurBrush);
+	}
+}
+
+void XamlBlurBrush::OnDisconnected()
+{
+	if (const auto brush = CompositionBrush())
+	{
+		brush.Close();
+		CompositionBrush(nullptr);
+	}
+}
+
+// clang-format on
+////////////////////////////////////////////////////////////////////////////////
+
 void SetOrClearValue(DependencyObject elementDo,
                      DependencyProperty property,
                      const PropertyOverrideValue& overrideValue) {
-    winrt::Windows::Foundation::IInspectable value = overrideValue;
+    winrt::Windows::Foundation::IInspectable value;
+    if (auto* inspectable =
+            std::get_if<winrt::Windows::Foundation::IInspectable>(
+                &overrideValue)) {
+        value = *inspectable;
+    } else if (auto* blurBrashParams =
+                   std::get_if<XamlBlurBrushParams>(&overrideValue)) {
+        if (auto uiElement = elementDo.try_as<UIElement>()) {
+            auto compositor =
+                muxh::ElementCompositionPreview::GetElementVisual(uiElement)
+                    .Compositor();
+
+            value = winrt::make<XamlBlurBrush>(std::move(compositor),
+                                               blurBrashParams->blurAmount,
+                                               blurBrashParams->tint);
+        } else {
+            Wh_Log(L"Can't get UIElement for blur brush");
+            return;
+        }
+    } else {
+        Wh_Log(L"Unsupported override value");
+        return;
+    }
+
     if (value == DependencyProperty::UnsetValue()) {
         elementDo.ClearValue(property);
         return;
@@ -862,6 +1576,85 @@ std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
     return res;
 }
 
+std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
+    std::wstring_view stringValue) {
+    // Example:
+    // <WindhawkBlur BlurAmount="10" TintColor="#FFFF0000"/>
+
+    auto substr = TrimStringView(stringValue);
+
+    constexpr auto kWindhawkBlurPrefix = L"<WindhawkBlur "sv;
+    if (!substr.starts_with(kWindhawkBlurPrefix)) {
+        return std::nullopt;
+    }
+    Wh_Log(L"%.*s", static_cast<int>(substr.length()), substr.data());
+    substr = substr.substr(std::size(kWindhawkBlurPrefix));
+
+    constexpr auto kWindhawkBlurSuffix = L"/>"sv;
+    if (!substr.ends_with(kWindhawkBlurSuffix)) {
+        throw std::runtime_error("WindhawkBlur: Bad suffix");
+    }
+    substr = substr.substr(0, substr.size() - std::size(kWindhawkBlurSuffix));
+
+    auto value = XamlBlurBrushParams{
+        .blurAmount = 0,
+        .tint = {},
+    };
+
+    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
+    constexpr auto kTintColorPrefix = L"TintColor=\"#"sv;
+    for (const auto prop : SplitStringView(substr, L" ")) {
+        const auto propSubstr = TrimStringView(prop);
+        if (propSubstr.empty()) {
+            continue;
+        }
+
+        Wh_Log(L"  %.*s", static_cast<int>(propSubstr.length()),
+               propSubstr.data());
+
+        if (propSubstr.starts_with(kBlurAmountPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kBlurAmountPrefix),
+                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
+            value.blurAmount = std::stoi(std::wstring(valStr));
+            continue;
+        }
+
+        if (propSubstr.starts_with(kTintColorPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kTintColorPrefix),
+                propSubstr.size() - std::size(kTintColorPrefix) - 1);
+
+            bool hasAlpha;
+            switch (valStr.size()) {
+                case 6:
+                    hasAlpha = false;
+                    break;
+                case 8:
+                    hasAlpha = true;
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "WindhawkBlur: Unsupported TintColor value");
+            }
+
+            auto valNum = std::stoul(std::wstring(valStr), nullptr, 16);
+            uint8_t a = hasAlpha ? HIBYTE(HIWORD(valNum)) : 255;
+            uint8_t r = LOBYTE(HIWORD(valNum));
+            uint8_t g = HIBYTE(LOWORD(valNum));
+            uint8_t b = LOBYTE(LOWORD(valNum));
+            value.tint = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            continue;
+        }
+
+        throw std::runtime_error("WindhawkBlur: Bad property");
+    }
+
+    return value;
+}
+
 Style GetStyleFromXamlSetters(const std::wstring_view type,
                               const std::wstring_view xamlStyleSetters) {
     std::wstring xaml =
@@ -928,11 +1721,19 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
         if (!styleRules.empty()) {
             std::wstring xaml;
 
+            std::vector<std::optional<PropertyOverrideValue>>
+                propertyOverrideValues;
+            propertyOverrideValues.reserve(styleRules.size());
+
             for (const auto& rule : styleRules) {
+                propertyOverrideValues.push_back(
+                    ParseNonXamlPropertyOverrideValue(rule.value));
+
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
                 xaml += L"\"";
-                if (rule.isXamlValue && rule.value.empty()) {
+                if (propertyOverrideValues.back() ||
+                    (rule.isXamlValue && rule.value.empty())) {
                     xaml += L" Value=\"{x:Null}\" />\n";
                 } else if (!rule.isXamlValue) {
                     xaml += L" Value=\"";
@@ -956,9 +1757,10 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
             for (const auto& rule : styleRules) {
                 const auto setter = style.Setters().GetAt(i).as<Setter>();
                 propertyOverrides[setter.Property()][rule.visualState] =
-                    rule.isXamlValue && rule.value.empty()
-                        ? DependencyProperty::UnsetValue()
-                        : setter.Value();
+                    propertyOverrideValues[i].value_or(
+                        rule.isXamlValue && rule.value.empty()
+                            ? DependencyProperty::UnsetValue()
+                            : setter.Value());
                 i++;
             }
         }
@@ -1250,10 +2052,12 @@ void ApplyCustomizationsForVisualStateGroup(
                 auto localValue =
                     ReadLocalValueWithWorkaround(element, property);
 
-                // The comment below is for clang format.
-                if (*propertyCustomizationState.customValue !=
-                    localValue /*.......................................*/) {
-                    propertyCustomizationState.originalValue = localValue;
+                if (auto* customValue =
+                        std::get_if<winrt::Windows::Foundation::IInspectable>(
+                            &*propertyCustomizationState.customValue)) {
+                    if (*customValue != localValue) {
+                        propertyCustomizationState.originalValue = localValue;
+                    }
                 }
 
                 g_elementPropertyModifying = true;
@@ -1424,8 +2228,34 @@ void CleanupCustomizations(InstanceHandle handle) {
 using StyleConstant = std::pair<std::wstring, std::wstring>;
 using StyleConstants = std::vector<StyleConstant>;
 
-StyleConstants LoadStyleConstants() {
+std::optional<StyleConstant> ParseStyleConstant(std::wstring_view constant) {
+    // Skip if commented.
+    if (constant.starts_with(L"//")) {
+        return std::nullopt;
+    }
+
+    auto eqPos = constant.find(L'=');
+    if (eqPos == constant.npos) {
+        Wh_Log(L"Skipping entry with no '=': %.*s",
+               static_cast<int>(constant.length()), constant.data());
+        return std::nullopt;
+    }
+
+    auto key = TrimStringView(constant.substr(0, eqPos));
+    auto val = TrimStringView(constant.substr(eqPos + 1));
+
+    return StyleConstant{std::wstring(key), std::wstring(val)};
+}
+
+StyleConstants LoadStyleConstants(
+    const std::vector<PCWSTR>& themeStyleConstants) {
     StyleConstants result;
+
+    for (const auto themeStyleConstant : themeStyleConstants) {
+        if (auto parsed = ParseStyleConstant(themeStyleConstant)) {
+            result.push_back(std::move(*parsed));
+        }
+    }
 
     for (int i = 0;; i++) {
         string_setting_unique_ptr constantSetting(
@@ -1434,24 +2264,9 @@ StyleConstants LoadStyleConstants() {
             break;
         }
 
-        // Skip if commented.
-        if (constantSetting[0] == L'/' && constantSetting[1] == L'/') {
-            continue;
+        if (auto parsed = ParseStyleConstant(constantSetting.get())) {
+            result.push_back(std::move(*parsed));
         }
-
-        std::wstring_view constant = constantSetting.get();
-
-        auto eqPos = constant.find(L'=');
-        if (eqPos == constant.npos) {
-            Wh_Log(L"Skipping entry with no '=': %.*s",
-                   static_cast<int>(constant.length()), constant.data());
-            continue;
-        }
-
-        auto key = TrimStringView(constant.substr(0, eqPos));
-        auto val = TrimStringView(constant.substr(eqPos + 1));
-
-        result.push_back({std::wstring(key), std::wstring(val)});
     }
 
     // Reverse the order to allow overriding definitions with the same name.
@@ -1731,10 +2546,17 @@ void ProcessAllStylesFromSettings() {
     const Theme* theme = nullptr;
     if (wcscmp(themeName, L"Minimal Explorer11") == 0) {
         theme = &g_themeMinimal_Explorer11;
+    } else if (wcscmp(themeName, L"Tabless") == 0) {
+        theme = &g_themeTabless;
+    } else if (wcscmp(themeName, L"NoCommandBar") == 0) {
+        theme = &g_themeNoCommandBar;
+    } else if (wcscmp(themeName, L"MicaBar") == 0) {
+        theme = &g_themeMicaBar;
     }
     Wh_FreeStringSetting(themeName);
 
-    StyleConstants styleConstants = LoadStyleConstants();
+    StyleConstants styleConstants = LoadStyleConstants(
+        theme ? theme->styleConstants : std::vector<PCWSTR>{});
 
     if (theme) {
         for (const auto& themeTargetStyle : theme->targetStyles) {
