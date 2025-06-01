@@ -431,7 +431,7 @@ BOOL IsWindowEligible(HWND hWnd)
 
     // Don't block CEF apps
     if (!((IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0")) || style & WS_POPUP)
-        && !(style & WS_THICKFRAME))
+        && !(style & WS_THICKFRAME || style & WS_MINIMIZEBOX || style & WS_MAXIMIZEBOX))
         return FALSE;
     
     return TRUE;
