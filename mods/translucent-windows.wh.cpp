@@ -302,7 +302,6 @@ static auto DrawTextWithGlow = (pDrawTextWithGlow)GetProcAddress(GetModuleHandle
 thread_local HHOOK g_callWndProcHook;
 std::mutex g_allCallWndProcHooksMutex;
 std::unordered_set<HHOOK> g_allCallWndProcHooks;
-std::atomic<int> g_hookRefCount;
 
 using PUNICODE_STRING = PVOID;
 
@@ -390,14 +389,6 @@ static decltype(&DrawThemeBackground) DrawThemeBackground_orig = nullptr;
 static decltype(&DrawThemeBackgroundEx) DrawThemeBackgroundEx_orig = nullptr;
 
 void NewWindowShown(HWND); 
-
-auto hookRefCountScope() {
-    g_hookRefCount++;
-    return std::unique_ptr<decltype(g_hookRefCount), void(*)(decltype(g_hookRefCount)*)>{
-        &g_hookRefCount, [](auto hookRefCount) {
-            (*hookRefCount)--;
-        }};
-}
 
 BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
 {
@@ -1352,8 +1343,6 @@ void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 
 LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
-    auto hookScope = hookRefCountScope();
-
     const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
     if (nCode != HC_ACTION || !IsWindowEligible(cwp->hwnd)) {
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -1980,10 +1969,6 @@ void Wh_ModUninit(void)
     ApplyForExistingWindows();
 
     RainbowWindows.clear();
-
-    while (g_hookRefCount > 0) {
-        Sleep(200);
-    }
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
