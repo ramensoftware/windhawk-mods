@@ -1400,7 +1400,10 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
             {
                 RainbowData* data = (RainbowData*)value;
                 KillTimer(NULL, data->WndTimer);
-                g_rainbowWindows.erase(cwp->hwnd);
+                {
+                    std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                    g_rainbowWindows.erase(cwp->hwnd);
+                }
                 delete data;
             }
             break;
