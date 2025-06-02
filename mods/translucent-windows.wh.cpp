@@ -293,7 +293,6 @@ UINT_PTR WndTimer;
 HWND WndHwnd;
 };
 
-std::mutex g_drawTextMutex;
 thread_local BOOL g_DrawThemeTextExEntry;
 
 typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC, LPCWSTR, UINT, const RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL, DTT_CALLBACK_PROC, LPARAM);
