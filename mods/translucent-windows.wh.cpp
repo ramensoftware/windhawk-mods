@@ -431,21 +431,18 @@ BOOL IsWindowEligible(HWND hWnd)
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    if(g_settings.BorderFlag && dwAttribute == DWMWA_BORDER_COLOR && g_settings.MenuBorderFlag &&  IsWindowClass(hWnd, L"#32768"))
+    if(dwAttribute == DWMWA_BORDER_COLOR && IsWindowClass(hWnd, L"#32768") && g_settings.MenuBorderFlag)
             return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
-
+            
     if(!IsWindowEligible(hWnd))
         return DwmSetWindowAttribute_orig(hWnd, dwAttribute, pvAttribute, cbAttribute);
     
     if(!g_settings.TitlebarFlag)
     {
-        if(g_settings.BgType == g_settings.AccentBlurBehind && IsWindowClass(hWnd, L"CabinetWClass") && 
-            g_settings.ExtendFrame && (dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE || dwAttribute == DWMWA_USE_HOSTBACKDROPBRUSH))
+        if (dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE || dwAttribute == DWMWA_USE_HOSTBACKDROPBRUSH)
         {
-            return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &NONE, sizeof(UINT));
-        }           
-        else if(dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE)
-        {
+            if (g_settings.BgType == g_settings.AccentBlurBehind)
+                return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &NONE, sizeof(UINT));
             if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(UINT));
             else if(g_settings.BgType == g_settings.MicaAlt)
@@ -454,11 +451,11 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &MAINWINDOW, sizeof(UINT));
         }
     }
-    else if((IsWindowClass(hWnd, L"CabinetWClass")|| IsWindowClass(hWnd, L"TaskManagerWindow")) && (dwAttribute == DWMWA_CAPTION_COLOR || dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE))
+    else if (dwAttribute == DWMWA_CAPTION_COLOR || dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE)
             return DwmSetWindowAttribute_orig(hWnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
     
     // Effects on VS Studio, Windows Terminal ...
-    if((g_settings.BorderFlag || g_settings.BorderRainbowFlag) && dwAttribute == DWMWA_BORDER_COLOR)
+    if(dwAttribute == DWMWA_BORDER_COLOR && g_settings.BorderFlag)
         return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &g_settings.g_BorderColor, sizeof(COLORREF));
     
     return DwmSetWindowAttribute_orig(hWnd, dwAttribute, pvAttribute, cbAttribute);
