@@ -4400,7 +4400,7 @@
                 "published": 1742642004000,
                 "rating": 10,
                 "ratingUsers": 5,
-                "updated": 1742642004000,
+                "updated": 1748884402000,
                 "users": 200
             },
             "metadata": {
@@ -4408,13 +4408,13 @@
                     "x86-64"
                 ],
                 "author": "aubymori",
-                "description": "Makes active borders always use the accent color in Windows 10",
+                "description": "Tweak the colorization of windows in Windows 10",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "dwm.exe"
                 ],
-                "name": "Windows 10 Colored Borders",
-                "version": "1.0.0"
+                "name": "Windows 10 Colorization Tweaks",
+                "version": "1.1.0"
             }
         },
         "win10-taskbar-on-win11": {

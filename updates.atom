@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-02T12:10:27.000Z</updated>
+    <updated>2025-06-02T17:13:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Colorization Tweaks 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win10-colored-borders#4720593a6f529636dcb4d1b9c5dca96fda239c00</id>
+        <link href="https://windhawk.net/mods/win10-colored-borders"/>
+        <updated>2025-06-02T17:13:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add the ability to force windows to use either light or dark theme always</li>
+<li>Rename the mod from "Windows 10 Colored Borders" to "Windows 10 Colorization Tweaks"</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Winver Custom Text 1.0]]></title>
         <id>https://windhawk.net/mods/winver-custom-text#9bf09a6887aed316e6503ca39ad5ef07298f3722</id>
@@ -309,25 +323,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
 <li>The mod no longer permanently changes the system auto-hide settings.</li>
 <li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 <li>Fixed a possible crash on Windows startup (only observed in Windows 10).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.4]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#29917c376199d3312e355f1b001dc3108040b7ca</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2025-05-09T12:01:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added style constants which can be defined once and used in multiple styles.</li>
-<li>Added a built-in blur brush object, <code>WindhawkBlur</code>, which supports the <code>BlurAmount</code> and <code>TintColor</code> properties. For example: <code>Fill:=&lt;WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/&gt;</code>.</li>
-<li>Improved handling of commented targets and styles (starting with <code>//</code>), and added details about this in the mod's description.</li>
-<li>Added themes: BottomDensy, TaskbarXII, xdark.</li>
-<li>Updated themes: DockLike, 21996Taskbar.</li>
-<li>The DockLike theme now applies correctly when a new monitor is attached.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
