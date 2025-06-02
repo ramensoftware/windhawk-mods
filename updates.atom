@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-02T17:13:22.000Z</updated>
+    <updated>2025-06-02T20:02:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Turn off change file extension warning 1.0.1]]></title>
+        <id>https://windhawk.net/mods/extension-change-no-warning#d6357847b9752c88e29c23c31cdecc9757c4941c</id>
+        <link href="https://windhawk.net/mods/extension-change-no-warning"/>
+        <updated>2025-06-02T20:02:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved compatibility with recent Windows updates.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 Colorization Tweaks 1.1.0]]></title>
         <id>https://windhawk.net/mods/win10-colored-borders#4720593a6f529636dcb4d1b9c5dca96fda239c00</id>
@@ -308,21 +321,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
 <li>Improved handling of commented targets and styles (starting with <code>//</code>), and added details about this in the mod's description.</li>
 <li>Added the Matter theme.</li>
 <li>Updated the TranslucentShell theme.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide when maximized 1.2.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-when-maximized#f8c259486b46a48a4fd3d8ddc0dee2ee98a4b4e1</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-when-maximized"/>
-        <updated>2025-05-09T16:50:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The mod no longer permanently changes the system auto-hide settings.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-<li>Fixed a possible crash on Windows startup (only observed in Windows 10).</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

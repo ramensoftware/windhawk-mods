@@ -1596,7 +1596,7 @@
                 "published": 1713878371000,
                 "rating": 10,
                 "ratingUsers": 77,
-                "updated": 1713878371000,
+                "updated": 1748894579000,
                 "users": 5358
             },
             "metadata": {
@@ -1609,7 +1609,7 @@
                 ],
                 "name": "Turn off change file extension warning",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "fake-explorer-path": {
