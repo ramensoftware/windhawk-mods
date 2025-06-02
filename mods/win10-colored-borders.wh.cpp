@@ -16,6 +16,14 @@ This mod allows you to tweak the colorization of windows in Windows 10, includin
 always showing colored borders on active windows and always using dark or light mode
 windows.
 
+## ⚠ Important usage note ⚠ 
+
+In order to use this mod, you must allow Windhawk to inject into the **dwm.exe** 
+system process. To do so, add it to the process inclusion list in the advanced 
+settings. If you do not do this, it will silently fail to inject.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
+
 ## Previews
 
 **Colored borders**:
