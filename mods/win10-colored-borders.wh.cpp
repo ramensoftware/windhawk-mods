@@ -62,29 +62,29 @@ enum WINDOWCOLOR
     WC_DARK
 } g_eWindowColor = WC_NORMAL;
 
-void (*CGlassColorizationParameters_AdjustWindowColorization_orig)(void *, void *, float, BYTE);
+void (*CGlassColorizationParameters_AdjustWindowColorization_orig)(void *, void *, float, DWORD);
 void CGlassColorizationParameters_AdjustWindowColorization_hook(
     void *pThis,
     void *pgpcc,
     float flUnknown,
-    BYTE  bFlags
+    DWORD dwFlags
 )
 {
-    if (g_fColorBorders && !(bFlags & 0x8))
-        bFlags &= ~0x4;
+    if (g_fColorBorders && !(dwFlags & 0x8))
+        dwFlags &= ~0x4;
     switch (g_eWindowColor)
     {
         case WC_NORMAL:
             break;
         case WC_LIGHT:
-            bFlags &= ~0x80;
+            dwFlags &= ~0x80;
             break;
         case WC_DARK:
-            bFlags |= 0x80;
+            dwFlags |= 0x80;
             break;
     }
     CGlassColorizationParameters_AdjustWindowColorization_orig(
-        pThis, pgpcc, flUnknown, bFlags
+        pThis, pgpcc, flUnknown, dwFlags
     );
 }
 
