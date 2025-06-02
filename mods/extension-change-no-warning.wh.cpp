@@ -2,7 +2,7 @@
 // @id              extension-change-no-warning
 // @name            Turn off change file extension warning
 // @description     When a file is renamed and its extension is changed, a confirmation warning appears, this mod turns it off
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -29,6 +29,16 @@ appears, this mod turns it off.
 */
 // ==/WindhawkModReadme==
 
+bool IsRenameMessageBoxParams(HINSTANCE hAppInst,
+                              LPCWSTR lpcText,
+                              LPCWSTR lpcTitle,
+                              UINT fuStyle) {
+    return hAppInst && lpcText == MAKEINTRESOURCE(4112) &&
+           lpcTitle == MAKEINTRESOURCE(4148) &&
+           fuStyle == (MB_ICONEXCLAMATION | MB_YESNO) &&
+           hAppInst == GetModuleHandle(L"shell32.dll");
+}
+
 // Forwarding arguments of varadic functions isn't supported in C/C++:
 // https://stackoverflow.com/q/3530771
 //
@@ -49,10 +59,7 @@ int __cdecl ShellMessageBoxW_Hook(HINSTANCE hAppInst,
                                   UINT fuStyle) {
     Wh_Log(L">");
 
-    if (hAppInst && lpcText == MAKEINTRESOURCE(4112) &&
-        lpcTitle == MAKEINTRESOURCE(4148) &&
-        fuStyle == (MB_ICONEXCLAMATION | MB_YESNO) &&
-        hAppInst == GetModuleHandle(L"shell32.dll")) {
+    if (IsRenameMessageBoxParams(hAppInst, lpcText, lpcTitle, fuStyle)) {
         return IDYES;
     }
 
@@ -60,11 +67,50 @@ int __cdecl ShellMessageBoxW_Hook(HINSTANCE hAppInst,
         hAppInst, hWnd, lpcText, lpcTitle, fuStyle);
 }
 
+using ShellMessageBoxInternal_t = int(__cdecl*)(HINSTANCE hAppInst,
+                                                HWND hWnd,
+                                                DWORD dwFlags,
+                                                LPCWSTR lpcText,
+                                                LPCWSTR lpcTitle,
+                                                UINT fuStyle);
+ShellMessageBoxInternal_t ShellMessageBoxInternal_Original;
+int __cdecl ShellMessageBoxInternal_Hook(HINSTANCE hAppInst,
+                                         HWND hWnd,
+                                         DWORD dwFlags,
+                                         LPCWSTR lpcText,
+                                         LPCWSTR lpcTitle,
+                                         UINT fuStyle) {
+    Wh_Log(L">");
+
+    if (IsRenameMessageBoxParams(hAppInst, lpcText, lpcTitle, fuStyle)) {
+        return IDYES;
+    }
+
+    [[clang::musttail]] return ShellMessageBoxInternal_Original(
+        hAppInst, hWnd, dwFlags, lpcText, lpcTitle, fuStyle);
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     Wh_SetFunctionHook((void*)ShellMessageBoxW, (void*)ShellMessageBoxW_Hook,
                        (void**)&ShellMessageBoxW_Original);
+
+    // Also hook ShellMessageBoxInternal which was added in newer builds around
+    // April 2025.
+    HMODULE shlwapiModule = LoadLibrary(L"shlwapi.dll");
+    if (shlwapiModule) {
+        if (auto pShellMessageBoxInternal =
+                GetProcAddress(shlwapiModule, "ShellMessageBoxInternal")) {
+            Wh_SetFunctionHook((void*)pShellMessageBoxInternal,
+                               (void*)ShellMessageBoxInternal_Hook,
+                               (void**)&ShellMessageBoxInternal_Original);
+        } else {
+            Wh_Log(L"Couldn't find ShellMessageBoxInternal");
+        }
+    } else {
+        Wh_Log(L"Couldn't load shlwapi.dll");
+    }
 
     return TRUE;
 }
