@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-05-31T20:04:47.000Z</updated>
+    <updated>2025-06-02T12:10:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Winver Custom Text 1.0]]></title>
+        <id>https://windhawk.net/mods/winver-custom-text#9bf09a6887aed316e6503ca39ad5ef07298f3722</id>
+        <link href="https://windhawk.net/mods/winver-custom-text"/>
+        <updated>2025-06-02T12:10:27.000Z</updated>
+        <content type="html"><![CDATA[<p>Allows you to set the text displayed in winver.exe.</p>
+<p>If you dont know what winver is, its a file built in to Windows that simply displays info about your system:
+<img src="https://i.imgur.com/6XvNlWj.png" alt="winver.exe" /><br>
+This mod allows you to customize that.</p>]]></content>
+        <author>
+            <name>Thomas Shrader</name>
+            <uri>https://github.com/ilikecoding-197</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.2]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#c08d8c4047fd99859a2d1449a2126ec56f20ec2d</id>
@@ -318,17 +332,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab window delayer 1.2.0]]></title>
-        <id>https://windhawk.net/mods/alt-tab-delayer#b07c7e0d65abbbf7d10547608004595ce07189e0</id>
-        <link href="https://windhawk.net/mods/alt-tab-delayer"/>
-        <updated>2025-05-04T17:19:46.000Z</updated>
-        <content type="html"><![CDATA[<p>Add ARM64 support</p>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
         </author>
     </entry>
 </feed>

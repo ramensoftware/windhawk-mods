@@ -4727,6 +4727,26 @@
                 "name": "Windows 7 Clock Spacing",
                 "version": "1.0.0"
             }
+        },
+        "winver-custom-text": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1748866227000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1748866227000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Thomas Shrader",
+                "description": "Allows you to set the text displayed in winver.exe.",
+                "github": "https://github.com/ilikecoding-197",
+                "include": [
+                    "winver.exe"
+                ],
+                "name": "Winver Custom Text",
+                "version": "1.0"
+            }
         }
     }
 }
