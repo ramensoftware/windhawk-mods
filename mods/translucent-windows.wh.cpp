@@ -260,7 +260,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 #include <vssym32.h>
 #include <uxtheme.h>
 #include <windows.h>
-#include <atomic>
 #include <functional>
 #include <cmath>
 #include <string>
@@ -450,7 +449,8 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &MAINWINDOW, sizeof(UINT));
         }
     }
-    else if (dwAttribute == DWMWA_CAPTION_COLOR || dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE)
+    else if (dwAttribute == DWMWA_CAPTION_COLOR || (dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE 
+        && (IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"TaskManagerWindow"))))
             return DwmSetWindowAttribute_orig(hWnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
     
     // Effects on VS Studio, Windows Terminal ...
@@ -600,12 +600,10 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lp
     std::wstring str;
     if (lpString) str = lpString;
 
-    thread_local bool isCurThread = false;
 
     if (!(option & ETO_IGNORELANGUAGE) && !(option & ETO_GLYPH_INDEX) && 
-        !isCurThread && !str.empty() && g_DrawThemeTextExEntry)
+        !str.empty() && g_DrawThemeTextExEntry)
     {
-        isCurThread = true;
         RECT rect = { 0 };
         if (lprect)
             rect = *lprect;
@@ -689,7 +687,6 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lp
             if (option & ETO_CLIPPED)
                 RestoreDC(hdc, -1);
         }
-        isCurThread = false;
         return TRUE;
     }
     
@@ -1305,34 +1302,40 @@ static COLORREF HSLToRGB(float h, float s, float l) {
 
 void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 {
-    for(auto& hWnd : g_rainbowWindows)
+    RainbowData* data = nullptr;
     {
-        HANDLE value = GetPropW(hWnd, g_RainbowPropStr.c_str());
-        if (value && (((RainbowData*)value)->WndTimer == t_id))
+        std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+        for(auto& hWnd : g_rainbowWindows)
         {
-            RainbowData* data = (RainbowData*)value;
-            data->WndHue = fmod(data->WndHue + g_settings.RainbowSpeed, 360.0f);
+            HANDLE value = GetPropW(hWnd, g_RainbowPropStr.c_str());
+            if (value && (((RainbowData*)value)->WndTimer == t_id))
+            {
+                data = (RainbowData*)value;
+                break;
+            }
+        }
+    }
+
+    if (data)
+    {
+        data->WndHue = fmod(data->WndHue + g_settings.RainbowSpeed, 360.0f);
+        if (g_settings.TitlebarRainbowFlag)
+        {
+            g_settings.g_TitlebarColor = HSLToRGB(data->WndHue, 1.0f, 0.5f); 
+            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
+        }
+        if (g_settings.CaptionRainbowFlag)
+        {
             if (g_settings.TitlebarRainbowFlag)
-            {
-                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                g_settings.g_TitlebarColor = HSLToRGB(fmod(data->WndHue + 240.0f, 360.0f), 1.0f, 0.5f);
-                DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
-            }
-            if (g_settings.CaptionRainbowFlag)
-            {
-                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                if (g_settings.TitlebarRainbowFlag)
-                    g_settings.g_CaptionColor = HSLToRGB(fmod(data->WndHue + 120.0f, 360.0f), 1.0f, 0.5f);
-                else
-                    g_settings.g_CaptionColor = HSLToRGB(data->WndHue, 1.0f, 0.5f);
-                DwmSetWindowAttribute(hWnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
-            }
-            if (g_settings.BorderRainbowFlag)
-            {
-                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                g_settings.g_BorderColor = HSLToRGB(data->WndHue, 1.0f, 0.5f);  
-                DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &g_settings.g_BorderColor, sizeof(COLORREF));
-            }
+                g_settings.g_CaptionColor = HSLToRGB(fmod(data->WndHue + 120.0f, 360.0f), 1.0f, 0.5f);
+            else
+                g_settings.g_CaptionColor = HSLToRGB(data->WndHue, 1.0f, 0.5f);
+            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
+        }
+        if (g_settings.BorderRainbowFlag)
+        {
+            g_settings.g_BorderColor = HSLToRGB(data->WndHue, 1.0f, 0.5f);  
+            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_BORDER_COLOR, &g_settings.g_BorderColor, sizeof(COLORREF));
         }
     }
 }
@@ -1340,7 +1343,7 @@ void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
     const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-    if (nCode != HC_ACTION || !IsWindowEligible(cwp->hwnd)) {
+    if (nCode != HC_ACTION) {
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
 
@@ -1349,7 +1352,7 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
         case WM_ACTIVATE:
         {
             bool isMinimized = HIWORD(cwp->wParam);
-            if (!isMinimized)
+            if (!isMinimized && IsWindowEligible(cwp->hwnd))
             {
                 WORD activationState = LOWORD(cwp->wParam);
 
@@ -1418,13 +1421,15 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
                         HANDLE value = GetPropW(cwp->hwnd, g_RainbowPropStr.c_str());
                         if (!value)
                         {
-                            g_rainbowWindows.insert(cwp->hwnd);
                             UINT_PTR timersId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
                             if (timersId)
                             {
                                 RainbowData* data = new RainbowData {0.f, timersId, cwp->hwnd};
                                 SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)data);
-
+                                {
+                                    std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                                    g_rainbowWindows.insert(cwp->hwnd);
+                                }
                             }
                         }
                         break;
@@ -1495,7 +1500,6 @@ void NewWindowShown(HWND hWnd)
     {
         if (g_settings.ImmersiveDarkmode)
             DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(UINT));
-            
         if(g_settings.BgType == g_settings.AccentBlurBehind && g_settings.ExtendFrame)
             EnableBlurBehind(hWnd);
         else if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
@@ -1510,14 +1514,15 @@ void NewWindowShown(HWND hWnd)
     
     if(g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.TitlebarFlag)
     {
-        std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);   
-        DWORD dwThreadId = GetWindowThreadProcessId(hWnd, NULL);
-        HHOOK callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProc, nullptr, dwThreadId);
-        if (callWndProcHook) {
-            g_callWndProcHook = callWndProcHook;
-            g_allCallWndProcHooks.insert(callWndProcHook);
+        {
+            std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);   
+            DWORD dwThreadId = GetWindowThreadProcessId(hWnd, NULL);
+            HHOOK callWndProcHook = SetWindowsHookEx(WH_CALLWNDPROC, CallWndProc, nullptr, dwThreadId);
+            if (callWndProcHook) {
+                g_callWndProcHook = callWndProcHook;
+                g_allCallWndProcHooks.insert(callWndProcHook);
+            }
         }
-        
         if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
             SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
     }
