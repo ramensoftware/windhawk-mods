@@ -11,6 +11,10 @@
 // ==WindhawkModReadme==
 /*
 Allows you to set the text displayed in winver.exe.
+
+If you dont know what winver is, its a file built in to Windows that simply displays info about your system:
+![winver.exe](https://i.imgur.com/6XvNlWj.png)<br>
+This mod allows you to customize that.
 */
 // ==/WindhawkModReadme==
 
@@ -79,6 +83,8 @@ void FreeSettings() {
 
     Wh_FreeStringSetting(Settings.title);
     Wh_FreeStringSetting(Settings.firstLine);
+
+    delete ShellAboutArgs.szApp;
 }
 
 BOOL Wh_ModInit() {
