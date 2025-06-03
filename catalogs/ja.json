@@ -1491,6 +1491,30 @@
                 "version": "1.4.9"
             }
         },
+        "explorer-double-click-up": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1748977001000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1748977001000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "wrldspawn",
+                "compilerOptions": "-lcomctl32 -loleaut32 -lole32",
+                "description": "Double click empty space to go up a folder",
+                "github": "https://github.com/wrldspawn",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer Double Click Up",
+                "version": "1.0.0"
+            }
+        },
         "explorer-frame-classic": {
             "details": {
                 "defaultSorting": 45880,

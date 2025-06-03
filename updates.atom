@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-03T11:53:21.000Z</updated>
+    <updated>2025-06-03T18:56:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Double Click Up 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-double-click-up#40afd947107997d91d611a3dc0f73daefebd27b6</id>
+        <link href="https://windhawk.net/mods/explorer-double-click-up"/>
+        <updated>2025-06-03T18:56:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerdoubleclickup">Explorer Double Click Up</h1>
+<p>Double click empty space to go up a folder</p>
+<h2 id="windowsversionsupport">Windows version support</h2>
+<p>Will not work on anything older than Windows 10 due to use of WinRT.</p>]]></content>
+        <author>
+            <name>wrldspawn</name>
+            <uri>https://github.com/wrldspawn</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Tweaks 1.1]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#5a9dafdec518bcd45686bc0e87f61858f7ce5d01</id>
@@ -310,21 +324,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
 10</a></li>
 </ul>
 <p><img src="https://i.imgur.com/nGxrBYG.png" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#d01044de4128b7fafc768e340b116b2c129b660a</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2025-05-09T19:36:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added style constants which can be defined once and used in multiple styles.</li>
-<li>Improved handling of commented targets and styles (starting with <code>//</code>), and added details about this in the mod's description.</li>
-<li>Added the first theme: Minimal Explorer11!</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
