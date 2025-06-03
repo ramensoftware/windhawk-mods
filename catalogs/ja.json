@@ -3296,7 +3296,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 197,
-                "updated": 1728681415000,
+                "updated": 1748989411000,
                 "users": 16104
             },
             "featured": true,
@@ -3305,7 +3305,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lversion -lwininet",
+                "compilerOptions": "-lversion",
                 "description": "Close programs with a middle click on the taskbar instead of creating a new instance",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -3314,7 +3314,7 @@
                 ],
                 "name": "Middle click to close on the taskbar",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.7"
+                "version": "1.0.8"
             }
         },
         "taskbar-button-scroll": {

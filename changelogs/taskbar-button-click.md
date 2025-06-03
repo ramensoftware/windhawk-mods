@@ -1,3 +1,8 @@
+## 1.0.8 ([Jun 3, 2025](https://github.com/ramensoftware/windhawk-mods/blob/78fc318a181cfb5299fab5beaf42a8726ebe5f9e/mods/taskbar-button-click.wh.cpp))
+
+* Added support for ARM64.
+* The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.
+
 ## 1.0.7 ([Oct 11, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d190ad2c0e8b24bd6b46292507fceaad45472d8f/mods/taskbar-button-click.wh.cpp))
 
 * Holding Ctrl while middle clicking will end the running task. The key combination can be configured or disabled in the mod settings.

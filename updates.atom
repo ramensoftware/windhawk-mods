@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-03T20:29:55.000Z</updated>
+    <updated>2025-06-03T22:23:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-click#78fc318a181cfb5299fab5beaf42a8726ebe5f9e</id>
+        <link href="https://windhawk.net/mods/taskbar-button-click"/>
+        <updated>2025-06-03T22:23:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for ARM64.</li>
+<li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.2.1]]></title>
         <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#451a0a24c7e026a0c86c10adfb44b8681ab24bb6</id>
@@ -302,23 +316,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
         <author>
             <name>tinodin</name>
             <uri>https://github.com/tinodin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#5e41b17208d957cf8b3dbfcc837c24ceb2e2eaa7</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2025-05-10T16:03:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option for customizing text trimming (ellipsis/clip).</li>
-<li>Added an option to hide the running indicator by setting the running indicator height to -1.</li>
-<li>Improved compatibility with the "Taskbar height and icon size" mod.</li>
-<li>Fixed the mod not applying on startup in some cases.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
