@@ -24,9 +24,8 @@
 Double click empty space to go up a folder
 
 ## Windows version support
-Only personally tested on Windows 10.
 
-Won't work on anything older due to use of WinRT.
+Will not work on anything older than Windows 10 due to use of WinRT.
 */
 // ==/WindhawkModReadme==
 
@@ -271,6 +270,69 @@ HRESULT __cdecl FileCabinet_CreateViewWindow2Hook(IShellBrowser* pBrowser, void*
     return hRes;
 }
 
+BOOL CALLBACK InitEnumChildWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        wchar_t className[256];
+        GetClassName(hWnd, className, 256);
+
+        if (wcscmp(className, L"SHELLDLL_DefView") == 0) {
+            HWND shellTab = (HWND)lParam;
+
+            auto browser = winrt::com_ptr<IShellBrowser>{
+                reinterpret_cast<IShellBrowser*>((void*)SendMessage(shellTab, WM_USER + 7, 0, 0)),
+                winrt::take_ownership_from_abi
+            };
+            if (browser != NULL) {
+                ExplorerWrapper wrapper = ExplorerWrapper(shellTab, browser.get());
+
+                HWND listView = FindWindowEx(hWnd, NULL, L"SysListView32", NULL);
+                HWND dui = FindWindowEx(hWnd, NULL, L"DirectUIHWND", NULL);
+                if (listView) {
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(listView, SysListViewSubclass, 0)) {
+                        Wh_Log(L"SysListView32 Subclassed %p", listView);
+                        wrapper.hListView = listView;
+                    }
+                } else if (dui) {
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DUISubclass, 0)) {
+                        Wh_Log(L"DirectUIHWND Subclassed %p", hWnd);
+                        wrapper.hListView = hWnd;
+                    }
+                }
+
+                if (wrapper.hListView) {
+                    g_Wrappers.push_back(wrapper);
+                } else {
+                    Wh_Log(L"Failed to setup wrapper for %p", shellTab);
+                }
+
+                return FALSE;
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        wchar_t className[256];
+        GetClassName(hWnd, className, 256);
+
+        if (wcscmp(className, L"CabinetWClass") == 0) {
+            HWND shellTab = FindWindowEx(hWnd, NULL, L"ShellTabWindowClass", NULL);
+            if (shellTab != NULL) {
+                EnumChildWindows(shellTab, InitEnumChildWindowsProc, (LPARAM)shellTab);
+            }
+        }
+    }
+
+    return TRUE;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Explorer Double Click Up Init");
 
@@ -315,6 +377,10 @@ BOOL Wh_ModInit() {
     }
 
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    EnumWindows(InitEnumWindowsProc, 0);
 }
 
 void Wh_ModUninit() {
