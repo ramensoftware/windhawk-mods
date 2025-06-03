@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-02T20:02:59.000Z</updated>
+    <updated>2025-06-03T11:53:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.1]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#5a9dafdec518bcd45686bc0e87f61858f7ce5d01</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-06-03T11:53:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Finally implemented proper transparency support for frameless windows<ul>
+<li>In frameless mode, this mod is not compatible with the <a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a> mod, due to the mod interfering with how this mod works around <a href="https://source.chromium.org/chromium/chromium/src/+/main:ui/views/win/hwnd_message_handler.cc;drc=339fea7fafdc1ba5b16e7b2fa6f9d996b65348a3;l=616">Chromium's weird code</a></li>
+<li>Please use <a href="https://github.com/MicaForEveryone/MicaForEveryone">MicaForEveryone</a> instead in frameless mode</li>
+<li>This does not apply when the native frame option is enabled. Translucent Windows will work fine in this mode</li></ul></li>
+<li>Prevent bad memory scan results with zero match persisting as a cached count value</li>
+<li>Prevent various time-consuming memory patch operations from running on known incompatible versions</li>
+<li>Added support for disabling the forced dark mode in Spotify versions between 1.2.21 and 1.2.25</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Turn off change file extension warning 1.0.1]]></title>
         <id>https://windhawk.net/mods/extension-change-no-warning#d6357847b9752c88e29c23c31cdecc9757c4941c</id>
@@ -305,22 +324,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
 <li>Added style constants which can be defined once and used in multiple styles.</li>
 <li>Improved handling of commented targets and styles (starting with <code>//</code>), and added details about this in the mod's description.</li>
 <li>Added the first theme: Minimal Explorer11!</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#c34430995b5cd76960f30692a94afba87a2f4215</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2025-05-09T18:11:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added style constants which can be defined once and used in multiple styles.</li>
-<li>Improved handling of commented targets and styles (starting with <code>//</code>), and added details about this in the mod's description.</li>
-<li>Added the Matter theme.</li>
-<li>Updated the TranslucentShell theme.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

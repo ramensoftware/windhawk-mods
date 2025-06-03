@@ -1,3 +1,13 @@
+## 1.1 ([Jun 3, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5a9dafdec518bcd45686bc0e87f61858f7ce5d01/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Finally implemented proper transparency support for frameless windows
+    * In frameless mode, this mod is not compatible with the [Translucent Windows](https://windhawk.net/mods/translucent-windows) mod, due to the mod interfering with how this mod works around [Chromium's weird code](https://source.chromium.org/chromium/chromium/src/+/main:ui/views/win/hwnd_message_handler.cc;drc=339fea7fafdc1ba5b16e7b2fa6f9d996b65348a3;l=616)
+    * Please use [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone) instead in frameless mode
+    * This does not apply when the native frame option is enabled. Translucent Windows will work fine in this mode
+* Prevent bad memory scan results with zero match persisting as a cached count value
+* Prevent various time-consuming memory patch operations from running on known incompatible versions
+* Added support for disabling the forced dark mode in Spotify versions between 1.2.21 and 1.2.25
+
 ## 1.0 ([May 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/363a9ab160fe2975c2fc1a7c359b488bbd43cc88/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Added a standalone playback speed changer in the Windhawk mod settings page
