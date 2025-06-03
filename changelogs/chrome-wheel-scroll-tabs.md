@@ -1,3 +1,7 @@
+## 1.2.1 ([Jun 3, 2025](https://github.com/ramensoftware/windhawk-mods/blob/451a0a24c7e026a0c86c10adfb44b8681ab24bb6/mods/chrome-wheel-scroll-tabs.wh.cpp))
+
+* Fixed the recently-added options to limit the scroll area, which worked only for maximized windows.
+
 ## 1.2 ([May 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d24cd9074413004acff7f87f7e9d6cab89210938/mods/chrome-wheel-scroll-tabs.wh.cpp))
 
 * Added options to limit the scroll area, which can be useful in case the mod incorrectly overrides the mouse wheel scrolling in areas where it shouldn't, e.g. in the page content area.

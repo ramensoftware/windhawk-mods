@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-03T18:56:41.000Z</updated>
+    <updated>2025-06-03T20:29:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.2.1]]></title>
+        <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#451a0a24c7e026a0c86c10adfb44b8681ab24bb6</id>
+        <link href="https://windhawk.net/mods/chrome-wheel-scroll-tabs"/>
+        <updated>2025-06-03T20:29:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the recently-added options to limit the scroll area, which worked only for maximized windows.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Double Click Up 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-double-click-up#40afd947107997d91d611a3dc0f73daefebd27b6</id>
@@ -303,27 +316,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
 <li>Fixed the mod not applying on startup in some cases.</li>
 <li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Size 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-size#c9b1f1bef25be1607f4960ec5b156d8ab661ec66</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-size"/>
-        <updated>2025-05-10T11:51:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarthumbnailsize">Taskbar Thumbnail Size</h1>
-<p>Customize the size of the new taskbar thumbnails in Windows 11.</p>
-<p>For older Windows versions, the size of taskbar thumbnails can be changed via the registry:</p>
-<ul>
-<li><a href="https://www.elevenforum.com/t/change-size-of-taskbar-thumbnail-previews-in-windows-11.6340/">Change Size of Taskbar Thumbnail Previews in Windows
-11</a>
-(before Windows 11 version 24H2)</li>
-<li><a href="https://www.tenforums.com/tutorials/26105-change-size-taskbar-thumbnails-windows-10-a.html">How to Change the Size of Taskbar Thumbnails in Windows
-10</a></li>
-</ul>
-<p><img src="https://i.imgur.com/nGxrBYG.png" alt="Demonstration" /></p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

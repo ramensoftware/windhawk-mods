@@ -379,7 +379,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 124,
-                "updated": 1748284460000,
+                "updated": 1748982595000,
                 "users": 8994
             },
             "featured": true,
@@ -398,7 +398,7 @@
                 ],
                 "name": "Chrome/Edge scroll tabs with mouse wheel",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.2.1"
             }
         },
         "chromium-native-titlebar": {
