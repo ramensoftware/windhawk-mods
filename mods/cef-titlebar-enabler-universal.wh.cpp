@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.0
+// @version         1.1
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -38,7 +38,7 @@
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.64 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.65 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -46,16 +46,19 @@
     * 1.1.71: First version to support the `Ignore minimum window size` option
     * 1.2.7: First version to use Library X UI by default
     * 1.2.13: Last version to have the old UI
-    * 1.2.28: First version to support Chrome runtime (disabled by default)
+    * 1.2.26: First version to support Chrome runtime (disabled by default)
     * 1.2.45: Last version to support disabling the global navbar
     * 1.2.47: Chrome runtime is always enabled since this version
     * Try the [noControls](https://github.com/ohitstom/spicetify-extensions/tree/main/noControls) Spicetify extension to remove the space left by the custom window controls
     * Or try my [WMPotify](https://github.com/Ingan121/WMPotify) theme for Windows Media Player 11-like look
     * Enable Chrome runtime to get a proper window icon. Use `--enable-chrome-runtime` flag or put `app.enable-chrome-runtime=true` in `%appdata%\Spotify\prefs`
+* Notes for transparent Spotify windows
+    * When the `Enable native frames and title bars on the main window` option is disabled, this mod is not compatible with the [Translucent Windows](https://windhawk.net/mods/translucent-windows) Windhawk mod due to how the mod and Chromium works
+    * Please use an alternative software, such as [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone), when the native frames are disabled
 * Notes for Spicetify extension/theme developers
     * Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
     * This mod exposes a JavaScript API that can be used to interact with the main window and this mod
-    * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-1.2.57)
+    * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-latest)
     * Use `(window.cancelEsperantoCall || window._getSpotifyModule)('ctewh').query()` to get various information about the window and the mod
     * Various functions are available in the object returned by `_getSpotifyModule('ctewh')` or `cancelEsperantoCall('ctewh')`
     * See [here](https://github.com/Ingan121/WMPotify/blob/master/theme/src/js/WindhawkComm.js) for a simple example of how to use the functions
@@ -75,6 +78,7 @@
   $name: Enable native frames and title bars on other windows
   $name:ko-KR: 다른 창에 시스템 제목 표시줄 및 테두리 사용
   $description: Includes Miniplayer, DevTools, etc.
+  $description:ko-KR: 미니 플레이어, 개발자 도구 등을 포함합니다
 - showmenu: true
   $name: Show the menu button*
   $name:ko-KR: 메뉴 버튼 표시*
@@ -103,8 +107,10 @@
 - forceextensions: true
   $name: Force enable Chrome extensions*
   $name:ko-KR: Chrome 확장 프로그램 강제 활성화*
-  $description: Always enable Chrome extension support, regardless of the DevTools status
-  $description:ko-KR: 개발자 도구 상태에 관계 없이 항상 크롬 확장 프로그램 지원을 활성화합니다
+  $description: "Always enable Chrome extension support, regardless of the DevTools status\n
+    Chrome runtime is required for this to work"
+  $description:ko-KR: "개발자 도구 상태에 관계 없이 항상 크롬 확장 프로그램 지원을 활성화합니다\n
+    이 기능은 Chrome 런타임이 필요합니다"
 - playbackspeed: "1"
   $name: Playback speed
   $name:ko-KR: 재생 속도
@@ -164,7 +170,7 @@
 129: 1.2.49-1.2.50
 130: 1.2.51-1.2.52
 131: 1.2.53, 1.2.55-1.2.61
-134: 1.2.62-1.2.64
+134: 1.2.62-1.2.65
 */
 
 #include <libloaderapi.h>
@@ -194,6 +200,7 @@ using namespace std::string_view_literals;
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
 #define LAST_TESTED_CEF_VERSION 134
+#define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
 #define DWMWA_USE_HOSTBACKDROPBRUSH 17
@@ -274,13 +281,14 @@ int add_child_view_offset = NULL;
 int get_window_handle_offset = NULL;
 int set_background_color_offset = NULL;
 
+HMODULE g_cefModule = NULL;
+
 BOOL g_isSpotify = FALSE;
 BOOL g_isSpotifyRenderer = FALSE;
 
 HWND g_mainHwnd = NULL;
 int g_minWidth = -1;
 int g_minHeight = -1;
-BOOL g_dwmBackdropEnabled = FALSE;
 BOOL g_titleLocked = FALSE;
 
 double g_playbackSpeed = 1.0;
@@ -302,7 +310,6 @@ struct cte_queryResponse_t {
     BOOL isLayered;
     BOOL isThemingEnabled;
     BOOL isDwmEnabled;
-    BOOL dwmBackdropEnabled;
     BOOL hwAccelerated;
     int minWidth;
     int minHeight;
@@ -588,8 +595,8 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     // dwRefData is 2 if the window is created by cef_window_create_top_level and is_frameless is hooked
     switch (uMsg) {
         case WM_NCACTIVATE:
-            if (g_dwmBackdropEnabled) {
-                // Fix MicaForEveryone not working well with native frames
+            if (hWnd == g_mainHwnd && cte_settings.transparentrendering && !cte_settings.showframe && IsDwmEnabled()) {
+                // Fix MicaForEveryone not working well with frameless windows
                 return DefWindowProc(hWnd, uMsg, wParam, lParam);
             }
             break;
@@ -752,7 +759,7 @@ int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::stri
         } else {
             std::wstring key = keyPrefix + L"cnt";
             int64_t cachedCount = Wh_GetIntValue(key.c_str(), -1);
-            if (cachedCount >= 0) {
+            if (cachedCount > 0) {
                 bool allOk = true;
                 for (int i = 0; i < cachedCount; i++) {
                     std::wstring key = keyPrefix + std::to_wstring(i);
@@ -794,6 +801,10 @@ int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::stri
                     Wh_DeleteValue(key.c_str());
                     noCachingForThisSession = true;
                 }
+            } else if (cachedCount == 0) {
+                Wh_Log(L"Invalid cache count for memory %s!", identifier.c_str());
+                Wh_DeleteValue(key.c_str());
+                noCachingForThisSession = true;
             }
         }
 
@@ -892,11 +903,12 @@ BOOL EnableTransparentRendering(char* pbExecutable) {
     return PatchMemory(L"BgColor", pbExecutable, targetRegex, targetPatch, 0, 4);
 }
 
-BOOL DisableForcedDarkMode(char* pbExecutable) {
+BOOL DisableForcedDarkMode(char* pbExecutable, int major) {
     std::string targetRegex = R"(force-dark-mode)";
     std::string targetPatch = "some-invalidarg";
     std::vector<uint8_t> targetPatchBytes(targetPatch.begin(), targetPatch.end());
-    return PatchMemory(L"ForceDarkMode", pbExecutable, targetRegex, targetPatchBytes, 1, 1);
+    int section = (major >= 116 && major <= 118) ? 2 : 1; // idk why
+    return PatchMemory(L"ForceDarkMode", pbExecutable, targetRegex, targetPatchBytes, section, 1);
 }
 
 BOOL ForceEnableExtensions(char* pbExecutable) {
@@ -1285,6 +1297,45 @@ HRESULT WINAPI SetWindowThemeAttribute_hook(HWND hwnd, enum WINDOWTHEMEATTRIBUTE
     }
 }
 
+using DwmExtendFrameIntoClientArea_t = decltype(&DwmExtendFrameIntoClientArea);
+DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea_original;
+HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(HWND hWnd, const MARGINS *pMarInset) {
+    // Prevent libcef.dll (Chromium code) from unextending itself whenever a frameless window's position changes
+    // https://source.chromium.org/chromium/chromium/src/+/main:ui/views/win/hwnd_message_handler.cc;drc=339fea7fafdc1ba5b16e7b2fa6f9d996b65348a3;l=616
+
+    // Designed to be compatible with other mods that inject into applications and call DwmExtendFrameIntoClientArea
+    // unless they hook DwmExtendFrameIntoClientArea themselves
+    // Unfortunately, the 'Translucent Windows' Windhawk mod does that, so it's likely to be incompatible with this fix
+    // It is recommended to use a tool that does not involve hooking, such as MicaForEveryone
+    // or just use the this mod's JavaScript API which entirely bypasses this check
+
+    if (cte_settings.showframe) {
+        // Disable this fix when native frames are enabled, as Chromium doesn't do that for framed windows
+        // Translucent Windows mod should work fine in this case
+        return DwmExtendFrameIntoClientArea_original(hWnd, pMarInset);
+    }
+
+    if (hWnd != g_mainHwnd) {
+        // Ditto for non-main windows to allow Chrome runtime full browser UI's Mica mode to work
+        // (No one's gonna use that seriously tho)
+        return DwmExtendFrameIntoClientArea_original(hWnd, pMarInset);
+    }
+
+    void* returnAddress = __builtin_return_address(0);
+
+    HMODULE callerModule;
+    if (GetModuleHandleEx(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            (PCWSTR)returnAddress, &callerModule
+        ) && callerModule == g_cefModule
+    ) {
+        Wh_Log(L"Denying DwmExtendFrameIntoClientArea from libcef.dll");
+        return E_ACCESSDENIED;
+    }
+
+    return DwmExtendFrameIntoClientArea_original(hWnd, pMarInset);
+}
+
 using SetWindowTextW_t = decltype(&SetWindowTextW);
 SetWindowTextW_t SetWindowTextW_original;
 BOOL WINAPI SetWindowTextW_hook(HWND hWnd, LPCWSTR lpString) {
@@ -1448,7 +1499,7 @@ void HandleWindhawkComm(LPCWSTR command) {
         int left, right, top, bottom;
         if (swscanf(command + 16, L"%d:%d:%d:%d", &left, &right, &top, &bottom) == 4) {
             MARGINS margins = {left, right, top, bottom};
-            DwmExtendFrameIntoClientArea(g_mainHwnd, &margins);
+            DwmExtendFrameIntoClientArea_original(g_mainHwnd, &margins);
         }
     // /WH:Minimize, /WH:MaximizeRestore, /WH:Close
     // Send respective window messages to the main window
@@ -1499,19 +1550,16 @@ void HandleWindhawkComm(LPCWSTR command) {
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
             int backdrop_type = DWMSBT_MAINWINDOW;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
-            g_dwmBackdropEnabled = TRUE;
         } else if (wcscmp(command + 16, L"acrylic") == 0) {
             BOOL value = TRUE;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
             int backdrop_type = DWMSBT_TRANSIENTWINDOW;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
-            g_dwmBackdropEnabled = TRUE;
         } else if (wcscmp(command + 16, L"tabbed") == 0) {
             BOOL value = TRUE;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
             int backdrop_type = DWMSBT_TABBEDWINDOW;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
-            g_dwmBackdropEnabled = TRUE;
         }
     // /WH:ResizeTo:<width>:<height>
     } else if (wcsncmp(command, L"/WH:ResizeTo:", 13) == 0) {
@@ -1568,8 +1616,8 @@ void HandleWindhawkComm(LPCWSTR command) {
             return;
         }
         wchar_t queryResponse[256];
-        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:dwmBackdropEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
-        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
+        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
             cte_settings.showframe,
             cte_settings.showframeonothers,
             cte_settings.showmenu,
@@ -1585,7 +1633,6 @@ void HandleWindhawkComm(LPCWSTR command) {
             GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_LAYERED,
             IsAppThemed() && IsThemeActive(),
             IsDwmEnabled(),
-            g_dwmBackdropEnabled,
             FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL,
             g_minWidth,
             g_minHeight,
@@ -1780,7 +1827,7 @@ int ConnectToNamedPipe() {
                         buffer[bytesRead / sizeof(wchar_t)] = L'\0';
                         Wh_Log(L"Received message: %s", buffer);
                         if (wcsncmp(buffer, L"/WH:QueryResponse:", 18) == 0) {
-                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
                                 &g_queryResponse.showframe,
                                 &g_queryResponse.showframeonothers,
                                 &g_queryResponse.showmenu,
@@ -1796,7 +1843,6 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.isLayered,
                                 &g_queryResponse.isThemingEnabled,
                                 &g_queryResponse.isDwmEnabled,
-                                &g_queryResponse.dwmBackdropEnabled,
                                 &g_queryResponse.hwAccelerated,
                                 &g_queryResponse.minWidth,
                                 &g_queryResponse.minHeight,
@@ -1804,7 +1850,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.dpi,
                                 &g_queryResponse.speedModSupported,
                                 &g_queryResponse.playbackSpeed,
-                                &g_queryResponse.immediateSpeedChange) == 24
+                                &g_queryResponse.immediateSpeedChange) == 23
                             ) {
                                 g_queryResponse.success = TRUE;
                             }
@@ -2099,7 +2145,6 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
             AddValueToObj(retobj, u"isLayered", cef_v8value_create_bool(g_queryResponse.isLayered));
             AddValueToObj(retobj, u"isThemingEnabled", cef_v8value_create_bool(g_queryResponse.isThemingEnabled));
             AddValueToObj(retobj, u"isDwmEnabled", cef_v8value_create_bool(g_queryResponse.isDwmEnabled));
-            AddValueToObj(retobj, u"dwmBackdropEnabled", cef_v8value_create_bool(g_queryResponse.dwmBackdropEnabled));
             AddValueToObj(retobj, u"hwAccelerated", cef_v8value_create_bool(g_queryResponse.hwAccelerated));
             AddValueToObj(retobj, u"minWidth", cef_v8value_create_int(g_queryResponse.minWidth));
             AddValueToObj(retobj, u"minHeight", cef_v8value_create_int(g_queryResponse.minHeight));
@@ -2259,7 +2304,7 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
     return cef_v8value_create_function_original(name, handler);
 };
 
-BOOL InitSpotifyRendererHooks(HMODULE cefModule, int major) {
+BOOL InitSpotifyRendererHooks(int major) {
     g_isSpotifyRenderer = TRUE;
     Wh_Log(L"Initializing Spotify renderer hooks");
 
@@ -2268,17 +2313,17 @@ BOOL InitSpotifyRendererHooks(HMODULE cefModule, int major) {
     if (major >= 134) {
         v8FuncPrefix = "cef_v8_value_";
     }
-    cef_v8value_create_function_t cef_v8value_create_function = (cef_v8value_create_function_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_function").c_str());
+    cef_v8value_create_function_t cef_v8value_create_function = (cef_v8value_create_function_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_function").c_str());
     if (!cef_v8value_create_function) {
         v8FuncPrefix = "cef_v8_value_";
-        cef_v8value_create_function = (cef_v8value_create_function_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_function").c_str());
+        cef_v8value_create_function = (cef_v8value_create_function_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_function").c_str());
     }
-    cef_v8value_create_bool = (cef_v8value_create_bool_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_bool").c_str());
-    cef_v8value_create_int = (cef_v8value_create_int_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_int").c_str());
-    cef_v8value_create_double = (cef_v8value_create_double_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_double").c_str());
-    cef_v8value_create_string = (cef_v8value_create_string_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_string").c_str());
-    cef_v8value_create_object = (cef_v8value_create_object_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_object").c_str());
-    cef_v8value_create_array = (cef_v8value_create_array_t)GetProcAddress(cefModule, (v8FuncPrefix + "create_array").c_str());
+    cef_v8value_create_bool = (cef_v8value_create_bool_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_bool").c_str());
+    cef_v8value_create_int = (cef_v8value_create_int_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_int").c_str());
+    cef_v8value_create_double = (cef_v8value_create_double_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_double").c_str());
+    cef_v8value_create_string = (cef_v8value_create_string_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_string").c_str());
+    cef_v8value_create_object = (cef_v8value_create_object_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_object").c_str());
+    cef_v8value_create_array = (cef_v8value_create_array_t)GetProcAddress(g_cefModule, (v8FuncPrefix + "create_array").c_str());
 
     // Returning after connecting to the pipe crashes the renderer, so get these functions first
     if (!cef_v8value_create_function || !cef_v8value_create_bool || !cef_v8value_create_int || !cef_v8value_create_double || !cef_v8value_create_string || !cef_v8value_create_object || !cef_v8value_create_array) {
@@ -2412,8 +2457,8 @@ BOOL Wh_ModInit() {
     #endif
     BOOL isInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
 
-    HMODULE cefModule = LoadLibrary(L"libcef.dll");
-    if (!cefModule) {
+    g_cefModule = LoadLibrary(L"libcef.dll");
+    if (!g_cefModule) {
         Wh_Log(L"Failed to load CEF!");
         return FALSE;
     }
@@ -2426,7 +2471,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Spotify detected");
     }
 
-    cef_version_info_t cef_version_info = (cef_version_info_t)GetProcAddress(cefModule, "cef_version_info");
+    cef_version_info_t cef_version_info = (cef_version_info_t)GetProcAddress(g_cefModule, "cef_version_info");
 
     // Get CEF version
     int major = cef_version_info(0);
@@ -2457,7 +2502,7 @@ BOOL Wh_ModInit() {
             wcsstr(args, L"--type=renderer") != NULL &&
             wcsstr(args, L"--extension-process") == NULL
         ) {
-            return InitSpotifyRendererHooks(cefModule, major);
+            return InitSpotifyRendererHooks(major);
         }
         Wh_Log(L"Auxilliary process detected, skipping.");
         return FALSE;
@@ -2475,8 +2520,8 @@ BOOL Wh_ModInit() {
         Wh_Log(L"set_background_color offset: %#x", set_background_color_offset);
     }
 
-    cef_window_create_top_level_t cef_window_create_top_level = (cef_window_create_top_level_t)GetProcAddress(cefModule, "cef_window_create_top_level");
-    cef_panel_create_t cef_panel_create = (cef_panel_create_t)GetProcAddress(cefModule, "cef_panel_create");
+    cef_window_create_top_level_t cef_window_create_top_level = (cef_window_create_top_level_t)GetProcAddress(g_cefModule, "cef_window_create_top_level");
+    cef_panel_create_t cef_panel_create = (cef_panel_create_t)GetProcAddress(g_cefModule, "cef_panel_create");
 
     Wh_SetFunctionHook((void*)cef_window_create_top_level,
                        (void*)cef_window_create_top_level_hook,
@@ -2488,6 +2533,8 @@ BOOL Wh_ModInit() {
                            (void**)&cef_panel_create_original);
         Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
                            (void**)&SetWindowThemeAttribute_original);
+        Wh_SetFunctionHook((void*)DwmExtendFrameIntoClientArea, (void*)DwmExtendFrameIntoClientArea_hook,
+                           (void**)&DwmExtendFrameIntoClientArea_original);
         Wh_SetFunctionHook((void*)SetWindowTextW, (void*)SetWindowTextW_hook,
                            (void**)&SetWindowTextW_original);
         Wh_SetFunctionHook((void*)CreateProcessW, (void*)CreateProcessW_hook,
@@ -2497,17 +2544,18 @@ BOOL Wh_ModInit() {
 
         // Patch the executable in memory to enable transparent rendering, disable forced dark mode, or force enable extensions
         // (Pointless if done after CEF initialization though)
-        if (cte_settings.transparentrendering) {
+        if (cte_settings.transparentrendering && major >= CR_RT_1ST_VERSION) {
             if (EnableTransparentRendering(pbExecutable)) {
                 Wh_Log(L"Enabled transparent rendering");
             }
         }
-        if (cte_settings.noforceddarkmode) {
-            if (DisableForcedDarkMode(pbExecutable)) {
+        // Spotify 1.2.68+ (patch is not needed before that)
+        if (cte_settings.noforceddarkmode && (major > 91 || (major == 91 && minor >= 3))) {
+            if (DisableForcedDarkMode(pbExecutable, major)) {
                 Wh_Log(L"Disabled forced dark mode");
             }
         }
-        if (cte_settings.forceextensions) {
+        if (cte_settings.forceextensions && major >= CR_RT_1ST_VERSION) {
             if (ForceEnableExtensions(pbExecutable)) {
                 Wh_Log(L"Enabled extensions");
             }
