@@ -75,6 +75,15 @@ maximized or snapped to the edge of the screen, this is caused by default by the
   $name: Extend effects into entire window
   $description: >-
     Extends the effects into the entire window background using DwmExtendFrameIntoClientArea. (Required for AccentBlurBehind)
+- CornerOption: default
+  $name: Window corner type
+  $description: >-
+     Specifies the rounded corner preference for a window
+      Windows 11 version >= 22000.xxx (21H2) is required.
+  $options: 
+  - default: Default
+  - notrounded: Not Rounded
+  - smallround: Small Corner
 - RainbowSpeed: 1
   $name: Rainbow Speed
   $description: Adjust the refresh speed of the rainbow colors (Value between 1 and 100).
@@ -183,6 +192,15 @@ maximized or snapped to the edge of the screen, this is caused by default by the
         $name: Extend effects into entire window
         $description: >-
           Extends the effects into the entire window background using DwmExtendFrameIntoClientArea. (Required for AccentBlurBehind)
+      - CornerOption: default
+        $name: Window corner type
+        $description: >-
+             Specifies the rounded corner preference for a window
+              Windows 11 version >= 22000.xxx (21H2) is required.
+        $options: 
+        - default: Default
+        - notrounded: Not Rounded
+        - smallround: Small Corner
       - RainbowSpeed: 1
         $name: Rainbow Speed
         $description: Adjust the refresh speed of the rainbow colors (Value between 1 and 100).
@@ -275,6 +293,10 @@ static constexpr UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static constexpr UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
 static constexpr UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
 
+static constexpr UINT DEFAULT = 0; // DWMWCP_DEFAULT
+static constexpr UINT DONTROUND = 1; // DWMWCP_DONOTROUND
+static constexpr UINT SMALLROUND = 3; // DWMWCP_ROUNDSMALL
+
 UINT g_msgRainbowTimer = RegisterWindowMessage(L"Rainbow_effect");
 
 enum {
@@ -340,6 +362,13 @@ struct Settings{
         Mica,
         MicaAlt,
     } BgType = Default;
+
+    enum CORNERTYPE
+    {
+        DefaultRounded,
+        NotRounded,
+        SmallRounded = 3
+    } CornerPref = DefaultRounded;
 
 } g_settings;
 
@@ -1511,6 +1540,11 @@ void NewWindowShown(HWND hWnd)
     }
     else
         EnableColoredTitlebar(hWnd);
+
+    if (g_settings.CornerPref  == g_settings.NotRounded)
+        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DONTROUND , sizeof(UINT));
+    else if (g_settings.CornerPref  == g_settings.SmallRounded)
+        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &SMALLROUND , sizeof(UINT));
     
     if(g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.TitlebarFlag)
     {
@@ -1583,6 +1617,9 @@ void RestoreWindowCustomizations(HWND hWnd)
 
     g_settings.CaptionActiveTextColor = DWMWA_COLOR_DEFAULT;
     DwmSetWindowAttribute(hWnd, DWMWA_TEXT_COLOR , &g_settings.CaptionActiveTextColor, sizeof(COLORREF));
+
+    if (g_settings.CornerPref != g_settings.DefaultRounded)
+        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DEFAULT , sizeof(UINT));
 
     // Disabling AccentBlurBehind temp workaround
     bb.fEnable = FALSE;
@@ -1761,6 +1798,15 @@ void LoadSettings(void)
     g_settings.ExtendFrame = Wh_GetIntSetting(L"ExtendFrame");
     if(g_settings.ExtendFrame)
         DwmExpandFrameIntoClientAreaHook();
+    
+    LPCWSTR pszCornerType = Wh_GetStringSetting(L"CornerOption");
+    if (0 == wcscmp(pszCornerType, L"notrounded"))
+        g_settings.CornerPref = g_settings.NotRounded;
+    else if (0 == wcscmp(pszCornerType, L"smallround"))
+        g_settings.CornerPref = g_settings.SmallRounded;
+    else
+        g_settings.CornerPref = g_settings.DefaultRounded;
+    Wh_FreeStringSetting(pszCornerType);
 
     DwmSetWindowAttributeHook();
 
@@ -1857,6 +1903,15 @@ void LoadSettings(void)
                 g_settings.ExtendFrame = Wh_GetIntSetting(L"RuledPrograms[%d].ExtendFrame", i);
                 if(g_settings.ExtendFrame)
                     DwmExpandFrameIntoClientAreaHook();
+
+                LPCWSTR pszCornerType = Wh_GetStringSetting(L"RuledPrograms[%d].CornerOption", i);
+                if (0 == wcscmp(pszCornerType, L"notrounded"))
+                    g_settings.CornerPref = g_settings.NotRounded;
+                else if (0 == wcscmp(pszCornerType, L"smallround"))
+                    g_settings.CornerPref = g_settings.SmallRounded;
+                else
+                    g_settings.CornerPref = g_settings.DefaultRounded;
+                Wh_FreeStringSetting(pszCornerType);
                 
                 g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RuledPrograms[%d].RainbowSpeed", i));
 
