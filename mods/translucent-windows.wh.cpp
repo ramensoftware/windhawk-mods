@@ -32,11 +32,11 @@
 * It is highly recommended to use the mod with black/dark window themes like the Rectify11 "Dark theme with Mica".
 
 * Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
-Light mode theme, HDR enabled, black textcolor or white background behind the window can cause this. 
+Light mode theme, HDR enabled, black color or white background behind the window can cause this. 
 This is because most GDI rendering operations do not preserve alpha values.
 
 * Blur effect may show a bleeding effect at the edges of a window when 
-maximized or snapped to the edge of the screen, this is caused by default by the windows DWMAPI.
+maximized or snapped to the edge of the screen, this is caused by default.
 
 */
 // ==/WindhawkModReadme==
@@ -47,7 +47,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
   $name: Optimize windows theme
   $description: >-
     Fills with black color windows theme parts in order to nullify the alpha of those elements to render a clear translucent effect.
-     ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
 - TextAlphaBlend: FALSE
   $name: Text alpha blending
   $description: >-
@@ -74,7 +73,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 - ExtendFrame: FALSE
   $name: Extend effects into entire window
   $description: >-
-    Extends the effects into the entire window background using DwmExtendFrameIntoClientArea. (Required for AccentBlurBehind)
+    Extends the effects into the entire window background using DwmExtendFrameIntoClientArea.
 - CornerOption: default
   $name: Window corner type
   $description: >-
@@ -164,7 +163,6 @@ maximized or snapped to the edge of the screen, this is caused by default by the
         $name: Optimize windows theme
         $description: >-
          Fills with black color windows theme parts in order to nullify the alpha of those elements to render a clear translucent effect.
-          ⚠ Be aware when changing this setting, the affected windows will need to be reopened to see the change.
       - TextAlphaBlend: FALSE
         $name: Text alpha blending
         $description: >-
@@ -191,7 +189,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
       - ExtendFrame: FALSE
         $name: Extend effects into entire window
         $description: >-
-          Extends the effects into the entire window background using DwmExtendFrameIntoClientArea. (Required for AccentBlurBehind)
+          Extends the effects into the entire window background using DwmExtendFrameIntoClientArea.
       - CornerOption: default
         $name: Window corner type
         $description: >-
@@ -280,6 +278,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 #include <windows.h>
 #include <functional>
 #include <cmath>
+#include <random>
 #include <string>
 #include <mutex>
 #include <unordered_set>
@@ -288,6 +287,7 @@ maximized or snapped to the edge of the screen, this is caused by default by the
 
 
 static UINT ENABLE = 1;
+static constexpr UINT AUTO = 0; // DWMSBT_AUTO
 static constexpr UINT NONE = 1; // DWMSBT_NONE
 static constexpr UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static constexpr UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
@@ -309,7 +309,6 @@ std::mutex g_rainbowWindowsMutex;
 std::unordered_set<HWND> g_rainbowWindows;
 
 struct RainbowData {
-float WndHue;
 UINT_PTR WndTimer;
 HWND WndHwnd;
 };
@@ -396,6 +395,26 @@ enum WINDOWCOMPOSITIONATTRIB
 ACCENT_POLICY accent = {};
 WINCOMPATTRDATA attrib = {};
 DWM_BLURBEHIND bb = { 0 };
+
+// Credits to @m417z
+double g_recipCyclesPerSecond;
+
+void TimerInitialize() {
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    double cyclesPerSecond = static_cast<double>(freq.QuadPart);
+    g_recipCyclesPerSecond = 1.0 / cyclesPerSecond;
+}
+
+double TimerGetCycles() {
+    LARGE_INTEGER T1;
+    QueryPerformanceCounter(&T1);
+    return static_cast<double>(T1.QuadPart);
+}
+
+double TimerGetSeconds() {
+    return TimerGetCycles() * g_recipCyclesPerSecond;
+}
 
 using NtUserCreateWindowEx_t = HWND(WINAPI*)(DWORD, PUNICODE_STRING, LPCWSTR, PUNICODE_STRING, DWORD, LONG, LONG, LONG, LONG, HWND, HMENU, HINSTANCE, LPVOID, DWORD, DWORD, DWORD, VOID*);
 NtUserCreateWindowEx_t NtUserCreateWindowEx_Original;
@@ -492,7 +511,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
 HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMarInset)
 {
     if(!IsWindowEligible(hWnd))
-        return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
+        [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
     
     if(g_settings.ExtendFrame)
     {
@@ -500,10 +519,10 @@ HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMar
         if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"NativeHWNDHost") || IsWindowClass(hWnd, L"TaskManagerWindow"))
         {
             MARGINS margins = {-1, -1, -1, -1};
-            return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
+            [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
         }
     }
-    return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
+    [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
 }
 
 HWND WINAPI HookedNtUserCreateWindowEx(DWORD dwExStyle,
@@ -1250,9 +1269,13 @@ void EnableBlurBehind(HWND hWnd)
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
 
         bb.fEnable = TRUE;
-        bb.dwFlags = DWM_BB_ENABLE;
+        bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION;
+        // Blurs window client area
+        HRGN hRgn = CreateRectRgn(0, 0, -1, -1);
+        bb.hRgnBlur = hRgn;
 
         DwmEnableBlurBehindWindow(hWnd, &bb);
+        DeleteObject(hRgn);
 
         accent.AccentState = 4;
         accent.GradientColor = g_settings.AccentBlurBehindClr;
@@ -1270,19 +1293,9 @@ void EnableBlurBehind(HWND hWnd)
     }
 }
 
-void EnableSystemBackdropAcrylic(HWND hWnd)
+void SetSystemBackdrop(HWND hWnd, const UINT type)
 {
-    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &TRANSIENTWINDOW, sizeof(UINT));
-}
-
-void EnableMica(HWND hWnd)
-{
-    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &MAINWINDOW, sizeof(UINT));
-}
-
-void EnableMicaTabbed(HWND hWnd)
-{
-    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &TABBEDWINDOW, sizeof(UINT));
+    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &type, sizeof(UINT));
 }
 
 void EnableColoredTitlebar(HWND hWnd)
@@ -1301,6 +1314,11 @@ void EnableColoredBorder(HWND hWnd)
 {
     g_settings.g_BorderColor = g_settings.BorderActiveColor;
     DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &g_settings.g_BorderColor, sizeof(COLORREF));
+}
+
+void SetCornerType(HWND hWnd, const UINT type)
+{
+    DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &type , sizeof(UINT));
 }
 
 static COLORREF HSLToRGB(float h, float s, float l) {
@@ -1347,24 +1365,31 @@ void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 
     if (data)
     {
-        data->WndHue = fmod(data->WndHue + g_settings.RainbowSpeed, 360.0f);
+	    // Credits to @m417z
+        std::mt19937 gen((UINT_PTR)data->WndHwnd);
+        std::uniform_real_distribution<> distr(0.0, 360.0);
+        double InitialHueOffset = distr(gen);
+
+        double wndHue = fmod(InitialHueOffset + TimerGetSeconds() * g_settings.RainbowSpeed, 360.0);
+
         if (g_settings.TitlebarRainbowFlag)
         {
-            g_settings.g_TitlebarColor = HSLToRGB(data->WndHue, 1.0f, 0.5f); 
-            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
+            COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
+            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
         }
         if (g_settings.CaptionRainbowFlag)
         {
+            COLORREF captionColor;
             if (g_settings.TitlebarRainbowFlag)
-                g_settings.g_CaptionColor = HSLToRGB(fmod(data->WndHue + 120.0f, 360.0f), 1.0f, 0.5f);
+                captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
             else
-                g_settings.g_CaptionColor = HSLToRGB(data->WndHue, 1.0f, 0.5f);
-            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
+                captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
+            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
         }
         if (g_settings.BorderRainbowFlag)
         {
-            g_settings.g_BorderColor = HSLToRGB(data->WndHue, 1.0f, 0.5f);  
-            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_BORDER_COLOR, &g_settings.g_BorderColor, sizeof(COLORREF));
+            COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
+            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
         }
     }
 }
@@ -1453,7 +1478,7 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
                             UINT_PTR timersId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
                             if (timersId)
                             {
-                                RainbowData* data = new RainbowData {0.f, timersId, cwp->hwnd};
+                                RainbowData* data = new RainbowData {timersId, cwp->hwnd};
                                 SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)data);
                                 {
                                     std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
@@ -1529,22 +1554,22 @@ void NewWindowShown(HWND hWnd)
     {
         if (g_settings.ImmersiveDarkmode)
             DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(UINT));
-        if(g_settings.BgType == g_settings.AccentBlurBehind && g_settings.ExtendFrame)
+        if(g_settings.BgType == g_settings.AccentBlurBehind)
             EnableBlurBehind(hWnd);
         else if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
-            EnableSystemBackdropAcrylic(hWnd);
+            SetSystemBackdrop(hWnd, TRANSIENTWINDOW);
         else if(g_settings.BgType == g_settings.Mica)
-            EnableMica(hWnd);
+            SetSystemBackdrop(hWnd, MAINWINDOW);
         else if(g_settings.BgType == g_settings.MicaAlt)
-            EnableMicaTabbed(hWnd);
+            SetSystemBackdrop(hWnd, TABBEDWINDOW);
     }
     else
         EnableColoredTitlebar(hWnd);
 
     if (g_settings.CornerPref  == g_settings.NotRounded)
-        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &DONTROUND , sizeof(UINT));
+        SetCornerType(hWnd, DONTROUND);
     else if (g_settings.CornerPref  == g_settings.SmallRounded)
-        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &SMALLROUND , sizeof(UINT));
+        SetCornerType(hWnd, SMALLROUND);
     
     if(g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.TitlebarFlag)
     {
@@ -1623,6 +1648,7 @@ void RestoreWindowCustomizations(HWND hWnd)
 
     // Disabling AccentBlurBehind temp workaround
     bb.fEnable = FALSE;
+    bb.hRgnBlur = NULL;
     DwmEnableBlurBehindWindow(hWnd, &bb);
 
     accent.AccentState = 0;
@@ -1635,6 +1661,8 @@ void RestoreWindowCustomizations(HWND hWnd)
     auto SetWindowCompositionAttribute = (pSetWindowCompositionAttribute)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
     if (SetWindowCompositionAttribute) 
         SetWindowCompositionAttribute(hWnd, &attrib);
+    
+    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &AUTO, sizeof(UINT));
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) 
@@ -1732,12 +1760,12 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
     }
 }
 
-float RainbowSpeedInput(int input)
+double RainbowSpeedInput(int input)
 {
     if (input < 1 || input > 100)
         return 1.0f;
 
-    return input/10.f;    
+    return (double)input * 3.6;    
 }
 
 void GetProcStrFromPath(std::wstring& path) {
@@ -1969,6 +1997,8 @@ void LoadSettings(void)
 
 BOOL Wh_ModInit(void) 
 {
+    TimerInitialize();
+
     LoadSettings();
     
     HMODULE hModule = GetModuleHandle(L"win32u.dll");
