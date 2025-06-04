@@ -518,7 +518,7 @@ HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMar
         // Override Win11 Taskmgr, explorer, aerowizard calls
         if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"NativeHWNDHost") || IsWindowClass(hWnd, L"TaskManagerWindow"))
         {
-            MARGINS margins = {-1, -1, -1, -1};
+            static const MARGINS margins = {-1, -1, -1, -1};
             [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
         }
     }
