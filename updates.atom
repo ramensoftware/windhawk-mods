@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-04T05:56:13.000Z</updated>
+    <updated>2025-06-04T21:33:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.5.0]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#0c981a8ec576c27ec33fcc70480c25083aecbb50</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2025-06-04T21:33:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added Rainbow effect</li>
+<li>Additional windows theme parts are modified</li>
+<li>Added text alpha blending</li>
+<li>Changed BlurBehind to AccentBlurBehind</li>
+<li>Added DWMAPI immersive darkmode setting option</li>
+<li>Added window corner type setting option</li>
+<li>Fixed conflicting bugs with steamwebhelper.exe and firefox.exe programs</li>
+<li>Fixed conflicting bug with Slick Window Arrangement mod</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Touhou Keyboard Binds 1.0.0]]></title>
         <id>https://windhawk.net/mods/touhou-kbd-binds#72a6608e9b6608a0a067f2b54148a6c59724a8e1</id>
@@ -297,19 +317,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
         <updated>2025-05-24T17:29:02.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed lock screen wallpaper not applying by injecting into explorer instead of windhawk</li>
-</ul>]]></content>
-        <author>
-            <name>tinodin</name>
-            <uri>https://github.com/tinodin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Theme Switcher 1.0.1]]></title>
-        <id>https://windhawk.net/mods/auto-theme-switcher#b7fcaa082c1c749bb3cdd7ab92ac6b677eab2697</id>
-        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
-        <updated>2025-05-23T23:35:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed changing theme not instantly updating the taskbar background</li>
 </ul>]]></content>
         <author>
             <name>tinodin</name>

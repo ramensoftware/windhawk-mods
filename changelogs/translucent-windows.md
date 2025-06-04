@@ -1,3 +1,14 @@
+## 1.5.0 ([Jun 4, 2025](https://github.com/ramensoftware/windhawk-mods/blob/0c981a8ec576c27ec33fcc70480c25083aecbb50/mods/translucent-windows.wh.cpp))
+
+* Added Rainbow effect
+* Additional windows theme parts are modified
+* Added text alpha blending
+* Changed BlurBehind to AccentBlurBehind
+* Added DWMAPI immersive darkmode setting option
+* Added window corner type setting option
+* Fixed conflicting bugs with steamwebhelper.exe and firefox.exe programs
+* Fixed conflicting bug with Slick Window Arrangement mod
+
 ## 1.4.2 ([Apr 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/afa6754ba136a6adbf459f0386bc7f13c68a707c/mods/translucent-windows.wh.cpp))
 
 * Apply a workaround solution for background effects in windows Game Bar transparent overlay 
