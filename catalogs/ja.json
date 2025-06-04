@@ -4117,6 +4117,41 @@
                 "version": "1.0.0"
             }
         },
+        "touhou-kbd-binds": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1749016573000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1749016573000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86"
+                ],
+                "author": "aubymori",
+                "description": "Allows you to change keyboard binds in Touhou",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "東方紅魔郷.exe",
+                    "“Œ•ûg–‚‹½.exe",
+                    "th07.exe",
+                    "th08.exe",
+                    "th09.exe",
+                    "th10.exe",
+                    "th11.exe",
+                    "th12.exe",
+                    "th13.exe",
+                    "th14.exe",
+                    "th15.exe",
+                    "th16.exe",
+                    "th17.exe"
+                ],
+                "name": "Touhou Keyboard Binds",
+                "version": "1.0.0"
+            }
+        },
         "translucent-windows": {
             "details": {
                 "defaultSorting": 44172,

@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-03T22:23:31.000Z</updated>
+    <updated>2025-06-04T05:56:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Touhou Keyboard Binds 1.0.0]]></title>
+        <id>https://windhawk.net/mods/touhou-kbd-binds#72a6608e9b6608a0a067f2b54148a6c59724a8e1</id>
+        <link href="https://windhawk.net/mods/touhou-kbd-binds"/>
+        <updated>2025-06-04T05:56:13.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="touhoukeyboardbinds">Touhou Keyboard Binds</h1>
+<p>From Touhou 6 to Touhou 17, keyboard bindings were unable to be changed within
+the game. This mod lets you set your own bindings.</p>
+<h2 id="importantusagenote">⚠️ Important usage note ⚠️</h2>
+<p>Windhawk may not inject into the game due to it being in a common game directory.
+If this occurs, add the game's executable to the process inclusion list in the advanced 
+settings.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
+<h2 id="keyformat">Key format</h2>
+<p>The key options can either be a single character, or one of the following keywords:</p>
+<p>None, Space, Up, Down, Left, Right, LCTRL, RCTRL, LControl, RControl, LAlt, RAlt, LShift,
+RShift, Tab, CapsLock, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, Numpad0, Numpad1,
+Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.8]]></title>
         <id>https://windhawk.net/mods/taskbar-button-click#78fc318a181cfb5299fab5beaf42a8726ebe5f9e</id>
@@ -288,31 +311,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed changing theme not instantly updating the taskbar background</li>
 </ul>]]></content>
-        <author>
-            <name>tinodin</name>
-            <uri>https://github.com/tinodin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Theme Switcher 1.0]]></title>
-        <id>https://windhawk.net/mods/auto-theme-switcher#3afd45f99c7c92b201a434255d5532ba6cd225df</id>
-        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
-        <updated>2025-05-23T22:22:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="autothemeswitcher">Auto Theme Switcher</h1>
-<p>Configure the schedule for light and dark mode/theme under settings<br />
-  (By default: <code>07:00</code> for light, <code>19:00</code> for dark)</p>
-<p>Provide paths to your desired <code>.theme</code> files<br />
-  (By default: <code>aero.theme</code> for light, <code>dark.theme</code> for dark)</p>
-<ul>
-<li><p>Themes shipped with Windows are located in:<br />
-<code>C:\Windows\Resources\Themes</code></p></li>
-<li><p>Saved or imported themes are located in:<br />
-<code>%LOCALAPPDATA%\Microsoft\Windows\Themes</code></p></li>
-<li><p>If no <code>.theme</code> file is provided, the mod will default to only changing the appearance</p></li>
-<li><p>To create custom <code>.theme</code> files, use the Personalization settings in Windows<br />
-<a href="https://www.youtube.com/watch?v=-QWR6NQZAUg">Video guide</a></p></li>
-</ul>
-<p>If you do not want the wallpaper to be applied to the lock screen, disable <em>Apply Wallpaper to Lock screen</em> under settings</p>]]></content>
         <author>
             <name>tinodin</name>
             <uri>https://github.com/tinodin</uri>
