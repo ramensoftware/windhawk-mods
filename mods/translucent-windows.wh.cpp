@@ -1544,10 +1544,10 @@ void NewWindowShown(HWND hWnd)
     if(g_settings.ExtendFrame)
         ApplyFrameExtension(hWnd);
 
-    if(g_settings.CaptionTextFlag)
+    if(g_settings.CaptionTextFlag && !g_settings.CaptionRainbowFlag)
         EnableCaptionTextColor(hWnd);
     
-    if(g_settings.BorderFlag)
+    if(g_settings.BorderFlag && !g_settings.BorderRainbowFlag)
         EnableColoredBorder(hWnd);
         
     if(!g_settings.TitlebarFlag)
@@ -1563,7 +1563,7 @@ void NewWindowShown(HWND hWnd)
         else if(g_settings.BgType == g_settings.MicaAlt)
             SetSystemBackdrop(hWnd, TABBEDWINDOW);
     }
-    else
+    else if (!g_settings.TitlebarRainbowFlag)
         EnableColoredTitlebar(hWnd);
 
     if (g_settings.CornerPref  == g_settings.NotRounded)
