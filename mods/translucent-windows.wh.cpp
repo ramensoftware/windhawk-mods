@@ -308,11 +308,6 @@ std::wstring g_RainbowPropStr = L"Windhawk_TranslucentMod_Rainbow";
 std::mutex g_rainbowWindowsMutex;
 std::unordered_set<HWND> g_rainbowWindows;
 
-struct RainbowData {
-UINT_PTR WndTimer;
-HWND WndHwnd;
-};
-
 thread_local BOOL g_DrawThemeTextExEntry;
 
 typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC, LPCWSTR, UINT, const RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL, DTT_CALLBACK_PROC, LPARAM);
@@ -1349,24 +1344,24 @@ static COLORREF HSLToRGB(float h, float s, float l) {
 
 void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 {
-    RainbowData* data = nullptr;
+    HWND WndHwnd= nullptr;
     {
         std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
         for(auto& hWnd : g_rainbowWindows)
         {
             HANDLE value = GetPropW(hWnd, g_RainbowPropStr.c_str());
-            if (value && (((RainbowData*)value)->WndTimer == t_id))
+            if (value && (UINT_PTR)value == t_id)
             {
-                data = (RainbowData*)value;
+                WndHwnd = hWnd;
                 break;
             }
         }
     }
 
-    if (data)
+    if (WndHwnd)
     {
 	    // Credits to @m417z
-        std::mt19937 gen((UINT_PTR)data->WndHwnd);
+        std::mt19937 gen((UINT_PTR)WndHwnd);
         std::uniform_real_distribution<> distr(0.0, 360.0);
         double InitialHueOffset = distr(gen);
 
@@ -1375,7 +1370,7 @@ void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
         if (g_settings.TitlebarRainbowFlag)
         {
             COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
-            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
+            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
         }
         if (g_settings.CaptionRainbowFlag)
         {
@@ -1384,12 +1379,12 @@ void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
                 captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
             else
                 captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
-            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
+            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
         }
         if (g_settings.BorderRainbowFlag)
         {
             COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
-            DwmSetWindowAttribute_orig(data->WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
+            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
         }
     }
 }
@@ -1454,13 +1449,11 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
             HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
             if (value)
             {
-                RainbowData* data = (RainbowData*)value;
-                KillTimer(NULL, data->WndTimer);
+                KillTimer(NULL, (UINT_PTR)value);
                 {
                     std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
                     g_rainbowWindows.erase(cwp->hwnd);
                 }
-                delete data;
             }
             break;
         }
@@ -1478,8 +1471,7 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
                             UINT_PTR timersId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
                             if (timersId)
                             {
-                                RainbowData* data = new RainbowData {timersId, cwp->hwnd};
-                                SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)data);
+                                SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)timersId);
                                 {
                                     std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
                                     g_rainbowWindows.insert(cwp->hwnd);
@@ -1492,11 +1484,7 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
                     {
                         HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
                         if (value)
-                        {
-                            RainbowData* data = (RainbowData*)value;
-                            KillTimer(NULL, data->WndTimer);
-                            delete data;
-                        }                        
+                            KillTimer(NULL, (UINT_PTR)value);                  
                         break;
                     }
                 }
