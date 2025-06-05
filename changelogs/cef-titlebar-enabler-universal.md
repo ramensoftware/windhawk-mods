@@ -1,3 +1,8 @@
+## 1.2 ([Jun 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4341502030118d63157c4bc43d74f199aa667e19/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Fixed compatibility with the Translucent Windows mod
+    * At least version 1.5 of the Translucent Windows mod is required. 1.4 and below are still not supported when the native frames are disabled
+
 ## 1.1 ([Jun 3, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5a9dafdec518bcd45686bc0e87f61858f7ce5d01/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Finally implemented proper transparency support for frameless windows
