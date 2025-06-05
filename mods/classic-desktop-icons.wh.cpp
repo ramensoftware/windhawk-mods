@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.4.2
+// @version         1.4.3
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -26,6 +26,10 @@ Vista, Windows XP, Windows 2000, or other old versions of Windows.
 
 ## Screenshots
 
+**Windows Vista style (modern selection, no margins)**:
+
+![Windows Vista style desktop icons](https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-vista-style.png)
+
 **Windows XP style (shadows, no label backgrounds)**:
 
 ![Windows XP style desktop icons](https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-xp-style.png)
@@ -34,7 +38,6 @@ Vista, Windows XP, Windows 2000, or other old versions of Windows.
 
 ![Windows 2000 style desktop icons](https://raw.githubusercontent.com/aubymori/images/main/classic-desktop-icons-2k-style.png)
 
-*Mod originally authored by Taniko Yamamoto.*  
 *Contributions from [Isabella Lulamoon (kawapure)](//github.com/kawapure).*
 */
 // ==/WindhawkModReadme==
@@ -242,6 +245,11 @@ LRESULT CALLBACK DesktopSubclassProc(
         UpdateDesktop();
     }
 
+    if (settings.background && uMsg == LVM_SETTEXTBKCOLOR)
+    {
+        lParam = GetSysColor(COLOR_BACKGROUND);
+    }
+
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
@@ -304,6 +312,31 @@ void UpdateDesktop(void)
     }
 }
 
+BOOL CALLBACK FindDesktopEnumProc(HWND hWnd, LPARAM lParam)
+{
+    WCHAR szClassName[256] = { 0 };
+    GetClassNameW(hWnd, szClassName, 256);
+    if (0 == wcscmp(szClassName, L"WorkerW"))
+    {
+        HWND hwndDefView = FindWindowExW(hWnd, 0, L"SHELLDLL_DefView", NULL);
+        if (hwndDefView)
+        {
+            HWND hwndDesktop = FindWindowExW(hwndDefView, 0, L"SysListView32", NULL);
+            if (hwndDesktop)
+            {
+                DWORD dwPID;
+                GetWindowThreadProcessId(hwndDesktop, &dwPID);
+                if (dwPID == GetCurrentProcessId())
+                {
+                    *(HWND *)lParam = hwndDesktop;
+                    return FALSE;
+                }
+            }
+        }
+    }
+    return TRUE;
+}
+
 HWND FindDesktopWindow(void)
 {
     HWND hwndProgman = FindWindowW(L"Progman", L"Program Manager");
@@ -320,6 +353,17 @@ HWND FindDesktopWindow(void)
                 if (dwPID == GetCurrentProcessId())
                     return hwndDesktop;
             }
+        }
+        else
+        {
+            HWND hwndDesktop = NULL;
+            EnumDesktopWindows(
+                GetThreadDesktop(GetCurrentThreadId()),
+                FindDesktopEnumProc,
+                (LPARAM)&hwndDesktop
+            );
+            if (hwndDesktop)
+                return hwndDesktop;
         }
     }
     return NULL;
