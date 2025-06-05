@@ -2,7 +2,7 @@
 // @id              clientedge-in-apps
 // @name            Clientedge Everywhere
 // @description     Adds 3D border (WS_EX_CLIENTEDGE style) to some windows to look better in Classic theme.
-// @version         1.1.0
+// @version         1.2.0
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -66,7 +66,10 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
     if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"NotebookContent")) {
         GetClassNameW(hWndParent, wszClassName, 256);
         if (!wcscmp(wszClassName, L"NotebookFrame")) {
-            dwExStyle |= WS_EX_CLIENTEDGE;
+            DWORD_PTR dwParentExStyle = GetWindowLongPtrW(hWndParent, GWL_EXSTYLE);
+            if (!(dwParentExStyle & WS_EX_TOOLWINDOW)) {
+                dwExStyle |= WS_EX_CLIENTEDGE;
+            }
         }
     }
 
