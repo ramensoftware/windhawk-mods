@@ -1,3 +1,9 @@
+## 1.4.3 ([Jun 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bdeebf8bd041100629066e24ee8cbb49bcc2bd1a/mods/classic-desktop-icons.wh.cpp))
+
+- Improve desktop finding method
+- Improve label background setting method
+- Redo readme images, add Vista-style image
+
 ## 1.4.2 ([May 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bdad626e964738691119d2a07104bd58983957c0/mods/classic-desktop-icons.wh.cpp))
 
 - Fix bug with multiprocess Explorer

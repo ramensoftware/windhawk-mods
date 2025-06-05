@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-05T12:51:36.000Z</updated>
+    <updated>2025-06-05T22:28:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Desktop Icons 1.4.3]]></title>
+        <id>https://windhawk.net/mods/classic-desktop-icons#bdeebf8bd041100629066e24ee8cbb49bcc2bd1a</id>
+        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
+        <updated>2025-06-05T22:28:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improve desktop finding method</li>
+<li>Improve label background setting method</li>
+<li>Redo readme images, add Vista-style image</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Clientedge Everywhere 1.2.0]]></title>
         <id>https://windhawk.net/mods/clientedge-in-apps#39f44c80c3c3557af96195e67589e8b399d40e7a</id>
@@ -307,19 +322,6 @@ they had no hover effect, and changed to the selection color while selected.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Menubar 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-menubar#2a52a4e03dea43390da0c465a83b44b4fd957367</id>
-        <link href="https://windhawk.net/mods/classic-explorer-menubar"/>
-        <updated>2025-05-26T16:42:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicexplorermenubar">Classic Explorer Menubar</h1>
-<p>Turns off theming for Explorer menu bar, making it use system colors, like in Windows XP.</p>
-<p><img src="https://i.imgur.com/yAyegLY.png" alt="Before / After" /></p>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
