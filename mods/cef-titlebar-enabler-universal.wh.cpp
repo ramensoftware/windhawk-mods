@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.1
+// @version         1.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -53,8 +53,8 @@
     * Or try my [WMPotify](https://github.com/Ingan121/WMPotify) theme for Windows Media Player 11-like look
     * Enable Chrome runtime to get a proper window icon. Use `--enable-chrome-runtime` flag or put `app.enable-chrome-runtime=true` in `%appdata%\Spotify\prefs`
 * Notes for transparent Spotify windows
-    * When the `Enable native frames and title bars on the main window` option is disabled, this mod is not compatible with the [Translucent Windows](https://windhawk.net/mods/translucent-windows) Windhawk mod due to how the mod and Chromium works
-    * Please use an alternative software, such as [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone), when the native frames are disabled
+    * When the `Enable native frames and title bars on the main window` option is disabled, this mod is not compatible with the [Translucent Windows](https://windhawk.net/mods/translucent-windows) Windhawk mod older than version 1.5
+    * Please update the mod to 1.5+, or use [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone) instead, when the native frames are disabled
 * Notes for Spicetify extension/theme developers
     * Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
     * This mod exposes a JavaScript API that can be used to interact with the main window and this mod
@@ -1305,7 +1305,7 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(HWND hWnd, const MARGINS *pMarI
 
     // Designed to be compatible with other mods that inject into applications and call DwmExtendFrameIntoClientArea
     // unless they hook DwmExtendFrameIntoClientArea themselves
-    // Unfortunately, the 'Translucent Windows' Windhawk mod does that, so it's likely to be incompatible with this fix
+    // Unfortunately, old version of the 'Translucent Windows' Windhawk mod does that, so it's likely to be incompatible with this fix
     // It is recommended to use a tool that does not involve hooking, such as MicaForEveryone
     // or just use the this mod's JavaScript API which entirely bypasses this check
 
@@ -1315,21 +1315,46 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(HWND hWnd, const MARGINS *pMarI
         return DwmExtendFrameIntoClientArea_original(hWnd, pMarInset);
     }
 
-    if (hWnd != g_mainHwnd) {
-        // Ditto for non-main windows to allow Chrome runtime full browser UI's Mica mode to work
-        // (No one's gonna use that seriously tho)
-        return DwmExtendFrameIntoClientArea_original(hWnd, pMarInset);
+    if (g_mainHwnd != NULL) {
+        if (hWnd != g_mainHwnd) {
+            // Ditto for non-main windows to allow Chrome runtime full browser UI's Mica mode to work
+            // (No one's gonna use that seriously tho)
+            return DwmExtendFrameIntoClientArea_original(hWnd, pMarInset);
+        }
     }
+    // Assume everything's the main window before the g_mainHwnd assignment, as it's early startup
+    // Otherwise Chromium's DEFICA calls will pass through during the main window creation,
+    // interfering with early frame extension attempts from some mods
+
+    bool deny = false;
 
     void* returnAddress = __builtin_return_address(0);
 
     HMODULE callerModule;
-    if (GetModuleHandleEx(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            (PCWSTR)returnAddress, &callerModule
-        ) && callerModule == g_cefModule
+    DWORD dwFlags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+    if (GetModuleHandleEx(dwFlags, (PCWSTR)returnAddress, &callerModule) &&
+        callerModule == g_cefModule && 
+        pMarInset->cxLeftWidth == 0 &&
+        pMarInset->cxRightWidth == 0 &&
+        (pMarInset->cyTopHeight == 0 || pMarInset->cyTopHeight == 1) &&
+        pMarInset->cyBottomHeight == 0
     ) {
-        Wh_Log(L"Denying DwmExtendFrameIntoClientArea from libcef.dll");
+        deny = true;
+    }
+
+    wchar_t modulePath[MAX_PATH] = {};
+    if (callerModule && GetModuleFileNameW(callerModule, modulePath, MAX_PATH)) {
+        Wh_Log(L"DEFICA: {%d, %d, %d, %d}, %s%s",
+            pMarInset->cxLeftWidth,
+            pMarInset->cxRightWidth,
+            pMarInset->cyTopHeight,
+            pMarInset->cyBottomHeight,
+            modulePath,
+            (deny ? L" (denied)" : L"")
+        );
+    }
+
+    if (deny) {
         return E_ACCESSDENIED;
     }
 
