@@ -4520,6 +4520,30 @@
                 "version": "0.1.1"
             }
         },
+        "win11-accent-border": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1749228741000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1749228741000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Guerra24",
+                "compilerOptions": "-ldwmapi -luser32",
+                "description": "Show the accent color on the border but not on the titlebar",
+                "exclude": [
+                    "devenv.exe"
+                ],
+                "github": "https://github.com/Guerra24",
+                "include": [
+                    "*"
+                ],
+                "name": "Windows 11 Accent Window Border",
+                "version": "1.0.0"
+            }
+        },
         "win32-tray-clock-experience": {
             "details": {
                 "defaultSorting": 7720,
