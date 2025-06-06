@@ -4,7 +4,7 @@
 // @description     Show the accent color on the border but not on the titlebar
 // @version         1.0.0
 // @author          Guerra24
-// @github          https://github.com/guerra24
+// @github          https://github.com/Guerra24
 // @include         *
 // @exclude         devenv.exe
 // @compilerOptions -ldwmapi -luser32
@@ -13,6 +13,18 @@
 // ==WindhawkModReadme==
 /*
 Mimics the behavior the *Show accent color on title bars and window borders* setting had in Windows 11 Build 22000.
+
+When it was enabled in build 22000 the accent color appeared behind the Mica effect but in 22621 and newer it appears on top and it doesn't look that great. This mod restores the former behavior.
+
+**Make sure *Show accent color on title bars and window borders* is disabled as it conflicts with this mod!**
+
+Before:
+![image](https://i.imgur.com/LnPyxkb.png)
+
+After:
+![image](https://i.imgur.com/TpGSX6X.png)
+
+# Colors
 
 The focused color is always the accent color.
 
