@@ -2,14 +2,14 @@
 // @id              taskbar-thumbnail-reorder
 // @name            Taskbar Thumbnail Reorder
 // @description     Reorder taskbar thumbnails with the left mouse button
-// @version         1.0.8
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lversion -lwininet
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -26,11 +26,19 @@
 
 Reorder taskbar thumbnails with the left mouse button.
 
-Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
+Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 **Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
 or a similar tool), enable the relevant option in the mod's settings.
+
+## Known limitations
+
+* When the new thumbnail previews implementation in Windows 11 is used, and when
+  labels are shown, each reordering operation causes the thumbnail previews to
+  be closed. This seems to be a bug in Windows 11, it also happens when closing
+  items with the x button or via middle click. I couldn't find a workaround,
+  hopefully it will be fixed by Microsoft in one of the next updates.
 
 ![demonstration](https://i.imgur.com/wGGe2RS.gif)
 */
@@ -42,20 +50,28 @@ or a similar tool), enable the relevant option in the mod's settings.
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
-    1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool).
 */
 // ==/WindhawkModSettings==
 
-#include <commctrl.h>
-#include <wininet.h>
+#include <windhawk_utils.h>
 
-#include <algorithm>
-#include <regex>
-#include <string>
-#include <string_view>
-#include <unordered_set>
+#include <commctrl.h>
+#include <psapi.h>
+
+#include <atomic>
+#include <functional>
 #include <vector>
+
+#undef GetCurrentTime
+
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+
+using namespace winrt::Windows::UI::Xaml;
 
 struct {
     bool oldTaskbarOnWin11;
@@ -65,14 +81,22 @@ enum class WinVersion {
     Unsupported,
     Win10,
     Win11,
+    Win11_24H2,
 };
 
-WinVersion g_explorerVersion;
+WinVersion g_winVersion;
 
-std::unordered_set<HWND> g_thumbnailWindows;
+std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_initialized;
+std::atomic<bool> g_explorerPatcherInitialized;
 
+int g_thumbDraggedIndex = -1;
+bool g_thumbDragDone;
 bool g_taskItemFilterDisallowAll;
 DWORD g_taskInclusionChangeLastTickCount;
+
+std::atomic<DWORD> g_getPtr_captureForThreadId;
+HDPA g_getPtr_lastHdpa;
 
 // https://www.geoffchappell.com/studies/windows/shell/comctl32/api/da/dpa/dpa.htm
 typedef struct _DPA {
@@ -83,41 +107,114 @@ typedef struct _DPA {
     int cpGrow;
 } DPA, *HDPA;
 
-////////////////////////////////////////////////////////////////////////////////
+// XAML thumbnails implementation variables.
 
-using CTaskListThumbnailWnd__RefreshThumbnail_t = void(WINAPI*)(void* pThis,
-                                                                int index);
-CTaskListThumbnailWnd__RefreshThumbnail_t
-    CTaskListThumbnailWnd__RefreshThumbnail;
+struct ThumbnailTaskItemMapping {
+    winrt::weak_ref<winrt::Windows::Foundation::IInspectable> thumbnail;
+    void* taskGroup;
+    void* taskItem;
+};
+
+std::vector<ThumbnailTaskItemMapping> g_thumbnailTaskItemMapping;
+
+bool g_inHoverFlyoutModel_TargetItemKey;
+
+winrt::weak_ref<winrt::Windows::Foundation::IInspectable>
+    g_TaskGroup_Thumbnails;
+
+bool g_reorderingXamlThumbnails;
+
+FrameworkElement EnumChildElements(
+    FrameworkElement element,
+    std::function<bool(FrameworkElement)> enumCallback) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
+            continue;
+        }
+
+        if (enumCallback(child)) {
+            return child;
+        }
+    }
+
+    return nullptr;
+}
+
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
+    return EnumChildElements(element, [name](FrameworkElement child) {
+        return child.Name() == name;
+    });
+}
+
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                      PCWSTR className) {
+    return EnumChildElements(element, [className](FrameworkElement child) {
+        return winrt::get_class_name(child) == className;
+    });
+}
+
+void* QueryViaVtable(void* object, void* vtable) {
+    void* ptr = object;
+    while (*(void**)ptr != vtable) {
+        ptr = (void**)ptr + 1;
+    }
+    return ptr;
+}
+
+void* QueryViaVtableBackwards(void* object, void* vtable) {
+    void* ptr = object;
+    while (*(void**)ptr != vtable) {
+        ptr = (void**)ptr - 1;
+    }
+    return ptr;
+}
+
+void* Query_CTaskListThumbnailWnd_IExtendedUISwitcher(
+    void* taskListThumbnailWnd) {
+    // This has been correct at least since the first Win10 versions, and is
+    // unlikely to ever change.
+    return (void**)taskListThumbnailWnd + 2;
+}
+
+void* CTaskListWnd_vftable_ITaskListUI;
+
+using CTaskListThumbnailWnd_GetHoverIndex_t = int(WINAPI*)(void* pThis);
+CTaskListThumbnailWnd_GetHoverIndex_t CTaskListThumbnailWnd_GetHoverIndex;
+
+using CTaskListThumbnailWnd__GetTaskItem_t = void*(WINAPI*)(void* pThis,
+                                                            int index);
+CTaskListThumbnailWnd__GetTaskItem_t CTaskListThumbnailWnd__GetTaskItem;
+
+using CTaskListThumbnailWnd_GetTaskGroup_t = void*(WINAPI*)(void* pThis);
+CTaskListThumbnailWnd_GetTaskGroup_t CTaskListThumbnailWnd_GetTaskGroup;
+
+using CTaskListThumbnailWnd_TaskReordered_t = void(WINAPI*)(void* pThis,
+                                                            void* taskItem);
+CTaskListThumbnailWnd_TaskReordered_t CTaskListThumbnailWnd_TaskReordered;
+
+using CTaskGroup_GetNumItems_t = int(WINAPI*)(PVOID pThis);
+CTaskGroup_GetNumItems_t CTaskGroup_GetNumItems;
 
 using CTaskListWnd__GetTBGroupFromGroup_t =
     void*(WINAPI*)(void* pThis, void* pTaskGroup, int* pTaskBtnGroupIndex);
 CTaskListWnd__GetTBGroupFromGroup_t CTaskListWnd__GetTBGroupFromGroup;
 
-void* CTaskListThumbnailWnd_Dismiss;
-void* CTaskListThumbnailWnd_GetTaskGroup;
-void* CTaskListThumbnailWnd__RegisterThumbBars;
-void* CTaskListThumbnailWnd_GetHoverIndex;
+using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(void* pThis);
+CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType;
 
-using CTaskListThumbnailWnd_GetHwnd_t = HWND(WINAPI*)(void* pThis);
-CTaskListThumbnailWnd_GetHwnd_t CTaskListThumbnailWnd_GetHwnd;
+using CTaskBtnGroup_IndexOfTaskItem_t = int(WINAPI*)(void* pThis,
+                                                     void* taskItem);
+CTaskBtnGroup_IndexOfTaskItem_t CTaskBtnGroup_IndexOfTaskItem;
 
 using CTaskListWnd_TaskInclusionChanged_t = HRESULT(WINAPI*)(void* pThis,
                                                              void* pTaskGroup,
                                                              void* pTaskItem);
 CTaskListWnd_TaskInclusionChanged_t CTaskListWnd_TaskInclusionChanged;
-
-using CTaskThumbnail_GetTaskItem_t = void*(WINAPI*)(void* pThis);
-CTaskThumbnail_GetTaskItem_t CTaskThumbnail_GetTaskItem;
-
-using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(void* pThis);
-CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType;
-
-using CTaskBtnGroup_GetNumItems_t = int(WINAPI*)(void* pThis);
-CTaskBtnGroup_GetNumItems_t CTaskBtnGroup_GetNumItems;
-
-using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(void* pThis, int index);
-CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem;
 
 using TaskItemFilter_IsTaskAllowed_t = bool(WINAPI*)(void* pThis,
                                                      void* pTaskItem);
@@ -132,195 +229,13 @@ bool WINAPI TaskItemFilter_IsTaskAllowed_Hook(void* pThis, void* pTaskItem) {
     return TaskItemFilter_IsTaskAllowed_Original(pThis, pTaskItem);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-void* SkipFirstBranch(void* func,
-                      std::string jumpToTake,
-                      std::string jumpToSkip,
-                      int limit = 30) {
-    jumpToTake += ' ';
-    jumpToSkip += ' ';
-
-    BYTE* p = (BYTE*)func;
-    for (int i = 0; i < limit; i++) {
-        WH_DISASM_RESULT result;
-        if (!Wh_Disasm(p, &result)) {
-            break;
-        }
-
-        p += result.length;
-        std::string_view s = result.text;
-        if (s == "ret") {
-            break;
-        }
-
-        if (s.starts_with(jumpToSkip)) {
-            return p;
-        }
-
-        if (s.starts_with(jumpToTake)) {
-            return (void*)std::stoull(result.text + jumpToTake.size(), nullptr,
-                                      16);
-        }
-
-        if (s.starts_with('j')) {
-            break;
-        }
-    }
-
-    Wh_Log(L"Failed for %p", func);
-    return nullptr;
-}
-
-size_t OffsetFromAssemblyAndRegexPattern(void* func,
-                                         size_t defValue,
-                                         std::string regexPattern,
-                                         int limit = 30) {
-    std::regex regex(regexPattern);
-
-    BYTE* p = (BYTE*)func;
-    for (int i = 0; i < limit; i++) {
-        WH_DISASM_RESULT result;
-        if (!Wh_Disasm(p, &result)) {
-            break;
-        }
-
-        p += result.length;
-        std::string_view s = result.text;
-        if (s == "ret") {
-            break;
-        }
-
-        std::match_results<std::string_view::const_iterator> match;
-        if (std::regex_match(s.begin(), s.end(), match, regex)) {
-            // Wh_Log(L"%S", result.text);
-            return std::stoull(match[1], nullptr, 16);
-        }
-    }
-
-    Wh_Log(L"Failed for %p", func);
-    return defValue;
-}
-
-size_t OffsetFromAssembly(void* func,
-                          size_t defValue = 0,
-                          std::string opcode = "mov",
-                          int limit = 30) {
-    // Example: mov rax, [rcx+0xE0]
-    std::string regexPattern =
-        opcode +
-        R"( r(?:[a-z]{2}|\d{1,2}), \[r(?:[a-z]{2}|\d{1,2})\+(0x[0-9A-F]+)\])";
-    return OffsetFromAssemblyAndRegexPattern(func, defValue,
-                                             std::move(regexPattern), limit);
-}
-
-size_t OffsetFromAssembly32(void* func,
-                            size_t defValue = 0,
-                            std::string opcode = "mov",
-                            int limit = 30) {
-    // Example: mov eax, [rcx+0xE0]
-    std::string regexPattern =
-        opcode +
-        R"( (?:e[a-z]{2}|r\d{1,2}d), \[r(?:[a-z]{2}|\d{1,2})\+(0x[0-9A-F]+)\])";
-    return OffsetFromAssemblyAndRegexPattern(func, defValue,
-                                             std::move(regexPattern), limit);
-}
-
-struct {
-    size_t taskListPtr;     // 10.0.22621.2792: 0x48
-    size_t taskGroup;       // 10.0.22621.2792: 0x140
-    size_t thumbnailArray;  // 10.0.22621.2792: 0x150
-
-    // A base address for thumbnail index values.
-    // 0: Active index
-    // 1: Something about keyboard focus
-    // 2: Tracked index
-    // 3: Pressed index
-    // 4: Live preview index
-    size_t indexValues;  // 10.0.22621.2792: 0x230
-} g_thumbnailOffsets;
-
-LONG_PTR ThumbnailTaskListPtr(LONG_PTR lpMMThumbnailLongPtr) {
-    return *(LONG_PTR*)(lpMMThumbnailLongPtr + g_thumbnailOffsets.taskListPtr);
-}
-
-LONG_PTR* ThumbnailTaskGroup(LONG_PTR lpMMThumbnailLongPtr) {
-    return *(LONG_PTR**)(lpMMThumbnailLongPtr + g_thumbnailOffsets.taskGroup);
-}
-
-HDPA ThumbnailArray(LONG_PTR lpMMThumbnailLongPtr) {
-    return *(HDPA*)(lpMMThumbnailLongPtr + g_thumbnailOffsets.thumbnailArray);
-}
-
-int* ThumbnailActiveIndex(LONG_PTR lpMMThumbnailLongPtr) {
-    return (int*)(lpMMThumbnailLongPtr + g_thumbnailOffsets.indexValues);
-}
-
-int* ThumbnailTrackedIndex(LONG_PTR lpMMThumbnailLongPtr) {
-    return (int*)(lpMMThumbnailLongPtr + g_thumbnailOffsets.indexValues) + 2;
-}
-
-int* ThumbnailPressedIndex(LONG_PTR lpMMThumbnailLongPtr) {
-    return (int*)(lpMMThumbnailLongPtr + g_thumbnailOffsets.indexValues) + 3;
-}
-
-struct {
-    size_t buttonArray;  // 10.0.22621.3880: 0x38
-} g_taskBrnGroupOffsets;
-
-HDPA TaskBtnGroupButtonArray(LONG_PTR* taskBtnGroup) {
-    return *(HDPA*)((BYTE*)taskBtnGroup + g_taskBrnGroupOffsets.buttonArray);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool MoveThumbnail(LONG_PTR lpMMThumbnailLongPtr, int indexFrom, int indexTo) {
-    HDPA thumbnailArray = ThumbnailArray(lpMMThumbnailLongPtr);
-    if (!thumbnailArray) {
-        return false;
-    }
-
-    LONG_PTR** thumbs = (LONG_PTR**)thumbnailArray->pArray;
-
-    LONG_PTR* thumbTemp = thumbs[indexFrom];
-    if (indexFrom < indexTo) {
-        memmove(&thumbs[indexFrom], &thumbs[indexFrom + 1],
-                (indexTo - indexFrom) * sizeof(LONG_PTR*));
-    } else {
-        memmove(&thumbs[indexTo + 1], &thumbs[indexTo],
-                (indexFrom - indexTo) * sizeof(LONG_PTR*));
-    }
-    thumbs[indexTo] = thumbTemp;
-
-    int* activeIndex = ThumbnailActiveIndex(lpMMThumbnailLongPtr);
-    if (*activeIndex == indexFrom) {
-        *activeIndex = indexTo;
-    } else if (*activeIndex == indexTo) {
-        *activeIndex = indexFrom;
-    }
-
-    int* pressedIndex = ThumbnailPressedIndex(lpMMThumbnailLongPtr);
-    if (*pressedIndex == indexFrom) {
-        *pressedIndex = indexTo;
-    } else if (*pressedIndex == indexTo) {
-        *pressedIndex = indexFrom;
-    }
-
-    CTaskListThumbnailWnd__RefreshThumbnail((void*)lpMMThumbnailLongPtr,
-                                            indexFrom);
-    CTaskListThumbnailWnd__RefreshThumbnail((void*)lpMMThumbnailLongPtr,
-                                            indexTo);
-
-    return true;
-}
-
-bool MoveTaskInTaskList(LONG_PTR lpMMTaskListLongPtr,
-                        LONG_PTR* taskGroup,
-                        LONG_PTR* taskItemFrom,
-                        LONG_PTR* taskItemTo,
-                        LONG_PTR lpMMThumbnailLongPtr) {
-    LONG_PTR* taskBtnGroup = (LONG_PTR*)CTaskListWnd__GetTBGroupFromGroup(
-        (void*)lpMMTaskListLongPtr, taskGroup, nullptr);
+bool MoveTaskInTaskList(HWND hMMTaskListWnd,
+                        void* lpMMTaskListLongPtr,
+                        void* taskGroup,
+                        void* taskItemFrom,
+                        void* taskItemTo) {
+    void* taskBtnGroup = CTaskListWnd__GetTBGroupFromGroup(lpMMTaskListLongPtr,
+                                                           taskGroup, nullptr);
     if (!taskBtnGroup) {
         return false;
     }
@@ -330,74 +245,123 @@ bool MoveTaskInTaskList(LONG_PTR lpMMTaskListLongPtr,
         return false;
     }
 
-    int indexFrom = -1;
-    int indexTo = -1;
-    int numItems = CTaskBtnGroup_GetNumItems(taskBtnGroup);
-    for (int i = 0; i < numItems && (indexFrom == -1 || indexTo == -1); i++) {
-        LONG_PTR* taskItem =
-            (LONG_PTR*)CTaskBtnGroup_GetTaskItem(taskBtnGroup, i);
+    g_getPtr_lastHdpa = nullptr;
 
-        if (taskItem == taskItemFrom) {
-            indexFrom = i;
-        }
+    g_getPtr_captureForThreadId = GetCurrentThreadId();
+    int indexFrom = CTaskBtnGroup_IndexOfTaskItem(taskBtnGroup, taskItemFrom);
+    g_getPtr_captureForThreadId = 0;
 
-        if (taskItem == taskItemTo) {
-            indexTo = i;
-        }
-    }
-
-    if (indexFrom == -1 || indexTo == -1) {
+    if (indexFrom == -1) {
         return false;
     }
 
-    HDPA buttonsArray = TaskBtnGroupButtonArray(taskBtnGroup);
+    HDPA buttonsArray = g_getPtr_lastHdpa;
+    if (!buttonsArray) {
+        return false;
+    }
 
-    LONG_PTR* button = (LONG_PTR*)DPA_DeletePtr(buttonsArray, indexFrom);
+    g_getPtr_lastHdpa = nullptr;
+
+    g_getPtr_captureForThreadId = GetCurrentThreadId();
+    int indexTo = CTaskBtnGroup_IndexOfTaskItem(taskBtnGroup, taskItemTo);
+    g_getPtr_captureForThreadId = 0;
+
+    if (indexTo == -1) {
+        return false;
+    }
+
+    if (g_getPtr_lastHdpa != buttonsArray) {
+        return false;
+    }
+
+    void* button = (void*)DPA_DeletePtr(buttonsArray, indexFrom);
     if (!button) {
         return false;
     }
 
     DPA_InsertPtr(buttonsArray, indexTo, button);
 
-    if (g_explorerVersion <= WinVersion::Win10) {
-        HWND hMMTaskListWnd = *(HWND*)(lpMMTaskListLongPtr + 0x08);
+    if (g_winVersion <= WinVersion::Win10) {
         InvalidateRect(hMMTaskListWnd, nullptr, FALSE);
     } else {
         g_taskInclusionChangeLastTickCount = GetTickCount();
 
-        HWND hThumbnailWnd =
-            CTaskListThumbnailWnd_GetHwnd((void*)lpMMThumbnailLongPtr);
+        HWND hThumbnailWnd = GetCapture();
+        if (hThumbnailWnd) {
+            WCHAR szClassName[32];
+            if (GetClassName(hThumbnailWnd, szClassName,
+                             ARRAYSIZE(szClassName)) == 0 ||
+                _wcsicmp(szClassName, L"TaskListThumbnailWnd") != 0) {
+                hThumbnailWnd = nullptr;
+            }
+        }
 
-        SendMessage(hThumbnailWnd, WM_SETREDRAW, FALSE, 0);
+        if (hThumbnailWnd) {
+            SendMessage(hThumbnailWnd, WM_SETREDRAW, FALSE, 0);
+        }
 
         g_taskItemFilterDisallowAll = true;
 
-        CTaskListWnd_TaskInclusionChanged((void*)(lpMMTaskListLongPtr + 0x28),
-                                          taskGroup, taskItemFrom);
+        void* pThis_ITaskListUI = QueryViaVtable(
+            lpMMTaskListLongPtr, CTaskListWnd_vftable_ITaskListUI);
+
+        CTaskListWnd_TaskInclusionChanged(pThis_ITaskListUI, taskGroup,
+                                          taskItemFrom);
 
         g_taskItemFilterDisallowAll = false;
 
-        CTaskListWnd_TaskInclusionChanged((void*)(lpMMTaskListLongPtr + 0x28),
-                                          taskGroup, taskItemFrom);
+        CTaskListWnd_TaskInclusionChanged(pThis_ITaskListUI, taskGroup,
+                                          taskItemFrom);
 
-        SendMessage(hThumbnailWnd, WM_SETREDRAW, TRUE, 0);
-        RedrawWindow(hThumbnailWnd, nullptr, nullptr,
-                     RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+        if (hThumbnailWnd) {
+            SendMessage(hThumbnailWnd, WM_SETREDRAW, TRUE, 0);
+            RedrawWindow(
+                hThumbnailWnd, nullptr, nullptr,
+                RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+        }
     }
 
     return true;
 }
 
-bool MoveTaskInGroup(LONG_PTR* taskGroup,
-                     LONG_PTR* taskItemFrom,
-                     LONG_PTR* taskItemTo) {
-    HDPA taskItemsArray = (HDPA)taskGroup[4];
+HDPA GetTaskItemsArray(void* taskGroup) {
+    // This is a horrible hack, but it's the best way I found to get the array
+    // of task items from a task group. It relies on the implementation of
+    // CTaskGroup::GetNumItems being just this:
+    //
+    // return DPA_GetPtrCount(this->taskItemsArray);
+    //
+    // Or in other words:
+    //
+    // return *(int*)this[taskItemsArrayOffset];
+    //
+    // Instead of calling it with a real taskGroup object, we call it with an
+    // array of pointers to ints. The returned int value is actually the offset
+    // to the array member.
+
+    static size_t offset = []() {
+        constexpr int kIntArraySize = 256;
+        int arrayOfInts[kIntArraySize];
+        int* arrayOfIntPtrs[kIntArraySize];
+        for (int i = 0; i < kIntArraySize; i++) {
+            arrayOfInts[i] = i;
+            arrayOfIntPtrs[i] = &arrayOfInts[i];
+        }
+
+        return CTaskGroup_GetNumItems(arrayOfIntPtrs);
+    }();
+
+    return (HDPA)((void**)taskGroup)[offset];
+}
+
+bool MoveTaskInGroup(void* taskGroup, void* taskItemFrom, void* taskItemTo) {
+    HDPA taskItemsArray = GetTaskItemsArray(taskGroup);
     if (!taskItemsArray) {
         return false;
     }
 
     int taskItemsCount = taskItemsArray->cpItems;
-    LONG_PTR** taskItems = (LONG_PTR**)taskItemsArray->pArray;
+    void** taskItems = (void**)taskItemsArray->pArray;
 
     int indexFrom = -1;
     for (int i = 0; i < taskItemsCount; i++) {
@@ -423,161 +387,148 @@ bool MoveTaskInGroup(LONG_PTR* taskGroup,
         return false;
     }
 
-    LONG_PTR* taskItemTemp = taskItems[indexFrom];
+    void* taskItemTemp = taskItems[indexFrom];
     if (indexFrom < indexTo) {
         memmove(&taskItems[indexFrom], &taskItems[indexFrom + 1],
-                (indexTo - indexFrom) * sizeof(LONG_PTR*));
+                (indexTo - indexFrom) * sizeof(void*));
     } else {
         memmove(&taskItems[indexTo + 1], &taskItems[indexTo],
-                (indexFrom - indexTo) * sizeof(LONG_PTR*));
+                (indexFrom - indexTo) * sizeof(void*));
     }
     taskItems[indexTo] = taskItemTemp;
 
-    for (HWND hWnd : g_thumbnailWindows) {
-        LONG_PTR lpMMThumbnailLongPtr = GetWindowLongPtr(hWnd, 0);
-        if (!lpMMThumbnailLongPtr) {
-            continue;
+    auto taskbarEnumProc = [taskGroup, taskItemFrom, taskItemTo](
+                               HWND hMMTaskbarWnd, bool secondary) {
+        HWND hMMTaskSwWnd;
+        if (!secondary) {
+            hMMTaskSwWnd = (HWND)GetProp(hMMTaskbarWnd, L"TaskbandHWND");
+        } else {
+            hMMTaskSwWnd =
+                FindWindowEx(hMMTaskbarWnd, nullptr, L"WorkerW", nullptr);
         }
 
-        LONG_PTR lpMMTaskListLongPtr =
-            ThumbnailTaskListPtr(lpMMThumbnailLongPtr) - 0x30;
+        if (!hMMTaskSwWnd) {
+            return;
+        }
 
-        MoveTaskInTaskList(lpMMTaskListLongPtr, taskGroup, taskItemFrom,
-                           taskItemTo, lpMMThumbnailLongPtr);
-    }
+        HWND hMMTaskListWnd =
+            FindWindowEx(hMMTaskSwWnd, nullptr, L"MSTaskListWClass", nullptr);
+        if (!hMMTaskListWnd) {
+            return;
+        }
 
-    return true;
-}
+        void* lpMMTaskListLongPtr = (void*)GetWindowLongPtr(hMMTaskListWnd, 0);
 
-bool MoveItemsFromThumbnail(LONG_PTR lpMMThumbnailLongPtr,
-                            int indexFrom,
-                            int indexTo) {
-    HDPA thumbnailArray = ThumbnailArray(lpMMThumbnailLongPtr);
-    if (!thumbnailArray || indexFrom < 0 ||
-        indexFrom >= thumbnailArray->cpItems || indexTo < 0 ||
-        indexTo >= thumbnailArray->cpItems || indexFrom == indexTo) {
-        return false;
-    }
-
-    LONG_PTR* from = (LONG_PTR*)thumbnailArray->pArray[indexFrom];
-    LONG_PTR* to = (LONG_PTR*)thumbnailArray->pArray[indexTo];
-
-    LONG_PTR* taskItemFrom = (LONG_PTR*)CTaskThumbnail_GetTaskItem(from);
-    LONG_PTR* taskItemTo = (LONG_PTR*)CTaskThumbnail_GetTaskItem(to);
-
-    if (!MoveThumbnail(lpMMThumbnailLongPtr, indexFrom, indexTo)) {
-        return false;
-    }
-
-    if (!MoveTaskInGroup(ThumbnailTaskGroup(lpMMThumbnailLongPtr), taskItemFrom,
-                         taskItemTo)) {
-        return false;
-    }
-
-    return true;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// wParam - TRUE to subclass, FALSE to unsubclass
-// lParam - subclass data
-UINT g_subclassRegisteredMsg = RegisterWindowMessage(
-    L"Windhawk_SetWindowSubclassFromAnyThread_taskbar-thumbnail-reorder");
-
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
-                                    SUBCLASSPROC pfnSubclass,
-                                    UINT_PTR uIdSubclass,
-                                    DWORD_PTR dwRefData) {
-    struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
-        SUBCLASSPROC pfnSubclass;
-        UINT_PTR uIdSubclass;
-        DWORD_PTR dwRefData;
-        BOOL result;
+        MoveTaskInTaskList(hMMTaskListWnd, lpMMTaskListLongPtr, taskGroup,
+                           taskItemFrom, taskItemTo);
     };
 
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
-        return FALSE;
-    }
-
-    if (dwThreadId == GetCurrentThreadId()) {
-        return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == g_subclassRegisteredMsg && cwp->wParam) {
-                    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM* param =
-                        (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM*)cwp->lParam;
-                    param->result =
-                        SetWindowSubclass(cwp->hwnd, param->pfnSubclass,
-                                          param->uIdSubclass, param->dwRefData);
-                }
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
             }
 
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            bool secondary;
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+                secondary = false;
+            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+                secondary = true;
+            } else {
+                return TRUE;
+            }
+
+            auto& proc = *reinterpret_cast<decltype(taskbarEnumProc)*>(lParam);
+            proc(hWnd, secondary);
+            return TRUE;
         },
-        nullptr, dwThreadId);
-    if (!hook) {
-        return FALSE;
-    }
+        reinterpret_cast<LPARAM>(&taskbarEnumProc));
 
-    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
-    param.pfnSubclass = pfnSubclass;
-    param.uIdSubclass = uIdSubclass;
-    param.dwRefData = dwRefData;
-    param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return param.result;
+    return true;
 }
 
-LRESULT CALLBACK ThumbnailWindowSubclassProc(HWND hWnd,
-                                             UINT uMsg,
-                                             WPARAM wParam,
-                                             LPARAM lParam,
-                                             UINT_PTR uIdSubclass,
-                                             DWORD_PTR dwRefData) {
-    static int draggedIndex = -1;
-    static bool dragDone;
+bool MoveItemsFromThumbnail(void* lpMMThumbnailLongPtr,
+                            int indexFrom,
+                            int indexTo) {
+    Wh_Log(L">");
+
+    void* taskItemFrom =
+        CTaskListThumbnailWnd__GetTaskItem(lpMMThumbnailLongPtr, indexFrom);
+    if (!taskItemFrom) {
+        return false;
+    }
+
+    void* taskItemTo =
+        CTaskListThumbnailWnd__GetTaskItem(lpMMThumbnailLongPtr, indexTo);
+    if (!taskItemTo) {
+        return false;
+    }
+
+    if (!MoveTaskInGroup(
+            CTaskListThumbnailWnd_GetTaskGroup(lpMMThumbnailLongPtr),
+            taskItemFrom, taskItemTo)) {
+        return false;
+    }
+
+    CTaskListThumbnailWnd_TaskReordered(lpMMThumbnailLongPtr, taskItemFrom);
+
+    return true;
+}
+
+using CTaskListThumbnailWnd_v_WndProc_t = LRESULT(
+    WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+CTaskListThumbnailWnd_v_WndProc_t CTaskListThumbnailWnd_v_WndProc_Original;
+LRESULT WINAPI CTaskListThumbnailWnd_v_WndProc_Hook(void* pThis,
+                                                    HWND hWnd,
+                                                    UINT Msg,
+                                                    WPARAM wParam,
+                                                    LPARAM lParam) {
     LRESULT result = 0;
     bool processed = false;
 
-    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
-        RemoveWindowSubclass(hWnd, ThumbnailWindowSubclassProc, 0);
-    }
+    auto OriginalProc = [pThis](HWND hWnd, UINT Msg, WPARAM wParam,
+                                LPARAM lParam) {
+        return CTaskListThumbnailWnd_v_WndProc_Original(pThis, hWnd, Msg,
+                                                        wParam, lParam);
+    };
 
-    switch (uMsg) {
+    switch (Msg) {
         case WM_LBUTTONDOWN:
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            result = OriginalProc(hWnd, Msg, wParam, lParam);
 
             {
-                LONG_PTR lpMMThumbnailLongPtr = GetWindowLongPtr(hWnd, 0);
-                int trackedIndex = *ThumbnailTrackedIndex(lpMMThumbnailLongPtr);
+                void* lpMMThumbnailLongPtr = (void*)GetWindowLongPtr(hWnd, 0);
+                void* lpMMThumbnailLongPtr_IExtendedUISwitcher =
+                    Query_CTaskListThumbnailWnd_IExtendedUISwitcher(
+                        lpMMThumbnailLongPtr);
+                int trackedIndex = CTaskListThumbnailWnd_GetHoverIndex(
+                    lpMMThumbnailLongPtr_IExtendedUISwitcher);
                 if (trackedIndex >= 0) {
-                    dragDone = false;
-                    draggedIndex = trackedIndex;
+                    g_thumbDragDone = false;
+                    g_thumbDraggedIndex = trackedIndex;
                     SetCapture(hWnd);
                 }
             }
             break;
 
         case WM_MOUSEMOVE:
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            result = OriginalProc(hWnd, Msg, wParam, lParam);
 
             if (GetCapture() == hWnd &&
-                GetTickCount() - g_taskInclusionChangeLastTickCount > 200) {
-                LONG_PTR lpMMThumbnailLongPtr = GetWindowLongPtr(hWnd, 0);
-                int trackedIndex = *ThumbnailTrackedIndex(lpMMThumbnailLongPtr);
-                if (MoveItemsFromThumbnail(lpMMThumbnailLongPtr, draggedIndex,
-                                           trackedIndex)) {
-                    draggedIndex = trackedIndex;
-                    dragDone = true;
+                GetTickCount() - g_taskInclusionChangeLastTickCount > 60) {
+                void* lpMMThumbnailLongPtr = (void*)GetWindowLongPtr(hWnd, 0);
+                void* lpMMThumbnailLongPtr_IExtendedUISwitcher =
+                    Query_CTaskListThumbnailWnd_IExtendedUISwitcher(
+                        lpMMThumbnailLongPtr);
+                int trackedIndex = CTaskListThumbnailWnd_GetHoverIndex(
+                    lpMMThumbnailLongPtr_IExtendedUISwitcher);
+                if (trackedIndex != g_thumbDraggedIndex &&
+                    MoveItemsFromThumbnail(lpMMThumbnailLongPtr,
+                                           g_thumbDraggedIndex, trackedIndex)) {
+                    g_thumbDraggedIndex = trackedIndex;
+                    g_thumbDragDone = true;
                 }
             }
             break;
@@ -585,14 +536,15 @@ LRESULT CALLBACK ThumbnailWindowSubclassProc(HWND hWnd,
         case WM_LBUTTONUP:
             if (GetCapture() == hWnd) {
                 ReleaseCapture();
-                if (dragDone) {
-                    result = DefWindowProc(hWnd, uMsg, wParam, lParam);
+                if (g_thumbDragDone) {
+                    result = DefWindowProc(hWnd, Msg, wParam, lParam);
                     processed = true;
                 }
             }
 
-            if (!processed)
-                result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (!processed) {
+                result = OriginalProc(hWnd, Msg, wParam, lParam);
+            }
             break;
 
         case WM_TIMER:
@@ -600,207 +552,540 @@ LRESULT CALLBACK ThumbnailWindowSubclassProc(HWND hWnd,
             if (wParam == 2006) {
                 if (GetCapture() == hWnd) {
                     KillTimer(hWnd, wParam);
-                    result = DefWindowProc(hWnd, uMsg, wParam, lParam);
+                    result = DefWindowProc(hWnd, Msg, wParam, lParam);
                     processed = true;
                 }
             }
 
-            if (!processed)
-                result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            break;
-
-        case WM_NCDESTROY:
-            g_thumbnailWindows.erase(hWnd);
-
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            if (!processed) {
+                result = OriginalProc(hWnd, Msg, wParam, lParam);
+            }
             break;
 
         default:
-            result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            result = OriginalProc(hWnd, Msg, wParam, lParam);
             break;
     }
 
     return result;
 }
 
-void SubclassThumbnailWindow(HWND hWnd) {
-    SetWindowSubclassFromAnyThread(hWnd, ThumbnailWindowSubclassProc, 0, 0);
+using TaskItemThumbnail_TaskItemThumbnail_t = void*(WINAPI*)(void* param1,
+                                                             void* param2,
+                                                             void* taskGroup,
+                                                             void* taskItem,
+                                                             void* taskListUi,
+                                                             void* param6,
+                                                             void* param7,
+                                                             bool param8);
+TaskItemThumbnail_TaskItemThumbnail_t
+    TaskItemThumbnail_TaskItemThumbnail_Original;
+void* WINAPI TaskItemThumbnail_TaskItemThumbnail_Hook(void* param1,
+                                                      void* param2,
+                                                      void* taskGroup,
+                                                      void* taskItem,
+                                                      void* taskListUi,
+                                                      void* param6,
+                                                      void* param7,
+                                                      bool param8) {
+    Wh_Log(L">");
+
+    void* result = TaskItemThumbnail_TaskItemThumbnail_Original(
+        param1, param2, taskGroup, taskItem, taskListUi, param6, param7,
+        param8);
+
+    winrt::Windows::Foundation::IInspectable obj = nullptr;
+    ((IUnknown*)result + 2)
+        ->QueryInterface(
+            winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
+            winrt::put_abi(obj));
+
+    g_thumbnailTaskItemMapping.push_back(
+        ThumbnailTaskItemMapping{obj, taskGroup, taskItem});
+
+    return result;
 }
 
-void UnsubclassThumbnailWindow(HWND hWnd) {
-    SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+using TaskGroup_Thumbnails_t = void*(WINAPI*)(void* pThis, void* param1);
+TaskGroup_Thumbnails_t TaskGroup_Thumbnails_Original;
+void* WINAPI TaskGroup_Thumbnails_Hook(void* pThis, void* param1) {
+    void* result = TaskGroup_Thumbnails_Original(pThis, param1);
+
+    if (g_inHoverFlyoutModel_TargetItemKey) {
+        Wh_Log(L">");
+
+        winrt::Windows::Foundation::IInspectable obj = nullptr;
+        (*(IUnknown**)result)
+            ->QueryInterface(
+                winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
+                winrt::put_abi(obj));
+
+        bool assign = false;
+
+        auto currentObj = g_TaskGroup_Thumbnails.get();
+        if (!currentObj) {
+            Wh_Log(L"No previous thumbnails object");
+            assign = true;
+        } else if (currentObj != obj) {
+            Wh_Log(L"Different previous thumbnails object");
+            assign = true;
+        } else {
+            Wh_Log(L"Same previous thumbnails object");
+        }
+
+        if (assign) {
+            g_TaskGroup_Thumbnails = obj;
+
+            // Remove invalid weak pointers.
+            std::erase_if(g_thumbnailTaskItemMapping, [](const auto& item) {
+                return !item.thumbnail.get();
+            });
+        }
+    }
+
+    return result;
 }
 
-void HandleIdentifiedThumbnailWindow(HWND hWnd) {
-    g_thumbnailWindows.insert(hWnd);
-    SubclassThumbnailWindow(hWnd);
+using TaskItemThumbnail_Size_t = int(WINAPI*)(void* pThis);
+TaskItemThumbnail_Size_t TaskItemThumbnail_Size_Original;
+
+using TaskItemThumbnail_GetAt_t = void*(WINAPI*)(void* pThis,
+                                                 void** result,
+                                                 int index);
+TaskItemThumbnail_GetAt_t TaskItemThumbnail_GetAt_Original;
+
+using CTaskListWnd_HandleExtendedUIClick_t =
+    HRESULT(WINAPI*)(void* pThis,
+                     void* taskGroup,
+                     void* taskItem,
+                     void* launcherOptions);
+CTaskListWnd_HandleExtendedUIClick_t
+    CTaskListWnd_HandleExtendedUIClick_Original;
+HRESULT WINAPI CTaskListWnd_HandleExtendedUIClick_Hook(void* pThis,
+                                                       void* taskGroup,
+                                                       void* taskItem,
+                                                       void* launcherOptions) {
+    Wh_Log(L">");
+
+    if (g_reorderingXamlThumbnails) {
+        return S_OK;
+    }
+
+    return CTaskListWnd_HandleExtendedUIClick_Original(
+        pThis, taskGroup, taskItem, launcherOptions);
 }
 
-void FindCurrentProcessThumbnailWindows() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (!hTaskbarWnd) {
-        Wh_Log(L"No taskbar found");
+using HoverFlyoutModel_TargetItemKey_t = void(WINAPI*)(void* pThis,
+                                                       void* param1);
+HoverFlyoutModel_TargetItemKey_t HoverFlyoutModel_TargetItemKey_Original;
+void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
+    Wh_Log(L">");
+
+    g_inHoverFlyoutModel_TargetItemKey = true;
+
+    HoverFlyoutModel_TargetItemKey_Original(pThis, param1);
+
+    g_inHoverFlyoutModel_TargetItemKey = false;
+}
+
+bool IsPointerInsideElement(const UIElement& element,
+                            const Input::PointerRoutedEventArgs& args) {
+    auto pointerPos = args.GetCurrentPoint(element).Position();
+
+    float width = element.RenderSize().Width;
+    float height = element.RenderSize().Height;
+
+    return pointerPos.X >= 0 && pointerPos.X < width && pointerPos.Y >= 0 &&
+           pointerPos.Y < height;
+}
+
+void MoveItemsFromXAMLThumbnail(int indexFrom, int indexTo) {
+    Wh_Log(L"Moving from %d to %d", indexFrom, indexTo);
+
+    auto thumbnails = g_TaskGroup_Thumbnails.get();
+    if (!thumbnails) {
+        Wh_Log(L"Thumbnails object isn't valid");
         return;
     }
 
-    DWORD dwProcessId = 0;
-    DWORD dwThreadId = GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId);
-    if (dwProcessId != GetCurrentProcessId()) {
-        Wh_Log(L"Taskbar belongs to a different process");
+    auto* thumbnailsPtr = winrt::get_abi(thumbnails);
+
+    int thumbnailsSize = TaskItemThumbnail_Size_Original(&thumbnailsPtr);
+
+    if (indexFrom < 0 || indexFrom >= thumbnailsSize) {
+        Wh_Log(L"Invalid indexFrom value");
         return;
     }
 
-    EnumThreadWindows(
-        dwThreadId,
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
-            WCHAR szClassName[32];
-            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
-                return TRUE;
+    if (indexTo < 0 || indexTo >= thumbnailsSize) {
+        Wh_Log(L"Invalid indexTo value");
+        return;
+    }
 
-            if (_wcsicmp(szClassName, L"TaskListThumbnailWnd") == 0)
-                g_thumbnailWindows.insert(hWnd);
+    winrt::com_ptr<IUnknown> from;
+    TaskItemThumbnail_GetAt_Original(&thumbnailsPtr, from.put_void(),
+                                     indexFrom);
 
-            return TRUE;
-        },
-        0);
+    winrt::com_ptr<IUnknown> to;
+    TaskItemThumbnail_GetAt_Original(&thumbnailsPtr, to.put_void(), indexTo);
+
+    void* taskItemFrom = nullptr;
+    void* taskGroupFrom = nullptr;
+    void* taskItemTo = nullptr;
+    void* taskGroupTo = nullptr;
+
+    for (const auto& iter : g_thumbnailTaskItemMapping) {
+        auto thumbnail = iter.thumbnail.get();
+        if (!thumbnail) {
+            continue;
+        }
+
+        void* thumbnailPtr = winrt::get_abi(thumbnail);
+
+        if (thumbnailPtr == from.get()) {
+            taskItemFrom = iter.taskItem;
+            taskGroupFrom = iter.taskGroup;
+        }
+
+        if (thumbnailPtr == to.get()) {
+            taskItemTo = iter.taskItem;
+            taskGroupTo = iter.taskGroup;
+        }
+    }
+
+    if (!taskItemFrom || !taskGroupFrom || !taskItemTo || !taskGroupTo) {
+        Wh_Log(L"Task item/group not found");
+        return;
+    }
+
+    if (taskGroupFrom != taskGroupTo) {
+        Wh_Log(L"Task group differs");
+        return;
+    }
+
+    MoveTaskInGroup(taskGroupFrom, taskItemFrom, taskItemTo);
 }
 
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 LPVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (!hWnd)
-        return hWnd;
+using TaskItemThumbnailList_OnPointerMoved_t = int(WINAPI*)(void* pThis,
+                                                            void* pArgs);
+TaskItemThumbnailList_OnPointerMoved_t
+    TaskItemThumbnailList_OnPointerMoved_Original;
+int WINAPI TaskItemThumbnailList_OnPointerMoved_Hook(void* pThis, void* pArgs) {
+    auto original = [=]() {
+        return TaskItemThumbnailList_OnPointerMoved_Original(pThis, pArgs);
+    };
 
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
-
-    if (bTextualClassName &&
-        _wcsicmp(lpClassName, L"TaskListThumbnailWnd") == 0) {
-        Wh_Log(L"Thumbnail window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        HandleIdentifiedThumbnailWindow(hWnd);
+    if (!GetCapture() ||
+        GetTickCount() - g_taskInclusionChangeLastTickCount <= 60) {
+        return original();
     }
 
-    return hWnd;
+    Wh_Log(L">");
+
+    FrameworkElement element = nullptr;
+    ((IUnknown*)pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(element));
+
+    if (!element) {
+        return original();
+    }
+
+    auto className = winrt::get_class_name(element);
+    Wh_Log(L"%s", className.c_str());
+
+    FrameworkElement taskItemThumbnailListRepeater = nullptr;
+
+    if (className == L"Taskbar.TaskItemThumbnailList") {
+        taskItemThumbnailListRepeater =
+            FindChildByName(element, L"TaskItemThumbnailListRepeater");
+    } else if (className == L"Taskbar.TaskItemThumbnailScrollableList") {
+        FrameworkElement child = element;
+        if ((child = FindChildByName(
+                 child, L"TaskItemThumbnailScrollableListScrollViewer")) &&
+            (child = FindChildByName(child, L"Root")) &&
+            (child = FindChildByClassName(child,
+                                          L"Windows.UI.Xaml.Controls.Grid")) &&
+            (child = FindChildByName(child, L"ScrollContentPresenter")) &&
+            (child =
+                 FindChildByName(child, L"TaskItemThumbnailListRepeater"))) {
+            taskItemThumbnailListRepeater = child;
+        }
+    } else {
+        return original();
+    }
+
+    if (!taskItemThumbnailListRepeater) {
+        Wh_Log(L"TaskItemThumbnailListRepeater not found");
+        return original();
+    }
+
+    Input::PointerRoutedEventArgs args = nullptr;
+    ((IUnknown*)pArgs)
+        ->QueryInterface(winrt::guid_of<Input::PointerRoutedEventArgs>(),
+                         winrt::put_abi(args));
+    if (!args) {
+        return original();
+    }
+
+    int positionPressed = 0;
+    int positionHovered = 0;
+
+    EnumChildElements(
+        taskItemThumbnailListRepeater,
+        [&args, &positionPressed, &positionHovered](FrameworkElement child) {
+            auto className = winrt::get_class_name(child);
+            if (className != L"Taskbar.TaskItemThumbnailView") {
+                Wh_Log(L"Unexpected element of class %s", className.c_str());
+                return true;
+            }
+
+            auto grid =
+                FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid");
+            if (!grid) {
+                Wh_Log(L"Element has no grid child");
+                return true;
+            }
+
+            if (positionPressed == 0) {
+                VisualState currentState = nullptr;
+
+                for (const auto& v :
+                     VisualStateManager::GetVisualStateGroups(grid)) {
+                    if (v.Name() == L"CommonStates") {
+                        currentState = v.CurrentState();
+                        break;
+                    }
+                }
+
+                if (currentState) {
+                    auto currentStateName = currentState.Name();
+                    if (currentStateName == L"Pressed" ||
+                        currentStateName == L"RequestingAttentionPressed") {
+                        positionPressed =
+                            Automation::AutomationProperties::GetPositionInSet(
+                                child);
+                    }
+                }
+            }
+
+            if (positionHovered == 0 && IsPointerInsideElement(child, args)) {
+                positionHovered =
+                    Automation::AutomationProperties::GetPositionInSet(child);
+            }
+
+            return positionPressed != 0 && positionHovered != 0;
+        });
+
+    if (positionPressed != 0 && positionHovered != 0 &&
+        positionPressed != positionHovered) {
+        g_reorderingXamlThumbnails = true;
+        MoveItemsFromXAMLThumbnail(positionPressed - 1, positionHovered - 1);
+    }
+
+    return original();
 }
 
-using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
-                                           LPCWSTR lpClassName,
-                                           LPCWSTR lpWindowName,
-                                           DWORD dwStyle,
-                                           int X,
-                                           int Y,
-                                           int nWidth,
-                                           int nHeight,
-                                           HWND hWndParent,
-                                           HMENU hMenu,
-                                           HINSTANCE hInstance,
-                                           LPVOID lpParam,
-                                           DWORD dwBand);
-CreateWindowInBand_t CreateWindowInBand_Original;
-HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
-                                    LPCWSTR lpClassName,
-                                    LPCWSTR lpWindowName,
-                                    DWORD dwStyle,
-                                    int X,
-                                    int Y,
-                                    int nWidth,
-                                    int nHeight,
-                                    HWND hWndParent,
-                                    HMENU hMenu,
-                                    HINSTANCE hInstance,
-                                    LPVOID lpParam,
-                                    DWORD dwBand) {
-    HWND hWnd = CreateWindowInBand_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (!hWnd)
-        return hWnd;
+using TaskItemThumbnailList_OnPointerReleased_t = int(WINAPI*)(void* pThis,
+                                                               void* pArgs);
+TaskItemThumbnailList_OnPointerReleased_t
+    TaskItemThumbnailList_OnPointerReleased_Original;
+int WINAPI TaskItemThumbnailList_OnPointerReleased_Hook(void* pThis,
+                                                        void* pArgs) {
+    Wh_Log(L">");
 
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    int ret = TaskItemThumbnailList_OnPointerReleased_Original(pThis, pArgs);
 
-    if (bTextualClassName &&
-        _wcsicmp(lpClassName, L"TaskListThumbnailWnd") == 0) {
-        Wh_Log(L"Thumbnail window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        HandleIdentifiedThumbnailWindow(hWnd);
+    FrameworkElement element = nullptr;
+    ((IUnknown*)pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(element));
+
+    if (!element) {
+        return ret;
     }
 
-    return hWnd;
+    auto className = winrt::get_class_name(element);
+    Wh_Log(L"%s", className.c_str());
+
+    if (className == L"Taskbar.TaskItemThumbnailList" ||
+        className == L"Taskbar.TaskItemThumbnailScrollableList") {
+        g_reorderingXamlThumbnails = false;
+    }
+
+    return ret;
 }
 
-bool InitOffsets() {
-    // Expected implementation:
-    // 48:895C24 10              | mov qword ptr ss:[rsp+10],rbx
-    // 48:896C24 18              | mov qword ptr ss:[rsp+18],rbp
-    // 48:897424 20              | mov qword ptr ss:[rsp+20],rsi
-    // 57                        | push rdi
-    // 41:56                     | push r14
-    // 41:57                     | push r15
-    // 48:83EC 60                | sub rsp,60
-    // 4C:8D71 48                | lea r14,qword ptr ds:[rcx+48]
-    void* p = SkipFirstBranch(CTaskListThumbnailWnd_Dismiss, "jnz", "jz");
-    if (p) {
-        g_thumbnailOffsets.taskListPtr = OffsetFromAssembly(p);
+using DPA_GetPtr_t = decltype(&DPA_GetPtr);
+DPA_GetPtr_t DPA_GetPtr_Original;
+PVOID WINAPI DPA_GetPtr_Hook(HDPA hdpa, INT_PTR i) {
+    if (g_getPtr_captureForThreadId == GetCurrentThreadId()) {
+        g_getPtr_lastHdpa = hdpa;
     }
 
-    if (!g_thumbnailOffsets.taskListPtr) {
-        Wh_Log(L"Unexpected implementation");
-        return false;
+    return DPA_GetPtr_Original(hdpa, i);
+}
+
+bool HookTaskbarSymbols() {
+    HMODULE module;
+    if (g_winVersion <= WinVersion::Win10) {
+        module = GetModuleHandle(nullptr);
+    } else {
+        module = LoadLibrary(L"taskbar.dll");
+        if (!module) {
+            Wh_Log(L"Couldn't load taskbar.dll");
+            return false;
+        }
     }
 
-    // Expected implementation:
-    // 180044250 48 8b 81        MOV        RAX,qword ptr [this + 0x148]
-    //           48 01 00 00
-    // 180044257 c3              RET
-    g_thumbnailOffsets.taskGroup =
-        OffsetFromAssembly(CTaskListThumbnailWnd_GetTaskGroup);
-    if (!g_thumbnailOffsets.taskGroup) {
-        Wh_Log(L"Unexpected implementation");
-        return false;
-    }
+    // Taskbar.dll, explorer.exe
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
+        {
+            {
+                {LR"(const CTaskListWnd::`vftable'{for `ITaskListUI'})"},
+                &CTaskListWnd_vftable_ITaskListUI,
+            },
+            {
+                {LR"(public: virtual int __cdecl CTaskListThumbnailWnd::GetHoverIndex(void)const )"},
+                &CTaskListThumbnailWnd_GetHoverIndex,
+            },
+            {
+                {
+                    // Windows 11.
+                    LR"(private: struct ITaskItem * __cdecl CTaskListThumbnailWnd::_GetTaskItem(int)const )",
 
-    g_thumbnailOffsets.thumbnailArray =
-        OffsetFromAssembly(CTaskListThumbnailWnd__RegisterThumbBars);
-    if (!g_thumbnailOffsets.taskGroup) {
-        Wh_Log(L"Unexpected implementation");
-        return false;
-    }
+                    // Windows 10.
+                    LR"(private: struct ITaskItem * __cdecl CTaskListThumbnailWnd::_GetTaskItem(int))",
+                },
+                &CTaskListThumbnailWnd__GetTaskItem,
+            },
+            {
+                {LR"(public: virtual struct ITaskGroup * __cdecl CTaskListThumbnailWnd::GetTaskGroup(void)const )"},
+                &CTaskListThumbnailWnd_GetTaskGroup,
+            },
+            {
+                {LR"(public: virtual void __cdecl CTaskListThumbnailWnd::TaskReordered(struct ITaskItem *))"},
+                &CTaskListThumbnailWnd_TaskReordered,
+            },
+            {
+                {LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void))"},
+                &CTaskGroup_GetNumItems,
+            },
+            {
+                {LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))"},
+                &CTaskListWnd__GetTBGroupFromGroup,
+            },
+            {
+                {LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))"},
+                &CTaskBtnGroup_GetGroupType,
+            },
+            {
+                {LR"(public: virtual int __cdecl CTaskBtnGroup::IndexOfTaskItem(struct ITaskItem *))"},
+                &CTaskBtnGroup_IndexOfTaskItem,
+            },
+            {
+                {LR"(public: virtual long __cdecl CTaskListWnd::TaskInclusionChanged(struct ITaskGroup *,struct ITaskItem *))"},
+                &CTaskListWnd_TaskInclusionChanged,
+            },
+            {
+                {LR"(public: virtual bool __cdecl TaskItemFilter::IsTaskAllowed(struct ITaskItem *))"},
+                &TaskItemFilter_IsTaskAllowed_Original,
+                TaskItemFilter_IsTaskAllowed_Hook,
+            },
+            {
+                {LR"(private: virtual __int64 __cdecl CTaskListThumbnailWnd::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+                &CTaskListThumbnailWnd_v_WndProc_Original,
+                CTaskListThumbnailWnd_v_WndProc_Hook,
+            },
+            {
+                {LR"(public: __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskItemThumbnail::TaskItemThumbnail(struct winrt::WindowsUdk::UI::Shell::TaskItem const &,struct ITaskGroup *,struct ITaskItem *,struct ITaskListUI *,struct IWICImagingFactory *,struct ITaskListAcc *,bool))"},
+                &TaskItemThumbnail_TaskItemThumbnail_Original,
+                TaskItemThumbnail_TaskItemThumbnail_Hook,
+                true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+            },
+            {
+                {LR"(public: struct winrt::Windows::Foundation::Collections::IObservableVector<struct winrt::WindowsUdk::UI::Shell::TaskItemThumbnail> __cdecl winrt::WindowsUdk::UI::Shell::implementation::TaskGroup::Thumbnails(void))"},
+                &TaskGroup_Thumbnails_Original,
+                TaskGroup_Thumbnails_Hook,
+                true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+            },
+            {
+                {LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IObservableVector<struct winrt::WindowsUdk::UI::Shell::TaskItemThumbnail>,struct winrt::WindowsUdk::UI::Shell::TaskItemThumbnail>::Size(void)const )"},
+                &TaskItemThumbnail_Size_Original,
+                nullptr,
+                true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+            },
+            {
+                {LR"(public: __cdecl winrt::impl::consume_Windows_Foundation_Collections_IVector<struct winrt::Windows::Foundation::Collections::IObservableVector<struct winrt::WindowsUdk::UI::Shell::TaskItemThumbnail>,struct winrt::WindowsUdk::UI::Shell::TaskItemThumbnail>::GetAt(unsigned int)const )"},
+                &TaskItemThumbnail_GetAt_Original,
+                nullptr,
+                true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+            },
+            {
+                {LR"(public: virtual long __cdecl CTaskListWnd::HandleExtendedUIClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))"},
+                &CTaskListWnd_HandleExtendedUIClick_Original,
+                CTaskListWnd_HandleExtendedUIClick_Hook,
+                true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+            },
+        };
 
-    // Expected implementation:
-    // 180046e40 8b 81 78        MOV        EAX,dword ptr [this + 0x278]
-    //           02 00 00
-    // 180046e46 c3              RET
-    g_thumbnailOffsets.indexValues =
-        OffsetFromAssembly32(CTaskListThumbnailWnd_GetHoverIndex);
-    if (!g_thumbnailOffsets.indexValues) {
-        Wh_Log(L"Unexpected implementation");
-        return false;
-    }
-
-    // Adjust vtables.
-    g_thumbnailOffsets.indexValues += 0x10;
-    g_thumbnailOffsets.indexValues -= 0x08;
-
-    g_taskBrnGroupOffsets.buttonArray =
-        OffsetFromAssembly((void*)CTaskBtnGroup_GetNumItems);
-    if (!g_taskBrnGroupOffsets.buttonArray) {
-        Wh_Log(L"Unexpected implementation");
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
         return false;
     }
 
     return true;
+}
+
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutModel::TargetItemKey(struct winrt::hstring const &))"},
+            &HoverFlyoutModel_TargetItemKey_Original,
+            HoverFlyoutModel_TargetItemKey_Hook,
+            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskItemThumbnailList,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
+            &TaskItemThumbnailList_OnPointerMoved_Original,
+            TaskItemThumbnailList_OnPointerMoved_Hook,
+            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskItemThumbnailList,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerReleased(void *))"},
+            &TaskItemThumbnailList_OnPointerReleased_Original,
+            TaskItemThumbnailList_OnPointerReleased_Hook,
+            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -823,395 +1108,185 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
         }
     }
 
-    if (puPtrLen)
+    if (puPtrLen) {
         *puPtrLen = uPtrLen;
+    }
 
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
 WinVersion GetExplorerVersion() {
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
-    if (!fixedFileInfo)
+    if (!fixedFileInfo) {
         return WinVersion::Unsupported;
+    }
 
     WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
     WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
     WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
     WORD qfe = LOWORD(fixedFileInfo->dwFileVersionLS);
 
-    Wh_Log(L"Explorer version: %u.%u.%u.%u", major, minor, build, qfe);
+    Wh_Log(L"Version: %u.%u.%u.%u", major, minor, build, qfe);
 
     switch (major) {
         case 10:
-            if (build < 22000)
+            if (build < 22000) {
                 return WinVersion::Win10;
-            else
+            } else if (build < 26100) {
                 return WinVersion::Win11;
+            } else {
+                return WinVersion::Win11_24H2;
+            }
             break;
     }
 
     return WinVersion::Unsupported;
 }
 
-struct SYMBOL_HOOK {
-    std::vector<std::wstring_view> symbols;
+struct EXPLORER_PATCHER_HOOK {
+    PCSTR symbol;
     void** pOriginalFunction;
     void* hookFunction = nullptr;
     bool optional = false;
+
+    template <typename Prototype>
+    EXPLORER_PATCHER_HOOK(
+        PCSTR symbol,
+        Prototype** originalFunction,
+        std::type_identity_t<Prototype*> hookFunction = nullptr,
+        bool optional = false)
+        : symbol(symbol),
+          pOriginalFunction(reinterpret_cast<void**>(originalFunction)),
+          hookFunction(reinterpret_cast<void*>(hookFunction)),
+          optional(optional) {}
 };
 
-bool HookSymbols(HMODULE module,
-                 const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount,
-                 bool cacheOnly = false) {
-    const WCHAR cacheVer = L'1';
-    const WCHAR cacheSep = L'@';
-    constexpr size_t cacheMaxSize = 10240;
+bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
+    if (g_explorerPatcherInitialized.exchange(true)) {
+        return true;
+    }
 
+    if (g_winVersion >= WinVersion::Win11) {
+        g_winVersion = WinVersion::Win10;
+    }
+
+    EXPLORER_PATCHER_HOOK hooks[] = {
+        {R"(??_7CTaskListWnd@@6BITaskListUI@@@)",
+         &CTaskListWnd_vftable_ITaskListUI},
+        {R"(?GetHoverIndex@CTaskListThumbnailWnd@@UEBAHXZ)",
+         &CTaskListThumbnailWnd_GetHoverIndex},
+        {R"(?_GetTaskItem@CTaskListThumbnailWnd@@AEAAPEAUITaskItem@@H@Z)",
+         &CTaskListThumbnailWnd__GetTaskItem},
+        {R"(?GetTaskGroup@CTaskListThumbnailWnd@@UEBAPEAUITaskGroup@@XZ)",
+         &CTaskListThumbnailWnd_GetTaskGroup},
+        {R"(?TaskReordered@CTaskListThumbnailWnd@@UEAAXPEAUITaskItem@@@Z)",
+         &CTaskListThumbnailWnd_TaskReordered},
+        {R"(?GetNumItems@CTaskGroup@@UEAAHXZ)", &CTaskGroup_GetNumItems},
+        {R"(?_GetTBGroupFromGroup@CTaskListWnd@@IEAAPEAUITaskBtnGroup@@PEAUITaskGroup@@PEAH@Z)",
+         &CTaskListWnd__GetTBGroupFromGroup},
+        {R"(?GetGroupType@CTaskBtnGroup@@UEAA?AW4eTBGROUPTYPE@@XZ)",
+         &CTaskBtnGroup_GetGroupType},
+        {R"(?IndexOfTaskItem@CTaskBtnGroup@@UEAAHPEAUITaskItem@@@Z)",
+         &CTaskBtnGroup_IndexOfTaskItem},
+        {R"(?TaskInclusionChanged@CTaskListWnd@@UEAAJPEAUITaskGroup@@PEAUITaskItem@@@Z)",
+         &CTaskListWnd_TaskInclusionChanged},
+        {R"(?IsTaskAllowed@TaskItemFilter@@UEAA_NPEAUITaskItem@@@Z)",
+         &TaskItemFilter_IsTaskAllowed_Original,
+         TaskItemFilter_IsTaskAllowed_Hook},
+        {R"(?v_WndProc@CTaskListThumbnailWnd@@EEAA_JPEAUHWND__@@I_K_J@Z)",
+         &CTaskListThumbnailWnd_v_WndProc_Original,
+         CTaskListThumbnailWnd_v_WndProc_Hook},
+    };
+
+    bool succeeded = true;
+
+    for (const auto& hook : hooks) {
+        void* ptr = (void*)GetProcAddress(explorerPatcherModule, hook.symbol);
+        if (!ptr) {
+            Wh_Log(L"ExplorerPatcher symbol%s doesn't exist: %S",
+                   hook.optional ? L" (optional)" : L"", hook.symbol);
+            if (!hook.optional) {
+                succeeded = false;
+            }
+            continue;
+        }
+
+        if (hook.hookFunction) {
+            Wh_SetFunctionHook(ptr, hook.hookFunction, hook.pOriginalFunction);
+        } else {
+            *hook.pOriginalFunction = ptr;
+        }
+    }
+
+    if (!succeeded) {
+        Wh_Log(L"HookExplorerPatcherSymbols failed");
+    } else if (g_initialized) {
+        Wh_ApplyHookOperations();
+    }
+
+    return succeeded;
+}
+
+bool IsExplorerPatcherModule(HMODULE module) {
     WCHAR moduleFilePath[MAX_PATH];
-    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
+    switch (
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            return false;
     }
 
     PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
     if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
         return false;
     }
 
     moduleFileName++;
 
-    WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
-    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
-
-    std::wstring_view cacheBufferView(cacheBuffer);
-
-    // https://stackoverflow.com/a/46931770
-    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
-        size_t pos_start = 0, pos_end;
-        std::wstring_view token;
-        std::vector<std::wstring_view> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) !=
-               std::wstring_view::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + 1;
-            res.push_back(token);
-        }
-
-        res.push_back(s.substr(pos_start));
-        return res;
-    };
-
-    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
-
-    std::vector<bool> symbolResolved(symbolHooksCount, false);
-    std::wstring newSystemCacheStr;
-
-    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
-                             &newSystemCacheStr,
-                             module](std::wstring_view symbol, void* address) {
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i]) {
-                continue;
-            }
-
-            bool match = false;
-            for (auto hookSymbol : symbolHooks[i].symbols) {
-                if (hookSymbol == symbol) {
-                    match = true;
-                    break;
-                }
-            }
-
-            if (!match) {
-                continue;
-            }
-
-            if (symbolHooks[i].hookFunction) {
-                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
-                                   symbolHooks[i].pOriginalFunction);
-                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            } else {
-                *symbolHooks[i].pOriginalFunction = address;
-                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            }
-
-            symbolResolved[i] = true;
-
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += symbol;
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr +=
-                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
-
-            break;
-        }
-    };
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    newSystemCacheStr += cacheVer;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += timeStamp;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += imageSize;
-
-    if (cacheParts.size() >= 3 &&
-        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
-        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
-        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
-            auto symbol = cacheParts[i];
-            auto address = cacheParts[i + 1];
-            if (address.length() == 0) {
-                continue;
-            }
-
-            void* addressPtr =
-                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
-                        (ULONG_PTR)module);
-
-            onSymbolResolved(symbol, addressPtr);
-        }
-
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i] || !symbolHooks[i].optional) {
-                continue;
-            }
-
-            size_t noAddressMatchCount = 0;
-            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
-                auto symbol = cacheParts[j];
-                auto address = cacheParts[j + 1];
-                if (address.length() != 0) {
-                    continue;
-                }
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    if (hookSymbol == symbol) {
-                        noAddressMatchCount++;
-                        break;
-                    }
-                }
-            }
-
-            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
-                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
-
-                symbolResolved[i] = true;
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    newSystemCacheStr += cacheSep;
-                    newSystemCacheStr += hookSymbol;
-                    newSystemCacheStr += cacheSep;
-                }
-            }
-        }
-
-        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
-                        [](bool b) { return b; })) {
-            return true;
-        }
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) ==
+        0) {
+        Wh_Log(L"ExplorerPatcher taskbar module: %s", moduleFileName);
+        return true;
     }
 
-    Wh_Log(L"Couldn't resolve all symbols from cache");
+    return false;
+}
 
-    if (cacheOnly) {
-        return false;
-    }
-
-    WH_FIND_SYMBOL findSymbol;
-    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
-    if (!findSymbolHandle) {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
-        return false;
-    }
-
-    do {
-        onSymbolResolved(findSymbol.symbol, findSymbol.address);
-    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
-
-    Wh_FindCloseSymbol(findSymbolHandle);
-
-    for (size_t i = 0; i < symbolHooksCount; i++) {
-        if (symbolResolved[i]) {
-            continue;
+bool HandleLoadedExplorerPatcher() {
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
+                           &cbNeeded)) {
+        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
+            if (IsExplorerPatcherModule(hMods[i])) {
+                return HookExplorerPatcherSymbols(hMods[i]);
+            }
         }
-
-        if (!symbolHooks[i].optional) {
-            Wh_Log(L"Unresolved symbol: %d", i);
-            return false;
-        }
-
-        Wh_Log(L"Optional symbol %d doesn't exist", i);
-
-        for (auto hookSymbol : symbolHooks[i].symbols) {
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += hookSymbol;
-            newSystemCacheStr += cacheSep;
-        }
-    }
-
-    if (newSystemCacheStr.length() <= cacheMaxSize) {
-        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
-    } else {
-        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
     }
 
     return true;
 }
 
-std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl) {
-    HINTERNET hOpenHandle = InternetOpen(
-        L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hOpenHandle) {
-        return std::nullopt;
-    }
-
-    HINTERNET hUrlHandle =
-        InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
-                        INTERNET_FLAG_NO_AUTH | INTERNET_FLAG_NO_CACHE_WRITE |
-                            INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
-                            INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
-                        0);
-    if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwStatusCode = 0;
-    DWORD dwStatusCodeSize = sizeof(dwStatusCode);
-    if (!HttpQueryInfo(hUrlHandle,
-                       HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
-                       &dwStatusCode, &dwStatusCodeSize, nullptr) ||
-        dwStatusCode != 200) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
-    if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
-        return std::nullopt;
-    }
-
-    DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
-    DWORD dwLength = dwNumberOfBytesRead;
-
-    while (dwNumberOfBytesRead) {
-        LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
-            GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
-        if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
-            HeapFree(GetProcessHeap(), 0, pUrlContent);
-            return std::nullopt;
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module) {
+    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
+        if (IsExplorerPatcherModule(module)) {
+            HookExplorerPatcherSymbols(module);
         }
-
-        pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
-        dwLength += dwNumberOfBytesRead;
     }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
-
-    // Assume UTF-8.
-    int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
-                                          dwLength, nullptr, 0);
-    std::wstring unicodeContent(charsNeeded, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent, dwLength,
-                        unicodeContent.data(), unicodeContent.size());
-
-    HeapFree(GetProcessHeap(), 0, pUrlContent);
-
-    return unicodeContent;
 }
 
-bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
-                                        const SYMBOL_HOOK* symbolHooks,
-                                        size_t symbolHooksCount) {
-    constexpr WCHAR kModIdForCache[] = L"taskbar-thumbnail-reorder";
-
-    if (HookSymbols(module, symbolHooks, symbolHooksCount,
-                    /*cacheOnly=*/true)) {
-        return true;
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfExplorerPatcher(module);
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
     }
 
-    Wh_Log(L"HookSymbols() from cache failed, trying to get an online cache");
-
-    WCHAR moduleFilePath[MAX_PATH];
-    DWORD moduleFilePathLen =
-        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
-    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
-    }
-
-    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
-        return false;
-    }
-
-    moduleFileName++;
-
-    DWORD moduleFileNameLen =
-        moduleFilePathLen - (moduleFileName - moduleFilePath);
-
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
-                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
-                  nullptr, 0);
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    std::wstring cacheStrKey =
-#if defined(_M_IX86)
-        L"symbol-x86-cache-";
-#elif defined(_M_X64)
-        L"symbol-cache-";
-#else
-#error "Unsupported architecture"
-#endif
-    cacheStrKey += moduleFileName;
-
-    std::wstring onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
-    onlineCacheUrl += kModIdForCache;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += cacheStrKey;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += timeStamp;
-    onlineCacheUrl += L'-';
-    onlineCacheUrl += imageSize;
-    onlineCacheUrl += L".txt";
-
-    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
-
-    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (onlineCache) {
-        Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
-    } else {
-        Wh_Log(L"Failed to get online cache");
-    }
-
-    return HookSymbols(module, symbolHooks, symbolHooksCount);
+    return module;
 }
 
 void LoadSettings() {
@@ -1223,170 +1298,85 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_explorerVersion = GetExplorerVersion();
-    if (g_explorerVersion == WinVersion::Unsupported) {
-        Wh_Log(L"Unsupported Explorer version");
+    g_winVersion = GetExplorerVersion();
+    if (g_winVersion == WinVersion::Unsupported) {
+        Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
-    if (g_explorerVersion >= WinVersion::Win11 &&
-        g_settings.oldTaskbarOnWin11) {
-        g_explorerVersion = WinVersion::Win10;
-    }
+    if (g_settings.oldTaskbarOnWin11) {
+        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
 
-    // Taskbar.dll, explorer.exe
-    SYMBOL_HOOK symbolHooks[] = {
-        {
-            {
-                LR"(private: void __cdecl CTaskListThumbnailWnd::_RefreshThumbnail(int) __ptr64)",
-                LR"(private: void __cdecl CTaskListThumbnailWnd::_RefreshThumbnail(int))",
-            },
-            (void**)&CTaskListThumbnailWnd__RefreshThumbnail,
-        },
-        {
-            {
-                LR"(protected: struct ITaskBtnGroup * __ptr64 __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup * __ptr64,int * __ptr64) __ptr64)",
-                LR"(protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *))",
-            },
-            (void**)&CTaskListWnd__GetTBGroupFromGroup,
-        },
-        {
-            {
-                LR"(public: virtual void __cdecl CTaskListThumbnailWnd::Dismiss(int,int) __ptr64)",
-                LR"(public: virtual void __cdecl CTaskListThumbnailWnd::Dismiss(int,int))",
-            },
-            (void**)&CTaskListThumbnailWnd_Dismiss,
-        },
-        {
-            {
-                LR"(public: virtual struct ITaskGroup * __ptr64 __cdecl CTaskListThumbnailWnd::GetTaskGroup(void)const __ptr64)",
-                LR"(public: virtual struct ITaskGroup * __cdecl CTaskListThumbnailWnd::GetTaskGroup(void)const )",
-            },
-            (void**)&CTaskListThumbnailWnd_GetTaskGroup,
-        },
-        {
-            {
-                LR"(private: void __cdecl CTaskListThumbnailWnd::_RegisterThumbBars(void) __ptr64)",
-                LR"(private: void __cdecl CTaskListThumbnailWnd::_RegisterThumbBars(void))",
-            },
-            (void**)&CTaskListThumbnailWnd__RegisterThumbBars,
-        },
-        {
-            {
-                LR"(public: virtual int __cdecl CTaskListThumbnailWnd::GetHoverIndex(void)const __ptr64)",
-                LR"(public: virtual int __cdecl CTaskListThumbnailWnd::GetHoverIndex(void)const )",
-            },
-            (void**)&CTaskListThumbnailWnd_GetHoverIndex,
-        },
-        {
-            {
-                LR"(public: virtual struct HWND__ * __ptr64 __cdecl CTaskListThumbnailWnd::GetHwnd(void) __ptr64)",
-                LR"(public: virtual struct HWND__ * __cdecl CTaskListThumbnailWnd::GetHwnd(void))",
-            },
-            (void**)&CTaskListThumbnailWnd_GetHwnd,
-        },
-        {
-            {
-                LR"(public: virtual long __cdecl CTaskListWnd::TaskInclusionChanged(struct ITaskGroup * __ptr64,struct ITaskItem * __ptr64) __ptr64)",
-                LR"(public: virtual long __cdecl CTaskListWnd::TaskInclusionChanged(struct ITaskGroup *,struct ITaskItem *))",
-            },
-            (void**)&CTaskListWnd_TaskInclusionChanged,
-        },
-        {
-            {
-                LR"(public: virtual struct ITaskItem * __ptr64 __cdecl CTaskThumbnail::GetTaskItem(void) __ptr64)",
-                LR"(public: virtual struct ITaskItem * __cdecl CTaskThumbnail::GetTaskItem(void))",
-            },
-            (void**)&CTaskThumbnail_GetTaskItem,
-        },
-        {
-            {
-                LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void) __ptr64)",
-                LR"(public: virtual enum eTBGROUPTYPE __cdecl CTaskBtnGroup::GetGroupType(void))",
-            },
-            (void**)&CTaskBtnGroup_GetGroupType,
-        },
-        {
-            {
-                LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void) __ptr64)",
-                LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void))",
-            },
-            (void**)&CTaskBtnGroup_GetNumItems,
-        },
-        {
-            {
-                LR"(public: virtual struct ITaskItem * __ptr64 __cdecl CTaskBtnGroup::GetTaskItem(int) __ptr64)",
-                LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))",
-            },
-            (void**)&CTaskBtnGroup_GetTaskItem,
-        },
-        {
-            {
-                LR"(public: virtual bool __cdecl TaskItemFilter::IsTaskAllowed(struct ITaskItem * __ptr64) __ptr64)",
-                LR"(public: virtual bool __cdecl TaskItemFilter::IsTaskAllowed(struct ITaskItem *))",
-            },
-            (void**)&TaskItemFilter_IsTaskAllowed_Original,
-            (void*)TaskItemFilter_IsTaskAllowed_Hook,
-        },
-    };
+        if (g_winVersion >= WinVersion::Win11) {
+            g_winVersion = WinVersion::Win10;
+        }
 
-    HMODULE module;
-
-    if (g_explorerVersion <= WinVersion::Win10) {
-        module = GetModuleHandle(nullptr);
-        if (!HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                                ARRAYSIZE(symbolHooks))) {
+        if (hasWin10Taskbar && !HookTaskbarSymbols()) {
             return FALSE;
+        }
+    } else if (g_winVersion >= WinVersion::Win11) {
+        if (!HookTaskbarSymbols()) {
+            return FALSE;
+        }
+
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            g_taskbarViewDllLoaded = true;
+            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                return FALSE;
+            }
+        } else {
+            Wh_Log(L"Taskbar view module not loaded yet");
         }
     } else {
-        module = LoadLibrary(L"taskbar.dll");
-        if (!module) {
-            Wh_Log(L"Couldn't load taskbar.dll");
-            return FALSE;
-        }
-
-        if (!HookSymbolsWithOnlineCacheFallback(module, symbolHooks,
-                                                ARRAYSIZE(symbolHooks))) {
+        if (!HookTaskbarSymbols()) {
             return FALSE;
         }
     }
 
-    if (!InitOffsets()) {
+    if (!HandleLoadedExplorerPatcher()) {
+        Wh_Log(L"HandleLoadedExplorerPatcher failed");
         return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
 
-    HMODULE user32Module = LoadLibrary(L"user32.dll");
-    if (user32Module) {
-        void* pCreateWindowInBand =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
-        if (pCreateWindowInBand) {
-            Wh_SetFunctionHook(pCreateWindowInBand,
-                               (void*)CreateWindowInBand_Hook,
-                               (void**)&CreateWindowInBand_Original);
-        }
-    }
+    WindhawkUtils::Wh_SetFunctionHookT(DPA_GetPtr, DPA_GetPtr_Hook,
+                                       &DPA_GetPtr_Original);
 
-    WNDCLASS wndclass;
-    if (GetClassInfo(module, L"TaskListThumbnailWnd", &wndclass)) {
-        FindCurrentProcessThumbnailWindows();
-        for (HWND hWnd : g_thumbnailWindows) {
-            Wh_Log(L"Thumbnail window found: %08X", (DWORD)(ULONG_PTR)hWnd);
-            SubclassThumbnailWindow(hWnd);
-        }
-    }
+    g_initialized = true;
 
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    for (HWND hWnd : g_thumbnailWindows) {
-        UnsubclassThumbnailWindow(hWnd);
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
     }
+
+    // Try again in case there's a race between the previous attempt and the
+    // LoadLibraryExW hook.
+    if (!g_explorerPatcherInitialized) {
+        HandleLoadedExplorerPatcher();
+    }
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -1399,12 +1389,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
 
     return TRUE;
-}
-
-// For pre-1.3 Windhawk compatibility.
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"> pre-1.3");
-
-    BOOL bReload = FALSE;
-    Wh_ModSettingsChanged(&bReload);
 }

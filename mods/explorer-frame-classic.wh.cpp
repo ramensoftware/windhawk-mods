@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.6
+// @version         1.0.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -463,9 +463,12 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
-    static VS_FIXEDFILEINFO* fixedFileInfo =
-        GetModuleVersionInfo(nullptr, nullptr);
+bool IsVersionAtLeast(HMODULE hModule,
+                      WORD major,
+                      WORD minor,
+                      WORD build,
+                      WORD qfe) {
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(hModule, nullptr);
     if (!fixedFileInfo) {
         return false;
     }
@@ -488,6 +491,22 @@ bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
     }
 
     return moduleQfe >= qfe;
+}
+
+bool IsExplorerVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+    return IsVersionAtLeast(nullptr, major, minor, build, qfe);
+}
+
+bool IsFileExplorerExtensionsVersionAtLeast(WORD major,
+                                            WORD minor,
+                                            WORD build,
+                                            WORD qfe) {
+    HMODULE hModule = GetModuleHandle(L"FileExplorerExtensions.dll");
+    if (!hModule) {
+        return false;
+    }
+
+    return IsVersionAtLeast(hModule, major, minor, build, qfe);
 }
 
 std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
@@ -627,7 +646,11 @@ HRESULT WINAPI Feature_NavigationBarControl_OnApplyTemplate_Hook(PVOID pThis) {
     Wh_Log(L">");
 
     if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
-        HandleNavigationBarControl(*(IUnknown**)((BYTE*)pThis + 0x08));
+        static size_t offset =
+            IsFileExplorerExtensionsVersionAtLeast(2125, 4200, 50, 0) ? 0x40
+                                                                      : 0x08;
+
+        HandleNavigationBarControl(*(IUnknown**)((BYTE*)pThis + offset));
     }
 
     return Feature_NavigationBarControl_OnApplyTemplate_Original(pThis);
@@ -648,7 +671,7 @@ int WINAPI CommandBarExtension_GetHeight_Hook(
 
     if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
         static const float newHeight =
-            IsVersionAtLeast(10, 0, 22621, 3958) ? 0 : 6;
+            IsExplorerVersionAtLeast(10, 0, 22621, 3958) ? 0 : 6;
         sizeOut->Height = newHeight;
     }
 
@@ -733,12 +756,12 @@ bool HookExplorerFrameSymbols() {
 }
 
 bool HookWindowsUIFileExplorerSymbols() {
-    if (IsVersionAtLeast(10, 0, 26100, 0)) {
-        if (!IsVersionAtLeast(10, 0, 26100, 1591)) {
+    if (IsExplorerVersionAtLeast(10, 0, 26100, 0)) {
+        if (!IsExplorerVersionAtLeast(10, 0, 26100, 1591)) {
             return true;
         }
-    } else if (IsVersionAtLeast(10, 0, 22621, 0)) {
-        if (!IsVersionAtLeast(10, 0, 22621, 4111)) {
+    } else if (IsExplorerVersionAtLeast(10, 0, 22621, 0)) {
+        if (!IsExplorerVersionAtLeast(10, 0, 22621, 4111)) {
             return true;
         }
     } else {

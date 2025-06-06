@@ -2,12 +2,12 @@
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.0.0
+// @version         1.1.0
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32
+// @compilerOptions -lole32 -loleaut32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,6 +18,8 @@ When you press the Alt+Tab combination, the window switcher will appear on the
 primary display, showing all open windows across all monitors. This mod
 customizes the behavior to display the switcher on the monitor where the cursor
 is currently located, showing only the windows present on that specific monitor.
+
+![Gif](https://i.imgur.com/Hpg8TKh.gif)
 */
 // ==/WindhawkModReadme==
 
@@ -25,13 +27,74 @@ is currently located, showing only the windows present on that specific monitor.
 
 #include <winrt/windows.foundation.collections.h>
 
+enum class WinVersion {
+    Unsupported,
+    Win10,
+    Win11,
+};
+
+WinVersion g_winVersion;
+
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
 std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
 ULONGLONG g_CreateInstance_TickCount;
 constexpr ULONGLONG kDeltaThreshold = 200;
 
-bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+WinVersion GetWindowsVersion() {
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return WinVersion::Unsupported;
+    }
+
+    WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD build = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD qfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    Wh_Log(L"Version: %u.%u.%u.%u", major, minor, build, qfe);
+
+    switch (major) {
+        case 10:
+            if (build < 22000) {
+                return WinVersion::Win10;
+            } else {
+                return WinVersion::Win11;
+            }
+            break;
+    }
+
+    return WinVersion::Unsupported;
+}
+
+bool HandleAltTabWindow(RECT* rect) {
     POINT pt;
     if (!GetCursorPos(&pt)) {
         return false;
@@ -45,11 +108,7 @@ bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
         return false;
     }
 
-    rect->Height = monInfo.rcWork.bottom - monInfo.rcWork.top;
-    rect->Width = monInfo.rcWork.right - monInfo.rcWork.left;
-    rect->X = monInfo.rcWork.left;
-    rect->Y = monInfo.rcWork.top;
-
+    *rect = monInfo.rcWork;
     return true;
 }
 
@@ -147,13 +206,29 @@ using XamlAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
                                                    int param2,
                                                    void* param3);
 XamlAltTabViewHost_Show_t XamlAltTabViewHost_Show_Original;
-HRESULT XamlAltTabViewHost_Show_Hook(void* pThis,
-                                     void* param1,
-                                     int param2,
-                                     void* param3) {
+HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis,
+                                            void* param1,
+                                            int param2,
+                                            void* param3) {
     g_threadIdForAltTabShowWindow = GetCurrentThreadId();
     HRESULT ret =
         XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
+    g_threadIdForAltTabShowWindow = 0;
+    return ret;
+}
+
+using CAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
+                                                void* param1,
+                                                int param2,
+                                                void* param3);
+CAltTabViewHost_Show_t CAltTabViewHost_Show_Original;
+HRESULT WINAPI CAltTabViewHost_Show_Hook(void* pThis,
+                                         void* param1,
+                                         int param2,
+                                         void* param3) {
+    Wh_Log(L">");
+    g_threadIdForAltTabShowWindow = GetCurrentThreadId();
+    HRESULT ret = CAltTabViewHost_Show_Original(pThis, param1, param2, param3);
     g_threadIdForAltTabShowWindow = 0;
     return ret;
 }
@@ -162,7 +237,7 @@ using ITaskGroupWindowInformation_Position_t =
     HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect* rect);
 ITaskGroupWindowInformation_Position_t
     ITaskGroupWindowInformation_Position_Original;
-HRESULT ITaskGroupWindowInformation_Position_Hook(
+HRESULT WINAPI ITaskGroupWindowInformation_Position_Hook(
     void* pThis,
     winrt::Windows::Foundation::Rect* rect) {
     if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
@@ -170,13 +245,44 @@ HRESULT ITaskGroupWindowInformation_Position_Hook(
     }
     g_threadIdForAltTabShowWindow = 0;
 
-    winrt::Windows::Foundation::Rect newRect;
-    if (!HandleAltTabWindow(&newRect)) {
+    RECT newRectNative;
+    if (!HandleAltTabWindow(&newRectNative)) {
         return ITaskGroupWindowInformation_Position_Original(pThis, rect);
     }
 
+    winrt::Windows::Foundation::Rect newRect{
+        static_cast<float>(newRectNative.left),
+        static_cast<float>(newRectNative.top),
+        static_cast<float>(newRectNative.right - newRectNative.left),
+        static_cast<float>(newRectNative.bottom - newRectNative.top),
+    };
+
     HRESULT ret =
         ITaskGroupWindowInformation_Position_Original(pThis, &newRect);
+
+    return ret;
+}
+
+using CMultitaskingViewFrame_CreateFrame_t = HRESULT(WINAPI*)(void* pThis,
+                                                              RECT* rect,
+                                                              void* param2);
+CMultitaskingViewFrame_CreateFrame_t
+    CMultitaskingViewFrame_CreateFrame_Original;
+HRESULT WINAPI CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
+                                                       RECT* rect,
+                                                       void* param2) {
+    if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
+        return CMultitaskingViewFrame_CreateFrame_Original(pThis, rect, param2);
+    }
+    g_threadIdForAltTabShowWindow = 0;
+
+    RECT newRect;
+    if (!HandleAltTabWindow(&newRect)) {
+        return CMultitaskingViewFrame_CreateFrame_Original(pThis, rect, param2);
+    }
+
+    HRESULT ret =
+        CMultitaskingViewFrame_CreateFrame_Original(pThis, &newRect, param2);
 
     return ret;
 }
@@ -186,10 +292,10 @@ using XamlAltTabViewHost_CreateInstance_t = HRESULT(WINAPI*)(void* pThis,
                                                              void* param2,
                                                              void* param3);
 XamlAltTabViewHost_CreateInstance_t XamlAltTabViewHost_CreateInstance_Original;
-HRESULT XamlAltTabViewHost_CreateInstance_Hook(void* pThis,
-                                               void* param1,
-                                               void* param2,
-                                               void* param3) {
+HRESULT WINAPI XamlAltTabViewHost_CreateInstance_Hook(void* pThis,
+                                                      void* param1,
+                                                      void* param2,
+                                                      void* param3) {
     g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
     g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
     g_CreateInstance_TickCount = GetTickCount64();
@@ -199,48 +305,79 @@ HRESULT XamlAltTabViewHost_CreateInstance_Hook(void* pThis,
     return ret;
 }
 
+using CAltTabViewHost_CreateInstance_t = HRESULT(WINAPI*)(void* pThis,
+                                                          void* param1,
+                                                          void* param2,
+                                                          void* param3,
+                                                          void* param4,
+                                                          void* param5,
+                                                          void* param6,
+                                                          void* param7,
+                                                          void* param8,
+                                                          void* param9,
+                                                          void* param10,
+                                                          void* param11);
+CAltTabViewHost_CreateInstance_t CAltTabViewHost_CreateInstance_Original;
+HRESULT WINAPI CAltTabViewHost_CreateInstance_Hook(void* pThis,
+                                                   void* param1,
+                                                   void* param2,
+                                                   void* param3,
+                                                   void* param4,
+                                                   void* param5,
+                                                   void* param6,
+                                                   void* param7,
+                                                   void* param8,
+                                                   void* param9,
+                                                   void* param10,
+                                                   void* param11) {
+    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_CreateInstance_TickCount = GetTickCount64();
+    HRESULT ret = CAltTabViewHost_CreateInstance_Original(
+        pThis, param1, param2, param3, param4, param5, param6, param7, param8,
+        param9, param10, param11);
+    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
+    return ret;
+}
+
+using CAltTabViewHost_CreateInstance_Win11_t = HRESULT(WINAPI*)(void* pThis,
+                                                                void* param1,
+                                                                void* param2,
+                                                                void* param3,
+                                                                void* param4,
+                                                                void* param5,
+                                                                void* param6,
+                                                                void* param7,
+                                                                void* param8,
+                                                                void* param9,
+                                                                void* param10);
+CAltTabViewHost_CreateInstance_Win11_t
+    CAltTabViewHost_CreateInstance_Win11_Original;
+HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
+                                                         void* param1,
+                                                         void* param2,
+                                                         void* param3,
+                                                         void* param4,
+                                                         void* param5,
+                                                         void* param6,
+                                                         void* param7,
+                                                         void* param8,
+                                                         void* param9,
+                                                         void* param10) {
+    g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_lastThreadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
+    g_CreateInstance_TickCount = GetTickCount64();
+    HRESULT ret = CAltTabViewHost_CreateInstance_Win11_Original(
+        pThis, param1, param2, param3, param4, param5, param6, param7, param8,
+        param9, param10);
+    g_threadIdForXamlAltTabViewHost_CreateInstance = 0;
+    return ret;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
-        {
-            {LR"(public: virtual long __cdecl CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *))"},
-            &CVirtualDesktop_IsViewVisible_Original,
-            CVirtualDesktop_IsViewVisible_Hook,
-        },
-        {
-            {LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"},
-            &CWin32ApplicationView_vtable,
-        },
-        {
-            {LR"(private: virtual long __cdecl CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
-            &CWin32ApplicationView_v_GetNativeWindow,
-        },
-        {
-            {LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"},
-            &CWinRTApplicationView_vtable,
-        },
-        {
-            {LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
-            &CWinRTApplicationView_v_GetNativeWindow,
-        },
-        {
-            {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-            &XamlAltTabViewHost_Show_Original,
-            XamlAltTabViewHost_Show_Hook,
-        },
-        {
-            {LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const )"},
-            &ITaskGroupWindowInformation_Position_Original,
-            ITaskGroupWindowInformation_Position_Hook,
-        },
-        {
-            {LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"},
-            &XamlAltTabViewHost_CreateInstance_Original,
-            XamlAltTabViewHost_CreateInstance_Hook,
-        },
-    };
+    g_winVersion = GetWindowsVersion();
 
     HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
     if (!twinuiPcshellModule) {
@@ -248,8 +385,120 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
-                     ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+    if (g_winVersion == WinVersion::Win11) {
+        // twinui.pcshell.dll
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+            {
+                {LR"(public: virtual long __cdecl CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *))"},
+                &CVirtualDesktop_IsViewVisible_Original,
+                CVirtualDesktop_IsViewVisible_Hook,
+            },
+            {
+                {LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"},
+                &CWin32ApplicationView_vtable,
+            },
+            {
+                {LR"(private: virtual long __cdecl CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
+                &CWin32ApplicationView_v_GetNativeWindow,
+            },
+            {
+                {LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"},
+                &CWinRTApplicationView_vtable,
+            },
+            {
+                {LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
+                &CWinRTApplicationView_v_GetNativeWindow,
+            },
+            {
+                {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &XamlAltTabViewHost_Show_Original,
+                XamlAltTabViewHost_Show_Hook,
+            },
+            {
+                {LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const )"},
+                &ITaskGroupWindowInformation_Position_Original,
+                ITaskGroupWindowInformation_Position_Hook,
+            },
+            {
+                {LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"},
+                &XamlAltTabViewHost_CreateInstance_Original,
+                XamlAltTabViewHost_CreateInstance_Hook,
+            },
+            // For the old Win10 (non-XAML) Alt+Tab (can be enabled with
+            // ExplorerPatcher):
+            {
+                {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &CAltTabViewHost_Show_Original,
+                CAltTabViewHost_Show_Hook,
+                true,
+            },
+            {
+                {LR"(public: virtual long __cdecl CMultitaskingViewFrame::CreateFrame(struct Geometry::CRect const &,enum MultitaskingViewZOrder))"},
+                &CMultitaskingViewFrame_CreateFrame_Original,
+                CMultitaskingViewFrame_CreateFrame_Hook,
+                true,
+            },
+            {
+                {LR"(long __cdecl CAltTabViewHost_CreateInstance(struct IMultitaskingData *,struct IMultitaskingViewManagerInternal *,struct IApplicationViewSwitcher *,struct IImmersiveAppCrusher *,struct IMultitaskingViewVisibilityServiceInternal *,struct IMultitaskingViewGestureState *,struct IApplicationViewCollection *,struct ITouchGestureSettings *,struct _GUID const &,void * *))"},
+                &CAltTabViewHost_CreateInstance_Win11_Original,
+                CAltTabViewHost_CreateInstance_Win11_Hook,
+                true,
+            },
+        };
+
+        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
+                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+            Wh_Log(L"HookSymbols failed");
+            return FALSE;
+        }
+    } else if (g_winVersion == WinVersion::Win10) {
+        // twinui.pcshell.dll
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellSymbolHooks[] = {
+            {
+                {LR"(public: virtual long __cdecl CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *))"},
+                &CVirtualDesktop_IsViewVisible_Original,
+                CVirtualDesktop_IsViewVisible_Hook,
+            },
+            {
+                {LR"(const CWin32ApplicationView::`vftable'{for `IApplicationView'})"},
+                &CWin32ApplicationView_vtable,
+            },
+            {
+                {LR"(private: virtual long __cdecl CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
+                &CWin32ApplicationView_v_GetNativeWindow,
+            },
+            {
+                {LR"(const CWinRTApplicationView::`vftable'{for `IApplicationView'})"},
+                &CWinRTApplicationView_vtable,
+            },
+            {
+                {LR"(private: virtual long __cdecl CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *))"},
+                &CWinRTApplicationView_v_GetNativeWindow,
+            },
+            {
+                {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                &CAltTabViewHost_Show_Original,
+                CAltTabViewHost_Show_Hook,
+            },
+            {
+                {LR"(public: virtual long __cdecl CMultitaskingViewFrame::CreateFrame(struct Geometry::CRect const &,enum MultitaskingViewZOrder))"},
+                &CMultitaskingViewFrame_CreateFrame_Original,
+                CMultitaskingViewFrame_CreateFrame_Hook,
+            },
+            {
+                {LR"(long __cdecl CAltTabViewHost_CreateInstance(struct IMultitaskingData *,struct IMultitaskingViewManagerInternal *,struct IApplicationViewSwitcher *,struct IImmersiveAppCrusher *,struct IMultitaskingViewVisibilityServiceInternal *,struct IMultitaskingViewGestureState *,struct IApplicationViewCollection *,struct Windows::Internal::ComposableShell::Tabs::ITabController *,struct ITabViewManager *,struct _GUID const &,void * *))"},
+                &CAltTabViewHost_CreateInstance_Original,
+                CAltTabViewHost_CreateInstance_Hook,
+            },
+        };
+
+        if (!HookSymbols(twinuiPcshellModule, twinuiPcshellSymbolHooks,
+                         ARRAYSIZE(twinuiPcshellSymbolHooks))) {
+            Wh_Log(L"HookSymbols failed");
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 

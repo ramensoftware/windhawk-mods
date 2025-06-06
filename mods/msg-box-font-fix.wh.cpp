@@ -2,7 +2,7 @@
 // @id              msg-box-font-fix
 // @name            Message Box Fix
 // @description     Fixes the MessageBox font size and optionally make them like Windows XP
-// @version         2.0.0
+// @version         2.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -28,32 +28,46 @@ This mod fixes both of those things.
 
 ![After](https://raw.githubusercontent.com/aubymori/images/main/message-box-font-fix-after.png)
 ![After (classic)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-classic.png)
+![After (Windows 95/NT 4.0)](https://raw.githubusercontent.com/aubymori/images/main/message-box-fix-after-nt4.png)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- background: false
-  $name: Classic style
-  $description: Make message boxes look like Windows XP and before
+- style: vista
+  $name: Message box style
+  $options:
+  - nt4: Windows 95/NT 4.0
+  - xp: Windows 98-XP
+  - vista: Windows Vista-10 1703
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
 HMODULE g_hUser32 = NULL;
-bool g_bClassic = false;
+enum MESSAGEBOXSTYLE
+{
+    MBS_NT4,
+    MBS_XP,
+    MBS_VISTA,
+} g_mbStyle = MBS_VISTA;
 
 /* Only available in Windows 10 version 1607 and greater. */
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hWnd);
 WINUSERAPI BOOL WINAPI SystemParametersInfoForDpi(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni, UINT dpi);
 
 /* Imported from win32u.dll */
-typedef DWORD (NTAPI *NtUserCallOneParam_t)(DWORD Param, DWORD Routine);
+typedef INT_PTR (WINAPI *NtUserCallOneParam_t)(DWORD dwParam, DWORD xpfnProc);
 NtUserCallOneParam_t NtUserCallOneParam = nullptr;
-
-typedef DWORD (NTAPI *NtUserCallHwnd_t)(HWND Wnd, DWORD Routine);
+typedef INT_PTR (NTAPI *NtUserCallHwnd_t)(HWND hwnd, DWORD xpfnProc);
 NtUserCallHwnd_t NtUserCallHwnd = nullptr;
+
+/* New in Windows 11 24H2. Using old method breaks. */
+typedef INT_PTR (WINAPI *NtUserMessageBeep_t)(DWORD dwBeep);
+NtUserMessageBeep_t NtUserMessageBeep = nullptr;
+typedef INT_PTR (WINAPI *NtUserSetMsgBox_t)(HWND hwnd);
+NtUserSetMsgBox_t NtUserSetMsgBox = nullptr;
 
 HFONT (__fastcall *GetMessageBoxFontForDpi_orig)(UINT);
 HFONT __fastcall GetMessageBoxFontForDpi_hook(
@@ -180,7 +194,89 @@ typedef struct tagMSGBOXMETRICS
 } MSGBOXMETRICS, *LPMSGBOXMETRICS;
 MSGBOXMETRICS mbm;
 
-BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm)
+int GetCharDimensions(HDC hdc, TEXTMETRICW *lptm, int *lpcy)
+{
+    TEXTMETRICW tm;
+
+    if (!GetTextMetricsW(hdc, &tm)) // _GetTextMetricsW
+    {
+        // Fallback to global system font: (NT User caches this information, but we don't have access u_u)
+        GetTextMetricsW(GetDC(nullptr), &tm);
+
+        if (tm.tmAveCharWidth == 0)
+        {
+            // Ultimate fallback:
+            tm.tmAveCharWidth = 8;
+        }
+    }
+
+    if (lptm)
+    {
+        *lptm = tm;
+    }
+
+    if (lpcy)
+    {
+        *lpcy = tm.tmHeight;
+    }
+
+    // Variable-width fonts calculate a true average rather than relying on tmAveCharWidth.
+    if (tm.tmPitchAndFamily & TMPF_FIXED_PITCH)
+    {
+        static const WCHAR wszAvgChars[] = L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+        SIZE size;
+        if (GetTextExtentPoint32W(hdc, wszAvgChars, ARRAYSIZE(wszAvgChars) - 1, &size)) // GreGetTextExtentW
+        {
+            // The above string is 26 * 2 characters. + 1 rounds the result.
+            return ((size.cx / 26) + 1) / 2;
+        }
+    }
+
+    return tm.tmAveCharWidth;
+}
+
+UINT MB_FindLongestString(HDC hdc, LPCWSTR *ppszButtonText, DWORD cButtons)
+{
+    UINT wRetVal;
+    int i, iMaxLen = 0, iNewMaxLen;
+    LPCWSTR szMaxStr;
+    SIZE sizeOneChar;
+    SIZE sizeMaxStr;
+    WCHAR szOneChar[2] = L"0";
+
+    for (i = 800; i <= 810; i++) {
+        WCHAR szCurStr[256];
+        LoadStringW(g_hUser32, i, szCurStr, 256);
+        if ((iNewMaxLen = wcslen(szCurStr)) > iMaxLen) {
+            iMaxLen = iNewMaxLen;
+            szMaxStr = szCurStr;
+        }
+    }
+
+    // Modification from original NT4 func: account for any custom strings.
+    // Don't want any custom message boxes cutting off text.
+    for (i = 0; i < (int)cButtons; i++)
+    {
+        LPCWSTR szCurStr = ppszButtonText[i];
+        if ((iNewMaxLen = wcslen(szCurStr)) > iMaxLen)
+        {
+            iMaxLen = iNewMaxLen;
+            szMaxStr = szCurStr;
+        }
+    }
+
+    /*
+     * Find the longest string
+     */
+    GetTextExtentPointW(hdc, szOneChar, 1, &sizeOneChar);
+    GetTextExtentPointW(hdc, szMaxStr, iMaxLen, &sizeMaxStr);
+    wRetVal = (UINT)(sizeMaxStr.cx + (sizeOneChar.cx * 2));
+
+    return wRetVal;
+}
+
+BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm, LPCWSTR *ppszButtonText, DWORD cButtons)
 {  
     if (!pmbm)
         return FALSE;
@@ -204,12 +300,16 @@ BOOL GetMessageBoxMetrics(LPMSGBOXMETRICS pmbm)
     );
     
     TEXTMETRICW tm;
+    int iAverageCharHeight;
+    int iAverageCharWidth = GetCharDimensions(hMemDC, nullptr, &iAverageCharHeight);
     succeeded = GetTextMetricsW(hMemDC, &tm);
     if (succeeded)
     {
-        pmbm->cxMsgFontChar = tm.tmAveCharWidth;
+        pmbm->cxMsgFontChar = iAverageCharWidth;
         pmbm->cyMsgFontChar = tm.tmHeight;
-        pmbm->wMaxBtnSize = XPixFromXDU(DU_BTNWIDTH, tm.tmAveCharWidth);
+        pmbm->wMaxBtnSize = (g_mbStyle == MBS_NT4)
+            ? MB_FindLongestString(hMemDC, ppszButtonText, cButtons)
+            : XPixFromXDU(DU_BTNWIDTH, iAverageCharWidth);
         pmbm->hCaptionFont = CreateFontIndirectW(&ncm.lfCaptionFont);
         pmbm->hMessageFont = hf;
     }
@@ -300,8 +400,8 @@ LPBYTE MB_UpdateDlgHdr(
 
     rc.left = iX + SYSMET(CXFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
     rc.top = iY + SYSMET(CYFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
-    rc.right = iX + iCX - SYSMET(CXFIXEDFRAME) - SYSMET(CXPADDEDBORDER);
-    rc.bottom = iY + iCY - SYSMET(CYFIXEDFRAME) - SYSMET(CXPADDEDBORDER);
+    rc.right = iX + iCX - SYSMET(CXFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
+    rc.bottom = iY + iCY - SYSMET(CYFIXEDFRAME) + SYSMET(CXPADDEDBORDER);
     rc.top += SYSMET(CYCAPTION);
 
     lpDlgTmp->style = lStyle;
@@ -555,7 +655,10 @@ INT_PTR CALLBACK MB_DlgProc(
         lpmb = (LPMSGBOXDATA)lParam;
         SetWindowLongPtr(hwndDlg, GWLP_USERDATA, (ULONG_PTR)lParam);
 
-        NtUserCallHwnd(hwndDlg, SFI_SETMSGBOX);
+        if (NtUserSetMsgBox)
+            NtUserSetMsgBox(hwndDlg);
+        else
+            NtUserCallHwnd(hwndDlg, SFI_SETMSGBOX);
 
         if (lpmb->dwStyle & MB_TOPMOST) {
             SetWindowPos(hwndDlg,
@@ -750,7 +853,7 @@ int SoftModalMessageBox_XP(
     HMONITOR            hMonitor;
     MONITORINFO         mi;
 
-    GetMessageBoxMetrics(&mbm);
+    GetMessageBoxMetrics(&mbm, lpmb->ppszButtonText, lpmb->cButtons);
 
     dwStyleMsg = lpmb->dwStyle;
 
@@ -1065,7 +1168,10 @@ ReSize:
     if (!(lpmb->dwStyle & MB_USERICON))
     {
         int wBeep = LOWORD(lpmb->dwStyle & MB_ICONMASK);
-        NtUserCallOneParam(wBeep, SFI_PLAYEVENTSOUND);
+        if (NtUserMessageBeep)
+            NtUserMessageBeep(wBeep);
+        else
+            NtUserCallOneParam(wBeep, SFI_PLAYEVENTSOUND);
     }
 
     iRetVal = (int)DialogBoxIndirectParamW(g_hUser32,
@@ -1124,7 +1230,7 @@ SMB_Exit:
 int (WINAPI *SoftModalMessageBox_orig)(LPMSGBOXDATA);
 int WINAPI SoftModalMessageBox_hook(LPMSGBOXDATA lpmb)
 {
-    if (g_bClassic)
+    if (g_mbStyle != MBS_VISTA)
         return SoftModalMessageBox_XP(lpmb);
     return SoftModalMessageBox_orig(lpmb);
 }
@@ -1133,7 +1239,20 @@ int WINAPI SoftModalMessageBox_hook(LPMSGBOXDATA lpmb)
 
 void LoadSettings(void)
 {
-    g_bClassic = Wh_GetIntSetting(L"background");
+    LPCWSTR pszStyle = Wh_GetStringSetting(L"style");
+    if (0 == wcscmp(pszStyle, L"nt4"))
+    {
+        g_mbStyle = MBS_NT4;
+    }
+    else if (0 == wcscmp(pszStyle, L"xp"))
+    {
+        g_mbStyle = MBS_XP;
+    }
+    else
+    {
+        g_mbStyle = MBS_VISTA;
+    }
+    Wh_FreeStringSetting(pszStyle);
 }
 
 const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
@@ -1157,7 +1276,7 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    // Load undocumented NtUserCallOneParam function for playing message box sound
+    // Load undocumented functions for playing message box sound and incrementing message box count
     HMODULE hWin32U = GetModuleHandleW(L"win32u.dll");
     if (!hWin32U)
     {
@@ -1165,16 +1284,18 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
     NtUserCallOneParam = (NtUserCallOneParam_t)GetProcAddress(hWin32U, "NtUserCallOneParam");
-    if (!NtUserCallOneParam)
+    NtUserMessageBeep = (NtUserMessageBeep_t)GetProcAddress(hWin32U, "NtUserMessageBeep");
+    if (!NtUserCallOneParam && !NtUserMessageBeep)
     {
-        Wh_Log(L"Failed to find NtUserCallOneParam in win32u.dll");
+        Wh_Log(L"Failed to find NtUserCallOneParam or NtUserMessageBeep in win32u.dll");
         return FALSE;
     }
 
     NtUserCallHwnd = (NtUserCallHwnd_t)GetProcAddress(hWin32U, "NtUserCallHwnd");
-    if (!NtUserCallHwnd)
+    NtUserSetMsgBox = (NtUserSetMsgBox_t)GetProcAddress(hWin32U, "NtUserSetMsgBox");
+    if (!NtUserCallHwnd && !NtUserSetMsgBox)
     {
-        Wh_Log(L"Failed to find NtUserCallHwnd in win32u.dll");
+        Wh_Log(L"Failed to find NtUserCallHwnd or NtUserSetMsgBox in win32u.dll");
         return FALSE;
     }
 

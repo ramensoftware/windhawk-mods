@@ -2,7 +2,7 @@
 // @id              taskbar-classic-menu
 // @name            Taskbar classic context menu
 // @description     Show the classic context menu when right-clicking on taskbar items
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -27,7 +27,7 @@
 Show the classic context menu when right-clicking on taskbar items. You can hold
 the Shift key to show the default jump list.
 
-Only Windows 10 64-bit and Windows 11 are supported. For other Windows versions
+Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 
 **Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
@@ -66,6 +66,7 @@ enum class WinVersion {
 
 WinVersion g_winVersion;
 
+std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
@@ -303,6 +304,24 @@ WinVersion GetExplorerVersion() {
     return WinVersion::Unsupported;
 }
 
+struct EXPLORER_PATCHER_HOOK {
+    PCSTR symbol;
+    void** pOriginalFunction;
+    void* hookFunction = nullptr;
+    bool optional = false;
+
+    template <typename Prototype>
+    EXPLORER_PATCHER_HOOK(
+        PCSTR symbol,
+        Prototype** originalFunction,
+        std::type_identity_t<Prototype*> hookFunction = nullptr,
+        bool optional = false)
+        : symbol(symbol),
+          pOriginalFunction(reinterpret_cast<void**>(originalFunction)),
+          hookFunction(reinterpret_cast<void*>(hookFunction)),
+          optional(optional) {}
+};
+
 bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
     if (g_explorerPatcherInitialized.exchange(true)) {
         return true;
@@ -312,17 +331,10 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
         g_winVersion = WinVersion::Win10;
     }
 
-    struct EXPLORER_PATCHER_HOOK {
-        PCSTR symbol;
-        void** pOriginalFunction;
-        void* hookFunction = nullptr;
-        bool optional = false;
-    };
-
     EXPLORER_PATCHER_HOOK hooks[] = {
         {R"(?_HandleContextMenu@CTaskListWnd@@IEAAXHHH@Z)",
-         (void**)&CTaskListWnd__HandleContextMenu_Original,
-         (void*)CTaskListWnd__HandleContextMenu_Hook},
+         &CTaskListWnd__HandleContextMenu_Original,
+         CTaskListWnd__HandleContextMenu_Hook},
     };
 
     bool succeeded = true;
@@ -345,14 +357,16 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
         }
     }
 
-    if (g_initialized) {
+    if (!succeeded) {
+        Wh_Log(L"HookExplorerPatcherSymbols failed");
+    } else if (g_initialized) {
         Wh_ApplyHookOperations();
     }
 
     return succeeded;
 }
 
-bool HandleModuleIfExplorerPatcher(HMODULE module) {
+bool IsExplorerPatcherModule(HMODULE module) {
     WCHAR moduleFilePath[MAX_PATH];
     switch (
         GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
@@ -368,37 +382,36 @@ bool HandleModuleIfExplorerPatcher(HMODULE module) {
 
     moduleFileName++;
 
-    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) !=
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) ==
         0) {
+        Wh_Log(L"ExplorerPatcher taskbar module: %s", moduleFileName);
         return true;
     }
 
-    Wh_Log(L"ExplorerPatcher taskbar loaded: %s", moduleFileName);
-    return HookExplorerPatcherSymbols(module);
+    return false;
 }
 
-void HandleLoadedExplorerPatcher() {
+bool HandleLoadedExplorerPatcher() {
     HMODULE hMods[1024];
     DWORD cbNeeded;
     if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
                            &cbNeeded)) {
         for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
-            HandleModuleIfExplorerPatcher(hMods[i]);
+            if (IsExplorerPatcherModule(hMods[i])) {
+                return HookExplorerPatcherSymbols(hMods[i]);
+            }
         }
     }
+
+    return true;
 }
 
-using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_Original;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
-                                   HANDLE hFile,
-                                   DWORD dwFlags) {
-    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module) {
     if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
-        HandleModuleIfExplorerPatcher(module);
+        if (IsExplorerPatcherModule(module)) {
+            HookExplorerPatcherSymbols(module);
+        }
     }
-
-    return module;
 }
 
 bool HookWin10TaskbarSymbols() {
@@ -423,7 +436,7 @@ bool HookWin11TaskbarSymbols() {
     HMODULE module = LoadLibrary(L"taskbar.dll");
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
-        return FALSE;
+        return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
@@ -470,24 +483,7 @@ bool HookWin11TaskbarSymbols() {
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
-bool HookTaskbarViewDllSymbols() {
-    WCHAR dllPath[MAX_PATH];
-    if (!GetWindowsDirectory(dllPath, ARRAYSIZE(dllPath))) {
-        Wh_Log(L"GetWindowsDirectory failed");
-        return false;
-    }
-
-    wcscat_s(
-        dllPath, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-
-    HMODULE module =
-        LoadLibraryEx(dllPath, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (!module) {
-        Wh_Log(L"Taskbar view module couldn't be loaded");
-        return false;
-    }
-
+bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
@@ -498,6 +494,40 @@ bool HookTaskbarViewDllSymbols() {
     };
 
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfExplorerPatcher(module);
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+    }
+
+    return module;
 }
 
 void LoadSettings() {
@@ -530,8 +560,13 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
-        if (!HookTaskbarViewDllSymbols()) {
-            return FALSE;
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            g_taskbarViewDllLoaded = true;
+            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                return FALSE;
+            }
+        } else {
+            Wh_Log(L"Taskbar view module not loaded yet");
         }
     } else {
         if (!HookWin10TaskbarSymbols()) {
@@ -542,14 +577,14 @@ BOOL Wh_ModInit() {
     HandleLoadedExplorerPatcher();
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-    FARPROC pKernelBaseLoadLibraryExW =
-        GetProcAddress(kernelBaseModule, "LoadLibraryExW");
-    Wh_SetFunctionHook((void*)pKernelBaseLoadLibraryExW,
-                       (void*)LoadLibraryExW_Hook,
-                       (void**)&LoadLibraryExW_Original);
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
 
-    Wh_SetFunctionHook((void*)GetKeyState, (void*)GetKeyState_Hook,
-                       (void**)&GetKeyState_Original);
+    WindhawkUtils::Wh_SetFunctionHookT(GetKeyState, GetKeyState_Hook,
+                                       &GetKeyState_Original);
 
     g_initialized = true;
 
@@ -559,11 +594,27 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
+
     // Try again in case there's a race between the previous attempt and the
     // LoadLibraryExW hook.
     if (!g_explorerPatcherInitialized) {
         HandleLoadedExplorerPatcher();
     }
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {

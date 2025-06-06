@@ -2,7 +2,7 @@
 // @id              classic-list-group-fix
 // @name            Classic List Group Fix
 // @description     Makes the appearance of list group headers in classic theme like Windows XP.
-// @version         1.1.0
+// @version         1.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -130,51 +130,26 @@ void __thiscall CListGroup__PaintCollapse_hook(
         CListGroup__PaintCollapse_orig(pThis, lpcd);
 }
 
-#ifdef _WIN64
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path"
-#else
-#   define PATHCACHE_VALNAME L"last-comctl32-v6-path-wow64"
-#endif
-
-#define COMCTL_582_SEARCH    L"microsoft.windows.common-controls_6595b64144ccf1df_5.82"
-
-/* Load the ComCtl32 module */
+/**
+  * Loads comctl32.dll, version 6.0.
+  * This uses an activation context that uses shell32.dll's manifest
+  * to load 6.0, even in apps which don't have the proper manifest for
+  * it.
+  */
 HMODULE LoadComCtlModule(void)
 {
+    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    ACTCTXW actCtx = { sizeof(actCtx) };
+    actCtx.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID | ACTCTX_FLAG_HMODULE_VALID;
+    actCtx.lpResourceName = MAKEINTRESOURCEW(124);
+    actCtx.hModule = hShell32;
+    HANDLE hActCtx = CreateActCtxW(&actCtx);
+    ULONG_PTR ulCookie;
+    ActivateActCtx(hActCtx, &ulCookie);
     HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
-    if (!hComCtl)
-    {
-        return NULL;
-    }
-
-    WCHAR szPath[MAX_PATH];
-    GetModuleFileNameW(hComCtl, szPath, MAX_PATH);
-
-    WCHAR szv6Path[MAX_PATH];
-    BOOL bNoCache = FALSE;
-    if (!Wh_GetStringValue(PATHCACHE_VALNAME, szv6Path, MAX_PATH))
-    {
-        bNoCache = TRUE;
-    }
-
-    /**
-      * the !bNoCache check here is nested because we only want to fall through
-      * to the cacher if the current comctl32 path is NOT 5.82.
-      */
-    if (wcsstr(szPath, COMCTL_582_SEARCH)
-    || wcsstr(szPath, L"\\System32")
-    || wcsstr(szPath, L"\\SysWOW64"))
-    {
-        if (!bNoCache)
-        {
-            hComCtl = LoadLibraryW(szv6Path);
-        }
-    }
-    else if (bNoCache || wcsicmp(szPath, szv6Path))
-    {
-        Wh_SetStringValue(PATHCACHE_VALNAME, szPath);
-    }
-
+    DeactivateActCtx(0, ulCookie);
+    ReleaseActCtx(hActCtx);
+    FreeLibrary(hShell32);
     return hComCtl;
 }
 

@@ -191,9 +191,12 @@ def validate_metadata(path: Path, expected_author: str):
     key = ('version', None)
     if key in properties:
         value, line_number = properties[key]
-        if not re.fullmatch(r'([0-9]+\.)*[0-9]+', value):
+        if not re.fullmatch(r'([0-9]+\.)*[0-9]+(-\w+)?', value):
             warnings += add_warning(
-                path, line_number, f'{key[0]} must contain only numbers and dots'
+                path,
+                line_number,
+                f'{key[0]} must contain only numbers and dots, and optionally a'
+                ' prerelease suffix (e.g. 1.2.3-beta)',
             )
     else:
         warnings += add_warning(path, 1, f'Missing {key[0]}')
@@ -296,7 +299,12 @@ def validate_symbol_hooks(path: Path):
         elif target_from_name or targets_from_comment:
             if target_from_name and not is_existing_windows_file_name(target_from_name):
                 warning_msg = (
-                    f'"{target_from_name}" is not recognized as a Windows file name'
+                    f'"{target_from_name}" is not recognized as a Windows file name.'
+                    ' If the target module name can\'t be represented by a variable'
+                    ' name, add the target module in a comment above the symbol hooks'
+                    ' variable. Example:\n'
+                    '// Taskbar.View.dll\n'
+                    'WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {...};'
                 )
                 warnings += add_warning(path, line_num, warning_msg)
 
@@ -309,15 +317,15 @@ def validate_symbol_hooks(path: Path):
         warning_msg = (
             'Please rename the symbol hooks variable to indicate the target module.'
             ' Examples (can end with "hook" or "hooks"):\n'
-            + '* user32DllHooks\n'
-            + '* user32dll_hooks\n'
-            + '* user32_dll_hooks\n'
-            + 'If the target module name can\'t be represented by a variable name, or'
+            '* user32DllHooks\n'
+            '* user32dll_hooks\n'
+            '* user32_dll_hooks\n'
+            'If the target module name can\'t be represented by a variable name, or'
             ' if there is more than one target module, add all target modules in a'
             ' comment above the symbol hooks variable, separated with commas.'
             ' Example:\n'
-            + '// explorer.exe, taskbar.dll\n'
-            + 'WindhawkUtils::SYMBOL_HOOK hooks[] = {...};'
+            '// explorer.exe, taskbar.dll\n'
+            'WindhawkUtils::SYMBOL_HOOK hooks[] = {...};'
         )
         warnings += add_warning(path, line_num, warning_msg)
 
@@ -342,6 +350,8 @@ def main():
     warnings = 0
 
     paths = [Path(p) for p in json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
+    if len(paths) == 0:
+        sys.exit('No files changed')
 
     added_count = int(os.environ['ADDED_FILES_COUNT'])
     modified_count = int(os.environ['MODIFIED_FILES_COUNT'])

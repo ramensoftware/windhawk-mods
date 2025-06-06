@@ -2,7 +2,7 @@
 // @id              notifications-placement
 // @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.0.2
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -40,6 +40,14 @@ Only Windows 10 64-bit and Windows 11 are supported.
   $description: >-
     The monitor number that notifications will appear on, set to zero to use the
     monitor where the mouse cursor is located
+- monitorInterfaceName: ""
+  $name: Monitor interface name
+  $description: >-
+    If not empty, the given monitor interface name (can also be an interface
+    name substring) will be used instead of the monitor number. Can be useful if
+    the monitor numbers change often. To see all available interface names, set
+    any interface name, enable mod logs, trigger a notification and look for
+    "Found display device" messages.
 - horizontalPlacement: right
   $name: Horizontal placement on the screen
   $options:
@@ -58,6 +66,8 @@ Only Windows 10 64-bit and Windows 11 are supported.
   $name: Distance from the bottom/top side of the screen
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <atomic>
 #include <string>
@@ -80,6 +90,7 @@ enum class VerticalPlacement {
 
 struct {
     int monitor;
+    WindhawkUtils::StringSetting monitorInterfaceName;
     HorizontalPlacement horizontalPlacement;
     int horizontalDistanceFromScreenEdge;
     VerticalPlacement verticalPlacement;
@@ -102,13 +113,51 @@ HMONITOR GetMonitorById(int monitorId) {
     HMONITOR monitorResult = nullptr;
     int currentMonitorId = 0;
 
-    auto monitorEnumProc = [&monitorResult, &currentMonitorId,
-                            monitorId](HMONITOR hMonitor) -> BOOL {
+    auto monitorEnumProc = [&](HMONITOR hMonitor) -> BOOL {
         if (currentMonitorId == monitorId) {
             monitorResult = hMonitor;
             return FALSE;
         }
         currentMonitorId++;
+        return TRUE;
+    };
+
+    EnumDisplayMonitors(
+        nullptr, nullptr,
+        [](HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor,
+           LPARAM dwData) -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(monitorEnumProc)*>(dwData);
+            return proc(hMonitor);
+        },
+        reinterpret_cast<LPARAM>(&monitorEnumProc));
+
+    return monitorResult;
+}
+
+HMONITOR GetMonitorByInterfaceNameSubstr(PCWSTR interfaceNameSubstr) {
+    HMONITOR monitorResult = nullptr;
+
+    auto monitorEnumProc = [&](HMONITOR hMonitor) -> BOOL {
+        MONITORINFOEX monitorInfo = {};
+        monitorInfo.cbSize = sizeof(monitorInfo);
+
+        if (GetMonitorInfo(hMonitor, &monitorInfo)) {
+            DISPLAY_DEVICE displayDevice = {
+                .cb = sizeof(displayDevice),
+            };
+
+            if (EnumDisplayDevices(monitorInfo.szDevice, 0, &displayDevice,
+                                   EDD_GET_DEVICE_INTERFACE_NAME)) {
+                Wh_Log(L"Found display device %s, interface name: %s",
+                       monitorInfo.szDevice, displayDevice.DeviceID);
+
+                if (wcsstr(displayDevice.DeviceID, interfaceNameSubstr)) {
+                    Wh_Log(L"Matched display device");
+                    monitorResult = hMonitor;
+                    return FALSE;
+                }
+            }
+        }
         return TRUE;
     };
 
@@ -275,7 +324,10 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     HMONITOR destMonitor = nullptr;
 
     if (!g_unloading) {
-        if (g_settings.monitor == 0) {
+        if (*g_settings.monitorInterfaceName.get()) {
+            destMonitor = GetMonitorByInterfaceNameSubstr(
+                g_settings.monitorInterfaceName.get());
+        } else if (g_settings.monitor == 0) {
             POINT pt;
             GetCursorPos(&pt);
             destMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
@@ -467,6 +519,8 @@ void ApplySettings() {
 
 void LoadSettings() {
     g_settings.monitor = Wh_GetIntSetting(L"monitor");
+    g_settings.monitorInterfaceName =
+        WindhawkUtils::StringSetting::make(L"monitorInterfaceName");
 
     PCWSTR horizontalPlacement = Wh_GetStringSetting(L"horizontalPlacement");
     g_settings.horizontalPlacement = HorizontalPlacement::right;
