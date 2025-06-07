@@ -1,3 +1,13 @@
+## 1.3 ([Jun 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4579380d42e30aea8898e502106df234cade7b3c/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Added an option to disable the new start menu layout. Recent Windows updates introduced some changes which broke some of the themes. The themes will be adapted to these changes in the future, but for now, this option can be used to temporarily revert them.
+* Added themes: Windows10 (Minimal), LegacyFluent, OnlySearch.
+* Updated themes: SideBySideMinimal, TranslucentStartMenu.
+* Added style constants which can be defined once and used in multiple styles.
+* Improved handling of commented targets and styles (starting with `//`), and added details about this in the mod's description.
+* Added a built-in blur brush object, `WindhawkBlur`, which supports the `BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`.
+* Added support for the new WebView2 search menu.
+
 ## 1.2.1 ([Feb 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/8e8581b30c2d1d64c641b8fdfe8ee417df35fdcb/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added themes: 21996, Down Aero, UniMenu.
