@@ -2,12 +2,79 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-06T16:52:21.000Z</updated>
+    <updated>2025-06-07T14:28:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Titlebar For Everyone 0.1]]></title>
+        <id>https://windhawk.net/mods/titlebar-for-everyone#e5a2544f6e7d9b999509256d7f6a2ce7c3527501</id>
+        <link href="https://windhawk.net/mods/titlebar-for-everyone"/>
+        <updated>2025-06-07T14:28:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="titlebarforeveryone">Titlebar For Everyone</h1>
+<ul>
+<li>Force native title bars and frames for various programs</li>
+</ul>
+<h2 id="supportedprograms">Supported programs</h2>
+<ul>
+<li>Chromium browsers<ul>
+<li>Chrome</li>
+<li>Edge</li>
+<li>Supermium</li>
+<li>Etc. (not tested)</li>
+<li>Enabling the DWM mode (Aero/Mica) is recommended if you can. This will also remove the duplicate window controls</li>
+<li>Also provides an option to use the classic button face color in the DWM extended area for Classic theme users</li></ul></li>
+<li>Steam (non-VGUI)<ul>
+<li>Known issues: In the Basic style, the window control hover effects do not show</li></ul></li>
+<li>WinUI apps<ul>
+<li>PowerToys apps</li>
+<li>New Photos app</li>
+<li>Known issues: Some WinUI apps may show visual artifacts in their custom title bar area</li></ul></li>
+<li>WPF apps<ul>
+<li>Visual Studio (tested: 2022)</li>
+<li>PowerToys Workspaces</li></ul></li>
+<li>Office apps<ul>
+<li>Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher</li>
+<li>Tested: 2010 and LTSC 2021 (Win10 mode)</li>
+<li>Known issues: on LTSC 2021, only Classic frames are shown (neither Basic nor DWM)</li></ul></li>
+<li>Some WebView2 apps<ul>
+<li>New Outlook</li>
+<li>Microsoft 365 Copilot</li></ul></li>
+<li>Hangul Word Processor<ul>
+<li>Tested: 2010 (using the system style is recommended)</li>
+<li>This mod also fixes the WM_NCACTIVATE bug present in the system style</li></ul></li>
+<li>Electron apps and CEF apps using <code>cef_window_create_top_level</code><ul>
+<li>Not included by default, but adding them manually to the inclusion list should work</li>
+<li>However, using this mod against those is not recommended</li>
+<li>For CEF apps using <code>cef_window_create_top_level</code>: use <a href="https://windhawk.net/mods/cef-titlebar-enabler-universal">CEF/Spotify Tweaks</a> instead. Add to the inclusion list manually for anything other than Spotify</li>
+<li>For Electron apps: try finding a built-in option to enable native frames first. If missing, patch files in <code>resources\app(.asar)</code> to override <code>frame: false</code> or <code>titleBarStyle: 'hidden'</code> to <code>frame: true</code> or <code>titleBarStyle: 'default'</code></li>
+<li>1Password: add <code>"appearance.useCustomTitleBar": false</code> to <code>%localappdata%\1Password\settings\settings.json</code></li>
+<li>VSCode &amp; forks (including Windhawk UI): Press F1, search and click <code>Preferences: Open Settings (UI)</code>, find <code>Window: Title Bar Style</code>, and set it to <code>native</code></li></ul></li>
+</ul>
+<h2 id="notsupportedprograms">Not supported programs</h2>
+<ul>
+<li>UWP apps<ul>
+<li>Use <a href="https://winclassic.net/thread/2041/remove-windows-10s-uwp-titlebars">this mod</a> instead</li></ul></li>
+<li>VMware Workstation/Player 16+<ul>
+<li>Use <a href="https://winclassic.net/thread/1568/change-vmware-titlebar-native-windows">this patch</a> instead</li></ul></li>
+<li>Firefox and derivatives<ul>
+<li>Just enable the title bar option in the customize page, or disable <code>browser.tabs.inTitlebar</code> in <code>about:config</code></li></ul></li>
+<li>NVIDIA apps<ul>
+<li>In the executable folder, look for <code>&lt;exe name without extension&gt;.json</code> (usually in the same directory or in <code>\Resources</code>), and change <code>nv-custom-black-window=true</code> to false</li></ul></li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>This mod does not deal with visual inconsistencies (e.g. duplicate window controls)</li>
+<li>Forcing the addition of your program to the inclusion list may work even if it's missing from the default list if it falls within the categories above (e.g., Chromium, WinUI)</li>
+<li>For other apps, you'll need to try adjusting the subclassing logic to get your target window to be subclassed properly</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.0]]></title>
         <id>https://windhawk.net/mods/win11-accent-border#1927abe816b6ff1d930fce7dc46ac527167bfd25</id>
@@ -311,19 +378,6 @@ to the process inclusion list in the program's advanced settings.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Theme Switcher 1.0.3]]></title>
-        <id>https://windhawk.net/mods/auto-theme-switcher#4a12f25a8fd9ce15834bd2b9c29a34fda8d0a05f</id>
-        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
-        <updated>2025-05-26T17:39:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add functionality to run custom scripts on switch with -light/-dark argument</li>
-</ul>]]></content>
-        <author>
-            <name>tinodin</name>
-            <uri>https://github.com/tinodin</uri>
         </author>
     </entry>
 </feed>

@@ -4095,6 +4095,50 @@
                 "version": "1.0"
             }
         },
+        "titlebar-for-everyone": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1749306524000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1749306524000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Ingan121",
+                "compilerOptions": "-lcomctl32 -luxtheme -lgdi32 -lshlwapi",
+                "description": "Force native title bars and frames for various programs",
+                "github": "https://github.com/Ingan121",
+                "homepage": "https://www.ingan121.com/",
+                "include": [
+                    "chrome.exe",
+                    "brave.exe",
+                    "msedge.exe",
+                    "opera.exe",
+                    "yandex.exe",
+                    "whale.exe",
+                    "supermium.exe",
+                    "chromium.exe",
+                    "devenv.exe",
+                    "steamwebhelper.exe",
+                    "PowerToys.*.exe",
+                    "olk.exe",
+                    "WebViewHost.exe",
+                    "winword.exe",
+                    "excel.exe",
+                    "powerpnt.exe",
+                    "msaccess.exe",
+                    "onenote.exe",
+                    "outlook.exe",
+                    "mspub.exe",
+                    "hwp.exe",
+                    "Photos.exe"
+                ],
+                "name": "Titlebar For Everyone",
+                "twitter": "https://twitter.com/Ingan121",
+                "version": "0.1"
+            }
+        },
         "tortoisegit-progress-animation-background-fix": {
             "details": {
                 "defaultSorting": 480,
