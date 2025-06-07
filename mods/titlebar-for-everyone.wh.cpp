@@ -44,8 +44,6 @@
     * Etc. (not tested)
     * Enabling the DWM mode (Aero/Mica) is recommended if you can. This will also remove the duplicate window controls
     * Also provides an option to use the classic button face color in the DWM extended area for Classic theme users
-* Visual Studio
-    * Tested: 2022
 * Steam (non-VGUI)
     * Known issues: In the Basic style, the window control hover effects do not show
 * WinUI apps
