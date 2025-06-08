@@ -331,7 +331,7 @@ HMODULE LoadComCtlModule(void)
       * comctl32.dll 5.82 anyway. If that occurs, just reject it.
       */
     VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(hComCtl, nullptr);
-    if (HIWORD(pVerInfo->dwFileVersionMS) < 6)
+    if (!pVerInfo || HIWORD(pVerInfo->dwFileVersionMS) < 6)
     {
         FreeLibrary(hComCtl);
         hComCtl = NULL;
