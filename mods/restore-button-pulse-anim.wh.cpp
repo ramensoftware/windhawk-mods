@@ -2,11 +2,11 @@
 // @id              restore-button-pulse-anim
 // @name            Restore Button Pulse Animation
 // @description     Restores the pulse animation that focused buttons played in Windows Vista/7
-// @version         1.0.1
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -luxtheme
+// @compilerOptions -luxtheme -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -276,6 +276,39 @@ void __fastcall Button_PaintDirectly_hook(PBUTN pbutn, HDC hdc, BOOL fEnableDoub
     }
 }
 
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) 
+{ 
+    void *pFixedFileInfo = nullptr; 
+    UINT uPtrLen = 0; 
+
+    HRSRC hResource = 
+        FindResourceW(hModule, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION); 
+    if (hResource)
+    { 
+        HGLOBAL hGlobal = LoadResource(hModule, hResource); 
+        if (hGlobal)
+        { 
+            void *pData = LockResource(hGlobal); 
+            if (pData)
+            { 
+                if (!VerQueryValueW(pData, L"\\", &pFixedFileInfo, &uPtrLen)
+                || uPtrLen == 0)
+                { 
+                    pFixedFileInfo = nullptr; 
+                    uPtrLen = 0; 
+                } 
+            } 
+        } 
+    } 
+
+    if (puPtrLen)
+    { 
+        *puPtrLen = uPtrLen; 
+    } 
+  
+     return (VS_FIXEDFILEINFO *)pFixedFileInfo; 
+ } 
+
 /**
   * Loads comctl32.dll, version 6.0.
   * This uses an activation context that uses shell32.dll's manifest
@@ -293,6 +326,16 @@ HMODULE LoadComCtlModule(void)
     ULONG_PTR ulCookie;
     ActivateActCtx(hActCtx, &ulCookie);
     HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+    /**
+      * Certain processes will ignore the activation context and load
+      * comctl32.dll 5.82 anyway. If that occurs, just reject it.
+      */
+    VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(hComCtl, nullptr);
+    if (!pVerInfo || HIWORD(pVerInfo->dwFileVersionMS) < 6)
+    {
+        FreeLibrary(hComCtl);
+        hComCtl = NULL;
+    }
     DeactivateActCtx(0, ulCookie);
     ReleaseActCtx(hActCtx);
     FreeLibrary(hShell32);
