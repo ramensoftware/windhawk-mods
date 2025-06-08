@@ -2,7 +2,7 @@
 // @id              clientedge-in-apps
 // @name            Clientedge Everywhere
 // @description     Adds 3D border (WS_EX_CLIENTEDGE style) to some windows to look better in Classic theme.
-// @version         1.2.0
+// @version         1.3.0
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -11,7 +11,7 @@
 // ==WindhawkModReadme==
 /*
 Adds WS_EX_CLIENTEDGE (3D border) to some apps to look better in Classic theme. Includes SysListView32 control in 
-File Explorer, Internet Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathematica.
+File Explorer, Internet Explorer, legacy (XP-like) file picker, Regedit, Classic Notepad and Wolfram Mathematica.
 
 Before:
 
