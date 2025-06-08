@@ -2837,19 +2837,19 @@
                 "published": 1739537994000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1743441688000,
+                "updated": 1749402841000,
                 "users": 350
             },
             "metadata": {
                 "author": "aubymori",
-                "compilerOptions": "-luxtheme",
+                "compilerOptions": "-luxtheme -lversion",
                 "description": "Restores the pulse animation that focused buttons played in Windows Vista/7",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
                 "name": "Restore Button Pulse Animation",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "ribbon-caption-icon-fix": {
