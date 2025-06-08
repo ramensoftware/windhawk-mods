@@ -1,3 +1,7 @@
+## 1.3.0 ([Jun 8, 2025](https://github.com/ramensoftware/windhawk-mods/blob/18e33a9aefed371e0a4899da5e0fd7cb69cc2487/mods/clientedge-in-apps.wh.cpp))
+
+* Regedit (need for newer builds)
+
 ## 1.2.0 ([Jun 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/39f44c80c3c3557af96195e67589e8b399d40e7a/mods/clientedge-in-apps.wh.cpp))
 
 Exclude Mathematica's toolboxes
