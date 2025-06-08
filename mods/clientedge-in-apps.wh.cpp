@@ -52,6 +52,17 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
         }
     }
 
+    // Regedit
+
+    if (((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"Edit")) || 
+       ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysListView32")) ||
+       ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysTreeView32"))) {
+        GetClassNameW(hWndParent, wszClassName, 256);
+        if (!wcscmp(wszClassName, L"RegEdit_RegEdit")) {
+            dwExStyle |= WS_EX_CLIENTEDGE;
+        }
+    }
+
     // Internet Explorer
 
     if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"Shell DocObject View")) {
