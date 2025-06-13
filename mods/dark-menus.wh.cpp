@@ -230,22 +230,6 @@ RtlGetNtVersionNumbers_T RtlGetNtVersionNumbers;
 using DefWindowProcW_T = decltype(&DefWindowProcW);
 DefWindowProcW_T DefWindowProcW_Original;
 
-LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    LRESULT lResult = 0;
-    if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
-        return lResult;
-
-    if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
-    {
-        lResult = DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
-        DrawUAHMenuNCBottomLine(hWnd);
-        return lResult;
-    }
-
-    return DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
-}
-
 enum AppMode
 {
 	Default,
@@ -255,11 +239,34 @@ enum AppMode
 	Max
 };
 
-using FlushMenuThemes_T = void (WINAPI *)();
-using SetPreferredAppMode_T = AppMode (WINAPI *)(AppMode);
+using FlushMenuThemes_T = void(WINAPI*)();
+using SetPreferredAppMode_T = AppMode(WINAPI*)(AppMode);
+using ShouldAppsUseDarkMode_T = bool(WINAPI*)();
 
 FlushMenuThemes_T FlushMenuThemes;
 SetPreferredAppMode_T SetPreferredAppMode;
+ShouldAppsUseDarkMode_T ShouldAppsUseDarkMode;
+
+AppMode g_currentAppMode;
+
+LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if(g_currentAppMode == AppMode::ForceDark || (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode()))
+    {
+        LRESULT lResult = 0;
+        if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
+            return lResult;
+    
+        if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
+        {
+            lResult = DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
+            DrawUAHMenuNCBottomLine(hWnd);
+            return lResult;
+        }
+    }
+
+    return DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
+}
 
 //Applies the theme to all menus.
 void ApplyTheme(const AppMode inputTheme = Max)
@@ -284,6 +291,8 @@ void ApplyTheme(const AppMode inputTheme = Max)
     //Apply the theme
     FlushMenuThemes();
     SetPreferredAppMode(theme);
+
+    g_currentAppMode = theme;
 }
 
 //Checks if the windows build is 18362 or later.
@@ -325,9 +334,11 @@ BOOL Wh_ModInit() {
     const HMODULE hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     const FARPROC pSetPreferredAppMode = GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
     const FARPROC pFlushMenuThemes = GetProcAddress(hUxtheme, MAKEINTRESOURCEA(136));
+    const FARPROC pShouldAppsUseDarkMode = GetProcAddress(hUxtheme, MAKEINTRESOURCEA(132));
 
     SetPreferredAppMode = reinterpret_cast<SetPreferredAppMode_T>(pSetPreferredAppMode);
     FlushMenuThemes = reinterpret_cast<FlushMenuThemes_T>(pFlushMenuThemes);
+    ShouldAppsUseDarkMode = reinterpret_cast<ShouldAppsUseDarkMode_T>(pShouldAppsUseDarkMode);
 
     ApplyTheme();
     return TRUE;
