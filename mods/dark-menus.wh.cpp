@@ -54,6 +54,7 @@ The code for dark menubars is based on [win32-darkmode](https://github.com/adzm/
 #include <windows.h>
 
 #include <windhawk_api.h>
+#include <winnt.h>
 
 const COLORREF crItemForeground = 0xFFFFFF;
 const COLORREF crItemDisabled = 0xAAAAAA;
@@ -103,7 +104,7 @@ struct UAHDRAWMENUITEM
 	UAHMENUITEM umi;
 };
 
-//Code based on https://github.com/notepad-plus-plus/notepad-plus-plus/blob/bab3573be708bb908b8080e3e2007ea78a7f1932/PowerEditor/src/NppDarkMode.cpp
+//Code based on : https://github.com/notepad-plus-plus/notepad-plus-plus/blob/bab3573be708bb908b8080e3e2007ea78a7f1932/PowerEditor/src/NppDarkMode.cpp
 #pragma region CodeBasedOnNotepad++
 
 void DrawUAHMenuNCBottomLine(HWND hWnd)
