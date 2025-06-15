@@ -137,7 +137,7 @@ void DrawUAHMenuNCBottomLine(HWND hWnd)
 //Code based on https://github.com/adzm/win32-darkmode/blob/darkmenubar/win32-darkmode/win32-darkmode.cpp
 #pragma region CodeBasedOnWin32DarkMode
 
-HTHEME g_menuTheme = nullptr;
+thread_local HTHEME g_menuTheme = nullptr;
 
 //Processes messages related to custom menubar drawing.
 //Returns true if handled, false to continue with normal processing
@@ -308,6 +308,7 @@ bool IsAPISupported()
     DWORD build;
     RtlGetNtVersionNumbers(nullptr, nullptr, &build);
 
+    build &= ~0xF0000000;
     return build >= 18362;
 }
 
@@ -348,7 +349,9 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit()
 {
     Wh_Log(L"Restoring the default theme.");
-
-    Wh_RemoveFunctionHook((void*) DefWindowProcW);
     ApplyTheme(Default);
+
+    DeleteObject(brBackground);
+    DeleteObject(brItemBackgroundHot);
+    DeleteObject(brItemBackgroundSelected);
 }
