@@ -1,3 +1,11 @@
+## 1.3 ([Jun 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/be51bf799c93646016dd5d2ea74043cf4f132b91/mods/dark-menus.wh.cpp))
+
+- Added feedback links to the readme
+- Added menubar screenshots to the readme
+- Added support for menubar
+- Added a German translation
+- Code cleanup
+
 ## 1.2 ([Jan 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4632327b4f048f0e6c6721e478d4bbf6fe96c79b/mods/dark-menus.wh.cpp))
 
 Added a compatibility check to avoid crashes on incompatible Windows versions.
