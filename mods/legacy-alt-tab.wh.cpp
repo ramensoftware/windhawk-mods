@@ -2,7 +2,7 @@
 // @id           legacy-alt-tab
 // @name         Legacy Alt+Tab dialog
 // @description  Enables legacy Alt+Tab dialog from Windows XP and Windows 2000
-// @version      1.0
+// @version      1.0.2
 // @author       Anixx
 // @github       https://github.com/Anixx
 // @include      explorer.exe
@@ -10,7 +10,8 @@
 
 // ==WindhawkModReadme==
 /*
-Enables legacy Alt+Tab dialog from Windows XP and Windows 2000
+Enables legacy Alt+Tab dialog from Windows XP and Windows 2000. The last Windows version supported
+is Windows 11 23H2. On Windows 11 version 24H2 and later the mod has a different effect: the windows are switched instantly on Alt+Tab pressing, without any dialog appearing.
 
 ![Legacy Alt+Tab](https://i.imgur.com/wdX9PW7.png)
 

@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              fix-basic-caption-text
 // @name            Fix Basic Caption Text
-// @description     Fixes non-DWM frames having hardcoded caption colors
-// @version         1.0.0
+// @description     Fixes non-DWM and UIRibbon frames having incorrect caption colors
+// @version         1.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -12,12 +12,11 @@
 // ==WindhawkModReadme==
 /*
 # Fix Basic Caption Text
-Since Windows 10, the caption color has been hardcoded due to different accent
-colors needing dark or light text. For whatever reason, this also applies to basic
-frames, and as such, they don't pull caption color from the theme anymore. This
-results in incorrectly colored and possibly illegible caption text. This mod fixes that.
+Since Windows 10, the caption colors on basic themed has been changed to adapt to dark mode
+among other things. This mod reverts it to the old behavior of just showing the user-defined
+system colors. It also affects the caption color of custom-drawn title text like UIRibbon's.
 
-**This mod requires Windhawk v1.4 or greater.**
+You can also optionally make basic windows use small icons instead of downscaling large icons.
 
 **Before**:
 
@@ -31,80 +30,81 @@ results in incorrectly colored and possibly illegible caption text. This mod fix
 
 // ==WindhawkModSettings==
 /*
-- usethemedata: true
-  $name: Use theme data
-  $description: Use the theme data for caption color rather than system (classic theme) colors. Disable this if you experience incorrect colors.
+- smallicons: true
+  $name: Small window icons
+  $description: Use small icons on basic theme windows instead of downscaling large icons
 */
 // ==/WindhawkModSettings==
 
-#include <windhawk_api.h>
-#ifdef _WIN64
-#   define STDCALL  __cdecl
-#   define SSTDCALL L"__cdecl"
+#include <windhawk_utils.h>
+#include <uxtheme.h>
 
-#   define THISCALL  __cdecl
+#ifdef _WIN64
+#   define SSTDCALL L"__cdecl"
 #   define STHISCALL L"__cdecl"
 #else
-#   define STDCALL  __stdcall
 #   define SSTDCALL L"__stdcall"
-
-#   define THISCALL __thiscall
 #   define STHISCALL L"__thiscall"
 #endif
 
-#include <uxtheme.h>
-#include <vssym32.h>
-#include <versionhelpers.h>
-#include <windhawk_utils.h>
+bool g_bSmallIcons = true;
 
-/* Use theme data or not */
-BOOL g_bUseThemeData;
+typedef int WINDOWPARTS, CLOSEBUTTONSTATES;
 
-typedef DWORD (THISCALL *_NCWNDMET__GetCaptionColor_t)(LPVOID, bool);
-_NCWNDMET__GetCaptionColor_t _NCWNDMET__GetCaptionColor_orig;
-DWORD THISCALL _NCWNDMET__GetCaptionColor_hook(LPVOID pThis, bool bDarkText)
+enum FRAMESTATES
 {
-#ifdef _WIN64
-    constexpr DWORD DEFAULT_INACTIVE_COLOR_DARK = RGB(99, 99, 99);
-#else
-    constexpr DWORD DEFAULT_INACTIVE_COLOR_DARK = RGB(98, 98, 98);
-#endif
-    constexpr DWORD DEFAULT_INACTIVE_COLOR_LIGHT = RGB(179, 184, 186);
+    FS_ACTIVE = 0x1,
+    FS_INACTIVE = 0x2
+};
 
-    DWORD res = _NCWNDMET__GetCaptionColor_orig(pThis, bDarkText);
-    DWORD dwCapClr;
-	BOOL  bIsInactive = res == (bDarkText
-    ? DEFAULT_INACTIVE_COLOR_DARK
-    : DEFAULT_INACTIVE_COLOR_LIGHT);
+typedef struct _NCWNDMET
+{
+    BOOL fValid;
+    BOOL fFrame;
+    BOOL fSmallFrame;
+    BOOL fMin;
+    BOOL fMaxed;
+    BOOL fFullMaxed;
+    BOOL fDirtyRects;
+    BOOL fCustomFrame;
+    BOOL fCustom;
+    DWORD dwStyle;
+    DWORD dwExStyle;
+    DWORD dwWindowStatus;
+    DWORD dwStyleClass;
+    WINDOWPARTS rgframeparts[4];
+    WINDOWPARTS rgsizehitparts[4];
+    FRAMESTATES framestate;
+    HFONT hfCaption;
+    COLORREF rgbCaption;
+    SIZE sizeCaptionText;
+    MARGINS CaptionMargins;
+    int iMinButtonPart;
+    int iMaxButtonPart;
+    CLOSEBUTTONSTATES rawCloseBtnState;
+    CLOSEBUTTONSTATES rawMinBtnState;
+    CLOSEBUTTONSTATES rawMaxBtnState;
+    CLOSEBUTTONSTATES rawHelpBtnState;
+    int cyMenu;
+    int cnMenuOffsetLeft;
+    int cnMenuOffsetRight;
+    int cnMenuOffsetTop;
+    int cnBorders;
+    RECT rcS0[26];
+    RECT rcW0[26];
+} NCWNDMET;
 
-    if (g_bUseThemeData)
-    {
-        HTHEME hTheme = OpenThemeData(NULL, L"Window");
-        if (hTheme && S_OK == GetThemeColor(
-            hTheme,
-            WP_CAPTION,
-            bIsInactive ? MB_INACTIVE : MB_ACTIVE,
-            TMT_TEXTCOLOR,
-            &dwCapClr
-        ))
-        {
-            CloseThemeData(hTheme);
-        }
-        else
-        {
-            dwCapClr = GetSysColor(
-                bIsInactive ? COLOR_INACTIVECAPTIONTEXT : COLOR_CAPTIONTEXT
-            );
-        }
-    }
-    else
-    {
-        dwCapClr = GetSysColor(
-            bIsInactive ? COLOR_INACTIVECAPTIONTEXT : COLOR_CAPTIONTEXT
-        );
-    }
-    
-    return dwCapClr;
+DWORD (__thiscall *_NCWNDMET__GetCaptionColor_orig)(NCWNDMET *, bool);
+DWORD __thiscall _NCWNDMET__GetCaptionColor_hook(NCWNDMET *pThis, bool bDarkText)
+{
+    bool fInactive = (pThis->framestate == FS_INACTIVE);
+    // When composition was active, Windows 7 always displayed active color on
+    // ribbon.
+    if (IsCompositionActive() && pThis->fCustomFrame)
+        fInactive = false;
+    return GetSysColor(
+        fInactive ? COLOR_INACTIVECAPTIONTEXT : COLOR_CAPTIONTEXT
+    );
 }
 
 /* Always use small icon */
@@ -112,62 +112,52 @@ typedef HICON (__fastcall *_GetWindowIcon_t)(HWND, BOOL);
 _GetWindowIcon_t _GetWindowIcon_orig;
 HICON __fastcall _GetWindowIcon_hook(HWND hWnd, BOOL bLarge)
 {
-    return _GetWindowIcon_orig(hWnd, FALSE);
+    if (g_bSmallIcons)
+        bLarge = FALSE;
+    return _GetWindowIcon_orig(hWnd, bLarge);
 }
 
-void LoadSettings(void)
-{
-    g_bUseThemeData = Wh_GetIntSetting(L"usethemedata");
-}
+const WindhawkUtils::SYMBOL_HOOK uxthemeDllHooks[] = { 
+    {
+        {
+            L"public: unsigned long "
+            STHISCALL
+            L" _NCWNDMET::GetCaptionColor(bool)"
+        },
+        &_NCWNDMET__GetCaptionColor_orig,
+        _NCWNDMET__GetCaptionColor_hook,
+        false
+    },
+    {
+        {
+            L"struct HICON__ * "
+            SSTDCALL
+            L" _GetWindowIcon(struct HWND__ *,int)"
+        },
+        &_GetWindowIcon_orig,
+        _GetWindowIcon_hook,
+        false
+    }
+};
 
 BOOL Wh_ModInit(void)
 {
-    LoadSettings();
-
-    HMODULE hUxTheme = LoadLibrary(L"uxtheme.dll");
+    HMODULE hUxTheme = LoadLibraryW(L"uxtheme.dll");
     if (!hUxTheme)
     {
-        Wh_Log(L"could not load uxtheme; probably unsupported by the application");
+        Wh_Log(L"Failed to load uxtheme.dll");
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = { 
-        {
-            {
-                L"public: unsigned long "
-                STHISCALL
-                L" _NCWNDMET::GetCaptionColor(bool)"
-            },
-            &_NCWNDMET__GetCaptionColor_orig,
-            _NCWNDMET__GetCaptionColor_hook,
-            false
-        },
-        {
-            {
-                L"struct HICON__ * "
-                SSTDCALL
-                L" _GetWindowIcon(struct HWND__ *,int)"
-            },
-            &_GetWindowIcon_orig,
-            _GetWindowIcon_hook,
-            false
-        }
-    };
-
     if (!WindhawkUtils::HookSymbols(
         hUxTheme,
-        hooks,
-        ARRAYSIZE(hooks)
+        uxthemeDllHooks,
+        ARRAYSIZE(uxthemeDllHooks)
     ))
     {
-        Wh_Log(L"Failed to install hooks");
+        Wh_Log(L"Failed to hook one or more symbol functions in uxtheme.dll");
         return FALSE;
     }
     
     return TRUE;
-}
-
-void Wh_ModSettingsChanged(void)
-{
-    LoadSettings();
 }

@@ -2,7 +2,7 @@
 // @id              clientedge-in-apps
 // @name            Clientedge Everywhere
 // @description     Adds 3D border (WS_EX_CLIENTEDGE style) to some windows to look better in Classic theme.
-// @version         1.1.0
+// @version         1.3.0
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -11,7 +11,7 @@
 // ==WindhawkModReadme==
 /*
 Adds WS_EX_CLIENTEDGE (3D border) to some apps to look better in Classic theme. Includes SysListView32 control in 
-File Explorer, Internet Explorer, legacy (XP-like) file picker, Classic Notepad and Wolfram Mathematica.
+File Explorer, Internet Explorer, legacy (XP-like) file picker, Regedit, Classic Notepad and Wolfram Mathematica.
 
 Before:
 
@@ -52,6 +52,17 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
         }
     }
 
+    // Regedit
+
+    if (((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"Edit")) || 
+       ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysListView32")) ||
+       ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"SysTreeView32"))) {
+        GetClassNameW(hWndParent, wszClassName, 256);
+        if (!wcscmp(wszClassName, L"RegEdit_RegEdit")) {
+            dwExStyle |= WS_EX_CLIENTEDGE;
+        }
+    }
+
     // Internet Explorer
 
     if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"Shell DocObject View")) {
@@ -66,7 +77,10 @@ DWORD dwStyle,int X,int Y,int nWidth,int nHeight,HWND hWndParent,HMENU hMenu,HIN
     if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"NotebookContent")) {
         GetClassNameW(hWndParent, wszClassName, 256);
         if (!wcscmp(wszClassName, L"NotebookFrame")) {
-            dwExStyle |= WS_EX_CLIENTEDGE;
+            DWORD_PTR dwParentExStyle = GetWindowLongPtrW(hWndParent, GWL_EXSTYLE);
+            if (!(dwParentExStyle & WS_EX_TOOLWINDOW)) {
+                dwExStyle |= WS_EX_CLIENTEDGE;
+            }
         }
     }
 

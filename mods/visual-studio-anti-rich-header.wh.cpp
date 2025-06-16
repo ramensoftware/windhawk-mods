@@ -2,7 +2,7 @@
 // @id           visual-studio-anti-rich-header
 // @name         Visual Studio Anti-Rich-Header
 // @description  Prevent the Visual Studio linker from embedding the Rich header into new executables
-// @version      1.0.2
+// @version      1.0.3
 // @author       m417z
 // @github       https://github.com/m417z
 // @twitter      https://twitter.com/m417z
@@ -10,11 +10,22 @@
 // @include      link.exe
 // ==/WindhawkMod==
 
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
+
 // ==WindhawkModReadme==
 /*
 # Visual Studio Anti-Rich-Header
 
 Prevent the Visual Studio linker from embedding the Rich header into new executables.
+
+![Screenshot](https://i.imgur.com/7ZeEfYK.png) \
+*A Rich header example*
 */
 // ==/WindhawkModReadme==
 
@@ -34,7 +45,7 @@ std::string ReplaceAll(std::string str, const std::string& from, const std::stri
     return str;
 }
 
-BOOL Wh_ModInit(void)
+BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
 
@@ -50,16 +61,26 @@ BOOL Wh_ModInit(void)
 #else
     std::string targetRegex =
         R"(\x8B\x44\x24.)"            // mov eax,dword ptr ss:[esp+??]
+        R"(()"
+
+        // VS 2019
         R"(\x5F)"                     // pop edi
         R"(\x5E)"                     // pop esi
-        R"(()"
-        // VS 2019
         R"(\xC7\x03\x52\x69\x63\x68)" // mov dword ptr ds:[ebx],68636952
         R"(\x89\x4B\x04)"             // mov dword ptr ds:[ebx+4],ecx
         R"(|)"
         // VS 2022
+        R"(\x5F)"                     // pop edi
+        R"(\x5E)"                     // pop esi
         R"(\x89\x59\x04)"             // mov dword ptr ds:[ecx+4],ebx
         R"(\xC7\x01\x52\x69\x63\x68)" // mov dword ptr ds:[ecx],68636952
+        R"(|)"
+        // VS 2022 17.12.1
+        R"(\x89\x7B\x04)"             // mov dword ptr ds:[ebx+4],ebx
+        R"(\x5F)"                     // pop edi
+        R"(\x5E)"                     // pop esi
+        R"(\xC7\x03\x52\x69\x63\x68)" // mov dword ptr ds:[ebx],68636952
+
         R"())"
         R"(\x5B)"                     // pop ebx
         ;
@@ -81,10 +102,10 @@ BOOL Wh_ModInit(void)
     if (std::regex_search(search.begin(), search.end(), match, regex)) {
         auto pos = from + match.position(0);
 
-        DWORD dlOldProtect;
-        VirtualProtect(pos, targetPatch.size(), PAGE_EXECUTE_READWRITE, &dlOldProtect);
+        DWORD dwOldProtect;
+        VirtualProtect(pos, targetPatch.size(), PAGE_EXECUTE_READWRITE, &dwOldProtect);
         memcpy(pos, targetPatch.data(), targetPatch.size());
-        VirtualProtect(pos, targetPatch.size(), dlOldProtect, &dlOldProtect);
+        VirtualProtect(pos, targetPatch.size(), dwOldProtect, &dwOldProtect);
     }
     else {
         bool proceed = MessageBox(

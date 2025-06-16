@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.0.3
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -11,8 +11,17 @@
 // @include         msedge.exe
 // @include         opera.exe
 // @include         brave.exe
-// @compilerOptions -lcomctl32
+// @include         *\YandexBrowser\Application\browser.exe
+// @compilerOptions -lcomctl32 -lgdi32
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+//
+// For pull requests, development takes place here:
+// https://github.com/m417z/my-windhawk-mods
 
 // ==WindhawkModReadme==
 /*
@@ -20,7 +29,8 @@
 
 Use the mouse wheel while hovering over the tab bar to switch between tabs.
 
-Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave.
+Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave,
+Yandex Browser.
 
 ![demonstration](https://i.imgur.com/GWCsO70.gif)
 */
@@ -30,15 +40,36 @@ Currently supported browsers: Google Chrome, Microsoft Edge, Opera, Brave.
 /*
 - reverseScrollingDirection: false
   $name: Reverse Scrolling Direction
+- horizontalScrolling: false
+  $name: Horizontal scrolling
+  $description: >-
+    Switch between tabs when the mouse's horizontal scroll wheel is tilted or
+    rotated
+- scrollAreaLimit:
+  - pixelsFromTop: 0
+    $name: Pixels from top
+  - pixelsFromLeft: 0
+    $name: Pixels from left
+  $name: Scroll area limit
+  $description: >-
+    Optionally limit the area where the mouse wheel scrolls tabs. The mod has no
+    effect if the mouse is outside this area. This is useful in case the mod
+    incorrectly overrides the mouse wheel scrolling in areas where it shouldn't,
+    e.g. in the page content area. Set to zero to disable the limit.
 */
 // ==/WindhawkModSettings==
 
 #include <commctrl.h>
+#include <windowsx.h>
 
 struct {
     bool reverseScrollingDirection;
+    bool horizontalScrolling;
+    int scrollAreaLimitPixelsFromTop;
+    int scrollAreaLimitPixelsFromLeft;
 } g_settings;
 
+bool g_isEdge;
 DWORD g_uiThreadId;
 DWORD g_lastScrollTime;
 HWND g_lastScrollWnd;
@@ -55,6 +86,32 @@ struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM {
     DWORD_PTR dwRefData;
     BOOL result;
 };
+
+UINT GetDpiForWindowWithFallback(HWND hWnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
+    static GetDpiForWindow_t pGetDpiForWindow = []() {
+        HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+        if (hUser32) {
+            return (GetDpiForWindow_t)GetProcAddress(hUser32,
+                                                     "GetDpiForWindow");
+        }
+
+        return (GetDpiForWindow_t) nullptr;
+    }();
+
+    UINT dpi = 96;
+    if (pGetDpiForWindow) {
+        dpi = pGetDpiForWindow(hWnd);
+    } else {
+        HDC hdc = GetDC(nullptr);
+        if (hdc) {
+            dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+            ReleaseDC(nullptr, hdc);
+        }
+    }
+
+    return dpi;
+}
 
 LRESULT CALLBACK CallWndProcForWindowSubclass(int nCode,
                                               WPARAM wParam,
@@ -97,24 +154,76 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd,
     param.uIdSubclass = uIdSubclass;
     param.dwRefData = dwRefData;
     param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
+    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (LPARAM)&param);
 
     UnhookWindowsHookEx(hook);
 
     return param.result;
 }
 
-bool OnMouseWheel(HWND hWnd, short delta) {
+bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
+    if (keys) {
+        return false;
+    }
+
+    RECT rect{};
+    GetWindowRect(hWnd, &rect);
+
+    UINT dpi = GetDpiForWindowWithFallback(hWnd);
+
+    if (int scrollAreaLimitPixelsFromTop =
+            g_settings.scrollAreaLimitPixelsFromTop) {
+        scrollAreaLimitPixelsFromTop =
+            MulDiv(scrollAreaLimitPixelsFromTop, dpi, 96);
+        if (yPos >= rect.top + scrollAreaLimitPixelsFromTop) {
+            Wh_Log(L"Mouse wheel event outside of the top scroll area limit");
+            return false;
+        }
+    }
+
+    if (int scrollAreaLimitPixelsFromLeft =
+            g_settings.scrollAreaLimitPixelsFromLeft) {
+        scrollAreaLimitPixelsFromLeft =
+            MulDiv(scrollAreaLimitPixelsFromLeft, dpi, 96);
+        if (xPos >= rect.left + scrollAreaLimitPixelsFromLeft) {
+            Wh_Log(L"Mouse wheel event outside of the left scroll area limit");
+            return false;
+        }
+    }
+
+    switch (SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(xPos, yPos))) {
+        case HTCLIENT:
+        case HTCAPTION:
+        case HTSYSMENU:
+        case HTMINBUTTON:
+        case HTMAXBUTTON:
+        case HTCLOSE:
+            break;
+
+        default:
+            return false;
+    }
+
     HWND hForegroundWnd = GetForegroundWindow();
     if (!hForegroundWnd || GetAncestor(hForegroundWnd, GA_ROOTOWNER) != hWnd) {
         g_lastScrollWnd = nullptr;
         return false;
     }
 
-    if (GetKeyState(VK_CONTROL) < 0 || GetKeyState(VK_MENU) < 0 ||
-        GetKeyState(VK_SHIFT) < 0 || GetKeyState(VK_PRIOR) < 0 ||
+    if (GetKeyState(VK_MENU) < 0 || GetKeyState(VK_LWIN) < 0 ||
+        GetKeyState(VK_RWIN) < 0 || GetKeyState(VK_PRIOR) < 0 ||
         GetKeyState(VK_NEXT) < 0) {
         return false;
+    }
+
+    // Edge has a thin border around the web content which triggers the tab
+    // scrolling. Ignore events which are very close to the window borders.
+    if (g_isEdge) {
+        if (MulDiv(xPos - rect.left, 96, dpi) <= 15 ||
+            MulDiv(rect.right - xPos, 96, dpi) <= 15 ||
+            MulDiv(rect.bottom - yPos, 96, dpi) <= 15) {
+            return false;
+        }
     }
 
     if (hWnd == g_lastScrollWnd &&
@@ -125,18 +234,14 @@ bool OnMouseWheel(HWND hWnd, short delta) {
     int clicks = delta / WHEEL_DELTA;
     Wh_Log(L"%d clicks (delta=%d)", clicks, delta);
 
-    if (g_settings.reverseScrollingDirection) {
-        clicks = -clicks;
-    }
-
-    WORD key = VK_PRIOR;
+    WORD key = VK_NEXT;
     if (clicks < 0) {
         clicks = -clicks;
-        key = VK_NEXT;
+        key = VK_PRIOR;
     }
 
     INPUT* input = new INPUT[clicks * 2 + 2];
-    for (size_t i = 0; i < clicks * 2 + 2; i++) {
+    for (int i = 0; i < clicks * 2 + 2; i++) {
         input[i].type = INPUT_KEYBOARD;
         input[i].ki.wScan = 0;
         input[i].ki.time = 0;
@@ -146,7 +251,7 @@ bool OnMouseWheel(HWND hWnd, short delta) {
     input[0].ki.wVk = VK_CONTROL;
     input[0].ki.dwFlags = 0;
 
-    for (size_t i = 0; i < clicks; i++) {
+    for (int i = 0; i < clicks; i++) {
         input[1 + i * 2].ki.wVk = key;
         input[1 + i * 2].ki.dwFlags = 0;
         input[1 + i * 2 + 1].ki.wVk = key;
@@ -173,26 +278,39 @@ LRESULT CALLBACK BrowserWindowSubclassProc(_In_ HWND hWnd,
                                            _In_ LPARAM lParam,
                                            _In_ UINT_PTR uIdSubclass,
                                            _In_ DWORD_PTR dwRefData) {
+    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam)) {
+        RemoveWindowSubclass(hWnd, BrowserWindowSubclassProc, 0);
+    }
+
     switch (uMsg) {
         case WM_MOUSEWHEEL:
-            switch (SendMessage(hWnd, WM_NCHITTEST, 0, lParam)) {
-                case HTCLIENT:
-                case HTCAPTION:
-                case HTSYSMENU:
-                case HTMINBUTTON:
-                case HTMAXBUTTON:
-                case HTCLOSE:
-                    if (OnMouseWheel(hWnd, GET_WHEEL_DELTA_WPARAM(wParam))) {
-                        return 0;
-                    }
+        case WM_MOUSEHWHEEL: {
+            WORD fwKeys = GET_KEYSTATE_WPARAM(wParam);
+            short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+            int xPos = GET_X_LPARAM(lParam);
+            int yPos = GET_Y_LPARAM(lParam);
+
+            if (uMsg == WM_MOUSEHWHEEL) {
+                if (!g_settings.horizontalScrolling) {
                     break;
+                }
+
+                // For horizontal scrolling, a large delta value might be posted
+                // for a single click (e.g. 480). Limit the value to 120.
+                if (zDelta < -120) {
+                    zDelta = -120;
+                } else if (zDelta > 120) {
+                    zDelta = 120;
+                }
+            } else if (!g_settings.reverseScrollingDirection) {
+                zDelta = -zDelta;
+            }
+
+            if (OnMouseWheel(hWnd, fwKeys, zDelta, xPos, yPos)) {
+                return 0;
             }
             break;
-
-        default:
-            if (uMsg == g_subclassRegisteredMsg && !wParam)
-                RemoveWindowSubclass(hWnd, BrowserWindowSubclassProc, 0);
-            break;
+        }
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -204,13 +322,24 @@ bool IsBrowserWindow(HWND hWnd) {
         return false;
     }
 
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0 ||
-        wcsicmp(szClassName, L"Chrome_WidgetWin_1") != 0) {
+    WCHAR windowClassName[256];
+    if (!GetClassName(hWnd, windowClassName, ARRAYSIZE(windowClassName))) {
         return false;
     }
 
-    return true;
+    bool classNameMatch = false;
+    PCWSTR classNames[] = {
+        L"Chrome_WidgetWin_1",
+        L"YandexBrowser_WidgetWin_1",
+    };
+    for (PCWSTR className : classNames) {
+        if (_wcsicmp(windowClassName, className) == 0) {
+            classNameMatch = true;
+            break;
+        }
+    }
+
+    return classNameMatch;
 }
 
 BOOL CALLBACK InitialEnumBrowserWindowsFunc(HWND hWnd, LPARAM lParam) {
@@ -289,12 +418,19 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
 void LoadSettings() {
     g_settings.reverseScrollingDirection =
         Wh_GetIntSetting(L"reverseScrollingDirection");
+    g_settings.horizontalScrolling = Wh_GetIntSetting(L"horizontalScrolling");
+    g_settings.scrollAreaLimitPixelsFromTop =
+        Wh_GetIntSetting(L"scrollAreaLimit.pixelsFromTop");
+    g_settings.scrollAreaLimitPixelsFromLeft =
+        Wh_GetIntSetting(L"scrollAreaLimit.pixelsFromLeft");
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
+
+    g_isEdge = !!GetModuleHandle(L"msedge.exe");
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook,
                        (void**)&pOriginalCreateWindowExW);

@@ -2,7 +2,7 @@
 // @id              desktop-icons-view
 // @name            Desktop icons view
 // @description     Change desktop icons view to list, details, small icons, or tiles
-// @version         1.0
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -52,6 +52,9 @@ Based on [List view desktop](https://github.com/deanm/lvd).
 - colwidth: 500
   $name: Column Width
   $description: Sets the width of filenames
+- monitor: 1
+  $name: Monitor
+  $description: The monitor number to have your desktop icons on
 */
 // ==/WindhawkModSettings==
 
@@ -60,6 +63,7 @@ Based on [List view desktop](https://github.com/deanm/lvd).
 struct {
     int style;
     int colwidth;
+    int monitor;
 } settings;
 
 HWND FindChild(HWND parent, LPCWSTR cls, LPCWSTR win) {
@@ -67,6 +71,47 @@ HWND FindChild(HWND parent, LPCWSTR cls, LPCWSTR win) {
         return nullptr;
     }
     return FindWindowEx(parent, nullptr, cls, win);
+}
+
+bool IsFolderViewWnd(HWND hWnd) {
+    WCHAR buffer[64];
+
+    if (!GetClassName(hWnd, buffer, ARRAYSIZE(buffer)) ||
+        _wcsicmp(buffer, L"SysListView32")) {
+        return false;
+    }
+
+    if (!GetWindowText(hWnd, buffer, ARRAYSIZE(buffer)) ||
+        _wcsicmp(buffer, L"FolderView")) {
+        return false;
+    }
+
+    HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
+    if (!hParentWnd) {
+        return false;
+    }
+
+    if (!GetClassName(hParentWnd, buffer, ARRAYSIZE(buffer)) ||
+        _wcsicmp(buffer, L"SHELLDLL_DefView")) {
+        return false;
+    }
+
+    if (GetWindowTextLength(hParentWnd) > 0) {
+        return false;
+    }
+
+    HWND hParentWnd2 = GetAncestor(hParentWnd, GA_PARENT);
+    if (!hParentWnd2) {
+        return false;
+    }
+
+    if ((!GetClassName(hParentWnd2, buffer, ARRAYSIZE(buffer)) ||
+         _wcsicmp(buffer, L"Progman")) &&
+        hParentWnd2 != GetShellWindow()) {
+        return false;
+    }
+
+    return true;
 }
 
 HWND GetFolderViewWnd() {
@@ -84,6 +129,32 @@ HWND GetFolderViewWnd() {
     }
 
     return hFolderFolderViewWnd;
+}
+
+HMONITOR GetMonitorById(int monitorId) {
+    HMONITOR monitorResult = nullptr;
+    int currentMonitorId = 0;
+
+    auto monitorEnumProc = [&monitorResult, &currentMonitorId,
+                            monitorId](HMONITOR hMonitor) -> BOOL {
+        if (currentMonitorId == monitorId) {
+            monitorResult = hMonitor;
+            return FALSE;
+        }
+        currentMonitorId++;
+        return TRUE;
+    };
+
+    EnumDisplayMonitors(
+        nullptr, nullptr,
+        [](HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor,
+           LPARAM dwData) -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(monitorEnumProc)*>(dwData);
+            return proc(hMonitor);
+        },
+        reinterpret_cast<LPARAM>(&monitorEnumProc));
+
+    return monitorResult;
 }
 
 void SetDesktopStyle(HWND hFolderViewWnd, int view) {
@@ -105,11 +176,23 @@ void SetDesktopStyle(HWND hFolderViewWnd, int view) {
     }
 
     // Get working area of desktop and position desktop window accordingly.
-    RECT rect{};
-    if (SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0)) {
-        SetWindowPos(hFolderViewWnd, nullptr, rect.left, rect.top,
-                     rect.right - rect.left, rect.bottom - rect.top,
-                     SWP_NOZORDER);
+    HMONITOR monitor = GetMonitorById(settings.monitor - 1);
+    if (!monitor) {
+        monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTONEAREST);
+    }
+
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(monitorInfo),
+    };
+    if (GetMonitorInfo(monitor, &monitorInfo)) {
+        RECT rc = monitorInfo.rcWork;
+        MapWindowPoints(nullptr, GetAncestor(hFolderViewWnd, GA_PARENT),
+                        (POINT*)(&rc), sizeof(RECT) / sizeof(POINT));
+        int x = rc.left;
+        int y = rc.top;
+        int cx = rc.right - rc.left;
+        int cy = rc.bottom - rc.top;
+        SetWindowPos(hFolderViewWnd, nullptr, x, y, cx, cy, SWP_NOZORDER);
     }
     // Refresh.
     UpdateWindow(hFolderViewWnd);
@@ -132,35 +215,30 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
                                          dwStyle, X, Y, nWidth, nHeight,
                                          hWndParent, hMenu, hInstance, lpParam);
-    if (!hWnd) {
+    if (!hWnd || !IsFolderViewWnd(hWnd)) {
         return hWnd;
     }
 
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    Wh_Log(L"FolderView window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+    // SetDesktopStyle(hWnd, settings.style);
 
-    if (bTextualClassName && _wcsicmp(lpClassName, L"SysListView32") == 0 &&
-        lpWindowName && _wcsicmp(lpWindowName, L"FolderView") == 0) {
-        Wh_Log(L"FolderView window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        // SetDesktopStyle(hWnd, settings.style);
+    static UINT s_timer = 0;
+    static HWND s_hWnd;
+    s_hWnd = hWnd;
+    s_timer = SetTimer(nullptr, s_timer, 1000,
+                       [](HWND hwnd,  // handle of window for timer messages
+                          UINT uMsg,  // WM_TIMER message
+                          UINT_PTR idEvent,  // timer identifier
+                          DWORD dwTime       // current system time
+                          ) WINAPI {
+                           Wh_Log(L">");
 
-        static UINT s_timer = 0;
-        static HWND s_hWnd;
-        s_hWnd = hWnd;
-        s_timer = SetTimer(nullptr, s_timer, 1000,
-                           [](HWND hwnd,  // handle of window for timer messages
-                              UINT uMsg,  // WM_TIMER message
-                              UINT_PTR idEvent,  // timer identifier
-                              DWORD dwTime       // current system time
-                              ) WINAPI {
-                               Wh_Log(L">");
+                           KillTimer(nullptr, s_timer);
+                           s_timer = 0;
 
-                               KillTimer(nullptr, s_timer);
-                               s_timer = 0;
-
-                               SetDesktopStyle(s_hWnd, settings.style);
-                               s_hWnd = nullptr;
-                           });
-    }
+                           SetDesktopStyle(s_hWnd, settings.style);
+                           s_hWnd = nullptr;
+                       });
 
     return hWnd;
 }
@@ -180,6 +258,7 @@ void LoadSettings() {
     Wh_FreeStringSetting(style);
 
     settings.colwidth = Wh_GetIntSetting(L"colwidth");
+    settings.monitor = Wh_GetIntSetting(L"monitor");
 }
 
 BOOL Wh_ModInit() {

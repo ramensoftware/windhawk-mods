@@ -2,14 +2,14 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.0.3
+// @version         1.1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -DWINVER=0x0A00 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -58,16 +58,15 @@ versions weren't tested and are probably not compatible.
   - sameAsPrimary: Same as on primary monitor
   - top: Top
   - bottom: Bottom
+- runningIndicatorsOnTop: false
+  $name: Running indicators on top
+  $description: Show running indicators above the taskbar icons
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
-#include <initguid.h>  // must come before knownfolders.h
-
 #include <dwmapi.h>
-#include <knownfolders.h>
-#include <shlobj.h>
 #include <windowsx.h>
 
 #undef GetCurrentTime
@@ -77,10 +76,13 @@ versions weren't tested and are probably not compatible.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
-#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <list>
+
+#ifdef _M_ARM64
+#include <regex>
+#endif
 
 using namespace winrt::Windows::UI::Xaml;
 
@@ -96,9 +98,10 @@ enum class TaskbarLocation {
 struct {
     TaskbarLocation taskbarLocation;
     TaskbarLocation taskbarLocationSecondary;
+    bool runningIndicatorsOnTop;
 } g_settings;
 
-WCHAR g_taskbarViewDllPath[MAX_PATH];
+std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_applyingSettings;
 std::atomic<bool> g_unloading;
 std::atomic<int> g_hookCallCounter;
@@ -106,6 +109,12 @@ std::atomic<int> g_hookCallCounter;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
 bool g_inCTaskListThumbnailWnd_LayoutThumbnails;
 bool g_inOverflowFlyoutModel_Show;
+int g_lastTaskbarAlignment;
+
+std::atomic<DWORD> g_UpdateFlyoutPosition_threadId;
+void* g_UpdateFlyoutPosition_pThis;
+
+winrt::Windows::Foundation::Size g_lastFlyoutPositionSize;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
@@ -130,12 +139,87 @@ using GetThreadDescription_t =
     WINBASEAPI HRESULT(WINAPI*)(HANDLE hThread, PWSTR* ppszThreadDescription);
 GetThreadDescription_t pGetThreadDescription;
 
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+    static VS_FIXEDFILEINFO* fixedFileInfo =
+        GetModuleVersionInfo(nullptr, nullptr);
+    if (!fixedFileInfo) {
+        return false;
+    }
+
+    WORD moduleMajor = HIWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleMinor = LOWORD(fixedFileInfo->dwFileVersionMS);
+    WORD moduleBuild = HIWORD(fixedFileInfo->dwFileVersionLS);
+    WORD moduleQfe = LOWORD(fixedFileInfo->dwFileVersionLS);
+
+    if (moduleMajor != major) {
+        return moduleMajor > major;
+    }
+
+    if (moduleMinor != minor) {
+        return moduleMinor > minor;
+    }
+
+    if (moduleBuild != build) {
+        return moduleBuild > build;
+    }
+
+    return moduleQfe >= qfe;
+}
+
 bool GetMonitorRect(HMONITOR monitor, RECT* rc) {
     MONITORINFO monitorInfo{
         .cbSize = sizeof(MONITORINFO),
     };
     return GetMonitorInfo(monitor, &monitorInfo) &&
            CopyRect(rc, &monitorInfo.rcMonitor);
+}
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
 }
 
 bool IsChildOfElementByName(FrameworkElement element, PCWSTR name) {
@@ -331,7 +415,15 @@ void WINAPI TrayUI_GetStuckInfo_Hook(void* pThis,
 
     TrayUI_GetStuckInfo_Original(pThis, rect, taskbarPos);
 
-    *taskbarPos = ABE_TOP;
+    switch (g_settings.taskbarLocation) {
+        case TaskbarLocation::top:
+            *taskbarPos = ABE_TOP;
+            break;
+
+        case TaskbarLocation::bottom:
+            *taskbarPos = ABE_BOTTOM;
+            break;
+    }
 }
 
 void TaskbarWndProcPreProcess(HWND hWnd,
@@ -340,6 +432,16 @@ void TaskbarWndProcPreProcess(HWND hWnd,
                               LPARAM* lParam) {
     switch (Msg) {
         case 0x5C3: {
+            // On Windows 11 23H2, setting the taskbar location here also causes
+            // the start menu to be opened on the left of the screen, even if
+            // the icons on the taskbar are centered. Therefore, only set it if
+            // the icons are aligned to left, not centered. The drawback is that
+            // the jump list animations won't be correct in this case.
+            if (g_lastTaskbarAlignment == 1 &&
+                !IsVersionAtLeast(10, 0, 26100, 0)) {
+                break;
+            }
+
             // The taskbar location that affects the jump list animations.
             if (*wParam == ABE_BOTTOM) {
                 HMONITOR monitor = (HMONITOR)lParam;
@@ -511,7 +613,7 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
 
     // Place at the bottom of the monitor, will reposition later in
     // SetWindowPos.
-    point->Y = monitorInfo.rcWork.bottom;
+    point->Y = monitorInfo.rcWork.bottom - 1;
 
     return ret;
 }
@@ -596,6 +698,42 @@ void* WINAPI XamlExplorerHostWindow_XamlExplorerHostWindow_Hook(
                                                                   rect, param3);
 }
 
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                          int* alignment);
+ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,
+                                                   int* alignment) {
+    Wh_Log(L">");
+
+    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        Wh_Log(L"alignment=%d", *alignment);
+        g_lastTaskbarAlignment = *alignment;
+    }
+
+    return ret;
+}
+
+bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
+    FrameworkElement controlCenterButton = nullptr;
+
+    FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
+    if (child &&
+        (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
+        (child = FindChildByName(child, L"SystemTrayFrameGrid")) &&
+        (child = FindChildByName(child, L"ControlCenterButton"))) {
+        controlCenterButton = child;
+    }
+
+    if (!controlCenterButton) {
+        return false;
+    }
+
+    // On secondary taskbars, the element that holds the system icons is empty
+    // and has the width of 2.
+    return controlCenterButton.ActualWidth() < 5;
+}
+
 void ApplyTaskbarFrameStyle(FrameworkElement taskbarFrame) {
     if (g_settings.taskbarLocation != TaskbarLocation::top) {
         return;
@@ -628,6 +766,7 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
     Wh_Log(L">");
 
     static LONG taskbarFrameOffset = []() -> LONG {
+#if defined(_M_X64)
         // 48:83EC 28               | sub rsp,28
         // 48:8B81 88020000         | mov rax,qword ptr ds:[rcx+288]
         // or
@@ -640,6 +779,39 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
             Wh_Log(L"taskbarFrameOffset=0x%X", offset);
             return offset;
         }
+#elif defined(_M_ARM64)
+        // 00000001`806b1810 a9bf7bfd stp fp,lr,[sp,#-0x10]!
+        // 00000001`806b1814 910003fd mov fp,sp
+        // 00000001`806b1818 aa0003e8 mov x8,x0
+        // 00000001`806b181c f9414500 ldr x0,[x8,#0x288]
+        const DWORD* start =
+            (const DWORD*)TaskbarController_OnGroupingModeChanged;
+        const DWORD* end = start + 10;
+        std::regex regex1(R"(ldr\s+x\d+, \[x\d+, #0x([0-9a-f]+)\])");
+        for (const DWORD* p = start; p != end; p++) {
+            WH_DISASM_RESULT result1;
+            if (!Wh_Disasm((void*)p, &result1)) {
+                break;
+            }
+
+            std::string_view s1 = result1.text;
+            if (s1 == "ret") {
+                break;
+            }
+
+            std::match_results<std::string_view::const_iterator> match1;
+            if (!std::regex_match(s1.begin(), s1.end(), match1, regex1)) {
+                continue;
+            }
+
+            // Wh_Log(L"%S", result1.text);
+            LONG offset = std::stoull(match1[1], nullptr, 16);
+            Wh_Log(L"taskbarFrameOffset=0x%X", offset);
+            return offset;
+        }
+#else
+#error "Unsupported architecture"
+#endif
 
         Wh_Log(L"taskbarFrameOffset not found");
         return 0;
@@ -693,13 +865,13 @@ TaskbarFrame_TaskbarFrame_t TaskbarFrame_TaskbarFrame_Original;
 void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
     Wh_Log(L">");
 
-    pThis = TaskbarFrame_TaskbarFrame_Original(pThis);
+    void* ret = TaskbarFrame_TaskbarFrame_Original(pThis);
 
     FrameworkElement taskbarFrame = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(taskbarFrame));
     if (!taskbarFrame) {
-        return pThis;
+        return ret;
     }
 
     g_elementLoadedAutoRevokerList.emplace_back();
@@ -730,7 +902,7 @@ void* WINAPI TaskbarFrame_TaskbarFrame_Hook(void* pThis) {
             }
         });
 
-    return pThis;
+    return ret;
 }
 
 void ApplySystemTrayChevronIconViewStyle(
@@ -769,13 +941,13 @@ IconView_IconView_t IconView_IconView_Original;
 void* WINAPI IconView_IconView_Hook(void* pThis) {
     Wh_Log(L">");
 
-    pThis = IconView_IconView_Original(pThis);
+    void* ret = IconView_IconView_Original(pThis);
 
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
     if (!iconView) {
-        return pThis;
+        return ret;
     }
 
     g_elementLoadedAutoRevokerList.emplace_back();
@@ -805,7 +977,75 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
             }
         });
 
-    return pThis;
+    return ret;
+}
+
+void UpdateTaskListButton(FrameworkElement taskListButtonElement) {
+    auto iconPanelElement =
+        FindChildByName(taskListButtonElement, L"IconPanel");
+    if (!iconPanelElement) {
+        return;
+    }
+
+    bool indicatorsOnTop = false;
+    if (!g_unloading && g_settings.runningIndicatorsOnTop) {
+        auto taskbarFrameRepeaterElement =
+            Media::VisualTreeHelper::GetParent(taskListButtonElement)
+                .as<FrameworkElement>();
+
+        bool isSecondaryTaskbar = false;
+        if (!taskbarFrameRepeaterElement ||
+            taskbarFrameRepeaterElement.Name() != L"TaskbarFrameRepeater") {
+            // TODO: Can also be "OverflowFlyoutListRepeater".
+        } else {
+            isSecondaryTaskbar =
+                IsSecondaryTaskbar(taskListButtonElement.XamlRoot());
+        }
+
+        TaskbarLocation taskbarLocation =
+            isSecondaryTaskbar ? g_settings.taskbarLocationSecondary
+                               : g_settings.taskbarLocation;
+        if (taskbarLocation == TaskbarLocation::top) {
+            indicatorsOnTop = true;
+        }
+    }
+
+    PCWSTR indicatorClassNames[] = {
+        L"RunningIndicator",
+        L"ProgressIndicator",
+    };
+    for (auto indicatorClassName : indicatorClassNames) {
+        auto indicatorElement =
+            FindChildByName(iconPanelElement, indicatorClassName);
+        if (!indicatorElement) {
+            continue;
+        }
+
+        indicatorElement.VerticalAlignment(indicatorsOnTop
+                                               ? VerticalAlignment::Top
+                                               : VerticalAlignment::Bottom);
+    }
+}
+
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    TaskListButton_UpdateVisualStates_Original(pThis);
+
+    void* taskListButtonIUnknownPtr = (void**)pThis + 3;
+    winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
+    winrt::copy_from_abi(taskListButtonIUnknown, taskListButtonIUnknownPtr);
+
+    auto taskListButtonElement = taskListButtonIUnknown.as<FrameworkElement>();
+
+    try {
+        UpdateTaskListButton(taskListButtonElement);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
 }
 
 using OverflowFlyoutModel_Show_t = void(WINAPI*)(void* pThis);
@@ -820,9 +1060,24 @@ void WINAPI OverflowFlyoutModel_Show_Hook(void* pThis) {
     g_inOverflowFlyoutModel_Show = false;
 }
 
-using MenuFlyout_ShowAt_t = void*(WINAPI*)(void* pThis,
-                                           void* placementTarget,
-                                           void* showOptions);
+using FlyoutFrame_UpdateFlyoutPosition_t = void(WINAPI*)(void* pThis);
+FlyoutFrame_UpdateFlyoutPosition_t FlyoutFrame_UpdateFlyoutPosition_Original;
+void WINAPI FlyoutFrame_UpdateFlyoutPosition_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    g_UpdateFlyoutPosition_threadId = GetCurrentThreadId();
+    g_UpdateFlyoutPosition_pThis = pThis;
+
+    FlyoutFrame_UpdateFlyoutPosition_Original(pThis);
+
+    g_UpdateFlyoutPosition_threadId = 0;
+    g_UpdateFlyoutPosition_pThis = nullptr;
+}
+
+using MenuFlyout_ShowAt_t =
+    void*(WINAPI*)(void* pThis,
+                   DependencyObject* placementTarget,
+                   Controls::Primitives::FlyoutShowOptions* showOptions);
 MenuFlyout_ShowAt_t MenuFlyout_ShowAt_Original;
 void* WINAPI
 MenuFlyout_ShowAt_Hook(void* pThis,
@@ -972,9 +1227,12 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         };
         GetMonitorInfo(monitor, &monitorInfo);
 
+        UINT monitorDpiX = 96;
+        UINT monitorDpiY = 96;
+        GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
         if (g_inCTaskListThumbnailWnd_DisplayUI) {
-            Y = std::max(monitorInfo.rcWork.top, pt.y);
-            Y += MulDiv(12, GetDpiForWindow(hWnd), 96);
+            Y = monitorInfo.rcWork.top + MulDiv(12, monitorDpiY, 96);
         } else {
             // Keep current position.
             RECT rc;
@@ -1004,10 +1262,41 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         };
         GetMonitorInfo(monitor, &monitorInfo);
 
-        if (Y < monitorInfo.rcWork.top) {
-            Y = monitorInfo.rcWork.top;
-        } else if (Y > monitorInfo.rcWork.bottom - cy) {
-            Y = monitorInfo.rcWork.bottom - cy;
+        UINT monitorDpiX = 96;
+        UINT monitorDpiY = 96;
+        GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
+        bool adjusted = false;
+
+        WCHAR rootOwnerClassName[64];
+        if (_wcsicmp(szClassName, L"Xaml_WindowedPopupClass") == 0 &&
+            GetWindowThreadProcessId(hWnd, nullptr) ==
+                GetWindowThreadProcessId(FindCurrentProcessTaskbarWnd(),
+                                         nullptr) &&
+            GetClassName(GetAncestor(hWnd, GA_ROOTOWNER), rootOwnerClassName,
+                         ARRAYSIZE(rootOwnerClassName))) {
+            if (_wcsicmp(rootOwnerClassName, L"XamlExplorerHostIslandWindow") ==
+                0) {
+                // Probably hovering a XAML thumbnail preview, make it so that
+                // the tooltip doesn't cover the thumbnail preview.
+                Y = monitorInfo.rcWork.top +
+                    MulDiv(10 + g_lastFlyoutPositionSize.Height, monitorDpiY,
+                           96);
+                adjusted = true;
+            } else if (_wcsicmp(rootOwnerClassName,
+                                L"TopLevelWindowForOverflowXamlIsland") == 0) {
+                // Don't adjust to prevent tooltips from covering the overflow
+                // flyout.
+                adjusted = true;
+            }
+        }
+
+        if (!adjusted) {
+            if (Y < monitorInfo.rcWork.top) {
+                Y = monitorInfo.rcWork.top;
+            } else if (Y > monitorInfo.rcWork.bottom - cy) {
+                Y = monitorInfo.rcWork.bottom - cy;
+            }
         }
     } else if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
         if (uFlags & SWP_NOMOVE) {
@@ -1056,6 +1345,28 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         GetMonitorInfo(monitor, &monitorInfo);
 
         Y = monitorInfo.rcWork.top;
+
+        // If hovering over the overflow window, exclude it.
+        HWND windowFromPoint = WindowFromPoint(pt);
+        if (windowFromPoint &&
+            GetWindowThreadProcessId(windowFromPoint, nullptr) ==
+                GetWindowThreadProcessId(FindCurrentProcessTaskbarWnd(),
+                                         nullptr)) {
+            WCHAR szClassNameFromPoint[64];
+            if (GetClassName(windowFromPoint, szClassNameFromPoint,
+                             ARRAYSIZE(szClassNameFromPoint)) &&
+                _wcsicmp(szClassNameFromPoint,
+                         L"XamlExplorerHostIslandWindow") == 0) {
+                UINT monitorDpiX = 96;
+                UINT monitorDpiY = 96;
+                GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX,
+                                 &monitorDpiY);
+
+                int overflowHeight = MulDiv(54 + 12, monitorDpiY, 96);
+
+                Y += overflowHeight;
+            }
+        }
     } else {
         return original();
     }
@@ -1064,6 +1375,156 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
            Y + cy);
 
     return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
+using MoveWindow_t = decltype(&MoveWindow);
+MoveWindow_t MoveWindow_Original;
+BOOL WINAPI MoveWindow_Hook(HWND hWnd,
+                            int X,
+                            int Y,
+                            int nWidth,
+                            int nHeight,
+                            BOOL bRepaint) {
+    auto original = [=]() {
+        return MoveWindow_Original(hWnd, X, Y, nWidth, nHeight, bRepaint);
+    };
+
+    WCHAR szClassName[64];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+        return original();
+    }
+
+    if (_wcsicmp(szClassName, L"XamlExplorerHostIslandWindow") == 0) {
+        DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+        if (!threadId) {
+            return original();
+        }
+
+        HANDLE thread =
+            OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, threadId);
+        if (!thread) {
+            return original();
+        }
+
+        PWSTR threadDescription;
+        HRESULT hr = pGetThreadDescription
+                         ? pGetThreadDescription(thread, &threadDescription)
+                         : E_FAIL;
+        CloseHandle(thread);
+        if (FAILED(hr)) {
+            return original();
+        }
+
+        bool isMultitaskingView =
+            wcscmp(threadDescription, L"MultitaskingView") == 0;
+
+        LocalFree(threadDescription);
+
+        if (!isMultitaskingView) {
+            return original();
+        }
+
+        POINT pt;
+        GetCursorPos(&pt);
+
+        HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        if (GetTaskbarLocationForMonitor(monitor) == TaskbarLocation::bottom) {
+            return original();
+        }
+
+        MONITORINFO monitorInfo{
+            .cbSize = sizeof(MONITORINFO),
+        };
+        GetMonitorInfo(monitor, &monitorInfo);
+
+        UINT monitorDpiX = 96;
+        UINT monitorDpiY = 96;
+        GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
+        Y = monitorInfo.rcWork.top + MulDiv(12, monitorDpiY, 96);
+    } else {
+        return original();
+    }
+
+    Wh_Log(L"Adjusting pos for %s: %dx%d, %dx%d", szClassName, X, Y, X + nWidth,
+           Y + nHeight);
+
+    return MoveWindow_Original(hWnd, X, Y, nWidth, nHeight, bRepaint);
+}
+
+using MapWindowPoints_t = decltype(&MapWindowPoints);
+MapWindowPoints_t MapWindowPoints_Original;
+int WINAPI MapWindowPoints_Hook(HWND hWndFrom,
+                                HWND hWndTo,
+                                LPPOINT lpPoints,
+                                UINT cPoints) {
+    int ret = MapWindowPoints_Original(hWndFrom, hWndTo, lpPoints, cPoints);
+
+    if (GetCurrentThreadId() != g_UpdateFlyoutPosition_threadId ||
+        !g_UpdateFlyoutPosition_pThis || cPoints != 1) {
+        return ret;
+    }
+
+    Wh_Log(L">");
+
+    FrameworkElement flyoutFrame = nullptr;
+    ((IUnknown**)g_UpdateFlyoutPosition_pThis)[1]->QueryInterface(
+        winrt::guid_of<FrameworkElement>(), winrt::put_abi(flyoutFrame));
+    if (!flyoutFrame) {
+        Wh_Log(L"Error getting flyoutFrame");
+        return ret;
+    }
+
+    FrameworkElement hoverFlyoutCanvas =
+        FindChildByName(flyoutFrame, L"HoverFlyoutCanvas");
+    if (!hoverFlyoutCanvas) {
+        Wh_Log(L"No HoverFlyoutCanvas");
+        return ret;
+    }
+
+    Controls::Grid hoverFlyoutGrid =
+        FindChildByName(hoverFlyoutCanvas, L"HoverFlyoutGrid")
+            .try_as<Controls::Grid>();
+    if (!hoverFlyoutGrid) {
+        Wh_Log(L"No HoverFlyoutGrid");
+        return ret;
+    }
+
+    auto flyoutPositionSize = hoverFlyoutGrid.DesiredSize();
+    g_lastFlyoutPositionSize = flyoutPositionSize;
+
+    DWORD messagePos = GetMessagePos();
+    POINT pt{
+        GET_X_LPARAM(messagePos),
+        GET_Y_LPARAM(messagePos),
+    };
+
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    if (GetTaskbarLocationForMonitor(monitor) != TaskbarLocation::top) {
+        return ret;
+    }
+
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(MONITORINFO),
+    };
+    GetMonitorInfo(monitor, &monitorInfo);
+
+    UINT monitorDpiX = 96;
+    UINT monitorDpiY = 96;
+    GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
+
+    int flyoutHeight = MulDiv(flyoutPositionSize.Height, monitorDpiY, 96);
+
+    // Align to bottom instead of top.
+    lpPoints->y += flyoutHeight;
+
+    // Add work area space.
+    lpPoints->y += monitorInfo.rcWork.top - monitorInfo.rcMonitor.top;
+
+    // Add margin.
+    lpPoints->y += MulDiv(12, monitorDpiY, 96);
+
+    return ret;
 }
 
 std::wstring GetProcessFileName(DWORD dwProcessId) {
@@ -1210,26 +1671,13 @@ void LoadSettings() {
         g_settings.taskbarLocationSecondary = TaskbarLocation::bottom;
     }
     Wh_FreeStringSetting(taskbarLocationSecondary);
-}
 
-HWND GetTaskbarWnd() {
-    static HWND hTaskbarWnd;
-
-    if (!hTaskbarWnd) {
-        HWND hWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-
-        DWORD processId = 0;
-        if (hWnd && GetWindowThreadProcessId(hWnd, &processId) &&
-            processId == GetCurrentProcessId()) {
-            hTaskbarWnd = hWnd;
-        }
-    }
-
-    return hTaskbarWnd;
+    g_settings.runningIndicatorsOnTop =
+        Wh_GetIntSetting(L"runningIndicatorsOnTop");
 }
 
 void ApplySettings() {
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         return;
     }
@@ -1257,105 +1705,104 @@ void ApplySettings() {
         reinterpret_cast<LPARAM>(&monitorEnumProc));
 }
 
-bool GetTaskbarViewDllPath(WCHAR path[MAX_PATH]) {
-    WCHAR szWindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectory(szWindowsDirectory,
-                             ARRAYSIZE(szWindowsDirectory))) {
-        Wh_Log(L"GetWindowsDirectory failed");
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnGroupingModeChanged(void))"},
+            &TaskbarController_OnGroupingModeChanged,
+            nullptr,
+            true,  // Missing in older Windows 11 versions.
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::UpdateFrameHeight(void))"},
+            &TaskbarController_UpdateFrameHeight_Original,
+            TaskbarController_UpdateFrameHeight_Hook,
+            true,  // Missing in older Windows 11 versions.
+        },
+        {
+            {LR"(public: __cdecl winrt::Taskbar::implementation::TaskbarFrame::TaskbarFrame(void))"},
+            &TaskbarFrame_TaskbarFrame_Original,
+            TaskbarFrame_TaskbarFrame_Hook,
+        },
+        {
+            {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
+            &IconView_IconView_Original,
+            IconView_IconView_Hook,
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
+            &TaskListButton_UpdateVisualStates_Original,
+            TaskListButton_UpdateVisualStates_Hook,
+        },
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::OverflowFlyoutModel::Show(void))"},
+            &OverflowFlyoutModel_Show_Original,
+            OverflowFlyoutModel_Show_Hook,
+        },
+        {
+            {
+                LR"(private: void __cdecl winrt::Taskbar::implementation::FlyoutFrame::UpdateFlyoutPosition(void))",
+            },
+            &FlyoutFrame_UpdateFlyoutPosition_Original,
+            FlyoutFrame_UpdateFlyoutPosition_Hook,
+            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+        },
+        {
+            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_Controls_Primitives_IFlyoutBase5<struct winrt::Windows::UI::Xaml::Controls::MenuFlyout>::ShowAt(struct winrt::Windows::UI::Xaml::DependencyObject const &,struct winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutShowOptions const &)const )"},
+            &MenuFlyout_ShowAt_Original,
+            MenuFlyout_ShowAt_Hook,
+        },
+        {
+            {LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContent::ShowContextMenu(void))"},
+            &TextIconContent_ShowContextMenu_Original,
+            TextIconContent_ShowContextMenu_Hook,
+        },
+        {
+            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::ShowContextMenu(void))"},
+            &DateTimeIconContent_ShowContextMenu_Original,
+            DateTimeIconContent_ShowContextMenu_Hook,
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         return false;
     }
 
-    // Windows 11 version 22H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(
-        path, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    // Windows 11 version 21H2.
-    wcscpy_s(path, MAX_PATH, szWindowsDirectory);
-    wcscat_s(
-        path, MAX_PATH,
-        LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
-    if (GetFileAttributes(path) != INVALID_FILE_ATTRIBUTES) {
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    {
-        // Taskbar.View.dll, ExplorerExtensions.dll
-        WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-            {
-                {
-                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnGroupingModeChanged(void))",
-                },
-                (void**)&TaskbarController_OnGroupingModeChanged,
-                nullptr,
-                true,  // Missing in older Windows 11 versions.
-            },
-            {
-                {
-                    LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::UpdateFrameHeight(void))",
-                },
-                (void**)&TaskbarController_UpdateFrameHeight_Original,
-                (void*)TaskbarController_UpdateFrameHeight_Hook,
-                true,  // Missing in older Windows 11 versions.
-            },
-            {
-                {
-                    LR"(public: __cdecl winrt::Taskbar::implementation::TaskbarFrame::TaskbarFrame(void))",
-                },
-                (void**)&TaskbarFrame_TaskbarFrame_Original,
-                (void*)TaskbarFrame_TaskbarFrame_Hook,
-            },
-            {
-                {
-                    LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))",
-                },
-                (void**)&IconView_IconView_Original,
-                (void*)IconView_IconView_Hook,
-            },
-            {
-                {
-                    LR"(public: void __cdecl winrt::Taskbar::implementation::OverflowFlyoutModel::Show(void))",
-                },
-                (void**)&OverflowFlyoutModel_Show_Original,
-                (void*)OverflowFlyoutModel_Show_Hook,
-            },
-            {
-                {
-                    LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_Controls_Primitives_IFlyoutBase5<struct winrt::Windows::UI::Xaml::Controls::MenuFlyout>::ShowAt(struct winrt::Windows::UI::Xaml::DependencyObject const &,struct winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutShowOptions const &)const )",
-                },
-                (void**)&MenuFlyout_ShowAt_Original,
-                (void*)MenuFlyout_ShowAt_Hook,
-            },
-            {
-                {
-                    LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContent::ShowContextMenu(void))",
-                },
-                (void**)&TextIconContent_ShowContextMenu_Original,
-                (void*)TextIconContent_ShowContextMenu_Hook,
-            },
-            {
-                {
-                    LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::ShowContextMenu(void))",
-                },
-                (void**)&DateTimeIconContent_ShowContextMenu_Original,
-                (void*)DateTimeIconContent_ShowContextMenu_Hook,
-            },
-        };
-
-        if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-            return false;
-        }
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
 
-    return true;
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+    }
+
+    return module;
 }
 
 bool HookTaskbarDllSymbols() {
@@ -1367,110 +1814,67 @@ bool HookTaskbarDllSymbols() {
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
-            {
-                LR"(public: void __cdecl TrayUI::_StuckTrayChange(void))",
-            },
-            (void**)&TrayUI__StuckTrayChange_Original,
+            {LR"(public: void __cdecl TrayUI::_StuckTrayChange(void))"},
+            &TrayUI__StuckTrayChange_Original,
         },
         {
-            {
-                LR"(public: void __cdecl TrayUI::_HandleSettingChange(struct HWND__ *,unsigned int,unsigned __int64,__int64))",
-            },
-            (void**)&TrayUI__HandleSettingChange_Original,
-            (void*)TrayUI__HandleSettingChange_Hook,
+            {LR"(public: void __cdecl TrayUI::_HandleSettingChange(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+            &TrayUI__HandleSettingChange_Original,
+            TrayUI__HandleSettingChange_Hook,
         },
         {
-            {
-                LR"(public: virtual unsigned int __cdecl TrayUI::GetDockedRect(struct tagRECT *,int))",
-            },
-            (void**)&TrayUI_GetDockedRect_Original,
-            (void*)TrayUI_GetDockedRect_Hook,
+            {LR"(public: virtual unsigned int __cdecl TrayUI::GetDockedRect(struct tagRECT *,int))"},
+            &TrayUI_GetDockedRect_Original,
+            TrayUI_GetDockedRect_Hook,
         },
         {
-            {
-                LR"(public: virtual void __cdecl TrayUI::MakeStuckRect(struct tagRECT *,struct tagRECT const *,struct tagSIZE,unsigned int))",
-            },
-            (void**)&TrayUI_MakeStuckRect_Original,
-            (void*)TrayUI_MakeStuckRect_Hook,
+            {LR"(public: virtual void __cdecl TrayUI::MakeStuckRect(struct tagRECT *,struct tagRECT const *,struct tagSIZE,unsigned int))"},
+            &TrayUI_MakeStuckRect_Original,
+            TrayUI_MakeStuckRect_Hook,
         },
         {
-            {
-                LR"(public: virtual void __cdecl TrayUI::GetStuckInfo(struct tagRECT *,unsigned int *))",
-            },
-            (void**)&TrayUI_GetStuckInfo_Original,
-            (void*)TrayUI_GetStuckInfo_Hook,
+            {LR"(public: virtual void __cdecl TrayUI::GetStuckInfo(struct tagRECT *,unsigned int *))"},
+            &TrayUI_GetStuckInfo_Original,
+            TrayUI_GetStuckInfo_Hook,
         },
         {
-            {
-                LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))",
-            },
-            (void**)&TrayUI_WndProc_Original,
-            (void*)TrayUI_WndProc_Hook,
+            {LR"(public: virtual __int64 __cdecl TrayUI::WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,bool *))"},
+            &TrayUI_WndProc_Original,
+            TrayUI_WndProc_Hook,
         },
         {
-            {
-                LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))",
-            },
-            (void**)&CSecondaryTray_v_WndProc_Original,
-            (void*)CSecondaryTray_v_WndProc_Hook,
+            {LR"(private: virtual __int64 __cdecl CSecondaryTray::v_WndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
+            &CSecondaryTray_v_WndProc_Original,
+            CSecondaryTray_v_WndProc_Hook,
         },
         {
-            {
-                LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )",
-            },
-            (void**)&CTaskListWnd_ComputeJumpViewPosition_Original,
-            (void*)CTaskListWnd_ComputeJumpViewPosition_Hook,
+            {LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
+            &CTaskListWnd_ComputeJumpViewPosition_Original,
+            CTaskListWnd_ComputeJumpViewPosition_Hook,
         },
         {
-            {
-                LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup *,struct ITaskItem *,struct ITaskItem *,unsigned long))",
-            },
-            (void**)&CTaskListThumbnailWnd_DisplayUI_Original,
-            (void*)CTaskListThumbnailWnd_DisplayUI_Hook,
+            {LR"(public: virtual int __cdecl CTaskListThumbnailWnd::DisplayUI(struct ITaskBtnGroup *,struct ITaskItem *,struct ITaskItem *,unsigned long))"},
+            &CTaskListThumbnailWnd_DisplayUI_Original,
+            CTaskListThumbnailWnd_DisplayUI_Hook,
         },
         {
-            {
-                LR"(public: virtual void __cdecl CTaskListThumbnailWnd::LayoutThumbnails(void))",
-            },
-            (void**)&CTaskListThumbnailWnd_LayoutThumbnails_Original,
-            (void*)CTaskListThumbnailWnd_LayoutThumbnails_Hook,
+            {LR"(public: virtual void __cdecl CTaskListThumbnailWnd::LayoutThumbnails(void))"},
+            &CTaskListThumbnailWnd_LayoutThumbnails_Original,
+            CTaskListThumbnailWnd_LayoutThumbnails_Hook,
         },
         {
-            {
-                LR"(public: __cdecl winrt::Windows::Internal::Shell::XamlExplorerHost::XamlExplorerHostWindow::XamlExplorerHostWindow(unsigned int,struct winrt::Windows::Foundation::Rect const &,unsigned int))",
-            },
-            (void**)&XamlExplorerHostWindow_XamlExplorerHostWindow_Original,
-            (void*)XamlExplorerHostWindow_XamlExplorerHostWindow_Hook,
+            {LR"(public: __cdecl winrt::Windows::Internal::Shell::XamlExplorerHost::XamlExplorerHostWindow::XamlExplorerHostWindow(unsigned int,struct winrt::Windows::Foundation::Rect const &,unsigned int))"},
+            &XamlExplorerHostWindow_XamlExplorerHostWindow_Original,
+            XamlExplorerHostWindow_XamlExplorerHostWindow_Hook,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"},
+            &ITaskbarSettings_get_Alignment_Original,
+            ITaskbarSettings_get_Alignment_Hook,
         },
     };
 
     return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
-}
-
-BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
-    if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
-        return FALSE;
-    }
-
-    if (!HookTaskbarDllSymbols()) {
-        return FALSE;
-    }
-
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook,
-                       (void**)&SetWindowPos_Original);
-
-    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
-    if (dwmapiModule) {
-        FARPROC pDwmSetWindowAttribute =
-            GetProcAddress(dwmapiModule, "DwmSetWindowAttribute");
-        if (pDwmSetWindowAttribute) {
-            Wh_SetFunctionHook((void*)pDwmSetWindowAttribute,
-                               (void*)DwmSetWindowAttribute_Hook,
-                               (void**)&DwmSetWindowAttribute_Original);
-        }
-    }
-
-    return TRUE;
 }
 
 BOOL Wh_ModInit() {
@@ -1483,23 +1887,65 @@ BOOL Wh_ModInit() {
             kernel32Module, "GetThreadDescription");
     }
 
-    if (!GetTaskbarViewDllPath(g_taskbarViewDllPath)) {
-        Wh_Log(L"Taskbar view module not found");
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllLoaded = true;
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"Taskbar view module not loaded yet");
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                      "LoadLibraryExW");
+        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                           LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
+    }
+
+    if (!HookTaskbarDllSymbols()) {
         return FALSE;
     }
 
-    HMODULE taskbarViewModule = LoadLibraryEx(g_taskbarViewDllPath, nullptr,
-                                              LOAD_WITH_ALTERED_SEARCH_PATH);
-    if (taskbarViewModule) {
-        return ModInitWithTaskbarView(taskbarViewModule);
+    WindhawkUtils::Wh_SetFunctionHookT(SetWindowPos, SetWindowPos_Hook,
+                                       &SetWindowPos_Original);
+
+    WindhawkUtils::Wh_SetFunctionHookT(MoveWindow, MoveWindow_Hook,
+                                       &MoveWindow_Original);
+
+    WindhawkUtils::Wh_SetFunctionHookT(MapWindowPoints, MapWindowPoints_Hook,
+                                       &MapWindowPoints_Original);
+
+    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
+    if (dwmapiModule) {
+        auto pDwmSetWindowAttribute =
+            (decltype(&DwmSetWindowAttribute))GetProcAddress(
+                dwmapiModule, "DwmSetWindowAttribute");
+        if (pDwmSetWindowAttribute) {
+            WindhawkUtils::Wh_SetFunctionHookT(pDwmSetWindowAttribute,
+                                               DwmSetWindowAttribute_Hook,
+                                               &DwmSetWindowAttribute_Original);
+        }
     }
 
-    Wh_Log(L"Taskbar view module not loaded yet");
-    return FALSE;
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
+
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
 
     ApplySettings();
 }

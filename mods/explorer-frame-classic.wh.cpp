@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.5
+// @version         1.0.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -25,7 +25,7 @@
 # Classic Explorer navigation bar
 
 Restores the classic Explorer navigation bar to the version before the Windows
-11 "Moments 4" update. Among other things, that makes drag and drop work again.
+11 "Moments 4" update.
 
 **Note**: You may need to restart Explorer to apply the changes.
 
@@ -463,9 +463,12 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
-    static VS_FIXEDFILEINFO* fixedFileInfo =
-        GetModuleVersionInfo(nullptr, nullptr);
+bool IsVersionAtLeast(HMODULE hModule,
+                      WORD major,
+                      WORD minor,
+                      WORD build,
+                      WORD qfe) {
+    VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(hModule, nullptr);
     if (!fixedFileInfo) {
         return false;
     }
@@ -488,6 +491,81 @@ bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
     }
 
     return moduleQfe >= qfe;
+}
+
+bool IsExplorerVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+    return IsVersionAtLeast(nullptr, major, minor, build, qfe);
+}
+
+bool IsFileExplorerExtensionsVersionAtLeast(WORD major,
+                                            WORD minor,
+                                            WORD build,
+                                            WORD qfe) {
+    HMODULE hModule = GetModuleHandle(L"FileExplorerExtensions.dll");
+    if (!hModule) {
+        return false;
+    }
+
+    return IsVersionAtLeast(hModule, major, minor, build, qfe);
+}
+
+std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
+    enum FEATURE_ENABLED_STATE {
+        FEATURE_ENABLED_STATE_DEFAULT = 0,
+        FEATURE_ENABLED_STATE_DISABLED = 1,
+        FEATURE_ENABLED_STATE_ENABLED = 2,
+    };
+
+#pragma pack(push, 1)
+    struct RTL_FEATURE_CONFIGURATION {
+        unsigned int featureId;
+        unsigned __int32 group : 4;
+        FEATURE_ENABLED_STATE enabledState : 2;
+        unsigned __int32 enabledStateOptions : 1;
+        unsigned __int32 unused1 : 1;
+        unsigned __int32 variant : 6;
+        unsigned __int32 variantPayloadKind : 2;
+        unsigned __int32 unused2 : 16;
+        unsigned int payload;
+    };
+#pragma pack(pop)
+
+    using RtlQueryFeatureConfiguration_t =
+        int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
+    static RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration = []() {
+        HMODULE hNtDll = LoadLibraryW(L"ntdll.dll");
+        return hNtDll ? (RtlQueryFeatureConfiguration_t)GetProcAddress(
+                            hNtDll, "RtlQueryFeatureConfiguration")
+                      : nullptr;
+    }();
+
+    if (!pRtlQueryFeatureConfiguration) {
+        Wh_Log(L"RtlQueryFeatureConfiguration not found");
+        return std::nullopt;
+    }
+
+    RTL_FEATURE_CONFIGURATION feature = {0};
+    INT64 changeStamp = 0;
+    HRESULT hr =
+        pRtlQueryFeatureConfiguration(featureId, 1, &changeStamp, &feature);
+    if (SUCCEEDED(hr)) {
+        Wh_Log(L"RtlQueryFeatureConfiguration result for %u: %d", featureId,
+               feature.enabledState);
+
+        switch (feature.enabledState) {
+            case FEATURE_ENABLED_STATE_DISABLED:
+                return false;
+            case FEATURE_ENABLED_STATE_ENABLED:
+                return true;
+            case FEATURE_ENABLED_STATE_DEFAULT:
+                return std::nullopt;
+        }
+    } else {
+        Wh_Log(L"RtlQueryFeatureConfiguration error for %u: %08X", featureId,
+               hr);
+    }
+
+    return std::nullopt;
 }
 
 bool HandleNavigationBarControl(IUnknown* navigationBarControl) {
@@ -537,21 +615,24 @@ bool HandleNavigationBarControl(IUnknown* navigationBarControl) {
     return true;
 }
 
-using XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_t =
-    int(WINAPI*)(PVOID pThis);
-XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_t
-    XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Original;
-int WINAPI
-XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Hook(PVOID pThis) {
+using XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_t =
+    HRESULT(WINAPI*)(PVOID pThis, SIZE* size);
+XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_t
+    XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Original;
+HRESULT WINAPI
+XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Hook(PVOID pThis,
+                                                           SIZE* size) {
     Wh_Log(L">");
 
-    int ret =
-        XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Original(pThis);
+    HRESULT ret =
+        XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Original(pThis,
+                                                                       size);
 
-    if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
-        int retNew = MulDiv(ret, 96, 136);
-        Wh_Log(L"%d -> %d", ret, retNew);
-        return retNew;
+    if (SUCCEEDED(ret) &&
+        g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
+        int originalCy = size->cy;
+        size->cy = MulDiv(size->cy, 90, 136);
+        Wh_Log(L"%d -> %d", originalCy, size->cy);
     }
 
     return ret;
@@ -565,7 +646,11 @@ HRESULT WINAPI Feature_NavigationBarControl_OnApplyTemplate_Hook(PVOID pThis) {
     Wh_Log(L">");
 
     if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
-        HandleNavigationBarControl(*(IUnknown**)((BYTE*)pThis + 0x08));
+        static size_t offset =
+            IsFileExplorerExtensionsVersionAtLeast(2125, 4200, 50, 0) ? 0x40
+                                                                      : 0x08;
+
+        HandleNavigationBarControl(*(IUnknown**)((BYTE*)pThis + offset));
     }
 
     return Feature_NavigationBarControl_OnApplyTemplate_Original(pThis);
@@ -586,7 +671,7 @@ int WINAPI CommandBarExtension_GetHeight_Hook(
 
     if (g_settings.explorerStyle == ExplorerStyle::classicNavigationBar) {
         static const float newHeight =
-            IsVersionAtLeast(10, 0, 22621, 3958) ? 0 : 6;
+            IsExplorerVersionAtLeast(10, 0, 22621, 3958) ? 0 : 6;
         sizeOut->Height = newHeight;
     }
 
@@ -671,6 +756,23 @@ bool HookExplorerFrameSymbols() {
 }
 
 bool HookWindowsUIFileExplorerSymbols() {
+    if (IsExplorerVersionAtLeast(10, 0, 26100, 0)) {
+        if (!IsExplorerVersionAtLeast(10, 0, 26100, 1591)) {
+            return true;
+        }
+    } else if (IsExplorerVersionAtLeast(10, 0, 22621, 0)) {
+        if (!IsExplorerVersionAtLeast(10, 0, 22621, 4111)) {
+            return true;
+        }
+    } else {
+        return true;
+    }
+
+    constexpr UINT kFileExplorerTabLineFix = 51960011;
+    if (!IsOsFeatureEnabled(kFileExplorerTabLineFix).value_or(true)) {
+        return true;
+    }
+
     HMODULE module = LoadLibrary(L"Windows.UI.FileExplorer.dll");
     if (!module) {
         Wh_Log(L"Couldn't load Windows.UI.FileExplorer.dll");
@@ -680,9 +782,9 @@ bool HookWindowsUIFileExplorerSymbols() {
     // Windows.UI.FileExplorer.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
-            {LR"(private: int __cdecl XamlIslandViewAdapter::GetScaledXamlIslandLogicalHeight(void))"},
-            (void**)&XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Original,
-            (void*)XamlIslandViewAdapter_GetScaledXamlIslandLogicalHeight_Hook,
+            {LR"(public: virtual long __cdecl XamlIslandViewAdapter::get_DesiredSizeInPhysicalPixels(struct tagSIZE *))"},
+            (void**)&XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Original,
+            (void*)XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Hook,
             true,
         },
     };

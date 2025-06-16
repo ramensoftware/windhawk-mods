@@ -2,14 +2,14 @@
 // @id              taskbar-background-helper
 // @name            Taskbar Background Helper
 // @description     Sets the taskbar background for the transparent parts, always or only when there's a maximized window, designed to be used with Windows 11 Taskbar Styler
-// @version         1.0.1
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi
+// @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -30,7 +30,7 @@ Styler](https://windhawk.net/mods/windows-11-taskbar-styler).
 
 Also, Windows 11 Taskbar Styler has [a known
 limitation](https://github.com/ramensoftware/windhawk-mods/issues/742) which
-makes some styles only work if there's a single monitor. This mod can be used as
+makes some styles only work if there's a single taskbar. This mod can be used as
 a workaround.
 
 ![Demonstration](https://i.imgur.com/lMp8OLp.gif)
@@ -52,6 +52,9 @@ a workaround.
     $name: Green
   - blue: 39
     $name: Blue
+  - accentColor: false
+    $name: Current theme accent color
+    $description: If enabled, the color values above are ignored
   - transparency: 128
     $name: Transparency
   $name: Custom color
@@ -60,6 +63,19 @@ a workaround.
   $name: Only when maximized
   $description: >-
     Only apply the style when there's a maximized window on the monitor
+- excludedPrograms: [""]
+  $name: Excluded programs
+  $description: >-
+    If the "Only when maximized" option is enabled, these programs will be
+    ignored when maximized.
+
+    Entries can be process names, paths or application IDs, for example:
+
+    mspaint.exe
+
+    C:\Windows\System32\notepad.exe
+
+    Microsoft.WindowsCalculator_8wekyb3d8bbwe!App
 - styleForDarkMode:
   - use: false
     $name: Use a separate background for dark mode
@@ -76,6 +92,9 @@ a workaround.
       $name: Green
     - blue: 39
       $name: Blue
+    - accentColor: false
+      $name: Current theme accent color
+      $description: If enabled, the color values above are ignored
     - transparency: 128
       $name: Transparency
     $name: Custom color
@@ -84,9 +103,16 @@ a workaround.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <dwmapi.h>
 
+#include <winrt/Windows.UI.ViewManagement.h>
+
+#include <atomic>
+#include <mutex>
 #include <optional>
+#include <string>
 #include <unordered_set>
 
 enum class BackgroundStyle {
@@ -98,17 +124,35 @@ enum class BackgroundStyle {
 struct TaskbarStyle {
     BackgroundStyle backgroundStyle;
     COLORREF color;
+    bool accentColor;
 };
 
 struct {
     TaskbarStyle style;
     bool onlyWhenMaximized;
+    std::unordered_set<std::wstring> excludedPrograms;
     std::optional<TaskbarStyle> darkModeStyle;
 } g_settings;
 
-HANDLE g_winObjectLocationChangeThread;
+std::mutex g_winEventHookThreadMutex;
+std::atomic<HANDLE> g_winEventHookThread;
 std::unordered_set<HMONITOR> g_pendingMonitors;
 UINT_PTR g_pendingMonitorsTimer;
+
+#if __cplusplus < 202302L
+// Missing in older MinGW headers.
+DECLARE_HANDLE(CO_MTA_USAGE_COOKIE);
+WINOLEAPI CoIncrementMTAUsage(CO_MTA_USAGE_COOKIE* pCookie);
+WINOLEAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE Cookie);
+#endif
+
+// Missing in older MinGW headers.
+#ifndef EVENT_OBJECT_CLOAKED
+#define EVENT_OBJECT_CLOAKED 0x8017
+#endif
+#ifndef EVENT_OBJECT_UNCLOAKED
+#define EVENT_OBJECT_UNCLOAKED 0x8018
+#endif
 
 enum WINDOWCOMPOSITIONATTRIB {
     WCA_UNDEFINED = 0,
@@ -205,7 +249,7 @@ bool IsWindowsDarkModeEnabled() {
 }
 
 // https://devblogs.microsoft.com/oldnewthing/20200302-00/?p=103507
-BOOL IsWindowCloaked(HWND hwnd) {
+bool IsWindowCloaked(HWND hwnd) {
     BOOL isCloaked = FALSE;
     return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &isCloaked,
                                            sizeof(isCloaked))) &&
@@ -235,7 +279,23 @@ BOOL SetTaskbarStyle(HWND hWnd) {
             break;
     }
 
-    ACCENTPOLICY policy = {accentState, accentFlags, style.color, 0};
+    COLORREF color = style.color;
+    if (style.accentColor) {
+        try {
+            const winrt::Windows::UI::ViewManagement::UISettings uiSettings;
+            const auto accentColor{uiSettings.GetColorValue(
+                winrt::Windows::UI::ViewManagement::UIColorType::Accent)};
+
+            color = (COLORREF)((BYTE)accentColor.R |
+                               ((WORD)((BYTE)accentColor.G) << 8) |
+                               (((DWORD)(BYTE)accentColor.B) << 16) |
+                               (color & 0xFF000000));
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    ACCENTPOLICY policy = {accentState, accentFlags, color, 0};
 
     WINDOWCOMPOSITIONATTRIBDATA data = {WCA_ACCENT_POLICY, &policy,
                                         sizeof(policy)};
@@ -251,105 +311,281 @@ BOOL ResetTaskbarStyle(HWND hWnd) {
     return SetWindowCompositionAttribute_Original(hWnd, &data);
 }
 
-HWND GetTaskbarForMonitor(HMONITOR monitor) {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+bool IsTaskbarWindow(HWND hWnd) {
+    WCHAR szClassName[32];
+    if (!GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName))) {
+        return false;
+    }
+
+    return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 ||
+           _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+HWND FindTaskbarWindows(std::unordered_set<HWND>* secondaryTaskbarWindows) {
+    secondaryTaskbarWindows->clear();
+
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         return nullptr;
     }
 
-    DWORD taskbarThreadId = 0;
-    DWORD taskbarProcessId = 0;
-    if (!(taskbarThreadId =
-              GetWindowThreadProcessId(hTaskbarWnd, &taskbarProcessId)) ||
-        taskbarProcessId != GetCurrentProcessId()) {
+    DWORD taskbarThreadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
+    if (!taskbarThreadId) {
         return nullptr;
     }
 
-    if (MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST) == monitor) {
-        return hTaskbarWnd;
-    }
-
-    HWND hResultWnd = nullptr;
-
-    auto enumWindowsProc = [monitor, &hResultWnd](HWND hWnd) -> BOOL {
+    auto enumWindowsProc = [&secondaryTaskbarWindows](HWND hWnd) -> BOOL {
         WCHAR szClassName[32];
         if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
             return TRUE;
         }
 
-        if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") != 0) {
-            return TRUE;
+        if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+            secondaryTaskbarWindows->insert(hWnd);
         }
 
-        if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
-            return TRUE;
-        }
-
-        hResultWnd = hWnd;
-        return FALSE;
+        return TRUE;
     };
 
     EnumThreadWindows(
         taskbarThreadId,
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
             return proc(hWnd);
         },
         reinterpret_cast<LPARAM>(&enumWindowsProc));
 
-    return hResultWnd;
+    return hTaskbarWnd;
 }
 
-bool DoesMonitorHaveMaximizedWindow(HMONITOR monitor) {
-    bool hasMaximized = false;
+// https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
+std::wstring GetWindowAppId(HWND hWnd) {
+    // {c8900b66-a973-584b-8cae-355b7f55341b}
+    constexpr winrt::guid CLSID_StartMenuCacheAndAppResolver{
+        0x660b90c8,
+        0x73a9,
+        0x4b58,
+        {0x8c, 0xae, 0x35, 0x5b, 0x7f, 0x55, 0x34, 0x1b}};
 
-    auto enumWindowsProc = [monitor, &hasMaximized](HWND hWnd) -> BOOL {
+    // {de25675a-72de-44b4-9373-05170450c140}
+    constexpr winrt::guid IID_IAppResolver_8{
+        0xde25675a,
+        0x72de,
+        0x44b4,
+        {0x93, 0x73, 0x05, 0x17, 0x04, 0x50, 0xc1, 0x40}};
+
+    struct IAppResolver_8 : public IUnknown {
+       public:
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcut() = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcutObject() = 0;
+        virtual HRESULT STDMETHODCALLTYPE
+        GetAppIDForWindow(HWND hWnd,
+                          WCHAR** pszAppId,
+                          void* pUnknown1,
+                          void* pUnknown2,
+                          void* pUnknown3) = 0;
+        virtual HRESULT STDMETHODCALLTYPE
+        GetAppIDForProcess(DWORD dwProcessId,
+                           WCHAR** pszAppId,
+                           void* pUnknown1,
+                           void* pUnknown2,
+                           void* pUnknown3) = 0;
+    };
+
+    HRESULT hr;
+    std::wstring result;
+
+    CO_MTA_USAGE_COOKIE cookie;
+    bool mtaUsageIncreased = SUCCEEDED(CoIncrementMTAUsage(&cookie));
+
+    winrt::com_ptr<IAppResolver_8> appResolver;
+    hr = CoCreateInstance(CLSID_StartMenuCacheAndAppResolver, nullptr,
+                          CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER,
+                          IID_IAppResolver_8, appResolver.put_void());
+    if (SUCCEEDED(hr)) {
+        WCHAR* pszAppId;
+        hr = appResolver->GetAppIDForWindow(hWnd, &pszAppId, nullptr, nullptr,
+                                            nullptr);
+        if (SUCCEEDED(hr)) {
+            result = pszAppId;
+            CoTaskMemFree(pszAppId);
+        }
+    }
+
+    appResolver = nullptr;
+
+    if (mtaUsageIncreased) {
+        CoDecrementMTAUsage(cookie);
+    }
+
+    return result;
+}
+
+bool IsWindowExcluded(HWND hWnd) {
+    if (g_settings.excludedPrograms.empty()) {
+        return false;
+    }
+
+    DWORD resolvedWindowProcessPathLen = 0;
+    WCHAR resolvedWindowProcessPath[MAX_PATH];
+    WCHAR resolvedWindowProcessPathUpper[MAX_PATH];
+
+    DWORD dwProcessId = 0;
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId)) {
+        HANDLE hProcess =
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
+        if (hProcess) {
+            DWORD dwSize = ARRAYSIZE(resolvedWindowProcessPath);
+            if (QueryFullProcessImageName(hProcess, 0,
+                                          resolvedWindowProcessPath, &dwSize)) {
+                resolvedWindowProcessPathLen = dwSize;
+            }
+
+            CloseHandle(hProcess);
+        }
+    }
+
+    if (resolvedWindowProcessPathLen > 0) {
+        LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                      resolvedWindowProcessPath,
+                      resolvedWindowProcessPathLen + 1,
+                      resolvedWindowProcessPathUpper,
+                      resolvedWindowProcessPathLen + 1, nullptr, nullptr, 0);
+    } else {
+        *resolvedWindowProcessPath = L'\0';
+        *resolvedWindowProcessPathUpper = L'\0';
+    }
+
+    if (resolvedWindowProcessPathLen > 0 &&
+        g_settings.excludedPrograms.contains(resolvedWindowProcessPathUpper)) {
+        return true;
+    }
+
+    if (PCWSTR programFileNameUpper =
+            wcsrchr(resolvedWindowProcessPathUpper, L'\\')) {
+        programFileNameUpper++;
+        if (*programFileNameUpper &&
+            g_settings.excludedPrograms.contains(programFileNameUpper)) {
+            return true;
+        }
+    }
+
+    std::wstring appId = GetWindowAppId(hWnd);
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, appId.data(),
+                  appId.length(), appId.data(), appId.length(), nullptr,
+                  nullptr, 0);
+    if (g_settings.excludedPrograms.contains(appId.c_str())) {
+        return true;
+    }
+
+    return false;
+}
+
+bool DoesMonitorHaveMaximizedWindow(HMONITOR monitor, HWND hMMTaskbarWnd) {
+    bool hasMaximizedWindow = false;
+
+    MONITORINFO monitorInfo{
+        .cbSize = sizeof(monitorInfo),
+    };
+    GetMonitorInfo(monitor, &monitorInfo);
+
+    HWND hShellWindow = GetShellWindow();
+
+    DWORD dwTaskbarThreadId = GetWindowThreadProcessId(hMMTaskbarWnd, nullptr);
+
+    auto enumWindowsProc = [&](HWND hWnd) -> BOOL {
+        if (GetWindowThreadProcessId(hWnd, nullptr) == dwTaskbarThreadId) {
+            return TRUE;
+        }
+
         if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
             return TRUE;
         }
 
-        if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd)) {
+        if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd) ||
+            (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
             return TRUE;
         }
 
-        if (GetWindowLong(hWnd, GWL_EXSTYLE) &
-            (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)) {
+        if (hWnd == hShellWindow || GetProp(hWnd, L"DesktopWindow")) {
+            return TRUE;
+        }
+
+        // Check this after the other checks, as it's the most expensive one.
+        if (IsWindowExcluded(hWnd)) {
             return TRUE;
         }
 
         WINDOWPLACEMENT wp{
             .length = sizeof(WINDOWPLACEMENT),
         };
-        if (!GetWindowPlacement(hWnd, &wp) || wp.showCmd != SW_SHOWMAXIMIZED) {
-            return TRUE;
+        if (GetWindowPlacement(hWnd, &wp) && wp.showCmd == SW_SHOWMAXIMIZED) {
+            hasMaximizedWindow = true;
+            return FALSE;
         }
 
-        hasMaximized = true;
-        return FALSE;
+        RECT windowRect{};
+        DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
+                              sizeof(windowRect));
+
+        if (EqualRect(&windowRect, &monitorInfo.rcMonitor)) {
+            // Spans across the whole monitor, e.g. Win+Tab view.
+            hasMaximizedWindow = true;
+            return FALSE;
+        }
+
+        return TRUE;
     };
 
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
             return proc(hWnd);
         },
         reinterpret_cast<LPARAM>(&enumWindowsProc));
 
-    return hasMaximized;
+    return hasMaximizedWindow;
 }
 
-void CALLBACK LocationChangeWinEventProc(HWINEVENTHOOK hWinEventHook,
-                                         DWORD event,
-                                         HWND hWnd,
-                                         LONG idObject,
-                                         LONG idChild,
-                                         DWORD dwEventThread,
-                                         DWORD dwmsEventTime) {
-    if (idObject != OBJID_WINDOW) {
+void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
+                           DWORD event,
+                           HWND hWnd,
+                           LONG idObject,
+                           LONG idChild,
+                           DWORD dwEventThread,
+                           DWORD dwmsEventTime) {
+    if (idObject != OBJID_WINDOW ||
+        (GetWindowLong(hWnd, GWL_STYLE) & WS_CHILD) || IsTaskbarWindow(hWnd)) {
         return;
     }
 
-    Wh_Log(L">");
+    HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
+    if (hParentWnd && hParentWnd != GetDesktopWindow()) {
+        return;
+    }
+
+    Wh_Log(L"> %08X", (DWORD)(ULONG_PTR)hWnd);
 
     HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
     g_pendingMonitors.insert(monitor);
@@ -358,35 +594,121 @@ void CALLBACK LocationChangeWinEventProc(HWINEVENTHOOK hWinEventHook,
         return;
     }
 
-    g_pendingMonitorsTimer =
-        SetTimer(nullptr, 0, 200,
-                 [](HWND hwnd,         // handle of window for timer messages
-                    UINT uMsg,         // WM_TIMER message
-                    UINT_PTR idEvent,  // timer identifier
-                    DWORD dwTime       // current system time
-                    ) WINAPI {
-                     Wh_Log(L">");
+    g_pendingMonitorsTimer = SetTimer(
+        nullptr, 0, 200,
+        [](HWND hwnd,         // handle of window for timer messages
+           UINT uMsg,         // WM_TIMER message
+           UINT_PTR idEvent,  // timer identifier
+           DWORD dwTime       // current system time
+        ) {
+            Wh_Log(L">");
 
-                     KillTimer(nullptr, g_pendingMonitorsTimer);
-                     g_pendingMonitorsTimer = 0;
+            KillTimer(nullptr, g_pendingMonitorsTimer);
+            g_pendingMonitorsTimer = 0;
 
-                     for (HMONITOR monitor : g_pendingMonitors) {
-                         HWND hMMTaskbarWnd = GetTaskbarForMonitor(monitor);
-                         if (DoesMonitorHaveMaximizedWindow(monitor)) {
-                             SetTaskbarStyle(hMMTaskbarWnd);
-                         } else {
-                             ResetTaskbarStyle(hMMTaskbarWnd);
-                         }
-                     }
+            std::unordered_set<HWND> secondaryTaskbarWindows;
+            HWND hTaskbarWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
 
-                     g_pendingMonitors.clear();
-                 });
+            for (HMONITOR monitor : g_pendingMonitors) {
+                HWND hMMTaskbarWnd = nullptr;
+
+                if (hTaskbarWnd &&
+                    MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST) ==
+                        monitor) {
+                    hMMTaskbarWnd = hTaskbarWnd;
+                } else {
+                    for (HWND hSecondaryTaskbarWnd : secondaryTaskbarWindows) {
+                        if (MonitorFromWindow(hSecondaryTaskbarWnd,
+                                              MONITOR_DEFAULTTONEAREST) ==
+                            monitor) {
+                            hMMTaskbarWnd = hSecondaryTaskbarWnd;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hMMTaskbarWnd) {
+                    continue;
+                }
+
+                if (DoesMonitorHaveMaximizedWindow(monitor, hMMTaskbarWnd)) {
+                    SetTaskbarStyle(hMMTaskbarWnd);
+                } else {
+                    ResetTaskbarStyle(hMMTaskbarWnd);
+                }
+            }
+
+            g_pendingMonitors.clear();
+        });
+}
+
+DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
+    HWINEVENTHOOK winObjectEventHook1 =
+        SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, nullptr,
+                        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!winObjectEventHook1) {
+        Wh_Log(L"Error: SetWinEventHook");
+    }
+
+    HWINEVENTHOOK winObjectEventHook2 = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!winObjectEventHook2) {
+        Wh_Log(L"Error: SetWinEventHook");
+    }
+
+    HWINEVENTHOOK winObjectEventHook3 =
+        SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
+                        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!winObjectEventHook3) {
+        Wh_Log(L"Error: SetWinEventHook");
+    }
+
+    BOOL bRet;
+    MSG msg;
+    while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0) {
+        if (bRet == -1) {
+            msg.wParam = 0;
+            break;
+        }
+
+        if (msg.hwnd == NULL && msg.message == WM_APP) {
+            PostQuitMessage(0);
+            continue;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (winObjectEventHook1) {
+        UnhookWinEvent(winObjectEventHook1);
+    }
+
+    if (winObjectEventHook2) {
+        UnhookWinEvent(winObjectEventHook2);
+    }
+
+    if (winObjectEventHook3) {
+        UnhookWinEvent(winObjectEventHook3);
+    }
+
+    return 0;
 }
 
 BOOL AdjustTaskbarStyle(HWND hWnd) {
     if (g_settings.onlyWhenMaximized) {
+        if (!g_winEventHookThread) {
+            std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
+
+            if (!g_winEventHookThread) {
+                g_winEventHookThread = CreateThread(
+                    nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
+            }
+        }
+
         HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-        if (!DoesMonitorHaveMaximizedWindow(monitor)) {
+        if (!DoesMonitorHaveMaximizedWindow(monitor, hWnd)) {
             return ResetTaskbarStyle(hWnd);
         }
     }
@@ -424,46 +746,9 @@ BOOL WINAPI SetWindowCompositionAttribute_Hook(
     return AdjustTaskbarStyle(hWnd);
 }
 
-HWND FindCurrentProcessTaskbarWindows(
-    std::unordered_set<HWND>* secondaryTaskbarWindows) {
-    struct ENUM_WINDOWS_PARAM {
-        HWND* hWnd;
-        std::unordered_set<HWND>* secondaryTaskbarWindows;
-    };
-
-    HWND hWnd = nullptr;
-    ENUM_WINDOWS_PARAM param = {&hWnd, secondaryTaskbarWindows};
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
-            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
-
-            DWORD dwProcessId = 0;
-            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
-                dwProcessId != GetCurrentProcessId()) {
-                return TRUE;
-            }
-
-            WCHAR szClassName[32];
-            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
-                return TRUE;
-            }
-
-            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
-                *param.hWnd = hWnd;
-            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
-                param.secondaryTaskbarWindows->insert(hWnd);
-            }
-
-            return TRUE;
-        },
-        (LPARAM)&param);
-
-    return hWnd;
-}
-
 void AdjustAllTaskbarStyles() {
     std::unordered_set<HWND> secondaryTaskbarWindows;
-    HWND hWnd = FindCurrentProcessTaskbarWindows(&secondaryTaskbarWindows);
+    HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
     if (hWnd) {
         AdjustTaskbarStyle(hWnd);
     }
@@ -486,13 +771,38 @@ void LoadSettings() {
     int red = Wh_GetIntSetting(L"color.red");
     int green = Wh_GetIntSetting(L"color.green");
     int blue = Wh_GetIntSetting(L"color.blue");
+    bool accentColor = Wh_GetIntSetting(L"color.accentColor");
     int transparency = Wh_GetIntSetting(L"color.transparency");
 
     g_settings.style.color = (COLORREF)((BYTE)red | ((WORD)((BYTE)green) << 8) |
                                         (((DWORD)(BYTE)blue) << 16) |
                                         (((DWORD)(BYTE)transparency) << 24));
+    g_settings.style.accentColor = accentColor;
 
     g_settings.onlyWhenMaximized = Wh_GetIntSetting(L"onlyWhenMaximized");
+
+    g_settings.excludedPrograms.clear();
+
+    for (int i = 0;; i++) {
+        PCWSTR program = Wh_GetStringSetting(L"excludedPrograms[%d]", i);
+
+        bool hasProgram = *program;
+        if (hasProgram) {
+            std::wstring programUpper = program;
+            LCMapStringEx(
+                LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, &programUpper[0],
+                static_cast<int>(programUpper.length()), &programUpper[0],
+                static_cast<int>(programUpper.length()), nullptr, nullptr, 0);
+
+            g_settings.excludedPrograms.insert(std::move(programUpper));
+        }
+
+        Wh_FreeStringSetting(program);
+
+        if (!hasProgram) {
+            break;
+        }
+    }
 
     if (Wh_GetIntSetting(L"styleForDarkMode.use")) {
         TaskbarStyle style;
@@ -542,69 +852,34 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)pSetWindowCompositionAttribute,
-                       (void*)SetWindowCompositionAttribute_Hook,
-                       (void**)&SetWindowCompositionAttribute_Original);
+    WindhawkUtils::Wh_SetFunctionHookT(pSetWindowCompositionAttribute,
+                                       SetWindowCompositionAttribute_Hook,
+                                       &SetWindowCompositionAttribute_Original);
 
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
     WNDCLASS wndclass;
-    if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) {
+    if (GetClassInfo(GetModuleHandle(nullptr), L"Shell_TrayWnd", &wndclass)) {
         AdjustAllTaskbarStyles();
-    }
-
-    if (g_settings.onlyWhenMaximized) {
-        g_winObjectLocationChangeThread = CreateThread(
-            nullptr, 0,
-            [](LPVOID lpParameter) WINAPI -> DWORD {
-                HWINEVENTHOOK winObjectLocationChangeEventHook =
-                    SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE,
-                                    EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-                                    LocationChangeWinEventProc, 0, 0,
-                                    WINEVENT_OUTOFCONTEXT);
-                if (!winObjectLocationChangeEventHook) {
-                    Wh_Log(L"Error: SetWinEventHook");
-                    return 0;
-                }
-
-                BOOL bRet;
-                MSG msg;
-                while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0) {
-                    if (bRet == -1) {
-                        msg.wParam = 0;
-                        break;
-                    }
-
-                    if (msg.hwnd == NULL && msg.message == WM_APP) {
-                        PostQuitMessage(0);
-                        continue;
-                    }
-
-                    TranslateMessage(&msg);
-                    DispatchMessage(&msg);
-                }
-
-                UnhookWinEvent(winObjectLocationChangeEventHook);
-                return 0;
-            },
-            nullptr, 0, nullptr);
     }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_winObjectLocationChangeThread) {
-        PostThreadMessage(GetThreadId(g_winObjectLocationChangeThread), WM_APP,
-                          0, 0);
-        WaitForSingleObject(g_winObjectLocationChangeThread, INFINITE);
-        CloseHandle(g_winObjectLocationChangeThread);
+    if (g_winEventHookThread) {
+        PostThreadMessage(GetThreadId(g_winEventHookThread), WM_APP, 0, 0);
+        WaitForSingleObject(g_winEventHookThread, INFINITE);
+        CloseHandle(g_winEventHookThread);
+        g_winEventHookThread = nullptr;
     }
 
     std::unordered_set<HWND> secondaryTaskbarWindows;
-    HWND hWnd = FindCurrentProcessTaskbarWindows(&secondaryTaskbarWindows);
+    HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
     if (hWnd) {
         ResetTaskbarStyle(hWnd);
     }
@@ -614,18 +889,21 @@ void Wh_ModUninit() {
     }
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
-
-    bool prevOnlyWhenMaximized = g_settings.onlyWhenMaximized;
 
     LoadSettings();
 
-    *bReload = g_settings.onlyWhenMaximized != prevOnlyWhenMaximized;
+    if (!g_settings.onlyWhenMaximized) {
+        std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
 
-    if (!*bReload) {
-        AdjustAllTaskbarStyles();
+        if (g_winEventHookThread) {
+            PostThreadMessage(GetThreadId(g_winEventHookThread), WM_APP, 0, 0);
+            WaitForSingleObject(g_winEventHookThread, INFINITE);
+            CloseHandle(g_winEventHookThread);
+            g_winEventHookThread = nullptr;
+        }
     }
 
-    return TRUE;
+    AdjustAllTaskbarStyles();
 }

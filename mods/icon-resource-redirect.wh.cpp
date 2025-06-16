@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.1.7
+// @version         1.1.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -82,7 +82,7 @@ The mod supports the following resource types and loading methods:
       $name: The original resource file
       $description: >-
         The original file from which resources are loaded, can be a pattern
-        where '*' matches any number characters and '?' matches any single
+        where '*' matches any number of characters and '?' matches any single
         character
     - redirect: 'C:\my-themes\theme-1\imageres.dll'
       $name: The custom resource file
@@ -203,15 +203,17 @@ auto StrToW(PCSTR str) {
         PCWSTR p;
     } result;
 
-    int strLen = static_cast<int>(strlen(str));
-    int sizeNeeded = MultiByteToWideChar(CP_ACP, 0, str, strLen, nullptr, 0);
-    if (sizeNeeded <= 0) {
-        throw std::runtime_error("MultiByteToWideChar() failed: " +
-                                 std::to_string(sizeNeeded));
+    if (*str) {
+        int strLen = static_cast<int>(strlen(str));
+        int sizeNeeded =
+            MultiByteToWideChar(CP_ACP, 0, str, strLen, nullptr, 0);
+        if (sizeNeeded) {
+            result.wstr.resize(sizeNeeded);
+            MultiByteToWideChar(CP_ACP, 0, str, strLen, result.wstr.data(),
+                                sizeNeeded);
+        }
     }
 
-    result.wstr.resize(sizeNeeded);
-    MultiByteToWideChar(CP_ACP, 0, str, strLen, result.wstr.data(), sizeNeeded);
     result.p = result.wstr.c_str();
     return result;
 }
@@ -1167,19 +1169,20 @@ HRSRC FindResourceExAW_Hook(HMODULE hModule,
     WCHAR prefix[64];
     swprintf_s(prefix, L"[%u] > %c", c, chooseAW<T, L'A', L'W'>());
 
-    std::wstring logType;
-    if (IS_INTRESOURCE(lpType)) {
-        logType = std::to_wstring((DWORD)(ULONG_PTR)lpType);
-    } else {
-        logType = StrToW(lpType).p;
-    }
+    auto logType = [lpType]() -> std::wstring {
+        if (IS_INTRESOURCE(lpType)) {
+            return std::to_wstring((DWORD)(ULONG_PTR)lpType);
+        } else {
+            return StrToW(lpType).p;
+        }
+    };
 
     if (IS_INTRESOURCE(lpName)) {
         Wh_Log(L"%s, resource type: %s, number: %u, language: 0x%04X", prefix,
-               logType.c_str(), (DWORD)(ULONG_PTR)lpName, wLanguage);
+               logType().c_str(), (DWORD)(ULONG_PTR)lpName, wLanguage);
     } else {
         Wh_Log(L"%s, resource type: %s, name: %s, language: 0x%04X", prefix,
-               logType.c_str(), StrToW(lpName).p, wLanguage);
+               logType().c_str(), StrToW(lpName).p, wLanguage);
     }
 
     HRSRC result;
@@ -1224,6 +1227,28 @@ HRSRC WINAPI FindResourceExW_Hook(HMODULE hModule,
                                                             lpName, wLanguage);
 }
 
+bool IsResourceHandlePartOfModule(HMODULE hModule, HRSRC hResInfo) {
+    if ((ULONG_PTR)hModule & 3) {
+        MEMORY_BASIC_INFORMATION mbi;
+        if (!VirtualQuery((void*)hModule, &mbi, sizeof(mbi))) {
+            DWORD dwError = GetLastError();
+            Wh_Log(L"VirtualQuery failed with error %u", dwError);
+            return false;
+        }
+
+        return (void*)hResInfo >= mbi.BaseAddress &&
+               (void*)hResInfo <
+                   (void*)((BYTE*)mbi.BaseAddress + mbi.RegionSize);
+    } else {
+        HMODULE module;
+        return GetModuleHandleEx(
+                   GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                   (PCWSTR)hResInfo, &module) &&
+               module == hModule;
+    }
+}
+
 using LoadResource_t = decltype(&LoadResource);
 LoadResource_t LoadResource_Original;
 HGLOBAL WINAPI LoadResource_Hook(HMODULE hModule, HRSRC hResInfo) {
@@ -1236,6 +1261,13 @@ HGLOBAL WINAPI LoadResource_Hook(HMODULE hModule, HRSRC hResInfo) {
     bool redirected = RedirectModule(
         c, hModule, []() {},
         [&](HINSTANCE hInstanceRedirect) {
+            if (!IsResourceHandlePartOfModule(hInstanceRedirect, hResInfo)) {
+                Wh_Log(
+                    L"[%u] Resource handle is not part of the module, skipping",
+                    c);
+                return false;
+            }
+
             result = LoadResource_Original(hInstanceRedirect, hResInfo);
             if (result) {
                 Wh_Log(L"[%u] Redirected successfully", c);
@@ -1265,6 +1297,13 @@ DWORD WINAPI SizeofResource_Hook(HMODULE hModule, HRSRC hResInfo) {
     bool redirected = RedirectModule(
         c, hModule, []() {},
         [&](HINSTANCE hInstanceRedirect) {
+            if (!IsResourceHandlePartOfModule(hInstanceRedirect, hResInfo)) {
+                Wh_Log(
+                    L"[%u] Resource handle is not part of the module, skipping",
+                    c);
+                return false;
+            }
+
             // Zero can be an error or the actual resource size. Check last
             // error to be sure.
             SetLastError(0);
@@ -1283,6 +1322,61 @@ DWORD WINAPI SizeofResource_Hook(HMODULE hModule, HRSRC hResInfo) {
     }
 
     return SizeofResource_Original(hModule, hResInfo);
+}
+
+// https://ntdoc.m417z.com/rtlloadstring
+using RtlLoadString_t = NTSTATUS(NTAPI*)(_In_ PVOID DllHandle,
+                                         _In_ ULONG StringId,
+                                         _In_opt_ PCWSTR StringLanguage,
+                                         _In_ ULONG Flags,
+                                         _Out_ PCWSTR* ReturnString,
+                                         _Out_opt_ PUSHORT ReturnStringLen,
+                                         _Out_writes_(ReturnLanguageLen)
+                                             PWSTR ReturnLanguageName,
+                                         _Inout_opt_ PULONG ReturnLanguageLen);
+RtlLoadString_t RtlLoadString_Original;
+HRESULT NTAPI RtlLoadString_Hook(_In_ PVOID DllHandle,
+                                 _In_ ULONG StringId,
+                                 _In_opt_ PCWSTR StringLanguage,
+                                 _In_ ULONG Flags,
+                                 _Out_ PCWSTR* ReturnString,
+                                 _Out_opt_ PUSHORT ReturnStringLen,
+                                 _Out_writes_(ReturnLanguageLen)
+                                     PWSTR ReturnLanguageName,
+                                 _Inout_opt_ PULONG ReturnLanguageLen) {
+    DWORD c = ++g_operationCounter;
+
+    Wh_Log(L"[%u] > string number: %u", c, StringId);
+
+    NTSTATUS result;
+
+    bool redirected = RedirectModule(
+        c, (HINSTANCE)DllHandle, []() {},
+        [&](HINSTANCE hInstanceRedirect) {
+            result = RtlLoadString_Original(hInstanceRedirect, StringId,
+                                            StringLanguage, Flags, ReturnString,
+                                            ReturnStringLen, ReturnLanguageName,
+                                            ReturnLanguageLen);
+            if (result != 0) {
+                Wh_Log(L"[%u] RtlLoadString failed with error %08X", c, result);
+                return false;
+            }
+
+            if (!*ReturnString) {
+                Wh_Log(L"[%u] RtlLoadString returned an empty string", c);
+                return false;
+            }
+
+            Wh_Log(L"[%u] Redirected successfully", c);
+            return true;
+        });
+    if (redirected) {
+        return result;
+    }
+
+    return RtlLoadString_Original(DllHandle, StringId, StringLanguage, Flags,
+                                  ReturnString, ReturnStringLen,
+                                  ReturnLanguageName, ReturnLanguageLen);
 }
 
 using SHCreateStreamOnModuleResourceW_t = HRESULT(WINAPI*)(HMODULE hModule,
@@ -1493,6 +1587,226 @@ void* WINAPI DirectUI_CreateString_Hook(PCWSTR name, HINSTANCE hInstance) {
     return DirectUI_CreateString_Original(name, hInstance);
 }
 
+// A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
+// Separate mod implementation:
+// https://gist.github.com/m417z/f0cdf071868a6f31210e84dd0d444055.
+// This workaround will be included in Windhawk in future versions.
+#include <cxxabi.h>
+#include <locale.h>
+namespace ProcessShutdownMessageBoxFix {
+
+using _errno_t = decltype(&_errno);
+
+WCHAR errorMsg[1025];
+void** g_ppSetlocale;
+HMODULE g_msvcrtModule;
+_errno_t g_msvcrtErrno;
+bool g_msvcrtSetLocaleIsPatched;
+
+void** FindImportPtr(HMODULE hFindInModule,
+                     PCSTR pModuleName,
+                     PCSTR pImportName) {
+    IMAGE_DOS_HEADER* pDosHeader;
+    IMAGE_NT_HEADERS* pNtHeader;
+    ULONG_PTR ImageBase;
+    IMAGE_IMPORT_DESCRIPTOR* pImportDescriptor;
+    ULONG_PTR* pOriginalFirstThunk;
+    ULONG_PTR* pFirstThunk;
+    ULONG_PTR ImageImportByName;
+
+    // Init
+    pDosHeader = (IMAGE_DOS_HEADER*)hFindInModule;
+    pNtHeader = (IMAGE_NT_HEADERS*)((char*)pDosHeader + pDosHeader->e_lfanew);
+
+    if (!pNtHeader->OptionalHeader.DataDirectory[1].VirtualAddress)
+        return nullptr;
+
+    ImageBase = (ULONG_PTR)hFindInModule;
+    pImportDescriptor =
+        (IMAGE_IMPORT_DESCRIPTOR*)(ImageBase +
+                                   pNtHeader->OptionalHeader.DataDirectory[1]
+                                       .VirtualAddress);
+
+    // Search!
+    while (pImportDescriptor->OriginalFirstThunk) {
+        if (lstrcmpiA((char*)(ImageBase + pImportDescriptor->Name),
+                      pModuleName) == 0) {
+            pOriginalFirstThunk =
+                (ULONG_PTR*)(ImageBase + pImportDescriptor->OriginalFirstThunk);
+            ImageImportByName = *pOriginalFirstThunk;
+
+            pFirstThunk =
+                (ULONG_PTR*)(ImageBase + pImportDescriptor->FirstThunk);
+
+            while (ImageImportByName) {
+                if (!(ImageImportByName & IMAGE_ORDINAL_FLAG)) {
+                    if ((ULONG_PTR)pImportName & ~0xFFFF) {
+                        ImageImportByName += sizeof(WORD);
+
+                        if (lstrcmpA((char*)(ImageBase + ImageImportByName),
+                                     pImportName) == 0)
+                            return (void**)pFirstThunk;
+                    }
+                } else {
+                    if (((ULONG_PTR)pImportName & ~0xFFFF) == 0)
+                        if ((ImageImportByName & 0xFFFF) ==
+                            (ULONG_PTR)pImportName)
+                            return (void**)pFirstThunk;
+                }
+
+                pOriginalFirstThunk++;
+                ImageImportByName = *pOriginalFirstThunk;
+
+                pFirstThunk++;
+            }
+        }
+
+        pImportDescriptor++;
+    }
+
+    return nullptr;
+}
+
+using SetLocale_t = char*(__cdecl*)(int category, const char* locale);
+SetLocale_t SetLocale_Original;
+char* __cdecl SetLocale_Wrapper(int category, const char* locale) {
+    // A workaround for https://github.com/mstorsjo/llvm-mingw/issues/459.
+    errno_t* err = g_msvcrtErrno();
+    HMODULE module;
+    if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          (PCWSTR)err, &module) &&
+        module == g_msvcrtModule) {
+        // Getting a process-wide errno from the module section instead of the
+        // thread errno from the heap means we have no PTD (Per-thread data) and
+        // setlocale will fail, likely with a message box and abort. Return NULL
+        // instead to let the caller handle it gracefully.
+        // Wh_Log(L"Returning NULL for setlocale");
+        return nullptr;
+    }
+
+    return SetLocale_Original(category, locale);
+}
+
+bool Init(HMODULE module) {
+    // Make sure the functions are in the import table.
+    void* p;
+    InterlockedExchangePointer(&p, (void*)__cxxabiv1::__cxa_throw);
+    InterlockedExchangePointer(&p, (void*)setlocale);
+
+    void** ppCxaThrow = FindImportPtr(module, "libc++.dll", "__cxa_throw");
+    if (!ppCxaThrow) {
+        wsprintf(errorMsg, L"No __cxa_throw");
+        return false;
+    }
+
+    void** ppSetlocale = FindImportPtr(module, "msvcrt.dll", "setlocale");
+    if (!ppSetlocale) {
+        wsprintf(errorMsg, L"No setlocale");
+        return false;
+    }
+
+    HMODULE libcppModule;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)*ppCxaThrow, &libcppModule)) {
+        wsprintf(errorMsg, L"No libcpp module");
+        return false;
+    }
+
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)*ppSetlocale, &g_msvcrtModule)) {
+        wsprintf(errorMsg, L"No msvcrt module");
+        return false;
+    }
+
+    g_ppSetlocale = FindImportPtr(libcppModule, "msvcrt.dll", "setlocale");
+    if (!g_ppSetlocale) {
+        wsprintf(errorMsg, L"No setlocale for libc++.dll");
+        return false;
+    }
+
+    HMODULE msvcrtModuleForLibcpp;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)*g_ppSetlocale, &msvcrtModuleForLibcpp)) {
+        wsprintf(errorMsg, L"No msvcrt module for libc++.dll");
+        return false;
+    }
+
+    if (msvcrtModuleForLibcpp != g_msvcrtModule) {
+        wsprintf(errorMsg, L"Bad msvcrt module, already patched? %p!=%p",
+                 msvcrtModuleForLibcpp, g_msvcrtModule);
+        return false;
+    }
+
+    g_msvcrtErrno = (_errno_t)GetProcAddress(msvcrtModuleForLibcpp, "_errno");
+    if (!g_msvcrtErrno) {
+        wsprintf(errorMsg, L"No _errno");
+        return false;
+    }
+
+    DWORD dwOldProtect;
+    if (!VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), PAGE_READWRITE,
+                        &dwOldProtect)) {
+        wsprintf(errorMsg, L"VirtualProtect failed");
+        return false;
+    }
+
+    SetLocale_Original = (SetLocale_t)*g_ppSetlocale;
+    *g_ppSetlocale = (void*)SetLocale_Wrapper;
+    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
+                   &dwOldProtect);
+
+    g_msvcrtSetLocaleIsPatched = true;
+    return true;
+}
+
+void LogErrorIfAny() {
+    if (*errorMsg) {
+        Wh_Log(L"%s", errorMsg);
+    }
+}
+
+void Uninit() {
+    if (!g_msvcrtSetLocaleIsPatched) {
+        return;
+    }
+
+    DWORD dwOldProtect;
+    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), PAGE_READWRITE,
+                   &dwOldProtect);
+    *g_ppSetlocale = (void*)SetLocale_Original;
+    VirtualProtect(g_ppSetlocale, sizeof(*g_ppSetlocale), dwOldProtect,
+                   &dwOldProtect);
+}
+
+}  // namespace ProcessShutdownMessageBoxFix
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
+    switch (fdwReason) {
+        case DLL_PROCESS_ATTACH:
+            ProcessShutdownMessageBoxFix::Init(hinstDLL);
+            break;
+
+        case DLL_THREAD_ATTACH:
+        case DLL_THREAD_DETACH:
+            break;
+
+        case DLL_PROCESS_DETACH:
+            // Do not do cleanup if process termination scenario.
+            if (lpReserved) {
+                break;
+            }
+
+            ProcessShutdownMessageBoxFix::Uninit();
+            break;
+    }
+
+    return TRUE;
+}
+
 void LoadSettings() {
     g_settings.allResourceRedirect = Wh_GetIntSetting(L"allResourceRedirect");
 
@@ -1552,8 +1866,21 @@ void LoadSettings() {
 
     if (*themeFolder) {
         WCHAR themeIniFile[MAX_PATH];
+        ULONGLONG fileSize = 0;
         if (PathCombine(themeIniFile, themeFolder, L"theme.ini")) {
-            std::wstring data(32768, L'\0');
+            WIN32_FILE_ATTRIBUTE_DATA fileAttr;
+            if (GetFileAttributesEx(themeIniFile, GetFileExInfoStandard,
+                                    &fileAttr)) {
+                ULARGE_INTEGER uli{
+                    .LowPart = fileAttr.nFileSizeLow,
+                    .HighPart = fileAttr.nFileSizeHigh,
+                };
+                fileSize = uli.QuadPart;
+            }
+        }
+
+        if (fileSize > sizeof("redirections")) {
+            std::wstring data(fileSize, L'\0');
             DWORD result = GetPrivateProfileSection(
                 L"redirections", data.data(), data.size(), themeIniFile);
             if (result != data.size() - 2) {
@@ -1611,18 +1938,20 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    ProcessShutdownMessageBoxFix::LogErrorIfAny();
+
     LoadSettings();
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     HMODULE kernel32Module = GetModuleHandle(L"kernel32.dll");
 
     auto setKernelFunctionHook = [kernelBaseModule, kernel32Module](
-                                     PCSTR targetMame, void* hookFunction,
+                                     PCSTR targetName, void* hookFunction,
                                      void** originalFunction) {
         void* targetFunction =
-            (void*)GetProcAddress(kernelBaseModule, targetMame);
+            (void*)GetProcAddress(kernelBaseModule, targetName);
         if (!targetFunction) {
-            targetFunction = (void*)GetProcAddress(kernel32Module, targetMame);
+            targetFunction = (void*)GetProcAddress(kernel32Module, targetName);
             if (!targetFunction) {
                 return FALSE;
             }
@@ -1632,12 +1961,12 @@ BOOL Wh_ModInit() {
                                   originalFunction);
     };
 
-    // All of these end up calling FindResourceEx, LoadResource, SizeofResource.
-    if (!g_settings.allResourceRedirect) {
-        Wh_SetFunctionHook((void*)PrivateExtractIconsW,
-                           (void*)PrivateExtractIconsW_Hook,
-                           (void**)&PrivateExtractIconsW_Original);
+    Wh_SetFunctionHook((void*)PrivateExtractIconsW,
+                       (void*)PrivateExtractIconsW_Hook,
+                       (void**)&PrivateExtractIconsW_Original);
 
+    if (!g_settings.allResourceRedirect) {
+        // The functions below use FindResourceEx, LoadResource, SizeofResource.
         Wh_SetFunctionHook((void*)LoadImageA, (void*)LoadImageA_Hook,
                            (void**)&LoadImageA_Original);
 
@@ -1681,19 +2010,20 @@ BOOL Wh_ModInit() {
         Wh_SetFunctionHook((void*)CreateDialogParamW,
                            (void*)CreateDialogParamW_Hook,
                            (void**)&CreateDialogParamW_Original);
+
+        // The functions below use RtlLoadString.
+        Wh_SetFunctionHook((void*)LoadStringA, (void*)LoadStringA_u_Hook,
+                           (void**)&LoadStringA_u_Original);
+
+        Wh_SetFunctionHook((void*)LoadStringW, (void*)LoadStringW_u_Hook,
+                           (void**)&LoadStringW_u_Original);
+
+        setKernelFunctionHook("LoadStringA", (void*)LoadStringA_k_Hook,
+                              (void**)&LoadStringA_k_Original);
+
+        setKernelFunctionHook("LoadStringW", (void*)LoadStringW_k_Hook,
+                              (void**)&LoadStringW_k_Original);
     }
-
-    Wh_SetFunctionHook((void*)LoadStringA, (void*)LoadStringA_u_Hook,
-                       (void**)&LoadStringA_u_Original);
-
-    Wh_SetFunctionHook((void*)LoadStringW, (void*)LoadStringW_u_Hook,
-                       (void**)&LoadStringW_u_Original);
-
-    setKernelFunctionHook("LoadStringA", (void*)LoadStringA_k_Hook,
-                          (void**)&LoadStringA_k_Original);
-
-    setKernelFunctionHook("LoadStringW", (void*)LoadStringA_k_Hook,
-                          (void**)&LoadStringA_k_Original);
 
     if (g_settings.allResourceRedirect) {
         setKernelFunctionHook("FindResourceExA", (void*)FindResourceExA_Hook,
@@ -1704,6 +2034,13 @@ BOOL Wh_ModInit() {
                               (void**)&LoadResource_Original);
         setKernelFunctionHook("SizeofResource", (void*)SizeofResource_Hook,
                               (void**)&SizeofResource_Original);
+
+        void* pRtlLoadString = (void*)GetProcAddress(
+            GetModuleHandle(L"ntdll.dll"), "RtlLoadString");
+        if (pRtlLoadString) {
+            Wh_SetFunctionHook(pRtlLoadString, (void*)RtlLoadString_Hook,
+                               (void**)&RtlLoadString_Original);
+        }
     }
 
     // All of these end up calling FindResourceEx, LoadResource, SizeofResource.

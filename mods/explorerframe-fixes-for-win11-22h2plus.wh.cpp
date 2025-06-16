@@ -2,7 +2,7 @@
 // @id              explorerframe-fixes-for-win11-22h2plus
 // @name            Explorerframe fixes for Win11 22H2+
 // @description     Fixes three problems with file explorer
-// @version         1.0
+// @version         1.0.1
 // @author          Waldemar
 // @github          https://github.com/CyprinusCarpio
 // @include         explorer.exe
@@ -25,9 +25,6 @@ Black artifacts briefly visible in new file explorer windows under Classic theme
 Changes will be visible in new file explorer windows.
 */
 // ==/WindhawkModReadme==
-#include <windhawk_utils.h>
-#include <Windows.h>
-#include <vector>
 
 // ==WindhawkModSettings==
 /*
@@ -39,6 +36,11 @@ Changes will be visible in new file explorer windows.
   $description: Use classic background color for explorer windows.
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
+#include <Windows.h>
+#include <shdeprecated.h>
+#include <vector>
 
 bool g_settingDisplayMenuBar;
 bool g_settingFixCWCBackground;
@@ -95,7 +97,7 @@ LRESULT CALLBACK RebarSubclassProc(_In_ HWND hWnd,
             LRESULT toRet = DefSubclassProc(hWnd, uMsg, wParam, g_settingDisplayMenuBar);
             if(g_settingDisplayMenuBar)
             {
-				// If the following hack is not done, menu bar items may be invisible.
+                // If the following hack is not done, menu bar items may be invisible.
                 HWND stwc = GetParent(GetParent(hWnd));
                 RECT rect;
                 GetClientRect(stwc, &rect);
@@ -148,7 +150,7 @@ LRESULT CALLBACK ListviewSubclassProc(_In_ HWND hWnd,
         }));
         return 0;
     }
-	// This is less than surgical, but it appears to have no adverse effects.
+    // This is less than surgical, but it appears to have no adverse effects.
     if(uMsg == WM_SETREDRAW)
     {
         wParam = true;
@@ -180,6 +182,13 @@ typedef long(*__cdecl CEFWndProc_t)(void*, HWND, unsigned int, WPARAM, LPARAM);
 CEFWndProc_t CEFWndProcOriginal;
 long __cdecl CEFWndProcHook(void* pThis, HWND hWnd, unsigned int uMsg, WPARAM wParam, LPARAM lParam)
 {
+    if(uMsg == WM_SHOWWINDOW)
+    {
+        // This message "fixes" the unpredictable appearance of the menu bar,
+        // but it sets a internal flag in the CShellBrowser that prevents it
+        // from saving it's layout. We stop that in another hook.
+        SendMessageW(hWnd, WM_WININICHANGE, 0, 0);
+    }
     if(g_settingFixCWCBackground && uMsg == WM_ERASEBKGND)
     {
         HDC hdc = (HDC)wParam;
@@ -190,6 +199,15 @@ long __cdecl CEFWndProcHook(void* pThis, HWND hWnd, unsigned int uMsg, WPARAM wP
         return 1;
     }
     return CEFWndProcOriginal(pThis, hWnd, uMsg, wParam, lParam);
+}
+
+typedef long(*__cdecl CSBSetFlags_t)(void*, unsigned long, unsigned long);
+CSBSetFlags_t CSBSetFlagsOriginal;
+long __cdecl CSBSetFlagsHook(void* pThis, unsigned long a, unsigned long b)
+{
+    // This flag is a deprecated feature that has no business being set
+    if(a & BSF_UISETBYAUTOMATION) a &= ~BSF_UISETBYAUTOMATION;
+    return CSBSetFlagsOriginal(pThis, a, b);
 }
 
 BOOL Wh_ModInit() 
@@ -219,12 +237,19 @@ BOOL Wh_ModInit()
             (void**)&CBSInitializeOriginal,
             (void*)CBSInitializeHook,
             FALSE
+        },
+        {   {
+                L"public: virtual long __cdecl CShellBrowser::SetFlags(unsigned long,unsigned long)"
+            },
+            (void**)&CSBSetFlagsOriginal,
+            (void*)CSBSetFlagsHook,
+            FALSE
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, 2))
+    if (!WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, 3))
     {
-        Wh_Log(L"Failed install explorerframe hooks");
+        Wh_Log(L"Failed to install explorerframe hooks");
         return FALSE;
     }
 
@@ -255,7 +280,7 @@ BOOL Wh_ModInit()
     }
 
     g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
-	g_settingFixCWCBackground = Wh_GetIntSetting(L"ClassicBackgroundColor");
+    g_settingFixCWCBackground = Wh_GetIntSetting(L"ClassicBackgroundColor");
 
     return TRUE;
 }

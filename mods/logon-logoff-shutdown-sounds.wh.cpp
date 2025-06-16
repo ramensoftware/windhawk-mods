@@ -2,7 +2,7 @@
 // @id              logon-logoff-shutdown-sounds
 // @name            Logon, Logoff & Shutdown Sounds Restored
 // @description     Restores the logon, logoff and shutdown sounds from earlier versions of Windows
-// @version         1.0.1
+// @version         1.0.3
 // @author          Toru the Red Fox
 // @github          https://github.com/TorutheRedFox
 // @twitter         https://twitter.com/TorutheRedFox
@@ -16,8 +16,6 @@
 Restores the logon, logoff and shutdown sounds from earlier versions of Windows, simple as.
 
 It is recommended to use [these reg files](https://www.howtogeek.com/wp-content/uploads/2016/09/Shutdown-Logoff-Logon-Sound-Hacks.zip) to restore the sound events to the Sound control panel applet.
-
-Note: Likely redundant with explorer7 due to 7's explorer having this code in it already.
 */
 // ==/WindhawkModReadme==
 
@@ -27,6 +25,10 @@ Note: Likely redundant with explorer7 due to 7's explorer having this code in it
 - xpmode: false
   $name: XP Startup behavior
   $description: Plays the startup sound on logon. Resuming will still play the logon sound. It is recommended to untick the box to play the startup sound in the control panel to prevent it from playing before you log on.
+
+- hookonsessionchange: true
+  $name: Hook OnSessionChange
+  $description: Only disable this if using ExplorerEx or another port of explorer from XP/Server 2003 or earlier.
 
 */
 // ==/WindhawkModSettings==
@@ -43,8 +45,10 @@ Note: Likely redundant with explorer7 due to 7's explorer having this code in it
 #include <winuser.h>
 
 // settings
-struct {
+struct
+{
     bool    bXpMode;
+    bool    bHookOnSessionChange;
 } settings;
 
 // the various global handles used 
@@ -125,7 +129,8 @@ HRESULT WINAPI HRESULTFromLastErrorError()
     return hr;
 }
 
-HRESULT WINAPI PlaySoundFile(HANDLE* hCurrentThread, LPCWSTR lpszFileName) {
+HRESULT WINAPI PlaySoundFile(HANDLE* hCurrentThread, LPCWSTR lpszFileName)
+{
     DWORD szSoundFile;           // eax
     signed int hr = 0;    // esi
     DWORD NumberOfBytesRead;  // [esp+8h] [ebp-Ch] BYREF
@@ -142,25 +147,34 @@ HRESULT WINAPI PlaySoundFile(HANDLE* hCurrentThread, LPCWSTR lpszFileName) {
         NULL
     );
 
-    if (hFile != INVALID_HANDLE_VALUE) {
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
         szSoundFile = GetFileSize(hFile, 0);
         hr = E_OUTOFMEMORY;
-        if (szSoundFile != INVALID_FILE_SIZE && szSoundFile >= 0 && szSoundFile < 0x400000) {
+        if (szSoundFile != INVALID_FILE_SIZE && szSoundFile >= 0 && szSoundFile < 0x400000)
+        {
             lpSndBuf = LocalAlloc(0, szSoundFile);
-            if (lpSndBuf && ReadFile(hFile, lpSndBuf, szSoundFile, &NumberOfBytesRead, 0)) {
+            if (lpSndBuf && ReadFile(hFile, lpSndBuf, szSoundFile, &NumberOfBytesRead, 0))
+            {
                 hr = szSoundFile != NumberOfBytesRead ? HRESULT_FROM_WIN32(ERROR_IO_PENDING) : 0;
-            } else {
+            }
+            else
+            {
                 hr = HRESULTFromLastErrorError();
             }
         }
         CloseHandle(hFile);
-    } else {
+    }
+    else
+    {
         hr = HRESULTFromLastErrorError();
     }
 
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(hr))
+    {
         HANDLE hPlaySndThread = CreateThread(0, 0, PlaySoundFileThreadProc, lpSndBuf, 0, 0);
-        if (hPlaySndThread) {
+        if (hPlaySndThread)
+        {
             if (hCurrentThread)
                 *hCurrentThread = hPlaySndThread;
             else
@@ -274,7 +288,8 @@ HWND WINAPI SHCreateWorkerWindowW(WNDPROC pfnWndProc, HWND hwndParent, DWORD dwE
     return hwnd;
 }
 
-class CSoundWnd {
+class CSoundWnd
+{
     public:
         WINAPI CSoundWnd();
         LONG m_refCount;
@@ -300,7 +315,8 @@ WINAPI CSoundWnd::CSoundWnd()
 
 BOOL WINAPI CSoundWnd::Init()
 {
-    if (!SHCreateThread(s_ThreadProc, this, CTF_COINIT_STA | CTF_PROCESS_REF, s_CreateWindow)) {
+    if (!SHCreateThread(s_ThreadProc, this, CTF_COINIT_STA | CTF_PROCESS_REF, s_CreateWindow))
+    {
         DWORD dwLastError = GetLastError();
         LPWSTR pszMessageBuffer = nullptr;
 
@@ -348,7 +364,8 @@ DWORD CALLBACK CSoundWnd::s_ThreadProc(void* lpParam)
 LRESULT CALLBACK CSoundWnd::s_WndProc(HWND hWnd,
                                    UINT msg,
                                    WPARAM wParam,
-                                   LPARAM lParam) {
+                                   LPARAM lParam)
+{
     CSoundWnd* soundWnd = (CSoundWnd*)GetWindowPtr0(hWnd);
     if (soundWnd)
         return soundWnd->v_WndProc(hWnd, msg, wParam, lParam);
@@ -359,16 +376,20 @@ LRESULT CALLBACK CSoundWnd::s_WndProc(HWND hWnd,
 LRESULT WINAPI CSoundWnd::v_WndProc(HWND hWnd,
                              UINT msg,
                              WPARAM wParam,
-                             LPARAM lParam) {
+                             LPARAM lParam)
+{
     WCHAR szShutdownReason[256];
     
-    switch (msg) {
+    switch (msg)
+    {
         case WM_QUERYENDSESSION:
-            if ((lParam & ENDSESSION_CRITICAL) == FALSE) {
+            if ((lParam & ENDSESSION_CRITICAL) == FALSE)
+            {
                 LoadString(GetModuleHandle(NULL), 0x2DBu, szShutdownReason, ARRAYSIZE(szShutdownReason));
                 ShutdownBlockReasonCreate(this->m_hwndSound, szShutdownReason);
-                PlayLogonLogoffSound(&this->m_thread, (lParam & ENDSESSION_LOGOFF) != 0 ? ST_LOGOFF : ST_EXIT);
-                if (this->m_thread) {
+                PlayLogonLogoffSound(&this->m_thread, (lParam & ENDSESSION_LOGOFF && settings.bXpMode == false) != 0 ? ST_LOGOFF : ST_EXIT);
+                if (this->m_thread)
+                {
                     g_hSoundThread = this->m_thread;
                     WaitForSingleObject(this->m_thread, INFINITE);
                     CloseHandle(this->m_thread);
@@ -376,7 +397,8 @@ LRESULT WINAPI CSoundWnd::v_WndProc(HWND hWnd,
             }
             return 1;
         case WM_ENDSESSION:
-            if (wParam && (lParam & ENDSESSION_CRITICAL) == FALSE && this->m_thread) {
+            if (wParam && (lParam & ENDSESSION_CRITICAL) == FALSE && this->m_thread)
+            {
                 WaitForSingleObject(this->m_thread, INFINITE);
                 CloseHandle(this->m_thread);
             }
@@ -483,7 +505,8 @@ BOOL WINAPI HasLogonSoundBeenPlayed()
     return HasPerLogonActionBeenDone(L"LogonSoundHasBeenPlayed", &g_tbPlayedStartupSound);
 }
 
-BOOL WINAPI IsDesktopProcess() {
+BOOL WINAPI IsDesktopProcess()
+{
     DWORD dwShellProcId = NULL;
     DWORD dwCurProcId = GetCurrentProcessId();
     HWND hShellWindow = FindWindow(TEXT("Shell_TrayWnd"), NULL);
@@ -493,14 +516,17 @@ BOOL WINAPI IsDesktopProcess() {
         return TRUE;
     }
     GetWindowThreadProcessId(hShellWindow, &dwShellProcId);
-    if (dwCurProcId == dwShellProcId || !hShellWindow) {
-        if (dwCurProcId != g_dwCurProcId) // because the dll handle is shared, the boolean needs to be reset when the explorer process changes
+    if (dwCurProcId == dwShellProcId || !hShellWindow)
+    {
+        if (dwCurProcId != g_dwCurProcId)
         {
             g_tbPlayedStartupSound = TRIBIT_UNDEFINED;
             g_dwCurProcId = dwCurProcId;
         }
         return TRUE;
-    } else {
+    }
+    else
+    {
         g_dwCurProcId = dwCurProcId;
         return FALSE;
     }
@@ -510,11 +536,13 @@ BOOL WINAPI IsDesktopProcess() {
 void LoadSettings(void)
 {
     settings.bXpMode = (BOOL)Wh_GetIntSetting(L"xpmode");
+    settings.bHookOnSessionChange = (BOOL)Wh_GetIntSetting(L"hookonsessionchange");
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
-BOOL Wh_ModInit() {
+BOOL Wh_ModInit()
+{
     Wh_Log(L"Init");
 
     LoadSettings();
@@ -525,32 +553,35 @@ BOOL Wh_ModInit() {
 
     g_hShlwapi = LoadLibrary(TEXT("shlwapi.dll"));
 
-    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
-        {
+    if (settings.bHookOnSessionChange) {
+        WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
             {
-                #ifdef _WIN64
-                L"protected: __int64 __cdecl CTray::_OnSessionChange(unsigned __int64,__int64)"
-                #else
-                L"protected: long __thiscall CTray::_OnSessionChange(unsigned int,long)"
-                #endif
-            },
-            (void **)&_OnSessionChange_orig,
-            (void *)_OnSessionChange_hook,
-            false
-        }
-    };
+                {
+                    #ifdef _WIN64
+                    L"protected: __int64 __cdecl CTray::_OnSessionChange(unsigned __int64,__int64)"
+                    #else
+                    L"protected: long __thiscall CTray::_OnSessionChange(unsigned int,long)"
+                    #endif
+                },
+                (void **)&_OnSessionChange_orig,
+                (void *)_OnSessionChange_hook,
+                false
+            }
+        };
 
-    if (!WindhawkUtils::HookSymbols(
-        g_hExplorer,
-        explorerExeHooks,
-        ARRAYSIZE(explorerExeHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook _OnSessionChange");
-        return FALSE;
+        if (!WindhawkUtils::HookSymbols(
+            g_hExplorer,
+            explorerExeHooks,
+            ARRAYSIZE(explorerExeHooks)
+        ))
+        {
+            Wh_Log(L"Failed to hook _OnSessionChange...");
+            //return FALSE;
+        }
     }
 
-    if (IsDesktopProcess()) {
+    if (IsDesktopProcess())
+    {
         InitSoundWindow();
         SetProcessShutdownParameters(0x4FF, NULL);
         if (!HasLogonSoundBeenPlayed())
@@ -574,16 +605,15 @@ VOID Wh_ModUninit()
     if (g_hSoundThread) // make sure DLL stays alive until we finish playing
         WaitForSingleObject(g_hSoundThread, INFINITE);
     
-    if (g_hwSound) {
+    if (g_hwSound)
+    {
         PostMessage(g_hwSound, WM_CLOSE, NULL, NULL);
         g_hwSound = NULL;
     }
 
-    if (g_hExplorer) {
+    if (g_hExplorer)
         CloseHandle(g_hExplorer);
-    }
 
-    if (g_hShlwapi) {
+    if (g_hShlwapi)
         CloseHandle(g_hShlwapi);
-    }
 }

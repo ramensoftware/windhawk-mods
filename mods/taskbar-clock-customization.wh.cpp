@@ -1,15 +1,15 @@
 // ==WindhawkMod==
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
-// @description     Customize the taskbar clock - add seconds, define a custom date/time format, add a news feed, and more
-// @version         1.3.3
+// @description     Customize the taskbar clock: define a custom date/time format, add a news feed, customize fonts and colors, and more
+// @version         1.5.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -D__USE_MINGW_ANSI_STDIO=0 -lole32 -loleaut32 -lversion -lwininet
+// @compilerOptions -D__USE_MINGW_ANSI_STDIO=0 -lole32 -loleaut32 -lruntimeobject -lversion -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -24,8 +24,8 @@
 /*
 # Taskbar Clock Customization
 
-Customize the taskbar clock - add seconds, define a custom date/time format, add
-a news feed, and more.
+Customize the taskbar clock: define a custom date/time format, add a news feed,
+customize fonts and colors, and more.
 
 Only Windows 10 64-bit and Windows 11 are supported.
 
@@ -41,8 +41,20 @@ extra line - can be configured with text that contains patterns. The following
 patterns can be used:
 
 * `%time%` - the time as configured by the time format in settings.
+  * `%time<n>%` - additional time formats which can be specified by separating
+    the time format string with `;`. `<n>` is the additional time format number,
+    starting with 2.
+  * `%time_tz<n>%` - the time with a custom time zone. `<n>` is the time zone
+    number in the list of time zones configured in settings.
 * `%date%` - the date as configured by the date format in settings.
-* `%weekday%` - the week day as configured by the week day format in settings.
+  * `%date<n>%` - additional date formats which can be specified by separating
+    the date format string with `;`. `<n>` is the additional date format number,
+    starting with 2.
+  * `%date_tz<n>%` - the date with a custom time zone. `<n>` is the time zone
+    number in the list of time zones configured in settings.
+* `%weekday%` - the week day as configured in settings.
+  * `%weekday_tz<n>%` - the week day with a custom time zone. `<n>` is the time
+    zone number in the list of time zones configured in settings.
 * `%weekday_num%` - the week day number according to the [first day of
    week](https://superuser.com/q/61002) system configuration. For example, if
    first day of week is Sunday, then the week day number is 1 for Sunday, 2 for
@@ -52,11 +64,13 @@ patterns can be used:
   of week according to the system configuration.
 * `%weeknum_iso%` - the [ISO week
   number](https://en.wikipedia.org/wiki/ISO_week_date).
+* `%dayofyear%` - the day of year starting from January 1st.
 * `%timezone%` - the time zone in ISO 8601 format.
 * `%web<n>%` - the web contents as configured in settings, truncated with
   ellipsis, where `<n>` is the web contents number.
 * `%web<n>_full%` - the full web contents as configured in settings, where `<n>`
   is the web contents number.
+* `%newline%` - a newline.
 
 ## Text styles
 
@@ -75,75 +89,89 @@ styles, such as the font color and size.
     hh':'mm':'ss tt
   $name: Time format
   $description: >-
-    Leave empty for the default format, for syntax refer to the following page:
+    Leave empty for the default format. For syntax refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/api/datetimeapi/nf-datetimeapi-gettimeformatex#remarks
 - DateFormat: >-
     ddd',' MMM dd yyyy
   $name: Date format
   $description: >-
-    Leave empty for the default format, for syntax refer to the following page:
+    Leave empty for the default format. For syntax refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
 - WeekdayFormat: dddd
   $name: Week day format
+  $options:
+  - dddd: Full day of the week
+  - ddd: Abbreviated day of the week
+  - custom: Custom, specified below
+- WeekdayFormatCustom: Sun, Mon, Tue, Wed, Thu, Fri, Sat
+  $name: Custom week day format
   $description: >-
-    Leave empty for the default format, for syntax refer to the following page:
-
-    https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
+    A comma-separated list of custom week days, Sunday through Saturday. Used if
+    the custom format is specified for the week day format.
 - TopLine: '%date% | %time%'
   $name: Top line
   $description: >-
-    Text to be shown on the first line, set to "-" for the default value, refer
-    to the mod details for list of patterns that can be used
+    Text to be shown on the first line. Set to "-" for the default value. Refer
+    to the mod details for list of patterns that can be used.
 - BottomLine: '%web1%'
   $name: Bottom line
   $description: >-
-    Only shown if the taskbar is large enough, set to "-" for the default value
+    Only shown if the taskbar is large enough. Set to "-" for the default value.
 - MiddleLine: '%weekday%'
   $name: Middle line (Windows 10 only)
   $description: >-
-    Only shown if the taskbar is large enough, set to "-" for the default value
+    Only shown if the taskbar is large enough. Set to "-" for the default value.
 - TooltipLine: '%web1_full%'
   $name: Tooltip extra line
 - Width: 180
   $name: Clock width (Windows 10 only)
 - Height: 60
   $name: Clock height (Windows 10 only)
+- MaxWidth: 0
+  $name: Clock max width (Windows 11 only)
+  $description: Set to zero to have no max width.
 - TextSpacing: 0
-  $name: Text spacing
+  $name: Line spacing
   $description: >-
     Set 0 for the default system value. A negative value can be used for
     negative spacing.
 - WebContentsItems:
-  - - Url: https://feeds.bbci.co.uk/news/world/rss.xml
+  - - Url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
       $name: Web content URL
     - BlockStart: '<item>'
       $name: Web content block start
-      $description: The string in the webpage to start from
-    - Start: '<title><![CDATA['
+      $description: The string in the webpage to start from.
+    - Start: '<title>'
       $name: Web content start
-      $description: The string just before the content
-    - End: ']]></title>'
+      $description: The string just before the content.
+    - End: '</title>'
       $name: Web content end
-      $description: The string just after the content
+      $description: The string just after the content.
     - MaxLength: 28
       $name: Web content maximum length
-      $description: Longer strings will be truncated with ellipsis
+      $description: Longer strings will be truncated with ellipsis.
   $name: Web content items
   $description: >-
     Will be used to fetch data displayed in place of the %web<n>%,
-    %web<n>_full% patterns, where <n> is the web contents number
+    %web<n>_full% patterns, where <n> is the web contents number.
 - WebContentsUpdateInterval: 10
   $name: Web content update interval
-  $description: The update interval, in minutes, of the web content items
+  $description: The update interval, in minutes, of the web content items.
+- TimeZones: ["Eastern Standard Time"]
+  $name: Time zones
+  $description: >-
+    The list of time zones for patterns such as %time_tz1%. For a full list of
+    supported time zones, use the following PowerShell command: Get-TimeZone
+    -ListAvailable.
 - TimeStyle:
-  - Visible: true
+  - Hidden: false
   - TextColor: ""
     $name: Text color
     $description: >-
       Can be a color name (Red, Black, ...) or an RGB/ARGB color code (like
-      #00FF00, #CC00FF00, ...)
+      #00FF00, #CC00FF00, ...).
   - TextAlignment: ""
     $name: Text alignment
     $options:
@@ -153,7 +181,7 @@ styles, such as the font color and size.
     - Left: Left
   - FontSize: 0
     $name: Font size
-    $description: Set to zero for the default size
+    $description: Set to zero for the default size.
   - FontFamily: ""
     $name: Font family
     $description: >-
@@ -185,7 +213,7 @@ styles, such as the font color and size.
     - Italic: Italic
   - FontStretch: ""
     $name: Font stretch
-    $description: Only supported for some fonts
+    $description: Only supported for some fonts.
     $options:
     - "": Default
     - Undefined: Undefined
@@ -200,14 +228,15 @@ styles, such as the font color and size.
     - UltraExpanded: Ultra expanded
   - CharacterSpacing: 0
     $name: Character spacing
-    $description: Can be a positive or a negative number
+    $description: Can be a positive or a negative number.
   $name: Top line style (Windows 11 version 22H2 and newer)
 - DateStyle:
+  - Hidden: false
   - TextColor: ""
     $name: Text color
     $description: >-
       Can be a color name (Red, Black, ...) or an RGB/ARGB color code (like
-      #00FF00, #CC00FF00, ...)
+      #00FF00, #CC00FF00, ...).
   - TextAlignment: ""
     $name: Text alignment
     $options:
@@ -217,7 +246,7 @@ styles, such as the font color and size.
     - Left: Left
   - FontSize: 0
     $name: Font size
-    $description: Set to zero for the default size
+    $description: Set to zero for the default size.
   - FontFamily: ""
     $name: Font family
     $description: >-
@@ -249,7 +278,7 @@ styles, such as the font color and size.
     - Italic: Italic
   - FontStretch: ""
     $name: Font stretch
-    $description: Only supported for some fonts
+    $description: Only supported for some fonts.
     $options:
     - "": Default
     - Undefined: Undefined
@@ -264,18 +293,18 @@ styles, such as the font color and size.
     - UltraExpanded: Ultra expanded
   - CharacterSpacing: 0
     $name: Character spacing
-    $description: Can be a positive or a negative number
+    $description: Can be a positive or a negative number.
   $name: Bottom line style (Windows 11 version 22H2 and newer)
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    ExplorerPatcher or a similar tool). Note: For Windhawk versions older than
-    1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool).
 */
 // ==/WindhawkModSettings==
 
-#include <algorithm>
+#include <windhawk_utils.h>
+
 #include <atomic>
 #include <mutex>
 #include <optional>
@@ -283,11 +312,9 @@ styles, such as the font color and size.
 #include <string_view>
 #include <vector>
 
-#include <initguid.h>  // must come before knownfolders.h
+using namespace std::string_view_literals;
 
-#include <inspectable.h>
-#include <knownfolders.h>
-#include <shlobj.h>
+#include <psapi.h>
 #include <wininet.h>
 
 #undef GetCurrentTime
@@ -331,7 +358,7 @@ struct WebContentsSettings {
 };
 
 struct TextStyleSettings {
-    std::optional<bool> visible;
+    bool hidden;
     StringSetting textColor;
     StringSetting textAlignment;
     int fontSize;
@@ -347,15 +374,18 @@ struct {
     StringSetting timeFormat;
     StringSetting dateFormat;
     StringSetting weekdayFormat;
+    std::vector<std::wstring> weekdayFormatCustom;
     StringSetting topLine;
     StringSetting bottomLine;
     StringSetting middleLine;
     StringSetting tooltipLine;
     int width;
     int height;
+    int maxWidth;
     int textSpacing;
     std::vector<WebContentsSettings> webContentsItems;
     int webContentsUpdateInterval;
+    std::vector<StringSetting> timeZones;
     TextStyleSettings timeStyle;
     TextStyleSettings dateStyle;
     bool oldTaskbarOnWin11;
@@ -369,25 +399,49 @@ struct {
 } g_settings;
 
 #define FORMATTED_BUFFER_SIZE 256
+#define INTEGER_BUFFER_SIZE sizeof("-2147483648")
 
 enum class WinVersion {
     Unsupported,
     Win10,
     Win11,
     Win11_22H2,
+    Win11_24H2,
 };
 
 WinVersion g_winVersion;
 
-WCHAR g_timeFormatted[FORMATTED_BUFFER_SIZE];
-WCHAR g_dateFormatted[FORMATTED_BUFFER_SIZE];
-WCHAR g_weekdayFormatted[FORMATTED_BUFFER_SIZE];
-WCHAR g_weekdayNumFormatted[FORMATTED_BUFFER_SIZE];
-WCHAR g_weeknumFormatted[FORMATTED_BUFFER_SIZE];
-WCHAR g_weeknumIsoFormatted[FORMATTED_BUFFER_SIZE];
-WCHAR g_timezoneFormatted[FORMATTED_BUFFER_SIZE];
+std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_initialized;
+std::atomic<bool> g_explorerPatcherInitialized;
+
+DWORD g_formatIndex;
+SYSTEMTIME g_formatTime;
+
+template <size_t N>
+struct FormattedString {
+    DWORD formatIndex;
+    WCHAR buffer[N];
+};
+
+FormattedString<FORMATTED_BUFFER_SIZE> g_timeFormatted;
+std::vector<std::wstring> g_timeFormattedExtra;
+std::vector<FormattedString<FORMATTED_BUFFER_SIZE>> g_timeFormattedTz;
+FormattedString<FORMATTED_BUFFER_SIZE> g_dateFormatted;
+std::vector<std::wstring> g_dateFormattedExtra;
+std::vector<FormattedString<FORMATTED_BUFFER_SIZE>> g_dateFormattedTz;
+FormattedString<FORMATTED_BUFFER_SIZE> g_weekdayFormatted;
+std::vector<FormattedString<FORMATTED_BUFFER_SIZE>> g_weekdayFormattedTz;
+FormattedString<INTEGER_BUFFER_SIZE> g_weekdayNumFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_weeknumFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_weeknumIsoFormatted;
+FormattedString<INTEGER_BUFFER_SIZE> g_dayOfYearFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_timezoneFormatted;
+
+std::vector<std::optional<DYNAMIC_TIME_ZONE_INFORMATION>> g_timeZoneInformation;
 
 HANDLE g_webContentUpdateThread;
+HANDLE g_webContentUpdateRefreshEvent;
 HANDLE g_webContentUpdateStopEvent;
 std::mutex g_webContentMutex;
 std::atomic<bool> g_webContentLoaded;
@@ -402,6 +456,8 @@ WCHAR g_webContentFull[FORMATTED_BUFFER_SIZE];
 struct ClockElementStyleData {
     winrt::weak_ref<FrameworkElement> dateTimeIconContentElement;
     DWORD styleIndex;
+    std::optional<int64_t> dateVisibilityPropertyChangedToken;
+    std::optional<int64_t> timeVisibilityPropertyChangedToken;
 };
 
 std::atomic<bool> g_clockElementStyleEnabled;
@@ -410,6 +466,17 @@ std::vector<ClockElementStyleData> g_clockElementStyleData;
 
 using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
 GetDpiForWindow_t pGetDpiForWindow;
+
+using SystemTimeToTzSpecificLocalTimeEx_t =
+    BOOL(WINAPI*)(const DYNAMIC_TIME_ZONE_INFORMATION* lpTimeZoneInformation,
+                  const SYSTEMTIME* lpUniversalTime,
+                  LPSYSTEMTIME lpLocalTime);
+SystemTimeToTzSpecificLocalTimeEx_t pSystemTimeToTzSpecificLocalTimeEx;
+
+using EnumDynamicTimeZoneInformation_t =
+    DWORD(WINAPI*)(const DWORD dwIndex,
+                   PDYNAMIC_TIME_ZONE_INFORMATION lpTimeZoneInformation);
+EnumDynamicTimeZoneInformation_t pEnumDynamicTimeZoneInformation;
 
 using GetLocalTime_t = decltype(&GetLocalTime);
 GetLocalTime_t GetLocalTime_Original;
@@ -422,6 +489,9 @@ GetDateFormatEx_t GetDateFormatEx_Original;
 
 using GetDateFormatW_t = decltype(&GetDateFormatW);
 GetDateFormatW_t GetDateFormatW_Original;
+
+using SendMessageW_t = decltype(&SendMessageW);
+SendMessageW_t SendMessageW_Original;
 
 std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl,
                                           bool failIfNot200 = true) {
@@ -607,7 +677,8 @@ void UpdateWebContent() {
 
         std::lock_guard<std::mutex> guard(g_webContentMutex);
 
-        if (item.maxLength <= 0 || extracted.length() <= item.maxLength) {
+        if (item.maxLength <= 0 ||
+            extracted.length() <= (size_t)item.maxLength) {
             g_webContentStrings[i] = extracted;
         } else {
             std::wstring truncated(extracted.begin(),
@@ -632,17 +703,30 @@ void UpdateWebContent() {
 DWORD WINAPI WebContentUpdateThread(LPVOID lpThreadParameter) {
     constexpr DWORD kSecondsForQuickRetry = 30;
 
+    HANDLE handles[] = {
+        g_webContentUpdateStopEvent,
+        g_webContentUpdateRefreshEvent,
+    };
+
     while (true) {
         UpdateWebContent();
 
-        DWORD seconds = g_settings.webContentsUpdateInterval * 60;
+        DWORD seconds = g_settings.webContentsUpdateInterval >= 1
+                            ? g_settings.webContentsUpdateInterval * 60
+                            : 1;
         if (!g_webContentLoaded && seconds > kSecondsForQuickRetry) {
             seconds = kSecondsForQuickRetry;
         }
 
-        DWORD dwWaitResult =
-            WaitForSingleObject(g_webContentUpdateStopEvent, seconds * 1000);
-        if (dwWaitResult != WAIT_TIMEOUT) {
+        DWORD dwWaitResult = WaitForMultipleObjects(ARRAYSIZE(handles), handles,
+                                                    FALSE, seconds * 1000);
+
+        if (dwWaitResult == WAIT_FAILED) {
+            Wh_Log(L"WAIT_FAILED");
+            break;
+        }
+
+        if (dwWaitResult == WAIT_OBJECT_0) {
             break;
         }
     }
@@ -663,8 +747,18 @@ void WebContentUpdateThreadInit() {
     g_webContentStringsFull.clear();
     g_webContentStringsFull.resize(g_settings.webContentsItems.size());
 
-    if ((g_settings.webContentsUrl && *g_settings.webContentsUrl) ||
-        g_settings.webContentsItems.size() > 0) {
+    // A fuzzy check to see if any of the lines contain the web content pattern.
+    // If not, no need to fire up the thread.
+    bool webContentsIsBeingUsed = wcsstr(g_settings.topLine, L"%web") ||
+                                  wcsstr(g_settings.bottomLine, L"%web") ||
+                                  wcsstr(g_settings.middleLine, L"%web") ||
+                                  wcsstr(g_settings.tooltipLine, L"%web");
+
+    if (webContentsIsBeingUsed &&
+        ((g_settings.webContentsUrl && *g_settings.webContentsUrl) ||
+         g_settings.webContentsItems.size() > 0)) {
+        g_webContentUpdateRefreshEvent =
+            CreateEvent(nullptr, FALSE, FALSE, nullptr);
         g_webContentUpdateStopEvent =
             CreateEvent(nullptr, TRUE, FALSE, nullptr);
         g_webContentUpdateThread = CreateThread(
@@ -678,9 +772,44 @@ void WebContentUpdateThreadUninit() {
         WaitForSingleObject(g_webContentUpdateThread, INFINITE);
         CloseHandle(g_webContentUpdateThread);
         g_webContentUpdateThread = nullptr;
+        CloseHandle(g_webContentUpdateRefreshEvent);
+        g_webContentUpdateRefreshEvent = nullptr;
         CloseHandle(g_webContentUpdateStopEvent);
         g_webContentUpdateStopEvent = nullptr;
     }
+}
+
+std::optional<DYNAMIC_TIME_ZONE_INFORMATION> GetTimeZoneInformation(
+    PCWSTR timeZone) {
+    if (!pEnumDynamicTimeZoneInformation) {
+        return std::nullopt;
+    }
+
+    DWORD i = 0;
+    DWORD dwResult;
+    do {
+        DYNAMIC_TIME_ZONE_INFORMATION dynamicTimezone;
+        dwResult = pEnumDynamicTimeZoneInformation(i++, &dynamicTimezone);
+        if (dwResult == ERROR_SUCCESS &&
+            _wcsicmp(dynamicTimezone.TimeZoneKeyName, timeZone) == 0) {
+            return dynamicTimezone;
+        }
+    } while (dwResult != ERROR_NO_MORE_ITEMS);
+
+    return std::nullopt;
+}
+
+DWORD GetStartDayOfWeek(const SYSTEMTIME* time) {
+    // https://stackoverflow.com/a/39344961
+    DWORD startDayOfWeek;
+    GetLocaleInfoEx(
+        LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER,
+        (PWSTR)&startDayOfWeek, sizeof(startDayOfWeek) / sizeof(WCHAR));
+
+    // Start from Sunday instead of Monday.
+    startDayOfWeek = (startDayOfWeek + 1) % 7;
+
+    return startDayOfWeek;
 }
 
 int CalculateWeeknum(const SYSTEMTIME* time, DWORD startDayOfWeek) {
@@ -805,6 +934,28 @@ int CalculateWeeknumIso(const SYSTEMTIME* time) {
     return WeekNumber;
 }
 
+// Adopted from VMime:
+// https://github.com/kisli/vmime/blob/fc69321d5304c73be685c890f3b30528aadcfeaf/src/vmime/utility/datetimeUtils.cpp#L239
+int CalculateDayOfYearNumber(const SYSTEMTIME* time) {
+    const int year = time->wYear;
+    const int month = time->wMonth;
+    const int day = time->wDay;
+
+    const bool leapYear =
+        ((year % 4) == 0 && (year % 100) != 0) || (year % 400) == 0;
+
+    static const int DAY_OF_YEAR_NUMBER_MAP[12] = {
+        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+
+    int DayOfYearNumber = day + DAY_OF_YEAR_NUMBER_MAP[month - 1];
+
+    if (leapYear && month > 2) {
+        DayOfYearNumber += 1;
+    }
+
+    return DayOfYearNumber;
+}
+
 // Adopted from:
 // https://github.com/microsoft/cpp_client_telemetry/blob/25bc0806f21ecb2587154494f073bfa581cd5089/lib/pal/desktop/WindowsEnvironmentInfo.hpp#L39
 void GetTimeZone(WCHAR* buffer, size_t bufferSize) {
@@ -830,132 +981,528 @@ void GetTimeZone(WCHAR* buffer, size_t bufferSize) {
                  static_cast<int>(minutes));
 }
 
-void InitializeFormattedStrings(const SYSTEMTIME* time) {
-    GetTimeFormatEx_Original(
-        nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
-        *g_settings.timeFormat ? g_settings.timeFormat.get() : nullptr,
-        g_timeFormatted, ARRAYSIZE(g_timeFormatted));
-    GetDateFormatEx_Original(
-        nullptr, DATE_AUTOLAYOUT, time,
-        *g_settings.dateFormat ? g_settings.dateFormat.get() : nullptr,
-        g_dateFormatted, ARRAYSIZE(g_dateFormatted), nullptr);
-    GetDateFormatEx_Original(
-        nullptr, DATE_AUTOLAYOUT, time,
-        *g_settings.weekdayFormat ? g_settings.weekdayFormat.get() : nullptr,
-        g_weekdayFormatted, ARRAYSIZE(g_weekdayFormatted), nullptr);
-
-    // https://stackoverflow.com/a/39344961
-    DWORD startDayOfWeek;
-    GetLocaleInfoEx(
-        LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK | LOCALE_RETURN_NUMBER,
-        (PWSTR)&startDayOfWeek, sizeof(startDayOfWeek) / sizeof(WCHAR));
-
-    // Start from Sunday instead of Monday.
-    startDayOfWeek = (startDayOfWeek + 1) % 7;
-
-    swprintf_s(g_weekdayNumFormatted, L"%d",
-               1 + (7 + time->wDayOfWeek - startDayOfWeek) % 7);
-
-    swprintf_s(g_weeknumFormatted, L"%d",
-               CalculateWeeknum(time, startDayOfWeek));
-
-    swprintf_s(g_weeknumIsoFormatted, L"%d", CalculateWeeknumIso(time));
-
-    GetTimeZone(g_timezoneFormatted, ARRAYSIZE(g_timezoneFormatted));
+// https://stackoverflow.com/a/54364173
+std::wstring_view TrimStringView(std::wstring_view s) {
+    s.remove_prefix(std::min(s.find_first_not_of(L" \t\r\v\n"), s.size()));
+    s.remove_suffix(
+        std::min(s.size() - s.find_last_not_of(L" \t\r\v\n") - 1, s.size()));
+    return s;
 }
 
-size_t ResolveFormatToken(PCWSTR format, PCWSTR* resolved) {
-    if (wcsncmp(L"%time%", format, sizeof("%time%") - 1) == 0) {
-        *resolved = g_timeFormatted;
-        return sizeof("%time%") - 1;
-    } else if (wcsncmp(L"%date%", format, sizeof("%date%") - 1) == 0) {
-        *resolved = g_dateFormatted;
-        return sizeof("%date%") - 1;
-    } else if (wcsncmp(L"%weekday%", format, sizeof("%weekday%") - 1) == 0) {
-        *resolved = g_weekdayFormatted;
-        return sizeof("%weekday%") - 1;
-    } else if (wcsncmp(L"%weekday_num%", format, sizeof("%weekday_num%") - 1) ==
-               0) {
-        *resolved = g_weekdayNumFormatted;
-        return sizeof("%weekday_num%") - 1;
-    } else if (wcsncmp(L"%weeknum%", format, sizeof("%weeknum%") - 1) == 0) {
-        *resolved = g_weeknumFormatted;
-        return sizeof("%weeknum%") - 1;
-    } else if (wcsncmp(L"%weeknum_iso%", format, sizeof("%weeknum_iso%") - 1) ==
-               0) {
-        *resolved = g_weeknumIsoFormatted;
-        return sizeof("%weeknum_iso%") - 1;
-    } else if (wcsncmp(L"%timezone%", format, sizeof("%timezone%") - 1) == 0) {
-        *resolved = g_timezoneFormatted;
-        return sizeof("%timezone%") - 1;
+// https://stackoverflow.com/a/46931770
+std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
+                                               std::wstring_view delimiter) {
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    std::wstring_view token;
+    std::vector<std::wstring_view> res;
+
+    while ((pos_end = s.find(delimiter, pos_start)) !=
+           std::wstring_view::npos) {
+        token = s.substr(pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back(token);
     }
 
-    // Kept for compatibility with old settings:
-    if (wcsncmp(L"%web%", format, sizeof("%web%") - 1) == 0) {
-        std::lock_guard<std::mutex> guard(g_webContentMutex);
-        *resolved = *g_webContent ? g_webContent : L"Loading...";
-        return sizeof("%web%") - 1;
-    } else if (wcsncmp(L"%web_full%", format, sizeof("%web_full%") - 1) == 0) {
-        std::lock_guard<std::mutex> guard(g_webContentMutex);
-        *resolved = *g_webContentFull ? g_webContentFull : L"Loading...";
-        return sizeof("%web_full%") - 1;
-    }
+    res.push_back(s.substr(pos_start));
+    return res;
+}
 
-    if (wcsncmp(L"%web", format, sizeof("%web") - 1) == 0) {
-        WCHAR indexChar = format[sizeof("%web") - 1];
-        if (indexChar >= L'1' && indexChar <= L'9') {
-            size_t index = indexChar - L'1';
-            if (index >= 0 && index < g_settings.webContentsItems.size()) {
-                PCWSTR formatAfterIndex = format + sizeof("%web1") - 1;
+std::vector<std::wstring> SplitTimeFormatString(std::wstring_view s) {
+    size_t posStart = 0;
+    std::wstring token;
+    std::vector<std::wstring> result;
 
-                if (*formatAfterIndex == L'%') {
-                    std::lock_guard<std::mutex> guard(g_webContentMutex);
+    while (true) {
+        size_t posEnd = s.size();
+        bool inQuote = false;
+        for (size_t i = posStart; i < s.size(); i++) {
+            if (s[i] == L'\'') {
+                inQuote = !inQuote;
+                continue;
+            }
 
-                    if (index >= g_webContentStrings.size() ||
-                        !g_webContentStrings[index]) {
-                        *resolved = L"Loading...";
-                    } else if (g_webContentStrings[index]->empty()) {
-                        *resolved = L"-";
-                    } else {
-                        *resolved = g_webContentStrings[index]->c_str();
-                    }
-
-                    return sizeof("%web1%") - 1;
-                }
-
-                if (wcsncmp(L"_full%", formatAfterIndex,
-                            sizeof("_full%") - 1) == 0) {
-                    std::lock_guard<std::mutex> guard(g_webContentMutex);
-
-                    if (index >= g_webContentStringsFull.size() ||
-                        !g_webContentStringsFull[index]) {
-                        *resolved = L"Loading...";
-                    } else if (g_webContentStringsFull[index]->empty()) {
-                        *resolved = L"-";
-                    } else {
-                        *resolved = g_webContentStringsFull[index]->c_str();
-                    }
-
-                    return sizeof("%web1_full%") - 1;
-                }
+            if (!inQuote && s[i] == L';') {
+                posEnd = i;
+                break;
             }
         }
+
+        if (posEnd == s.size()) {
+            break;
+        }
+
+        token = s.substr(posStart, posEnd - posStart);
+        posStart = posEnd + 1;
+        result.push_back(std::move(token));
+    }
+
+    token = s.substr(posStart);
+    result.push_back(std::move(token));
+    return result;
+}
+
+PCWSTR GetTimeFormattedWithExtra(std::vector<std::wstring>** extra) {
+    if (g_timeFormatted.formatIndex != g_formatIndex) {
+        const SYSTEMTIME* time = &g_formatTime;
+
+        auto timeFormatParts =
+            SplitTimeFormatString(g_settings.timeFormat.get());
+
+        GetTimeFormatEx_Original(
+            nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
+            !timeFormatParts[0].empty() ? timeFormatParts[0].c_str() : nullptr,
+            g_timeFormatted.buffer, ARRAYSIZE(g_timeFormatted.buffer));
+
+        g_timeFormattedExtra.resize(timeFormatParts.size() - 1);
+        for (size_t i = 1; i < timeFormatParts.size(); i++) {
+            WCHAR formatted[FORMATTED_BUFFER_SIZE];
+            GetTimeFormatEx_Original(
+                nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
+                !timeFormatParts[i].empty() ? timeFormatParts[i].c_str()
+                                            : nullptr,
+                formatted, ARRAYSIZE(formatted));
+            g_timeFormattedExtra[i - 1] = formatted;
+        }
+
+        g_timeFormatted.formatIndex = g_formatIndex;
+    }
+
+    if (extra) {
+        *extra = &g_timeFormattedExtra;
+    }
+
+    return g_timeFormatted.buffer;
+}
+
+PCWSTR GetTimeFormatted() {
+    return GetTimeFormattedWithExtra(nullptr);
+}
+
+std::vector<std::wstring>* GetTimeFormattedExtra() {
+    std::vector<std::wstring>* extra;
+    GetTimeFormattedWithExtra(&extra);
+    return extra;
+}
+
+PCWSTR GetTimeFormattedTz(size_t index) {
+    if (index >= g_settings.timeZones.size()) {
+        return nullptr;
+    }
+
+    auto& timeFormattedTz = g_timeFormattedTz[index];
+
+    if (timeFormattedTz.formatIndex != g_formatIndex) {
+        const auto& timeZoneInformation = g_timeZoneInformation[index];
+        if (timeZoneInformation && pSystemTimeToTzSpecificLocalTimeEx) {
+            SYSTEMTIME systemTime;
+            TzSpecificLocalTimeToSystemTime(nullptr, &g_formatTime,
+                                            &systemTime);
+
+            SYSTEMTIME timeTz;
+            pSystemTimeToTzSpecificLocalTimeEx(&*timeZoneInformation,
+                                               &systemTime, &timeTz);
+
+            const SYSTEMTIME* time = &timeTz;
+
+            auto timeFormatParts =
+                SplitTimeFormatString(g_settings.timeFormat.get());
+
+            GetTimeFormatEx_Original(
+                nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
+                !timeFormatParts[0].empty() ? timeFormatParts[0].c_str()
+                                            : nullptr,
+                timeFormattedTz.buffer, ARRAYSIZE(timeFormattedTz.buffer));
+        } else {
+            wcscpy_s(timeFormattedTz.buffer, L"-");
+        }
+
+        timeFormattedTz.formatIndex = g_formatIndex;
+    }
+
+    return timeFormattedTz.buffer;
+}
+
+PCWSTR GetDateFormattedWithExtra(std::vector<std::wstring>** extra) {
+    if (g_dateFormatted.formatIndex != g_formatIndex) {
+        const SYSTEMTIME* time = &g_formatTime;
+
+        auto dateFormatParts =
+            SplitTimeFormatString(g_settings.dateFormat.get());
+
+        GetDateFormatEx_Original(
+            nullptr, DATE_AUTOLAYOUT, time,
+            !dateFormatParts[0].empty() ? dateFormatParts[0].c_str() : nullptr,
+            g_dateFormatted.buffer, ARRAYSIZE(g_dateFormatted.buffer), nullptr);
+
+        g_dateFormattedExtra.resize(dateFormatParts.size() - 1);
+        for (size_t i = 1; i < dateFormatParts.size(); i++) {
+            WCHAR formatted[FORMATTED_BUFFER_SIZE];
+            GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
+                                     !dateFormatParts[i].empty()
+                                         ? dateFormatParts[i].c_str()
+                                         : nullptr,
+                                     formatted, ARRAYSIZE(formatted), nullptr);
+            g_dateFormattedExtra[i - 1] = formatted;
+        }
+
+        g_dateFormatted.formatIndex = g_formatIndex;
+    }
+
+    if (extra) {
+        *extra = &g_dateFormattedExtra;
+    }
+
+    return g_dateFormatted.buffer;
+}
+
+PCWSTR GetDateFormatted() {
+    return GetDateFormattedWithExtra(nullptr);
+}
+
+std::vector<std::wstring>* GetDateFormattedExtra() {
+    std::vector<std::wstring>* extra;
+    GetDateFormattedWithExtra(&extra);
+    return extra;
+}
+
+PCWSTR GetDateFormattedTz(size_t index) {
+    if (index >= g_settings.timeZones.size()) {
+        return nullptr;
+    }
+
+    auto& dateFormattedTz = g_dateFormattedTz[index];
+
+    if (dateFormattedTz.formatIndex != g_formatIndex) {
+        const auto& timeZoneInformation = g_timeZoneInformation[index];
+        if (timeZoneInformation && pSystemTimeToTzSpecificLocalTimeEx) {
+            SYSTEMTIME systemTime;
+            TzSpecificLocalTimeToSystemTime(nullptr, &g_formatTime,
+                                            &systemTime);
+
+            SYSTEMTIME timeTz;
+            pSystemTimeToTzSpecificLocalTimeEx(&*timeZoneInformation,
+                                               &systemTime, &timeTz);
+
+            const SYSTEMTIME* time = &timeTz;
+
+            auto dateFormatParts =
+                SplitTimeFormatString(g_settings.dateFormat.get());
+
+            GetDateFormatEx_Original(
+                nullptr, DATE_AUTOLAYOUT, time,
+                !dateFormatParts[0].empty() ? dateFormatParts[0].c_str()
+                                            : nullptr,
+                dateFormattedTz.buffer, ARRAYSIZE(dateFormattedTz.buffer),
+                nullptr);
+        } else {
+            wcscpy_s(dateFormattedTz.buffer, L"-");
+        }
+
+        dateFormattedTz.formatIndex = g_formatIndex;
+    }
+
+    return dateFormattedTz.buffer;
+}
+
+void FormatWeekday(const SYSTEMTIME* time, PWSTR buffer, size_t bufferSize) {
+    if (g_settings.weekdayFormatCustom.empty()) {
+        GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
+                                 *g_settings.weekdayFormat
+                                     ? g_settings.weekdayFormat.get()
+                                     : L"dddd",
+                                 buffer, bufferSize, nullptr);
+    } else if (g_settings.weekdayFormatCustom.size() > time->wDayOfWeek) {
+        // Copy truncated.
+        wcsncpy_s(buffer, bufferSize,
+                  g_settings.weekdayFormatCustom[time->wDayOfWeek].c_str(),
+                  bufferSize - 1);
+    } else {
+        wcscpy_s(buffer, bufferSize, L"-");
+    }
+}
+
+PCWSTR GetWeekdayFormatted() {
+    if (g_weekdayFormatted.formatIndex != g_formatIndex) {
+        const SYSTEMTIME* time = &g_formatTime;
+
+        FormatWeekday(time, g_weekdayFormatted.buffer,
+                      ARRAYSIZE(g_weekdayFormatted.buffer));
+
+        g_weekdayFormatted.formatIndex = g_formatIndex;
+    }
+
+    return g_weekdayFormatted.buffer;
+}
+
+PCWSTR GetWeekdayFormattedTz(size_t index) {
+    if (index >= g_settings.timeZones.size()) {
+        return nullptr;
+    }
+
+    auto& weekdayFormattedTz = g_weekdayFormattedTz[index];
+
+    if (weekdayFormattedTz.formatIndex != g_formatIndex) {
+        const auto& timeZoneInformation = g_timeZoneInformation[index];
+        if (timeZoneInformation && pSystemTimeToTzSpecificLocalTimeEx) {
+            SYSTEMTIME systemTime;
+            TzSpecificLocalTimeToSystemTime(nullptr, &g_formatTime,
+                                            &systemTime);
+
+            SYSTEMTIME timeTz;
+            pSystemTimeToTzSpecificLocalTimeEx(&*timeZoneInformation,
+                                               &systemTime, &timeTz);
+
+            const SYSTEMTIME* time = &timeTz;
+
+            auto weekdayFormatParts =
+                SplitTimeFormatString(g_settings.weekdayFormat.get());
+
+            FormatWeekday(time, weekdayFormattedTz.buffer,
+                          ARRAYSIZE(weekdayFormattedTz.buffer));
+        } else {
+            wcscpy_s(weekdayFormattedTz.buffer, L"-");
+        }
+
+        weekdayFormattedTz.formatIndex = g_formatIndex;
+    }
+
+    return weekdayFormattedTz.buffer;
+}
+
+PCWSTR GetWeekdayNumFormatted() {
+    if (g_weekdayNumFormatted.formatIndex != g_formatIndex) {
+        const SYSTEMTIME* time = &g_formatTime;
+
+        DWORD startDayOfWeek = GetStartDayOfWeek(time);
+
+        swprintf_s(g_weekdayNumFormatted.buffer, L"%d",
+                   1 + (7 + time->wDayOfWeek - startDayOfWeek) % 7);
+
+        g_weekdayNumFormatted.formatIndex = g_formatIndex;
+    }
+
+    return g_weekdayNumFormatted.buffer;
+}
+
+PCWSTR GetWeeknumFormatted() {
+    if (g_weeknumFormatted.formatIndex != g_formatIndex) {
+        const SYSTEMTIME* time = &g_formatTime;
+
+        DWORD startDayOfWeek = GetStartDayOfWeek(time);
+
+        swprintf_s(g_weeknumFormatted.buffer, L"%d",
+                   CalculateWeeknum(time, startDayOfWeek));
+
+        g_weeknumFormatted.formatIndex = g_formatIndex;
+    }
+
+    return g_weeknumFormatted.buffer;
+}
+
+PCWSTR GetWeeknumIsoFormatted() {
+    if (g_weeknumIsoFormatted.formatIndex != g_formatIndex) {
+        const SYSTEMTIME* time = &g_formatTime;
+
+        swprintf_s(g_weeknumIsoFormatted.buffer, L"%d",
+                   CalculateWeeknumIso(time));
+
+        g_weeknumIsoFormatted.formatIndex = g_formatIndex;
+    }
+
+    return g_weeknumIsoFormatted.buffer;
+}
+
+PCWSTR GetDayOfYearFormatted() {
+    if (g_dayOfYearFormatted.formatIndex != g_formatIndex) {
+        const SYSTEMTIME* time = &g_formatTime;
+
+        swprintf_s(g_dayOfYearFormatted.buffer, L"%d",
+                   CalculateDayOfYearNumber(time));
+
+        g_dayOfYearFormatted.formatIndex = g_formatIndex;
+    }
+
+    return g_dayOfYearFormatted.buffer;
+}
+
+PCWSTR GetTimezoneFormatted() {
+    if (g_timezoneFormatted.formatIndex != g_formatIndex) {
+        GetTimeZone(g_timezoneFormatted.buffer,
+                    ARRAYSIZE(g_timezoneFormatted.buffer));
+
+        g_timezoneFormatted.formatIndex = g_formatIndex;
+    }
+
+    return g_timezoneFormatted.buffer;
+}
+
+int ResolveFormatTokenWithDigit(std::wstring_view format,
+                                std::wstring_view formatTokenPrefix,
+                                std::wstring_view formatTokenSuffix) {
+    if (format.size() <
+        formatTokenPrefix.size() + 1 + formatTokenSuffix.size()) {
+        return 0;
+    }
+
+    if (!format.starts_with(formatTokenPrefix)) {
+        return 0;
+    }
+
+    char digitChar = format[formatTokenPrefix.size()];
+    if (digitChar < L'1' || digitChar > L'9') {
+        return 0;
+    }
+
+    if (!format.substr(formatTokenPrefix.size() + 1)
+             .starts_with(formatTokenSuffix)) {
+        return 0;
+    }
+
+    return digitChar - L'0';
+}
+
+size_t ResolveFormatToken(std::wstring_view format, PCWSTR* resolved) {
+    using FormattedStringValueGetter = PCWSTR (*)();
+
+    struct {
+        std::wstring_view token;
+        FormattedStringValueGetter valueGetter;
+    } formatTokens[] = {
+        {L"%time%"sv, GetTimeFormatted},
+        {L"%date%"sv, GetDateFormatted},
+        {L"%weekday%"sv, GetWeekdayFormatted},
+        {L"%weekday_num%"sv, GetWeekdayNumFormatted},
+        {L"%weeknum%"sv, GetWeeknumFormatted},
+        {L"%weeknum_iso%"sv, GetWeeknumIsoFormatted},
+        {L"%dayofyear%"sv, GetDayOfYearFormatted},
+        {L"%timezone%"sv, GetTimezoneFormatted},
+        {L"%newline%"sv, []() { return L"\n"; }},
+    };
+
+    for (const auto& formatToken : formatTokens) {
+        if (format.starts_with(formatToken.token)) {
+            *resolved = formatToken.valueGetter();
+            return formatToken.token.size();
+        }
+    }
+
+    using FormattedStringValueGetterTz = PCWSTR (*)(size_t index);
+
+    struct {
+        std::wstring_view prefix;
+        FormattedStringValueGetterTz valueGetter;
+    } formatTzTokens[] = {
+        {L"%time_tz"sv, GetTimeFormattedTz},
+        {L"%date_tz"sv, GetDateFormattedTz},
+        {L"%weekday_tz"sv, GetWeekdayFormattedTz},
+    };
+
+    for (auto formatTzToken : formatTzTokens) {
+        int digit =
+            ResolveFormatTokenWithDigit(format, formatTzToken.prefix, L"%"sv);
+        if (!digit) {
+            continue;
+        }
+
+        PCWSTR value = formatTzToken.valueGetter(digit - 1);
+        if (!value) {
+            *resolved = L"-";
+        } else {
+            *resolved = value;
+        }
+
+        return formatTzToken.prefix.size() + 2;
+    }
+
+    if (auto token = L"%web%"sv; format.starts_with(token)) {
+        std::lock_guard<std::mutex> guard(g_webContentMutex);
+        *resolved = *g_webContent ? g_webContent : L"Loading...";
+        return token.size();
+    }
+
+    if (auto token = L"%web_full%"sv; format.starts_with(token)) {
+        std::lock_guard<std::mutex> guard(g_webContentMutex);
+        *resolved = *g_webContentFull ? g_webContentFull : L"Loading...";
+        return token.size();
+    }
+
+    using FormattedStringVectorGetter = std::vector<std::wstring>* (*)();
+
+    struct {
+        std::wstring_view prefix;
+        FormattedStringVectorGetter valueVectorGetter;
+    } formatExtraTokens[] = {
+        {L"%time"sv, GetTimeFormattedExtra},
+        {L"%date"sv, GetDateFormattedExtra},
+    };
+
+    for (auto formatExtraToken : formatExtraTokens) {
+        int digit = ResolveFormatTokenWithDigit(format, formatExtraToken.prefix,
+                                                L"%"sv);
+        if (!digit) {
+            continue;
+        }
+
+        const auto& valueVector = *formatExtraToken.valueVectorGetter();
+
+        if (digit < 2 || static_cast<size_t>(digit - 2) >= valueVector.size()) {
+            *resolved = L"-";
+        } else {
+            *resolved = valueVector[digit - 2].c_str();
+        }
+
+        return formatExtraToken.prefix.size() + 2;
+    }
+
+    if (int digit = ResolveFormatTokenWithDigit(format, L"%web"sv, L"%"sv)) {
+        size_t index = digit - 1;
+
+        std::lock_guard<std::mutex> guard(g_webContentMutex);
+
+        if (index >= g_webContentStrings.size()) {
+            *resolved = L"-";
+        } else if (!g_webContentStrings[index]) {
+            *resolved = L"Loading...";
+        } else {
+            *resolved = g_webContentStrings[index]->c_str();
+        }
+
+        return "%web1%"sv.size();
+    }
+
+    if (int digit =
+            ResolveFormatTokenWithDigit(format, L"%web"sv, L"_full%"sv)) {
+        size_t index = digit - 1;
+
+        std::lock_guard<std::mutex> guard(g_webContentMutex);
+
+        if (index >= g_webContentStringsFull.size()) {
+            *resolved = L"-";
+        } else if (!g_webContentStringsFull[index]) {
+            *resolved = L"Loading...";
+        } else {
+            *resolved = g_webContentStringsFull[index]->c_str();
+        }
+
+        return "%web1_full%"sv.size();
     }
 
     return 0;
 }
 
-int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format) {
+int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
     if (bufferSize == 0) {
         return 0;
     }
 
+    std::wstring_view formatSuffix = format;
+
     PWSTR bufferStart = buffer;
     PWSTR bufferEnd = bufferStart + bufferSize;
-    while (*format && bufferEnd - buffer > 1) {
-        if (*format == L'%') {
+    while (!formatSuffix.empty() && bufferEnd - buffer > 1) {
+        if (formatSuffix[0] == L'%') {
             PCWSTR srcStr = nullptr;
-            size_t formatTokenLen = ResolveFormatToken(format, &srcStr);
+            size_t formatTokenLen = ResolveFormatToken(formatSuffix, &srcStr);
             if (formatTokenLen > 0) {
                 bool truncated;
                 buffer += StringCopyTruncated(buffer, bufferEnd - buffer,
@@ -964,15 +1511,16 @@ int FormatLine(PWSTR buffer, size_t bufferSize, PCWSTR format) {
                     break;
                 }
 
-                format += formatTokenLen;
+                formatSuffix = formatSuffix.substr(formatTokenLen);
                 continue;
             }
         }
 
-        *buffer++ = *format++;
+        *buffer++ = formatSuffix[0];
+        formatSuffix = formatSuffix.substr(1);
     }
 
-    if (*format && bufferSize >= 4) {
+    if (!formatSuffix.empty() && bufferSize >= 4) {
         buffer[-1] = L'.';
         buffer[-2] = L'.';
         buffer[-3] = L'.';
@@ -1000,6 +1548,11 @@ using ClockSystemTrayIconDataModel_GetTimeToolTipString_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
 ClockSystemTrayIconDataModel_GetTimeToolTipString_t
     ClockSystemTrayIconDataModel_GetTimeToolTipString_Original;
+
+using ClockSystemTrayIconDataModel_GetTimeToolTipString2_t =
+    LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
+ClockSystemTrayIconDataModel_GetTimeToolTipString2_t
+    ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original;
 
 using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(LPVOID pThis);
 DateTimeIconContent_OnApplyTemplate_t
@@ -1044,11 +1597,11 @@ void WINAPI ClockSystemTrayIconDataModel_RefreshIcon_Hook(LPVOID pThis,
 }
 
 void UpdateToolTipString(LPVOID tooltipPtrPtr) {
-    std::wstring_view separator = L"\r\n\r\n";
+    auto separator = L"\r\n\r\n"sv;
 
     WCHAR extraLine[256];
-    size_t extraLength =
-        FormatLine(extraLine, ARRAYSIZE(extraLine), g_settings.tooltipLine);
+    size_t extraLength = FormatLine(extraLine, ARRAYSIZE(extraLine),
+                                    g_settings.tooltipLine.get());
     if (extraLength == 0) {
         return;
     }
@@ -1118,6 +1671,26 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook(LPVOID pThis,
     return ret;
 }
 
+LPVOID WINAPI
+ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook(LPVOID pThis,
+                                                        LPVOID param1,
+                                                        LPVOID param2,
+                                                        LPVOID param3,
+                                                        LPVOID param4) {
+    Wh_Log(L">");
+
+    g_inGetTimeToolTipString = true;
+
+    LPVOID ret = ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original(
+        pThis, param1, param2, param3, param4);
+
+    UpdateToolTipString(ret);
+
+    g_inGetTimeToolTipString = false;
+
+    return ret;
+}
+
 FrameworkElement FindChildByName(FrameworkElement element,
                                  winrt::hstring name) {
     int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
@@ -1138,7 +1711,16 @@ FrameworkElement FindChildByName(FrameworkElement element,
     return nullptr;
 }
 
-void ApplyStackPanelStyles(Controls::StackPanel stackPanel, int textSpacing) {
+void ApplyStackPanelStyles(Controls::StackPanel stackPanel,
+                           int maxWidth,
+                           int textSpacing) {
+    if (maxWidth) {
+        stackPanel.MaxWidth(maxWidth);
+    } else {
+        stackPanel.as<DependencyObject>().ClearValue(
+            FrameworkElement::MaxWidthProperty());
+    }
+
     if (textSpacing) {
         stackPanel.Spacing(textSpacing);
     } else {
@@ -1147,14 +1729,43 @@ void ApplyStackPanelStyles(Controls::StackPanel stackPanel, int textSpacing) {
     }
 }
 
-void ApplyTextBlockStyles(Controls::TextBlock textBlock,
-                          const TextStyleSettings* textStyleSettings) {
-    if (textStyleSettings && !textStyleSettings->visible.value_or(true)) {
+void ApplyTextBlockStyles(
+    Controls::TextBlock textBlock,
+    const TextStyleSettings* textStyleSettings,
+    bool noWrap,
+    std::optional<int64_t>* visibilityPropertyChangedToken) {
+    if (visibilityPropertyChangedToken->has_value()) {
+        textBlock.UnregisterPropertyChangedCallback(
+            UIElement::VisibilityProperty(),
+            visibilityPropertyChangedToken->value());
+    }
+
+    if (textStyleSettings && textStyleSettings->hidden) {
         textBlock.Visibility(Visibility::Collapsed);
+        *visibilityPropertyChangedToken =
+            textBlock.RegisterPropertyChangedCallback(
+                UIElement::VisibilityProperty(),
+                [](DependencyObject sender, DependencyProperty property) {
+                    auto textBlock = sender.try_as<Controls::TextBlock>();
+                    if (!textBlock) {
+                        return;
+                    }
+
+                    textBlock.Visibility(Visibility::Collapsed);
+                });
         return;
     }
 
+    visibilityPropertyChangedToken->reset();
+
     textBlock.Visibility(Visibility::Visible);
+
+    if (noWrap) {
+        textBlock.TextWrapping(TextWrapping::NoWrap);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::TextWrappingProperty());
+    }
 
     if (textStyleSettings && *textStyleSettings->textColor) {
         auto textColor =
@@ -1285,8 +1896,8 @@ void ApplyDateTimeIconContentStyles(
     auto stackPanel =
         containerGridElement.Children().GetAt(0).as<Controls::StackPanel>();
 
-    Controls::TextBlock dateInnerTextBlock;
-    Controls::TextBlock timeInnerTextBlock;
+    Controls::TextBlock dateInnerTextBlock = nullptr;
+    Controls::TextBlock timeInnerTextBlock = nullptr;
 
     for (const auto& child : stackPanel.Children()) {
         auto childTextBlock = child.try_as<Controls::TextBlock>();
@@ -1316,14 +1927,19 @@ void ApplyDateTimeIconContentStyles(
         clockElementStyleData = &g_clockElementStyleData.back();
     }
 
-    ApplyStackPanelStyles(
-        stackPanel, clockElementStyleEnabled ? g_settings.textSpacing : 0);
-    ApplyTextBlockStyles(dateInnerTextBlock, clockElementStyleEnabled
-                                                 ? &g_settings.dateStyle
-                                                 : nullptr);
-    ApplyTextBlockStyles(timeInnerTextBlock, clockElementStyleEnabled
-                                                 ? &g_settings.timeStyle
-                                                 : nullptr);
+    int maxWidth = clockElementStyleEnabled ? g_settings.maxWidth : 0;
+    int textSpacing = clockElementStyleEnabled ? g_settings.textSpacing : 0;
+    bool noWrap = maxWidth;
+
+    ApplyStackPanelStyles(stackPanel, maxWidth, textSpacing);
+    ApplyTextBlockStyles(
+        dateInnerTextBlock,
+        clockElementStyleEnabled ? &g_settings.dateStyle : nullptr, noWrap,
+        &clockElementStyleData->dateVisibilityPropertyChangedToken);
+    ApplyTextBlockStyles(
+        timeInnerTextBlock,
+        clockElementStyleEnabled ? &g_settings.timeStyle : nullptr, noWrap,
+        &clockElementStyleData->timeVisibilityPropertyChangedToken);
 
     clockElementStyleData->styleIndex = clockElementStyleIndex;
 }
@@ -1362,7 +1978,7 @@ HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis, LPVOID pArgs) {
     try {
         winrt::Windows::Foundation::IInspectable obj = nullptr;
         winrt::check_hresult(
-            ((IInspectable*)pThis)
+            ((IUnknown*)pThis)
                 ->QueryInterface(
                     winrt::guid_of<winrt::Windows::Foundation::IInspectable>(),
                     winrt::put_abi(obj)));
@@ -1507,7 +2123,7 @@ int WINAPI GetTimeFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
                 return FORMATTED_BUFFER_SIZE;
             }
 
-            return FormatLine(lpTimeStr, cchTime, g_settings.topLine) + 1;
+            return FormatLine(lpTimeStr, cchTime, g_settings.topLine.get()) + 1;
         }
     }
 
@@ -1563,10 +2179,11 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
             }
         }
 
-        if (dwFlags & DATE_SHORTDATE) {
+        if (!(dwFlags & DATE_LONGDATE)) {
             if (!cchDate || g_winVersion >= WinVersion::Win11_22H2) {
-                // First call, initialize strings.
-                InitializeFormattedStrings(lpDate);
+                // First call, save date for formatting.
+                g_formatTime = *lpDate;
+                g_formatIndex++;
             }
 
             if (wcscmp(g_settings.bottomLine, L"-") != 0) {
@@ -1575,7 +2192,8 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
                     return FORMATTED_BUFFER_SIZE;
                 }
 
-                return FormatLine(lpDateStr, cchDate, g_settings.bottomLine) +
+                return FormatLine(lpDateStr, cchDate,
+                                  g_settings.bottomLine.get()) +
                        1;
             }
         }
@@ -1583,6 +2201,48 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
 
     int ret = GetDateFormatEx_Original(lpLocaleName, dwFlags, lpDate, lpFormat,
                                        lpDateStr, cchDate, lpCalendar);
+
+    return ret;
+}
+
+LRESULT WINAPI SendMessageW_Hook(HWND hWnd,
+                                 UINT Msg,
+                                 WPARAM wParam,
+                                 LPARAM lParam) {
+    LRESULT ret = SendMessageW_Original(hWnd, Msg, wParam, lParam);
+
+    if (Msg != WM_POWERBROADCAST || wParam != PBT_APMQUERYSUSPEND) {
+        return ret;
+    }
+
+    switch (lParam) {
+        case PBT_APMRESUMECRITICAL:
+        case PBT_APMRESUMESUSPEND:
+        case PBT_APMRESUMEAUTOMATIC:
+            break;
+
+        default:
+            return ret;
+    }
+
+    WCHAR szClassName[64];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+        return ret;
+    }
+
+    if (_wcsicmp(szClassName, L"MSTaskSwWClass") != 0) {
+        return ret;
+    }
+
+    Wh_Log(L"Resumed, refreshing web contents");
+
+    std::lock_guard<std::mutex> guard(g_webContentMutex);
+
+    HANDLE event = g_webContentUpdateRefreshEvent;
+    if (event) {
+        g_webContentLoaded = false;
+        SetEvent(event);
+    }
 
     return ret;
 }
@@ -1638,7 +2298,7 @@ HRESULT WINAPI ClockButton_v_GetTooltipText_Hook(LPVOID pThis,
         size_t size = g_getTooltipTextBufferSize + stringLen;
         if (size > 4) {
             wcscpy(p, L"\r\n\r\n");
-            FormatLine(p + 4, size - 4, g_settings.tooltipLine);
+            FormatLine(p + 4, size - 4, g_settings.tooltipLine.get());
         }
     }
 
@@ -1743,10 +2403,11 @@ int WINAPI GetTimeFormatEx_Hook_Win10(LPCWSTR lpLocaleName,
                                       LPWSTR lpTimeStr,
                                       int cchTime) {
     if (g_updateTextStringThreadId == GetCurrentThreadId()) {
-        InitializeFormattedStrings(lpTime);
+        g_formatTime = *lpTime;
+        g_formatIndex++;
 
         if (wcscmp(g_settings.topLine, L"-") != 0) {
-            return FormatLine(lpTimeStr, cchTime, g_settings.topLine) + 1;
+            return FormatLine(lpTimeStr, cchTime, g_settings.topLine.get()) + 1;
         }
     }
 
@@ -1818,16 +2479,18 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
         }
     }
 
-    if (puPtrLen)
+    if (puPtrLen) {
         *puPtrLen = uPtrLen;
+    }
 
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-WinVersion GetWindowsVersion() {
+WinVersion GetExplorerVersion() {
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
-    if (!fixedFileInfo)
+    if (!fixedFileInfo) {
         return WinVersion::Unsupported;
+    }
 
     WORD major = HIWORD(fixedFileInfo->dwFileVersionMS);
     WORD minor = LOWORD(fixedFileInfo->dwFileVersionMS);
@@ -1838,294 +2501,286 @@ WinVersion GetWindowsVersion() {
 
     switch (major) {
         case 10:
-            if (build < 22000)
+            if (build < 22000) {
                 return WinVersion::Win10;
-            else if (build <= 22000)
+            } else if (build <= 22000) {
                 return WinVersion::Win11;
-            else
+            } else if (build < 26100) {
                 return WinVersion::Win11_22H2;
+            } else {
+                return WinVersion::Win11_24H2;
+            }
             break;
     }
 
     return WinVersion::Unsupported;
 }
 
-struct SYMBOL_HOOK {
-    std::vector<std::wstring_view> symbols;
+struct EXPLORER_PATCHER_HOOK {
+    PCSTR symbol;
     void** pOriginalFunction;
     void* hookFunction = nullptr;
     bool optional = false;
+
+    template <typename Prototype>
+    EXPLORER_PATCHER_HOOK(
+        PCSTR symbol,
+        Prototype** originalFunction,
+        std::type_identity_t<Prototype*> hookFunction = nullptr,
+        bool optional = false)
+        : symbol(symbol),
+          pOriginalFunction(reinterpret_cast<void**>(originalFunction)),
+          hookFunction(reinterpret_cast<void*>(hookFunction)),
+          optional(optional) {}
 };
 
-bool HookSymbols(HMODULE module,
-                 const SYMBOL_HOOK* symbolHooks,
-                 size_t symbolHooksCount) {
-    const WCHAR cacheVer = L'1';
-    const WCHAR cacheSep = L'@';
-    constexpr size_t cacheMaxSize = 10240;
+bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
+    if (g_explorerPatcherInitialized.exchange(true)) {
+        return true;
+    }
 
+    if (g_winVersion >= WinVersion::Win11) {
+        g_winVersion = WinVersion::Win10;
+    }
+
+    EXPLORER_PATCHER_HOOK hooks[] = {
+        {R"(?UpdateTextStringsIfNecessary@ClockButton@@AEAAIPEA_N@Z)",
+         &ClockButton_UpdateTextStringsIfNecessary_Original,
+         ClockButton_UpdateTextStringsIfNecessary_Hook},
+        {R"(?CalculateMinimumSize@ClockButton@@QEAA?AUtagSIZE@@U2@@Z)",
+         &ClockButton_CalculateMinimumSize_Original,
+         ClockButton_CalculateMinimumSize_Hook},
+        {R"(?GetTextSpacingForOrientation@ClockButton@@AEAAH_NHHHH@Z)",
+         &ClockButton_GetTextSpacingForOrientation_Original,
+         ClockButton_GetTextSpacingForOrientation_Hook},
+        {R"(?v_GetTooltipText@ClockButton@@MEAAJPEAPEAUHINSTANCE__@@PEAPEAGPEAG_K@Z)",
+         &ClockButton_v_GetTooltipText_Original,
+         ClockButton_v_GetTooltipText_Hook, true},
+        {R"(?v_OnDisplayStateChange@ClockButton@@MEAAX_N@Z)",
+         &ClockButton_v_OnDisplayStateChange_Original},
+    };
+
+    bool succeeded = true;
+
+    for (const auto& hook : hooks) {
+        void* ptr = (void*)GetProcAddress(explorerPatcherModule, hook.symbol);
+        if (!ptr) {
+            Wh_Log(L"ExplorerPatcher symbol%s doesn't exist: %S",
+                   hook.optional ? L" (optional)" : L"", hook.symbol);
+            if (!hook.optional) {
+                succeeded = false;
+            }
+            continue;
+        }
+
+        if (hook.hookFunction) {
+            Wh_SetFunctionHook(ptr, hook.hookFunction, hook.pOriginalFunction);
+        } else {
+            *hook.pOriginalFunction = ptr;
+        }
+    }
+
+    if (!succeeded) {
+        Wh_Log(L"HookExplorerPatcherSymbols failed");
+    } else if (g_initialized) {
+        Wh_ApplyHookOperations();
+    }
+
+    return succeeded;
+}
+
+bool IsExplorerPatcherModule(HMODULE module) {
     WCHAR moduleFilePath[MAX_PATH];
-    if (!GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-        Wh_Log(L"GetModuleFileName failed");
-        return false;
+    switch (
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            return false;
     }
 
     PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
     if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
         return false;
     }
 
     moduleFileName++;
 
-    WCHAR cacheBuffer[cacheMaxSize + 1];
-    std::wstring cacheStrKey = std::wstring(L"symbol-cache-") + moduleFileName;
-    Wh_GetStringValue(cacheStrKey.c_str(), cacheBuffer, ARRAYSIZE(cacheBuffer));
-
-    std::wstring_view cacheBufferView(cacheBuffer);
-
-    // https://stackoverflow.com/a/46931770
-    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
-        size_t pos_start = 0, pos_end;
-        std::wstring_view token;
-        std::vector<std::wstring_view> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) !=
-               std::wstring_view::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + 1;
-            res.push_back(token);
-        }
-
-        res.push_back(s.substr(pos_start));
-        return res;
-    };
-
-    auto cacheParts = splitStringView(cacheBufferView, cacheSep);
-
-    std::vector<bool> symbolResolved(symbolHooksCount, false);
-    std::wstring newSystemCacheStr;
-
-    auto onSymbolResolved = [symbolHooks, symbolHooksCount, &symbolResolved,
-                             &newSystemCacheStr,
-                             module](std::wstring_view symbol, void* address) {
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i]) {
-                continue;
-            }
-
-            bool match = false;
-            for (auto hookSymbol : symbolHooks[i].symbols) {
-                if (hookSymbol == symbol) {
-                    match = true;
-                    break;
-                }
-            }
-
-            if (!match) {
-                continue;
-            }
-
-            if (symbolHooks[i].hookFunction) {
-                Wh_SetFunctionHook(address, symbolHooks[i].hookFunction,
-                                   symbolHooks[i].pOriginalFunction);
-                Wh_Log(L"Hooked %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            } else {
-                *symbolHooks[i].pOriginalFunction = address;
-                Wh_Log(L"Found %p: %.*s", address, symbol.length(),
-                       symbol.data());
-            }
-
-            symbolResolved[i] = true;
-
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += symbol;
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr +=
-                std::to_wstring((ULONG_PTR)address - (ULONG_PTR)module);
-
-            break;
-        }
-    };
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    newSystemCacheStr += cacheVer;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += timeStamp;
-    newSystemCacheStr += cacheSep;
-    newSystemCacheStr += imageSize;
-
-    if (cacheParts.size() >= 3 &&
-        cacheParts[0] == std::wstring_view(&cacheVer, 1) &&
-        cacheParts[1] == timeStamp && cacheParts[2] == imageSize) {
-        for (size_t i = 3; i + 1 < cacheParts.size(); i += 2) {
-            auto symbol = cacheParts[i];
-            auto address = cacheParts[i + 1];
-            if (address.length() == 0) {
-                continue;
-            }
-
-            void* addressPtr =
-                (void*)(std::stoull(std::wstring(address), nullptr, 10) +
-                        (ULONG_PTR)module);
-
-            onSymbolResolved(symbol, addressPtr);
-        }
-
-        for (size_t i = 0; i < symbolHooksCount; i++) {
-            if (symbolResolved[i] || !symbolHooks[i].optional) {
-                continue;
-            }
-
-            size_t noAddressMatchCount = 0;
-            for (size_t j = 3; j + 1 < cacheParts.size(); j += 2) {
-                auto symbol = cacheParts[j];
-                auto address = cacheParts[j + 1];
-                if (address.length() != 0) {
-                    continue;
-                }
-
-                for (auto hookSymbol : symbolHooks[i].symbols) {
-                    if (hookSymbol == symbol) {
-                        noAddressMatchCount++;
-                        break;
-                    }
-                }
-            }
-
-            if (noAddressMatchCount == symbolHooks[i].symbols.size()) {
-                Wh_Log(L"Optional symbol %d doesn't exist (from cache)", i);
-                symbolResolved[i] = true;
-            }
-        }
-
-        if (std::all_of(symbolResolved.begin(), symbolResolved.end(),
-                        [](bool b) { return b; })) {
-            return true;
-        }
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) ==
+        0) {
+        Wh_Log(L"ExplorerPatcher taskbar module: %s", moduleFileName);
+        return true;
     }
 
-    Wh_Log(L"Couldn't resolve all symbols from cache");
+    return false;
+}
 
-    WH_FIND_SYMBOL findSymbol;
-    HANDLE findSymbolHandle = Wh_FindFirstSymbol(module, nullptr, &findSymbol);
-    if (!findSymbolHandle) {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
-        return false;
-    }
-
-    do {
-        onSymbolResolved(findSymbol.symbol, findSymbol.address);
-    } while (Wh_FindNextSymbol(findSymbolHandle, &findSymbol));
-
-    Wh_FindCloseSymbol(findSymbolHandle);
-
-    for (size_t i = 0; i < symbolHooksCount; i++) {
-        if (symbolResolved[i]) {
-            continue;
+bool HandleLoadedExplorerPatcher() {
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
+                           &cbNeeded)) {
+        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++) {
+            if (IsExplorerPatcherModule(hMods[i])) {
+                return HookExplorerPatcherSymbols(hMods[i]);
+            }
         }
-
-        if (!symbolHooks[i].optional) {
-            Wh_Log(L"Unresolved symbol: %d", i);
-            return false;
-        }
-
-        Wh_Log(L"Optional symbol %d doesn't exist", i);
-
-        for (auto hookSymbol : symbolHooks[i].symbols) {
-            newSystemCacheStr += cacheSep;
-            newSystemCacheStr += hookSymbol;
-            newSystemCacheStr += cacheSep;
-        }
-    }
-
-    if (newSystemCacheStr.length() <= cacheMaxSize) {
-        Wh_SetStringValue(cacheStrKey.c_str(), newSystemCacheStr.c_str());
-    } else {
-        Wh_Log(L"Cache is too large (%zu)", newSystemCacheStr.length());
     }
 
     return true;
 }
 
-bool HookSymbolsWithOnlineCacheFallback(HMODULE module,
-                                        const SYMBOL_HOOK* symbolHooks,
-                                        size_t symbolHooksCount) {
-    constexpr WCHAR kModIdForCache[] = L"taskbar-clock-customization";
-
-    if (HookSymbols(module, symbolHooks, symbolHooksCount)) {
-        return true;
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module) {
+    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
+        if (IsExplorerPatcherModule(module)) {
+            HookExplorerPatcherSymbols(module);
+        }
     }
+}
 
-    Wh_Log(L"HookSymbols() failed, trying to get an online cache");
+bool HookWin10TaskbarSymbols() {
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+        {
+            {LR"(private: unsigned int __cdecl ClockButton::UpdateTextStringsIfNecessary(bool *))"},
+            &ClockButton_UpdateTextStringsIfNecessary_Original,
+            ClockButton_UpdateTextStringsIfNecessary_Hook,
+        },
+        {
+            {LR"(public: struct tagSIZE __cdecl ClockButton::CalculateMinimumSize(struct tagSIZE))"},
+            &ClockButton_CalculateMinimumSize_Original,
+            ClockButton_CalculateMinimumSize_Hook,
+        },
+        {
+            {LR"(private: int __cdecl ClockButton::GetTextSpacingForOrientation(bool,int,int,int,int))"},
+            &ClockButton_GetTextSpacingForOrientation_Original,
+            ClockButton_GetTextSpacingForOrientation_Hook,
+        },
+        {
+            {LR"(protected: virtual long __cdecl ClockButton::v_GetTooltipText(struct HINSTANCE__ * *,unsigned short * *,unsigned short *,unsigned __int64))"},
+            &ClockButton_v_GetTooltipText_Original,
+            ClockButton_v_GetTooltipText_Hook,
+            true,
+        },
+        {
+            {LR"(protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange(bool))"},
+            &ClockButton_v_OnDisplayStateChange_Original,
+        },
+    };
 
-    WCHAR moduleFilePath[MAX_PATH];
-    DWORD moduleFilePathLen =
-        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath));
-    if (!moduleFilePathLen || moduleFilePathLen == ARRAYSIZE(moduleFilePath)) {
-        Wh_Log(L"GetModuleFileName failed");
+    if (!HookSymbols(GetModuleHandle(nullptr), explorerExeHooks,
+                     ARRAYSIZE(explorerExeHooks))) {
+        Wh_Log(L"HookSymbols failed");
         return false;
     }
 
-    PWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
-    if (!moduleFileName) {
-        Wh_Log(L"GetModuleFileName returned unsupported path");
+    return true;
+}
+
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
+            &ClockSystemTrayIconDataModel_RefreshIcon_Original,
+            ClockSystemTrayIconDataModel_RefreshIcon_Hook,
+        },
+        {
+            {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
+            &ClockSystemTrayIconDataModel_GetTimeToolTipString_Original,
+            ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook,
+            true,
+        },
+        {
+            {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString2(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
+            &ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original,
+            ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+            &DateTimeIconContent_OnApplyTemplate_Original,
+            DateTimeIconContent_OnApplyTemplate_Hook,
+            true,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * *))"},
+            &BadgeIconContent_get_ViewModel_Original,
+            BadgeIconContent_get_ViewModel_Hook,
+            true,
+        },
+        {
+            {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME *,struct _TIME_DYNAMIC_ZONE_INFORMATION *,class SystemTrayTelemetry::ClockUpdate &))"},
+            &ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Original,
+            ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Hook,
+            true,  // Until Windows 11 version 21H2.
+        },
+        {
+            {LR"(public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second(void)const )"},
+            &ICalendar_Second_Original,
+            ICalendar_Second_Hook,
+            true,  // Until Windows 11 version 21H2.
+        },
+        {
+            {
+                LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &))",
+                // Windows 11 21H2:
+                LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl winrt::impl::consume_Windows_System_Threading_IThreadPoolTimerStatics<struct winrt::Windows::System::Threading::IThreadPoolTimerStatics>::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &)const )",
+            },
+            &ThreadPoolTimer_CreateTimer_Original,
+            ThreadPoolTimer_CreateTimer_Hook,
+            true,  // Only for more precise clock, see comment in the hook.
+        },
+        {
+            {
+                LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
+                // Windows 11 21H2:
+                LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
+            },
+            &ThreadPoolTimer_CreateTimer_lambda_Original,
+            ThreadPoolTimer_CreateTimer_lambda_Hook,
+            true,  // Only for more precise clock, see comment in the hook.
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
         return false;
     }
 
-    moduleFileName++;
+    return true;
+}
 
-    DWORD moduleFileNameLen =
-        moduleFilePathLen - (moduleFileName - moduleFilePath);
-
-    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_LOWERCASE, moduleFileName,
-                  moduleFileNameLen, moduleFileName, moduleFileNameLen, nullptr,
-                  nullptr, 0);
-
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)module;
-    IMAGE_NT_HEADERS* header =
-        (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-    auto timeStamp = std::to_wstring(header->FileHeader.TimeDateStamp);
-    auto imageSize = std::to_wstring(header->OptionalHeader.SizeOfImage);
-
-    std::wstring cacheStrKey =
-#if defined(_M_IX86)
-        L"symbol-x86-cache-";
-#elif defined(_M_X64)
-        L"symbol-cache-";
-#else
-#error "Unsupported architecture"
-#endif
-    cacheStrKey += moduleFileName;
-
-    std::wstring onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/";
-    onlineCacheUrl += kModIdForCache;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += cacheStrKey;
-    onlineCacheUrl += L'/';
-    onlineCacheUrl += timeStamp;
-    onlineCacheUrl += L'-';
-    onlineCacheUrl += imageSize;
-    onlineCacheUrl += L".txt";
-
-    Wh_Log(L"Looking for an online cache at %s", onlineCacheUrl.c_str());
-
-    auto onlineCache = GetUrlContent(onlineCacheUrl.c_str());
-    if (!onlineCache) {
-        Wh_Log(L"Failed to get online cache");
-        return false;
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
 
-    Wh_SetStringValue(cacheStrKey.c_str(), onlineCache->c_str());
+    return module;
+}
 
-    return HookSymbols(module, symbolHooks, symbolHooksCount);
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfExplorerPatcher(module);
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+    }
+
+    return module;
 }
 
 void LoadSettings() {
@@ -2133,12 +2788,26 @@ void LoadSettings() {
     g_settings.timeFormat = Wh_GetStringSetting(L"TimeFormat");
     g_settings.dateFormat = Wh_GetStringSetting(L"DateFormat");
     g_settings.weekdayFormat = Wh_GetStringSetting(L"WeekdayFormat");
+
+    g_settings.weekdayFormatCustom.clear();
+    if (wcscmp(g_settings.weekdayFormat, L"custom") == 0) {
+        StringSetting weekdayFormatCustom =
+            Wh_GetStringSetting(L"WeekdayFormatCustom");
+        for (const auto weekdayName :
+             SplitStringView(weekdayFormatCustom.get(), L",")) {
+            g_settings.weekdayFormatCustom.emplace_back(
+                TrimStringView(weekdayName));
+        }
+        g_settings.weekdayFormatCustom.resize(7);
+    }
+
     g_settings.topLine = Wh_GetStringSetting(L"TopLine");
     g_settings.bottomLine = Wh_GetStringSetting(L"BottomLine");
     g_settings.middleLine = Wh_GetStringSetting(L"MiddleLine");
     g_settings.tooltipLine = Wh_GetStringSetting(L"TooltipLine");
     g_settings.width = Wh_GetIntSetting(L"Width");
     g_settings.height = Wh_GetIntSetting(L"Height");
+    g_settings.maxWidth = Wh_GetIntSetting(L"MaxWidth");
     g_settings.textSpacing = Wh_GetIntSetting(L"TextSpacing");
 
     g_settings.webContentsItems.clear();
@@ -2161,7 +2830,27 @@ void LoadSettings() {
     g_settings.webContentsUpdateInterval =
         Wh_GetIntSetting(L"WebContentsUpdateInterval");
 
-    g_settings.timeStyle.visible = Wh_GetIntSetting(L"TimeStyle.Visible");
+    g_timeZoneInformation.clear();
+    g_timeFormattedTz.clear();
+    g_dateFormattedTz.clear();
+    g_weekdayFormattedTz.clear();
+
+    g_settings.timeZones.clear();
+    for (int i = 0;; i++) {
+        StringSetting timeZone = Wh_GetStringSetting(L"TimeZones[%d]", i);
+        if (*timeZone == '\0') {
+            break;
+        }
+
+        g_timeZoneInformation.emplace_back(GetTimeZoneInformation(timeZone));
+        g_timeFormattedTz.emplace_back();
+        g_dateFormattedTz.emplace_back();
+        g_weekdayFormattedTz.emplace_back();
+
+        g_settings.timeZones.push_back(std::move(timeZone));
+    }
+
+    g_settings.timeStyle.hidden = Wh_GetIntSetting(L"TimeStyle.Hidden");
     g_settings.timeStyle.textColor =
         Wh_GetStringSetting(L"TimeStyle.TextColor");
     g_settings.timeStyle.textAlignment =
@@ -2178,6 +2867,7 @@ void LoadSettings() {
     g_settings.timeStyle.characterSpacing =
         Wh_GetIntSetting(L"TimeStyle.CharacterSpacing");
 
+    g_settings.dateStyle.hidden = Wh_GetIntSetting(L"DateStyle.Hidden");
     g_settings.dateStyle.textColor =
         Wh_GetStringSetting(L"DateStyle.TextColor");
     g_settings.dateStyle.textAlignment =
@@ -2195,12 +2885,12 @@ void LoadSettings() {
         Wh_GetIntSetting(L"DateStyle.CharacterSpacing");
 
     g_clockElementStyleEnabled =
-        (g_settings.textSpacing || !*g_settings.timeStyle.visible ||
-         *g_settings.timeStyle.textColor ||
+        (g_settings.maxWidth || g_settings.textSpacing ||
+         g_settings.timeStyle.hidden || *g_settings.timeStyle.textColor ||
          *g_settings.timeStyle.textAlignment || g_settings.timeStyle.fontSize ||
          *g_settings.timeStyle.fontFamily || *g_settings.timeStyle.fontWeight ||
          *g_settings.timeStyle.fontStyle || *g_settings.timeStyle.fontStretch ||
-         g_settings.timeStyle.characterSpacing ||
+         g_settings.timeStyle.characterSpacing || g_settings.dateStyle.hidden ||
          *g_settings.dateStyle.textColor ||
          *g_settings.dateStyle.textAlignment || g_settings.dateStyle.fontSize ||
          *g_settings.dateStyle.fontFamily || *g_settings.dateStyle.fontWeight ||
@@ -2236,13 +2926,27 @@ void ApplySettingsWin11() {
     HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
     if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) &&
         dwProcessId == dwCurrentProcessId) {
-        // Trigger a time change notification. Do so only if the current
-        // explorer.exe instance owns the taskbar.
-        WCHAR szTimeFormat[80];
-        if (GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STIMEFORMAT, szTimeFormat,
-                          ARRAYSIZE(szTimeFormat))) {
-            SetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STIMEFORMAT,
-                          szTimeFormat);
+        // Touch a registry value to trigger a watcher for a clock update. Do so
+        // only if the current explorer.exe instance owns the taskbar.
+        constexpr WCHAR kTempValueName[] =
+            L"_temp_windhawk_taskbar-taskbar-clock-customization";
+        HKEY hSubKey;
+        LONG result = RegOpenKeyEx(HKEY_CURRENT_USER,
+                                   L"Control Panel\\TimeDate\\AdditionalClocks",
+                                   0, KEY_WRITE, &hSubKey);
+        if (result == ERROR_SUCCESS) {
+            if (RegSetValueEx(hSubKey, kTempValueName, 0, REG_SZ,
+                              (const BYTE*)L"",
+                              sizeof(WCHAR)) != ERROR_SUCCESS) {
+                Wh_Log(L"Failed to create temp value");
+            } else if (RegDeleteValue(hSubKey, kTempValueName) !=
+                       ERROR_SUCCESS) {
+                Wh_Log(L"Failed to remove temp value");
+            }
+
+            RegCloseKey(hSubKey);
+        } else {
+            Wh_Log(L"Failed to open subkey: %d", result);
         }
     }
 }
@@ -2326,279 +3030,120 @@ void ApplySettings() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    if (HMODULE hUser32 = LoadLibrary(L"user32.dll")) {
+        pGetDpiForWindow =
+            (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
+    }
+
+    if (HMODULE hKernel32 = LoadLibrary(L"kernel32.dll")) {
+        pSystemTimeToTzSpecificLocalTimeEx =
+            (SystemTimeToTzSpecificLocalTimeEx_t)GetProcAddress(
+                hKernel32, "SystemTimeToTzSpecificLocalTimeEx");
+    }
+
+    if (HMODULE hAdvapi32 = LoadLibrary(L"advapi32.dll")) {
+        pEnumDynamicTimeZoneInformation =
+            (EnumDynamicTimeZoneInformation_t)GetProcAddress(
+                hAdvapi32, "EnumDynamicTimeZoneInformation");
+    }
+
     LoadSettings();
 
-    g_winVersion = GetWindowsVersion();
+    g_winVersion = GetExplorerVersion();
     if (g_winVersion == WinVersion::Unsupported) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
-    if (g_winVersion >= WinVersion::Win11 && g_settings.oldTaskbarOnWin11) {
-        g_winVersion = WinVersion::Win10;
-    }
+    if (g_settings.oldTaskbarOnWin11) {
+        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
 
-    HMODULE hUser32 = LoadLibrary(L"user32.dll");
-    if (hUser32) {
-        pGetDpiForWindow =
-            (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
-    }
-
-    SYMBOL_HOOK taskbarHooks11[] =  //
-        {
-            {
-                {
-                    LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))",
-                    LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
-                },
-                (void**)&ClockSystemTrayIconDataModel_RefreshIcon_Original,
-                (void*)ClockSystemTrayIconDataModel_RefreshIcon_Hook,
-            },
-            {
-                {
-                    LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))",
-                    LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const & __ptr64,struct _SYSTEMTIME const & __ptr64,class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
-                },
-                (void**)&ClockSystemTrayIconDataModel_GetTimeToolTipString_Original,
-                (void*)ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook,
-                true,
-            },
-            {
-                {
-                    LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))",
-                    LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void) __ptr64)",
-                },
-                (void**)&DateTimeIconContent_OnApplyTemplate_Original,
-                (void*)DateTimeIconContent_OnApplyTemplate_Hook,
-                true,
-            },
-            {
-                {
-                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * *))",
-                    LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * __ptr64 * __ptr64) __ptr64)",
-                },
-                (void**)&BadgeIconContent_get_ViewModel_Original,
-                (void*)BadgeIconContent_get_ViewModel_Hook,
-                true,
-            },
-            {
-                {
-                    LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME *,struct _TIME_DYNAMIC_ZONE_INFORMATION *,class SystemTrayTelemetry::ClockUpdate &))",
-                    LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME * __ptr64,struct _TIME_DYNAMIC_ZONE_INFORMATION * __ptr64,class SystemTrayTelemetry::ClockUpdate & __ptr64) __ptr64)",
-                },
-                (void**)&ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Original,
-                (void*)ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Hook,
-                true,  // Until Windows 11 version 21H2.
-            },
-            {
-                {
-                    LR"(public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second(void)const )",
-                    LR"(public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second(void)const __ptr64)",
-                },
-                (void**)&ICalendar_Second_Original,
-                (void*)ICalendar_Second_Hook,
-                true,  // Until Windows 11 version 21H2.
-            },
-            {
-                {
-                    LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &))",
-                    LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const & __ptr64,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const & __ptr64) __ptr64)",
-                    // Windows 11 21H2:
-                    LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl winrt::impl::consume_Windows_System_Threading_IThreadPoolTimerStatics<struct winrt::Windows::System::Threading::IThreadPoolTimerStatics>::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &)const )",
-                },
-                (void**)&ThreadPoolTimer_CreateTimer_Original,
-                (void*)ThreadPoolTimer_CreateTimer_Hook,
-                true,  // Only for more precise clock, see comment in the hook.
-            },
-            {
-                {
-                    LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
-                    LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const & __ptr64)const __ptr64)",
-                    // Windows 11 21H2:
-                    LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
-                },
-                (void**)&ThreadPoolTimer_CreateTimer_lambda_Original,
-                (void*)ThreadPoolTimer_CreateTimer_lambda_Hook,
-                true,  // Only for more precise clock, see comment in the hook.
-            },
-        };
-
-    SYMBOL_HOOK taskbarHooks10[] = {
-        {
-            {
-                LR"(private: unsigned int __cdecl ClockButton::UpdateTextStringsIfNecessary(bool *))",
-                LR"(private: unsigned int __cdecl ClockButton::UpdateTextStringsIfNecessary(bool * __ptr64) __ptr64)",
-            },
-            (void**)&ClockButton_UpdateTextStringsIfNecessary_Original,
-            (void*)ClockButton_UpdateTextStringsIfNecessary_Hook,
-        },
-        {
-            {
-                LR"(public: struct tagSIZE __cdecl ClockButton::CalculateMinimumSize(struct tagSIZE))",
-                LR"(public: struct tagSIZE __cdecl ClockButton::CalculateMinimumSize(struct tagSIZE) __ptr64)",
-            },
-            (void**)&ClockButton_CalculateMinimumSize_Original,
-            (void*)ClockButton_CalculateMinimumSize_Hook,
-        },
-        {
-            {
-                LR"(private: int __cdecl ClockButton::GetTextSpacingForOrientation(bool,int,int,int,int))",
-                LR"(private: int __cdecl ClockButton::GetTextSpacingForOrientation(bool,int,int,int,int) __ptr64)",
-            },
-            (void**)&ClockButton_GetTextSpacingForOrientation_Original,
-            (void*)ClockButton_GetTextSpacingForOrientation_Hook,
-        },
-        {
-            {
-                LR"(protected: virtual long __cdecl ClockButton::v_GetTooltipText(struct HINSTANCE__ * *,unsigned short * *,unsigned short *,unsigned __int64))",
-                LR"(protected: virtual long __cdecl ClockButton::v_GetTooltipText(struct HINSTANCE__ * __ptr64 * __ptr64,unsigned short * __ptr64 * __ptr64,unsigned short * __ptr64,unsigned __int64) __ptr64)",
-            },
-            (void**)&ClockButton_v_GetTooltipText_Original,
-            (void*)ClockButton_v_GetTooltipText_Hook,
-            true,
-        },
-        {
-            {
-                LR"(protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange(bool))",
-                LR"(protected: virtual void __cdecl ClockButton::v_OnDisplayStateChange(bool) __ptr64)",
-            },
-            (void**)&ClockButton_v_OnDisplayStateChange_Original,
-        },
-    };
-
-    if (g_winVersion <= WinVersion::Win10) {
-        if (!HookSymbolsWithOnlineCacheFallback(GetModuleHandle(nullptr),
-                                                taskbarHooks10,
-                                                ARRAYSIZE(taskbarHooks10))) {
-            return FALSE;
-        }
-    } else {
-        WCHAR szWindowsDirectory[MAX_PATH];
-        if (!GetWindowsDirectory(szWindowsDirectory,
-                                 ARRAYSIZE(szWindowsDirectory))) {
-            Wh_Log(L"GetWindowsDirectory failed");
-            return FALSE;
+        if (g_winVersion >= WinVersion::Win11) {
+            g_winVersion = WinVersion::Win10;
         }
 
-        HMODULE module = nullptr;
-
-        if (g_winVersion == WinVersion::Win11) {
-            WCHAR szTargetDllPath[MAX_PATH];
-            wcscpy_s(szTargetDllPath, szWindowsDirectory);
-            wcscat_s(
-                szTargetDllPath,
-                LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\ExplorerExtensions.dll)");
-
-            module = GetModuleHandle(szTargetDllPath);
-            if (!module) {
-                // Try to load dependency DLLs. At process start, if they're not
-                // loaded, loading the ExplorerExtensions DLL fails.
-                WCHAR szRuntimeDllPath[MAX_PATH];
-
-                PWSTR pProgramFilesDirectory;
-                if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, 0,
-                                                nullptr,
-                                                &pProgramFilesDirectory))) {
-                    Wh_Log(
-                        L"SHGetKnownFolderPath(FOLDERID_ProgramFiles) failed");
-                    return FALSE;
-                }
-
-                wcscpy_s(szRuntimeDllPath, pProgramFilesDirectory);
-                wcscat_s(
-                    szRuntimeDllPath,
-                    LR"(\WindowsApps\Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe\vcruntime140_app.dll)");
-                LoadLibrary(szRuntimeDllPath);
-
-                wcscpy_s(szRuntimeDllPath, pProgramFilesDirectory);
-                wcscat_s(
-                    szRuntimeDllPath,
-                    LR"(\WindowsApps\Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe\vcruntime140_1_app.dll)");
-                LoadLibrary(szRuntimeDllPath);
-
-                wcscpy_s(szRuntimeDllPath, pProgramFilesDirectory);
-                wcscat_s(
-                    szRuntimeDllPath,
-                    LR"(\WindowsApps\Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe\msvcp140_app.dll)");
-                LoadLibrary(szRuntimeDllPath);
-
-                CoTaskMemFree(pProgramFilesDirectory);
-
-                module = LoadLibraryEx(szTargetDllPath, nullptr,
-                                       LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (hasWin10Taskbar && !HookWin10TaskbarSymbols()) {
+            return FALSE;
+        }
+    } else if (g_winVersion >= WinVersion::Win11) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            g_taskbarViewDllLoaded = true;
+            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                return FALSE;
             }
         } else {
-            WCHAR szTargetDllPath[MAX_PATH];
-            wcscpy_s(szTargetDllPath, szWindowsDirectory);
-            wcscat_s(
-                szTargetDllPath,
-                LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\Taskbar.View.dll)");
-
-            module = LoadLibraryEx(szTargetDllPath, nullptr,
-                                   LOAD_WITH_ALTERED_SEARCH_PATH);
+            Wh_Log(L"Taskbar view module not loaded yet");
         }
-
-        if (!module) {
-            Wh_Log(L"Failed loading Taskbar View module");
-            return FALSE;
-        }
-
-        if (!HookSymbolsWithOnlineCacheFallback(module, taskbarHooks11,
-                                                ARRAYSIZE(taskbarHooks11))) {
+    } else {
+        if (!HookWin10TaskbarSymbols()) {
             return FALSE;
         }
     }
 
-    // Must use GetProcAddress for the functions below, otherwise the stubs in
-    // kernel32.dll are being hooked.
-    HMODULE hKernelBase = GetModuleHandle(L"kernelbase.dll");
-    if (!hKernelBase) {
+    if (!HandleLoadedExplorerPatcher()) {
+        Wh_Log(L"HandleLoadedExplorerPatcher failed");
         return FALSE;
     }
 
-    FARPROC pGetTimeFormatEx = GetProcAddress(hKernelBase, "GetTimeFormatEx");
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
+        kernelBaseModule, "LoadLibraryExW");
+    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+
+    // Must use GetProcAddress for the functions below, otherwise the stubs in
+    // kernel32.dll are being hooked.
+    auto pGetTimeFormatEx = (decltype(&GetTimeFormatEx))GetProcAddress(
+        kernelBaseModule, "GetTimeFormatEx");
     if (!pGetTimeFormatEx) {
         return FALSE;
     }
 
-    FARPROC pGetDateFormatEx = GetProcAddress(hKernelBase, "GetDateFormatEx");
+    auto pGetDateFormatEx = (decltype(&GetDateFormatEx))GetProcAddress(
+        kernelBaseModule, "GetDateFormatEx");
     if (!pGetDateFormatEx) {
         return FALSE;
     }
 
     if (g_winVersion <= WinVersion::Win10) {
-        Wh_SetFunctionHook((void*)pGetTimeFormatEx,
-                           (void*)GetTimeFormatEx_Hook_Win10,
-                           (void**)&GetTimeFormatEx_Original);
-        Wh_SetFunctionHook((void*)pGetDateFormatEx,
-                           (void*)GetDateFormatEx_Hook_Win10,
-                           (void**)&GetDateFormatEx_Original);
+        WindhawkUtils::Wh_SetFunctionHookT(pGetTimeFormatEx,
+                                           GetTimeFormatEx_Hook_Win10,
+                                           &GetTimeFormatEx_Original);
+        WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatEx,
+                                           GetDateFormatEx_Hook_Win10,
+                                           &GetDateFormatEx_Original);
 
-        FARPROC pGetDateFormatW = GetProcAddress(hKernelBase, "GetDateFormatW");
+        auto pGetDateFormatW = (decltype(&GetDateFormatW))GetProcAddress(
+            kernelBaseModule, "GetDateFormatW");
         if (pGetDateFormatW) {
-            Wh_SetFunctionHook((void*)pGetDateFormatW,
-                               (void*)GetDateFormatW_Hook_Win10,
-                               (void**)&GetDateFormatW_Original);
+            WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatW,
+                                               GetDateFormatW_Hook_Win10,
+                                               &GetDateFormatW_Original);
         }
     } else {
         if (g_winVersion >= WinVersion::Win11_22H2) {
-            FARPROC pGetLocalTime = GetProcAddress(hKernelBase, "GetLocalTime");
+            auto pGetLocalTime = (decltype(&GetLocalTime))GetProcAddress(
+                kernelBaseModule, "GetLocalTime");
             if (!pGetLocalTime) {
                 return FALSE;
             }
 
-            Wh_SetFunctionHook((void*)pGetLocalTime,
-                               (void*)GetLocalTime_Hook_Win11,
-                               (void**)&GetLocalTime_Original);
+            WindhawkUtils::Wh_SetFunctionHookT(
+                pGetLocalTime, GetLocalTime_Hook_Win11, &GetLocalTime_Original);
         }
 
-        Wh_SetFunctionHook((void*)pGetTimeFormatEx,
-                           (void*)GetTimeFormatEx_Hook_Win11,
-                           (void**)&GetTimeFormatEx_Original);
-        Wh_SetFunctionHook((void*)pGetDateFormatEx,
-                           (void*)GetDateFormatEx_Hook_Win11,
-                           (void**)&GetDateFormatEx_Original);
+        WindhawkUtils::Wh_SetFunctionHookT(pGetTimeFormatEx,
+                                           GetTimeFormatEx_Hook_Win11,
+                                           &GetTimeFormatEx_Original);
+        WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatEx,
+                                           GetDateFormatEx_Hook_Win11,
+                                           &GetDateFormatEx_Original);
+        WindhawkUtils::Wh_SetFunctionHookT(SendMessageW, SendMessageW_Hook,
+                                           &SendMessageW_Original);
     }
+
+    g_initialized = true;
 
     return TRUE;
 }
@@ -2606,12 +3151,32 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
+    if (!g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
+
+    // Try again in case there's a race between the previous attempt and the
+    // LoadLibraryExW hook.
+    if (!g_explorerPatcherInitialized) {
+        HandleLoadedExplorerPatcher();
+    }
+
     WebContentUpdateThreadInit();
 
     ApplySettings();
 }
 
 void Wh_ModBeforeUninit() {
+    Wh_Log(L">");
+
     if (g_winVersion >= WinVersion::Win11 &&
         g_clockElementStyleEnabled.exchange(false)) {
         DWORD styleIndex = ++g_clockElementStyleIndex;
@@ -2664,17 +3229,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     ApplySettings();
 
     return TRUE;
-}
-
-// For pre-1.3 Windhawk compatibility.
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"> pre-1.3");
-
-    WebContentUpdateThreadUninit();
-
-    LoadSettings();
-
-    WebContentUpdateThreadInit();
-
-    ApplySettings();
 }
