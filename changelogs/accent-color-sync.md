@@ -1,3 +1,8 @@
+## 1.6 ([Jun 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/83686a2c455d411a2b1a2e2f853984859ef71647/mods/accent-color-sync.wh.cpp))
+
+* Added option to replicate Windows Vista's Aero shader (experimental).
+* Partially updated translations
+
 ## 1.53 ([Oct 23, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0bf9b7f52bcb88beaf0efa0e464fa4e53863d032/mods/accent-color-sync.wh.cpp))
 
 * Re-added 'older OpenGlass' option to DWM modification software selection.

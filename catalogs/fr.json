@@ -9,7 +9,7 @@
                 "published": 1721392103000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1729667984000,
+                "updated": 1750145023000,
                 "users": 357
             },
             "metadata": {
@@ -19,13 +19,13 @@
                 ],
                 "author": "CatmanFan / Mr._Lechkar",
                 "compilerOptions": "-lcomdlg32 -lversion",
-                "description": "Retour de la fonctionnalité d'opacité des couleurs du Panneau de configuration",
+                "description": "Restaurer la fonctionnalité d'opacité des couleurs du Panneau de configuration",
                 "github": "https://github.com/CatmanFan",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Accent Color Sync",
-                "version": "1.53"
+                "version": "1.6"
             }
         },
         "acrylic-effect-radius-changer": {
