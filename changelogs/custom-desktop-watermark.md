@@ -1,3 +1,9 @@
+## 1.1.0 ([Jun 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d5b48dbb461bd68125950069d6c124ee5b15bff0/mods/custom-desktop-watermark.wh.cpp))
+
+- Add notice to README about empty lines
+- Add option to force a specific line to be bold
+- Add option to change the horizontal alignment of a specific line
+
 ## 1.0.2 ([Nov 16, 2024](https://github.com/ramensoftware/windhawk-mods/blob/3205ff7547c8429f0d5b7141231a8733c18d123d/mods/custom-desktop-watermark.wh.cpp))
 
 - Fix resource leak
