@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.7.0
+// @version         1.7.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -1527,7 +1527,7 @@ HRESULT THISCALL CNavBar_ConstructNavBarThemeClassName_hook(
         bool fInactive = nullptr == wcsstr(*ppszOut, c_szInactive);
         bool fComposited = !settings.nocomposition && nullptr != wcsstr(*ppszOut, c_szComposited);
 
-        size_t cchAlloc = c_cchNavbar;
+        size_t cchAlloc = c_cchNavbar + 1;
         if (fDarkMode)
             cchAlloc += c_cchDarkMode;
         if (fMax)
