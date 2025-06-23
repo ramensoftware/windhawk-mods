@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-23T16:40:58.000Z</updated>
+    <updated>2025-06-23T19:13:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.7.1]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#7f4839438dad587631cb7478c5c122417f3a5e95</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2025-06-23T19:13:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix a crash caused by a missing null terminator in the navbar theme class name</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.7.0]]></title>
         <id>https://windhawk.net/mods/aerexplorer#ea7ae610c721354ed1390a538ed1f03d39dd7b5a</id>
@@ -360,20 +373,6 @@ Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9</p>]]></c
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Colorization Tweaks 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win10-colored-borders#4720593a6f529636dcb4d1b9c5dca96fda239c00</id>
-        <link href="https://windhawk.net/mods/win10-colored-borders"/>
-        <updated>2025-06-02T17:13:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add the ability to force windows to use either light or dark theme always</li>
-<li>Rename the mod from "Windows 10 Colored Borders" to "Windows 10 Colorization Tweaks"</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,7 @@
+## 1.7.1 ([Jun 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7f4839438dad587631cb7478c5c122417f3a5e95/mods/aerexplorer.wh.cpp))
+
+- Fix a crash caused by a missing null terminator in the navbar theme class name
+
 ## 1.7.0 ([Jun 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/ea7ae610c721354ed1390a538ed1f03d39dd7b5a/mods/aerexplorer.wh.cpp))
 
 - Introduce option for Windows 8 beta navigation bar background
