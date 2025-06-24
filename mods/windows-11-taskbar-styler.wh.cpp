@@ -1142,7 +1142,7 @@ const Theme g_themeTaskbarXII = {{
         L"Margin=0,0,3,0"}},
     ThemeTargetStyles{L"Taskbar.SearchBoxButton > Taskbar.TaskListButtonPanel", {
         L"Margin=2,0,6,0"}},
-    ThemeTargetStyles{L"Taskbar.SearchBoxButton > Taskbar.TaskListButtonPanel > TextBlock", {
+    ThemeTargetStyles{L"TextBlock#SearchBoxTextBlock", {
         L"Text=\u2726 Meow"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#BackgroundStroke", {
         L"Visibility=Collapsed"}},
