@@ -1,3 +1,7 @@
+## 1.2.1 ([Jun 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/88473fba37aafef3009f3b609ca35bd55218e9bc/mods/icon-resource-redirect.wh.cpp))
+
+* Fixed an error when launching programs without a visual style manifest.
+
 ## 1.2 ([Jun 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9ee749979a3dfa668f4a16432d449f77ffb4fce9/mods/icon-resource-redirect.wh.cpp))
 
 * Icon themes can now be selected in the mod settings. A selected theme is automatically downloaded, extracted, and applied. A prompt is shown to optionally clear the icon cache and restart Explorer.

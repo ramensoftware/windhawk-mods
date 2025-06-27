@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-27T18:17:51.000Z</updated>
+    <updated>2025-06-27T19:39:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.2.1]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#88473fba37aafef3009f3b609ca35bd55218e9bc</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2025-06-27T19:39:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an error when launching programs without a visual style manifest.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.2]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#9ee749979a3dfa668f4a16432d449f77ffb4fce9</id>
@@ -356,20 +369,6 @@ Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9</p>]]></c
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Double Click Up 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-double-click-up#40afd947107997d91d611a3dc0f73daefebd27b6</id>
-        <link href="https://windhawk.net/mods/explorer-double-click-up"/>
-        <updated>2025-06-03T18:56:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerdoubleclickup">Explorer Double Click Up</h1>
-<p>Double click empty space to go up a folder</p>
-<h2 id="windowsversionsupport">Windows version support</h2>
-<p>Will not work on anything older than Windows 10 due to use of WinRT.</p>]]></content>
-        <author>
-            <name>wrldspawn</name>
-            <uri>https://github.com/wrldspawn</uri>
         </author>
     </entry>
 </feed>
