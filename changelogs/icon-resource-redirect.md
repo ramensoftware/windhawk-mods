@@ -1,3 +1,11 @@
+## 1.2 ([Jun 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9ee749979a3dfa668f4a16432d449f77ffb4fce9/mods/icon-resource-redirect.wh.cpp))
+
+* Icon themes can now be selected in the mod settings. A selected theme is automatically downloaded, extracted, and applied. A prompt is shown to optionally clear the icon cache and restart Explorer.
+* A theme path can now specify the ini file itself, not only the theme folder with the theme.ini file.
+* Multiple theme paths can now be specified.
+
+Windhawk v1.6 or newer is required for this version of the mod.
+
 ## 1.1.9 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/adad08eed4819a37229592168641eb2753afa76e/mods/icon-resource-redirect.wh.cpp))
 
 * Improved compatibility with some resources in some cases in the experimental mode.
