@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -2125,12 +2125,25 @@ void PromptToClearCache() {
                 },
             };
 
+            static decltype(&TaskDialogIndirect) pTaskDialogIndirect = []() {
+                HMODULE hComctl32 = LoadLibrary(L"comctl32.dll");
+                if (!hComctl32) {
+                    Wh_Log(L"Failed to load comctl32.dll");
+                    return (decltype(&TaskDialogIndirect))nullptr;
+                }
+
+                return (decltype(&TaskDialogIndirect))GetProcAddress(
+                    hComctl32, "TaskDialogIndirect");
+            }();
+
             int button;
-            if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button,
-                                             nullptr, nullptr)) &&
+            if (pTaskDialogIndirect &&
+                SUCCEEDED(pTaskDialogIndirect(&taskDialogConfig, &button,
+                                              nullptr, nullptr)) &&
                 button == IDYES) {
                 WCHAR commandLine[ARRAYSIZE(kClearCacheCommand)];
-                memcpy(commandLine, kClearCacheCommand, sizeof(kClearCacheCommand));
+                memcpy(commandLine, kClearCacheCommand,
+                       sizeof(kClearCacheCommand));
                 STARTUPINFO si = {
                     .cb = sizeof(si),
                 };
