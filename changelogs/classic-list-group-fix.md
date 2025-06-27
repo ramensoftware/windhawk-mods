@@ -1,3 +1,7 @@
+## 1.1.2 ([Jun 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/061b5aa25434ac42184f72fb76f85f8c222f299b/mods/classic-list-group-fix.wh.cpp))
+
+- Update `LoadComCtlModule` to reject version 5.82
+
 ## 1.1.1 ([Apr 2, 2025](https://github.com/ramensoftware/windhawk-mods/blob/37479b14fd4a35d62fdb2fec9d9e0d66f8978c57/mods/classic-list-group-fix.wh.cpp))
 
 Revise `LoadComCtlModule` to not use registry caching
