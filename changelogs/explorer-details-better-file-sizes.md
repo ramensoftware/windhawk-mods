@@ -1,3 +1,10 @@
+## 1.4.10 ([Jun 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f0a4fe87b2b24a0e9f9a685f7dfd90968a2cf132/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Fixed querying Everything v1.4 when custom macros named "folder" or "wfn" are configured.
+* Fixed querying Everything v1.5 when the **alpha_instance** option is set to false.
+* Libraries are now loaded with the `LOAD_LIBRARY_SEARCH_SYSTEM32` flag to prevent malicious or accidental dll hijacking.
+* Excluded the search menu process due to a reported incompatibility which is still being investigated. Several other processes, such as the start menu and the lock screen, were excluded as well. These processes never use the explorer details control, so this mod isn't useful for them anyway.
+
 ## 1.4.9 ([Apr 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7ae6bca49f773eef9966ceedc8e9e2495f896463/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Added support for long paths.

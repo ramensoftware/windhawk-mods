@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-28T22:01:09.000Z</updated>
+    <updated>2025-06-28T22:12:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.10]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#f0a4fe87b2b24a0e9f9a685f7dfd90968a2cf132</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2025-06-28T22:12:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed querying Everything v1.4 when custom macros named "folder" or "wfn" are configured.</li>
+<li>Fixed querying Everything v1.5 when the <strong>alpha_instance</strong> option is set to false.</li>
+<li>Libraries are now loaded with the <code>LOAD_LIBRARY_SEARCH_SYSTEM32</code> flag to prevent malicious or accidental dll hijacking.</li>
+<li>Excluded the search menu process due to a reported incompatibility which is still being investigated. Several other processes, such as the start menu and the lock screen, were excluded as well. These processes never use the explorer details control, so this mod isn't useful for them anyway.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Start Menu Folders Icon 1.0.1]]></title>
         <id>https://windhawk.net/mods/classic-start-menu-folders-icon#77c508575c2e3eb18494bc5f6c2dc6b942b626c0</id>
@@ -338,26 +354,6 @@ private debug symbols</li>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.5.0]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#0c981a8ec576c27ec33fcc70480c25083aecbb50</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-06-04T21:33:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added Rainbow effect</li>
-<li>Additional windows theme parts are modified</li>
-<li>Added text alpha blending</li>
-<li>Changed BlurBehind to AccentBlurBehind</li>
-<li>Added DWMAPI immersive darkmode setting option</li>
-<li>Added window corner type setting option</li>
-<li>Fixed conflicting bugs with steamwebhelper.exe and firefox.exe programs</li>
-<li>Fixed conflicting bug with Slick Window Arrangement mod</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

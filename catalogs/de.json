@@ -1470,7 +1470,7 @@
                 "published": 1730231151000,
                 "rating": 10,
                 "ratingUsers": 556,
-                "updated": 1744749837000,
+                "updated": 1751148728000,
                 "users": 45627
             },
             "featured": true,
@@ -1480,7 +1480,12 @@
                 "description": "Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)",
                 "exclude": [
                     "conhost.exe",
-                    "Plex*.exe"
+                    "Plex*.exe",
+                    "backgroundTaskHost.exe",
+                    "LockApp.exe",
+                    "SearchHost.exe",
+                    "ShellExperienceHost.exe",
+                    "StartMenuExperienceHost.exe"
                 ],
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -1489,7 +1494,7 @@
                 ],
                 "name": "Better file sizes in Explorer details",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.4.9"
+                "version": "1.4.10"
             }
         },
         "explorer-double-click-up": {
