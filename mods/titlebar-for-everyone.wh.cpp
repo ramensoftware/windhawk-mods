@@ -331,7 +331,6 @@ BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId()) {
         ProcessWindow(hWnd, true);
-        // Update NonClient size
         wchar_t className[256];
         GetClassName(hWnd, className, 256);
         if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
