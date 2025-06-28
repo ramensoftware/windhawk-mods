@@ -2,7 +2,7 @@
 // @id              favorites-in-navpane
 // @name            Favorites in Navigation Pane
 // @description     Replaces Windows 10 Quick Access with Favorites in Navigation Pane
-// @version         1.0.1
+// @version         1.0.2
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -284,14 +284,14 @@ HRESULT __fastcall OrderList_SaveToStream_hook(IStream *pStream, HDPA hdpa, IShe
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32) 
     {
         Wh_Log(L"Failed to load shell32.dll");
         return FALSE;
     }
 
-    HMODULE hExplorerFrame = LoadLibraryW(L"ExplorerFrame.dll");
+    HMODULE hExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hExplorerFrame) 
     {
         Wh_Log(L"Failed to load ExplorerFrame.dll");
