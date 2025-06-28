@@ -1693,7 +1693,7 @@
                 "published": 1742054420000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1744043013000,
+                "updated": 1751150239000,
                 "users": 166
             },
             "metadata": {
@@ -1705,7 +1705,7 @@
                     "*"
                 ],
                 "name": "Favorites in Navigation Pane",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "file-explorer-remove-suffixes": {
