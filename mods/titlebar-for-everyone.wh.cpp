@@ -46,7 +46,7 @@
     * Etc. (not tested)
     * Enabling the DWM mode (Aero/Mica) is recommended if you can. This will also remove the duplicate window controls
     * Also provides an option to use the classic button face color in the DWM extended area for Classic theme users
-    * Vivaldi does work but is intentionally excluded from the default inclusion list. Use the built-in option to use native title bars instead.
+    * Vivaldi does work but is intentionally excluded from the default inclusion list. Use the built-in option to use native title bars instead
 * Steam (non-VGUI)
     * Known issues: In the Basic style, the window control hover effects do not show
 * WinUI apps
