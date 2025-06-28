@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-28T21:45:33.000Z</updated>
+    <updated>2025-06-28T22:01:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Start Menu Folders Icon 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-start-menu-folders-icon#77c508575c2e3eb18494bc5f6c2dc6b942b626c0</id>
+        <link href="https://windhawk.net/mods/classic-start-menu-folders-icon"/>
+        <updated>2025-06-28T22:01:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Use LoadLibraryEx with LOAD<em>LIBRARY</em>SEARCH_SYSTEM32 #2063</li>
+<li>Fix 32-bit symbols</li>
+<li>Code cleanup</li>
+</ul>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic theme transparency fix 1.1]]></title>
         <id>https://windhawk.net/mods/classic-theme-transparency-fix#aaf906578b278f95bd23e745832c4e30719e185e</id>
@@ -343,29 +358,6 @@ private debug symbols</li>
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Touhou Keyboard Binds 1.0.0]]></title>
-        <id>https://windhawk.net/mods/touhou-kbd-binds#72a6608e9b6608a0a067f2b54148a6c59724a8e1</id>
-        <link href="https://windhawk.net/mods/touhou-kbd-binds"/>
-        <updated>2025-06-04T05:56:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="touhoukeyboardbinds">Touhou Keyboard Binds</h1>
-<p>From Touhou 6 to Touhou 17, keyboard bindings were unable to be changed within
-the game. This mod lets you set your own bindings.</p>
-<h2 id="importantusagenote">⚠️ Important usage note ⚠️</h2>
-<p>Windhawk may not inject into the game due to it being in a common game directory.
-If this occurs, add the game's executable to the process inclusion list in the advanced 
-settings.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot" /></p>
-<h2 id="keyformat">Key format</h2>
-<p>The key options can either be a single character, or one of the following keywords:</p>
-<p>None, Space, Up, Down, Left, Right, LCTRL, RCTRL, LControl, RControl, LAlt, RAlt, LShift,
-RShift, Tab, CapsLock, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, Numpad0, Numpad1,
-Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

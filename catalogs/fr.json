@@ -690,7 +690,7 @@
                 "published": 1738189438000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1738189438000,
+                "updated": 1751148069000,
                 "users": 99
             },
             "metadata": {
@@ -701,7 +701,7 @@
                     "*"
                 ],
                 "name": "Classic Start Menu Folders Icon",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "classic-taskbar-background-fix": {
