@@ -412,7 +412,7 @@ BOOL Wh_ModInit()
     InitCriticalSections();
 
     HMODULE user32 = LoadLibraryW(L"user32.dll");
-    HMODULE uxtheme = LoadLibraryW(L"uxtheme.dll");
+    HMODULE uxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     // Init DPI helpers:
     *(FARPROC *)&g_pGetDpiForWindow = GetProcAddress(user32, "GetDpiForWindow");
