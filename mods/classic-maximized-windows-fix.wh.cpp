@@ -2,7 +2,7 @@
 // @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
-// @version         2.1
+// @version         2.1.1
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         *
