@@ -1,3 +1,7 @@
+## 2.2 ([Jun 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b345471bbc41410cb7e0d74396157090a0ddf2b5/mods/classic-maximized-windows-fix.wh.cpp))
+
+* LoadLibrary -> LoadLibraryEx limited to System32 for UxTheme load
+
 ## 2.1 ([Dec 26, 2023](https://github.com/ramensoftware/windhawk-mods/blob/71368b0ce9133d13dbe076d0a045cfbfc1762401/mods/classic-maximized-windows-fix.wh.cpp))
 
 - Improved compatibility with Aero Snap. This was done by migrating to the undocumented `SetWindowRgnEx` function rather than the older public function.

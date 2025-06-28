@@ -636,7 +636,7 @@
                 "published": 1694245393000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1703577817000,
+                "updated": 1751132322000,
                 "users": 105
             },
             "metadata": {
@@ -660,7 +660,7 @@
                     "*"
                 ],
                 "name": "Fix Classic Theme Maximized Windows",
-                "version": "2.1"
+                "version": "2.2"
             }
         },
         "classic-menus": {

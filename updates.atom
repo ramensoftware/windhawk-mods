@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-27T19:39:56.000Z</updated>
+    <updated>2025-06-28T17:38:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 2.2]]></title>
+        <id>https://windhawk.net/mods/classic-maximized-windows-fix#b345471bbc41410cb7e0d74396157090a0ddf2b5</id>
+        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
+        <updated>2025-06-28T17:38:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>LoadLibrary -&gt; LoadLibraryEx limited to System32 for UxTheme load</li>
+</ul>]]></content>
+        <author>
+            <name>ephemeralViolette</name>
+            <uri>https://github.com/ephemeralViolette</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.2.1]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#88473fba37aafef3009f3b609ca35bd55218e9bc</id>
@@ -352,19 +365,6 @@ Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9</p>]]></c
         <content type="html"><![CDATA[<ul>
 <li>Added support for ARM64.</li>
 <li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chrome/Edge scroll tabs with mouse wheel 1.2.1]]></title>
-        <id>https://windhawk.net/mods/chrome-wheel-scroll-tabs#451a0a24c7e026a0c86c10adfb44b8681ab24bb6</id>
-        <link href="https://windhawk.net/mods/chrome-wheel-scroll-tabs"/>
-        <updated>2025-06-03T20:29:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the recently-added options to limit the scroll area, which worked only for maximized windows.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
