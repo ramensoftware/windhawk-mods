@@ -2,7 +2,7 @@
 // @id              classic-theme-transparency-fix
 // @name            Classic theme transparency fix
 // @description     Fixes transparency glitches in Classic theme
-// @version         1.0
+// @version         1.1
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -39,10 +39,10 @@ BOOL WINAPI IsCompositionActive_hook()
 
 BOOL Wh_ModInit()
 {
-    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
+    HMODULE dwmapiModule = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     FARPROC pFunction = GetProcAddress(dwmapiModule, "DwmIsCompositionEnabled");
     WindhawkUtils::Wh_SetFunctionHookT((void*)pFunction, (void*)DwmIsCompositionEnabled_hook, (void**)&DwmIsCompositionEnabled_orig);
-    HMODULE uxthemeModule = LoadLibrary(L"uxtheme.dll");
+    HMODULE uxthemeModule = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     pFunction = GetProcAddress(uxthemeModule, "IsCompositionActive");
     WindhawkUtils::Wh_SetFunctionHookT((void*)pFunction, (void*)IsCompositionActive_hook, (void**)&IsCompositionActive_orig);
     return TRUE;
