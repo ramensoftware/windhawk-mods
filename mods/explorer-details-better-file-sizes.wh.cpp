@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.9
+// @version         1.4.10
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,6 +10,11 @@
 // @include         *
 // @exclude         conhost.exe
 // @exclude         Plex*.exe
+// @exclude         backgroundTaskHost.exe
+// @exclude         LockApp.exe
+// @exclude         SearchHost.exe
+// @exclude         ShellExperienceHost.exe
+// @exclude         StartMenuExperienceHost.exe
 // @compilerOptions -lole32 -loleaut32 -lpropsys
 // ==/WindhawkMod==
 
@@ -1152,7 +1157,9 @@ typedef struct {
 
 constexpr DWORD kGsTimeoutIPC = 1000;
 
-#define GS_SEARCH_PREFIX L"folder:wfn:\""
+// Prefix with :: to always use the built-in search modifiers. See:
+// https://www.voidtools.com/forum/viewtopic.php?p=75105#p75105
+#define GS_SEARCH_PREFIX L"::folder:::wfn:\""
 #define GS_SEARCH_SUFFIX L"\""
 
 std::atomic<HWND> g_gsReceiverWnd;
@@ -1264,7 +1271,12 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
         return ES_QUERY_NO_ES_IPC;
     }
 
-    EVERYTHING3_CLIENT* pClient = Everything3_ConnectW(L"1.5a");
+    EVERYTHING3_CLIENT* pClient = Everything3_ConnectW(nullptr);
+
+    if (!pClient) {
+        pClient = Everything3_ConnectW(L"1.5a");
+    }
+
     if (pClient) {
         *size = Everything3_GetFolderSizeFromFilenameW(pClient, folderPath);
         Everything3_DestroyClient(pClient);
@@ -2110,7 +2122,8 @@ int WINAPI LoadStringW_Hook(HINSTANCE hInstance,
 }
 
 bool HookWindowsStorageSymbols() {
-    HMODULE windowsStorageModule = LoadLibrary(L"windows.storage.dll");
+    HMODULE windowsStorageModule = LoadLibraryEx(
+        L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!windowsStorageModule) {
         Wh_Log(L"Failed to load windows.storage.dll");
         return false;
