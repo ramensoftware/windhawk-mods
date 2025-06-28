@@ -42,7 +42,7 @@ BOOL Wh_ModInit()
     HMODULE dwmapiModule = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     FARPROC pFunction = GetProcAddress(dwmapiModule, "DwmIsCompositionEnabled");
     WindhawkUtils::Wh_SetFunctionHookT((void*)pFunction, (void*)DwmIsCompositionEnabled_hook, (void**)&DwmIsCompositionEnabled_orig);
-    HMODULE uxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE uxthemeModule = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     pFunction = GetProcAddress(uxthemeModule, "IsCompositionActive");
     WindhawkUtils::Wh_SetFunctionHookT((void*)pFunction, (void*)IsCompositionActive_hook, (void**)&IsCompositionActive_orig);
     return TRUE;
