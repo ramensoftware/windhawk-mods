@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-28T22:37:19.000Z</updated>
+    <updated>2025-06-28T23:04:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Clientedge Everywhere 1.4.0]]></title>
+        <id>https://windhawk.net/mods/clientedge-in-apps#afbc62ee034d63d1a2513594de420ae3eee1a97f</id>
+        <link href="https://windhawk.net/mods/clientedge-in-apps"/>
+        <updated>2025-06-28T23:04:01.000Z</updated>
+        <content type="html"><![CDATA[<p>The issue with Regedit was caused by another mod, whose fixed version is to be submitted soon. As such, it is not needed anymore.</p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Favorites in Navigation Pane 1.0.2]]></title>
         <id>https://windhawk.net/mods/favorites-in-navpane#fbc0cc8ab7e9e12ef8b1dd6d64d8dca38c30957d</id>
@@ -342,17 +353,6 @@ private debug symbols</li>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Clientedge Everywhere 1.2.0]]></title>
-        <id>https://windhawk.net/mods/clientedge-in-apps#39f44c80c3c3557af96195e67589e8b399d40e7a</id>
-        <link href="https://windhawk.net/mods/clientedge-in-apps"/>
-        <updated>2025-06-05T12:51:36.000Z</updated>
-        <content type="html"><![CDATA[<p>Exclude Mathematica's toolboxes</p>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

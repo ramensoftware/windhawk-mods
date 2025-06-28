@@ -1,3 +1,7 @@
+## 1.4.0 ([Jun 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/afbc62ee034d63d1a2513594de420ae3eee1a97f/mods/clientedge-in-apps.wh.cpp))
+
+The issue with Regedit was caused by another mod, whose fixed version is to be submitted soon. As such, it is not needed anymore.
+
 ## 1.3.0 ([Jun 8, 2025](https://github.com/ramensoftware/windhawk-mods/blob/18e33a9aefed371e0a4899da5e0fd7cb69cc2487/mods/clientedge-in-apps.wh.cpp))
 
 * Regedit (need for newer builds)
