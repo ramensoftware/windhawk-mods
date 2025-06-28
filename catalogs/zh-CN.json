@@ -879,7 +879,7 @@
                 "published": 1711437875000,
                 "rating": 9,
                 "ratingUsers": 2,
-                "updated": 1711437875000,
+                "updated": 1751147133000,
                 "users": 403
             },
             "metadata": {
@@ -891,7 +891,7 @@
                     "dllhost.exe"
                 ],
                 "name": "Classic theme transparency fix",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "classic-uwp-fix": {
