@@ -2,7 +2,7 @@
 // @id              classic-maximized-windows-fix
 // @name            Fix Classic Theme Maximized Windows
 // @description     Fix maximized windows having borders that spill out onto additional displays when using the classic theme.
-// @version         2.1
+// @version         2.2
 // @author          ephemeralViolette
 // @github          https://github.com/ephemeralViolette
 // @include         *
@@ -46,20 +46,13 @@ so rarely they may be affected. For consistency, I manually excluded `conhost.ex
 // ==/WindhawkModReadme==
 
 #include <vector>
-#include <unordered_map>
 #include <algorithm>
 #include <synchapi.h>
 #include <windhawk_utils.h>
 
-// Defines data shared by all instances of the library, even across processes.
-#define SHARED_SECTION __attribute__((section(".shared")))
-asm(".section .shared,\"dws\"\n");
-
 CRITICAL_SECTION g_criticalSection;
 std::vector<HWND> g_affectedWindows;
 std::vector<HWND> g_fakeUndoWindows;
-
-void *g_pfnThemePostWndProc SHARED_SECTION = NULL;
 
 // === DPI HELPERS === //
 // These are only available in Windows 10, version 1607 and newer.
@@ -312,97 +305,6 @@ void CleanCriticalSections()
     DeleteCriticalSection(&g_criticalSection);
 }
 
-struct CMWF_SYMBOL_HOOK {
-    std::vector<std::wstring> symbols;
-    void** pOriginalFunction;
-    void* hookFunction = nullptr;
-    bool optional = false;
-    void **pSharedMemoryCache;
-};
-
-/*
- * CmwfHookSymbols: A custom hook wrapper which allows storing symbol hook results in the
- *                  module's shared memory for faster access.
- */
-bool CmwfHookSymbols(
-        HMODULE module,
-        const CMWF_SYMBOL_HOOK *symbolHooks,
-        size_t symbolHooksCount
-)
-{
-    bool anyUncachedHooks = false;
-    std::vector<void **> proxyAddresses(symbolHooksCount);
-    std::vector<WindhawkUtils::SYMBOL_HOOK> proxyHooks;
-    
-    for (size_t i = 0; i < symbolHooksCount; i++)
-    {
-        void *address = nullptr;
-        if (symbolHooks[i].pSharedMemoryCache && *(symbolHooks[i].pSharedMemoryCache) != NULL)
-        {
-            address = *(symbolHooks[i].pSharedMemoryCache);
-            Wh_Log(
-                L"CmwfHookSymbols: Hooking symbol %.*s from in-memory cache.",
-                symbolHooks[i].symbols[0].length(),
-                symbolHooks[i].symbols[0].data()
-            );
-            Wh_SetFunctionHook(
-                address,
-                symbolHooks[i].hookFunction,
-                symbolHooks[i].pOriginalFunction
-            );
-        }
-        else
-        {
-            address = nullptr;
-            anyUncachedHooks = true;
-
-            WindhawkUtils::SYMBOL_HOOK hook = {
-                symbolHooks[i].symbols,
-                &proxyAddresses[i],
-                NULL,
-                symbolHooks[i].optional
-            };
-
-            proxyHooks.push_back(hook);
-        }
-    }
-
-    if (anyUncachedHooks)
-    {
-        if (!WindhawkUtils::HookSymbols(module, proxyHooks.data(), proxyHooks.size()))
-        {
-            return false;
-        }
-
-        int curProxyHook = 0;
-        for (void *address : proxyAddresses)
-        {
-            if (address == NULL)
-            {
-                continue;
-            }
-
-            if (
-                symbolHooks[curProxyHook].pSharedMemoryCache && 
-                *(symbolHooks[curProxyHook].pSharedMemoryCache) == NULL
-            )
-            {
-                *(symbolHooks[curProxyHook].pSharedMemoryCache) = address;
-            }
-
-            Wh_SetFunctionHook(
-                address,
-                symbolHooks[curProxyHook].hookFunction,
-                symbolHooks[curProxyHook].pOriginalFunction
-            );
-
-            curProxyHook++;
-        }
-    }
-
-    return true;
-}
-
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit()
@@ -412,7 +314,7 @@ BOOL Wh_ModInit()
     InitCriticalSections();
 
     HMODULE user32 = LoadLibraryW(L"user32.dll");
-    HMODULE uxtheme = LoadLibraryW(L"uxtheme.dll");
+    HMODULE uxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     // Init DPI helpers:
     *(FARPROC *)&g_pGetDpiForWindow = GetProcAddress(user32, "GetDpiForWindow");
@@ -434,22 +336,21 @@ BOOL Wh_ModInit()
         (void **)&DefWindowProcA_orig
     );
 
-    CMWF_SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK uxthemeDllHooks[] = {
         {
-            .symbols = {
+            {
                 #ifdef _WIN64
                 L"int __cdecl ThemePostWndProc(struct HWND__ *,unsigned int,unsigned __int64,__int64,__int64 *,void * *)"
                 #else
                 L"int __stdcall ThemePostWndProc(struct HWND__ *,unsigned int,unsigned int,long,long *,void * *)"
                 #endif
             },
-            .pOriginalFunction = (void **)&ThemePostWndProc_orig,
-            .hookFunction = (void *)ThemePostWndProc_hook,
-            .pSharedMemoryCache = (void **)&g_pfnThemePostWndProc
+            &ThemePostWndProc_orig,
+            ThemePostWndProc_hook
         }
     };
 
-    CmwfHookSymbols(uxtheme, symbolHooks, ARRAYSIZE(symbolHooks));
+    HookSymbols(uxtheme, uxthemeDllHooks, ARRAYSIZE(uxthemeDllHooks));
 
     Wh_Log(L"Finished init");
 
