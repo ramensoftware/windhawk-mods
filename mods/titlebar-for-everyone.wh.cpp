@@ -59,10 +59,13 @@
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
     * Tested: 2010 and LTSC 2021 (Win10 mode)
-    * Known issues: on LTSC 2021, only Classic frames are shown (neither Basic nor DWM)
+    * Known issues: On LTSC 2021, only Classic frames are shown (neither Basic nor DWM)
 * Some WebView2 apps
     * New Outlook
     * Microsoft 365 Copilot
+* Qt apps
+    * MuseScore
+    * Known issues: If the mod loads after a window is open, the window content will look downscaled a bit
 * Hangul Word Processor
     * Tested: 2010 (using the system style is recommended)
     * This mod also fixes the WM_NCACTIVATE bug present in the system style
@@ -120,7 +123,7 @@
   - add: 항상 표시
   - remove: 항상 숨기기
 - notoolwinsteam: true
-  $name: Steam - ToolWindow frames
+  $name: Steam - Hide tool window frames
   $name:ko-KR: Steam - 도구 창 테두리 숨기기
 */
 // ==/WindhawkModSettings==
@@ -215,6 +218,12 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
             style |= WS_CAPTION | WS_BORDER;
         }
         SetWindowLongW(hWnd, GWL_STYLE, style);
+        if (!onlyUpdateStyle) {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+                Wh_Log(L"Subclassed %p", hWnd);
+            }
+        }
+        return;
     }
 
     // Exclude tool windows or child windows
