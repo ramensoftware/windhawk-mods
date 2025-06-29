@@ -1,3 +1,7 @@
+## 1.1.4 ([Jun 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5f29657c709183d11aa2bc4a64f2a6a43d248d93/mods/taskbar-left-click-cycle.wh.cpp))
+
+* Fixed an incompatibility with recent Windows 11 updates.
+
 ## 1.1.3 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7f2b9d2f53250388d0b9417ede518d0c13f4a1a5/mods/taskbar-left-click-cycle.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.

@@ -3607,7 +3607,7 @@
                 "published": 1726228929000,
                 "rating": 10,
                 "ratingUsers": 45,
-                "updated": 1742607183000,
+                "updated": 1751220088000,
                 "users": 1372
             },
             "metadata": {
@@ -3624,7 +3624,7 @@
                 ],
                 "name": "Cycle through taskbar windows on click",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.3"
+                "version": "1.1.4"
             }
         },
         "taskbar-multirow": {
