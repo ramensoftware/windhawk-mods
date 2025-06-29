@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-28T23:04:01.000Z</updated>
+    <updated>2025-06-29T06:22:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Titlebar For Everyone 0.2]]></title>
+        <id>https://windhawk.net/mods/titlebar-for-everyone#c013224f458297a3e51bacd1d096f00a3acc6fec</id>
+        <link href="https://windhawk.net/mods/titlebar-for-everyone"/>
+        <updated>2025-06-29T06:22:38.000Z</updated>
+        <content type="html"><![CDATA[<p>Titlebar for Everyone 0.2 (#2070)oolong </p>
+<ul>
+<li>Fix removing all client edges of enabled apps, including child controls</li>
+<li>Fix Brave being invisible</li>
+<li>Add an option to force enable or disable the window client edge in enabled apps</li>
+<li>Add an option to hide Steam's tool windows</li>
+<li>Add support for Qt apps</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Clientedge Everywhere 1.4.0]]></title>
         <id>https://windhawk.net/mods/clientedge-in-apps#afbc62ee034d63d1a2513594de420ae3eee1a97f</id>
@@ -338,21 +356,6 @@ private debug symbols</li>
         <author>
             <name>Guerra24</name>
             <uri>https://github.com/Guerra24</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Desktop Icons 1.4.3]]></title>
-        <id>https://windhawk.net/mods/classic-desktop-icons#bdeebf8bd041100629066e24ee8cbb49bcc2bd1a</id>
-        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
-        <updated>2025-06-05T22:28:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improve desktop finding method</li>
-<li>Improve label background setting method</li>
-<li>Redo readme images, add Vista-style image</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
