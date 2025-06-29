@@ -2,7 +2,7 @@
 // @id              titlebar-for-everyone
 // @name            Titlebar For Everyone
 // @description     Force native title bars and frames for various programs
-// @version         0.1
+// @version         0.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -29,6 +29,7 @@
 // @include         mspub.exe
 // @include         hwp.exe
 // @include         Photos.exe
+// @include         MuseScore*.exe
 // @compilerOptions -lcomctl32 -luxtheme -lgdi32 -lshlwapi
 // ==/WindhawkMod==
 
@@ -41,9 +42,11 @@
     * Chrome
     * Edge
     * Supermium
+    * Brave (known issues: Only works when HW acceleration is enabled and available)
     * Etc. (not tested)
     * Enabling the DWM mode (Aero/Mica) is recommended if you can. This will also remove the duplicate window controls
     * Also provides an option to use the classic button face color in the DWM extended area for Classic theme users
+    * Vivaldi does work but is intentionally excluded from the default inclusion list. Use the built-in option to use native title bars instead
 * Steam (non-VGUI)
     * Known issues: In the Basic style, the window control hover effects do not show
 * WinUI apps
@@ -56,10 +59,13 @@
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
     * Tested: 2010 and LTSC 2021 (Win10 mode)
-    * Known issues: on LTSC 2021, only Classic frames are shown (neither Basic nor DWM)
+    * Known issues: On LTSC 2021, only Classic frames are shown (neither Basic nor DWM)
 * Some WebView2 apps
     * New Outlook
     * Microsoft 365 Copilot
+* Qt apps
+    * MuseScore
+    * Known issues: If the mod loads after a window is open, the window content will look downscaled a bit
 * Hangul Word Processor
     * Tested: 2010 (using the system style is recommended)
     * This mod also fixes the WM_NCACTIVATE bug present in the system style
@@ -90,6 +96,7 @@
 /*
 - btnfacechrome: false
   $name: Chromium - Paint Win32 ButtonFace color to the DWM area
+  $name:ko-KR: Chromium - DWM 영역에 Win32 버튼 표면 색상 칠하기
   $description: "In Chromium browsers, this option will draw the classic Windows button face color to the background of the title/tab bar\n
     DWM frames must be enabled for this to work. For recent versions of Chromium, this has three requirements:\n
     * Using Windows 11 22H2 (build 22621) or higher. On older versions, you can spoof your Windows version with Application Verifier or Version Spoof mod\n
@@ -97,6 +104,27 @@
     * 'Windows 11 Mica titlebar' must be enabled in 'chrome://flags'\n
     Hardware acceleration also must be enabled and working for this option to work\n
     Recommended for users of Classic, XP, or Basic themes"
+  $description:ko-KR: "Chromium 브라우저에서, 이 옵션은 고전 Windows 버튼 표면 색상을 제목 표시줄 및 탭 표시줄 영역에 그립니다\n
+    DWM 테두리가 활성화되어있어야 합니다. 최근 버전의 Chromium에서 이는 다음 세 가지를 요구합니다:\n
+    * Windows 11 22H2 (빌드 22621) 이상이여야 합니다. 하위 버전에서는 Application Verifier 또는 Version Spoof 모드를 이용하여 Windows 버전을 속일 수 있습니다\n
+    * 개인 설정에서 제목 표시줄에 테마 컬러를 표시하는 옵션은 비활성화되어야 합니다\n
+    * 'chrome://flags'에서 'Windows 11 Mica titlebar'를 활성화해야 합니다\n
+    하드웨어 가속 또한 켜져 있고 사용 가능해야 합니다\n
+    고전, XP, 또는 베이직 테마 사용자에게 권장됩니다"
+- clientedge: keep
+  $name: Client edge settings
+  $name:ko-KR: 클라이언트 영역 테두리 설정
+  $options:
+  - keep: Keep application behavior
+  - add: Always show
+  - remove: Always hide
+  $options:ko-KR:
+  - keep: 응용 프로그램 동작 유지
+  - add: 항상 표시
+  - remove: 항상 숨기기
+- notoolwinsteam: true
+  $name: Steam - Hide tool window frames
+  $name:ko-KR: Steam - 도구 창 테두리 숨기기
 */
 // ==/WindhawkModSettings==
 
@@ -110,24 +138,42 @@
 #include <fstream>
 #include <sstream>
 
-#define MODE_DEFAULT 0
-#define MODE_OUTLOOK 1
-#define MODE_CHROMIUM 2
+#ifndef WS_EX_NOREDIRECTIONBITMAP // WH 1.4
+#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
+#endif
 
-int mode = MODE_DEFAULT;
+enum WorkingMode {
+    MODE_DEFAULT,
+    MODE_OUTLOOK,
+    MODE_CHROMIUM
+};
 
-int btnFaceChrome = FALSE;
+enum ClientEdgeSetting {
+    CE_KEEP,
+    CE_ADD,
+    CE_REMOVE
+};
+
+struct tb4e_settings {
+    BOOL btnFaceChrome = FALSE;
+    ClientEdgeSetting clientEdgeSetting = CE_KEEP;
+    BOOL noToolWinSteam = FALSE;
+} tb4e_settings;
+
+WorkingMode mode = MODE_DEFAULT;
 
 BOOL isSteam = FALSE;
 wchar_t steamIndexHtml[MAX_PATH];
 wchar_t steamIndexHtmlModded[MAX_PATH];
+
+BOOL isBrave = FALSE;
 
 #pragma region Subclassing
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_PAINT:
         {
-            if (btnFaceChrome && mode == MODE_CHROMIUM && FindWindowExW(hWnd, NULL, L"Intermediate D3D Window", NULL))
+            if (tb4e_settings.btnFaceChrome && mode == MODE_CHROMIUM && FindWindowExW(hWnd, NULL, L"Intermediate D3D Window", NULL))
             {
                 PAINTSTRUCT ps;
                 HDC hdc = BeginPaint(hWnd, &ps);
@@ -160,10 +206,61 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     }
 }
 
+void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
+    LONG style = GetWindowLongW(hWnd, GWL_STYLE);
+    LONG exStyle = GetWindowLongW(hWnd, GWL_EXSTYLE);
+    bool isToolWindow = (exStyle & WS_EX_TOOLWINDOW) != 0;
+
+    if (isSteam && isToolWindow) {
+        if (tb4e_settings.noToolWinSteam) {
+            style &= ~(WS_CAPTION | WS_BORDER);
+        } else {
+            style |= WS_CAPTION | WS_BORDER;
+        }
+        SetWindowLongW(hWnd, GWL_STYLE, style);
+        if (!onlyUpdateStyle) {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+                Wh_Log(L"Subclassed %p", hWnd);
+            }
+        }
+        return;
+    }
+
+    // Exclude tool windows or child windows
+    if (isToolWindow || GetAncestor(hWnd, GA_ROOT) != hWnd) {
+        return;
+    }
+
+    if (!onlyUpdateStyle) {
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+            Wh_Log(L"Subclassed %p", hWnd);
+        }
+    }
+
+    style |= WS_CAPTION | WS_SYSMENU;
+    switch (tb4e_settings.clientEdgeSetting) {
+        case CE_ADD:
+            exStyle |= WS_EX_CLIENTEDGE;
+            break;
+        case CE_REMOVE:
+            exStyle &= ~WS_EX_CLIENTEDGE;
+            break;
+        case CE_KEEP:
+            // do nothing
+            // can't do anything on config change unfortunately
+    }
+
+    SetWindowLongW(hWnd, GWL_STYLE, style);
+    SetWindowLongW(hWnd, GWL_EXSTYLE, exStyle);
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+}
+
 BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
     if (hParentWnd && hParentWnd != GetDesktopWindow())
         return TRUE;
+
+    bool isTarget = false;
 
     DWORD pid;
     GetWindowThreadProcessId(hWnd, &pid);
@@ -174,35 +271,23 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
         // Chromium browsers / Electron apps / CEF top-level windows
         if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
             mode = MODE_CHROMIUM;
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
-        // Visual Studio (2022) and PowerToys Workspace editor
+            isTarget = true;
+        // WPF apps
         } else if (wcsncmp(className, L"HwndWrapper[", 12) == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // WinUI
         } else if (wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // Steam
         } else if (wcscmp(className, L"SDL_app") == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // Microsoft 365 Copilot
         } else if (wcscmp(className, L"OfficeApp-Frame") == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // New Outlook
         } else if (wcscmp(className, L"Olk Host") == 0) {
             mode = MODE_OUTLOOK;
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // Microsoft Office apps
         } else if (wcscmp(className, L"OpusApp") == 0 || // Word
             wcscmp(className, L"XLMAIN") == 0 || // Excel
@@ -212,18 +297,17 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
             wcscmp(className, L"rctrl_renwnd32") == 0 || // Outlook
             wcscmp(className, L"MSWinPub") == 0 // Publisher
         ) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // Hangul Word Processor
         } else if (wcsncmp(className, L"HwpApp", 6) == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
+        // Qt apps
+        } else if (wcsstr(className, L"QWindowIcon") != 0) {
+            isTarget = true;
         }
 
-        if (lParam == 1) {
-            SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+        if (isTarget) {
+            ProcessWindow(hWnd);
         }
     }
     return TRUE;
@@ -235,9 +319,9 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     // Unsubclass all windows belonging to this process
     if (pid == GetCurrentProcessId()) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-    }
-    if (lParam == 1) {
-        SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+        if (lParam == 1) {
+            SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+        }
     }
     return TRUE;
 }
@@ -246,7 +330,7 @@ BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     DWORD pid;
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId()) {
-        // Update NonClient size
+        ProcessWindow(hWnd, true);
         wchar_t className[256];
         GetClassName(hWnd, className, 256);
         if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
@@ -260,12 +344,11 @@ BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_original;
 HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    if ((dwExStyle & 0x00200000L) != 0) {
-        dwExStyle &= ~0x00200000L;
-    }
-    if ((dwExStyle & WS_EX_CLIENTEDGE) != 0) {
-        dwExStyle &= ~WS_EX_CLIENTEDGE;
-    }
+    if ((dwExStyle & WS_EX_NOREDIRECTIONBITMAP) != 0) { // This makes the GDI surface invisible
+        dwExStyle &= ~WS_EX_NOREDIRECTIONBITMAP;        // Just purge this cuz it's bad for Basic/Classic users anyway
+    }                                                   // It must be set in CreateWindowExW. Not changeable with SetWindowLongW
+
+    bool isTarget = false;
 
     HWND hWnd = CreateWindowExW_original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hWnd != NULL) {
@@ -273,40 +356,39 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
         GetClassName(hWnd, className, 256);
         Wh_Log(L"%s", className);
         // Chromium browsers / Electron apps / CEF top-level windows
+        // Subclass late for Brave cuz somehow early subclassing makes it invisible
         if (wcsncmp(className, L"Chrome_WidgetWin_", 17) == 0) {
             if (dwStyle & WS_CAPTION) {
                 mode = MODE_CHROMIUM;
-                if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
-                    Wh_Log(L"Subclassed %p", hWnd);
+                if (!isBrave) {
+                    isTarget = true;
                 }
             }
         // WinUI
         } else if (wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
             if (dwStyle & WS_CAPTION) {
-                if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
-                    Wh_Log(L"Subclassed %p", hWnd);
-                    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
-                }
+                isTarget = true;
             }
         // Steam with workarounds
         } else if (isSteam && wcscmp(className, L"Chrome_RenderWidgetHostHWND") == 0) {
             EnumWindows(InitEnumWindowsProc, 1);
         // Microsoft 365 Copilot
         } else if (wcscmp(className, L"OfficeApp-Frame") == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // New Outlook
         } else if (wcscmp(className, L"Olk Host") == 0) {
             mode = MODE_OUTLOOK;
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
         // Hangul Word Processor
         } else if (wcsncmp(className, L"HwpApp", 6) == 0) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-                Wh_Log(L"Subclassed %p", hWnd);
-            }
+            isTarget = true;
+        // Qt apps
+        } else if (wcsstr(className, L"QWindowIcon") != 0) {
+            isTarget = true;
+        }
+
+        if (isTarget) {
+            ProcessWindow(hWnd);
         }
     }
     return hWnd;
@@ -319,11 +401,9 @@ BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
     wchar_t className[256];
     GetClassName(hWnd, className, 256);
     Wh_Log(L"ShowWindow_hook: %s", className);
-    // Visual Studio and PowerToys Workspace editor
+    // WPF apps
     if (wcsncmp(className, L"HwndWrapper[", 12) == 0) {
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
-            Wh_Log(L"Subclassed %p", hWnd);
-        }
+        ProcessWindow(hWnd);
     // Microsoft Office apps
     } else if (wcscmp(className, L"OpusApp") == 0 || // Word
         wcscmp(className, L"XLMAIN") == 0 || // Excel
@@ -332,9 +412,7 @@ BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
         wcscmp(className, L"rctrl_renwnd32") == 0 || // Outlook
         wcscmp(className, L"MSWinPub") == 0 // Publisher
     ) {
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 1)) {
-            Wh_Log(L"Subclassed %p", hWnd);
-        }
+        ProcessWindow(hWnd);
     // OneNote with workarounds
     } else if (wcscmp(className, L"Framework::CFrameApp") == 0) {
         EnumWindows(InitEnumWindowsProc, 1);
@@ -361,8 +439,13 @@ HWND WINAPI SetParent_hook(HWND hWndChild, HWND hWndNewParent) {
     GetClassName(hWndChild, className, 256);
     Wh_Log(L"SetParent_hook: hWndChild=%p (%s), hWndNewParent=%p", hWndChild, className, hWndNewParent);
     HWND hWndOldParent = SetParent_original(hWndChild, hWndNewParent);
-    if (mode == MODE_CHROMIUM && btnFaceChrome && wcscmp(className, L"Intermediate D3D Window") == 0) {
-        RedrawWindow(hWndNewParent, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+    if (mode == MODE_CHROMIUM && wcscmp(className, L"Intermediate D3D Window") == 0) {
+        if (isBrave) {
+            ProcessWindow(hWndNewParent);
+        }
+        if (tb4e_settings.btnFaceChrome) {
+            RedrawWindow(hWndNewParent, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        }
     }
     return hWndOldParent;
 }
@@ -446,6 +529,18 @@ BOOL PrepareSteamIndexHtml() {
 }
 #pragma endregion
 
+void LoadSettings() {
+    tb4e_settings.btnFaceChrome = Wh_GetIntSetting(L"btnfacechrome");
+    LPCWSTR ceSetting = Wh_GetStringSetting(L"clientedge");
+    if (wcscmp(ceSetting, L"add") == 0) {
+        tb4e_settings.clientEdgeSetting = CE_ADD;
+    } else if (wcscmp(ceSetting, L"remove") == 0) {
+        tb4e_settings.clientEdgeSetting = CE_REMOVE;
+    }
+    Wh_FreeStringSetting(ceSetting);
+    tb4e_settings.noToolWinSteam = Wh_GetIntSetting(L"notoolwinsteam");
+}
+
 // The mod is being initialized, load settings, hook functions, and do other
 // initialization stuff if required.
 BOOL Wh_ModInit() {
@@ -478,7 +573,9 @@ BOOL Wh_ModInit() {
         steamPrepared = PrepareSteamIndexHtml();
     }
 
-    btnFaceChrome = Wh_GetIntSetting(L"btnfacechrome");
+    isBrave = wcsstr(_wcsupr(modulePath), L"BRAVE.EXE") != NULL;
+
+    LoadSettings();
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook,
                        (void**)&CreateWindowExW_original);
@@ -504,8 +601,6 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
-    btnFaceChrome = Wh_GetIntSetting(L"btnfacechrome");
-    if (mode == MODE_CHROMIUM) {
-        EnumWindows(UpdateEnumWindowsProc, 1);
-    }
+    LoadSettings();
+    EnumWindows(UpdateEnumWindowsProc, 1);
 }
