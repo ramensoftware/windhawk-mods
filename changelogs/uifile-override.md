@@ -1,3 +1,8 @@
+## 1.0.3 ([Jun 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e82911698b507bbac08ec0bda87ab865d020ad14/mods/uifile-override.wh.cpp))
+
+* Use LoadLibraryEx with LOAD_LIBRARY_SEARCH_SYSTEM32 #2063
+* Code cleanup
+
 ## 1.0.2 ([Sep 7, 2024](https://github.com/ramensoftware/windhawk-mods/blob/64075c826be2989a7d02742caa12efe29c40bd1f/mods/uifile-override.wh.cpp))
 
 * Check executable name instead of full path for explorer hooking
