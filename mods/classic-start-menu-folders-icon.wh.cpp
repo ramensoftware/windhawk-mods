@@ -2,7 +2,7 @@
 // @id              classic-start-menu-folders-icon
 // @name            Classic Start Menu Folders Icon
 // @description     Change the default icon of Start Menu folders like Windows XP and before
-// @version         1.0.1
+// @version         1.0.2
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -82,7 +82,7 @@ HRESULT THISCALL CFSFolder__CreateFileFolderDefExtIcon_hook(CFSFolder *pThis, IT
     if (SUCCEEDED(CFSFolder__GetDesktopIniForItem(pThis, pItemId, &pICachedPrivateProfile)) && pICachedPrivateProfile)
     {
         if (!CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconResource", 0, 2, folderString) ||
-            !CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconResource", 0, 2, folderString))
+            !CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconFile", 0, 2, folderString))
         {
             return hr;
         }
@@ -121,7 +121,7 @@ HRESULT STDCALL CFSFolder_GetIconOf_hook(CFSFolder *pThis, ITEMIDLIST_RELATIVE *
     if (SUCCEEDED(CFSFolder__GetDesktopIniForItem(pFSFolder, pItemId, &pICachedPrivateProfile)) && pICachedPrivateProfile)
     {
         if (!CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconResource", 0, 2, folderString) ||
-            !CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconResource", 0, 2, folderString))
+            !CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconFile", 0, 2, folderString))
         {
             return hr;
         }
