@@ -26,8 +26,7 @@
         <id>https://windhawk.net/mods/titlebar-for-everyone#c013224f458297a3e51bacd1d096f00a3acc6fec</id>
         <link href="https://windhawk.net/mods/titlebar-for-everyone"/>
         <updated>2025-06-29T06:22:38.000Z</updated>
-        <content type="html"><![CDATA[<p>Titlebar for Everyone 0.2 (#2070)oolong </p>
-<ul>
+        <content type="html"><![CDATA[<ul>
 <li>Fix removing all client edges of enabled apps, including child controls</li>
 <li>Fix Brave being invisible</li>
 <li>Add an option to force enable or disable the window client edge in enabled apps</li>
