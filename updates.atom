@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-06-29T06:22:38.000Z</updated>
+    <updated>2025-06-29T06:57:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better file sizes in Explorer details 1.4.11]]></title>
+        <id>https://windhawk.net/mods/explorer-details-better-file-sizes#5698ca7310087986276b6cb408fb83ed73d155d6</id>
+        <link href="https://windhawk.net/mods/explorer-details-better-file-sizes"/>
+        <updated>2025-06-29T06:57:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Undid the Everything v1.4 fix from the previous version which was incorrect.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Titlebar For Everyone 0.2]]></title>
         <id>https://windhawk.net/mods/titlebar-for-everyone#c013224f458297a3e51bacd1d096f00a3acc6fec</id>
@@ -336,26 +349,6 @@ private debug symbols</li>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win11-accent-border#1927abe816b6ff1d930fce7dc46ac527167bfd25</id>
-        <link href="https://windhawk.net/mods/win11-accent-border"/>
-        <updated>2025-06-06T16:52:21.000Z</updated>
-        <content type="html"><![CDATA[<p>Mimics the behavior the <em>Show accent color on title bars and window borders</em> setting had in Windows 11 Build 22000.</p>
-<p>When it was enabled in build 22000 the accent color appeared behind the Mica effect but in 22621 and newer it appears on top and it doesn't look that great. This mod restores the former behavior.</p>
-<p><strong>Make sure <em>Show accent color on title bars and window borders</em> is disabled as it conflicts with this mod!</strong></p>
-<p>Before:
-<img src="https://i.imgur.com/LnPyxkb.png" alt="image" /></p>
-<p>After:
-<img src="https://i.imgur.com/TpGSX6X.png" alt="image" /></p>
-<h1 id="colors">Colors</h1>
-<p>The focused color is always the accent color.</p>
-<p>You can use <code>AccentColorInactive</code> in <code>HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM</code> to change the inactive color. This is a HEX value in BGR format.</p>]]></content>
-        <author>
-            <name>Guerra24</name>
-            <uri>https://github.com/Guerra24</uri>
         </author>
     </entry>
 </feed>

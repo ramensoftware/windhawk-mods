@@ -1,3 +1,7 @@
+## 1.4.11 ([Jun 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5698ca7310087986276b6cb408fb83ed73d155d6/mods/explorer-details-better-file-sizes.wh.cpp))
+
+* Undid the Everything v1.4 fix from the previous version which was incorrect.
+
 ## 1.4.10 ([Jun 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f0a4fe87b2b24a0e9f9a685f7dfd90968a2cf132/mods/explorer-details-better-file-sizes.wh.cpp))
 
 * Fixed querying Everything v1.4 when custom macros named "folder" or "wfn" are configured.
