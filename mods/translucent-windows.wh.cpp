@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.5.0
+// @version         1.5.1
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -50,23 +50,23 @@ maximized or snapped to the edge of the screen, this is caused by default.
 - TextAlphaBlend: FALSE
   $name: Text alpha blending
   $description: >-
-    Alpha blends Windows GDI text rendering. It may not affect all rendered text, use with caution as it may cause problems with some applications (ExplorerBlurMica implementation)
+    Alpha blends Windows GDI text rendering. It may not affect all rendered text (ExplorerBlurMica implementation)
 - type: none
   $name: Effects
   $description: >-
-     Windows 11 version >= 22621.xxx (22H2) is required.
+     Windows 11 version >= 22621.xxx (22H2) is required for SystemBackdrop effects.
   $options:
   - none: Default
   - acrylicblur: Blur (AccentBlurBehind)
   - acrylicsystem: Acrylic (SystemBackdrop)
   - mica: Mica (SystemBackdrop)
   - mica_tabbed: MicaAlt (SystemBackdrop)
-- AccentBlurBehind: "0F000000"
+- AccentBlurBehind: "00000000"
   $name: AccentBlurBehind color blend
   $description: >-
     Blending color with blur background.
      Color in hexadecimal ARGB format e.g. 0F000000
-- ImmersiveDarkTitle: TRUE
+- ImmersiveDarkTitle: FALSE
   $name: Immersive darkmode titlebar
   $description: >-
     Enables the flag for immersive darkmode titlebars, affects the tintcolor of SystemBackdrop effects and caption buttons color state
@@ -166,18 +166,18 @@ maximized or snapped to the edge of the screen, this is caused by default.
       - TextAlphaBlend: FALSE
         $name: Text alpha blending
         $description: >-
-         Alpha blends Windows GDI text rendering. It may not affect all rendered text, use with caution as it may cause problems with some applications (ExplorerBlurMica implementation)
+         Alpha blends Windows GDI text rendering. It may not affect all rendered text (ExplorerBlurMica implementation)
       - type: none
         $name: Effects
         $description: >-
-         Windows 11 version >= 22621.xxx (22H2) is required.
+         Windows 11 version >= 22621.xxx (22H2) is required for SystemBackdrop effects.
         $options:
           - none: Default
           - acrylicblur: Blur (AccentBlurBehind)
           - acrylicsystem: Acrylic (SystemBackdrop)
           - mica: Mica (SystemBackdrop)
           - mica_tabbed: MicaAlt (SystemBackdrop)
-      - AccentBlurBehind: "0F000000"
+      - AccentBlurBehind: "00000000"
         $name: AccentBlurBehind color blend
         $description: >-
           Blending color with blur background.
@@ -366,13 +366,38 @@ struct Settings{
 
 } g_settings;
 
-/*https://gist.github.com/xv/43bd4c944202a593ac8ec6daa299b471*/
 struct ACCENT_POLICY 
 {
     int AccentState;
     int AccentFlags;
     int GradientColor;
     int AnimationId;
+};
+
+enum ACCENT_STATE
+{
+    ACCENT_STATE_DISABLED,
+    ACCENT_STATE_ENABLE_GRADIENT,
+    ACCENT_STATE_ENABLE_TRANSPARENTGRADIENT,
+    ACCENT_STATE_ENABLE_BLURBEHIND,	// Removed in Windows 11 22H2+
+    ACCENT_STATE_ENABLE_ACRYLICBLURBEHIND,
+    ACCENT_STATE_ENABLE_HOSTBACKDROP,
+    ACCENT_STATE_INVALID_STATE
+};
+
+enum ACCENT_FLAG
+{
+    ACCENT_FLAG_NONE,
+    ACCENT_FLAG_ENABLE_MODERN_ACRYLIC_RECIPE = 1 << 1,	// Windows 11 22H2+
+    ACCENT_FLAG_ENABLE_GRADIENT_COLOR = 1 << 1, // ACCENT_ENABLE_BLURBEHIND
+    ACCENT_FLAG_ENABLE_FULLSCREEN = 1 << 2,
+    ACCENT_FLAG_ENABLE_BORDER_LEFT = 1 << 5,
+    ACCENT_FLAG_ENABLE_BORDER_TOP = 1 << 6,
+    ACCENT_FLAG_ENABLE_BORDER_RIGHT = 1 << 7,
+    ACCENT_FLAG_ENABLE_BORDER_BOTTOM = 1 << 8,
+    ACCENT_FLAG_ENABLE_BLUR_RECT = 1 << 9,	// DwmpUpdateAccentBlurRect, it is conflicted with ACCENT_ENABLE_GRADIENT_COLOR when using ACCENT_ENABLE_BLURBEHIND
+    ACCENT_FLAG_ENABLE_BORDER = ACCENT_FLAG_ENABLE_BORDER_LEFT | ACCENT_FLAG_ENABLE_BORDER_TOP 
+    | ACCENT_FLAG_ENABLE_BORDER_RIGHT | ACCENT_FLAG_ENABLE_BORDER_BOTTOM
 };
 
 struct WINCOMPATTRDATA 
@@ -384,7 +409,37 @@ struct WINCOMPATTRDATA
 
 enum WINDOWCOMPOSITIONATTRIB 
 {
-    WCA_ACCENT_POLICY = 19
+    WCA_UNDEFINED,
+    WCA_NCRENDERING_ENABLED,
+    WCA_NCRENDERING_POLICY,
+    WCA_TRANSITIONS_FORCEDISABLED,
+    WCA_ALLOW_NCPAINT,
+    WCA_CAPTION_BUTTON_BOUNDS,
+    WCA_NONCLIENT_RTL_LAYOUT,
+    WCA_FORCE_ICONIC_REPRESENTATION,
+    WCA_EXTENDED_FRAME_BOUNDS,
+    WCA_HAS_ICONIC_BITMAP,
+    WCA_THEME_ATTRIBUTES,
+    WCA_NCRENDERING_EXILED,
+    WCA_NCADORNMENTINFO,
+    WCA_EXCLUDED_FROM_LIVEPREVIEW,
+    WCA_VIDEO_OVERLAY_ACTIVE,
+    WCA_FORCE_ACTIVEWINDOW_APPEARANCE,
+    WCA_DISALLOW_PEEK,
+    WCA_CLOAK,
+    WCA_CLOAKED,
+    WCA_ACCENT_POLICY,
+    WCA_FREEZE_REPRESENTATION,
+    WCA_EVER_UNCLOAKED,
+    WCA_VISUAL_OWNER,
+    WCA_HOLOGRAPHIC,
+    WCA_EXCLUDED_FROM_DDA,
+    WCA_PASSIVEUPDATEMODE,
+    WCA_USEDARKMODECOLORS,
+    WCA_CORNER_STYLE,
+    WCA_PART_COLOR,
+    WCA_DISABLE_MOVESIZE_FEEDBACK,
+    WCA_LAST
 };
 
 ACCENT_POLICY accent = {};
@@ -423,7 +478,6 @@ static decltype(&ExtTextOutW) ExtTextOutW_orig = nullptr;
 static decltype(&DrawThemeText) DrawThemeText_orig = nullptr;
 static decltype(&DrawThemeTextEx) DrawThemeTextEx_orig = nullptr;
 
-static decltype(&GetSysColor) GetSysColor_orig = nullptr;
 static decltype(&GetThemeBitmap) GetThemeBitmap_orig = nullptr;
 static decltype(&GetThemeColor) GetThemeColor_orig = nullptr;
 static decltype(&DrawThemeBackground) DrawThemeBackground_orig = nullptr;
@@ -455,20 +509,17 @@ BOOL IsWindowEligible(HWND hWnd)
 
     BOOL hasTitleBar = (style & WS_BORDER) && (style & WS_DLGFRAME);
 
-    if ((styleEx & WS_EX_TOOLWINDOW) && !hasTitleBar)
-        return FALSE;
-
-    if ((style & WS_POPUP) && !hasTitleBar)
+    if (!hasTitleBar && ((styleEx & WS_EX_TOOLWINDOW) ||
+       (style & WS_POPUP) || (styleEx & WS_EX_APPWINDOW)))
         return FALSE;
 
     // Don't block CEF apps
-    if (!((IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0")) || style & WS_POPUP)
-        && !(style & WS_THICKFRAME || style & WS_MINIMIZEBOX || style & WS_MAXIMIZEBOX))
+    if (!((IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0")) || style & WS_POPUP || styleEx & WS_EX_APPWINDOW)
+        && !(style & WS_THICKFRAME || style & WS_MINIMIZEBOX || style & WS_MAXIMIZEBOX || style & 0x00000080l)) // Firefox dialog
         return FALSE;
     
     return TRUE;
 }
-
 
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
@@ -483,7 +534,7 @@ HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID
         if (dwAttribute == DWMWA_SYSTEMBACKDROP_TYPE || dwAttribute == DWMWA_USE_HOSTBACKDROPBRUSH)
         {
             if (g_settings.BgType == g_settings.AccentBlurBehind)
-                return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &NONE, sizeof(UINT));
+                return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &AUTO, sizeof(UINT));
             if(g_settings.BgType == g_settings.AcrylicSystemBackdrop)
                 return DwmSetWindowAttribute_orig(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &TRANSIENTWINDOW, sizeof(UINT));
             else if(g_settings.BgType == g_settings.MicaAlt)
@@ -511,7 +562,8 @@ HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMar
     if(g_settings.ExtendFrame)
     {
         // Override Win11 Taskmgr, explorer, aerowizard calls
-        if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"NativeHWNDHost") || IsWindowClass(hWnd, L"TaskManagerWindow"))
+        if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"NativeHWNDHost") 
+            || IsWindowClass(hWnd, L"TaskManagerWindow") || IsWindowClass(hWnd, L"TWizardForm"))
         {
             static const MARGINS margins = {-1, -1, -1, -1};
             [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
@@ -782,14 +834,6 @@ HRESULT WINAPI HookedDrawThemeText(HTHEME hTheme, HDC hdc, int iPartId, int iSta
     return ret;
 }
 
-DWORD WINAPI HookedGetSysColor(int nIndex)
-{
-    if (nIndex == COLOR_HOTLIGHT)
-        return RGB(0, 148, 251);
-    
-    return GetSysColor_orig(nIndex);
-}
-
 #ifdef _WIN64
 #define STDCALL  __cdecl
 #define SSTDCALL L"__cdecl"
@@ -848,11 +892,11 @@ void CplDuiHook()
         },
     };
 
-    HMODULE hDui = LoadLibraryW(L"dui70.dll");
+    HMODULE hDui = LoadLibraryEx(L"dui70.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     WindhawkUtils::HookSymbols(hDui, dui70dll_hooks, ARRAYSIZE(dui70dll_hooks));
 }
 
-constexpr int aSysElements[] = {
+constexpr int SysColorElements[] = {
 	COLOR_SCROLLBAR ,
     COLOR_BACKGROUND ,
     COLOR_ACTIVECAPTION ,
@@ -878,11 +922,11 @@ constexpr int aSysElements[] = {
     COLOR_3DLIGHT ,
     COLOR_INFOTEXT ,
     COLOR_INFOBK ,
-    COLOR_HOTLIGHT ,
     COLOR_GRADIENTACTIVECAPTION ,
     COLOR_GRADIENTINACTIVECAPTION ,
     COLOR_MENUHILIGHT ,
     COLOR_MENUBAR
+    //COLOR_HOTLIGHT
 };
 
 HTHEME hTh = nullptr;
@@ -897,14 +941,14 @@ void SetCurrentTheme(LPCWSTR themeclass)
 
 void RevertSysColors()
 {
-    SetCurrentTheme(L"globals");
+    SetCurrentTheme(L"SysMetrics");
+    COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
 
-    COLORREF aNewColors[ARRAYSIZE(aSysElements)];
-    for (UINT i = 0; i < ARRAYSIZE(aSysElements); i++)
+    for (UINT i = 0; i < ARRAYSIZE(SysColorElements); i++)
     {
         aNewColors[i] = GetThemeSysColor(hTh, i);
     }
-    SetSysColors(ARRAYSIZE(aSysElements), aSysElements, aNewColors);
+    SetSysColors(ARRAYSIZE(SysColorElements), SysColorElements, aNewColors);
 
     CloseThemeData(hTh);
     hTh = nullptr;
@@ -912,42 +956,42 @@ void RevertSysColors()
 
 void ColorizeSysColors()
 {
-    COLORREF aNewColors[ARRAYSIZE(aSysElements)];
+    COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
 
-    for (UINT i = 0; i < ARRAYSIZE(aSysElements); i++)
+    for (UINT i = 0; i < ARRAYSIZE(SysColorElements); i++)
     {
-        if (i == COLOR_SCROLLBAR || i == COLOR_BACKGROUND || i == COLOR_INACTIVECAPTION 
-            || i == COLOR_MENU || i == COLOR_WINDOW || i == COLOR_INACTIVEBORDER || i == COLOR_INFOBK
-            || i == COLOR_GRADIENTACTIVECAPTION || i == COLOR_MENUBAR)
+        if (SysColorElements[i] == COLOR_SCROLLBAR || SysColorElements[i] == COLOR_BACKGROUND || SysColorElements[i] == COLOR_INACTIVECAPTION 
+            || SysColorElements[i] == COLOR_MENU || SysColorElements[i] == COLOR_WINDOW || SysColorElements[i] == COLOR_INACTIVEBORDER || SysColorElements[i] == COLOR_INFOBK
+            || SysColorElements[i] == COLOR_GRADIENTACTIVECAPTION || SysColorElements[i] == COLOR_MENUBAR)
                 aNewColors[i] = RGB(0, 0, 0);
-        else if (i == COLOR_ACTIVECAPTION || i == COLOR_ACTIVEBORDER || i == COLOR_BTNSHADOW
-            ||i == COLOR_GRADIENTINACTIVECAPTION)
+        else if (SysColorElements[i] == COLOR_ACTIVECAPTION || SysColorElements[i] == COLOR_ACTIVEBORDER || SysColorElements[i] == COLOR_BTNSHADOW
+            ||SysColorElements[i] == COLOR_GRADIENTINACTIVECAPTION)
                 aNewColors[i] = RGB(32, 32, 32);
-        else if (i == COLOR_WINDOWFRAME || i == COLOR_BTNHIGHLIGHT)
+        else if (SysColorElements[i] == COLOR_WINDOWFRAME || SysColorElements[i] == COLOR_BTNHIGHLIGHT)
             aNewColors[i] = RGB(64, 64, 64);
-        else if (i == COLOR_MENUTEXT || i == COLOR_CAPTIONTEXT || i == COLOR_HIGHLIGHTTEXT 
-            || i == COLOR_BTNTEXT | i == COLOR_INFOTEXT)
+        else if (SysColorElements[i] == COLOR_MENUTEXT || SysColorElements[i] == COLOR_CAPTIONTEXT || SysColorElements[i] == COLOR_HIGHLIGHTTEXT 
+            || SysColorElements[i] == COLOR_BTNTEXT || SysColorElements[i] == COLOR_INFOTEXT)
                 aNewColors[i] = RGB(220, 220, 220);
-        else if (i == COLOR_WINDOWTEXT)
+        else if (SysColorElements[i] == COLOR_WINDOWTEXT)
             aNewColors[i] = RGB(240, 240, 240);
-        else if (i == COLOR_APPWORKSPACE)
+        else if (SysColorElements[i] == COLOR_APPWORKSPACE)
             aNewColors[i] = RGB(8, 8, 8);
-        else if (i == COLOR_HIGHLIGHT || i == COLOR_MENUHILIGHT)
+        else if (SysColorElements[i] == COLOR_HIGHLIGHT || SysColorElements[i] == COLOR_MENUHILIGHT)
             aNewColors[i] = RGB(0, 120, 215);
-        else if (i == COLOR_BTNFACE)
+        else if (SysColorElements[i] == COLOR_BTNFACE)
             aNewColors[i] = RGB(1, 1, 1);
-        else if (i == COLOR_GRAYTEXT)
+        else if (SysColorElements[i] == COLOR_GRAYTEXT)
             aNewColors[i] = RGB(128, 128, 128);
-        else if (i == COLOR_INACTIVECAPTIONTEXT)
+        else if (SysColorElements[i] == COLOR_INACTIVECAPTIONTEXT)
             aNewColors[i] = RGB(160, 160, 160);
-        else if (i == COLOR_3DDKSHADOW)
+        else if (SysColorElements[i] == COLOR_3DDKSHADOW)
             aNewColors[i] = RGB(16, 16, 16);
-        else if (i == COLOR_3DLIGHT)
+        else if (SysColorElements[i] == COLOR_3DLIGHT)
             aNewColors[i] = RGB(4, 4, 4);
-        else if (i == COLOR_HOTLIGHT)
+        else if (SysColorElements[i] == COLOR_HOTLIGHT)
             aNewColors[i] = RGB(0, 148, 251);        
     }
-    SetSysColors(ARRAYSIZE(aSysElements), aSysElements, aNewColors);
+    SetSysColors(ARRAYSIZE(SysColorElements), SysColorElements, aNewColors);
 }
 
 HRESULT WINAPI HookedGetThemeBitmap(
@@ -1148,7 +1192,7 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
             }
         }  
     }
-    else if (((ThemeClassName == L"Button" && iPartId != 2) || ThemeClassName == L"Tab" || ThemeClassName == L"Combobox" 
+    else if (((ThemeClassName == L"Button" && iPartId == 1) || ThemeClassName == L"Tab" || ThemeClassName == L"Combobox" 
         || ThemeClassName == L"Toolbar") && iPropId == TMT_TEXTCOLOR)
     {
         return hr;
@@ -1156,6 +1200,11 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
     else if (ThemeClassName == L"Menu" || ThemeClassName == L"ChartView" || ThemeClassName == L"TaskManager")
     {
         return hr;
+    }
+    else if ((ThemeClassName == L"Button" && iPartId != 1) || ThemeClassName == L"Static")
+    {
+        *pColor = RGB(192, 192, 192);
+        return S_OK;
     }
     else
     {
@@ -1203,13 +1252,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
     {
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
-    }
-    else 
-    {
-        HTHEME hTh = OpenThemeData(NULL, L"Tab");
-        HBITMAP bm {};
-        GetThemeBitmap(hTh, 10, 0, TMT_DIBDATA, GBF_DIRECT, &bm);
-        CloseThemeData(hTh);
     }
 
     return hr;
@@ -1264,7 +1306,7 @@ void EnableBlurBehind(HWND hWnd)
         typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
 
         bb.fEnable = TRUE;
-        bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION;
+        bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION | DWM_BB_TRANSITIONONMAXIMIZED;
         // Blurs window client area
         HRGN hRgn = CreateRectRgn(0, 0, -1, -1);
         bb.hRgnBlur = hRgn;
@@ -1272,10 +1314,8 @@ void EnableBlurBehind(HWND hWnd)
         DwmEnableBlurBehindWindow(hWnd, &bb);
         DeleteObject(hRgn);
 
-        accent.AccentState = 4;
+        accent.AccentState = ACCENT_STATE_ENABLE_ACRYLICBLURBEHIND;
         accent.GradientColor = g_settings.AccentBlurBehindClr;
-        //Change caption button color state
-        //accent.AccentFlags |= 3584;
 
         attrib.Attrib = WCA_ACCENT_POLICY;
         attrib.pvData = &accent;
@@ -1449,11 +1489,14 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
             HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
             if (value)
             {
-                KillTimer(NULL, (UINT_PTR)value);
+                if (KillTimer(NULL, (UINT_PTR)value))
                 {
                     std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
                     g_rainbowWindows.erase(cwp->hwnd);
+                    Wh_Log(L"Timer termination success for window: %p", cwp->hwnd);
                 }
+                else
+                    Wh_Log(L"[ERROR] Timer termination failure for window: %p", cwp->hwnd);
             }
             break;
         }
@@ -1476,7 +1519,10 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
                                     std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
                                     g_rainbowWindows.insert(cwp->hwnd);
                                 }
+                                Wh_Log(L"Timer set success for window: %p", cwp->hwnd);
                             }
+                            else
+                                Wh_Log(L"[ERROR] Timer set failure for window: %p", cwp->hwnd);
                         }
                         break;
                     }
@@ -1484,7 +1530,12 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
                     {
                         HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
                         if (value)
-                            KillTimer(NULL, (UINT_PTR)value);                  
+                        {
+                            if (KillTimer(NULL, (UINT_PTR)value))
+                                Wh_Log(L"Timer unload success for window: %p", cwp->hwnd);
+                            else
+                                Wh_Log(L"[ERROR] Timer unload failure for window: %p", cwp->hwnd);
+                        }        
                         break;
                     }
                 }
@@ -1528,6 +1579,8 @@ void NewWindowShown(HWND hWnd)
 {
     if(!IsWindowEligible(hWnd))
         return;
+    else
+        Wh_Log(L"Eligible window: %p", hWnd);
 
     if(g_settings.ExtendFrame)
         ApplyFrameExtension(hWnd);
@@ -1568,7 +1621,10 @@ void NewWindowShown(HWND hWnd)
             if (callWndProcHook) {
                 g_callWndProcHook = callWndProcHook;
                 g_allCallWndProcHooks.insert(callWndProcHook);
+                Wh_Log(L"SetWindowsHookEx succeeded for thread %u", dwThreadId);
             }
+            else
+                Wh_Log(L"[ERROR] SetWindowsHookEx failed for thread %u", dwThreadId);
         }
         if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
             SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
@@ -1594,7 +1650,6 @@ void FillBackgroundElements()
 {
     ColorizeSysColors();
     CplDuiHook();
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"user32.dll"), "GetSysColor"), (void*)HookedGetSysColor, (void**)&GetSysColor_orig);
     Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "GetThemeBitmap"), (void*)HookedGetThemeBitmap, (void**)&GetThemeBitmap_orig);
     Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "GetThemeColor"), (void*)HookedGetColorTheme, (void**)&GetThemeColor_orig);   
     Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "DrawThemeBackground"), (void*)HookedDrawThemeBackground, (void**)&DrawThemeBackground_orig);
@@ -1656,7 +1711,8 @@ void RestoreWindowCustomizations(HWND hWnd)
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) 
 {
     DWORD dwProcessId = 0;
-    if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) 
+    // Pass console window, it might be called from other processes like Clink:https://github.com/chrisant996/clink
+    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && !IsWindowClass(hWnd, L"ConsoleWindowClass")) 
             return TRUE;
     else
     {
@@ -1692,25 +1748,46 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
     }
     else if (hexColor[0] == L'2' && hexColor[1] == L'\0') 
     {
-        DWORD colorization;
-        BOOL opaque;
-        if (SUCCEEDED(DwmGetColorizationColor(&colorization, &opaque))) 
+        // In some programs, e.g. snippingtool.exe, the default blue accent color is used instead of the Windows theme with DwmGetColorizationColor.
+        // Use the immersive color API if available, fall back to DwmGetColorizationColor
+        // https://github.com/ALTaleX531/TranslucentFlyouts/blob/017970cbac7b77758ab6217628912a8d551fcf7c/Common/ThemeHelper.hpp#L278
+        static const auto s_GetImmersiveColorFromColorSetEx{ reinterpret_cast<DWORD(WINAPI*)(DWORD dwImmersiveColorSet, DWORD dwImmersiveColorType, bool bIgnoreHighContrast, DWORD dwHighContrastCacheMode)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(95))) };
+        static const auto s_GetImmersiveColorTypeFromName{ reinterpret_cast<DWORD(WINAPI*)(LPCWSTR name)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(96))) };
+        static const auto s_GetImmersiveUserColorSetPreference{ reinterpret_cast<DWORD(WINAPI*)(bool bForceCheckRegistry, bool bSkipCheckOnFail)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(98))) };
+
+        COLORREF AccentClr{ 0 };
+        BOOL opaque = FALSE;
+        
+        if (s_GetImmersiveColorFromColorSetEx && s_GetImmersiveColorTypeFromName && s_GetImmersiveUserColorSetPreference) 
         {
-            outColor = RGB(
-                (colorization >> 16) & 0xFF,
-                (colorization >> 8) & 0xFF,
-                colorization & 0xFF
+            AccentClr = s_GetImmersiveColorFromColorSetEx(
+                s_GetImmersiveUserColorSetPreference(false, false),
+                s_GetImmersiveColorTypeFromName(L"ImmersiveStartHoverBackground"),
+                true,
+                0
             );
+            outColor = RGB((AccentClr & 0xFF), (AccentClr >> 8) & 0xFF, (AccentClr >> 16) & 0xFF);
             return TRUE;
         }
-        outColor = DWMWA_COLOR_DEFAULT;
-        return FALSE;
+        else if (SUCCEEDED(DwmGetColorizationColor(&AccentClr, &opaque)))
+        {
+            outColor = RGB((AccentClr >> 16) & 0xFF, (AccentClr >> 8) & 0xFF,  AccentClr & 0xFF);
+            return TRUE;
+        }
+        else
+        {
+            outColor = DWMWA_COLOR_DEFAULT;
+            return FALSE;
+        }
     }
     else 
     {
         size_t len = wcslen(hexColor);
         if (len != 6 && len != 8)
+        {
+            Wh_Log(L"[ERROR] Invalid color length");
             return FALSE;
+        }
         
         auto hexToByte = [](WCHAR c) -> int {
             if (c >= L'0' && c <= L'9') return c - L'0';
@@ -1824,8 +1901,6 @@ void LoadSettings(void)
         g_settings.CornerPref = g_settings.DefaultRounded;
     Wh_FreeStringSetting(pszCornerType);
 
-    DwmSetWindowAttributeHook();
-
     g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RainbowSpeed"));
 
     g_settings.TitlebarFlag = Wh_GetIntSetting(L"TitlebarColor.ColorTitlebar");
@@ -1871,6 +1946,9 @@ void LoadSettings(void)
     g_settings.MenuBorderFlag = Wh_GetIntSetting(L"BorderColor.MenuBorderColor");
 
     Wh_FreeStringSetting(pszStyle);
+
+    if (g_settings.TitlebarFlag || g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.BgType != g_settings.Default)
+        DwmSetWindowAttributeHook();
 
     // Process Rules
 
@@ -1972,6 +2050,9 @@ void LoadSettings(void)
                 }
 
                 g_settings.MenuBorderFlag = g_settings.BorderFlag;
+
+                if (g_settings.TitlebarFlag || g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.BgType != g_settings.Default)
+                    DwmSetWindowAttributeHook();
             }
         }
 
@@ -1980,7 +2061,7 @@ void LoadSettings(void)
         if (!hasProgram) {
             break;
         }
-    }    
+    }   
 }
 
 BOOL Wh_ModInit(void) 
@@ -2020,7 +2101,8 @@ void Wh_ModAfterInit()
 void Wh_ModUninit(void) 
 { 
     g_settings.Unload = TRUE;
-    RevertSysColors();
+    if (g_settings.FillBg)
+        RevertSysColors();
 
     std::unordered_set<HWND> RainbowWindows;
     {
