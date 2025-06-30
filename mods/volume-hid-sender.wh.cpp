@@ -205,7 +205,7 @@ DWORD WINAPI ThreadFunc(void * data) {
         Sleep(2 SECONDS);
         float vol = GetSystemVolume(VolumeUnit::Scalar);
         Wh_Log(L"Volume Info: %f", vol);
-        startup(L"I:\\hidapitest\\hidapitester.exe", FormCommand(vol));
+        startup(HID_PATH, FormCommand(vol));
         Sleep(5 SECONDS);
         vol = GetSystemVolume(VolumeUnit::Scalar);
         Wh_Log(L"Volume Info: %f", vol);
