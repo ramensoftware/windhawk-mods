@@ -11,7 +11,7 @@
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
-# Your Awesome Mod
+# Volume HID Sender
 This mod allows you to send HID input for the MOUNTAIN EVEREST MAX keyboard everytime 
 the volume is changed. This solution is not perfect. The volume will frequently be off by one. 
 It is also possible to desync the volume temporarily (until next volume update) by taking
@@ -27,9 +27,14 @@ Requires HID HIDApiTester.
 First get HIDAPITester
 [here](https://github.com/todbot/hidapitester/releases).
 
+Next set the HIDApiTesterPath variable in settings to where you downloaded HIDAPITester to
+
+Finally, Profit 
+
 
 # Special Thanks
 https://stackoverflow.com/questions/4559526/how-do-i-tell-if-the-master-volume-is-muted
+
 https://github.com/todbot/hidapitester
 */
 // ==/WindhawkModReadme==
