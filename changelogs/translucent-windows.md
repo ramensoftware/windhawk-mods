@@ -1,3 +1,10 @@
+## 1.5.1 ([Jun 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e8d7c07e86637230df1c386a05f184da5b96f2d7/mods/translucent-windows.wh.cpp))
+
+* Libraries are now loaded with the LOAD_LIBRARY_SEARCH_SYSTEM32 flag to prevent malicious or accidental dll hijacking. https://github.com/ramensoftware/windhawk-mods/issues/2063
+* Fixed issue with the accent color not being the correct color in some programs, e.g. snippingtool.exe.
+* Fixed a bug with system colors not being applied and unloaded correctly.
+* Added logs.
+
 ## 1.5.0 ([Jun 4, 2025](https://github.com/ramensoftware/windhawk-mods/blob/0c981a8ec576c27ec33fcc70480c25083aecbb50/mods/translucent-windows.wh.cpp))
 
 * Added Rainbow effect
