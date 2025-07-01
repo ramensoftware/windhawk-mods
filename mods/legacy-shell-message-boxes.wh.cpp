@@ -5,7 +5,8 @@
 // @version         1.0.0
 // @author          aubymori
 // @github          https://github.com/aubymori
-// @include         *
+// @include         explorer.exe
+// @include         notepad.exe
 // @compilerOptions -lshlwapi -lversion
 // ==/WindhawkMod==
 
@@ -28,7 +29,7 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
 #include <shlwapi.h>
 #include <windhawk_utils.h>
 
-DWORD g_dwSMBThreadID = (DWORD)-1;
+thread_local bool g_fInSMB = false;
 
 LPWSTR (__fastcall *ConstructMessageStringW)(HINSTANCE hInst, LPCWSTR pszMsg, va_list *ArgList);
 LPSTR (__fastcall *ConstructMessageStringA)(HINSTANCE hInst, LPCSTR pszMsg, va_list *ArgList);
@@ -41,9 +42,9 @@ HRESULT WINAPI TaskDialogIndirect_hook(
     BOOL                   *pfVerificationFlagChecked
 )
 {
-    if (g_dwSMBThreadID != (DWORD)-1 && g_dwSMBThreadID == GetCurrentThreadId())
+    if (g_fInSMB)
     {
-        g_dwSMBThreadID = (DWORD)-1;
+        g_fInSMB = false;
         return E_FAIL;
     }
     return TaskDialogIndirect_orig(pTaskConfig, pnButton, pnRadioButton, pfVerificationFlagChecked);
@@ -63,21 +64,21 @@ int WINAPI ShellMessageBoxW_hook(
     ...
 )
 {
-    g_dwSMBThreadID = GetCurrentThreadId();
     va_list args;
     va_start(args, fuStyle);
     LPWSTR pszMsg = ConstructMessageStringW(hAppInst, lpcText, &args);
     int nRet = 0;
     if (pszMsg)
     {
+        g_fInSMB = true;
         nRet = ShellMessageBoxW_orig(hAppInst, hWnd, pszMsg, lpcTitle, fuStyle);
         LocalFree(pszMsg);
     }
     else
     {
-        g_dwSMBThreadID = (DWORD)-1;
         SetLastError(ERROR_OUTOFMEMORY);
     }
+    g_fInSMB = false;
     va_end(args);
     return nRet;
 }
@@ -93,21 +94,21 @@ int WINAPI ShellMessageBoxA_hook(
     ...
 )
 {
-    g_dwSMBThreadID = GetCurrentThreadId();
     va_list args;
     va_start(args, fuStyle);
     LPSTR pszMsg = ConstructMessageStringA(hAppInst, lpcText, &args);
     int nRet = 0;
     if (pszMsg)
     {
+        g_fInSMB = true;
         nRet = ShellMessageBoxA_orig(hAppInst, hWnd, pszMsg, lpcTitle, fuStyle);
         LocalFree(pszMsg);
     }
     else
     {
-        g_dwSMBThreadID = (DWORD)-1;
         SetLastError(ERROR_OUTOFMEMORY);
     }
+    g_fInSMB = false;
     va_end(args);
     return nRet;
 }
@@ -188,7 +189,7 @@ HMODULE LoadComCtlModule(void)
     HANDLE hActCtx = CreateActCtxW(&actCtx);
     ULONG_PTR ulCookie;
     ActivateActCtx(hActCtx, &ulCookie);
-    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+    HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     /**
       * Certain processes will ignore the activation context and load
       * comctl32.dll 5.82 anyway. If that occurs, just reject it.
