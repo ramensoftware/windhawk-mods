@@ -2457,6 +2457,27 @@
                 "version": "1.0.0"
             }
         },
+        "no-properties-icon": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1751396376000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1751396376000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "xalejandro",
+                "compilerOptions": "-lcomctl32 -lversion",
+                "description": "Removes the window icon from property sheets like previous Windows versions",
+                "github": "https://github.com/tetawaves",
+                "include": [
+                    "*"
+                ],
+                "name": "No Properties Icon",
+                "version": "1.0"
+            }
+        },
         "no-run-icon": {
             "details": {
                 "defaultSorting": 4540,
