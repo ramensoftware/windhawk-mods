@@ -179,6 +179,11 @@ BOOL Wh_ModInit(void)
     }
 
     HMODULE hComCtl32 = LoadComCtlModule();
+    if (!hComCtl32)
+    {
+        Wh_Log(L"Failed to load comctl32.dll");
+        return FALSE;
+    }
 
     const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[]
     {
@@ -200,7 +205,7 @@ BOOL Wh_ModInit(void)
         },
     };
 
-    WindhawkUtils::SYMBOL_HOOK comCtl32hook = {
+    WindhawkUtils::SYMBOL_HOOK comCtl32Dllhook = {
         {
             #ifdef _WIN64
             L"__int64 __cdecl PropSheetDlgProc(struct HWND__ *,unsigned int,unsigned __int64,__int64)"
@@ -220,7 +225,7 @@ BOOL Wh_ModInit(void)
         return FALSE;
     }
 
-    if (!WindhawkUtils::HookSymbols(hComCtl32, &comCtl32hook, 1))
+    if (!WindhawkUtils::HookSymbols(hComCtl32, &comCtl32Dllhook, 1))
     {
         Wh_Log(L"Failed to hook comctl32.dll");
         return FALSE;
