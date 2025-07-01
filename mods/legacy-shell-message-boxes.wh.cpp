@@ -5,8 +5,7 @@
 // @version         1.0.0
 // @author          aubymori
 // @github          https://github.com/aubymori
-// @include         explorer.exe
-// @include         notepad.exe
+// @include         *
 // @compilerOptions -lshlwapi -lversion
 // ==/WindhawkMod==
 
@@ -71,7 +70,7 @@ int WINAPI ShellMessageBoxW_hook(
     if (pszMsg)
     {
         g_fInSMB = true;
-        nRet = ShellMessageBoxW_orig(hAppInst, hWnd, pszMsg, lpcTitle, fuStyle);
+        nRet = ShellMessageBoxW_orig(hAppInst, hWnd, L"%s", lpcTitle, fuStyle, pszMsg);
         LocalFree(pszMsg);
     }
     else
@@ -101,7 +100,7 @@ int WINAPI ShellMessageBoxA_hook(
     if (pszMsg)
     {
         g_fInSMB = true;
-        nRet = ShellMessageBoxA_orig(hAppInst, hWnd, pszMsg, lpcTitle, fuStyle);
+        nRet = ShellMessageBoxA_orig(hAppInst, hWnd, "%s", lpcTitle, fuStyle, pszMsg);
         LocalFree(pszMsg);
     }
     else
