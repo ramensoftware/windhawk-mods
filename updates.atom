@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-01T18:59:36.000Z</updated>
+    <updated>2025-07-01T22:08:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy Shell Message Boxes 1.0.0]]></title>
+        <id>https://windhawk.net/mods/legacy-shell-message-boxes#3229a6dfbafa86f4017a7787dd52de5676a05219</id>
+        <link href="https://windhawk.net/mods/legacy-shell-message-boxes"/>
+        <updated>2025-07-01T22:08:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="legacyshellmessageboxes">Legacy Shell Message Boxes</h1>
+<p>This mod makes message boxes opened by the <code>ShellMessageBox</code> API use regular message boxes like in
+Windows XP and before instead of task dialogs, like they do in Windows Vista and later.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/legacy-shell-message-boxes-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/legacy-shell-message-boxes-after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No Properties Icon 1.0]]></title>
         <id>https://windhawk.net/mods/no-properties-icon#6a6232d08f4aa992db667fd3f0c237af31fbfc3c</id>
@@ -274,20 +291,6 @@ private debug symbols</li>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Accent Color Sync 1.6]]></title>
-        <id>https://windhawk.net/mods/accent-color-sync#83686a2c455d411a2b1a2e2f853984859ef71647</id>
-        <link href="https://windhawk.net/mods/accent-color-sync"/>
-        <updated>2025-06-17T07:23:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added option to replicate Windows Vista's Aero shader (experimental).</li>
-<li>Partially updated translations</li>
-</ul>]]></content>
-        <author>
-            <name>CatmanFan / Mr._Lechkar</name>
-            <uri>https://github.com/CatmanFan</uri>
         </author>
     </entry>
 </feed>

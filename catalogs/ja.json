@@ -2093,6 +2093,27 @@
                 "version": "1.0.0"
             }
         },
+        "legacy-shell-message-boxes": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1751407689000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1751407689000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lshlwapi -lversion",
+                "description": "Makes ShellMessageBox use message boxes rather than task dialogs",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Legacy Shell Message Boxes",
+                "version": "1.0.0"
+            }
+        },
         "lines-in-mmc": {
             "details": {
                 "defaultSorting": 860,
