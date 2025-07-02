@@ -2,7 +2,7 @@
 // @id              legacy-shell-message-boxes
 // @name            Legacy Shell Message Boxes
 // @description     Makes ShellMessageBox use message boxes rather than task dialogs
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -70,7 +70,7 @@ int WINAPI ShellMessageBoxW_hook(
     if (pszMsg)
     {
         g_fInSMB = true;
-        nRet = ShellMessageBoxW_orig(hAppInst, hWnd, L"%s", lpcTitle, fuStyle, pszMsg);
+        nRet = ShellMessageBoxW_orig(hAppInst, hWnd, L"%1", lpcTitle, fuStyle, pszMsg);
         LocalFree(pszMsg);
     }
     else
@@ -100,7 +100,7 @@ int WINAPI ShellMessageBoxA_hook(
     if (pszMsg)
     {
         g_fInSMB = true;
-        nRet = ShellMessageBoxA_orig(hAppInst, hWnd, "%s", lpcTitle, fuStyle, pszMsg);
+        nRet = ShellMessageBoxA_orig(hAppInst, hWnd, "%1", lpcTitle, fuStyle, pszMsg);
         LocalFree(pszMsg);
     }
     else
