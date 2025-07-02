@@ -2099,7 +2099,7 @@
                 "published": 1751407689000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1751407689000,
+                "updated": 1751462250000,
                 "users": 0
             },
             "metadata": {
@@ -2111,7 +2111,7 @@
                     "*"
                 ],
                 "name": "Legacy Shell Message Boxes",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "lines-in-mmc": {

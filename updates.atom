@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-01T22:08:09.000Z</updated>
+    <updated>2025-07-02T13:17:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy Shell Message Boxes 1.0.1]]></title>
+        <id>https://windhawk.net/mods/legacy-shell-message-boxes#e1493954e5bd412d6cd2a9dbfc60ca5d943737d3</id>
+        <link href="https://windhawk.net/mods/legacy-shell-message-boxes"/>
+        <updated>2025-07-02T13:17:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix string format</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy Shell Message Boxes 1.0.0]]></title>
         <id>https://windhawk.net/mods/legacy-shell-message-boxes#3229a6dfbafa86f4017a7787dd52de5676a05219</id>
@@ -272,21 +285,6 @@ Previously, a hack in themes allowed this navbar background, but also interfered
 private debug symbols</li>
 <li>Completely rewrite init function to use macros, it is now less repetitive</li>
 <li>Modify some of the option descriptions to be clearer</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Desktop Watermark 1.1.0]]></title>
-        <id>https://windhawk.net/mods/custom-desktop-watermark#d5b48dbb461bd68125950069d6c124ee5b15bff0</id>
-        <link href="https://windhawk.net/mods/custom-desktop-watermark"/>
-        <updated>2025-06-18T19:06:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add notice to README about empty lines</li>
-<li>Add option to force a specific line to be bold</li>
-<li>Add option to change the horizontal alignment of a specific line</li>
 </ul>]]></content>
         <author>
             <name>aubymori</name>
