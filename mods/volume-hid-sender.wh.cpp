@@ -7,7 +7,7 @@
 // @github          https://github.com/rom4ster
 // @include         explorer.exe
 // @include         ShellHost.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lurlmon -lruntimeobject -Wl,--export-all-symbols -v 
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lurlmon -lruntimeobject
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -84,6 +84,9 @@ https://github.com/todbot/hidapitester
 #define HIDTesterSetting L"HIDApiTesterPath"
 
 
+
+
+
 // #define APPCOMMAND_VOLUME_MUTE 0x80000
 // #define APPCOMMAND_VOLUME_UP 0xA0000
 // #define APPCOMMAND_VOLUME_DOWN 0x90000               
@@ -105,6 +108,7 @@ enum class VolumeUnit {
 
 
  PCWSTR HID_PATH = nullptr;
+
 
 DLLExport float GetSystemVolume(VolumeUnit vUnit) {
         HRESULT hr;
@@ -192,11 +196,21 @@ LPWSTR  FormCommand(float vol) {
     std::wstring commandp1(L"64,0x11,0x83,00,00,");
     std::wstring commandp2(L",00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00"); //Setting
     std::wstring command = commandp1 + volstring + commandp2;
-    std::wstring fullstr(HID_PATH);
+    std::wstring q1 = std::wstring(L"\"");
+    std::wstring fullstr(q1 + HID_PATH + q1);
 
     std::wstring * completestr = new std::wstring(fullstr SPACE L"--vidpid" SPACE vid + L":" + pid SPACE L"--usagePage" SPACE usage_page SPACE L"--usage" SPACE usage SPACE L"--open" SPACE L"--send-output" SPACE command);     
     Wh_Log( L"%s", ( PCWSTR) completestr->c_str());
-    return (LPWSTR ) completestr->c_str();
+    auto cstr = completestr->c_str();
+    
+    WCHAR * arr = (WCHAR *) malloc(sizeof(WCHAR) * wcslen(cstr));
+
+    wcscpy(arr, cstr);
+
+    delete completestr;
+
+
+    return (LPWSTR ) arr;
 
 }
 
@@ -204,12 +218,15 @@ LPWSTR  FormCommand(float vol) {
 DWORD WINAPI ThreadFunc(void * data) {
         Sleep(2 SECONDS);
         float vol = GetSystemVolume(VolumeUnit::Scalar);
+        WCHAR * ptr; 
         Wh_Log(L"Volume Info: %f", vol);
-        startup(HID_PATH, FormCommand(vol));
+        startup(HID_PATH, (ptr = FormCommand(vol)));
+        free(ptr);
         Sleep(5 SECONDS);
         vol = GetSystemVolume(VolumeUnit::Scalar);
         Wh_Log(L"Volume Info: %f", vol);
-        startup(L"hidapitester.exe",FormCommand(vol));
+        startup(HID_PATH, (ptr = FormCommand(vol)));
+        free(ptr);
         //Sleep(15 SECONDS);
         //vol = GetSystemVolume(VolumeUnit::Scalar);
         //Wh_Log(L"Volume Info: %f", vol);
@@ -279,12 +296,28 @@ void Init_Settings() {
     HID_PATH = Wh_GetStringSetting(HIDTesterSetting);
 }
 
+void UnInit_Settings() {
+    if (HID_PATH != nullptr) {
+         Wh_FreeStringSetting(HID_PATH);
+    }
+    
+}
+
 bool Check_Requirements() {
     if (!FileExists(HID_PATH)) {
         Download_EXE();
         return FALSE;
     }
     return TRUE;
+}
+
+
+void Wh_ModSettingsChanged() {
+    Init_Settings();
+}
+
+void Wh_ModBeforeUninit() {
+    UnInit_Settings();
 }
 
 BOOL Wh_ModInit() {
