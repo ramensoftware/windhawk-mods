@@ -7,7 +7,7 @@
 // @github          https://github.com/rom4ster
 // @include         explorer.exe
 // @include         ShellHost.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lurlmon -lruntimeobject
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lurlmon -lruntimeobject -v
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -180,7 +180,7 @@ VOID startup(LPCTSTR lpApplicationName, LPWSTR cmdLine )
 }
 
 
-LPWSTR  FormCommand(float vol) {
+std::wstring  FormCommand(float vol) {
     LPWSTR vid = (LPWSTR) L"3282"; //setting
     LPWSTR pid = (LPWSTR) L"0001"; //setting
     LPWSTR usage_page = (LPWSTR) L"65280"; //setting
@@ -199,18 +199,16 @@ LPWSTR  FormCommand(float vol) {
     std::wstring q1 = std::wstring(L"\"");
     std::wstring fullstr(q1 + HID_PATH + q1);
 
-    std::wstring * completestr = new std::wstring(fullstr SPACE L"--vidpid" SPACE vid + L":" + pid SPACE L"--usagePage" SPACE usage_page SPACE L"--usage" SPACE usage SPACE L"--open" SPACE L"--send-output" SPACE command);     
-    Wh_Log( L"%s", ( PCWSTR) completestr->c_str());
-    auto cstr = completestr->c_str();
+    std::wstring completestr =  std::wstring(fullstr SPACE L"--vidpid" SPACE vid + L":" + pid SPACE L"--usagePage" SPACE usage_page SPACE L"--usage" SPACE usage SPACE L"--open" SPACE L"--send-output" SPACE command);     
+    Wh_Log( L"%s", ( PCWSTR) completestr.c_str());
+
     
-    WCHAR * arr = (WCHAR *) malloc(sizeof(WCHAR) * wcslen(cstr));
-
-    wcscpy(arr, cstr);
-
-    delete completestr;
 
 
-    return (LPWSTR ) arr;
+
+
+
+    return completestr;
 
 }
 
@@ -218,15 +216,14 @@ LPWSTR  FormCommand(float vol) {
 DWORD WINAPI ThreadFunc(void * data) {
         Sleep(2 SECONDS);
         float vol = GetSystemVolume(VolumeUnit::Scalar);
-        WCHAR * ptr; 
+
         Wh_Log(L"Volume Info: %f", vol);
-        startup(HID_PATH, (ptr = FormCommand(vol)));
-        free(ptr);
+        startup(HID_PATH, ((LPWSTR) FormCommand(vol).c_str()));
         Sleep(5 SECONDS);
         vol = GetSystemVolume(VolumeUnit::Scalar);
         Wh_Log(L"Volume Info: %f", vol);
-        startup(HID_PATH, (ptr = FormCommand(vol)));
-        free(ptr);
+        startup(HID_PATH, ((LPWSTR) FormCommand(vol).c_str()));
+        Sleep(2 SECONDS);
         //Sleep(15 SECONDS);
         //vol = GetSystemVolume(VolumeUnit::Scalar);
         //Wh_Log(L"Volume Info: %f", vol);
