@@ -7,7 +7,7 @@
 // @github          https://github.com/rom4ster
 // @include         explorer.exe
 // @include         ShellHost.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lurlmon -lruntimeobject -v
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lurlmon -lruntimeobject
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
