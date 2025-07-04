@@ -290,6 +290,7 @@ BOOL FileExists(LPCTSTR szPath)
 }
 
 void Init_Settings() {
+     UnInit_Settings();
     HID_PATH = Wh_GetStringSetting(HIDTesterSetting);
 }
 
