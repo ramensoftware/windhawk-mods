@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-02T13:17:30.000Z</updated>
+    <updated>2025-07-04T18:42:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No Properties Icon 1.0.1]]></title>
+        <id>https://windhawk.net/mods/no-properties-icon#44ce7b23ea3db90ef619aaae50bd1f4dd38550ef</id>
+        <link href="https://windhawk.net/mods/no-properties-icon"/>
+        <updated>2025-07-04T18:42:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix calling convention</li>
+</ul>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy Shell Message Boxes 1.0.1]]></title>
         <id>https://windhawk.net/mods/legacy-shell-message-boxes#e1493954e5bd412d6cd2a9dbfc60ca5d943737d3</id>
@@ -265,26 +278,6 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
         <updated>2025-06-23T19:13:31.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fix a crash caused by a missing null terminator in the navbar theme class name</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.7.0]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#ea7ae610c721354ed1390a538ed1f03d39dd7b5a</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2025-06-23T16:40:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Introduce option for Windows 8 beta navigation bar background</li>
-<li>The logic to draw the background this way is not present in modern Windows.
-Previously, a hack in themes allowed this navbar background, but also interfered with Internet Explorer.</li>
-<li>Fix a bug where glass would apply on ribbon visibility change with the option disabled</li>
-<li>Change the names of most hook function arguments and class members (macros) to match the names from
-private debug symbols</li>
-<li>Completely rewrite init function to use macros, it is now less repetitive</li>
-<li>Modify some of the option descriptions to be clearer</li>
 </ul>]]></content>
         <author>
             <name>aubymori</name>

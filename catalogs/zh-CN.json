@@ -2484,7 +2484,7 @@
                 "published": 1751396376000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1751396376000,
+                "updated": 1751654538000,
                 "users": 19
             },
             "metadata": {
@@ -2496,7 +2496,7 @@
                     "*"
                 ],
                 "name": "No Properties Icon",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "no-run-icon": {
