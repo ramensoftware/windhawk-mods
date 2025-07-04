@@ -289,10 +289,6 @@ BOOL FileExists(LPCTSTR szPath)
          !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-void Init_Settings() {
-     UnInit_Settings();
-    HID_PATH = Wh_GetStringSetting(HIDTesterSetting);
-}
 
 void UnInit_Settings() {
     if (HID_PATH != nullptr) {
@@ -300,6 +296,13 @@ void UnInit_Settings() {
     }
     
 }
+
+void Init_Settings() {
+     UnInit_Settings();
+    HID_PATH = Wh_GetStringSetting(HIDTesterSetting);
+}
+
+
 
 bool Check_Requirements() {
     if (!FileExists(HID_PATH)) {
