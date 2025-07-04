@@ -2,7 +2,7 @@
 // @id              no-properties-icon
 // @name            No Properties Icon
 // @description     Removes the window icon from property sheets like previous Windows versions
-// @version         1.0
+// @version         1.0.1
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -120,8 +120,8 @@ int STDCALL _SetPropertySheetIcon_hook(IDataObject *, ITEMIDLIST_ABSOLUTE *, PRO
     return 0;
 }
 
-int (STDCALL *_SetIconToCPLStubWindow_orig)(HWND, void *, void *, LPWSTR);
-int STDCALL _SetIconToCPLStubWindow_hook(HWND, void *, void *, LPWSTR)
+int (__fastcall *_SetIconToCPLStubWindow_orig)(HWND, void *, void *, LPWSTR);
+int __fastcall _SetIconToCPLStubWindow_hook(HWND, void *, void *, LPWSTR)
 {
     return 0;
 }
