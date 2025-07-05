@@ -264,11 +264,11 @@ void Set_Hooks() {
     if (user32Module) {
         // SendMessageW_t * pSendMessageW =
         //     GetProcAddress(user32Module, "SendMessageW");
-        if (true) {
+
             WindhawkUtils::SetFunctionHook(SendMessageW,
                                SendMessage_Hook,
                                &SendMessageW_Original);
-        }
+        
     }
 
 }
