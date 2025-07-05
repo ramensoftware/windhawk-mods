@@ -1,3 +1,10 @@
+## 1.3 ([Jul 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cad5479d01f8bdd92144a219fcf6844a34e26c89/mods/taskbar-icon-size.wh.cpp))
+
+* Added support for newer Windows 11 builds with support for smaller taskbar icons. For the newer builds, on Settings > Personalization > Taskbar, the “Taskbar behaviors” settings now include the “Show smaller taskbar buttons” option. If the option is available, the mod is now able to customize both the large icons and the small icons.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+* Improved the quality of small 16x16 icons.
+* Fixed sizing of the search button in recent Windows 11 builds.
+
 ## 1.2.17 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b17320a6b8fe99338c82c8bcd7d948c9fabbb99d/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.
