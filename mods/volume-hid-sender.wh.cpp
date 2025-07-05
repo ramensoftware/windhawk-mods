@@ -64,7 +64,7 @@ https://github.com/todbot/hidapitester
 #include <string>
 #include <sstream>
 #include <Urlmon.h>
-
+#include <windhawk_utils.h>
 
 
 #define WLog(X) Wh_Log( L"%s", X)
@@ -232,7 +232,7 @@ DWORD WINAPI ThreadFunc(void * data) {
 }
 
 
-LRESULT SendMessage_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+LRESULT WINAPI SendMessage_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
   
   
   // Check for correct message 
@@ -265,7 +265,7 @@ void Set_Hooks() {
         void* pSendMessageW =
             (void*)GetProcAddress(user32Module, "SendMessageW");
         if (pSendMessageW) {
-            Wh_SetFunctionHook(pSendMessageW,
+            WindhawkUtils::SetFunctionHook(pSendMessageW,
                                (void*) SendMessage_Hook,
                                (void**)&SendMessageW_Original);
         }
