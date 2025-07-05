@@ -147,8 +147,8 @@ DLLExport float GetSystemVolume(VolumeUnit vUnit) {
 
 
 
-using SendMessageW_t = LRESULT (HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
-SendMessageW_t*  SendMessageW_Original;
+using SendMessageW_t = decltype(&SendMessageW);
+SendMessageW_t  SendMessageW_Original;
 
 
 VOID startup(LPCTSTR lpApplicationName, LPWSTR cmdLine )
@@ -232,7 +232,7 @@ DWORD WINAPI ThreadFunc(void * data) {
 }
 
 
-LRESULT WINAPI SendMessage_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+ LRESULT WINAPI SendMessage_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
   
   
   // Check for correct message 
@@ -262,12 +262,12 @@ LRESULT WINAPI SendMessage_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPara
 void Set_Hooks() {
         HMODULE user32Module = LoadLibrary(L"user32.dll");
     if (user32Module) {
-        void* pSendMessageW =
-            (void*)GetProcAddress(user32Module, "SendMessageW");
-        if (pSendMessageW) {
-            WindhawkUtils::SetFunctionHook(pSendMessageW,
-                               (void*) SendMessage_Hook,
-                               (void**)&SendMessageW_Original);
+        // SendMessageW_t * pSendMessageW =
+        //     GetProcAddress(user32Module, "SendMessageW");
+        if (true) {
+            WindhawkUtils::SetFunctionHook(SendMessageW,
+                               SendMessage_Hook,
+                               &SendMessageW_Original);
         }
     }
 
