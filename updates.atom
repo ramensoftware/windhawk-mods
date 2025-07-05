@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-04T18:42:18.000Z</updated>
+    <updated>2025-07-05T19:16:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Volume HID Sendeer 0.1]]></title>
+        <id>https://windhawk.net/mods/volume-hid-sender#ea9266452ed4e81227552681af10d99512cdc12b</id>
+        <link href="https://windhawk.net/mods/volume-hid-sender"/>
+        <updated>2025-07-05T19:16:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="volumehidsender">Volume HID Sender</h1>
+<p>This mod allows you to send HID input for the MOUNTAIN EVEREST MAX keyboard everytime 
+the volume is changed. This solution is not perfect. The volume will frequently be off by one. 
+It is also possible to desync the volume temporarily (until next volume update) by taking
+a very long time to decide which volume you want. </p>
+<p>Custom timeouts may be supported in the future</p>
+<p>Arbritary HID output will be supported in the future</p>
+<p>Requires HID HIDApiTester. </p>
+<h1 id="gettingstarted">Getting started</h1>
+<p>First get HIDAPITester
+<a href="https://github.com/todbot/hidapitester/releases">here</a>.</p>
+<p>Next set the HIDApiTesterPath variable in settings to where you downloaded HIDAPITester to</p>
+<p>Finally, Profit </p>
+<h1 id="specialthanks">Special Thanks</h1>
+<p>https://stackoverflow.com/questions/4559526/how-do-i-tell-if-the-master-volume-is-muted</p>
+<p>https://github.com/todbot/hidapitester</p>]]></content>
+        <author>
+            <name>rom4ster</name>
+            <uri>https://github.com/rom4ster</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No Properties Icon 1.0.1]]></title>
         <id>https://windhawk.net/mods/no-properties-icon#44ce7b23ea3db90ef619aaae50bd1f4dd38550ef</id>
@@ -265,19 +291,6 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
         <updated>2025-06-27T10:10:59.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Update <code>LoadComCtlModule</code> to reject version 5.82</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.7.1]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#7f4839438dad587631cb7478c5c122417f3a5e95</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2025-06-23T19:13:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix a crash caused by a missing null terminator in the navbar theme class name</li>
 </ul>]]></content>
         <author>
             <name>aubymori</name>

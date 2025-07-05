@@ -4477,6 +4477,28 @@
                 "version": "1.0"
             }
         },
+        "volume-hid-sender": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1751742975000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1751742975000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "rom4ster",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lurlmon -lruntimeobject",
+                "description": "HID Mod For Volume (Mountain Everest Max Only)",
+                "github": "https://github.com/rom4ster",
+                "include": [
+                    "explorer.exe",
+                    "ShellHost.exe"
+                ],
+                "name": "Volume HID Sendeer",
+                "version": "0.1"
+            }
+        },
         "vscode-tweaker": {
             "details": {
                 "defaultSorting": 1370,
