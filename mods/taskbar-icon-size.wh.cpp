@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -560,10 +560,9 @@ TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_t
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Hook(
     int enumTaskbarSize) {
-    if (g_hasDynamicIconScaling) {
-        return TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Original(
-            enumTaskbarSize);
-    }
+    // Even if the feature flag is enabled, the feature may not be actually
+    // enabled for some reason. Handle this here by resetting the flag.
+    g_hasDynamicIconScaling = false;
 
     Wh_Log(L"> %d", enumTaskbarSize);
 
@@ -581,10 +580,9 @@ TaskbarConfiguration_GetIconHeightInViewPixels_double_t
     TaskbarConfiguration_GetIconHeightInViewPixels_double_Original;
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_double_Hook(double baseHeight) {
-    if (g_hasDynamicIconScaling) {
-        return TaskbarConfiguration_GetIconHeightInViewPixels_double_Original(
-            baseHeight);
-    }
+    // Even if the feature flag is enabled, the feature may not be actually
+    // enabled for some reason. Handle this here by resetting the flag.
+    g_hasDynamicIconScaling = false;
 
     if (!g_unloading) {
         return g_settings.iconSize;
@@ -1290,14 +1288,14 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
         return;
     }
 
-    double defaultWidthExtra = 0;
+    double defaultWidthExtra = -4;
 
     auto className = winrt::get_class_name(toggleButtonElement);
     if (className == L"Taskbar.ExperienceToggleButton") {
         auto automationId = Automation::AutomationProperties::GetAutomationId(
             toggleButtonElement);
         if (automationId == L"StartButton") {
-            defaultWidthExtra = 11;
+            defaultWidthExtra = -3;
         }
     } else if (className == L"Taskbar.SearchBoxButton") {
         // Only if search icon and not a search box.
@@ -1316,13 +1314,18 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
         return;
     }
 
+    // For the start button, the padding is different depending on the alignment
+    // of the taskbar (left/center).
+    auto buttonPadding = panelElement.Padding();
+
     double defaultWidth = g_smallIconSize ? 32 : 44;
     double overrideWidth =
         g_unloading ? defaultWidth
                     : (g_smallIconSize ? g_settings.taskbarButtonWidthSmall
                                        : g_settings.taskbarButtonWidth);
 
-    double newWidth = overrideWidth + defaultWidthExtra;
+    double newWidth = overrideWidth + buttonPadding.Left + buttonPadding.Right +
+                      defaultWidthExtra;
     if (newWidth != buttonWidth) {
         Wh_Log(L"Updating MediumTaskbarButtonExtent for %s: %f->%f",
                className.c_str(), buttonWidth, newWidth);
@@ -1369,13 +1372,16 @@ void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
         return;
     }
 
+    auto buttonPadding = panelElement.Padding();
+
     double defaultWidth = g_smallIconSize ? 32 : 44;
     double overrideWidth =
         g_unloading ? defaultWidth
                     : (g_smallIconSize ? g_settings.taskbarButtonWidthSmall
                                        : g_settings.taskbarButtonWidth);
 
-    double newWidth = overrideWidth;
+    double newWidth =
+        overrideWidth + buttonPadding.Left + buttonPadding.Right - 4;
     if (newWidth != buttonWidth) {
         Wh_Log(L"Updating MediumTaskbarButtonExtent: %f->%f", buttonWidth,
                newWidth);
