@@ -1,3 +1,8 @@
+## 1.3.1 ([Jul 6, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f24431bf623008bd0d2ad6e4ba05c8788bbb6ebe/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed the mod for some Windows 11 builds which don't yet have the small icons option.
+* Fixed an incorrect width of the start button in some cases.
+
 ## 1.3 ([Jul 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cad5479d01f8bdd92144a219fcf6844a34e26c89/mods/taskbar-icon-size.wh.cpp))
 
 * Added support for newer Windows 11 builds with support for smaller taskbar icons. For the newer builds, on Settings > Personalization > Taskbar, the “Taskbar behaviors” settings now include the “Show smaller taskbar buttons” option. If the option is available, the mod is now able to customize both the large icons and the small icons.
