@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-06T16:20:55.000Z</updated>
+    <updated>2025-07-06T20:53:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Spoof Light/Dark Theme 1.0.2]]></title>
+        <id>https://windhawk.net/mods/spoof-light-dark-theme#6957e8c744705ce82a7baa9d6b9d821423fec60c</id>
+        <link href="https://windhawk.net/mods/spoof-light-dark-theme"/>
+        <updated>2025-07-06T20:53:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix "Invalid parameter passed to C runtime function" log spam</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Favorites in Navigation Pane 1.0.3]]></title>
+        <id>https://windhawk.net/mods/favorites-in-navpane#1c35cbcd783ff929a94d313657f621d2ad2f9a1a</id>
+        <link href="https://windhawk.net/mods/favorites-in-navpane"/>
+        <updated>2025-07-06T20:51:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix debug log spam by checking if strings are not null before passing them to wcscmp and wcsicmp functions (thanks @aubymori)</li>
+</ul>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.3.1]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#f24431bf623008bd0d2ad6e4ba05c8788bbb6ebe</id>
@@ -270,32 +296,6 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
         <author>
             <name>anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix Classic Theme Maximized Windows 2.2]]></title>
-        <id>https://windhawk.net/mods/classic-maximized-windows-fix#b345471bbc41410cb7e0d74396157090a0ddf2b5</id>
-        <link href="https://windhawk.net/mods/classic-maximized-windows-fix"/>
-        <updated>2025-06-28T17:38:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>LoadLibrary -&gt; LoadLibraryEx limited to System32 for UxTheme load</li>
-</ul>]]></content>
-        <author>
-            <name>ephemeralViolette</name>
-            <uri>https://github.com/ephemeralViolette</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Resource Redirect 1.2.1]]></title>
-        <id>https://windhawk.net/mods/icon-resource-redirect#88473fba37aafef3009f3b609ca35bd55218e9bc</id>
-        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
-        <updated>2025-06-27T19:39:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an error when launching programs without a visual style manifest.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

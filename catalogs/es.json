@@ -1693,7 +1693,7 @@
                 "published": 1742054420000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1751150239000,
+                "updated": 1751835080000,
                 "users": 177
             },
             "metadata": {
@@ -1705,7 +1705,7 @@
                     "*"
                 ],
                 "name": "Favorites in Navigation Pane",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "file-explorer-remove-suffixes": {
@@ -3079,7 +3079,7 @@
                 "published": 1739047328000,
                 "rating": 10,
                 "ratingUsers": 4,
-                "updated": 1739548651000,
+                "updated": 1751835196000,
                 "users": 209
             },
             "metadata": {
@@ -3091,7 +3091,7 @@
                     "*"
                 ],
                 "name": "Spoof Light/Dark Theme",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "start-menu-all-apps": {
