@@ -98,7 +98,7 @@ LSTATUS WINAPI RegQueryValueExW_hook(
                     lpBuffer[ulSize / sizeof(WCHAR)] = L'\0';
                     if (EndsWith(lpKeyName, L"\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"))
                     {
-                        *(LPDWORD)lpData = g_fDarkTheme;
+                        *(LPDWORD)lpData = !g_fDarkTheme;
                     }
                 }
                 delete[] lpBuffer;
