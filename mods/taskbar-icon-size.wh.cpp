@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.3.1
+// @version         1.3.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1896,6 +1896,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 {LR"(public: virtual void __cdecl winrt::Taskbar::implementation::LaunchListItemViewModel::IconHeight(double))"},
                 &LaunchListItemViewModel_IconHeight_Original,
                 LaunchListItemViewModel_IconHeight_Hook,
+                true,
             },
             {
                 {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateButtonPadding(void))"},
@@ -2025,6 +2026,7 @@ bool HookTaskbarDllSymbols() {
             {LR"(static  ShellIconLoaderV2::LoadAsyncIcon$_ResumeCoro$1())"},
             &ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Original,
             ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Hook,
+            true,
         },
         {
             {LR"(public: void __cdecl TrayUI::_StuckTrayChange(void))"},
