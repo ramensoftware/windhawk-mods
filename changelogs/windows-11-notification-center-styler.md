@@ -1,3 +1,8 @@
+## 1.3 ([Jul 11, 2025](https://github.com/ramensoftware/windhawk-mods/blob/deda2477f65c93873120051ae41906734197b23e/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added a built-in blur brush object, `WindhawkBlur`, which supports the `BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`.
+* Updated the Matter theme.
+
 ## 1.2 ([May 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c34430995b5cd76960f30692a94afba87a2f4215/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added style constants which can be defined once and used in multiple styles.
