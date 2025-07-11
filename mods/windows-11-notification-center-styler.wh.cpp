@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
-// @description     Customize the Notification Center with themes contributed by others or create your own
-// @version         1.2
+// @description     Customize the Notification Center and Action Center with themes contributed by others or create your own
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -25,8 +25,8 @@
 /*
 # Windows 11 Notification Center Styler
 
-Customize the Notification Center with themes contributed by others or create
-your own.
+Customize the Notification Center and Action Center with themes contributed by
+others or create your own.
 
 Also check out the **Windows 11 Taskbar Styler**, **Windows 11 Start Menu
 Styler** mods.
@@ -103,6 +103,11 @@ specified as following: `Style@VisualState=Value`, in which case the style will
 only apply when the visual state group specified in the target matches the
 specified visual state.
 
+For the XAML syntax, in addition to the built-in taskbar objects, the mod
+provides a built-in blur brush via the `WindhawkBlur` object, which supports the
+`BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur
+BlurAmount="10" TintColor="#80FF00FF"/>`.
+
 Targets and styles starting with two slashes (`//`) are ignored. This can be
 useful for temporarily disabling a target or style.
 
@@ -155,6 +160,10 @@ resource variables.
 The VisualTreeWatcher implementation is based on the
 [ExplorerTAP](https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP)
 code from the **TranslucentTB** project.
+
+The `WindhawkBlur` brush object implementation is based on
+[XamlBlurBrush](https://github.com/TranslucentTB/TranslucentTB/blob/release/ExplorerTAP/XamlBlurBrush.cpp)
+from the **TranslucentTB** project.
 */
 // ==/WindhawkModReadme==
 
@@ -218,6 +227,7 @@ struct ThemeTargetStyles {
 
 struct Theme {
     std::vector<ThemeTargetStyles> targetStyles;
+    std::vector<PCWSTR> styleConstants;
 };
 
 // clang-format off
@@ -344,7 +354,7 @@ const Theme g_theme10JumpLists = {{
     ThemeTargetStyles{L"JumpViewUI.JumpListListView#ItemList", {
         L"Width=256",
         L"Padding=0,5,0,5",
-        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.78\" TintLuminosityOpacity=\"0.77\"  FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />"}},
+        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.78\" TintLuminosityOpacity=\"0.77\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemControl > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.TextBlock", {
         L"FontFamily=Segoe MDL2 Assets"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PinButton > Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.TextBlock", {
@@ -384,7 +394,7 @@ const Theme g_theme10JumpLists = {{
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SystemItemsContainer", {
         L"Padding=0,5,0,5",
-        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.78\" TintLuminosityOpacity=\"0.77\"  FallbackColor=\"{ThemeResource SystemChromeLowColor}\" />"}},
+        L"Background:=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.78\" TintLuminosityOpacity=\"0.77\" FallbackColor=\"{ThemeResource SystemChromeLowColor}\" />"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Windows.UI.Xaml.Controls.Grid#LayoutRoot > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter > Windows.UI.Xaml.Controls.Grid#LayoutRoot > Windows.UI.Xaml.Shapes.Rectangle", {
         L"Margin=12,4,12,4"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListControl#JumpList", {
@@ -397,67 +407,88 @@ const Theme g_theme10JumpLists = {{
 
 const Theme g_themeMatter = {{
     ThemeTargetStyles{L"Grid#NotificationCenterGrid", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"Background:=$base",
         L"BorderThickness=0,0,0,0",
-        L"CornerRadius=17"}},
+        L"CornerRadius=$r1",
+        L"Shadow :="}},
     ThemeTargetStyles{L"Grid#CalendarCenterGrid", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"Background:=$base",
         L"BorderThickness=0,0,0,0",
-        L"CornerRadius=17"}},
+        L"CornerRadius=$r1",
+        L"Shadow :=",
+        L"Margin = 0,6,0,6",
+        L"MinHeight = 40"}},
     ThemeTargetStyles{L"ScrollViewer#CalendarControlScrollViewer", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"CornerRadius=14",
-        L"Margin=-10,11,-10,-14"}},
+        L"Background:=$overlay",
+        L"CornerRadius=$r2",
+        L"Margin=-10,11,-10,-14",
+        L"Shadow :="}},
     ThemeTargetStyles{L"Border#CalendarHeaderMinimizedOverlay", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"CornerRadius=18"}},
+        L"Background:=$overlay",
+        L"CornerRadius=$r2",
+        L"Shadow :=",
+        L"Margin =-10,-6,-10,-8",
+        L"Height = 45"}},
     ThemeTargetStyles{L"ActionCenter.FocusSessionControl#FocusSessionControl > Grid#FocusGrid", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"CornerRadius=14",
-        L"Margin=6,7,6,6"}},
+        L"Background:=$overlay",
+        L"CornerRadius=$r2",
+        L"Margin=6,7,6,6",
+        L"Shadow :="}},
     ThemeTargetStyles{L"MenuFlyoutPresenter", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background:=$base",
         L"BorderThickness=0,0,0,0",
-        L"CornerRadius=12",
-        L"Padding=1,2,1,2"}},
+        L"CornerRadius=$r3",
+        L"Padding=1,2,1,2",
+        L"Shadow :="}},
     ThemeTargetStyles{L"Border#JumpListRestyledAcrylic", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"Background:=$base",
         L"BorderThickness=0,0,0,0",
-        L"CornerRadius=12",
-        L"Margin=-2,-2,-2,-2"}},
+        L"CornerRadius=$r3",
+        L"Margin=-2,-2,-2,-2",
+        L"Shadow :="}},
     ThemeTargetStyles{L"Grid#ControlCenterRegion", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
-        L"CornerRadius=17",
-        L"BorderThickness=0,0,0,0"}},
-    ThemeTargetStyles{L"ContentPresenter#PageContent", {
-        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{L"ContentPresenter#PageContent > Grid > Border", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"CornerRadius=14",
-        L"Margin=8,0,8,2"}},
-    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot", {
-        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot > ContentPresenter#PageHeader", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"CornerRadius=14",
-        L"Margin=7,7,7,7"}},
-    ThemeTargetStyles{L"ScrollViewer#ListContent", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"CornerRadius=14",
-        L"Margin=8,0,8,0"}},
-    ThemeTargetStyles{L"ActionCenter.FlexibleToastView#FlexibleNormalToastView", {
-        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
-    ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>",
+        L"Background:=$base",
+        L"CornerRadius=$r1",
         L"BorderThickness=0,0,0,0",
-        L"CornerRadius=16"}},
+        L"Shadow :=",
+        L"Margin = 0,0,0,-6"}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent", {
+        L"Background:= $transparent",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"ContentPresenter#PageContent > Grid > Border", {
+        L"Background:=$overlay",
+        L"CornerRadius=$r2",
+        L"Margin=8,0,8,2",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot", {
+        L"Background:= $transparent",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"QuickActions.ControlCenter.AccessibleWindow#PageWindow > ContentPresenter > Grid#FullScreenPageRoot > ContentPresenter#PageHeader", {
+        L"Background:=$overlay",
+        L"CornerRadius=$r2",
+        L"Margin=7,7,7,7",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"ScrollViewer#ListContent", {
+        L"Background:=$overlay",
+        L"CornerRadius=$r2",
+        L"Margin=8,0,8,0",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"ActionCenter.FlexibleToastView#FlexibleNormalToastView", {
+        L"Background:= $transparent",
+        L"Shadow :="}},
+    ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
+        L"Background:=$base",
+        L"BorderThickness=0,0,0,0",
+        L"CornerRadius=16",
+        L"Shadow :="}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background:=$overlay",
         L"CornerRadius=8"}},
     ThemeTargetStyles{L"JumpViewUI.JumpListListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
         L"CornerRadius=6"}},
     ThemeTargetStyles{L"ActionCenter.FlexibleItemView", {
-        L"CornerRadius=16"}},
+        L"CornerRadius=16",
+        L"Shadow :="}},
     ThemeTargetStyles{L"QuickActions.AccessibleToggleButton#ToggleButton", {
         L"CornerRadius=13",
         L"BorderThickness = 0"}},
@@ -466,48 +497,45 @@ const Theme g_themeMatter = {{
         L"Margin=4,0,-4,0",
         L"BorderThickness = 0"}},
     ThemeTargetStyles{L"Grid#NotificationCenterTopBanner", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"CornerRadius=14",
-        L"Margin=7,7,7,7"}},
+        L"Background:=$overlay",
+        L"CornerRadius=$r2",
+        L"Margin=6"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#L1Grid > Border", {
-        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
+        L"Background:= $transparent"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ContentPresenter", {
         L"BorderThickness=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#FooterButton[AutomationProperties.Name = Edit quick settings] ", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#FooterButton[AutomationProperties.Name = Edit quick settings]", {
         L"Margin = 0,0,8,0",
-        L"CornerRadius = 12"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button[AutomationProperties.AutomationId = Microsoft.QuickAction.Battery] ", {
+        L"CornerRadius=$r3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button[AutomationProperties.AutomationId = Microsoft.QuickAction.Battery]", {
         L"Margin = 2,0,0,0",
-        L"CornerRadius = 12"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#FooterButton[AutomationProperties.Name = All settings] ", {
+        L"CornerRadius=$r3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#FooterButton[AutomationProperties.Name = All settings]", {
         L"Margin = 0,0,-1,0",
         L"CornerRadius = 13"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button[AutomationProperties.AutomationId = Microsoft.QuickAction.Volume] ", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button[AutomationProperties.AutomationId = Microsoft.QuickAction.Volume]", {
         L"CornerRadius = 10"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#VolumeL2Button[AutomationProperties.Name = Select a sound output] ", {
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#VolumeL2Button[AutomationProperties.Name = Select a sound output]", {
         L"CornerRadius = 10"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#HorizontalTrackRect", {
-        L"Height  = 8",
-        L"Margin = 6,-1,12,0",
-        L"Fill := <AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>"}},
+        L"Height = 10",
+        L"Fill := $overlay",
+        L"RadiusY = 3",
+        L"RadiusX = 3"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#HorizontalDecreaseRect", {
-        L"Height  =8",
-        L"Margin = 6,-1,-10,0",
-        L"Fill:=<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" />"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Ellipse#SliderInnerThumb", {
-        L"Height = 12",
-        L"Width = 12",
-        L"Margin = -1,0,0,0"}},
+        L"Height =10",
+        L"RadiusY = 3",
+        L"RadiusX = 3",
+        L"Margin = 0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.Thumb#HorizontalThumb", {
-        L"Height = 18",
-        L"Width = 18",
-        L"Margin = 0,-1,0,0",
-        L"Visibility  = 1"}},
+        L"Visibility = 1"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
         L"Height=470",
-        L"CornerRadius = 17",
-        L"BorderThickness  = 0 ",
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.4\" Opacity=\"1\" FallbackColor=\"#262626\"/>"}},
+        L"CornerRadius=$r1",
+        L"BorderThickness = 0",
+        L"Background:=$base",
+        L"Shadow :=",
+        L"Margin = 0,0,0,12"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#AlbumTextAndArtContainer", {
         L"Height=347"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ThumbnailImage", {
@@ -517,7 +545,7 @@ const Theme g_themeMatter = {{
         L"VerticalAlignment=Top",
         L"Grid.Column=1",
         L"Margin=0,2,0,0",
-        L"CornerRadius = 14"}},
+        L"CornerRadius=$r2"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer", {
         L"VerticalAlignment=Bottom",
         L"Margin = 0,5,0,-5"}},
@@ -535,25 +563,25 @@ const Theme g_themeMatter = {{
         L"Height=48",
         L"Margin = 0,12,0,-12"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.RepeatButton#PreviousButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter@CommonStates", {
-        L"Background@Normal:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"Background@PointerOver:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.3\" Opacity=\"1\" FallbackColor=\"#333333\"/>",
-        L"Background@Pressed:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background@Normal:=$overlay",
+        L"Background@PointerOver:=$accentColor",
+        L"Background@Pressed:=$overlay2",
         L"Width=40",
         L"Height= 30",
         L"CornerRadius = 6",
         L"Margin = 15,0,0,0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#PlayPauseButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter@CommonStates", {
-        L"Background@Normal:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"Background@PointerOver:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.3\" Opacity=\"1\" FallbackColor=\"#333333\"/>",
-        L"Background@Pressed:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background@Normal:=$overlay",
+        L"Background@PointerOver:=$accentColor",
+        L"Background@Pressed:=$overlay2",
         L"Width=40",
         L"Height = 40",
         L"CornerRadius = 8",
         L"Margin = -10,0,0,0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.RepeatButton#NextButton > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter@CommonStates", {
-        L"Background@Normal:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
-        L"Background@PointerOver:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.3\" Opacity=\"1\" FallbackColor=\"#333333\"/>",
-        L"Background@Pressed:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.5\" Opacity=\"1\" FallbackColor=\"#0d0d0d\"/>",
+        L"Background@Normal:=$overlay",
+        L"Background@PointerOver:=$accentColor",
+        L"Background@Pressed:=$overlay2",
         L"Width=40",
         L"Height = 30",
         L"CornerRadius = 6",
@@ -565,7 +593,92 @@ const Theme g_themeMatter = {{
         L"Height = 20",
         L"Width = 20"}},
     ThemeTargetStyles{L"Grid#MediaTransportControlsRoot", {
-        L"Background:= <SolidColorBrush Color=\"Transparent\"/>"}},
+        L"Background:= $transparent"}},
+    ThemeTargetStyles{L"Grid#ToastPeekRegion", {
+        L"Background =",
+        L"RenderTransform:=<TranslateTransform Y=\"-495\" X=\"395\" />",
+        L"Grid.Column = 0",
+        L"Grid.Row = 2"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem > Windows.UI.Xaml.Controls.Border", {
+        L"CornerRadius = 8",
+        L"Margin = 1,2,1,2"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.CalendarViewDayItem", {
+        L"CornerRadius = 8"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Control > Windows.UI.Xaml.Controls.Border", {
+        L"CornerRadius = 8"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.CalendarViewItem", {
+        L"CornerRadius = 8"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListViewHeaderItem", {
+        L"Margin = 50,6,50,2",
+        L"CornerRadius = 8",
+        L"Height = 35"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#SettingsButton", {
+        L"CornerRadius = 4"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#DismissButton", {
+        L"CornerRadius = 4"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#CalendarHeader", {
+        L"Margin = 6,0,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ScrollContentPresenter#ScrollContentPresenter", {
+        L"Margin = 1,2,1,2"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#WeekDayNames", {
+        L"Background := <SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity = \"0.8\" />",
+        L"CornerRadius = 8",
+        L"Margin = 4,0,4,0",
+        L"Padding = 0,-5,0,-3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ListViewItem", {
+        L"CornerRadius=$r3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#RootGrid > Windows.UI.Xaml.Controls.ContentPresenter#ContentPresenter", {
+        L"Background := <SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity = \"0.5\" />",
+        L"BorderThickness = 0",
+        L"CornerRadius = 8"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid > Windows.UI.Xaml.Controls.Border#ItemOpaquePlating", {
+        L"Background := $overlay2",
+        L"BorderThickness = 0",
+        L"CornerRadius=$r3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#StandardHeroContainer", {
+        L"Margin = 12,0,12,0",
+        L"CornerRadius = 0",
+        L"Height = 150"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Primitives.ScrollBar#VerticalScrollBar", {
+        L"Visibility = 1"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#SliderContainer", {
+        L"Margin = 0-2,0,0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#BackButton", {
+        L"CornerRadius=$r3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#OuterBorder", {
+        L"RadiusX = 6",
+        L"RadiusY = 6",
+        L"Height = 18"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#SwitchKnobOff", {
+        L"RadiusY = 3",
+        L"RadiusX = 3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Border#SwitchKnobOn", {
+        L"CornerRadius = 3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Shapes.Rectangle#SwitchKnobBounds", {
+        L"RadiusX = 6",
+        L"RadiusY = 6",
+        L"Height = 18"}},
+    ThemeTargetStyles{L"ActionCenter.NotificationListViewItem", {
+        L"Margin = 5,2,5,3"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid[AutomationProperties.LocalizedLandmarkType = Footer]", {
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"NetworkUX.View.SettingsListViewItem > Windows.UI.Xaml.Controls.Primitives.ListViewItemPresenter#Root", {
+        L"CornerRadius = 12"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.ContentPresenter > Windows.UI.Xaml.Controls.Border", {
+        L"BorderThickness = 0"}},
+    ThemeTargetStyles{L"Button#ClearAll", {
+        L"AccessKey=x"}},
+    ThemeTargetStyles{L"Button#ExpandCollapseButton", {
+        L"AccessKey=e"}},
+}, {
+    L"transparent = <SolidColorBrush Color=\"Transparent\"/>",
+    L"base = <AcrylicBrush TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"1\" TintLuminosityOpacity=\"0.6\" Opacity = \"1\" FallbackColor=\"{ThemeResource SystemChromeLowColor}\" />",
+    L"overlay = <AcrylicBrush TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"1\" TintLuminosityOpacity=\"0.6\" FallbackColor=\"{ThemeResource LayerFillColorDefault}\" />",
+    L"accentColor =<SolidColorBrush Color=\"{ThemeResource SystemAccentColorLight1}\" Opacity = \"1\" />",
+    L"overlay2 = <AcrylicBrush TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"1\" TintLuminosityOpacity=\"0.4\" FallbackColor=\"{ThemeResource CardStrokeColorDefaultSolid}\" />",
+    L"r1 = 18",
+    L"r2 = 14",
+    L"r3 = 12",
 }};
 
 // clang-format on
@@ -1008,7 +1121,13 @@ struct StyleRule {
 
 using PropertyOverridesUnresolved = std::vector<StyleRule>;
 
-using PropertyOverrideValue = winrt::Windows::Foundation::IInspectable;
+struct XamlBlurBrushParams {
+    float blurAmount;
+    wf::Numerics::float4 tint;
+};
+
+using PropertyOverrideValue =
+    std::variant<winrt::Windows::Foundation::IInspectable, XamlBlurBrushParams>;
 
 // Property -> visual state -> value.
 using PropertyOverrides =
@@ -1074,10 +1193,640 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
     return value;
 }
 
+// Blur background implementation, copied from TranslucentTB.
+////////////////////////////////////////////////////////////////////////////////
+// clang-format off
+
+#include <initguid.h>
+
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+
+namespace wfn = wf::Numerics;
+namespace wge = winrt::Windows::Graphics::Effects;
+namespace wuc = winrt::Windows::UI::Composition;
+namespace wuxh = wux::Hosting;
+
+template <> inline constexpr winrt::guid winrt::impl::guid_v<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>{
+    winrt::impl::guid_v<winrt::Windows::Foundation::IPropertyValue>
+};
+
+#ifndef E_BOUNDS
+#define E_BOUNDS (HRESULT)(0x8000000BL)
+#endif
+
+typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION
+{
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_SPEED = 0,
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED = 1,
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_QUALITY = 2,
+    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_FORCE_DWORD = 0xffffffff
+
+} MY_D2D1_GAUSSIANBLUR_OPTIMIZATION;
+
+////////////////////////////////////////////////////////////////////////////////
+// XamlBlurBrush.h
+#include <winrt/Windows.Foundation.Numerics.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+
+class XamlBlurBrush : public wux::Media::XamlCompositionBrushBaseT<XamlBlurBrush>
+{
+public:
+	XamlBlurBrush(wuc::Compositor compositor, float blurAmount, wfn::float4 tint);
+
+	void OnConnected();
+	void OnDisconnected();
+
+private:
+	wuc::Compositor m_compositor;
+	float m_blurAmount;
+	wfn::float4 m_tint;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// CompositeEffect.h
+#include <d2d1effects.h>
+#include <d2d1_1.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Effects.h>
+// #include <windows.graphics.effects.interop.h>
+
+#include <windows.graphics.effects.h>
+#include <sdkddkver.h>
+
+#ifndef BUILD_WINDOWS
+namespace ABI {
+#endif
+namespace Windows {
+namespace Graphics {
+namespace Effects {
+
+typedef interface IGraphicsEffectSource                         IGraphicsEffectSource;
+typedef interface IGraphicsEffectD2D1Interop                    IGraphicsEffectD2D1Interop;
+
+
+typedef enum GRAPHICS_EFFECT_PROPERTY_MAPPING
+{
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_UNKNOWN,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORX,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORY,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORZ,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORW,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_RECT_TO_VECTOR4,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_RADIANS_TO_DEGREES,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLORMATRIX_ALPHA_MODE,
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR3, 
+    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR4
+} GRAPHICS_EFFECT_PROPERTY_MAPPING;
+
+//+-----------------------------------------------------------------------------
+//
+//  Interface:
+//      IGraphicsEffectD2D1Interop
+//
+//  Synopsis:
+//      An interface providing a Interop counterpart to IGraphicsEffect
+//      and allowing for metadata queries.
+//
+//------------------------------------------------------------------------------
+
+#undef INTERFACE
+#define INTERFACE IGraphicsEffectD2D1Interop
+DECLARE_INTERFACE_IID_(IGraphicsEffectD2D1Interop, IUnknown, "2FC57384-A068-44D7-A331-30982FCF7177")
+{
+    STDMETHOD(GetEffectId)(
+        _Out_ GUID * id
+        ) PURE;
+
+    STDMETHOD(GetNamedPropertyMapping)(
+        LPCWSTR name,
+        _Out_ UINT * index,
+        _Out_ GRAPHICS_EFFECT_PROPERTY_MAPPING * mapping
+        ) PURE;
+
+    STDMETHOD(GetPropertyCount)(
+        _Out_ UINT * count
+        ) PURE;
+
+    STDMETHOD(GetProperty)(
+        UINT index,
+        _Outptr_ winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue> ** value
+        ) PURE;
+
+    STDMETHOD(GetSource)(
+        UINT index,
+        _Outptr_ IGraphicsEffectSource ** source
+        ) PURE;
+
+    STDMETHOD(GetSourceCount)(
+        _Out_ UINT * count
+        ) PURE;
+};
+
+
+} // namespace Effects
+} // namespace Graphics
+} // namespace Windows
+#ifndef BUILD_WINDOWS
+} // namespace ABI 
+#endif
+
+template <> inline constexpr winrt::guid winrt::impl::guid_v<ABI::Windows::Graphics::Effects::IGraphicsEffectD2D1Interop>{
+    0x2FC57384, 0xA068, 0x44D7, { 0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77 }
+};
+
+
+
+namespace awge = ABI::Windows::Graphics::Effects;
+
+struct CompositeEffect : winrt::implements<CompositeEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+	// IGraphicsEffectD2D1Interop
+	HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override;
+
+	// IGraphicsEffect
+	winrt::hstring Name();
+	void Name(winrt::hstring name);
+
+	std::vector<wge::IGraphicsEffectSource> Sources;
+	D2D1_COMPOSITE_MODE Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+private:
+	winrt::hstring m_name = L"CompositeEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// CompositeEffect.cpp
+HRESULT CompositeEffect::GetEffectId(GUID* id) noexcept
+{
+	if (id == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*id = CLSID_D2D1Composite;
+	return S_OK;
+}
+
+HRESULT CompositeEffect::GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept
+{
+	if (index == nullptr || mapping == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	const std::wstring_view nameView(name);
+	if (nameView == L"Mode")
+	{
+		*index = D2D1_COMPOSITE_PROP_MODE;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+
+	return E_INVALIDARG;
+}
+
+HRESULT CompositeEffect::GetPropertyCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 1;
+	return S_OK;
+}
+
+HRESULT CompositeEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept try
+{
+	if (value == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	switch (index)
+	{
+		case D2D1_COMPOSITE_PROP_MODE:
+			*value = wf::PropertyValue::CreateUInt32((UINT32)Mode).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		default:
+			return E_BOUNDS;
+	}
+
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT CompositeEffect::GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept try
+{
+	if (source == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	winrt::copy_to_abi(Sources.at(index), *reinterpret_cast<void**>(source));
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT CompositeEffect::GetSourceCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = static_cast<UINT>(Sources.size());
+	return S_OK;
+}
+
+winrt::hstring CompositeEffect::Name()
+{
+	return m_name;
+}
+
+void CompositeEffect::Name(winrt::hstring name)
+{
+	m_name = name;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// FloodEffect.h
+#include <d2d1effects.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Numerics.h>
+#include <winrt/Windows.Graphics.Effects.h>
+// #include <windows.graphics.effects.interop.h>
+
+namespace awge = ABI::Windows::Graphics::Effects;
+
+struct FloodEffect : winrt::implements<FloodEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+	// IGraphicsEffectD2D1Interop
+	HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override;
+
+	// IGraphicsEffect
+	winrt::hstring Name();
+	void Name(winrt::hstring name);
+
+	wfn::float4 Color = { 0.0f, 0.0f, 0.0f, 1.0f };
+private:
+	winrt::hstring m_name = L"FloodEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// FloodEffect.cpp
+HRESULT FloodEffect::GetEffectId(GUID* id) noexcept
+{
+	if (id == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*id = CLSID_D2D1Flood;
+	return S_OK;
+}
+
+HRESULT FloodEffect::GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept
+{
+	if (index == nullptr || mapping == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	const std::wstring_view nameView(name);
+	if (nameView == L"Color")
+	{
+		*index = D2D1_FLOOD_PROP_COLOR;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+
+	return E_INVALIDARG;
+}
+
+HRESULT FloodEffect::GetPropertyCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 1;
+	return S_OK;
+}
+
+HRESULT FloodEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept try
+{
+	if (value == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	switch (index)
+	{
+		case D2D1_FLOOD_PROP_COLOR:
+			*value = wf::PropertyValue::CreateSingleArray({ Color.x, Color.y, Color.z, Color.w }).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		default:
+			return E_BOUNDS;
+	}
+
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT FloodEffect::GetSource(UINT, awge::IGraphicsEffectSource** source) noexcept
+{
+	if (source == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	return E_BOUNDS;
+}
+
+HRESULT FloodEffect::GetSourceCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 0;
+	return S_OK;
+}
+
+winrt::hstring FloodEffect::Name()
+{
+	return m_name;
+}
+
+void FloodEffect::Name(winrt::hstring name)
+{
+	m_name = name;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// GaussianBlurEffect.h
+#include <d2d1effects.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Effects.h>
+// #include <windows.graphics.effects.interop.h>
+
+namespace wge = winrt::Windows::Graphics::Effects;
+namespace awge = ABI::Windows::Graphics::Effects;
+
+struct GaussianBlurEffect : winrt::implements<GaussianBlurEffect, wge::IGraphicsEffect, wge::IGraphicsEffectSource, awge::IGraphicsEffectD2D1Interop>
+{
+public:
+	// IGraphicsEffectD2D1Interop
+	HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept override;
+	HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override;
+
+	// IGraphicsEffect
+	winrt::hstring Name();
+	void Name(winrt::hstring name);
+
+	wge::IGraphicsEffectSource Source;
+
+	float BlurAmount = 3.0f;
+	MY_D2D1_GAUSSIANBLUR_OPTIMIZATION Optimization = MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED;
+	D2D1_BORDER_MODE BorderMode = D2D1_BORDER_MODE_SOFT;
+private:
+	winrt::hstring m_name = L"GaussianBlurEffect";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// GaussianBlurEffect.cpp
+HRESULT GaussianBlurEffect::GetEffectId(GUID* id) noexcept
+{
+	if (id == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*id = CLSID_D2D1GaussianBlur;
+	return S_OK;
+}
+
+HRESULT GaussianBlurEffect::GetNamedPropertyMapping(LPCWSTR name, UINT* index, awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept
+{
+	if (index == nullptr || mapping == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	const std::wstring_view nameView(name);
+	if (nameView == L"BlurAmount")
+	{
+		*index = D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+	else if (nameView == L"Optimization")
+	{
+		*index = D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+	else if (nameView == L"BorderMode")
+	{
+		*index = D2D1_GAUSSIANBLUR_PROP_BORDER_MODE;
+		*mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+
+		return S_OK;
+	}
+
+	return E_INVALIDARG;
+}
+
+HRESULT GaussianBlurEffect::GetPropertyCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 3;
+	return S_OK;
+}
+
+HRESULT GaussianBlurEffect::GetProperty(UINT index, winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>** value) noexcept try
+{
+	if (value == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	switch (index)
+	{
+		case D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION:
+			*value = wf::PropertyValue::CreateSingle(BlurAmount).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		case D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION:
+			*value = wf::PropertyValue::CreateUInt32((UINT32)Optimization).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		case D2D1_GAUSSIANBLUR_PROP_BORDER_MODE:
+			*value = wf::PropertyValue::CreateUInt32((UINT32)BorderMode).as<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>().detach();
+			break;
+
+		default:
+			return E_BOUNDS;
+	}
+
+	return S_OK;
+}
+catch (...)
+{
+	return winrt::to_hresult();
+}
+
+HRESULT GaussianBlurEffect::GetSource(UINT index, awge::IGraphicsEffectSource** source) noexcept
+{
+	if (source == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	if (index == 0)
+	{
+		winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source));
+		return S_OK;
+	}
+	else
+	{
+		return E_BOUNDS;
+	}
+}
+
+HRESULT GaussianBlurEffect::GetSourceCount(UINT* count) noexcept
+{
+	if (count == nullptr) [[unlikely]]
+	{
+		return E_INVALIDARG;
+	}
+
+	*count = 1;
+	return S_OK;
+}
+
+winrt::hstring GaussianBlurEffect::Name()
+{
+	return m_name;
+}
+
+void GaussianBlurEffect::Name(winrt::hstring name)
+{
+	m_name = name;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// XamlBlurBrush.cpp
+XamlBlurBrush::XamlBlurBrush(wuc::Compositor compositor, float blurAmount, wfn::float4 tint) :
+	m_compositor(std::move(compositor)),
+	m_blurAmount(blurAmount),
+	m_tint(tint)
+{ }
+
+void XamlBlurBrush::OnConnected()
+{
+	if (!CompositionBrush())
+	{
+		auto backdropBrush = m_compositor.CreateBackdropBrush();
+
+		auto blurEffect = winrt::make_self<GaussianBlurEffect>();
+		blurEffect->Source = wuc::CompositionEffectSourceParameter(L"backdrop");
+		blurEffect->BlurAmount = m_blurAmount;
+
+		auto floodEffect = winrt::make_self<FloodEffect>();
+		floodEffect->Color = m_tint;
+
+		auto compositeEffect = winrt::make_self<CompositeEffect>();
+		compositeEffect->Sources.push_back(*blurEffect);
+		compositeEffect->Sources.push_back(*floodEffect);
+		compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
+
+		auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
+		auto blurBrush = factory.CreateBrush();
+		blurBrush.SetSourceParameter(L"backdrop", backdropBrush);
+
+		CompositionBrush(blurBrush);
+	}
+}
+
+void XamlBlurBrush::OnDisconnected()
+{
+	if (const auto brush = CompositionBrush())
+	{
+		brush.Close();
+		CompositionBrush(nullptr);
+	}
+}
+
+// clang-format on
+////////////////////////////////////////////////////////////////////////////////
+
 void SetOrClearValue(DependencyObject elementDo,
                      DependencyProperty property,
                      const PropertyOverrideValue& overrideValue) {
-    winrt::Windows::Foundation::IInspectable value = overrideValue;
+    winrt::Windows::Foundation::IInspectable value;
+    if (auto* inspectable =
+            std::get_if<winrt::Windows::Foundation::IInspectable>(
+                &overrideValue)) {
+        value = *inspectable;
+    } else if (auto* blurBrashParams =
+                   std::get_if<XamlBlurBrushParams>(&overrideValue)) {
+        if (auto uiElement = elementDo.try_as<UIElement>()) {
+            auto compositor =
+                wuxh::ElementCompositionPreview::GetElementVisual(uiElement)
+                    .Compositor();
+
+            value = winrt::make<XamlBlurBrush>(std::move(compositor),
+                                               blurBrashParams->blurAmount,
+                                               blurBrashParams->tint);
+        } else {
+            Wh_Log(L"Can't get UIElement for blur brush");
+            return;
+        }
+    } else {
+        Wh_Log(L"Unsupported override value");
+        return;
+    }
+
     if (value == DependencyProperty::UnsetValue()) {
         elementDo.ClearValue(property);
         return;
@@ -1160,6 +1909,85 @@ std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
 
     res.push_back(s.substr(pos_start));
     return res;
+}
+
+std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
+    std::wstring_view stringValue) {
+    // Example:
+    // <WindhawkBlur BlurAmount="10" TintColor="#FFFF0000"/>
+
+    auto substr = TrimStringView(stringValue);
+
+    constexpr auto kWindhawkBlurPrefix = L"<WindhawkBlur "sv;
+    if (!substr.starts_with(kWindhawkBlurPrefix)) {
+        return std::nullopt;
+    }
+    Wh_Log(L"%.*s", static_cast<int>(substr.length()), substr.data());
+    substr = substr.substr(std::size(kWindhawkBlurPrefix));
+
+    constexpr auto kWindhawkBlurSuffix = L"/>"sv;
+    if (!substr.ends_with(kWindhawkBlurSuffix)) {
+        throw std::runtime_error("WindhawkBlur: Bad suffix");
+    }
+    substr = substr.substr(0, substr.size() - std::size(kWindhawkBlurSuffix));
+
+    auto value = XamlBlurBrushParams{
+        .blurAmount = 0,
+        .tint = {},
+    };
+
+    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
+    constexpr auto kTintColorPrefix = L"TintColor=\"#"sv;
+    for (const auto prop : SplitStringView(substr, L" ")) {
+        const auto propSubstr = TrimStringView(prop);
+        if (propSubstr.empty()) {
+            continue;
+        }
+
+        Wh_Log(L"  %.*s", static_cast<int>(propSubstr.length()),
+               propSubstr.data());
+
+        if (propSubstr.starts_with(kBlurAmountPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kBlurAmountPrefix),
+                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
+            value.blurAmount = std::stoi(std::wstring(valStr));
+            continue;
+        }
+
+        if (propSubstr.starts_with(kTintColorPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kTintColorPrefix),
+                propSubstr.size() - std::size(kTintColorPrefix) - 1);
+
+            bool hasAlpha;
+            switch (valStr.size()) {
+                case 6:
+                    hasAlpha = false;
+                    break;
+                case 8:
+                    hasAlpha = true;
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "WindhawkBlur: Unsupported TintColor value");
+            }
+
+            auto valNum = std::stoul(std::wstring(valStr), nullptr, 16);
+            uint8_t a = hasAlpha ? HIBYTE(HIWORD(valNum)) : 255;
+            uint8_t r = LOBYTE(HIWORD(valNum));
+            uint8_t g = HIBYTE(LOWORD(valNum));
+            uint8_t b = LOBYTE(LOWORD(valNum));
+            value.tint = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            continue;
+        }
+
+        throw std::runtime_error("WindhawkBlur: Bad property");
+    }
+
+    return value;
 }
 
 Style GetStyleFromXamlSetters(const std::wstring_view type,
@@ -1256,11 +2084,19 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
         if (!styleRules.empty()) {
             std::wstring xaml;
 
+            std::vector<std::optional<PropertyOverrideValue>>
+                propertyOverrideValues;
+            propertyOverrideValues.reserve(styleRules.size());
+
             for (const auto& rule : styleRules) {
+                propertyOverrideValues.push_back(
+                    ParseNonXamlPropertyOverrideValue(rule.value));
+
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
                 xaml += L"\"";
-                if (rule.isXamlValue && rule.value.empty()) {
+                if (propertyOverrideValues.back() ||
+                    (rule.isXamlValue && rule.value.empty())) {
                     xaml += L" Value=\"{x:Null}\" />\n";
                 } else if (!rule.isXamlValue) {
                     xaml += L" Value=\"";
@@ -1285,9 +2121,10 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
             for (const auto& rule : styleRules) {
                 const auto setter = style.Setters().GetAt(i).as<Setter>();
                 propertyOverrides[setter.Property()][rule.visualState] =
-                    rule.isXamlValue && rule.value.empty()
-                        ? DependencyProperty::UnsetValue()
-                        : setter.Value();
+                    propertyOverrideValues[i].value_or(
+                        rule.isXamlValue && rule.value.empty()
+                            ? DependencyProperty::UnsetValue()
+                            : setter.Value());
                 i++;
             }
         }
@@ -1587,10 +2424,12 @@ void ApplyCustomizationsForVisualStateGroup(
                 auto localValue =
                     ReadLocalValueWithWorkaround(element, property);
 
-                // The comment below is for clang format.
-                if (*propertyCustomizationState.customValue !=
-                    localValue /*.......................................*/) {
-                    propertyCustomizationState.originalValue = localValue;
+                if (auto* customValue =
+                        std::get_if<winrt::Windows::Foundation::IInspectable>(
+                            &*propertyCustomizationState.customValue)) {
+                    if (*customValue != localValue) {
+                        propertyCustomizationState.originalValue = localValue;
+                    }
                 }
 
                 g_elementPropertyModifying = true;
@@ -1761,8 +2600,34 @@ void CleanupCustomizations(InstanceHandle handle) {
 using StyleConstant = std::pair<std::wstring, std::wstring>;
 using StyleConstants = std::vector<StyleConstant>;
 
-StyleConstants LoadStyleConstants() {
+std::optional<StyleConstant> ParseStyleConstant(std::wstring_view constant) {
+    // Skip if commented.
+    if (constant.starts_with(L"//")) {
+        return std::nullopt;
+    }
+
+    auto eqPos = constant.find(L'=');
+    if (eqPos == constant.npos) {
+        Wh_Log(L"Skipping entry with no '=': %.*s",
+               static_cast<int>(constant.length()), constant.data());
+        return std::nullopt;
+    }
+
+    auto key = TrimStringView(constant.substr(0, eqPos));
+    auto val = TrimStringView(constant.substr(eqPos + 1));
+
+    return StyleConstant{std::wstring(key), std::wstring(val)};
+}
+
+StyleConstants LoadStyleConstants(
+    const std::vector<PCWSTR>& themeStyleConstants) {
     StyleConstants result;
+
+    for (const auto themeStyleConstant : themeStyleConstants) {
+        if (auto parsed = ParseStyleConstant(themeStyleConstant)) {
+            result.push_back(std::move(*parsed));
+        }
+    }
 
     for (int i = 0;; i++) {
         string_setting_unique_ptr constantSetting(
@@ -1771,24 +2636,9 @@ StyleConstants LoadStyleConstants() {
             break;
         }
 
-        // Skip if commented.
-        if (constantSetting[0] == L'/' && constantSetting[1] == L'/') {
-            continue;
+        if (auto parsed = ParseStyleConstant(constantSetting.get())) {
+            result.push_back(std::move(*parsed));
         }
-
-        std::wstring_view constant = constantSetting.get();
-
-        auto eqPos = constant.find(L'=');
-        if (eqPos == constant.npos) {
-            Wh_Log(L"Skipping entry with no '=': %.*s",
-                   static_cast<int>(constant.length()), constant.data());
-            continue;
-        }
-
-        auto key = TrimStringView(constant.substr(0, eqPos));
-        auto val = TrimStringView(constant.substr(eqPos + 1));
-
-        result.push_back({std::wstring(key), std::wstring(val)});
     }
 
     // Reverse the order to allow overriding definitions with the same name.
@@ -2077,7 +2927,8 @@ void ProcessAllStylesFromSettings() {
     }
     Wh_FreeStringSetting(themeName);
 
-    StyleConstants styleConstants = LoadStyleConstants();
+    StyleConstants styleConstants = LoadStyleConstants(
+        theme ? theme->styleConstants : std::vector<PCWSTR>{});
 
     if (theme) {
         for (const auto& themeTargetStyle : theme->targetStyles) {
@@ -2480,6 +3331,108 @@ std::vector<HWND> GetCoreWnds() {
     return hWnds;
 }
 
+PTP_TIMER g_statsTimer;
+
+bool StartStatsTimer() {
+    ULONGLONG lastStatsTime = 0;
+    Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
+                      sizeof(lastStatsTime));
+
+    // -1 can be set for disabling the stats timer.
+    if (lastStatsTime == 0xFFFFFFFF'FFFFFFFF) {
+        return false;
+    }
+
+    FILETIME currentTimeFt;
+    GetSystemTimeAsFileTime(&currentTimeFt);
+
+    ULONGLONG currentTime = ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
+                            currentTimeFt.dwLowDateTime;
+
+    constexpr ULONGLONG k10Minutes = 10 * 60 * 10000000LL;
+    constexpr ULONGLONG k24Hours = 24 * 60 * 60 * 10000000LL;
+
+    ULONGLONG minDueTime = currentTime + k10Minutes;
+    ULONGLONG maxDueTime = currentTime + k24Hours;
+
+    ULONGLONG dueTime = k24Hours - (currentTime - lastStatsTime);
+    if (dueTime < minDueTime) {
+        dueTime = minDueTime;
+    } else if (dueTime > maxDueTime) {
+        dueTime = maxDueTime;
+    }
+
+    g_statsTimer = CreateThreadpoolTimer(
+        [](PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
+            Wh_Log(L">");
+
+            FILETIME currentTimeFt;
+            GetSystemTimeAsFileTime(&currentTimeFt);
+            ULONGLONG currentTime =
+                ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
+                currentTimeFt.dwLowDateTime;
+
+            Wh_SetBinaryValue(L"statsTimerLastTime", &currentTime,
+                              sizeof(currentTime));
+
+            string_setting_unique_ptr themeName(Wh_GetStringSetting(L"theme"));
+            if (!*themeName.get()) {
+                return;
+            }
+
+            std::wstring themeNameEscaped = themeName.get();
+            std::replace(themeNameEscaped.begin(), themeNameEscaped.end(), L' ',
+                         L'_');
+
+            std::wstring statsUrl =
+                L"https://github.com/ramensoftware/"
+                L"windows-11-notification-center-styling-guide/releases/"
+                L"download/"
+                L"stats-v1/";
+            statsUrl += themeNameEscaped;
+            statsUrl += L".txt";
+
+            Wh_Log(L"Submitting stats to %s", statsUrl.c_str());
+
+            const WH_URL_CONTENT* content =
+                Wh_GetUrlContent(statsUrl.c_str(), nullptr);
+            if (!content) {
+                Wh_Log(L"Failed to get stats content");
+                return;
+            }
+
+            if (content->statusCode != 200) {
+                Wh_Log(L"Stats content status code: %d", content->statusCode);
+            }
+
+            Wh_FreeUrlContent(content);
+            Wh_Log(L"Stats content submitted");
+        },
+        nullptr, nullptr);
+    if (!g_statsTimer) {
+        Wh_Log(L"Failed to create stats timer");
+        return false;
+    }
+
+    constexpr DWORD k24HoursInMs = 24 * 60 * 60 * 1000;
+    constexpr ULONGLONG k10MinutesInMs = 10 * 60 * 1000;
+
+    FILETIME dueTimeFt;
+    dueTimeFt.dwLowDateTime = (DWORD)(dueTime & 0xFFFFFFFF);
+    dueTimeFt.dwHighDateTime = (DWORD)(dueTime >> 32);
+    SetThreadpoolTimer(g_statsTimer, &dueTimeFt, k24HoursInMs, k10MinutesInMs);
+    return true;
+}
+
+void StopStatsTimer() {
+    if (g_statsTimer) {
+        SetThreadpoolTimer(g_statsTimer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(g_statsTimer, TRUE);
+        CloseThreadpoolTimer(g_statsTimer);
+        g_statsTimer = nullptr;
+    }
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -2505,7 +3458,8 @@ BOOL Wh_ModInit() {
             break;
     }
 
-    HMODULE user32Module = LoadLibrary(L"user32.dll");
+    HMODULE user32Module =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (user32Module) {
         void* pCreateWindowInBand =
             (void*)GetProcAddress(user32Module, "CreateWindowInBand");
@@ -2524,21 +3478,26 @@ BOOL Wh_ModInit() {
         }
     }
 
+    if (g_target == Target::ShellExperienceHost) {
+        StartStatsTimer();
+    }
+
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    auto hCoreWnds = GetCoreWnds();
-    for (auto hCoreWnd : hCoreWnds) {
+    bool initialize = false;
+
+    for (auto hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd, [](PVOID) { InitializeForCurrentThread(); }, nullptr);
+        initialize = true;
     }
 
-    if (hCoreWnds.size() > 0) {
-        Wh_Log(L"Initializing - Found core windows");
+    if (initialize) {
         InitializeSettingsAndTap();
     }
 }
@@ -2546,10 +3505,13 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
+    if (g_target == Target::ShellExperienceHost) {
+        StopStatsTimer();
+    }
+
     UninitializeSettingsAndTap();
 
-    auto hCoreWnds = GetCoreWnds();
-    for (auto hCoreWnd : hCoreWnds) {
+    for (auto hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd, [](PVOID) { UninitializeForCurrentThread(); }, nullptr);
@@ -2561,8 +3523,9 @@ void Wh_ModSettingsChanged() {
 
     UninitializeSettingsAndTap();
 
-    auto hCoreWnds = GetCoreWnds();
-    for (auto hCoreWnd : hCoreWnds) {
+    bool initialize = false;
+
+    for (auto hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Reinitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd,
@@ -2571,10 +3534,10 @@ void Wh_ModSettingsChanged() {
                 InitializeForCurrentThread();
             },
             nullptr);
+        initialize = true;
     }
 
-    if (hCoreWnds.size() > 0) {
-        Wh_Log(L"Reinitializing - Found core windows");
+    if (initialize) {
         InitializeSettingsAndTap();
     }
 }
