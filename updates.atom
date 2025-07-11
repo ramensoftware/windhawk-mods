@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-11T17:25:19.000Z</updated>
+    <updated>2025-07-11T17:51:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Resource Redirect 1.2.2]]></title>
+        <id>https://windhawk.net/mods/icon-resource-redirect#4f480eff9a5cecad737798bfafa461e1fb23c250</id>
+        <link href="https://windhawk.net/mods/icon-resource-redirect"/>
+        <updated>2025-07-11T17:51:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the Kripton Flatery, Pane7 icon themes.</li>
+<li>Fixed some of the icon themes. To apply the fix, you might need to uninstall and re-install the mod.</li>
+<li>Fixed icon themes: All White Icons, Catppuccin Lavender, Catppuccin Maroon, Eyecandy, Fluent, Fluent Keys Night, Fluent Keys Day, Gruvbox, Gruvbox Plus Olive, Gruvbox Numix, Lumicons Folders, Lumicons Symbols, Somatic Rebirth, Super Remix Slate, Sweet Awesomeness, Sweetness Neutral, Sweetness Original.</li>
+<li>Libraries are now loaded with the <code>LOAD_LIBRARY_SEARCH_SYSTEM32</code> flag to prevent malicious or accidental dll hijacking.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.3]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#deda2477f65c93873120051ae41906734197b23e</id>
@@ -284,19 +300,6 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
         <author>
             <name>anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Favorites in Navigation Pane 1.0.2]]></title>
-        <id>https://windhawk.net/mods/favorites-in-navpane#fbc0cc8ab7e9e12ef8b1dd6d64d8dca38c30957d</id>
-        <link href="https://windhawk.net/mods/favorites-in-navpane"/>
-        <updated>2025-06-28T22:37:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Use LoadLibraryEx with LOAD<em>LIBRARY</em>SEARCH_SYSTEM32 #2063</li>
-</ul>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>

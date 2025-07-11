@@ -1,3 +1,10 @@
+## 1.2.2 ([Jul 11, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4f480eff9a5cecad737798bfafa461e1fb23c250/mods/icon-resource-redirect.wh.cpp))
+
+* Added the Kripton Flatery, Pane7 icon themes.
+* Fixed some of the icon themes. To apply the fix, you might need to uninstall and re-install the mod.
+  * Fixed icon themes: All White Icons, Catppuccin Lavender, Catppuccin Maroon, Eyecandy, Fluent, Fluent Keys Night, Fluent Keys Day, Gruvbox, Gruvbox Plus Olive, Gruvbox Numix, Lumicons Folders, Lumicons Symbols, Somatic Rebirth, Super Remix Slate, Sweet Awesomeness, Sweetness Neutral, Sweetness Original.
+* Libraries are now loaded with the `LOAD_LIBRARY_SEARCH_SYSTEM32` flag to prevent malicious or accidental dll hijacking.
+
 ## 1.2.1 ([Jun 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/88473fba37aafef3009f3b609ca35bd55218e9bc/mods/icon-resource-redirect.wh.cpp))
 
 * Fixed an error when launching programs without a visual style manifest.
