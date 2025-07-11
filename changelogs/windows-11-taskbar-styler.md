@@ -1,3 +1,10 @@
+## 1.5 ([Jul 11, 2025](https://github.com/ramensoftware/windhawk-mods/blob/fbce0bace35249e6ec4996e0b4a9b2bb07017352/mods/windows-11-taskbar-styler.wh.cpp))
+
+* The mod now handles all explorer.exe threads, which allows styling additional components: the volume popup, Alt+Tab, Win+Tab, the language popup, snap layout popups, and maybe other elements.
+* In new Windows 11 builds, fixed a crash with some themes when the "Icon and label"-style search button is used.
+* Added new themes: WinXP (Zune), Matter, SimplyTransparent, Windows7, and Aeris.
+* Update themes: Bubbles, TranslucentTaskbar, CleanSlate, Lucent, TaskbarXII.
+
 ## 1.4 ([May 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/29917c376199d3312e355f1b001dc3108040b7ca/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added style constants which can be defined once and used in multiple styles.
