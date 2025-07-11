@@ -2,7 +2,7 @@
 // @id              icon-resource-redirect
 // @name            Resource Redirect
 // @description     Define alternative files for loading various resources (e.g. icons in imageres.dll) for simple theming without having to modify system files
-// @version         1.2.1
+// @version         1.2.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -200,6 +200,7 @@ The resource lookup order then becomes:
   - Janguru Grey|themes/icons/niivu/janguru%20grey.zip: Janguru Grey (by niivu)
   - Janguru Orange|themes/icons/niivu/janguru%20orange.zip: Janguru Orange (by niivu)
   - koZ|themes/icons/niivu/koZ.zip: koZ (by niivu)
+  - Kripton Flatery|themes/icons/niivu/Kripton%20Flatery.zip: Kripton Flatery (by niivu)
   - Linuxfx 11 AIO|themes/icons/niivu/Linuxfx-11-AIO.zip: Linuxfx 11 AIO (by niivu)
   - Linuxfx 11 Lite|themes/icons/niivu/Linuxfx-11-lite.zip: Linuxfx 11 Lite (by niivu)
   - Lol|themes/icons/niivu/lol.zip: Lol (by niivu)
@@ -278,6 +279,7 @@ The resource lookup order then becomes:
   - Windows 11 New Folders Purple|themes/icons/niivu/Windows%2011%20New%20Folders%20Purple.zip: Windows 11 New Folders Purple (by niivu)
   - Windows 11 New Folders Slate|themes/icons/niivu/Windows%2011%20New%20Folders%20Slate.zip: Windows 11 New Folders Slate (by niivu)
   - Windows 11 New Folders Yellow|themes/icons/niivu/Windows%2011%20New%20Folders%20Yellow.zip: Windows 11 New Folders Yellow (by niivu)
+  - Pane7|themes/icons/ImSwordQueen/Pane7.zip: Pane7 (by ImSwordQueen)
 - themePaths: [""]
   $name: Theme paths
   $description: >-
@@ -1678,7 +1680,8 @@ void DirectUI_DUIXmlParser_SetDefaultHInstance(void* pThis, HMODULE hModule) {
     using DirectUI_DUIXmlParser_SetDefaultHInstance_t =
         void(__thiscall*)(void* pThis, HMODULE hModule);
     static DirectUI_DUIXmlParser_SetDefaultHInstance_t pSetDefaultHInstance = []() {
-        HMODULE duiModule = LoadLibrary(L"dui70.dll");
+        HMODULE duiModule =
+            LoadLibraryEx(L"dui70.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (duiModule) {
             PCSTR procName =
 #ifdef _WIN64
@@ -2126,7 +2129,8 @@ void PromptToClearCache() {
             };
 
             static decltype(&TaskDialogIndirect) pTaskDialogIndirect = []() {
-                HMODULE hComctl32 = LoadLibrary(L"comctl32.dll");
+                HMODULE hComctl32 = LoadLibraryEx(L"comctl32.dll", nullptr,
+                                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
                 if (!hComctl32) {
                     Wh_Log(L"Failed to load comctl32.dll");
                     return (decltype(&TaskDialogIndirect))nullptr;
@@ -2743,7 +2747,8 @@ BOOL Wh_ModInit() {
 
     // All of these end up calling FindResourceEx, LoadResource, SizeofResource.
     if (!g_settings.allResourceRedirect) {
-        HMODULE shcoreModule = LoadLibrary(L"shcore.dll");
+        HMODULE shcoreModule =
+            LoadLibraryEx(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (shcoreModule) {
             FARPROC pSHCreateStreamOnModuleResourceW =
                 GetProcAddress(shcoreModule, (PCSTR)109);
@@ -2759,7 +2764,8 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Couldn't load shcore.dll");
         }
 
-        HMODULE duiModule = LoadLibrary(L"dui70.dll");
+        HMODULE duiModule =
+            LoadLibraryEx(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (duiModule) {
             PCSTR SetXMLFromResource_Name =
                 R"(?_SetXMLFromResource@DUIXmlParser@DirectUI@@IAEJPBG0PAUHINSTANCE__@@11@Z)";
