@@ -2,7 +2,7 @@
 // @id              explorer-double-click-up
 // @name            Explorer Double Click Up
 // @description     Double click empty space to go up a folder
-// @version         1.0.0
+// @version         1.0.1
 // @author          wrldspawn
 // @github          https://github.com/wrldspawn
 // @include         explorer.exe
@@ -336,7 +336,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Explorer Double Click Up Init");
 
-    HMODULE hExplorerFrame = LoadLibraryW(L"explorerframe.dll");
+    HMODULE hExplorerFrame = LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (!hExplorerFrame) {
         Wh_Log(L"Failed to load explorerframe.dll");
