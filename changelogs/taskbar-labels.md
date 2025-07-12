@@ -1,3 +1,7 @@
+## 1.4.2 ([Jul 12, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a16d12ef9bb15dfd5462b139fcfca356650e06d0/mods/taskbar-labels.wh.cpp))
+
+* In [a recent update](https://blogs.windows.com/windows-insider/2025/05/05/announcing-windows-11-insider-preview-build-26120-3950-beta-channel/#:~:text=We%20have%20adjusted%20the%20needy%20state%20pill%20under%20apps%20on%20the%20taskbar%20that%20need%20attention%20to%20be%20wider%20and%20more%20visible.), Windows adjusted the running indicator for taskbar items that need attention to be wider and more visible. The update improves compatibility with this change.
+
 ## 1.4.1 ([May 10, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5e41b17208d957cf8b3dbfcc837c24ceb2e2eaa7/mods/taskbar-labels.wh.cpp))
 
 * Added an option for customizing text trimming (ellipsis/clip).
