@@ -1503,7 +1503,7 @@
                 "published": 1748977001000,
                 "rating": 10,
                 "ratingUsers": 19,
-                "updated": 1748977001000,
+                "updated": 1752305308000,
                 "users": 407
             },
             "metadata": {
@@ -1518,7 +1518,7 @@
                     "explorer.exe"
                 ],
                 "name": "Explorer Double Click Up",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "explorer-frame-classic": {

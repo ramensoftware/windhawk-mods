@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-11T17:51:29.000Z</updated>
+    <updated>2025-07-12T07:28:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Double Click Up 1.0.1]]></title>
+        <id>https://windhawk.net/mods/explorer-double-click-up#e80412f22825c0d4ce5c306e0ecf6608d1103f7a</id>
+        <link href="https://windhawk.net/mods/explorer-double-click-up"/>
+        <updated>2025-07-12T07:28:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Use LoadLibraryEx with LOAD<em>LIBRARY</em>SEARCH_SYSTEM32 #2063</li>
+</ul>]]></content>
+        <author>
+            <name>wrldspawn</name>
+            <uri>https://github.com/wrldspawn</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Resource Redirect 1.2.2]]></title>
         <id>https://windhawk.net/mods/icon-resource-redirect#4f480eff9a5cecad737798bfafa461e1fb23c250</id>
@@ -289,17 +302,6 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Clientedge Everywhere 1.4.0]]></title>
-        <id>https://windhawk.net/mods/clientedge-in-apps#afbc62ee034d63d1a2513594de420ae3eee1a97f</id>
-        <link href="https://windhawk.net/mods/clientedge-in-apps"/>
-        <updated>2025-06-28T23:04:01.000Z</updated>
-        <content type="html"><![CDATA[<p>The issue with Regedit was caused by another mod, whose fixed version is to be submitted soon. As such, it is not needed anymore.</p>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
