@@ -1,3 +1,7 @@
+## 1.3.1 ([Jul 12, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b924b35e8f24e34cf2cb793a4a593f0a1b48057b/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Updated the TranslucentShell theme. Now the translucent effect works even if transparency effects are disabled in the settings or if energy saving mode is enabled.
+
 ## 1.3 ([Jul 11, 2025](https://github.com/ramensoftware/windhawk-mods/blob/deda2477f65c93873120051ae41906734197b23e/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added a built-in blur brush object, `WindhawkBlur`, which supports the `BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`.
