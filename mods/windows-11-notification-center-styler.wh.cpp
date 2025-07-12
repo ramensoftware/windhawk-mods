@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center and Action Center with themes contributed by others or create your own
-// @version         1.3
+// @version         1.3.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -234,37 +234,37 @@ struct Theme {
 
 const Theme g_themeTranslucentShell = {{
     ThemeTargetStyles{L"Grid#NotificationCenterGrid", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.12\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"Background:=$CommonBgBrush",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15"}},
     ThemeTargetStyles{L"Grid#CalendarCenterGrid", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.12\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"Background:=$CommonBgBrush",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15"}},
     ThemeTargetStyles{L"ScrollViewer#CalendarControlScrollViewer", {
-        L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
+        L"Background=Transparent"}},
     ThemeTargetStyles{L"Border#CalendarHeaderMinimizedOverlay", {
-        L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
+        L"Background=Transparent"}},
     ThemeTargetStyles{L"ActionCenter.FocusSessionControl#FocusSessionControl > Grid#FocusGrid", {
-        L"Background:=<AcrylicBrush Opacity=\"0\"/>"}},
+        L"Background=Transparent"}},
     ThemeTargetStyles{L"MenuFlyoutPresenter", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.12\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#00000000\"/>",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15",
         L"Padding=2,4,2,4"}},
     ThemeTargetStyles{L"Border#JumpListRestyledAcrylic", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.12\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"Background:=$CommonBgBrush",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15",
         L"Margin=-2,-2,-2,-2"}},
     ThemeTargetStyles{L"Grid#ControlCenterRegion", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.12\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"Background:=$CommonBgBrush",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#L1Grid > Border", {
         L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#MediaTransportControlsRegion", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.12\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"Background:=$CommonBgBrush",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15"}},
     ThemeTargetStyles{L"Grid#MediaTransportControlsRoot", {
@@ -282,7 +282,7 @@ const Theme g_themeTranslucentShell = {{
     ThemeTargetStyles{L"ActionCenter.FlexibleToastView#FlexibleNormalToastView", {
         L"Background:=<SolidColorBrush Color=\"Transparent\"/>"}},
     ThemeTargetStyles{L"Border#ToastBackgroundBorder2", {
-        L"Background:=<AcrylicBrush TintOpacity=\"0\" TintColor=\"Black\" TintLuminosityOpacity=\"0.12\" Opacity=\"1\" FallbackColor=\"#70262626\"/>",
+        L"Background:=$CommonBgBrush",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15"}},
     ThemeTargetStyles{L"JumpViewUI.SystemItemListViewItem > Grid#LayoutRoot > Border#BackgroundBorder", {
@@ -311,6 +311,8 @@ const Theme g_themeTranslucentShell = {{
         L"TextAlignment=Center"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.StackPanel#PrimaryAndSecondaryTextContainer > Windows.UI.Xaml.Controls.TextBlock#SubtitleText", {
         L"TextAlignment=Center"}},
+}, {
+    L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>",
 }};
 
 const Theme g_themeUnified = {{
@@ -2090,7 +2092,9 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             for (const auto& rule : styleRules) {
                 propertyOverrideValues.push_back(
-                    ParseNonXamlPropertyOverrideValue(rule.value));
+                    rule.isXamlValue
+                        ? ParseNonXamlPropertyOverrideValue(rule.value)
+                        : std::nullopt);
 
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
