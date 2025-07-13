@@ -1,3 +1,8 @@
+## 1.3.3 ([Jul 13, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b00021ce3d71d1b854c13daa040b58a5b05c8466/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed icon sizes not applying or applying incorrectly in some cases.
+* Fixed labels being truncated with icons of size 32 in some cases.
+
 ## 1.3.2 ([Jul 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f4cfa7d1a515ac3ae9e72793087ab9ff8fb889ca/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed compatibility with older Windows 11 builds.
