@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.3.2
+// @version         1.3.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -349,6 +349,12 @@ using IconUtils_GetIconSize_t = void(WINAPI*)(bool isSmall,
                                               SIZE* size);
 IconUtils_GetIconSize_t IconUtils_GetIconSize_Original;
 void WINAPI IconUtils_GetIconSize_Hook(bool isSmall, int type, SIZE* size) {
+    [[maybe_unused]] static bool logged = [] {
+        Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
+               __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
+        return true;
+    }();
+
     if (g_hasDynamicIconScaling) {
         IconUtils_GetIconSize_Original(isSmall, type, size);
         return;
@@ -370,6 +376,12 @@ IconContainer_IsStorageRecreationRequired_t
 bool WINAPI IconContainer_IsStorageRecreationRequired_Hook(void* pThis,
                                                            void* param1,
                                                            int flags) {
+    [[maybe_unused]] static bool logged = [] {
+        Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
+               __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
+        return true;
+    }();
+
     if (g_hasDynamicIconScaling) {
         return IconContainer_IsStorageRecreationRequired_Original(pThis, param1,
                                                                   flags);
@@ -411,12 +423,13 @@ CIconLoadingFunctions_GetClassLongPtrW_t
 ULONG_PTR WINAPI CIconLoadingFunctions_GetClassLongPtrW_Hook(void* pThis,
                                                              HWND hWnd,
                                                              int nIndex) {
+    Wh_Log(L"> hasDynamicIconScaling=%d, nIndex=%d", g_hasDynamicIconScaling,
+           nIndex);
+
     if (g_hasDynamicIconScaling) {
         return CIconLoadingFunctions_GetClassLongPtrW_Original(pThis, hWnd,
                                                                nIndex);
     }
-
-    Wh_Log(L">");
 
     if (!g_unloading && nIndex == GCLP_HICON && g_settings.iconSize <= 16) {
         nIndex = GCLP_HICONSM;
@@ -446,12 +459,13 @@ CIconLoadingFunctions_SendMessageCallbackW_Hook(void* pThis,
                                                 LPARAM lParam,
                                                 SENDASYNCPROC lpResultCallBack,
                                                 ULONG_PTR dwData) {
+    Wh_Log(L"> hasDynamicIconScaling=%d, Msg=%u, wParam=%zu, lParam=%zu",
+           g_hasDynamicIconScaling, Msg, wParam, lParam);
+
     if (g_hasDynamicIconScaling) {
         return CIconLoadingFunctions_SendMessageCallbackW_Original(
             pThis, hWnd, Msg, wParam, lParam, lpResultCallBack, dwData);
     }
-
-    Wh_Log(L">");
 
     if (!g_unloading && Msg == WM_GETICON && wParam == ICON_BIG &&
         g_settings.iconSize <= 16) {
@@ -469,12 +483,12 @@ using ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_t =
 ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_t
     ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Original;
 void WINAPI ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Hook(void* pThis) {
+    Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
+
     if (g_hasDynamicIconScaling) {
         ShellIconLoaderV2_LoadAsyncIcon__ResumeCoro_Original(pThis);
         return;
     }
-
-    Wh_Log(L">");
 
     g_shellIconLoaderV2_LoadAsyncIcon__ResumeCoro_ThreadId =
         GetCurrentThreadId();
@@ -515,6 +529,12 @@ TaskListItemViewModel_GetIconHeight_t
 int WINAPI TaskListItemViewModel_GetIconHeight_Hook(void* pThis,
                                                     void* param1,
                                                     double* iconHeight) {
+    [[maybe_unused]] static bool logged = [] {
+        Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
+               __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
+        return true;
+    }();
+
     if (g_hasDynamicIconScaling) {
         return TaskListItemViewModel_GetIconHeight_Original(pThis, param1,
                                                             iconHeight);
@@ -538,6 +558,8 @@ TaskListGroupViewModel_GetIconHeight_t
 int WINAPI TaskListGroupViewModel_GetIconHeight_Hook(void* pThis,
                                                      void* param1,
                                                      double* iconHeight) {
+    Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
+
     if (g_hasDynamicIconScaling) {
         return TaskListGroupViewModel_GetIconHeight_Original(pThis, param1,
                                                              iconHeight);
@@ -560,11 +582,15 @@ TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_t
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_taskbarSizeEnum_Hook(
     int enumTaskbarSize) {
+    Wh_Log(L"> hasDynamicIconScaling=%d, enumTaskbarSize=%d",
+           g_hasDynamicIconScaling, enumTaskbarSize);
+
     // Even if the feature flag is enabled, the feature may not be actually
     // enabled for some reason. Handle this here by resetting the flag.
-    g_hasDynamicIconScaling = false;
-
-    Wh_Log(L"> %d", enumTaskbarSize);
+    if (g_hasDynamicIconScaling) {
+        Wh_Log(L"Setting hasDynamicIconScaling to false");
+        g_hasDynamicIconScaling = false;
+    }
 
     if (!g_unloading && (enumTaskbarSize == 1 || enumTaskbarSize == 2)) {
         return g_settings.iconSize;
@@ -580,9 +606,15 @@ TaskbarConfiguration_GetIconHeightInViewPixels_double_t
     TaskbarConfiguration_GetIconHeightInViewPixels_double_Original;
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_double_Hook(double baseHeight) {
+    Wh_Log(L"> hasDynamicIconScaling=%d, baseHeight=%f",
+           g_hasDynamicIconScaling, baseHeight);
+
     // Even if the feature flag is enabled, the feature may not be actually
     // enabled for some reason. Handle this here by resetting the flag.
-    g_hasDynamicIconScaling = false;
+    if (g_hasDynamicIconScaling) {
+        Wh_Log(L"Setting hasDynamicIconScaling to false");
+        g_hasDynamicIconScaling = false;
+    }
 
     if (!g_unloading) {
         return g_settings.iconSize;
@@ -598,6 +630,12 @@ TaskbarConfiguration_GetIconHeightInViewPixels_method_t
     TaskbarConfiguration_GetIconHeightInViewPixels_method_Original;
 double WINAPI
 TaskbarConfiguration_GetIconHeightInViewPixels_method_Hook(void* pThis) {
+    [[maybe_unused]] static bool logged = [] {
+        Wh_Log(L"> [%S] First call, hasDynamicIconScaling=%d",
+               __PRETTY_FUNCTION__, g_hasDynamicIconScaling);
+        return true;
+    }();
+
     double iconSize =
         TaskbarConfiguration_GetIconHeightInViewPixels_method_Original(pThis);
 
@@ -609,20 +647,20 @@ TaskbarConfiguration_GetIconHeightInViewPixels_method_Hook(void* pThis) {
 }
 
 using TaskListButton_IconHeight_t = void(WINAPI*)(void* pThis, double height);
-TaskListButton_IconHeight_t TaskListButton_IconHeight_SymbolAddress;
+TaskListButton_IconHeight_t TaskListButton_IconHeight_Original;
 
 size_t GetIconHeightOffset() {
     static size_t iconHeightOffset = []() {
         size_t offset =
 #if defined(_M_X64)
             OffsetFromAssemblyRegex(
-                (void*)TaskListButton_IconHeight_SymbolAddress, 0,
+                (void*)TaskListButton_IconHeight_Original, 0,
                 std::regex(R"(movsd xmm\d+, qword ptr \[rcx\+0x([0-9a-f]+)\])",
                            std::regex_constants::icase),
                 30);
 #elif defined(_M_ARM64)
             OffsetFromAssemblyRegex(
-                (void*)TaskListButton_IconHeight_SymbolAddress, 0,
+                (void*)TaskListButton_IconHeight_Original, 0,
                 std::regex(R"(ldr\s+d\d+, \[x\d+, #0x([0-9a-f]+)\])",
                            std::regex_constants::icase),
                 30);
@@ -630,7 +668,7 @@ size_t GetIconHeightOffset() {
 #error "Unsupported architecture"
 #endif
         Wh_Log(L"iconHeightOffset=0x%X", offset);
-        return offset;
+        return offset > 0xFFFF ? 0 : offset;
     }();
 
     return iconHeightOffset;
@@ -638,32 +676,6 @@ size_t GetIconHeightOffset() {
 
 void TaskListButton_IconHeight_InitOffsets() {
     GetIconHeightOffset();
-}
-
-TaskListButton_IconHeight_t TaskListButton_IconHeight_Original;
-void WINAPI TaskListButton_IconHeight_Hook(void* pThis, double height) {
-    Wh_Log(L">");
-
-    size_t iconHeightOffset = GetIconHeightOffset();
-    if (!iconHeightOffset || iconHeightOffset > 0xFFFF) {
-        TaskListButton_IconHeight_Original(pThis, height);
-        return;
-    }
-
-    double* iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
-
-    if (g_applyingSettings) {
-        // Make sure the function doesn't think that the value wasn't changed.
-        *iconHeight = 1;
-    }
-
-    TaskListButton_IconHeight_Original(pThis, height);
-
-    if (!g_unloading) {
-        // Make sure to use a different value for other calculations such as
-        // padding.
-        *iconHeight = g_smallIconSize ? 16 : 24;
-    }
 }
 
 using SystemTrayController_GetFrameSize_t =
@@ -750,7 +762,7 @@ LONG GetFrameSizeOffset() {
             // Wh_Log(L"%S", result1.text);
             LONG offset = std::stoull(match1[1], nullptr, 16);
             Wh_Log(L"frameSizeOffset=0x%X", offset);
-            return offset;
+            return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
         }
 
         Wh_Log(L"frameSizeOffset not found");
@@ -770,8 +782,8 @@ void WINAPI TaskbarConfiguration_UpdateFrameSize_Hook(void* pThis) {
     Wh_Log(L">");
 
     LONG frameSizeOffset = GetFrameSizeOffset();
-    if (frameSizeOffset <= 0) {
-        Wh_Log(L"frameSizeOffset <= 0");
+    if (!frameSizeOffset) {
+        Wh_Log(L"Error: frameSizeOffset is invalid");
         TaskbarConfiguration_UpdateFrameSize_Original(pThis);
         return;
     }
@@ -823,7 +835,7 @@ LONG GetLastHeightOffset() {
                 p[8] == 0x7A && p[10] == 0x75) {
                 LONG offset = *(LONG*)(p + 4);
                 Wh_Log(L"lastHeightOffset=0x%X", offset);
-                return offset;
+                return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
             }
         }
 #elif defined(_M_ARM64)
@@ -874,7 +886,7 @@ LONG GetLastHeightOffset() {
             // Wh_Log(L"%S", result3.text);
             LONG offset = std::stoull(match1[1], nullptr, 16);
             Wh_Log(L"lastHeightOffset=0x%X", offset);
-            return offset;
+            return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
         }
 #else
 #error "Unsupported architecture"
@@ -897,8 +909,10 @@ void WINAPI SystemTrayController_UpdateFrameSize_Hook(void* pThis) {
     Wh_Log(L">");
 
     LONG lastHeightOffset = GetLastHeightOffset();
-    if (lastHeightOffset > 0) {
+    if (lastHeightOffset) {
         *(double*)((BYTE*)pThis + lastHeightOffset) = 0;
+    } else {
+        Wh_Log(L"Error: lastHeightOffset is invalid");
     }
 
     g_inSystemTrayController_UpdateFrameSize = true;
@@ -925,27 +939,23 @@ void WINAPI TaskbarFrame_Height_double_Hook(void* pThis, double value) {
     return TaskbarFrame_Height_double_Original(pThis, value);
 }
 
-void* TaskbarController_OnGroupingModeChanged;
+void* TaskbarController_OnGroupingModeChanged_Original;
 
-using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
-TaskbarController_UpdateFrameHeight_t
-    TaskbarController_UpdateFrameHeight_Original;
-void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
-    Wh_Log(L">");
-
+LONG GetTaskbarFrameOffset() {
     static LONG taskbarFrameOffset = []() -> LONG {
 #if defined(_M_X64)
         // 48:83EC 28               | sub rsp,28
         // 48:8B81 88020000         | mov rax,qword ptr ds:[rcx+288]
         // or
         // 4C:8B81 80020000         | mov r8,qword ptr ds:[rcx+280]
-        const BYTE* p = (const BYTE*)TaskbarController_OnGroupingModeChanged;
+        const BYTE* p =
+            (const BYTE*)TaskbarController_OnGroupingModeChanged_Original;
         if (p && p[0] == 0x48 && p[1] == 0x83 && p[2] == 0xEC &&
             (p[4] == 0x48 || p[4] == 0x4C) && p[5] == 0x8B &&
             (p[6] & 0xC0) == 0x80) {
             LONG offset = *(LONG*)(p + 7);
             Wh_Log(L"taskbarFrameOffset=0x%X", offset);
-            return offset;
+            return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
         }
 #elif defined(_M_ARM64)
         // 00000001`806b1810 a9bf7bfd stp fp,lr,[sp,#-0x10]!
@@ -953,7 +963,7 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
         // 00000001`806b1818 aa0003e8 mov x8,x0
         // 00000001`806b181c f9414500 ldr x0,[x8,#0x288]
         const DWORD* start =
-            (const DWORD*)TaskbarController_OnGroupingModeChanged;
+            (const DWORD*)TaskbarController_OnGroupingModeChanged_Original;
         const DWORD* end = start + 10;
         std::regex regex1(R"(ldr\s+x\d+, \[x\d+, #0x([0-9a-f]+)\])");
         for (const DWORD* p = start; p != end; p++) {
@@ -975,7 +985,7 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
             // Wh_Log(L"%S", result1.text);
             LONG offset = std::stoull(match1[1], nullptr, 16);
             Wh_Log(L"taskbarFrameOffset=0x%X", offset);
-            return offset;
+            return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
         }
 #else
 #error "Unsupported architecture"
@@ -985,15 +995,29 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
         return 0;
     }();
 
-    if (taskbarFrameOffset <= 0) {
-        Wh_Log(L"taskbarFrameOffset <= 0");
+    return taskbarFrameOffset;
+}
+
+void TaskbarController_OnGroupingModeChanged_InitOffsets() {
+    GetTaskbarFrameOffset();
+}
+
+using TaskbarController_UpdateFrameHeight_t = void(WINAPI*)(void* pThis);
+TaskbarController_UpdateFrameHeight_t
+    TaskbarController_UpdateFrameHeight_Original;
+void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    LONG taskbarFrameOffset = GetTaskbarFrameOffset();
+    if (!taskbarFrameOffset) {
+        Wh_Log(L"Error: taskbarFrameOffset is invalid");
         TaskbarController_UpdateFrameHeight_Original(pThis);
         return;
     }
 
     void* taskbarFrame = *(void**)((BYTE*)pThis + taskbarFrameOffset);
     if (!taskbarFrame) {
-        Wh_Log(L"!taskbarFrame");
+        Wh_Log(L"Error: taskbarFrame is null");
         TaskbarController_UpdateFrameHeight_Original(pThis);
         return;
     }
@@ -1003,7 +1027,7 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
         winrt::guid_of<FrameworkElement>(),
         winrt::put_abi(taskbarFrameElement));
     if (!taskbarFrameElement) {
-        Wh_Log(L"!taskbarFrameElement");
+        Wh_Log(L"Error: taskbarFrameElement is null");
         TaskbarController_UpdateFrameHeight_Original(pThis);
         return;
     }
@@ -1082,55 +1106,101 @@ void* TaskListButton_UpdateIconColumnDefinition_Original;
 using TaskListButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateButtonPadding_t
     TaskListButton_UpdateButtonPadding_Original;
+void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
+    Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
 
-using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
-TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
-void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
-    Wh_Log(L">");
+    if (!g_hasDynamicIconScaling) {
+        TaskListButton_UpdateButtonPadding_Original(pThis);
+        return;
+    }
 
-    if (TaskListButton_UpdateIconColumnDefinition_Original &&
-        (g_applyingSettings || g_taskbarButtonWidthCustomized)) {
-        static LONG mediumTaskbarButtonExtentOffset = []() -> LONG {
+    // Make sure to use a different value for other calculations such as
+    // padding. Value 16 and 32 have special treatment.
+    double* iconHeight = nullptr;
+    double prevIconHeight;
+    if (g_hasDynamicIconScaling) {
+        size_t iconHeightOffset = GetIconHeightOffset();
+        if (iconHeightOffset) {
+            iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
+            prevIconHeight = *iconHeight;
+            double newIconHeight = g_smallIconSize ? 16 : 24;
+            Wh_Log(L"Setting iconHeight: %f->%f", prevIconHeight,
+                   newIconHeight);
+            *iconHeight = newIconHeight;
+        }
+    }
+
+    TaskListButton_UpdateButtonPadding_Original(pThis);
+
+    if (iconHeight) {
+        *iconHeight = prevIconHeight;
+    }
+}
+
+LONG GetMediumTaskbarButtonExtentOffset() {
+    static LONG mediumTaskbarButtonExtentOffset = []() -> LONG {
 #if defined(_M_X64)
-            // 40:53              | push rbx
-            // 48:83EC 60         | sub rsp,60
-            // 0F297424 50        | movaps xmmword ptr ss:[rsp+50],xmm6
-            // 48:8B05 B2EB1F00   | mov rax,qword ptr ds:[<__security_cookie>]
-            // 48:33C4            | xor rax,rsp
-            // 48:894424 48       | mov qword ptr ss:[rsp+48],rax
-            // F2:0F10B1 38030000 | movsd xmm6,qword ptr ds:[rcx+338]
-            const BYTE* start =
-                (const BYTE*)TaskListButton_UpdateIconColumnDefinition_Original;
-            const BYTE* end = start + 0x200;
-            for (const BYTE* p = start; p != end; p++) {
-                if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
-                    (p[3] & 0x81) == 0x81) {
-                    LONG offset = *(LONG*)(p + 4);
-                    Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
-                    return offset;
-                }
-
-                if (p[0] == 0xF2 && p[1] == 0x44 && p[2] == 0x0F &&
-                    p[3] == 0x10 && (p[4] & 0x81) == 0x81) {
-                    LONG offset = *(LONG*)(p + 5);
-                    Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
-                    return offset;
-                }
+        // 40:53              | push rbx
+        // 48:83EC 60         | sub rsp,60
+        // 0F297424 50        | movaps xmmword ptr ss:[rsp+50],xmm6
+        // 48:8B05 B2EB1F00   | mov rax,qword ptr ds:[<__security_cookie>]
+        // 48:33C4            | xor rax,rsp
+        // 48:894424 48       | mov qword ptr ss:[rsp+48],rax
+        // F2:0F10B1 38030000 | movsd xmm6,qword ptr ds:[rcx+338]
+        const BYTE* start =
+            (const BYTE*)TaskListButton_UpdateIconColumnDefinition_Original;
+        const BYTE* end = start + 0x200;
+        for (const BYTE* p = start; p != end; p++) {
+            if (p[0] == 0xF2 && p[1] == 0x0F && p[2] == 0x10 &&
+                (p[3] & 0x81) == 0x81) {
+                LONG offset = *(LONG*)(p + 4);
+                Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
+                return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
             }
+
+            if (p[0] == 0xF2 && p[1] == 0x44 && p[2] == 0x0F && p[3] == 0x10 &&
+                (p[4] & 0x81) == 0x81) {
+                LONG offset = *(LONG*)(p + 5);
+                Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
+                return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
+            }
+        }
 #elif defined(_M_ARM64)
-            // ...
-            // fd41b670 ldr  d16,[x19,#0x368]
-            // fd419e71 ldr  d17,[x19,#0x338]
-            // 1e703a31 fsub d17,d17,d16
-            // fd41be70 ldr  d16,[x19,#0x378]
-            // 1e703a28 fsub d8,d17,d16
-            const DWORD* start = (const DWORD*)
-                TaskListButton_UpdateIconColumnDefinition_Original;
-            const DWORD* end = start + 0x80;
-            std::regex regex1(R"(fsub\s+d\d+, (d\d+), d\d+)");
-            const DWORD* cmdWithReg1 = nullptr;
-            std::string reg1;
-            for (const DWORD* p = start; p != end; p++) {
+        // ...
+        // fd41b670 ldr  d16,[x19,#0x368]
+        // fd419e71 ldr  d17,[x19,#0x338]
+        // 1e703a31 fsub d17,d17,d16
+        // fd41be70 ldr  d16,[x19,#0x378]
+        // 1e703a28 fsub d8,d17,d16
+        const DWORD* start =
+            (const DWORD*)TaskListButton_UpdateIconColumnDefinition_Original;
+        const DWORD* end = start + 0x80;
+        std::regex regex1(R"(fsub\s+d\d+, (d\d+), d\d+)");
+        const DWORD* cmdWithReg1 = nullptr;
+        std::string reg1;
+        for (const DWORD* p = start; p != end; p++) {
+            WH_DISASM_RESULT result1;
+            if (!Wh_Disasm((void*)p, &result1)) {
+                break;
+            }
+
+            std::string_view s1 = result1.text;
+            if (s1 == "ret") {
+                break;
+            }
+
+            std::match_results<std::string_view::const_iterator> match1;
+            if (std::regex_match(s1.begin(), s1.end(), match1, regex1)) {
+                // Wh_Log(L"%S", result1.text);
+                cmdWithReg1 = p;
+                reg1 = match1[1];
+                break;
+            }
+        }
+
+        if (cmdWithReg1) {
+            std::regex regex2(R"(ldr\s+(d\d+), \[x\d+, #0x([0-9a-f]+)\])");
+            for (const DWORD* p = start; p != cmdWithReg1; p++) {
                 WH_DISASM_RESULT result1;
                 if (!Wh_Disasm((void*)p, &result1)) {
                     break;
@@ -1142,49 +1212,42 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
                 }
 
                 std::match_results<std::string_view::const_iterator> match1;
-                if (std::regex_match(s1.begin(), s1.end(), match1, regex1)) {
-                    // Wh_Log(L"%S", result1.text);
-                    cmdWithReg1 = p;
-                    reg1 = match1[1];
-                    break;
+                if (!std::regex_match(s1.begin(), s1.end(), match1, regex2) ||
+                    match1[1] != reg1) {
+                    continue;
                 }
+
+                // Wh_Log(L"%S", result1.text);
+                LONG offset = std::stoull(match1[2], nullptr, 16);
+                Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
+                return (offset < 0 || offset > 0xFFFF) ? 0 : offset;
             }
-
-            if (cmdWithReg1) {
-                std::regex regex2(R"(ldr\s+(d\d+), \[x\d+, #0x([0-9a-f]+)\])");
-                for (const DWORD* p = start; p != cmdWithReg1; p++) {
-                    WH_DISASM_RESULT result1;
-                    if (!Wh_Disasm((void*)p, &result1)) {
-                        break;
-                    }
-
-                    std::string_view s1 = result1.text;
-                    if (s1 == "ret") {
-                        break;
-                    }
-
-                    std::match_results<std::string_view::const_iterator> match1;
-                    if (!std::regex_match(s1.begin(), s1.end(), match1,
-                                          regex2) ||
-                        match1[1] != reg1) {
-                        continue;
-                    }
-
-                    // Wh_Log(L"%S", result1.text);
-                    LONG offset = std::stoull(match1[2], nullptr, 16);
-                    Wh_Log(L"mediumTaskbarButtonExtentOffset=0x%X", offset);
-                    return offset;
-                }
-            }
+        }
 #else
 #error "Unsupported architecture"
 #endif
 
-            Wh_Log(L"mediumTaskbarButtonExtentOffset not found");
-            return 0;
-        }();
+        Wh_Log(L"Error: mediumTaskbarButtonExtentOffset not found");
+        return 0;
+    }();
 
-        if (mediumTaskbarButtonExtentOffset > 0) {
+    return mediumTaskbarButtonExtentOffset;
+}
+
+void TaskListButton_UpdateIconColumnDefinition_InitOffsets() {
+    GetMediumTaskbarButtonExtentOffset();
+}
+
+using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    if (TaskListButton_UpdateIconColumnDefinition_Original &&
+        (g_applyingSettings || g_taskbarButtonWidthCustomized)) {
+        LONG mediumTaskbarButtonExtentOffset =
+            GetMediumTaskbarButtonExtentOffset();
+        if (mediumTaskbarButtonExtentOffset) {
             bool updateButtonPadding = false;
 
             double* mediumTaskbarButtonExtent =
@@ -1222,8 +1285,10 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
 
             if (updateButtonPadding) {
                 g_taskbarButtonWidthCustomized = true;
-                TaskListButton_UpdateButtonPadding_Original(pThis);
+                TaskListButton_UpdateButtonPadding_Hook(pThis);
             }
+        } else {
+            Wh_Log(L"Error: mediumTaskbarButtonExtentOffset is invalid");
         }
     }
 
@@ -1254,7 +1319,7 @@ LaunchListItemViewModel_IconHeight_t
     LaunchListItemViewModel_IconHeight_Original;
 void WINAPI LaunchListItemViewModel_IconHeight_Hook(void* pThis,
                                                     double iconHeight) {
-    Wh_Log(L">");
+    Wh_Log(L"> iconHeight=%f", iconHeight);
 
     g_smallIconSize = iconHeight == g_settings.iconSizeSmall &&
                       iconHeight != g_settings.iconSize;
@@ -1394,12 +1459,12 @@ using AugmentedEntryPointButton_UpdateButtonPadding_t =
 AugmentedEntryPointButton_UpdateButtonPadding_t
     AugmentedEntryPointButton_UpdateButtonPadding_Original;
 void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook(void* pThis) {
+    Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
+
     if (g_hasDynamicIconScaling) {
         AugmentedEntryPointButton_UpdateButtonPadding_Original(pThis);
         return;
     }
-
-    Wh_Log(L">");
 
     g_inAugmentedEntryPointButton_UpdateButtonPadding = true;
 
@@ -1411,12 +1476,13 @@ void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook(void* pThis) {
 using RepeatButton_Width_t = void(WINAPI*)(void* pThis, double width);
 RepeatButton_Width_t RepeatButton_Width_Original;
 void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
+    Wh_Log(L"> hasDynamicIconScaling=%d, width=%f", g_hasDynamicIconScaling,
+           width);
+
     if (g_hasDynamicIconScaling) {
         RepeatButton_Width_Original(pThis, width);
         return;
     }
-
-    Wh_Log(L">");
 
     RepeatButton_Width_Original(pThis, width);
 
@@ -1573,6 +1639,7 @@ auto WINAPI SHAppBarMessage_Hook(DWORD dwMessage, PAPPBARDATA pData) {
 
     // This is used to position secondary taskbars.
     if (dwMessage == ABM_QUERYPOS && ret && g_taskbarHeight) {
+        Wh_Log(L">");
         pData->rc.top =
             pData->rc.bottom -
             MulDiv(g_taskbarHeight, GetDpiForWindow(pData->hWnd), 96);
@@ -1595,6 +1662,7 @@ LRESULT WINAPI SendMessageTimeoutW_Hook(HWND hWnd,
         !g_unloading && Msg == WM_GETICON && wParam == ICON_BIG &&
         (g_smallIconSize ? g_settings.iconSizeSmall : g_settings.iconSize) <=
             16) {
+        Wh_Log(L">");
         wParam = ICON_SMALL2;
     }
 
@@ -1787,9 +1855,9 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             {
                 {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListButton::IconHeight(double))"},
-                &TaskListButton_IconHeight_SymbolAddress,
-                nullptr,  // Hooked manually, we need the symbol address.
-                true,     // From KB5058499 (May 2025).
+                &TaskListButton_IconHeight_Original,
+                nullptr,
+                true,  // From KB5058499 (May 2025).
             },
             {
                 {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
@@ -1850,7 +1918,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             {
                 {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnGroupingModeChanged(void))"},
-                &TaskbarController_OnGroupingModeChanged,
+                &TaskbarController_OnGroupingModeChanged_Original,
                 nullptr,
                 true,  // Missing in older Windows 11 versions.
             },
@@ -1886,6 +1954,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             {
                 {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"},
                 &TaskListButton_UpdateButtonPadding_Original,
+                TaskListButton_UpdateButtonPadding_Hook,
             },
             {
                 {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
@@ -1923,12 +1992,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         return false;
     }
 
-    if (TaskListButton_IconHeight_SymbolAddress) {
+    if (TaskListButton_IconHeight_Original) {
         TaskListButton_IconHeight_InitOffsets();
-        WindhawkUtils::Wh_SetFunctionHookT(
-            TaskListButton_IconHeight_SymbolAddress,
-            TaskListButton_IconHeight_Hook,
-            &TaskListButton_IconHeight_Original);
     }
 
 #ifdef _M_ARM64
@@ -1947,6 +2012,14 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             SystemTrayController_UpdateFrameSize_SymbolAddress,
             SystemTrayController_UpdateFrameSize_Hook,
             &SystemTrayController_UpdateFrameSize_Original);
+    }
+
+    if (TaskbarController_OnGroupingModeChanged_Original) {
+        TaskbarController_OnGroupingModeChanged_InitOffsets();
+    }
+
+    if (TaskListButton_UpdateIconColumnDefinition_Original) {
+        TaskListButton_UpdateIconColumnDefinition_InitOffsets();
     }
 
     constexpr UINT kDynamicIconScaling = 29785184;
