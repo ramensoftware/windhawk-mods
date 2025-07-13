@@ -2945,6 +2945,32 @@
                 "version": "1.0"
             }
         },
+        "search-menu-inspect-helper": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1752393997000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1752393997000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "description": "Helps inspect the search menu web view content via DevTools remote debugging, refer to the description for details",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "SearchHost.exe",
+                    "explorer.exe"
+                ],
+                "name": "Search Menu Inspect Helper",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "shadowplay-do-not-disable": {
             "details": {
                 "defaultSorting": 10870,

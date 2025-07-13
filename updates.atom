@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-12T17:52:19.000Z</updated>
+    <updated>2025-07-13T08:06:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Search Menu Inspect Helper 1.0]]></title>
+        <id>https://windhawk.net/mods/search-menu-inspect-helper#a096805885bace28a660707aa7e215ca6cf237e3</id>
+        <link href="https://windhawk.net/mods/search-menu-inspect-helper"/>
+        <updated>2025-07-13T08:06:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="searchmenuinspecthelper">Search Menu Inspect Helper</h1>
+<p>Helps inspect the search menu web view content via DevTools remote debugging.</p>
+<p>The mod prevents the search menu from being closed when focus is lost, which
+allows to inspect it while the DevTools window is the foreground window. The
+search menu can be closed by focusing on the search bar and pressing Escape.</p>
+<h2 id="instructions">Instructions</h2>
+<p>Configure remote debugging by following these steps: <a href="https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/remote-debugging-desktop">Remote debugging desktop
+WebView2 WinUI 2 (UWP)
+apps</a>.
+Instead of step 11 (Configure your WebView2 WinUI 2 (UWP) app for remote
+debugging), install this mod, and terminate the SearchHost.exe process. It will
+be relaunched automatically with remote debugging enabled.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.2]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#a16d12ef9bb15dfd5462b139fcfca356650e06d0</id>
@@ -285,19 +307,6 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
         <author>
             <name>xalejandro</name>
             <uri>https://github.com/tetawaves</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle through taskbar windows on click 1.1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-left-click-cycle#5f29657c709183d11aa2bc4a64f2a6a43d248d93</id>
-        <link href="https://windhawk.net/mods/taskbar-left-click-cycle"/>
-        <updated>2025-06-29T18:01:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with recent Windows 11 updates.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
