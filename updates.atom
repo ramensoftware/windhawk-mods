@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-14T15:49:04.000Z</updated>
+    <updated>2025-07-14T19:38:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Unlocked Toolbars Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-unlocked-toolbars-fix#82ef6abf501b9b14007d0ec0ae004b448dd5abc5</id>
+        <link href="https://windhawk.net/mods/explorer-unlocked-toolbars-fix"/>
+        <updated>2025-07-14T19:38:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerunlockedtoolbarsfix">Explorer Unlocked Toolbars Fix</h1>
+<p>In Windows Vista, a splitter was added to the bottom of the Explorer toolbar band
+site that renders when toolbars are unlocked. This mod removes that splitter.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-unlocked-toolbars-fix-before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-unlocked-toolbars-fix-after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Desktop Icons 1.4.4]]></title>
         <id>https://windhawk.net/mods/classic-desktop-icons#3fb3f3a47613cfcffcd4c49f4f339d81f948e1e2</id>
@@ -287,23 +304,6 @@ a very long time to decide which volume you want. </p>
         <content type="html"><![CDATA[<ul>
 <li>Fix string format</li>
 </ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Legacy Shell Message Boxes 1.0.0]]></title>
-        <id>https://windhawk.net/mods/legacy-shell-message-boxes#3229a6dfbafa86f4017a7787dd52de5676a05219</id>
-        <link href="https://windhawk.net/mods/legacy-shell-message-boxes"/>
-        <updated>2025-07-01T22:08:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="legacyshellmessageboxes">Legacy Shell Message Boxes</h1>
-<p>This mod makes message boxes opened by the <code>ShellMessageBox</code> API use regular message boxes like in
-Windows XP and before instead of task dialogs, like they do in Windows Vista and later.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/legacy-shell-message-boxes-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/legacy-shell-message-boxes-after.png" alt="After" /></p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
