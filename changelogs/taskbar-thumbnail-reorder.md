@@ -1,3 +1,7 @@
+## 1.1.3 ([Jul 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7ba9342013a283e981ecd93119ea8d9f6250d44c/mods/taskbar-thumbnail-reorder.wh.cpp))
+
+* Fixed thumbnails not being clickable when in list mode, either when there are too many items, or when the "Disable Taskbar Thumbnails" mod is used in list mode.
+
 ## 1.1.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4f601abc4c4dca4a0af11bc8e4f27b3175aee882/mods/taskbar-thumbnail-reorder.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.
