@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-14T10:35:15.000Z</updated>
+    <updated>2025-07-14T15:49:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Desktop Icons 1.4.4]]></title>
+        <id>https://windhawk.net/mods/classic-desktop-icons#3fb3f3a47613cfcffcd4c49f4f339d81f948e1e2</id>
+        <link href="https://windhawk.net/mods/classic-desktop-icons"/>
+        <updated>2025-07-14T15:49:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix desktop code applying to list views in multiprocess Explorer windows</li>
+<li>Use <code>LOAD_LIBRARY_SEARCH_SYSTEM32</code> to load comctl32.dll</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Scroll Actions 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-scroll-actions#27e1954f2906a693556907ad1dfbbb1bc4716a9d</id>
@@ -293,19 +307,6 @@ Windows XP and before instead of task dialogs, like they do in Windows Vista and
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Properties Icon 1.0]]></title>
-        <id>https://windhawk.net/mods/no-properties-icon#6a6232d08f4aa992db667fd3f0c237af31fbfc3c</id>
-        <link href="https://windhawk.net/mods/no-properties-icon"/>
-        <updated>2025-07-01T18:59:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="nopropertiesicon">No Properties Icon</h1>
-<p>Removes the window icon from property sheets like previous Windows versions.
-<img src="https://i.imgur.com/ehRAMCz.png" alt="Before / After" /></p>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>

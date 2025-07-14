@@ -1,3 +1,8 @@
+## 1.4.4 ([Jul 14, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3fb3f3a47613cfcffcd4c49f4f339d81f948e1e2/mods/classic-desktop-icons.wh.cpp))
+
+- Fix desktop code applying to list views in multiprocess Explorer windows
+- Use `LOAD_LIBRARY_SEARCH_SYSTEM32` to load comctl32.dll
+
 ## 1.4.3 ([Jun 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bdeebf8bd041100629066e24ee8cbb49bcc2bd1a/mods/classic-desktop-icons.wh.cpp))
 
 - Improve desktop finding method

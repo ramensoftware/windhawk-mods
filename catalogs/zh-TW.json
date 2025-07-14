@@ -526,7 +526,7 @@
                 "published": 1694937060000,
                 "rating": 10,
                 "ratingUsers": 4,
-                "updated": 1749162486000,
+                "updated": 1752508144000,
                 "users": 905
             },
             "metadata": {
@@ -541,7 +541,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Desktop Icons",
-                "version": "1.4.3"
+                "version": "1.4.4"
             }
         },
         "classic-explorer-menubar": {
