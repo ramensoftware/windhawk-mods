@@ -2,7 +2,7 @@
 // @id              classic-desktop-icons
 // @name            Classic Desktop Icons
 // @description     Enables the classic selection style on desktop icons.
-// @version         1.4.3
+// @version         1.4.4
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -401,6 +401,7 @@ HWND WINAPI CreateWindowExW_hook(
       * - lpClassName is non-null and not a bad pointer (MANY windows pass a bad pointer to lpClassName)
       * - The window's class name is "SysListView32"
       * - The window's parent's class name is "SHELLDLL_DefView"
+      * - The root window's class name is "Progman"
       */
     if (g_hWndDesktop == NULL
     && hWndParent != NULL
@@ -414,8 +415,13 @@ HWND WINAPI CreateWindowExW_hook(
 
             if (0 == wcscmp(lpPrntCls, L"SHELLDLL_DefView"))
             {
-                g_hWndDesktop = hRes;
-                UpdateDesktop();
+                HWND hwndRoot = GetAncestor(hWndParent, GA_ROOT);
+                GetClassNameW(hwndRoot, lpPrntCls, 256);
+                if (0 == wcscmp(lpPrntCls, L"Progman"))
+                {
+                    g_hWndDesktop = hRes;
+                    UpdateDesktop();
+                }
             }
         }
     }
@@ -480,7 +486,7 @@ BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hComCtl = LoadLibraryW(L"comctl32.dll");
+    HMODULE hComCtl = LoadLibraryExW(L"comctl32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hComCtl)
     {
         Wh_Log(L"Failed to load comctl32.dll");
