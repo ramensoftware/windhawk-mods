@@ -11,6 +11,7 @@
 // @include         msedge.exe
 // @include         opera.exe
 // @include         brave.exe
+// @include         thorium.exe
 // @include         *\YandexBrowser\Application\browser.exe
 // @compilerOptions -lcomctl32 -lgdi32
 // ==/WindhawkMod==
