@@ -1,11 +1,11 @@
 {
   "devDependencies": {
-    "@types/node": "^17.0.13",
-    "@types/showdown": "^2.0.0",
-    "tsx": "^4.19.0"
+    "@types/node": "^24.0.14",
+    "@types/showdown": "^2.0.6",
+    "tsx": "^4.20.3"
   },
   "dependencies": {
-    "feed": "^4.2.2",
+    "feed": "^5.1.0",
     "showdown": "^2.1.0"
   }
 }
