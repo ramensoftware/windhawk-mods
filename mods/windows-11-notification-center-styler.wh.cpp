@@ -2,7 +2,7 @@
 // @id              windows-11-notification-center-styler
 // @name            Windows 11 Notification Center Styler
 // @description     Customize the Notification Center and Action Center with themes contributed by others or create your own
-// @version         1.3.1
+// @version         1.3.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -105,8 +105,10 @@ specified visual state.
 
 For the XAML syntax, in addition to the built-in taskbar objects, the mod
 provides a built-in blur brush via the `WindhawkBlur` object, which supports the
-`BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur
-BlurAmount="10" TintColor="#80FF00FF"/>`.
+`BlurAmount`, `TintColor`, and `TintOpacity` properties. For example:
+`Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`. Theme resources
+are also supported, for example: `Fill:=<WindhawkBlur BlurAmount="18"
+TintColor="{ThemeResource SystemAccentColorDark1}" TintOpacity="0.5"/>`.
 
 Targets and styles starting with two slashes (`//`) are ignored. This can be
 useful for temporarily disabling a target or style.
@@ -247,7 +249,7 @@ const Theme g_themeTranslucentShell = {{
         L"Background=Transparent"}},
     ThemeTargetStyles{L"ActionCenter.FocusSessionControl#FocusSessionControl > Grid#FocusGrid", {
         L"Background=Transparent"}},
-    ThemeTargetStyles{L"MenuFlyoutPresenter", {
+    ThemeTargetStyles{L"MenuFlyoutPresenter > Border", {
         L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#00000000\"/>",
         L"BorderThickness=0,0,0,0",
         L"CornerRadius=15",
@@ -1231,13 +1233,29 @@ typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
-class XamlBlurBrush : public wux::Media::XamlCompositionBrushBaseT<XamlBlurBrush>
+class XamlBlurBrush : public wux::Media::XamlCompositionBrushBaseT<XamlBlurBrush, wux::Media::ISolidColorBrush>
 {
 public:
 	XamlBlurBrush(wuc::Compositor compositor, float blurAmount, wfn::float4 tint);
 
 	void OnConnected();
 	void OnDisconnected();
+
+	// The ISolidColorBrush implementation is required for
+	// ActionCenter::FlexibleToastView::OnToastBackgroundBorderBackgroundChanged
+	// in Windows.UI.ActionCenter.dll. If missing, the app crashes while trying
+	// to show the first notification, which results in a crash loop.
+	winrt::Windows::UI::Color Color() const {
+		return winrt::Windows::UI::Color{
+			static_cast<uint8_t>(std::round(m_tint.w * 255.0f)),
+			static_cast<uint8_t>(std::round(m_tint.x * 255.0f)),
+			static_cast<uint8_t>(std::round(m_tint.y * 255.0f)),
+			static_cast<uint8_t>(std::round(m_tint.z * 255.0f)),
+		};
+	}
+	void Color(winrt::Windows::UI::Color const& value) {
+		// Do nothing.
+	}
 
 private:
 	wuc::Compositor m_compositor;
@@ -1810,7 +1828,7 @@ void SetOrClearValue(DependencyObject elementDo,
             std::get_if<winrt::Windows::Foundation::IInspectable>(
                 &overrideValue)) {
         value = *inspectable;
-    } else if (auto* blurBrashParams =
+    } else if (auto* blurBrushParams =
                    std::get_if<XamlBlurBrushParams>(&overrideValue)) {
         if (auto uiElement = elementDo.try_as<UIElement>()) {
             auto compositor =
@@ -1818,8 +1836,8 @@ void SetOrClearValue(DependencyObject elementDo,
                     .Compositor();
 
             value = winrt::make<XamlBlurBrush>(std::move(compositor),
-                                               blurBrashParams->blurAmount,
-                                               blurBrashParams->tint);
+                                               blurBrushParams->blurAmount,
+                                               blurBrushParams->tint);
         } else {
             Wh_Log(L"Can't get UIElement for blur brush");
             return;
@@ -1933,13 +1951,17 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     }
     substr = substr.substr(0, substr.size() - std::size(kWindhawkBlurSuffix));
 
-    auto value = XamlBlurBrushParams{
-        .blurAmount = 0,
-        .tint = {},
-    };
+    bool pendingTintColorThemeResource = false;
+    wf::Numerics::float4 tint{};
+    float tintOpacity = std::numeric_limits<float>::quiet_NaN();
+    float blurAmount = 0;
 
-    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
+    constexpr auto kTintColorThemeResourcePrefix =
+        L"TintColor=\"{ThemeResource"sv;
+    constexpr auto kTintColorThemeResourceSuffix = L"}\""sv;
     constexpr auto kTintColorPrefix = L"TintColor=\"#"sv;
+    constexpr auto kTintOpacityPrefix = L"TintOpacity=\""sv;
+    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
     for (const auto prop : SplitStringView(substr, L" ")) {
         const auto propSubstr = TrimStringView(prop);
         if (propSubstr.empty()) {
@@ -1949,12 +1971,44 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
         Wh_Log(L"  %.*s", static_cast<int>(propSubstr.length()),
                propSubstr.data());
 
-        if (propSubstr.starts_with(kBlurAmountPrefix) &&
-            propSubstr.back() == L'\"') {
-            auto valStr = propSubstr.substr(
-                std::size(kBlurAmountPrefix),
-                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
-            value.blurAmount = std::stoi(std::wstring(valStr));
+        if (pendingTintColorThemeResource) {
+            if (!propSubstr.ends_with(kTintColorThemeResourceSuffix)) {
+                throw std::runtime_error(
+                    "WindhawkBlur: Invalid TintColor theme resource syntax");
+            }
+
+            pendingTintColorThemeResource = false;
+
+            auto themeResourceName = propSubstr.substr(
+                0,
+                propSubstr.size() - std::size(kTintColorThemeResourceSuffix));
+
+            auto resources = Application::Current().Resources();
+            auto resource = resources.TryLookup(
+                winrt::box_value(winrt::hstring(themeResourceName)));
+            if (resource) {
+                if (auto colorBrush =
+                        resource.try_as<wux::Media::SolidColorBrush>()) {
+                    auto color = colorBrush.Color();
+                    tint = {color.R / 255.0f, color.G / 255.0f,
+                            color.B / 255.0f, color.A / 255.0f};
+                } else if (auto color =
+                               resource.try_as<winrt::Windows::UI::Color>()) {
+                    tint = {color->R / 255.0f, color->G / 255.0f,
+                            color->B / 255.0f, color->A / 255.0f};
+                } else {
+                    Wh_Log(L"Resource type is unsupported: %s",
+                           winrt::get_class_name(resource).c_str());
+                }
+            } else {
+                Wh_Log(L"Failed to find resource");
+            }
+
+            continue;
+        }
+
+        if (propSubstr == kTintColorThemeResourcePrefix) {
+            pendingTintColorThemeResource = true;
             continue;
         }
 
@@ -1982,14 +2036,50 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             uint8_t r = LOBYTE(HIWORD(valNum));
             uint8_t g = HIBYTE(LOWORD(valNum));
             uint8_t b = LOBYTE(LOWORD(valNum));
-            value.tint = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            tint = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            continue;
+        }
+
+        if (propSubstr.starts_with(kTintOpacityPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kTintOpacityPrefix),
+                propSubstr.size() - std::size(kTintOpacityPrefix) - 1);
+            tintOpacity = std::stof(std::wstring(valStr));
+            continue;
+        }
+
+        if (propSubstr.starts_with(kBlurAmountPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kBlurAmountPrefix),
+                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
+            blurAmount = std::stof(std::wstring(valStr));
             continue;
         }
 
         throw std::runtime_error("WindhawkBlur: Bad property");
     }
 
-    return value;
+    if (pendingTintColorThemeResource) {
+        throw std::runtime_error(
+            "WindhawkBlur: Unterminated TintColor theme resource");
+    }
+
+    if (!std::isnan(tintOpacity)) {
+        if (tintOpacity < 0.0f) {
+            tintOpacity = 0.0f;
+        } else if (tintOpacity > 1.0f) {
+            tintOpacity = 1.0f;
+        }
+
+        tint.w = tintOpacity;
+    }
+
+    return XamlBlurBrushParams{
+        .blurAmount = blurAmount,
+        .tint = tint,
+    };
 }
 
 Style GetStyleFromXamlSetters(const std::wstring_view type,
