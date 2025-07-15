@@ -159,9 +159,16 @@ def validate_metadata(path: Path, expected_author: str):
         github = value
         expected = f'https://github.com/{expected_author}'
         if value != expected:
-            warnings += add_warning(
-                path, line_number, f'Expected {key[0]} to be "{expected}"'
+            warning_msg = (
+                f'Expected {key[0]} to be "{expected}".\n'
+                'Note that only the original author of the mod is allowed to submit'
+                ' updates.\n'
+                'If you are not the original author, you might want to contact them to'
+                ' submit the update instead.\n'
+                'For more information about submitting a mod update, refer to the'
+                ' "Submitting a Mod Update" section in the repository\'s README.md.'
             )
+            warnings += add_warning(path, line_number, warning_msg)
     else:
         warnings += add_warning(path, 1, f'Missing {key[0]}')
 
