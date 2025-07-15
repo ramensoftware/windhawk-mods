@@ -1,3 +1,10 @@
+## 1.3.2 ([Jul 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5e1b574b5bdd18af997aaebe764784b9dc6093ef/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Updated TranslucentShell.
+  * Fixed notifications causing a crash of the notification center.
+  * Fixed buggy menu hover handling.
+* Added ThemeResource support to WindhawkBlur.
+
 ## 1.3.1 ([Jul 12, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b924b35e8f24e34cf2cb793a4a593f0a1b48057b/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Updated the TranslucentShell theme. Now the translucent effect works even if transparency effects are disabled in the settings or if energy saving mode is enabled.
