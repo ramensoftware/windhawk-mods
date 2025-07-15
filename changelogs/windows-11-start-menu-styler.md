@@ -1,3 +1,10 @@
+## 1.3.1 ([Jul 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/51c2fd314812aaa6a4596b58dc12c6aa09d4165e/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Updated themes: Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired.
+* Initial adaptation of themes to [the redesigned start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/): NoRecommendedSection, Windows10, Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired, RosePine.
+* The "Disable the new start menu layout" option now disables the redesigned start menu too. Previously, only layout changes related to the Phone Link pane were disabled.
+* Added ThemeResource support to WindhawkBlur.
+
 ## 1.3 ([Jun 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4579380d42e30aea8898e502106df234cade7b3c/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Added an option to disable the new start menu layout. Recent Windows updates introduced some changes which broke some of the themes. The themes will be adapted to these changes in the future, but for now, this option can be used to temporarily revert them.

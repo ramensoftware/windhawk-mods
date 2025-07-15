@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-15T13:59:53.000Z</updated>
+    <updated>2025-07-15T18:48:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.3.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-start-menu-styler#51c2fd314812aaa6a4596b58dc12c6aa09d4165e</id>
+        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
+        <updated>2025-07-15T18:48:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated themes: Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired.</li>
+<li>Initial adaptation of themes to <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned start menu</a>: NoRecommendedSection, Windows10, Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired, RosePine.</li>
+<li>The "Disable the new start menu layout" option now disables the redesigned start menu too. Previously, only layout changes related to the Phone Link pane were disabled.</li>
+<li>Added ThemeResource support to WindhawkBlur.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.3.2]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#5e1b574b5bdd18af997aaebe764784b9dc6093ef</id>
@@ -297,19 +313,6 @@ a very long time to decide which volume you want. </p>
         <author>
             <name>rom4ster</name>
             <uri>https://github.com/rom4ster</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Properties Icon 1.0.1]]></title>
-        <id>https://windhawk.net/mods/no-properties-icon#44ce7b23ea3db90ef619aaae50bd1f4dd38550ef</id>
-        <link href="https://windhawk.net/mods/no-properties-icon"/>
-        <updated>2025-07-04T18:42:18.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix calling convention</li>
-</ul>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
