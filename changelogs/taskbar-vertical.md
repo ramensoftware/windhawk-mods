@@ -1,3 +1,12 @@
+## 1.3.5 ([Jul 16, 2025](https://github.com/ramensoftware/windhawk-mods/blob/97c72fa2c85a13393590bdf73464db7c6d19e8ae/mods/taskbar-vertical.wh.cpp))
+
+* Fixed misplaced thumbnail previews after a recent Windows 11 update.
+* Thumbnail previews in list mode are now aligned to bottom. List mode is used when there are too many items, or when the "Disable Taskbar Thumbnails" mod is used in list mode.
+* Fixed taskbar elements being unclickable on the monitor edges sometimes.
+* Fixed [the redesigned start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/) being cut off. Currently it opens in the original location. Better support is planned for follow-up updates.
+* Improved notifications placement when the taskbar is on the left. The mod tried to keep notifications on the left in this case, but they sometimes still opened on the right.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.3.4 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/787a8c303d89449e75abd3f2a4677f26b7d16b0a/mods/taskbar-vertical.wh.cpp))
 
 * Added an option to customize the start menu vertical alignment.
