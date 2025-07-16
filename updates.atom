@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-15T18:48:11.000Z</updated>
+    <updated>2025-07-16T09:53:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Native titelebars in Chromium-based browsers 0.1.2]]></title>
+        <id>https://windhawk.net/mods/chromium-native-titlebar#4bb5bf82e481883cf97da7c3d98cf82114a86d0c</id>
+        <link href="https://windhawk.net/mods/chromium-native-titlebar"/>
+        <updated>2025-07-16T09:53:24.000Z</updated>
+        <content type="html"><![CDATA[<p>Deprecation notification</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.3.1]]></title>
         <id>https://windhawk.net/mods/windows-11-start-menu-styler#51c2fd314812aaa6a4596b58dc12c6aa09d4165e</id>
@@ -287,32 +298,6 @@ be relaunched automatically with remote debugging enabled.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Volume HID Sendeer 0.1]]></title>
-        <id>https://windhawk.net/mods/volume-hid-sender#ea9266452ed4e81227552681af10d99512cdc12b</id>
-        <link href="https://windhawk.net/mods/volume-hid-sender"/>
-        <updated>2025-07-05T19:16:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="volumehidsender">Volume HID Sender</h1>
-<p>This mod allows you to send HID input for the MOUNTAIN EVEREST MAX keyboard everytime 
-the volume is changed. This solution is not perfect. The volume will frequently be off by one. 
-It is also possible to desync the volume temporarily (until next volume update) by taking
-a very long time to decide which volume you want. </p>
-<p>Custom timeouts may be supported in the future</p>
-<p>Arbritary HID output will be supported in the future</p>
-<p>Requires HID HIDApiTester. </p>
-<h1 id="gettingstarted">Getting started</h1>
-<p>First get HIDAPITester
-<a href="https://github.com/todbot/hidapitester/releases">here</a>.</p>
-<p>Next set the HIDApiTesterPath variable in settings to where you downloaded HIDAPITester to</p>
-<p>Finally, Profit </p>
-<h1 id="specialthanks">Special Thanks</h1>
-<p>https://stackoverflow.com/questions/4559526/how-do-i-tell-if-the-master-volume-is-muted</p>
-<p>https://github.com/todbot/hidapitester</p>]]></content>
-        <author>
-            <name>rom4ster</name>
-            <uri>https://github.com/rom4ster</uri>
         </author>
     </entry>
 </feed>

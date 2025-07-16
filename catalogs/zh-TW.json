@@ -407,7 +407,7 @@
                 "published": 1739537800000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1739582662000,
+                "updated": 1752659604000,
                 "users": 64
             },
             "metadata": {
@@ -422,7 +422,7 @@
                     "supermium.exe"
                 ],
                 "name": "Native titelebars in Chromium-based browsers",
-                "version": "0.1.1"
+                "version": "0.1.2"
             }
         },
         "chromium-ncpaint-fix": {
