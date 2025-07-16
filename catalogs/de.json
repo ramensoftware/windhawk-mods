@@ -684,6 +684,27 @@
                 "version": "1.1.0"
             }
         },
+        "classic-progress-bars": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1752682973000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1752682973000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lversion -luxtheme -lgdi32 -lpsapi",
+                "description": "Reverts progress bars to how they looked in Windows XP and before",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Progress Bars",
+                "version": "1.0.0"
+            }
+        },
         "classic-start-menu-folders-icon": {
             "details": {
                 "defaultSorting": 1150,
