@@ -2,7 +2,7 @@
 // @id              basic-themer
 // @name            Basic Themer
 // @description     Applies the Windows Basic theme to desktop windows
-// @version         1.1.0
+// @version         1.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         dwm.exe
@@ -73,6 +73,7 @@ basic frames. To circumvent this, use the "DWM Unextend Frames" mod.
 #include <windhawk_utils.h>
 #include <dwmapi.h>
 #include <wtsapi32.h>
+#include <vector>
 
 struct
 {
@@ -286,7 +287,8 @@ void LoadSettings(void)
     }
 }
 
-const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+// Windows 11 23H2 and before
+const WindhawkUtils::SYMBOL_HOOK uDWMDllHooks[] = {
     {
         {
             L"public: long __cdecl CWindowList::GetSyncedWindowDataByHwnd(struct HWND__ *,class CWindowData * *)"
@@ -298,6 +300,27 @@ const WindhawkUtils::SYMBOL_HOOK hooks[] = {
     {
         {
             L"public: long __cdecl CWindowList::SyncWindowData(struct IDwmWindow *,class CWindowData *)"
+        },
+        &CWindowList_SyncWindowData_orig,
+        CWindowList_SyncWindowData_hook,
+        false
+    }
+};
+
+// Windows 11 24H2+
+// uDWM.dll
+const WindhawkUtils::SYMBOL_HOOK uDWMDllHooks_win11[] = {
+    {
+        {
+            L"public: void __cdecl CWindowList::GetSyncedWindowDataByHwnd(struct HWND__ *,class CWindowData * *)"
+        },
+        &CWindowList_GetSyncedWindowDataByHwnd_orig,
+        CWindowList_GetSyncedWindowDataByHwnd_hook,
+        false
+    },
+    {
+        {
+            L"public: void __cdecl CWindowList::SyncWindowData(struct IDwmWindow *,class CWindowData *)"
         },
         &CWindowList_SyncWindowData_orig,
         CWindowList_SyncWindowData_hook,
@@ -318,8 +341,13 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         uDWM,
-        hooks,
-        ARRAYSIZE(hooks)
+        uDWMDllHooks,
+        ARRAYSIZE(uDWMDllHooks)
+    )
+    && !WindhawkUtils::HookSymbols(
+        uDWM,
+        uDWMDllHooks_win11,
+        ARRAYSIZE(uDWMDllHooks_win11)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in uDWM.dll");
