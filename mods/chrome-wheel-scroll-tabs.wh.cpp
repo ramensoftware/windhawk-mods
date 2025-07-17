@@ -2,7 +2,7 @@
 // @id              chrome-wheel-scroll-tabs
 // @name            Chrome/Edge scroll tabs with mouse wheel
 // @description     Use the mouse wheel while hovering over the tab bar to switch between tabs
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -166,14 +166,16 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
         return false;
     }
 
+    RECT rect{};
+    GetWindowRect(hWnd, &rect);
+
     UINT dpi = GetDpiForWindowWithFallback(hWnd);
 
     if (int scrollAreaLimitPixelsFromTop =
             g_settings.scrollAreaLimitPixelsFromTop) {
         scrollAreaLimitPixelsFromTop =
-            MulDiv(scrollAreaLimitPixelsFromTop,
-                   GetDpiForWindowWithFallback(hWnd), 96);
-        if (yPos >= scrollAreaLimitPixelsFromTop) {
+            MulDiv(scrollAreaLimitPixelsFromTop, dpi, 96);
+        if (yPos >= rect.top + scrollAreaLimitPixelsFromTop) {
             Wh_Log(L"Mouse wheel event outside of the top scroll area limit");
             return false;
         }
@@ -182,9 +184,8 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
     if (int scrollAreaLimitPixelsFromLeft =
             g_settings.scrollAreaLimitPixelsFromLeft) {
         scrollAreaLimitPixelsFromLeft =
-            MulDiv(scrollAreaLimitPixelsFromLeft,
-                   GetDpiForWindowWithFallback(hWnd), 96);
-        if (xPos >= scrollAreaLimitPixelsFromLeft) {
+            MulDiv(scrollAreaLimitPixelsFromLeft, dpi, 96);
+        if (xPos >= rect.left + scrollAreaLimitPixelsFromLeft) {
             Wh_Log(L"Mouse wheel event outside of the left scroll area limit");
             return false;
         }
@@ -218,8 +219,6 @@ bool OnMouseWheel(HWND hWnd, WORD keys, short delta, int xPos, int yPos) {
     // Edge has a thin border around the web content which triggers the tab
     // scrolling. Ignore events which are very close to the window borders.
     if (g_isEdge) {
-        RECT rect{};
-        GetWindowRect(hWnd, &rect);
         if (MulDiv(xPos - rect.left, 96, dpi) <= 15 ||
             MulDiv(rect.right - xPos, 96, dpi) <= 15 ||
             MulDiv(rect.bottom - yPos, 96, dpi) <= 15) {

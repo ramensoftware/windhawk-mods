@@ -2,7 +2,7 @@
 // @id              spoof-light-dark-theme
 // @name            Spoof Light/Dark Theme
 // @description     Use light/dark theme on an application basis
-// @version         1.0.1
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -81,7 +81,7 @@ LSTATUS WINAPI RegQueryValueExW_hook(
 )
 {
     LSTATUS lStatus = RegQueryValueExW_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-    if (g_fSpoofTheme && ERROR_SUCCESS == lStatus && lpData && 0 == wcsicmp(lpValueName, L"AppsUseLightTheme"))
+    if (g_fSpoofTheme && ERROR_SUCCESS == lStatus && lpData && lpValueName && 0 == wcsicmp(lpValueName, L"AppsUseLightTheme"))
     {
         ULONG ulSize = 0;
         NTSTATUS status = NtQueryKey(hKey, KeyNameInformation, nullptr, 0, &ulSize);

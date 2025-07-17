@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.4.1
+// @version         1.4.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1095,6 +1095,9 @@ void UpdateTaskListButtonWithLabelStyle(
                                       winrt::box_value(2));
         }
 
+        double maxWidth = std::max(taskListButtonWidth - 6, 0.0);
+        indicatorElement.MaxWidth(maxWidth);
+
         double minWidth = 0;
 
         double indicatorElementWidth = indicatorElement.Width();
@@ -1112,6 +1115,10 @@ void UpdateTaskListButtonWithLabelStyle(
                 if (minWidth < 0) {
                     minWidth = 0;
                 }
+            }
+
+            if (minWidth > maxWidth) {
+                minWidth = maxWidth;
             }
         }
 
@@ -2023,7 +2030,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 bool HookTaskbarDllSymbols() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -2046,7 +2054,8 @@ bool HookTaskbarDllSymbols() {
 }
 
 bool HookTaskbarDllSymbolsOldImplementation() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
