@@ -1,3 +1,10 @@
+## 1.1 ([Jul 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/549ef593719ffac5cbd7db143cc8abbf2479dc96/mods/auto-theme-switcher.wh.cpp))
+
+- Added Scheduling options for Sunset to Surise (location service or custom geographic coordinates)
+- Improved ReadMe
+- Improved Logging
+- Made settings less cluttered by giving them descriptions
+
 ## 1.0.4 ([May 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/15e5d9838349e4b927ed8ac5433e9894ff6cda28/mods/auto-theme-switcher.wh.cpp))
 
 - Fixed switching after waking up from sleep

@@ -175,19 +175,19 @@
                 "published": 1748038966000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1748367536000,
+                "updated": 1752784376000,
                 "users": 115
             },
             "metadata": {
                 "author": "tinodin",
-                "compilerOptions": "-lole32 -loleaut32",
-                "description": "Automatically switch between light and dark appearance/wallpaper/theme based on a set schedule with custom script support",
+                "compilerOptions": "-lole32 -loleaut32 -lwindowsapp -lruntimeobject -lkernel32 -luser32 -lshell32",
+                "description": "Automatically switch between light and dark appearance/wallpapers/themes based on a custom hours/sunset to sunrise with custom script support",
                 "github": "https://github.com/tinodin",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Auto Theme Switcher",
-                "version": "1.0.4"
+                "version": "1.1"
             }
         },
         "balloon-sound-fix": {
