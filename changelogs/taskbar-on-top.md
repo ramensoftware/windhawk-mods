@@ -1,3 +1,8 @@
+## 1.1.4 ([Jul 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c094b860efa76d6d481a26237c089695d6f78406/mods/taskbar-on-top.wh.cpp))
+
+* Fixed a crash when hovering over taskbar items in recent Windows 11 builds.
+* Fixed [the redesigned start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/) being cut off. Currently it opens in the original location. Better support is planned for follow-up updates.
+
 ## 1.1.3 ([May 31, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f696c21820a69cca5815ca7deca1f0a91675b5c0/mods/taskbar-on-top.wh.cpp))
 
 * Fixed tooltips covering the tray icons in the first row of the overflow popup.
