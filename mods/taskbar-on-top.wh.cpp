@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.1.3
+// @version         1.1.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -191,6 +191,65 @@ bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
     }
 
     return moduleQfe >= qfe;
+}
+
+std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
+    enum FEATURE_ENABLED_STATE {
+        FEATURE_ENABLED_STATE_DEFAULT = 0,
+        FEATURE_ENABLED_STATE_DISABLED = 1,
+        FEATURE_ENABLED_STATE_ENABLED = 2,
+    };
+
+#pragma pack(push, 1)
+    struct RTL_FEATURE_CONFIGURATION {
+        unsigned int featureId;
+        unsigned __int32 group : 4;
+        FEATURE_ENABLED_STATE enabledState : 2;
+        unsigned __int32 enabledStateOptions : 1;
+        unsigned __int32 unused1 : 1;
+        unsigned __int32 variant : 6;
+        unsigned __int32 variantPayloadKind : 2;
+        unsigned __int32 unused2 : 16;
+        unsigned int payload;
+    };
+#pragma pack(pop)
+
+    using RtlQueryFeatureConfiguration_t =
+        int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
+    static RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration = []() {
+        HMODULE hNtDll = LoadLibraryW(L"ntdll.dll");
+        return hNtDll ? (RtlQueryFeatureConfiguration_t)GetProcAddress(
+                            hNtDll, "RtlQueryFeatureConfiguration")
+                      : nullptr;
+    }();
+
+    if (!pRtlQueryFeatureConfiguration) {
+        Wh_Log(L"RtlQueryFeatureConfiguration not found");
+        return std::nullopt;
+    }
+
+    RTL_FEATURE_CONFIGURATION feature = {0};
+    INT64 changeStamp = 0;
+    HRESULT hr =
+        pRtlQueryFeatureConfiguration(featureId, 1, &changeStamp, &feature);
+    if (SUCCEEDED(hr)) {
+        Wh_Log(L"RtlQueryFeatureConfiguration result for %u: %d", featureId,
+               feature.enabledState);
+
+        switch (feature.enabledState) {
+            case FEATURE_ENABLED_STATE_DISABLED:
+                return false;
+            case FEATURE_ENABLED_STATE_ENABLED:
+                return true;
+            case FEATURE_ENABLED_STATE_DEFAULT:
+                return std::nullopt;
+        }
+    } else {
+        Wh_Log(L"RtlQueryFeatureConfiguration error for %u: %08X", featureId,
+               hr);
+    }
+
+    return std::nullopt;
 }
 
 bool GetMonitorRect(HMONITOR monitor, RECT* rc) {
@@ -1467,12 +1526,20 @@ int WINAPI MapWindowPoints_Hook(HWND hWndFrom,
 
     Wh_Log(L">");
 
+    // For build 26120.4733 or newer with the 56848060 feature flag which
+    // enables thumbnail transition animations.
     FrameworkElement flyoutFrame = nullptr;
-    ((IUnknown**)g_UpdateFlyoutPosition_pThis)[1]->QueryInterface(
-        winrt::guid_of<FrameworkElement>(), winrt::put_abi(flyoutFrame));
+    ((IUnknown*)g_UpdateFlyoutPosition_pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(flyoutFrame));
     if (!flyoutFrame) {
-        Wh_Log(L"Error getting flyoutFrame");
-        return ret;
+        // For previous builds.
+        ((IUnknown**)g_UpdateFlyoutPosition_pThis)[1]->QueryInterface(
+            winrt::guid_of<FrameworkElement>(), winrt::put_abi(flyoutFrame));
+        if (!flyoutFrame) {
+            Wh_Log(L"Error getting flyoutFrame");
+            return ret;
+        }
     }
 
     FrameworkElement hoverFlyoutCanvas =
@@ -1516,13 +1583,16 @@ int WINAPI MapWindowPoints_Hook(HWND hWndFrom,
     int flyoutHeight = MulDiv(flyoutPositionSize.Height, monitorDpiY, 96);
 
     // Align to bottom instead of top.
-    lpPoints->y += flyoutHeight;
+    int offsetToAdd = flyoutHeight;
 
     // Add work area space.
-    lpPoints->y += monitorInfo.rcWork.top - monitorInfo.rcMonitor.top;
+    offsetToAdd += monitorInfo.rcWork.top - monitorInfo.rcMonitor.top;
 
     // Add margin.
-    lpPoints->y += MulDiv(12, monitorDpiY, 96);
+    offsetToAdd += MulDiv(12, monitorDpiY, 96);
+
+    lpPoints->y += std::min(offsetToAdd, (int)(monitorInfo.rcWork.bottom -
+                                               monitorInfo.rcMonitor.top));
 
     return ret;
 }
@@ -1595,6 +1665,16 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
 
     if (_wcsicmp(processFileName.c_str(), L"StartMenuExperienceHost.exe") ==
         0) {
+        // The redesigned Start menu has variable height, don't adjust it.
+        static bool isRedesignedStartMenu =
+            IsOsFeatureEnabled(47205210).value_or(false) &&
+            IsOsFeatureEnabled(48433719).value_or(false) &&
+            IsOsFeatureEnabled(49221331).value_or(false) &&
+            IsOsFeatureEnabled(49402389).value_or(false);
+        if (isRedesignedStartMenu) {
+            return original();
+        }
+
         target = Target::StartMenu;
     } else if (_wcsicmp(processFileName.c_str(), L"SearchHost.exe") == 0) {
         target = Target::SearchHost;
@@ -1806,7 +1886,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 bool HookTaskbarDllSymbols() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -1882,7 +1963,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    if (HMODULE kernel32Module = LoadLibrary(L"kernel32.dll")) {
+    if (HMODULE kernel32Module = LoadLibraryEx(L"kernel32.dll", nullptr,
+                                               LOAD_LIBRARY_SEARCH_SYSTEM32)) {
         pGetThreadDescription = (GetThreadDescription_t)GetProcAddress(
             kernel32Module, "GetThreadDescription");
     }
@@ -1917,7 +1999,8 @@ BOOL Wh_ModInit() {
     WindhawkUtils::Wh_SetFunctionHookT(MapWindowPoints, MapWindowPoints_Hook,
                                        &MapWindowPoints_Original);
 
-    HMODULE dwmapiModule = LoadLibrary(L"dwmapi.dll");
+    HMODULE dwmapiModule =
+        LoadLibraryEx(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (dwmapiModule) {
         auto pDwmSetWindowAttribute =
             (decltype(&DwmSetWindowAttribute))GetProcAddress(
