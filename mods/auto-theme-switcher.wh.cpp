@@ -2,7 +2,7 @@
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
 // @description     Automatically switch between light and dark appearance/wallpapers/themes based on a custom hours/sunset to sunrise with custom script support
-// @version         1.1
+// @version         1.1.1
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         explorer.exe
@@ -534,35 +534,32 @@ void StartScheduler() {
     g_timerThread = CreateThread(nullptr, 0, ThemeScheduler, nullptr, 0, nullptr);
 }
 
-winrt::Windows::Foundation::IAsyncOperation<BasicGeoposition> GetLocation()
+BasicGeoposition GetLocation()
 {
-    init_apartment();
+    auto permission = Geolocator::RequestAccessAsync().get();
 
-    auto permission = co_await Geolocator::RequestAccessAsync();
-
-    switch (permission)
+    if (permission == GeolocationAccessStatus::Allowed)
     {
-        case GeolocationAccessStatus::Allowed:
-        {
-            Geolocator locator;
-            locator.DesiredAccuracy(PositionAccuracy::Default);
+        Geolocator locator;
+        locator.DesiredAccuracy(PositionAccuracy::Default);
 
-            Geoposition location = co_await locator.GetGeopositionAsync();
-            co_return location.Coordinate().Point().Position();
+        Geoposition location = locator.GetGeopositionAsync().get();
+
+        return location.Coordinate().Point().Position();
+    }
+    else
+    {
+        if (Geolocator::DefaultGeoposition())
+        {
+            return Geolocator::DefaultGeoposition().Value();
         }
-
-        default:
+        else
         {
-            if (Geolocator::DefaultGeoposition())
-            {
-                co_return Geolocator::DefaultGeoposition().Value();
-            }
-            else
-            {
-                Wh_Log(L"Location services are disabled");
-                co_await winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(L"ms-settings:privacy-location"));
-                co_return {};
-            }
+            Wh_Log(L"Location services are disabled");
+
+            winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(L"ms-settings:privacy-location"));
+
+            return {};
         }
     }
 }
@@ -717,7 +714,7 @@ void LoadSettings() {
         g_lightTime = ParseScheduleTime(rawLight);
         g_darkTime = ParseScheduleTime(rawDark);
     } else if (g_scheduleMode == L"LocationService") {
-        BasicGeoposition pos = GetLocation().get();
+        BasicGeoposition pos = GetLocation();
 
         SYSTEMTIME sunriseTime, sunsetTime;
         GetSunriseSunsetTimes(pos.Latitude, pos.Longitude, sunriseTime, sunsetTime);
