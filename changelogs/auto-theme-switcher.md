@@ -1,3 +1,7 @@
+## 1.1.1 ([Jul 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a24a92e08b8e8f7163fa47e734cf01e4ec6f14b1/mods/auto-theme-switcher.wh.cpp))
+
+- Fixed Sunset to sunrise (location service) interfering with ApplyTheme() causing it to fail
+
 ## 1.1 ([Jul 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/549ef593719ffac5cbd7db143cc8abbf2479dc96/mods/auto-theme-switcher.wh.cpp))
 
 - Added Scheduling options for Sunset to Surise (location service or custom geographic coordinates)

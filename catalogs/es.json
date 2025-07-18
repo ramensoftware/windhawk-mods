@@ -175,7 +175,7 @@
                 "published": 1748038966000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1752784376000,
+                "updated": 1752827009000,
                 "users": 119
             },
             "metadata": {
@@ -187,7 +187,7 @@
                     "explorer.exe"
                 ],
                 "name": "Auto Theme Switcher",
-                "version": "1.1"
+                "version": "1.1.1"
             }
         },
         "balloon-sound-fix": {
