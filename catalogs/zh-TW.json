@@ -2773,6 +2773,27 @@
                 "version": "1.0.2"
             }
         },
+        "prevent-focus-stealing": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1752954022000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1752954022000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "bawNg",
+                "compilerOptions": "-lshlwapi -lcomctl32",
+                "description": "Prevents specific apps from stealing focus when a window is opened.",
+                "github": "https://github.com/bawNg",
+                "include": [
+                    "*"
+                ],
+                "name": "Prevent Focus Stealing",
+                "version": "1.0.0"
+            }
+        },
         "regedit-auto-trim-whitespace-on-navigation-bar": {
             "details": {
                 "defaultSorting": 1340,
