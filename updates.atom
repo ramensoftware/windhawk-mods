@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-18T08:23:29.000Z</updated>
+    <updated>2025-07-19T04:31:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar keyboard-only auto-hide 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-keyboard-only#e857f64901909ed4e2aa2bc83ab06898effdb4a1</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-keyboard-only"/>
+        <updated>2025-07-19T04:31:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the taskbar unhiding in some cases when the "Fully hide" option is enabled.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Theme Switcher 1.1.1]]></title>
         <id>https://windhawk.net/mods/auto-theme-switcher#a24a92e08b8e8f7163fa47e734cf01e4ec6f14b1</id>
@@ -315,22 +329,6 @@ be relaunched automatically with remote debugging enabled.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Added a built-in blur brush object, <code>WindhawkBlur</code>, which supports the <code>BlurAmount</code> and <code>TintColor</code> properties. For example: <code>Fill:=&lt;WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/&gt;</code>.</li>
 <li>Updated the Matter theme.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.5]]></title>
-        <id>https://windhawk.net/mods/windows-11-taskbar-styler#fbce0bace35249e6ec4996e0b4a9b2bb07017352</id>
-        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
-        <updated>2025-07-11T15:08:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The mod now handles all explorer.exe threads, which allows styling additional components: the volume popup, Alt+Tab, Win+Tab, the language popup, snap layout popups, and maybe other elements.</li>
-<li>In new Windows 11 builds, fixed a crash with some themes when the "Icon and label"-style search button is used.</li>
-<li>Added new themes: WinXP (Zune), Matter, SimplyTransparent, Windows7, and Aeris.</li>
-<li>Update themes: Bubbles, TranslucentTaskbar, CleanSlate, Lucent, TaskbarXII.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

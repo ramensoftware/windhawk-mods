@@ -3288,7 +3288,7 @@
                 "published": 1740431630000,
                 "rating": 10,
                 "ratingUsers": 13,
-                "updated": 1742755308000,
+                "updated": 1752899517000,
                 "users": 388
             },
             "metadata": {
@@ -3296,7 +3296,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lversion",
+                "compilerOptions": "-ldwmapi -lversion",
                 "description": "When taskbar auto-hide is enabled, the taskbar will only be unhidden with the keyboard, hovering the mouse over the taskbar will not unhide it",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -3305,7 +3305,7 @@
                 ],
                 "name": "Taskbar keyboard-only auto-hide",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.1"
+                "version": "1.1.2"
             }
         },
         "taskbar-auto-hide-speed": {

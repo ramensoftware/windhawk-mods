@@ -1,3 +1,8 @@
+## 1.1.2 ([Jul 19, 2025](https://github.com/ramensoftware/windhawk-mods/blob/e857f64901909ed4e2aa2bc83ab06898effdb4a1/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
+
+* Fixed the taskbar unhiding in some cases when the "Fully hide" option is enabled.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.1.1 ([Mar 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/20ab961f2e9e81c99927394bd0a6d1dcb3987de9/mods/taskbar-auto-hide-keyboard-only.wh.cpp))
 
 * Fixed Win+num hotkeys not working when the "Fully hide" option is enabled.
