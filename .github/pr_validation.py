@@ -158,7 +158,10 @@ def validate_metadata(path: Path, expected_author: str):
         value, line_number = properties[key]
         github = value
         expected = f'https://github.com/{expected_author}'
-        if value != expected:
+        if value != expected and value.lower() == expected.lower():
+            warning_msg = f'Expected {key[0]} to be "{expected}" (case-sensitive)'
+            warnings += add_warning(path, line_number, warning_msg)
+        elif value != expected:
             warning_msg = (
                 f'Expected {key[0]} to be "{expected}".\n'
                 'Note that only the original author of the mod is allowed to submit'
@@ -219,6 +222,14 @@ def validate_metadata(path: Path, expected_author: str):
                 path, line_number, f'{key[0]} requires manual verification'
             )
 
+    key = ('homepage', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if not re.match(r'https?://', value):
+            warnings += add_warning(
+                path, line_number, f'{key[0]} must start with "http://" or "https://"'
+            )
+
     key = ('compilerOptions', None)
     if key in properties:
         value, line_number = properties[key]
@@ -227,9 +238,31 @@ def validate_metadata(path: Path, expected_author: str):
                 path, line_number, f'{key[0]} require manual verification'
             )
 
+    key = ('name', None)
+    if key not in properties:
+        warnings += add_warning(path, 1, f'Missing {key[0]}')
+
     key = ('author', None)
     if key not in properties:
         warnings += add_warning(path, 1, f'Missing {key[0]}')
+
+    key = ('architecture', None)
+    if key in properties:
+        value, line_number = properties[key]
+        for arch in value.split('\n'):
+            if arch.strip() == '':
+                pass
+            elif arch not in {'x86', 'x86-64', 'amd64', 'arm64'}:
+                warnings += add_warning(
+                    path, line_number, f'Unknown architecture "{arch}"'
+                )
+            elif arch not in {'x86', 'x86-64'}:
+                warnings += add_warning(
+                    path,
+                    line_number,
+                    f'Architecture "{arch}" isn\'t commonly used, manual verification'
+                    ' is required',
+                )
 
     # Validate that this file has the required extensions
     if ''.join(path.suffixes) != '.wh.cpp':
