@@ -4,9 +4,8 @@
 // @description     Prevents specific apps from stealing focus when a window is opened.
 // @version         1.0.0
 // @author          bawNg
-// @github          https://github.com/bawNg
+// @github          https://github.com/bawng
 // @include         *
-// @architecture    x86-64
 // @compilerOptions -lshlwapi -lcomctl32
 // ==/WindhawkMod==
 
@@ -95,164 +94,225 @@ Leave `Never Focus` disabled so that you can manually activate the window and in
 #include <windows.h>
 #include <shlwapi.h>
 #include <vector>
-#include <set>
-#include <map>
 
-#define WM_USER_REMOVE_NOACTIVATE (WM_USER + 1)
+#ifdef _WIN64
+    const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
+#else
+    const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
+#endif
 
-const uint64_t NEW_WINDOW_TRACKING_MS = 1000;
+#define MOD_MSG_PREFIX L"Wh_FocusSteal_"
+
+#define Wh_SetProp(hWnd, name, value) SetPropW(hWnd, MOD_MSG_PREFIX name, reinterpret_cast<HANDLE>(value))
+#define Wh_GetProp(type, hWnd, name)  static_cast<type>(reinterpret_cast<intptr_t>(GetPropW(hWnd, MOD_MSG_PREFIX name)))
+#define Wh_RemoveProp(hWnd, name)     RemoveProp(hWnd, MOD_MSG_PREFIX name)
+
 const uint64_t INITIAL_UI_FOCUS_BLOCK_MS = 100;
-const uint64_t INITIAL_FRAME_ACTIVATE_BLOCK_MS = 8000;
 
 struct WindowInfo {
-    const wchar_t* title;
+    WindhawkUtils::StringSetting title;
     bool neverFocus;
 };
 
 std::vector<WindowInfo> g_includedWindows;
 
-std::map<HWND, uint64_t> g_newHwnds;
-std::set<HWND> g_hookedHwnds;
-std::map<HWND, uint64_t> g_blockedHwnds; // Store creation time for timeout
+bool g_initialized;
 
-WindowInfo* GetWindowInfo(HWND hWnd, LPCWSTR title) {
+LPCWSTR ShowCmdToString(int cmd) {
+    switch (cmd) {
+        case SW_HIDE: return L"SW_HIDE";
+        case SW_SHOWNORMAL: return L"SW_SHOWNORMAL";
+        case SW_SHOWMINIMIZED: return L"SW_SHOWMINIMIZED";
+        case SW_SHOWMAXIMIZED: return L"SW_SHOWMAXIMIZED";
+        case SW_SHOWNOACTIVATE: return L"SW_SHOWNOACTIVATE";
+        case SW_SHOW: return L"SW_SHOW";
+        case SW_MINIMIZE: return L"SW_MINIMIZE";
+        case SW_SHOWMINNOACTIVE: return L"SW_SHOWMINNOACTIVE";
+        case SW_SHOWNA: return L"SW_SHOWNA";
+        case SW_RESTORE: return L"SW_RESTORE";
+        case SW_SHOWDEFAULT: return L"SW_SHOWDEFAULT";
+        case SW_FORCEMINIMIZE: return L"SW_FORCEMINIMIZE";
+        default: return L"SW_UNKNOWN";
+    }
+}
+
+struct EnumWindowsContext {
+    DWORD pid;
+    std::vector<HWND> hwnds;
+};
+
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    auto context = reinterpret_cast<EnumWindowsContext*>(lParam);
+    DWORD window_pid = 0;
+    GetWindowThreadProcessId(hwnd, &window_pid);
+    if (window_pid == context->pid) context->hwnds.push_back(hwnd);
+    return TRUE;
+}
+
+WindowInfo* GetWindowInfo(LPCWSTR title) {
     for (WindowInfo& info : g_includedWindows) {
-        if (*info.title && _wcsnicmp(title, info.title, wcslen(info.title)) != 0)
-            continue;
-        if (!info.neverFocus && g_hookedHwnds.contains(hWnd))
-            continue;
-        return &info;
+        if (!(*info.title) || _wcsnicmp(title, info.title, wcslen(info.title)) == 0)
+            return &info;
     }
     return nullptr;
 }
 
-LRESULT CALLBACK WindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_DESTROY) {
-        Wh_Log(L"Stopped tracking window 0x%p due to WM_DESTROY", hWnd);
-        g_newHwnds.erase(hWnd);
-        g_hookedHwnds.erase(hWnd);
-        g_blockedHwnds.erase(hWnd);
-    }
-    if (uMsg == WM_USER_REMOVE_NOACTIVATE) {
-        Wh_Log(L"Removing WS_EX_NOACTIVATE from window 0x%p", hWnd);
-        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & ~WS_EX_NOACTIVATE);
-    }
-    if (uMsg == WM_ACTIVATE && (wParam == WA_ACTIVE || wParam == WA_CLICKACTIVE)) {
-        auto it = g_blockedHwnds.find(hWnd);
-        if (it != g_blockedHwnds.end() && GetTickCount64() - it->second < INITIAL_UI_FOCUS_BLOCK_MS) {
-            // Prevent the UI from thinking the window is focused (like Chromium rendering a blinking cursor in DevTools console)
-            Wh_Log(L"Blocked WM_ACTIVATE for window 0x%p - wParam: %llu", hWnd, wParam);
-            return FALSE;
-        }
-    }
-    if (uMsg == WM_NCACTIVATE && wParam == TRUE) {
-        auto it = g_blockedHwnds.find(hWnd);
-        if (it != g_blockedHwnds.end()) {
-            if (GetForegroundWindow() != hWnd && GetTickCount64() - it->second < INITIAL_FRAME_ACTIVATE_BLOCK_MS) {
-                // Chromium repeatedly attempts to activate the window frame every second for ~7s after the DevTools window has been opened
-                Wh_Log(L"Blocked WM_NCACTIVATE for window 0x%p", hWnd);
-                return TRUE; // Prevents the window frame from becoming active
-            }
-            g_blockedHwnds.erase(it);
-        }
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-typedef BOOL(WINAPI *SetForegroundWindow_t)(HWND);
-SetForegroundWindow_t SetForegroundWindow_Orig;
-
-BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
-    if (g_hookedHwnds.contains(hWnd)) {
-        wchar_t title[256];
-        GetWindowTextW(hWnd, title, _countof(title));
-        Wh_Log(L"Blocked SetForegroundWindow for new window: %ls", title);
-        return FALSE;
-    }
-    return SetForegroundWindow_Orig(hWnd);
-}
-
-void HookNewWindow(HWND hWnd, bool neverFocus) {
-    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, WindowSubclassProc, NULL)) {
-        g_hookedHwnds.insert(hWnd);
-        g_blockedHwnds[hWnd] = GetTickCount64();
-    }
-    if (!neverFocus) {
-        PostMessageW(hWnd, WM_USER_REMOVE_NOACTIVATE, 0, 0);
-    }
-    if (GetForegroundWindow() == hWnd) {
-        // In rare cases, the window becomes focused before the title has been set
-        Wh_Log(L"Window stole focus before title was set");
-        HWND prev_hwnd = GetNextWindow(hWnd, GW_HWNDNEXT);
-        if (prev_hwnd && prev_hwnd != hWnd) {
-            DWORD active_pid;
-            GetWindowThreadProcessId(hWnd, &active_pid);
-            while (prev_hwnd && prev_hwnd != hWnd) {
-                DWORD prev_pid;
-                GetWindowThreadProcessId(prev_hwnd, &prev_pid);
-                if (prev_pid != active_pid && IsWindowVisible(prev_hwnd)) {
-                    wchar_t prev_title[256];
-                    GetWindowTextW(prev_hwnd, prev_title, _countof(prev_title));
-                    WCHAR class_name[256];
-                    GetClassNameW(prev_hwnd, class_name, 256);
-                    Wh_Log(L"Restoring focus to window 0x%p - Title: '%ls', Class: %ls, pid: %u", prev_hwnd, prev_title, class_name, prev_pid);
-                    SetForegroundWindow_Orig(prev_hwnd);
-                    break;
-                }
-                prev_hwnd = GetWindow(prev_hwnd, GW_HWNDNEXT);
-            }
-        }
-    }
-}
-
-typedef HWND(WINAPI *CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-CreateWindowExW_t CreateWindowExW_Orig;
-
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd) {
-        if (lpWindowName && *lpWindowName) {
-            WindowInfo* window_info = GetWindowInfo(hWnd, lpWindowName);
-            if (window_info) {
-                HookNewWindow(hWnd, window_info->neverFocus);
-                return hWnd;
-            }
-        }
-        uint64_t now = GetTickCount64();
-        for (auto it = g_newHwnds.begin(); it != g_newHwnds.end(); ) {
-            if (now - it->second >= NEW_WINDOW_TRACKING_MS)
-                it = g_newHwnds.erase(it);
-            else
-                it++;
-        }
-        g_newHwnds[hWnd] = now;
-        //Wh_Log(L"Tracked new window 0x%p via CreateWindowExW");
-    }
-    return hWnd;
-}
-
-typedef BOOL(WINAPI *SetWindowTextW_t)(HWND, LPCWSTR);
+using SetWindowTextW_t = decltype(&SetWindowTextW);
 SetWindowTextW_t SetWindowTextW_Orig;
 
+// May be called from other threads, in which case it posts a WM_SETTEXT message
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR title) {
     BOOL result = SetWindowTextW_Orig(hWnd, title);
-    auto it = g_newHwnds.find(hWnd);
-    if (it != g_newHwnds.end() && GetTickCount64() - it->second < NEW_WINDOW_TRACKING_MS) {
-        WindowInfo* window_info = title ? GetWindowInfo(hWnd, title) : nullptr;
+    uint64_t now = GetTickCount64();
+    uint64_t created_at = Wh_GetProp(uint64_t, hWnd, L"CreatedAt");
+    if (!created_at) {
+        // CreateWindowExW was missed due to late injection
+        created_at = now;
+        Wh_SetProp(hWnd, L"CreatedAt", created_at);
+    }
+    if (title && !Wh_GetProp(uint64_t, hWnd, L"NoActivateAt")) {
+        WindowInfo* window_info = GetWindowInfo(title);
         if (window_info) {
-            Wh_Log(L"Detected new window via SetWindowTextW: %ls", title);
-            g_newHwnds.erase(it);
-            HookNewWindow(hWnd, window_info->neverFocus);
+            Wh_Log(L"SetWindowTextW for window 0x%p: '%ls'", hWnd, title);
+            Wh_SetProp(hWnd, L"NoActivateAt", now);
         }
     }
     return result;
 }
 
+using SetForegroundWindow_t = decltype(&SetForegroundWindow);
+SetForegroundWindow_t SetForegroundWindow_Orig;
+
+BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
+    uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
+    if (no_activate_at) {
+        if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
+            wchar_t title[256];
+            GetWindowTextW(hWnd, title, _countof(title));
+            Wh_Log(L"SetForegroundWindow blocked for new window 0x%p: '%ls'", hWnd, title);
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"SetForegroundWindow allowed for new window 0x%p", hWnd);
+    }
+    return SetForegroundWindow_Orig(hWnd);
+}
+
+using SetFocus_t = decltype(&SetFocus);
+SetFocus_t SetFocus_Orig;
+
+HWND WINAPI SetFocus_Hook(HWND hWnd) {
+    uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
+    if (no_activate_at) {
+        if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
+            Wh_Log(L"SetFocus blocked for window 0x%p", hWnd);
+            return GetFocus();
+        } else {
+            Wh_Log(L"SetFocus allowed for window 0x%p", hWnd);
+        }
+    }
+    HWND result = SetFocus_Orig(hWnd);
+    return result;
+}
+
+using SetWindowPos_t = decltype(&SetWindowPos);
+SetWindowPos_t SetWindowPos_Orig;
+
+BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
+    if (!(uFlags & SWP_NOACTIVATE)) {
+        uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
+        if (no_activate_at) {
+            if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
+                Wh_Log(L"SetWindowPos for window 0x%p - Adding SWP_NOACTIVATE to flags", hWnd);
+                uFlags |= SWP_NOACTIVATE;
+            }
+        } else {
+            Wh_Log(L"SetWindowPos for new window 0x%p", hWnd);
+        }
+    }
+    return SetWindowPos_Orig(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
+using ShowWindow_t = decltype(&ShowWindow);
+ShowWindow_t ShowWindow_Orig;
+
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    bool show_maximize = false;
+    uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
+    if ((nCmdShow == SW_SHOW) | (nCmdShow == SW_SHOWNORMAL) | (nCmdShow == SW_RESTORE) | (nCmdShow == SW_SHOWMAXIMIZED) | (nCmdShow == SW_SHOWDEFAULT)) {
+        if (no_activate_at) {
+            if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
+                Wh_Log(L"Showing window 0x%p with SW_SHOWNOACTIVATE instead of %ls", hWnd, ShowCmdToString(nCmdShow));
+                show_maximize = nCmdShow == SW_SHOWMAXIMIZED;
+                nCmdShow = SW_SHOWNOACTIVATE;
+            }
+        } else {
+            Wh_Log(L"Showing window 0x%p with %ls", hWnd, ShowCmdToString(nCmdShow));
+        }
+    } else if (no_activate_at) {
+        Wh_Log(L"Showing window 0x%p with %ls", hWnd, ShowCmdToString(nCmdShow));
+    }
+    BOOL result = ShowWindow_Orig(hWnd, nCmdShow);
+    if (show_maximize) {
+        Wh_Log(L"Maximizing window 0x%p", hWnd);
+        SendMessageW(hWnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+    }
+    return result;
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Orig;
+
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
+    WindowInfo* window_info = lpWindowName ? GetWindowInfo(lpWindowName) : nullptr;
+    if ((dwStyle & WS_VISIBLE) && window_info) {
+        Wh_Log(L"CreateWindowExW with WS_VISIBLE: '%ls'", lpWindowName);
+        dwStyle &= ~WS_VISIBLE;
+    }
+    HWND hWnd = CreateWindowExW_Orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (hWnd) {
+        uint64_t now = GetTickCount64();
+        Wh_SetProp(hWnd, L"CreatedAt", now);
+        if (window_info) {
+            Wh_Log(L"Created window 0x%p is being tracked: '%ls'", hWnd, lpWindowName);
+            Wh_SetProp(hWnd, L"NoActivateAt", now);
+            ShowWindow_Orig(hWnd, SW_SHOWNOACTIVATE);
+        }
+    }
+    return hWnd;
+}
+
+void SwitchToPreviousWindow(HWND hWnd) {
+    HWND prev_hwnd = GetWindow(hWnd, GW_HWNDNEXT);
+    if (prev_hwnd && prev_hwnd != hWnd) {
+        DWORD active_pid;
+        GetWindowThreadProcessId(hWnd, &active_pid);
+        while (prev_hwnd && prev_hwnd != hWnd) {
+            DWORD prev_pid;
+            GetWindowThreadProcessId(prev_hwnd, &prev_pid);
+            if (prev_pid != active_pid && IsWindowVisible(prev_hwnd)) {
+                wchar_t prev_title[256];
+                GetWindowTextW(prev_hwnd, prev_title, _countof(prev_title));
+                WCHAR class_name[256];
+                GetClassNameW(prev_hwnd, class_name, 256);
+                Wh_Log(L"Restoring focus to pid %u's window 0x%p: '%ls'", prev_pid, prev_hwnd, prev_title);
+                if (SetForegroundWindow_Orig(prev_hwnd)) {
+                    // SetForegroundWindow causes the window that stole focus to go behind the previous window, which wouldn't
+                    // have happened if the window was blocked from stealing focus, so we need to bring it to the top again
+                    SetWindowPos_Orig(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                } else {
+                    Wh_Log(L"SetForegroundWindow failed");
+                }
+                break;
+            }
+            prev_hwnd = GetWindow(prev_hwnd, GW_HWNDNEXT);
+        }
+    }
+}
+
 BOOL Wh_ModInit() {
     WCHAR exe_path[MAX_PATH];
     GetModuleFileNameW(NULL, exe_path, MAX_PATH);
-    //Wh_Log(L"Process path: %ls", exe_path);
     LPCWSTR exe_name = PathFindFileNameW(exe_path);
     LPCWSTR process_args = nullptr;
     for (int application_index = 0; ; application_index++) {
@@ -281,7 +341,6 @@ BOOL Wh_ModInit() {
             if (is_match) {
                 if (!process_args) {
                     process_args = GetCommandLineW();
-                    //Wh_Log(L"Process command line: %ls", process_args);
                     if (*process_args == L'"') {
                         process_args++;
                         while (*process_args && *process_args != L'"')
@@ -295,7 +354,6 @@ BOOL Wh_ModInit() {
                     while (*process_args == L' ' || *process_args == L'\t')
                         process_args++;
                 }
-                //Wh_Log(L"Process arguments: %ls", process_args);
                 for (int arg_index = 0; ; arg_index++) {
                     PCWSTR arg = Wh_GetStringSetting(L"applications[%d].args[%d]", application_index, arg_index);
                     if (!*arg) {
@@ -317,10 +375,10 @@ BOOL Wh_ModInit() {
                     Wh_FreeStringSetting(arg);
                 }
                 if (is_match) {
-                    PCWSTR title = Wh_GetStringSetting(L"applications[%d].title", application_index);
-                    bool never_focus = Wh_GetIntSetting(L"applications[%d].never_focus", application_index);
-                    Wh_Log(L"Hooking process for window title: %ls", title);
-                    g_includedWindows.push_back(WindowInfo { title, never_focus });
+                    auto& window_info = g_includedWindows.emplace_back();
+                    window_info.title = WindhawkUtils::StringSetting::make(L"applications[%d].title", application_index);
+                    window_info.neverFocus = Wh_GetIntSetting(L"applications[%d].never_focus", application_index);
+                    Wh_Log(L"Hooking process for window title: %ls", window_info.title.get());
                     break;
                 }
             }
@@ -334,33 +392,76 @@ Done:
 
     if (!Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Orig)) {
         Wh_Log(L"Failed to hook CreateWindowExW");
-        return FALSE;
+        goto Failed;
     }
-
+    if (!Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Orig)) {
+        Wh_Log(L"Failed to hook ShowWindow");
+        goto Failed;
+    }
     if (!Wh_SetFunctionHook((void *)SetForegroundWindow, (void *)SetForegroundWindow_Hook, (void **)&SetForegroundWindow_Orig)) {
         Wh_Log(L"Failed to hook SetForegroundWindow");
-        return FALSE;
+        goto Failed;
+    }
+
+    if (!Wh_SetFunctionHook((void *)SetFocus, (void *)SetFocus_Hook, (void **)&SetFocus_Orig)) {
+        Wh_Log(L"Failed to hook SetFocus");
+        goto Failed;
+    }
+
+    if (!Wh_SetFunctionHook((void *)SetWindowPos, (void *)SetWindowPos_Hook, (void **)&SetWindowPos_Orig)) {
+        Wh_Log(L"Failed to hook SetWindowPos");
+        goto Failed;
     }
 
     if (!Wh_SetFunctionHook((void *)SetWindowTextW, (void *)SetWindowTextW_Hook, (void **)&SetWindowTextW_Orig)) {
         Wh_Log(L"Failed to hook SetWindowTextW");
-        return FALSE;
+        goto Failed;
     }
 
-    Wh_Log(L"Mod initialized");
+    Wh_Log(L"Mod loaded");
     return TRUE;
+
+Failed:
+    g_includedWindows.clear();
+    return FALSE;
+}
+
+// Hook original pointers are only valid after ModInit so SwitchToPreviousWindow has to be called from ModAfterInit
+void Wh_ModAfterInit() {
+    bool injected_late = !(*(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400);
+    if (injected_late) {
+        // Windows may have been created before the mod was asynchronously injected if the parent process isn't whitelisted
+        EnumWindowsContext existing_windows { GetCurrentProcessId() };
+        EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&existing_windows));
+        Wh_Log(L"Checking %lld existing windows", existing_windows.hwnds.size());
+        uint64_t now = GetTickCount64();
+        for (HWND hWnd : existing_windows.hwnds) {
+            uint64_t created_at = Wh_GetProp(uint64_t, hWnd, L"CreatedAt");
+            if (created_at)
+                continue;
+            Wh_SetProp(hWnd, L"CreatedAt", now);
+            wchar_t title[256];
+            GetWindowTextW(hWnd, title, _countof(title));
+            WindowInfo* window_info = GetWindowInfo(title);
+            if (window_info) {
+                Wh_Log(L"Existing window 0x%p needs to be tracked: %ls", hWnd, title);
+                Wh_SetProp(hWnd, L"NoActivateAt", now);
+                if (GetForegroundWindow() == hWnd) {
+                    Wh_Log(L"Window 0x%p stole focus before mod initialized - switching to previous", hWnd);
+                    SwitchToPreviousWindow(hWnd);
+                }
+            }
+        }
+    } else {
+        Wh_Log(L"Injection was not asynchronous");
+    }
+
+    g_initialized = true;
+
+    Wh_Log(L"Mod initialized");
 }
 
 void Wh_ModUninit() {
-    g_newHwnds.clear();
-    for (HWND hWnd : g_hookedHwnds) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, WindowSubclassProc);
-    }
-    g_hookedHwnds.clear();
-    for (WindowInfo info : g_includedWindows) {
-        Wh_FreeStringSetting(info.title);
-    }
-    g_includedWindows.clear();
     Wh_Log(L"Mod unloaded");
 }
 
