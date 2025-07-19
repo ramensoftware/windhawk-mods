@@ -4,7 +4,7 @@
 // @description     Prevents specific apps from stealing focus when a window is opened.
 // @version         1.0.0
 // @author          bawNg
-// @github          https://github.com/bawng
+// @github          https://github.com/bawNg
 // @include         *
 // @compilerOptions -lshlwapi -lcomctl32
 // ==/WindhawkMod==
