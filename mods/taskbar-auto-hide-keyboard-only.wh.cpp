@@ -2,14 +2,14 @@
 // @id              taskbar-auto-hide-keyboard-only
 // @name            Taskbar keyboard-only auto-hide
 // @description     When taskbar auto-hide is enabled, the taskbar will only be unhidden with the keyboard, hovering the mouse over the taskbar will not unhide it
-// @version         1.1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lversion
+// @compilerOptions -ldwmapi -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -52,6 +52,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 #include <windhawk_utils.h>
 
+#include <dwmapi.h>
 #include <psapi.h>
 
 #include <atomic>
@@ -89,14 +90,23 @@ bool IsTaskbarWindow(HWND hWnd) {
            _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
 }
 
-HWND GetTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    DWORD processId = 0;
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
-        processId != GetCurrentProcessId()) {
-        return nullptr;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
 }
@@ -104,7 +114,7 @@ HWND GetTaskbarWnd() {
 HWND FindTaskbarWindows(std::vector<HWND>* secondaryTaskbarWindows) {
     secondaryTaskbarWindows->clear();
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         return nullptr;
     }
@@ -138,36 +148,8 @@ HWND FindTaskbarWindows(std::vector<HWND>* secondaryTaskbarWindows) {
     return hTaskbarWnd;
 }
 
-using ShowWindow_t = decltype(&ShowWindow);
-ShowWindow_t ShowWindow_Original;
-BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    if (g_settings.fullyHide && IsTaskbarWindow(hWnd)) {
-        Wh_Log(L">");
-        return TRUE;
-    }
-
-    BOOL ret = ShowWindow_Original(hWnd, nCmdShow);
-
-    return ret;
-}
-
-using IsWindowVisible_t = decltype(&IsWindowVisible);
-IsWindowVisible_t IsWindowVisible_Original;
-BOOL WINAPI IsWindowVisible_Hook(HWND hWnd) {
-    // Checked in CTaskListWnd::HandleWinNumHotKey, Win+num hotkeys don't work
-    // if the window is hidden. Return TRUE to make the hotkeys work.
-    if (g_settings.fullyHide) {
-        WCHAR szClassName[32];
-        if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
-            _wcsicmp(szClassName, L"MSTaskSwWClass") == 0) {
-            Wh_Log(L">");
-            return TRUE;
-        }
-    }
-
-    BOOL ret = IsWindowVisible_Original(hWnd);
-
-    return ret;
+void CloakWindow(HWND hWnd, BOOL cloak) {
+    DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
 }
 
 using SetTimer_t = decltype(&SetTimer);
@@ -202,13 +184,13 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
     Wh_Log(L">");
 
     if (show && g_settings.fullyHide) {
-        ShowWindow_Original(hWnd, SW_SHOWNA);
+        CloakWindow(hWnd, FALSE);
     }
 
     TrayUI_SlideWindow_Original(pThis, hWnd, rc, monitor, show, flag);
 
     if (!show && g_settings.fullyHide) {
-        ShowWindow_Original(hWnd, SW_HIDE);
+        CloakWindow(hWnd, TRUE);
     }
 }
 
@@ -217,7 +199,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -454,12 +437,6 @@ BOOL Wh_ModInit() {
                                        LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
 
-    WindhawkUtils::Wh_SetFunctionHookT(ShowWindow, ShowWindow_Hook,
-                                       &ShowWindow_Original);
-
-    WindhawkUtils::Wh_SetFunctionHookT(IsWindowVisible, IsWindowVisible_Hook,
-                                       &IsWindowVisible_Original);
-
     WindhawkUtils::Wh_SetFunctionHookT(SetTimer, SetTimer_Hook,
                                        &SetTimer_Original);
 
@@ -468,12 +445,12 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void ShowAllTaskbars(int nCmdShow) {
+void CloakAllTaskbars(BOOL cloak) {
     std::vector<HWND> secondaryTaskbarWindows;
     HWND taskbarWindow = FindTaskbarWindows(&secondaryTaskbarWindows);
-    ShowWindow_Original(taskbarWindow, nCmdShow);
+    CloakWindow(taskbarWindow, cloak);
     for (HWND hWnd : secondaryTaskbarWindows) {
-        ShowWindow_Original(hWnd, nCmdShow);
+        CloakWindow(hWnd, cloak);
     }
 }
 
@@ -487,7 +464,7 @@ void Wh_ModAfterInit() {
     }
 
     if (g_settings.fullyHide) {
-        ShowAllTaskbars(SW_HIDE);
+        CloakAllTaskbars(TRUE);
     }
 }
 
@@ -495,7 +472,7 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     if (g_settings.fullyHide) {
-        ShowAllTaskbars(SW_SHOWNA);
+        CloakAllTaskbars(FALSE);
     }
 }
 
@@ -509,9 +486,9 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     if (g_settings.fullyHide != prevFullyHide) {
         if (g_settings.fullyHide) {
-            ShowAllTaskbars(SW_HIDE);
+            CloakAllTaskbars(TRUE);
         } else {
-            ShowAllTaskbars(SW_SHOWNA);
+            CloakAllTaskbars(FALSE);
         }
     }
 
