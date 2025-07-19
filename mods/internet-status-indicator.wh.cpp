@@ -2,12 +2,11 @@
 // @id              internet-status-indicator
 // @name            Internet Status Indicator
 // @description     Real-time network connectivity monitoring with visual indicators as a Tray Icon
-// @version         0.7
+// @version         0.8
 // @author          ALMAS CP
 // @github          https://github.com/almas-cp
 // @homepage        https://github.com/almas-cp
-// @include         explorer.exe
-// @architecture    amd64
+// @include         windhawk.exe
 // @compilerOptions -lwininet -lws2_32 -liphlpapi -lgdi32 -luser32
 // ==/WindhawkMod==
 
@@ -38,13 +37,16 @@ The mod performs periodic connectivity checks using:
 3. Network adapter status monitoring
 
 ## Usage
-Once installed, the mod runs automatically with explorer.exe and provides:
+Once installed, the mod runs automatically and provides:
 - Continuous background monitoring
 - Log entries showing connectivity status
 - Configurable check intervals and targets
 - Customizable visual appearance
 
 Check the Windhawk log to see connectivity status updates in real-time.
+
+## Note
+This mod runs as part of the windhawk.exe process for better stability and resource management.
 */
 // ==/WindhawkModReadme==
 
@@ -318,20 +320,15 @@ public:
     
     bool Initialize(HWND window, const NetworkSettings& settings) {
         if (isInitialized) {
-            Wh_Log(L"⚠️ TrayIconManager already initialized, skipping");
             return true;
         }
         
         hwnd = window;
         
-        // Ensure any existing icon is removed first
-        Shell_NotifyIcon(NIM_DELETE, &nid);
-        
         // Create icons with settings
         CreateIcons(settings);
         
         if (!hIconConnected || !hIconDisconnected) {
-            Wh_Log(L"❌ Failed to create icons");
             return false;
         }
         
@@ -342,31 +339,20 @@ public:
         nid.uID = ID_TRAYICON;
         nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         nid.uCallbackMessage = WM_TRAYICON;
-        nid.hIcon = hIconDisconnected; // Start with disconnected state
+        nid.hIcon = hIconDisconnected;
         wcscpy_s(nid.szTip, L"Internet Status: Starting...");
         
         isInitialized = true;
-        Wh_Log(L"✅ TrayIconManager initialized");
         return true;
     }
     
     bool Show() {
-        if (!hwnd || !isInitialized) {
-            Wh_Log(L"❌ Cannot show icon - not initialized");
-            return false;
-        }
-        
-        if (iconVisible) {
-            Wh_Log(L"⚠️ Icon already visible");
-            return true;
-        }
+        if (!hwnd || !isInitialized) return false;
+        if (iconVisible) return true;
         
         bool result = Shell_NotifyIcon(NIM_ADD, &nid) != FALSE;
         if (result) {
             iconVisible = true;
-            Wh_Log(L"✅ Tray icon shown successfully");
-        } else {
-            Wh_Log(L"❌ Failed to show tray icon (Shell_NotifyIcon returned error)");
         }
         return result;
     }
@@ -377,35 +363,21 @@ public:
         bool result = Shell_NotifyIcon(NIM_DELETE, &nid) != FALSE;
         if (result) {
             iconVisible = false;
-            Wh_Log(L"✅ Tray icon hidden");
         }
         return result;
     }
     
     void UpdateStatus(bool connected, bool forceUpdate = false) {
         if (!iconVisible || !isInitialized) return;
-        
-        // Always update on force or state change
         if (!forceUpdate && currentConnectionState == connected) return;
         
         currentConnectionState = connected;
         nid.hIcon = connected ? hIconConnected : hIconDisconnected;
         
-        // Update tooltip
         const wchar_t* status = connected ? L"Connected" : L"Disconnected";
-        const wchar_t* indicator = connected ? L"🟢" : L"🔴";
-        swprintf_s(nid.szTip, L"Internet Status: %s %s", status, indicator);
+        swprintf_s(nid.szTip, L"Internet Status: %s", status);
         
-        // Update the icon
-        bool success = Shell_NotifyIcon(NIM_MODIFY, &nid) != FALSE;
-        
-        if (!success) {
-            Wh_Log(L"⚠️ Icon update failed, attempting to re-add");
-            // If modify fails, try to re-add the icon
-            Shell_NotifyIcon(NIM_DELETE, &nid);
-            Sleep(50);
-            Shell_NotifyIcon(NIM_ADD, &nid);
-        }
+        Shell_NotifyIcon(NIM_MODIFY, &nid);
     }
     
     void UpdateSettings(const NetworkSettings& settings) {
@@ -414,27 +386,20 @@ public:
         bool wasVisible = iconVisible;
         bool wasConnected = currentConnectionState;
         
-        // Update icons without hiding/showing
         CreateIcons(settings);
         
         if (wasVisible) {
-            // Update current icon immediately
             nid.hIcon = wasConnected ? hIconConnected : hIconDisconnected;
             Shell_NotifyIcon(NIM_MODIFY, &nid);
-            Wh_Log(L"✅ Icon appearance updated");
         }
     }
     
     bool IsVisible() const { return iconVisible; }
-    bool IsInitialized() const { return isInitialized; }
     
     void Cleanup() {
-        if (iconVisible) {
-            Hide();
-        }
+        Hide();
         isInitialized = false;
         currentConnectionState = false;
-        Wh_Log(L"✅ TrayIconManager cleaned up");
     }
 };
 
@@ -445,18 +410,6 @@ private:
     static const wchar_t* CLASS_NAME;
     
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        switch (uMsg) {
-            case WM_TRAYICON:
-                if (LOWORD(lParam) == WM_RBUTTONUP || LOWORD(lParam) == WM_LBUTTONUP) {
-                    // Could add context menu here in the future
-                    return 0;
-                }
-                break;
-                
-            case WM_DESTROY:
-                PostQuitMessage(0);
-                return 0;
-        }
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
     
@@ -483,9 +436,9 @@ public:
             0,
             CLASS_NAME,
             L"Internet Status Indicator",
-            0, // Hidden window
+            0,
             0, 0, 0, 0,
-            HWND_MESSAGE, // Message-only window
+            HWND_MESSAGE,
             NULL,
             hInstance,
             NULL
@@ -507,12 +460,10 @@ private:
     NetworkSettings settings;
     HANDLE hIcmpFile;
     
-    // Network status tracking
     DWORD lastConnectedTime;
     DWORD lastDisconnectedTime;
     int consecutiveFailures;
     
-    // Tray icon components
     std::unique_ptr<TrayWindow> trayWindow;
     std::unique_ptr<TrayIconManager> trayIcon;
     bool trayIconInitialized;
@@ -526,7 +477,6 @@ public:
         WSAData wsaData;
         WSAStartup(MAKEWORD(2, 2), &wsaData);
         
-        // Initialize tray components
         trayWindow = std::make_unique<TrayWindow>();
         trayIcon = std::make_unique<TrayIconManager>();
     }
@@ -537,7 +487,6 @@ public:
             IcmpCloseHandle(hIcmpFile);
         }
         
-        // Clean up tray icon
         if (trayIcon) {
             trayIcon->Cleanup();
         }
@@ -546,38 +495,13 @@ public:
     }
     
     bool InitializeTrayIcon() {
-        if (!settings.showTrayIcon) {
-            Wh_Log(L"ℹ️ Tray icon disabled in settings");
-            return true;
-        }
+        if (!settings.showTrayIcon || trayIconInitialized) return true;
         
-        if (trayIconInitialized) {
-            Wh_Log(L"⚠️ Tray icon already initialized");
-            return true;
-        }
-        
-        if (!trayWindow->Create()) {
-            Wh_Log(L"❌ Failed to create tray window");
-            return false;
-        }
-        
-        if (!trayIcon->Initialize(trayWindow->GetHandle(), settings)) {
-            Wh_Log(L"❌ Failed to initialize tray icon");
-            return false;
-        }
-        
-        if (!trayIcon->Show()) {
-            Wh_Log(L"❌ Failed to show tray icon");
-            return false;
-        }
+        if (!trayWindow->Create()) return false;
+        if (!trayIcon->Initialize(trayWindow->GetHandle(), settings)) return false;
+        if (!trayIcon->Show()) return false;
         
         trayIconInitialized = true;
-        
-        const wchar_t* shapeText = (settings.iconShape == SHAPE_CIRCLE) ? L"Circle" : L"Square";
-        Wh_Log(L"✅ Tray icon initialized successfully using Custom Bitmap (%s, Connected: RGB(%d,%d,%d), Disconnected: RGB(%d,%d,%d))", 
-               shapeText,
-               settings.connectedColorR, settings.connectedColorG, settings.connectedColorB,
-               settings.disconnectedColorR, settings.disconnectedColorG, settings.disconnectedColorB);
         return true;
     }
     
@@ -588,20 +512,14 @@ public:
     
     bool PingHost(const std::string& hostname) {
         if (hIcmpFile == INVALID_HANDLE_VALUE) {
-            if (!InitializeIcmp()) {
-                return false;
-            }
+            if (!InitializeIcmp()) return false;
         }
         
-        // Convert hostname to IP
         struct addrinfo hints = {0};
         struct addrinfo* result = nullptr;
         hints.ai_family = AF_INET;
         
         if (getaddrinfo(hostname.c_str(), nullptr, &hints, &result) != 0) {
-            if (settings.logVerbose) {
-                Wh_Log(L"DNS resolution failed for %S", hostname.c_str());
-            }
             return false;
         }
         
@@ -609,7 +527,6 @@ public:
         IPAddr destIP = addr->sin_addr.s_addr;
         freeaddrinfo(result);
         
-        // Ping parameters
         char sendData[] = "NetworkStatusCheck";
         DWORD replySize = sizeof(ICMP_ECHO_REPLY) + sizeof(sendData);
         LPVOID replyBuffer = malloc(replySize);
@@ -617,25 +534,14 @@ public:
         if (!replyBuffer) return false;
         
         DWORD numReplies = IcmpSendEcho(
-            hIcmpFile,
-            destIP,
-            sendData,
-            sizeof(sendData),
-            nullptr,
-            replyBuffer,
-            replySize,
-            settings.timeout
+            hIcmpFile, destIP, sendData, sizeof(sendData),
+            nullptr, replyBuffer, replySize, settings.timeout
         );
         
         bool success = false;
         if (numReplies > 0) {
             PICMP_ECHO_REPLY reply = (PICMP_ECHO_REPLY)replyBuffer;
             success = (reply->Status == IP_SUCCESS);
-            
-            if (success && settings.logVerbose) {
-                Wh_Log(L"Ping to %S successful - RTT: %dms", 
-                       hostname.c_str(), reply->RoundTripTime);
-            }
         }
         
         free(replyBuffer);
@@ -650,20 +556,16 @@ public:
                                           nullptr, nullptr, 0);
         if (!hInternet) return false;
         
-        HINTERNET hUrl = InternetOpenUrlA(hInternet,
-                                        settings.httpTestUrl.c_str(),
+        HINTERNET hUrl = InternetOpenUrlA(hInternet, settings.httpTestUrl.c_str(),
                                         nullptr, 0,
                                         INTERNET_FLAG_NO_CACHE_WRITE |
                                         INTERNET_FLAG_NO_UI |
                                         INTERNET_FLAG_PRAGMA_NOCACHE |
-                                        INTERNET_FLAG_RELOAD,
-                                        0);
+                                        INTERNET_FLAG_RELOAD, 0);
         
         bool success = (hUrl != nullptr);
         
-        if (hUrl) {
-            InternetCloseHandle(hUrl);
-        }
+        if (hUrl) InternetCloseHandle(hUrl);
         InternetCloseHandle(hInternet);
         
         return success;
@@ -673,7 +575,6 @@ public:
         PIP_ADAPTER_INFO adapterInfo = nullptr;
         ULONG bufferSize = 0;
         
-        // Get required buffer size
         GetAdaptersInfo(nullptr, &bufferSize);
         adapterInfo = (PIP_ADAPTER_INFO)malloc(bufferSize);
         
@@ -685,7 +586,6 @@ public:
             while (adapter) {
                 if (adapter->Type == MIB_IF_TYPE_ETHERNET ||
                     adapter->Type == IF_TYPE_IEEE80211) {
-                    // Check if adapter has valid IP
                     if (strcmp(adapter->IpAddressList.IpAddress.String, "0.0.0.0") != 0) {
                         hasActiveAdapter = true;
                         break;
@@ -701,9 +601,7 @@ public:
     
     void PerformConnectivityCheck() {
         bool wasConnected = isConnected.load();
-        bool currentlyConnected = false;
         
-        // Multi-layered connectivity check
         bool adapterCheck = CheckNetworkAdapters();
         bool primaryPing = false;
         bool secondaryPing = false;
@@ -717,11 +615,9 @@ public:
             httpCheck = CheckHttpConnectivity();
         }
         
-        // Determine connectivity status
-        currentlyConnected = adapterCheck && (primaryPing || secondaryPing) && 
-                           (httpCheck || !settings.enableHttpCheck);
+        bool currentlyConnected = adapterCheck && (primaryPing || secondaryPing) && 
+                                (httpCheck || !settings.enableHttpCheck);
         
-        // Update internal state
         if (currentlyConnected != wasConnected) {
             isConnected.store(currentlyConnected);
             
@@ -735,38 +631,23 @@ public:
             }
         }
         
-        // ALWAYS update tray icon to ensure it reflects current status
         if (settings.showTrayIcon && trayIcon && trayIcon->IsVisible()) {
-            trayIcon->UpdateStatus(currentlyConnected, true); // Always force update
+            trayIcon->UpdateStatus(currentlyConnected, true);
         }
         
-        // Reset consecutive failures if connected
-        if (currentlyConnected && consecutiveFailures > 0) {
-            consecutiveFailures = 0;
-        } else if (!currentlyConnected) {
-            consecutiveFailures++;
-        }
-        
-        // Verbose logging
         if (settings.logVerbose) {
-            const wchar_t* shapeText = (settings.iconShape == SHAPE_CIRCLE) ? L"Circle" : L"Square";
-            
-            Wh_Log(L"Status: Adapter=%s, Primary=%s, Secondary=%s, HTTP=%s, Result=%s, Shape=%s, IconState=%s",
+            Wh_Log(L"Status: Adapter=%s, Primary=%s, HTTP=%s, Result=%s",
                    adapterCheck ? L"OK" : L"FAIL",
                    primaryPing ? L"OK" : L"FAIL",
-                   secondaryPing ? L"OK" : L"FAIL",
                    httpCheck ? L"OK" : L"FAIL",
-                   currentlyConnected ? L"CONNECTED" : L"DISCONNECTED",
-                   shapeText,
-                   currentlyConnected ? L"GREEN" : L"RED");
+                   currentlyConnected ? L"CONNECTED" : L"DISCONNECTED");
         }
     }
     
     void MonitorLoop() {
-        Wh_Log(L"🚀 Internet Status Monitor started");
+        Wh_Log(L"🚀 Internet Status Monitor started (windhawk.exe)");
         
-        // Perform immediate initial check
-        Sleep(1000); // Brief delay for initialization
+        Sleep(1000);
         PerformConnectivityCheck();
         
         while (isRunning.load()) {
@@ -782,7 +663,6 @@ public:
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 endTime - startTime).count();
             
-            // Sleep for remaining interval time
             int sleepTime = settings.checkInterval - (int)elapsed;
             if (sleepTime > 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
@@ -809,71 +689,35 @@ public:
     }
     
     void UpdateSettings(const NetworkSettings& newSettings) {
-        bool visualChanged = (settings.connectedColorR != newSettings.connectedColorR) ||
-                            (settings.connectedColorG != newSettings.connectedColorG) ||
-                            (settings.connectedColorB != newSettings.connectedColorB) ||
-                            (settings.disconnectedColorR != newSettings.disconnectedColorR) ||
-                            (settings.disconnectedColorG != newSettings.disconnectedColorG) ||
-                            (settings.disconnectedColorB != newSettings.disconnectedColorB) ||
-                            (settings.iconShape != newSettings.iconShape) ||
-                            (settings.iconSize != newSettings.iconSize);
-        
-        bool trayIconToggled = (settings.showTrayIcon != newSettings.showTrayIcon);
-        
         settings = newSettings;
         
-        // Ensure minimum interval
         if (settings.checkInterval < 1000) {
             settings.checkInterval = 1000;
         }
         
-        // Ensure valid shape
         if (settings.iconShape < 0 || settings.iconShape > 1) {
-            settings.iconShape = 0; // Default to circle
+            settings.iconShape = 0;
         }
         
-        // Handle tray icon toggling
-        if (trayIconToggled) {
-            if (settings.showTrayIcon && !trayIconInitialized) {
-                // Enable tray icon
-                InitializeTrayIcon();
-                if (trayIcon && trayIcon->IsVisible()) {
-                    trayIcon->UpdateStatus(isConnected.load(), true);
-                }
-            } else if (!settings.showTrayIcon && trayIconInitialized) {
-                // Disable tray icon
-                if (trayIcon) {
-                    trayIcon->Cleanup();
-                }
-                trayIconInitialized = false;
+        if (settings.showTrayIcon && !trayIconInitialized) {
+            InitializeTrayIcon();
+            if (trayIcon && trayIcon->IsVisible()) {
+                trayIcon->UpdateStatus(isConnected.load(), true);
             }
-        } 
-        // Handle visual changes to existing tray icon
-        else if (visualChanged && settings.showTrayIcon && trayIconInitialized && trayIcon) {
-            Wh_Log(L"🎨 Updating icon appearance");
+        } else if (!settings.showTrayIcon && trayIconInitialized) {
+            if (trayIcon) {
+                trayIcon->Cleanup();
+            }
+            trayIconInitialized = false;
+        } else if (trayIconInitialized && trayIcon) {
             trayIcon->UpdateSettings(settings);
         }
         
-        const wchar_t* shapeText = (settings.iconShape == SHAPE_CIRCLE) ? L"Circle" : L"Square";
-        Wh_Log(L"⚙️ Settings updated - Interval: %dms, Target: %S, TrayIcon: %s, Shape: %s, Connected: RGB(%d,%d,%d), Disconnected: RGB(%d,%d,%d)",
-               settings.checkInterval, settings.targetHost.c_str(),
-               settings.showTrayIcon ? L"ON" : L"OFF", shapeText,
-               settings.connectedColorR, settings.connectedColorG, settings.connectedColorB,
-               settings.disconnectedColorR, settings.disconnectedColorG, settings.disconnectedColorB);
-    }
-    
-    bool IsConnected() const {
-        return isConnected.load();
-    }
-    
-    void GetStatusInfo(DWORD* lastConnected, DWORD* lastDisconnected, int* failures) const {
-        if (lastConnected) *lastConnected = lastConnectedTime;
-        if (lastDisconnected) *lastDisconnected = lastDisconnectedTime;
-        if (failures) *failures = consecutiveFailures;
+        Wh_Log(L"⚙️ Settings updated - Interval: %dms, Target: %S",
+               settings.checkInterval, settings.targetHost.c_str());
     }
 };
 
-// Global monitor instance
 static std::unique_ptr<InternetStatusMonitor> g_monitor;
 
 void LoadSettings() {
@@ -881,12 +725,10 @@ void LoadSettings() {
     
     settings.checkInterval = Wh_GetIntSetting(L"checkInterval");
     
-    // Convert wide string settings to narrow strings
     PCWSTR targetHostW = Wh_GetStringSetting(L"targetHost");
     PCWSTR secondaryHostW = Wh_GetStringSetting(L"secondaryHost");
     PCWSTR httpTestUrlW = Wh_GetStringSetting(L"httpTestUrl");
     
-    // Convert to narrow strings
     int len = WideCharToMultiByte(CP_UTF8, 0, targetHostW, -1, nullptr, 0, nullptr, nullptr);
     settings.targetHost.resize(len - 1);
     WideCharToMultiByte(CP_UTF8, 0, targetHostW, -1, &settings.targetHost[0], len, nullptr, nullptr);
@@ -899,13 +741,16 @@ void LoadSettings() {
     settings.httpTestUrl.resize(len - 1);
     WideCharToMultiByte(CP_UTF8, 0, httpTestUrlW, -1, &settings.httpTestUrl[0], len, nullptr, nullptr);
     
+    Wh_FreeStringSetting(targetHostW);
+    Wh_FreeStringSetting(secondaryHostW);
+    Wh_FreeStringSetting(httpTestUrlW);
+    
     settings.timeout = Wh_GetIntSetting(L"timeout");
     settings.enableHttpCheck = Wh_GetIntSetting(L"enableHttpCheck") != 0;
     settings.enableSpeedTest = Wh_GetIntSetting(L"enableSpeedTest") != 0;
     settings.iconSize = Wh_GetIntSetting(L"iconSize");
     settings.showTrayIcon = Wh_GetIntSetting(L"showTrayIcon") != 0;
     
-    // Load color settings
     settings.connectedColorR = Wh_GetIntSetting(L"connectedColorR");
     settings.connectedColorG = Wh_GetIntSetting(L"connectedColorG");
     settings.connectedColorB = Wh_GetIntSetting(L"connectedColorB");
@@ -922,13 +767,12 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"🌐 Initializing Internet Status Indicator (Custom Bitmap)");
+    Wh_Log(L"🌐 Initializing Internet Status Indicator (windhawk.exe)");
     
     try {
         g_monitor = std::make_unique<InternetStatusMonitor>();
         LoadSettings();
         
-        // Initialize tray icon
         if (!g_monitor->InitializeTrayIcon()) {
             Wh_Log(L"⚠️ Tray icon initialization failed, continuing without it");
         }
