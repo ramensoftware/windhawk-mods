@@ -1,3 +1,7 @@
+## 1.3.4 ([Jul 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c7ad7841b9abb457146ca62506e94451f3210b05/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed broken layout when clicking on the search bar on the taskbar.
+
 ## 1.3.3 ([Jul 13, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b00021ce3d71d1b854c13daa040b58a5b05c8466/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed icon sizes not applying or applying incorrectly in some cases.
