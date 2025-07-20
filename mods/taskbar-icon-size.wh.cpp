@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.3.3
+// @version         1.3.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1364,10 +1364,7 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
         }
     } else if (className == L"Taskbar.SearchBoxButton") {
         // Only if search icon and not a search box.
-        auto searchBoxTextBlock =
-            FindChildByName(panelElement, L"SearchBoxTextBlock");
-        if (searchBoxTextBlock &&
-            searchBoxTextBlock.Visibility() != Visibility::Collapsed) {
+        if (panelElement.Margin() != Thickness{}) {
             return;
         }
     } else {
@@ -1425,10 +1422,7 @@ void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
     }
 
     // Only if search icon and not a search box.
-    auto searchBoxTextBlock =
-        FindChildByName(panelElement, L"SearchBoxTextBlock");
-    if (searchBoxTextBlock &&
-        searchBoxTextBlock.Visibility() != Visibility::Collapsed) {
+    if (FindChildByName(panelElement, L"SearchBoxTextBlock")) {
         return;
     }
 
