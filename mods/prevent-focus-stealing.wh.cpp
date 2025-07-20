@@ -2,7 +2,7 @@
 // @id              prevent-focus-stealing
 // @name            Prevent Focus Stealing
 // @description     Prevents specific apps from stealing focus when a window is opened.
-// @version         1.0.0
+// @version         1.0.1
 // @author          bawNg
 // @github          https://github.com/bawNg
 // @include         *
@@ -60,10 +60,6 @@ You should set `Excluded Arguments` to `--type` for efficiency so that only the 
 - `Developer Tools - https://example.com` will target only DevTools for that site.
 - `Developer Tools - chrome-extension://<extension_id>` will target only DevTools windows for that extension.
 
-### Never Focus
-
-Leave `Never Focus` disabled so that you can manually activate the window and interact with it.
-
 */
 // ==/WindhawkModReadme==
 
@@ -84,7 +80,7 @@ Leave `Never Focus` disabled so that you can manually activate the window and in
       $description: "The window title prefix to match. Leave blank to match all windows for the process."
     - never_focus: false
       $name: Never Focus
-      $description: "Never allow the window to be become focused, instead of only when it initially opens."
+      $description: "Never allow the window to become focused, instead of only when it initially opens. You can still manually focus the window."
   $name: Application Windows
   $description: "Prevent focus being stolen by these application windows."
 */
@@ -101,13 +97,25 @@ Leave `Never Focus` disabled so that you can manually activate the window and in
     const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
 #endif
 
+#if INTPTR_MAX == INT64_MAX
+#define INTPTR_MIN INT64_MIN
+#elif INTPTR_MAX == INT32_MAX
+#define INTPTR_MIN INT32_MIN
+#else
+#error Unknown pointer size
+#endif
+
 #define MOD_MSG_PREFIX L"Wh_FocusSteal_"
 
 #define Wh_SetProp(hWnd, name, value) SetPropW(hWnd, MOD_MSG_PREFIX name, reinterpret_cast<HANDLE>(value))
 #define Wh_GetProp(type, hWnd, name)  static_cast<type>(reinterpret_cast<intptr_t>(GetPropW(hWnd, MOD_MSG_PREFIX name)))
 #define Wh_RemoveProp(hWnd, name)     RemoveProp(hWnd, MOD_MSG_PREFIX name)
 
-const uint64_t INITIAL_UI_FOCUS_BLOCK_MS = 100;
+const intptr_t TS_PRECISION_MS = INTPTR_MAX == INT32_MAX ? 10 : 1;
+
+const intptr_t INITIAL_FOCUS_BLOCK_MS = 100;
+
+const intptr_t NEVER_FOCUS_TS = INTPTR_MIN + 1;
 
 struct WindowInfo {
     WindhawkUtils::StringSetting title;
@@ -157,24 +165,23 @@ WindowInfo* GetWindowInfo(LPCWSTR title) {
     return nullptr;
 }
 
+bool CanActivateWindow(HWND hWnd) {
+    intptr_t timestamp = Wh_GetProp(intptr_t, hWnd, L"NoActivateTs");
+    return !timestamp || GetTickCount64() / TS_PRECISION_MS - timestamp >= INITIAL_FOCUS_BLOCK_MS / TS_PRECISION_MS;
+}
+
 using SetWindowTextW_t = decltype(&SetWindowTextW);
 SetWindowTextW_t SetWindowTextW_Orig;
 
 // May be called from other threads, in which case it posts a WM_SETTEXT message
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR title) {
     BOOL result = SetWindowTextW_Orig(hWnd, title);
-    uint64_t now = GetTickCount64();
-    uint64_t created_at = Wh_GetProp(uint64_t, hWnd, L"CreatedAt");
-    if (!created_at) {
-        // CreateWindowExW was missed due to late injection
-        created_at = now;
-        Wh_SetProp(hWnd, L"CreatedAt", created_at);
-    }
-    if (title && !Wh_GetProp(uint64_t, hWnd, L"NoActivateAt")) {
+    if (title && !Wh_GetProp(intptr_t, hWnd, L"NoActivateTs")) {
         WindowInfo* window_info = GetWindowInfo(title);
         if (window_info) {
-            Wh_Log(L"SetWindowTextW for window 0x%p: '%ls'", hWnd, title);
-            Wh_SetProp(hWnd, L"NoActivateAt", now);
+            Wh_Log(L"SetWindowTextW for new window 0x%p: '%ls'", hWnd, title);
+            intptr_t timestamp = window_info->neverFocus ? NEVER_FOCUS_TS : (GetTickCount64() / TS_PRECISION_MS);
+            Wh_SetProp(hWnd, L"NoActivateTs", timestamp);
         }
     }
     return result;
@@ -184,16 +191,11 @@ using SetForegroundWindow_t = decltype(&SetForegroundWindow);
 SetForegroundWindow_t SetForegroundWindow_Orig;
 
 BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
-    uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
-    if (no_activate_at) {
-        if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
-            wchar_t title[256];
-            GetWindowTextW(hWnd, title, _countof(title));
-            Wh_Log(L"SetForegroundWindow blocked for new window 0x%p: '%ls'", hWnd, title);
-            return FALSE;
-        }
-    } else {
-        Wh_Log(L"SetForegroundWindow allowed for new window 0x%p", hWnd);
+    if (!CanActivateWindow(hWnd)) {
+        wchar_t title[256];
+        GetWindowTextW(hWnd, title, _countof(title));
+        Wh_Log(L"SetForegroundWindow blocked for window 0x%p: '%ls'", hWnd, title);
+        return FALSE;
     }
     return SetForegroundWindow_Orig(hWnd);
 }
@@ -202,14 +204,9 @@ using SetFocus_t = decltype(&SetFocus);
 SetFocus_t SetFocus_Orig;
 
 HWND WINAPI SetFocus_Hook(HWND hWnd) {
-    uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
-    if (no_activate_at) {
-        if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
-            Wh_Log(L"SetFocus blocked for window 0x%p", hWnd);
-            return GetFocus();
-        } else {
-            Wh_Log(L"SetFocus allowed for window 0x%p", hWnd);
-        }
+    if (!CanActivateWindow(hWnd)) {
+        Wh_Log(L"SetFocus blocked for window 0x%p", hWnd);
+        return GetFocus();
     }
     HWND result = SetFocus_Orig(hWnd);
     return result;
@@ -220,14 +217,9 @@ SetWindowPos_t SetWindowPos_Orig;
 
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
     if (!(uFlags & SWP_NOACTIVATE)) {
-        uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
-        if (no_activate_at) {
-            if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
-                Wh_Log(L"SetWindowPos for window 0x%p - Adding SWP_NOACTIVATE to flags", hWnd);
-                uFlags |= SWP_NOACTIVATE;
-            }
-        } else {
-            Wh_Log(L"SetWindowPos for new window 0x%p", hWnd);
+        if (!CanActivateWindow(hWnd)) {
+            Wh_Log(L"SetWindowPos for window 0x%p - Adding SWP_NOACTIVATE to flags", hWnd);
+            uFlags |= SWP_NOACTIVATE;
         }
     }
     return SetWindowPos_Orig(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
@@ -238,19 +230,12 @@ ShowWindow_t ShowWindow_Orig;
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     bool show_maximize = false;
-    uint64_t no_activate_at = Wh_GetProp(uint64_t, hWnd, L"NoActivateAt");
     if ((nCmdShow == SW_SHOW) | (nCmdShow == SW_SHOWNORMAL) | (nCmdShow == SW_RESTORE) | (nCmdShow == SW_SHOWMAXIMIZED) | (nCmdShow == SW_SHOWDEFAULT)) {
-        if (no_activate_at) {
-            if (GetTickCount64() - no_activate_at < INITIAL_UI_FOCUS_BLOCK_MS) {
-                Wh_Log(L"Showing window 0x%p with SW_SHOWNOACTIVATE instead of %ls", hWnd, ShowCmdToString(nCmdShow));
-                show_maximize = nCmdShow == SW_SHOWMAXIMIZED;
-                nCmdShow = SW_SHOWNOACTIVATE;
-            }
-        } else {
-            Wh_Log(L"Showing window 0x%p with %ls", hWnd, ShowCmdToString(nCmdShow));
+        if (!CanActivateWindow(hWnd)) {
+            Wh_Log(L"Showing window 0x%p with SW_SHOWNOACTIVATE instead of %ls", hWnd, ShowCmdToString(nCmdShow));
+            show_maximize = nCmdShow == SW_SHOWMAXIMIZED;
+            nCmdShow = SW_SHOWNOACTIVATE;
         }
-    } else if (no_activate_at) {
-        Wh_Log(L"Showing window 0x%p with %ls", hWnd, ShowCmdToString(nCmdShow));
     }
     BOOL result = ShowWindow_Orig(hWnd, nCmdShow);
     if (show_maximize) {
@@ -271,11 +256,9 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     }
     HWND hWnd = CreateWindowExW_Orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hWnd) {
-        uint64_t now = GetTickCount64();
-        Wh_SetProp(hWnd, L"CreatedAt", now);
         if (window_info) {
             Wh_Log(L"Created window 0x%p is being tracked: '%ls'", hWnd, lpWindowName);
-            Wh_SetProp(hWnd, L"NoActivateAt", now);
+            Wh_SetProp(hWnd, L"NoActivateTs", window_info->neverFocus ? NEVER_FOCUS_TS : (GetTickCount64() / TS_PRECISION_MS));
             ShowWindow_Orig(hWnd, SW_SHOWNOACTIVATE);
         }
     }
@@ -436,24 +419,25 @@ void Wh_ModAfterInit() {
         Wh_Log(L"Checking %lld existing windows", existing_windows.hwnds.size());
         uint64_t now = GetTickCount64();
         for (HWND hWnd : existing_windows.hwnds) {
-            uint64_t created_at = Wh_GetProp(uint64_t, hWnd, L"CreatedAt");
-            if (created_at)
-                continue;
-            Wh_SetProp(hWnd, L"CreatedAt", now);
             wchar_t title[256];
             GetWindowTextW(hWnd, title, _countof(title));
             WindowInfo* window_info = GetWindowInfo(title);
-            if (window_info) {
-                Wh_Log(L"Existing window 0x%p needs to be tracked: %ls", hWnd, title);
-                Wh_SetProp(hWnd, L"NoActivateAt", now);
-                if (GetForegroundWindow() == hWnd) {
-                    Wh_Log(L"Window 0x%p stole focus before mod initialized - switching to previous", hWnd);
-                    SwitchToPreviousWindow(hWnd);
-                }
+            if (!window_info) {
+                Wh_RemoveProp(hWnd, "NoActivateTs");
+                continue;
+            }
+            intptr_t no_activate_ts = Wh_GetProp(intptr_t, hWnd, L"NoActivateTs");
+            if (no_activate_ts) {
+                if (window_info->neverFocus ? no_activate_ts == NEVER_FOCUS_TS : no_activate_ts != NEVER_FOCUS_TS)
+                    continue;
+            }
+            Wh_Log(L"Existing window 0x%p needs to be tracked: '%ls'%ls", hWnd, title, window_info->neverFocus ? L" (never focus)" : L"");
+            Wh_SetProp(hWnd, L"NoActivateTs", window_info->neverFocus ? NEVER_FOCUS_TS : (now / TS_PRECISION_MS));
+            if (GetForegroundWindow() == hWnd) {
+                Wh_Log(L"Window 0x%p stole focus before mod initialized - switching to previous", hWnd);
+                SwitchToPreviousWindow(hWnd);
             }
         }
-    } else {
-        Wh_Log(L"Injection was not asynchronous");
     }
 
     g_initialized = true;
