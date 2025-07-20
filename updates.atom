@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-20T19:27:43.000Z</updated>
+    <updated>2025-07-20T19:46:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Prevent Focus Stealing 1.0.1]]></title>
+        <id>https://windhawk.net/mods/prevent-focus-stealing#07ca47be112f26803db61e862625f660a9f4a952</id>
+        <link href="https://windhawk.net/mods/prevent-focus-stealing"/>
+        <updated>2025-07-20T19:46:33.000Z</updated>
+        <content type="html"><![CDATA[<p>Reimplemented support for "Never Focus" setting and made changes to settings be applied to existing windows</p>
+<ul>
+<li>Reimplemented support for "Never Focus" setting which was forgotten during overhaul</li>
+<li>"Never Focus" only prevents the app from focusing itself, while allowing manual activation by the user</li>
+<li>Changes to settings are now applied to existing window and not only new windows</li>
+<li>Titles are rechecked on late load in case reload happened between window creation and title being set</li>
+<li>Fixed timestamp being truncated after 49 days uptime on 32 bit systems</li>
+</ul>]]></content>
+        <author>
+            <name>bawNg</name>
+            <uri>https://github.com/bawNg</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar height and icon size 1.3.4]]></title>
         <id>https://windhawk.net/mods/taskbar-icon-size#c7ad7841b9abb457146ca62506e94451f3210b05</id>
@@ -346,19 +364,6 @@ be relaunched automatically with remote debugging enabled.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Double Click Up 1.0.1]]></title>
-        <id>https://windhawk.net/mods/explorer-double-click-up#e80412f22825c0d4ce5c306e0ecf6608d1103f7a</id>
-        <link href="https://windhawk.net/mods/explorer-double-click-up"/>
-        <updated>2025-07-12T07:28:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Use LoadLibraryEx with LOAD<em>LIBRARY</em>SEARCH_SYSTEM32 #2063</li>
-</ul>]]></content>
-        <author>
-            <name>wrldspawn</name>
-            <uri>https://github.com/wrldspawn</uri>
         </author>
     </entry>
 </feed>

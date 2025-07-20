@@ -2779,7 +2779,7 @@
                 "published": 1752954022000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1752954022000,
+                "updated": 1753040793000,
                 "users": 0
             },
             "metadata": {
@@ -2791,7 +2791,7 @@
                     "*"
                 ],
                 "name": "Prevent Focus Stealing",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "regedit-auto-trim-whitespace-on-navigation-bar": {
