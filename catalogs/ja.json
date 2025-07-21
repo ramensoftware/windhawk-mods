@@ -2698,6 +2698,30 @@
                 "version": "1.1"
             }
         },
+        "old-auto-colorization": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753076556000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753076556000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lshlwapi",
+                "description": "Restores old auto colorization algorithms from before Windows 10 1809",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Old Auto Colorization",
+                "version": "1.0.0"
+            }
+        },
         "old-this-pc-commands": {
             "details": {
                 "defaultSorting": 7640,
