@@ -2,7 +2,7 @@
 // @id              internet-status-indicator
 // @name            Internet Status Indicator
 // @description     Real-time network connectivity monitoring with visual indicators as a Tray Icon
-// @version         0.8
+// @version         0.7
 // @author          ALMAS CP
 // @github          https://github.com/almas-cp
 // @homepage        https://github.com/almas-cp
@@ -10,31 +10,37 @@
 // @compilerOptions -lwininet -lws2_32 -liphlpapi -lgdi32 -luser32
 // ==/WindhawkMod==
 
+
 // ==WindhawkModReadme==
 /*
 # Internet Status Indicator
-A comprehensive network monitoring mod that provides real-time connectivity status
-directly integrated into your system. This mod continuously monitors your internet
-connection and provides visual feedback about network availability.
+A simple network monitoring mod that provides real-time connectivity status
+directly integrated into your system tray. This mod continuously monitors your internet
+connection by pinging target hosts and provides visual feedback.
+
 
 ## Features
 - **Real-time monitoring**: Continuous network connectivity checks
-- **Multiple check methods**: Uses both ping and HTTP requests for accurate status
+- **Simple ping-based checking**: Pings primary host, falls back to secondary if needed
 - **Customizable visual indicators**: Choose colors and shapes for connected/disconnected states
 - **Customizable settings**: Configure check intervals, target hosts, and timeouts
 - **Lightweight**: Minimal system resource usage
 - **Simple Bitmap Icons**: Clean, reliable icon rendering
+
 
 ## Visual Customization
 - **Custom Colors**: Set different colors for connected and disconnected states
 - **Shape Options**: Choose between circular and square icon shapes
 - **Size Control**: Adjust icon size to your preference
 
+
 ## How it works
-The mod performs periodic connectivity checks using:
-1. ICMP ping to specified target hosts
-2. HTTP connectivity verification
-3. Network adapter status monitoring
+The mod performs periodic connectivity checks by:
+1. Ping primary target host (default: 8.8.8.8)
+2. If primary fails, ping secondary host (default: 1.1.1.1)
+3. If either ping succeeds: Green icon (connected)
+4. If both pings fail: Red icon (disconnected)
+
 
 ## Usage
 Once installed, the mod runs automatically and provides:
@@ -43,87 +49,93 @@ Once installed, the mod runs automatically and provides:
 - Configurable check intervals and targets
 - Customizable visual appearance
 
+
 Check the Windhawk log to see connectivity status updates in real-time.
+
 
 ## Note
 This mod runs as part of the windhawk.exe process for better stability and resource management.
 */
 // ==/WindhawkModReadme==
 
+
 // ==WindhawkModSettings==
 /*
 # Network Status Indicator Settings
 # Configure how the mod monitors your internet connectivity
 
+
 - checkInterval: 5000
   $name: Check Interval (ms)
   $description: How often to check connectivity (minimum 1000ms recommended)
 
+
 - targetHost: "8.8.8.8"
-  $name: Target Host
+  $name: Primary Target Host
   $description: Primary host to ping for connectivity checks (Google DNS by default)
 
+
 - secondaryHost: "1.1.1.1"
-  $name: Secondary Host  
-  $description: Fallback host for connectivity verification (Cloudflare DNS)
+  $name: Secondary Target Host  
+  $description: Secondary host to ping if primary fails (Cloudflare DNS)
+
 
 - timeout: 3000
-  $name: Timeout (ms)
-  $description: Maximum wait time for connectivity checks
+  $name: Ping Timeout (ms)
+  $description: Maximum wait time for ping responses
 
-- enableHttpCheck: true
-  $name: Enable HTTP Checks
-  $description: Perform HTTP connectivity tests in addition to ping
-
-- httpTestUrl: "http://www.google.com/generate_204"
-  $name: HTTP Test URL
-  $description: URL used for HTTP connectivity verification
-
-- enableSpeedTest: false
-  $name: Enable Speed Testing
-  $description: Periodically test network speeds (may use bandwidth)
 
 - iconSize: 16
   $name: Tray Icon Size
   $description: Size of the tray icon in pixels (16-32 recommended)
 
+
 - showTrayIcon: true
   $name: Show Tray Icon
   $description: Display network status indicator in system tray
+
 
 - connectedColorR: 0
   $name: Connected Color - Red (0-255)
   $description: Red component of connected state color
 
+
 - connectedColorG: 255
   $name: Connected Color - Green (0-255)
   $description: Green component of connected state color
+
 
 - connectedColorB: 0
   $name: Connected Color - Blue (0-255)
   $description: Blue component of connected state color
 
+
 - disconnectedColorR: 255
   $name: Disconnected Color - Red (0-255)
   $description: Red component of disconnected state color
+
 
 - disconnectedColorG: 0
   $name: Disconnected Color - Green (0-255)
   $description: Green component of disconnected state color
 
+
 - disconnectedColorB: 0
   $name: Disconnected Color - Blue (0-255)
   $description: Blue component of disconnected state color
 
+
 - iconShape: 0
   $name: Icon Shape
   $description: 0=Circle, 1=Square
+
 
 - logVerbose: true
   $name: Verbose Logging
   $description: Enable detailed connectivity status logging
 */
 // ==/WindhawkModSettings==
+
 
 // Fix include order - winsock2.h must come before windows.h
 #include <winsock2.h>
@@ -140,22 +152,24 @@ This mod runs as part of the windhawk.exe process for better stability and resou
 #include <atomic>
 #include <chrono>
 #include <algorithm>
+#include <condition_variable>
+#include <mutex>
+
 
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAYICON 1001
 
+
 // Icon shape constants
 #define SHAPE_CIRCLE 0
 #define SHAPE_SQUARE 1
+
 
 struct NetworkSettings {
     int checkInterval;
     std::string targetHost;
     std::string secondaryHost;
     int timeout;
-    bool enableHttpCheck;
-    std::string httpTestUrl;
-    bool enableSpeedTest;
     bool logVerbose;
     int iconSize;
     bool showTrayIcon;
@@ -168,6 +182,7 @@ struct NetworkSettings {
     int disconnectedColorB;
     int iconShape; // 0=Circle, 1=Square
 };
+
 
 // System tray icon management
 class TrayIconManager {
@@ -188,7 +203,7 @@ private:
     // Create bitmap icon with custom color and shape
     HICON CreateCustomBitmapIcon(COLORREF color, int size, int shape) {
         // Create bitmap info
-        BITMAPINFO bi = {0};
+        BITMAPINFO bi = {{0}};
         bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         bi.bmiHeader.biWidth = size;
         bi.bmiHeader.biHeight = -size; // Top-down
@@ -228,7 +243,7 @@ private:
                     // Square shape - leave 1 pixel border
                     int border = 1;
                     shouldFill = (x >= border && x < size - border && 
-                                 y >= border && y < size - border);
+                                  y >= border && y < size - border);
                 }
                 
                 pixels[index] = shouldFill ? bitmapColor : transparent;
@@ -308,7 +323,7 @@ private:
     
 public:
     TrayIconManager() : hwnd(NULL), hIconConnected(NULL), hIconDisconnected(NULL), 
-                       iconVisible(false), currentConnectionState(false), isInitialized(false) {
+                        iconVisible(false), currentConnectionState(false), isInitialized(false) {
         memset(&nid, 0, sizeof(nid));
     }
     
@@ -403,6 +418,7 @@ public:
     }
 };
 
+
 // Hidden window for tray icon messages
 class TrayWindow {
 private:
@@ -410,6 +426,9 @@ private:
     static const wchar_t* CLASS_NAME;
     
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+        if (uMsg == WM_TRAYICON) {
+            return 0;
+        }
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
     
@@ -450,7 +469,9 @@ public:
     HWND GetHandle() const { return hwnd; }
 };
 
+
 const wchar_t* TrayWindow::CLASS_NAME = L"InternetStatusTrayWindow";
+
 
 class InternetStatusMonitor {
 private:
@@ -460,20 +481,17 @@ private:
     NetworkSettings settings;
     HANDLE hIcmpFile;
     
-    DWORD lastConnectedTime;
-    DWORD lastDisconnectedTime;
-    int consecutiveFailures;
-    
     std::unique_ptr<TrayWindow> trayWindow;
     std::unique_ptr<TrayIconManager> trayIcon;
     bool trayIconInitialized;
     
+    // For interruptible waiting
+    std::condition_variable cv;
+    std::mutex cv_mutex;
+    
 public:
     InternetStatusMonitor() : hIcmpFile(INVALID_HANDLE_VALUE), 
-                             lastConnectedTime(0), 
-                             lastDisconnectedTime(0),
-                             consecutiveFailures(0),
-                             trayIconInitialized(false) {
+                              trayIconInitialized(false) {
         WSAData wsaData;
         WSAStartup(MAKEWORD(2, 2), &wsaData);
         
@@ -497,9 +515,18 @@ public:
     bool InitializeTrayIcon() {
         if (!settings.showTrayIcon || trayIconInitialized) return true;
         
-        if (!trayWindow->Create()) return false;
-        if (!trayIcon->Initialize(trayWindow->GetHandle(), settings)) return false;
-        if (!trayIcon->Show()) return false;
+        if (!trayWindow->Create()) {
+            Wh_Log(L"❌ Failed to create tray window.");
+            return false;
+        }
+        if (!trayIcon->Initialize(trayWindow->GetHandle(), settings)) {
+            Wh_Log(L"❌ Failed to initialize tray icon manager.");
+            return false;
+        }
+        if (!trayIcon->Show()) {
+            Wh_Log(L"❌ Failed to show tray icon.");
+            return false;
+        }
         
         trayIconInitialized = true;
         return true;
@@ -533,9 +560,12 @@ public:
         
         if (!replyBuffer) return false;
         
+        // Use shorter timeout for faster shutdown
+        DWORD pingTimeout = std::min((DWORD)settings.timeout, 1000UL);
+        
         DWORD numReplies = IcmpSendEcho(
             hIcmpFile, destIP, sendData, sizeof(sendData),
-            nullptr, replyBuffer, replySize, settings.timeout
+            nullptr, replyBuffer, replySize, pingTimeout
         );
         
         bool success = false;
@@ -548,99 +578,52 @@ public:
         return success;
     }
     
-    bool CheckHttpConnectivity() {
-        if (!settings.enableHttpCheck) return true;
-        
-        HINTERNET hInternet = InternetOpenA("NetworkStatusIndicator/1.0",
-                                          INTERNET_OPEN_TYPE_PRECONFIG,
-                                          nullptr, nullptr, 0);
-        if (!hInternet) return false;
-        
-        HINTERNET hUrl = InternetOpenUrlA(hInternet, settings.httpTestUrl.c_str(),
-                                        nullptr, 0,
-                                        INTERNET_FLAG_NO_CACHE_WRITE |
-                                        INTERNET_FLAG_NO_UI |
-                                        INTERNET_FLAG_PRAGMA_NOCACHE |
-                                        INTERNET_FLAG_RELOAD, 0);
-        
-        bool success = (hUrl != nullptr);
-        
-        if (hUrl) InternetCloseHandle(hUrl);
-        InternetCloseHandle(hInternet);
-        
-        return success;
-    }
-    
-    bool CheckNetworkAdapters() {
-        PIP_ADAPTER_INFO adapterInfo = nullptr;
-        ULONG bufferSize = 0;
-        
-        GetAdaptersInfo(nullptr, &bufferSize);
-        adapterInfo = (PIP_ADAPTER_INFO)malloc(bufferSize);
-        
-        if (!adapterInfo) return false;
-        
-        bool hasActiveAdapter = false;
-        if (GetAdaptersInfo(adapterInfo, &bufferSize) == NO_ERROR) {
-            PIP_ADAPTER_INFO adapter = adapterInfo;
-            while (adapter) {
-                if (adapter->Type == MIB_IF_TYPE_ETHERNET ||
-                    adapter->Type == IF_TYPE_IEEE80211) {
-                    if (strcmp(adapter->IpAddressList.IpAddress.String, "0.0.0.0") != 0) {
-                        hasActiveAdapter = true;
-                        break;
-                    }
-                }
-                adapter = adapter->Next;
-            }
-        }
-        
-        free(adapterInfo);
-        return hasActiveAdapter;
-    }
-    
     void PerformConnectivityCheck() {
+        // Check if we should stop before doing any work
+        if (!isRunning.load()) return;
+        
         bool wasConnected = isConnected.load();
         
-        bool adapterCheck = CheckNetworkAdapters();
-        bool primaryPing = false;
+        // SIMPLIFIED LOGIC: Just ping primary host, then secondary if primary fails
+        bool primaryPing = PingHost(settings.targetHost);
         bool secondaryPing = false;
-        bool httpCheck = false;
         
-        if (adapterCheck) {
-            primaryPing = PingHost(settings.targetHost);
-            if (!primaryPing) {
-                secondaryPing = PingHost(settings.secondaryHost);
-            }
-            httpCheck = CheckHttpConnectivity();
+        // Check again if we should stop (ping might have taken time)
+        if (!isRunning.load()) return;
+        
+        if (!primaryPing) {
+            secondaryPing = PingHost(settings.secondaryHost);
         }
         
-        bool currentlyConnected = adapterCheck && (primaryPing || secondaryPing) && 
-                                (httpCheck || !settings.enableHttpCheck);
+        // Check one more time if we should stop
+        if (!isRunning.load()) return;
         
+        // If either ping succeeds, we're connected. That's it!
+        bool currentlyConnected = primaryPing || secondaryPing;
+        
+        // Update connection state if changed
         if (currentlyConnected != wasConnected) {
             isConnected.store(currentlyConnected);
             
             if (currentlyConnected) {
-                lastConnectedTime = GetTickCount();
-                consecutiveFailures = 0;
-                Wh_Log(L"🌐 Internet connection established");
+                Wh_Log(L"🟢 Internet connection established");
             } else {
-                lastDisconnectedTime = GetTickCount();
-                Wh_Log(L"❌ Internet connection lost");
+                Wh_Log(L"🔴 Internet connection lost");
             }
         }
         
+        // Update tray icon
         if (settings.showTrayIcon && trayIcon && trayIcon->IsVisible()) {
-            trayIcon->UpdateStatus(currentlyConnected, true);
+            trayIcon->UpdateStatus(currentlyConnected, false);
         }
         
+        // Verbose logging
         if (settings.logVerbose) {
-            Wh_Log(L"Status: Adapter=%s, Primary=%s, HTTP=%s, Result=%s",
-                   adapterCheck ? L"OK" : L"FAIL",
-                   primaryPing ? L"OK" : L"FAIL",
-                   httpCheck ? L"OK" : L"FAIL",
-                   currentlyConnected ? L"CONNECTED" : L"DISCONNECTED");
+            Wh_Log(L"Status: Primary=%s, Secondary=%s, Result=%s (%s)",
+                   primaryPing ? L"✓" : L"✗",
+                   secondaryPing ? L"✓" : L"✗", 
+                   currentlyConnected ? L"CONNECTED" : L"DISCONNECTED",
+                   currentlyConnected ? L"🟢" : L"🔴");
         }
     }
     
@@ -659,13 +642,19 @@ public:
                 Wh_Log(L"⚠️ Error during connectivity check");
             }
             
+            // Check if we should stop before waiting
+            if (!isRunning.load()) break;
+            
             auto endTime = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 endTime - startTime).count();
             
             int sleepTime = settings.checkInterval - (int)elapsed;
             if (sleepTime > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
+                // Use condition variable for interruptible wait
+                std::unique_lock<std::mutex> lock(cv_mutex);
+                cv.wait_for(lock, std::chrono::milliseconds(sleepTime), 
+                           [this] { return !isRunning.load(); });
             }
         }
         
@@ -682,10 +671,17 @@ public:
     void Stop() {
         if (!isRunning.load()) return;
         
+        Wh_Log(L"🔄 Stopping Internet Status Monitor...");
         isRunning.store(false);
+        
+        // Wake up the monitoring thread immediately
+        cv.notify_all();
+        
         if (monitorThread.joinable()) {
             monitorThread.join();
         }
+        
+        Wh_Log(L"✅ Internet Status Monitor stopped successfully");
     }
     
     void UpdateSettings(const NetworkSettings& newSettings) {
@@ -713,12 +709,14 @@ public:
             trayIcon->UpdateSettings(settings);
         }
         
-        Wh_Log(L"⚙️ Settings updated - Interval: %dms, Target: %S",
-               settings.checkInterval, settings.targetHost.c_str());
+        Wh_Log(L"⚙️ Settings updated - Interval: %dms, Primary: %S, Secondary: %S",
+               settings.checkInterval, settings.targetHost.c_str(), settings.secondaryHost.c_str());
     }
 };
 
+
 static std::unique_ptr<InternetStatusMonitor> g_monitor;
+
 
 void LoadSettings() {
     NetworkSettings settings;
@@ -727,7 +725,6 @@ void LoadSettings() {
     
     PCWSTR targetHostW = Wh_GetStringSetting(L"targetHost");
     PCWSTR secondaryHostW = Wh_GetStringSetting(L"secondaryHost");
-    PCWSTR httpTestUrlW = Wh_GetStringSetting(L"httpTestUrl");
     
     int len = WideCharToMultiByte(CP_UTF8, 0, targetHostW, -1, nullptr, 0, nullptr, nullptr);
     settings.targetHost.resize(len - 1);
@@ -737,17 +734,10 @@ void LoadSettings() {
     settings.secondaryHost.resize(len - 1);
     WideCharToMultiByte(CP_UTF8, 0, secondaryHostW, -1, &settings.secondaryHost[0], len, nullptr, nullptr);
     
-    len = WideCharToMultiByte(CP_UTF8, 0, httpTestUrlW, -1, nullptr, 0, nullptr, nullptr);
-    settings.httpTestUrl.resize(len - 1);
-    WideCharToMultiByte(CP_UTF8, 0, httpTestUrlW, -1, &settings.httpTestUrl[0], len, nullptr, nullptr);
-    
     Wh_FreeStringSetting(targetHostW);
     Wh_FreeStringSetting(secondaryHostW);
-    Wh_FreeStringSetting(httpTestUrlW);
     
     settings.timeout = Wh_GetIntSetting(L"timeout");
-    settings.enableHttpCheck = Wh_GetIntSetting(L"enableHttpCheck") != 0;
-    settings.enableSpeedTest = Wh_GetIntSetting(L"enableSpeedTest") != 0;
     settings.iconSize = Wh_GetIntSetting(L"iconSize");
     settings.showTrayIcon = Wh_GetIntSetting(L"showTrayIcon") != 0;
     
@@ -766,7 +756,8 @@ void LoadSettings() {
     }
 }
 
-BOOL Wh_ModInit() {
+
+BOOL WhTool_ModInit() {
     Wh_Log(L"🌐 Initializing Internet Status Indicator (windhawk.exe)");
     
     try {
@@ -787,7 +778,8 @@ BOOL Wh_ModInit() {
     }
 }
 
-void Wh_ModUninit() {
+
+void WhTool_ModUninit() {
     Wh_Log(L"🔄 Uninitializing Internet Status Indicator");
     
     if (g_monitor) {
@@ -795,10 +787,224 @@ void Wh_ModUninit() {
         g_monitor.reset();
     }
     
+    PostQuitMessage(0);
+    
     Wh_Log(L"✅ Internet Status Indicator uninitialized");
 }
 
-void Wh_ModSettingsChanged() {
+
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"⚙️ Internet Status Indicator settings changed");
     LoadSettings();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// [https://github.com/ramensoftware/windhawk-mods/pull/1916](https://github.com/ramensoftware/windhawk-mods/pull/1916)
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+
+// FIX: Implement a proper message loop.
+// The previous implementation with ExitThread(0) terminated the main thread,
+// which is required for handling GUI messages for the tray icon. This new
+// implementation runs a message loop until WhTool_ModUninit posts a quit message.
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L"Tool mod process entry point hooked. Starting message loop.");
+
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+
+    Wh_Log(L"Tool mod message loop exited. Process will terminate.");
+}
+
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+
+    LocalFree(argv);
+
+
+    if (isService) {
+        return FALSE;
+    }
+
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+
+    WhTool_ModSettingsChanged();
+}
+
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+
+    WhTool_ModUninit();
+    ExitProcess(0);  // ← FIXED: Added the missing ExitProcess call
 }
