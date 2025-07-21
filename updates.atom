@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-21T05:42:36.000Z</updated>
+    <updated>2025-07-21T15:48:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#cc47ad5150e1f7361c3ad8ffa166dbc8fa5488da</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2025-07-21T15:48:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the mod not working on some Windows 11 builds which have one of the hooked functions inlined.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old Auto Colorization 1.0.0]]></title>
         <id>https://windhawk.net/mods/old-auto-colorization#9810bf97723bd61357f233783abb558c00aa7b02</id>
@@ -356,19 +370,6 @@ apps</a>.
 Instead of step 11 (Configure your WebView2 WinUI 2 (UWP) app for remote
 debugging), install this mod, and terminate the SearchHost.exe process. It will
 be relaunched automatically with remote debugging enabled.</p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#a16d12ef9bb15dfd5462b139fcfca356650e06d0</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2025-07-12T17:52:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>In <a href="https://blogs.windows.com/windows-insider/2025/05/05/announcing-windows-11-insider-preview-build-26120-3950-beta-channel/#:~:text=We%20have%20adjusted%20the%20needy%20state%20pill%20under%20apps%20on%20the%20taskbar%20that%20need%20attention%20to%20be%20wider%20and%20more%20visible.">a recent update</a>, Windows adjusted the running indicator for taskbar items that need attention to be wider and more visible. The update improves compatibility with this change.</li>
-</ul>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
