@@ -2053,6 +2053,28 @@
                 "version": "1.0.0"
             }
         },
+        "internet-status-indicator": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753184093000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753184093000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ALMAS CP",
+                "compilerOptions": "-lwininet -lws2_32 -liphlpapi -lgdi32 -luser32",
+                "description": "Real-time network connectivity monitoring with visual indicators as a Tray Icon",
+                "github": "https://github.com/almas-cp",
+                "homepage": "https://github.com/almas-cp",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Internet Status Indicator",
+                "version": "0.7"
+            }
+        },
         "isretailready-false": {
             "details": {
                 "defaultSorting": 207,

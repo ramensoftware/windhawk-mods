@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-22T10:18:00.000Z</updated>
+    <updated>2025-07-22T11:34:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Internet Status Indicator 0.7]]></title>
+        <id>https://windhawk.net/mods/internet-status-indicator#8c144cc61e4f31a8d9443ed84d19516b484bd09d</id>
+        <link href="https://windhawk.net/mods/internet-status-indicator"/>
+        <updated>2025-07-22T11:34:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="internetstatusindicator">Internet Status Indicator</h1>
+<p>A simple network monitoring mod that provides real-time connectivity status
+directly integrated into your system tray. This mod continuously monitors your internet
+connection by pinging target hosts and provides visual feedback.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Real-time monitoring</strong>: Continuous network connectivity checks</li>
+<li><strong>Simple ping-based checking</strong>: Pings primary host, falls back to secondary if needed</li>
+<li><strong>Customizable visual indicators</strong>: Choose colors and shapes for connected/disconnected states</li>
+<li><strong>Customizable settings</strong>: Configure check intervals, target hosts, and timeouts</li>
+<li><strong>Lightweight</strong>: Minimal system resource usage</li>
+<li><strong>Simple Bitmap Icons</strong>: Clean, reliable icon rendering</li>
+</ul>
+<h2 id="visualcustomization">Visual Customization</h2>
+<ul>
+<li><strong>Custom Colors</strong>: Set different colors for connected and disconnected states</li>
+<li><strong>Shape Options</strong>: Choose between circular and square icon shapes</li>
+<li><strong>Size Control</strong>: Adjust icon size to your preference</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod performs periodic connectivity checks by:</p>
+<ol>
+<li>Ping primary target host (default: 8.8.8.8)</li>
+<li>If primary fails, ping secondary host (default: 1.1.1.1)</li>
+<li>If either ping succeeds: Green icon (connected)</li>
+<li>If both pings fail: Red icon (disconnected)</li>
+</ol>
+<h2 id="usage">Usage</h2>
+<p>Once installed, the mod runs automatically and provides:</p>
+<ul>
+<li>Continuous background monitoring</li>
+<li>Log entries showing connectivity status</li>
+<li>Configurable check intervals and targets</li>
+<li>Customizable visual appearance</li>
+</ul>
+<p>Check the Windhawk log to see connectivity status updates in real-time.</p>
+<h2 id="note">Note</h2>
+<p>This mod runs as part of the windhawk.exe process for better stability and resource management.</p>]]></content>
+        <author>
+            <name>ALMAS CP</name>
+            <uri>https://github.com/almas-cp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Basic Themer 1.1.1]]></title>
         <id>https://windhawk.net/mods/basic-themer#6f365f998004d32f55343a583a7e8eff5ce2c0c6</id>
@@ -346,20 +394,6 @@ site that renders when toolbars are unlocked. This mod removes that splitter.</p
         <updated>2025-07-14T09:35:23.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed thumbnails not being clickable when in list mode, either when there are too many items, or when the "Disable Taskbar Thumbnails" mod is used in list mode.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.3.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#b00021ce3d71d1b854c13daa040b58a5b05c8466</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2025-07-13T08:36:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed icon sizes not applying or applying incorrectly in some cases.</li>
-<li>Fixed labels being truncated with icons of size 32 in some cases.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
