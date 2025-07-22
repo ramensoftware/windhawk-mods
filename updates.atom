@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-21T15:48:07.000Z</updated>
+    <updated>2025-07-22T10:18:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Basic Themer 1.1.1]]></title>
+        <id>https://windhawk.net/mods/basic-themer#6f365f998004d32f55343a583a7e8eff5ce2c0c6</id>
+        <link href="https://windhawk.net/mods/basic-themer"/>
+        <updated>2025-07-22T10:18:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix for Windows 11 24H2</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-multirow#cc47ad5150e1f7361c3ad8ffa166dbc8fa5488da</id>
@@ -348,28 +361,6 @@ site that renders when toolbars are unlocked. This mod removes that splitter.</p
 <li>Fixed icon sizes not applying or applying incorrectly in some cases.</li>
 <li>Fixed labels being truncated with icons of size 32 in some cases.</li>
 </ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Search Menu Inspect Helper 1.0]]></title>
-        <id>https://windhawk.net/mods/search-menu-inspect-helper#a096805885bace28a660707aa7e215ca6cf237e3</id>
-        <link href="https://windhawk.net/mods/search-menu-inspect-helper"/>
-        <updated>2025-07-13T08:06:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="searchmenuinspecthelper">Search Menu Inspect Helper</h1>
-<p>Helps inspect the search menu web view content via DevTools remote debugging.</p>
-<p>The mod prevents the search menu from being closed when focus is lost, which
-allows to inspect it while the DevTools window is the foreground window. The
-search menu can be closed by focusing on the search bar and pressing Escape.</p>
-<h2 id="instructions">Instructions</h2>
-<p>Configure remote debugging by following these steps: <a href="https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/remote-debugging-desktop">Remote debugging desktop
-WebView2 WinUI 2 (UWP)
-apps</a>.
-Instead of step 11 (Configure your WebView2 WinUI 2 (UWP) app for remote
-debugging), install this mod, and terminate the SearchHost.exe process. It will
-be relaunched automatically with remote debugging enabled.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>

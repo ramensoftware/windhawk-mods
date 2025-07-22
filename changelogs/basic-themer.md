@@ -1,3 +1,7 @@
+## 1.1.1 ([Jul 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6f365f998004d32f55343a583a7e8eff5ce2c0c6/mods/basic-themer.wh.cpp))
+
+- Fix for Windows 11 24H2
+
 ## 1.1.0 ([Jul 6, 2024](https://github.com/ramensoftware/windhawk-mods/blob/158c2c73690dc245e9f6c9b44da0ab5961b1d8f4/mods/basic-themer.wh.cpp))
 
 - Fix issue with windows having completely white frames
