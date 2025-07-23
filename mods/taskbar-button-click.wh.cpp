@@ -214,124 +214,119 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
                                   int param3) {
     Wh_Log(L">");
 
+    // Standard function to call if we decide not to intercept the click.
     auto original = [=]() {
         return CTaskBand_Launch_Original(pThis, taskGroup, param2, param3);
     };
 
+    // Ensure the click context was captured by a preceding hook.
     if (!g_pCTaskListWndHandlingClick || !g_pCTaskListWndTaskBtnGroup) {
         return original();
     }
 
-    // Get the task group from taskBtnGroup instead of relying on taskGroup for
-    // compatibility with the taskbar-grouping mod, which hooks this function
-    // and replaces taskGroup. An ugly workaround but it works.
+    // Get the real task group for compatibility with other mods.
     LPVOID realTaskGroup =
         CTaskBtnGroup_GetGroup_Original(g_pCTaskListWndTaskBtnGroup);
     if (!realTaskGroup) {
         return original();
     }
 
-    // The click action of launching a new instance can happen in two ways:
-    // * Middle click.
-    // * Shift + Left click.
-    // Exclude the second click action by checking whether the shift key is
-    // down.
+    // We only want to intercept a middle-click (action 3).
+    // Exclude Shift+Left-Click by checking the Shift key state.
     if (g_CTaskListWndClickAction != 3 || GetKeyState(VK_SHIFT) < 0) {
         return original();
     }
 
-    // Group types:
-    // 1 - Single item or multiple uncombined items
-    // 2 - Pinned item
-    // 3 - Multiple combined items
+    // Determine if we're clicking a single item (1) or a combined group (3).
     int groupType =
         CTaskBtnGroup_GetGroupType_Original(g_pCTaskListWndTaskBtnGroup);
-    if (groupType != 1 && groupType != 3) {
-        return original();
-    }
 
-    int taskItemIndex = -1;
+    HWND hWnd = nullptr;
 
-    if (groupType == 3) {
-        if (g_settings.multipleItemsBehavior == MULTIPLE_ITEMS_BEHAVIOR_NONE) {
-            return 0;
-        }
-
-        // ==========================================================
-        // ===== START OF THE FIX ===================================
-        // ==========================================================
-        if (g_settings.multipleItemsBehavior == MULTIPLE_ITEMS_BEHAVIOR_CLOSE_ALL) {
-            // (The code block from above goes here)
-            bool ctrlDown = GetKeyState(VK_CONTROL) < 0;
-            bool altDown = GetKeyState(VK_MENU) < 0;
-            bool endTask = (ctrlDown || altDown) &&
-                           g_settings.keysToEndTaskCtrl == ctrlDown &&
-                           g_settings.keysToEndTaskAlt == altDown;
-
-            POINT pt;
-            GetCursorPos(&pt);
-            HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-
-            for (int i = 0; ; i++) {
-                void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
-                    g_pCTaskListWndTaskBtnGroup, i);
-                if (!taskItem) {
-                    break;
-                }
-
-                HWND hWnd = nullptr;
+    // --- Logic for single items (and uncombined groups) ---
+    if (groupType == 1) {
+        int taskItemIndex = g_CTaskListWndTaskItemIndex;
+        if (taskItemIndex >= 0) {
+            void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
+                g_pCTaskListWndTaskBtnGroup, taskItemIndex);
+            if (taskItem) {
                 if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
                     hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
                 } else {
                     hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
                 }
+            }
+        }
+    }
+    // --- Logic for combined groups ---
+    else if (groupType == 3) {
+        switch (g_settings.multipleItemsBehavior) {
+            case MULTIPLE_ITEMS_BEHAVIOR_NONE:
+                return 0; // Do nothing and suppress the default action.
 
-                if (hWnd) {
-                    if (endTask) {
-                        Wh_Log(L"Ending task for HWND %08X as part of a group", (DWORD)(ULONG_PTR)hWnd);
-                        CTaskBand__EndTask_Original(pThis, hWnd, TRUE);
+            case MULTIPLE_ITEMS_BEHAVIOR_CLOSE_ALL: {
+                bool ctrlDown = GetKeyState(VK_CONTROL) < 0;
+                bool altDown = GetKeyState(VK_MENU) < 0;
+                bool endTask = (ctrlDown || altDown) &&
+                               g_settings.keysToEndTaskCtrl == ctrlDown &&
+                               g_settings.keysToEndTaskAlt == altDown;
+
+                POINT pt;
+                GetCursorPos(&pt);
+                HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+                for (int i = 0; ; i++) {
+                    void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
+                        g_pCTaskListWndTaskBtnGroup, i);
+                    if (!taskItem) {
+                        break;
+                    }
+
+                    HWND itemHWnd = nullptr;
+                    if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
+                        itemHWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
                     } else {
-                        Wh_Log(L"Closing HWND %08X as part of a group", (DWORD)(ULONG_PTR)hWnd);
-                        CTaskListWnd_ProcessJumpViewCloseWindow_Original(
-                            g_pCTaskListWndHandlingClick, hWnd, realTaskGroup, monitor);
+                        itemHWnd = CWindowTaskItem_GetWindow_Original(taskItem);
+                    }
+
+                    if (itemHWnd) {
+                        if (endTask) {
+                            CTaskBand__EndTask_Original(pThis, itemHWnd, TRUE);
+                        } else {
+                            CTaskListWnd_ProcessJumpViewCloseWindow_Original(
+                                g_pCTaskListWndHandlingClick, itemHWnd, realTaskGroup,
+                                monitor);
+                        }
                     }
                 }
-            }
-            
-            return 0;
-        }
-        // ==========================================================
-        // ===== END OF THE FIX =====================================
-        // ==========================================================
-        if (g_settings.multipleItemsBehavior ==
-            MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND) {
-            void* activeTaskGroup;
-            if (FAILED(CTaskListWnd_GetActiveBtn_Original(
-                    (BYTE*)g_pCTaskListWndHandlingClick + 0x18,
-                    &activeTaskGroup, &taskItemIndex)) ||
-                !activeTaskGroup) {
-                return 0;
+                return 0; // Action is complete for the group.
             }
 
-            ((IUnknown*)activeTaskGroup)->Release();
-            if (activeTaskGroup != realTaskGroup || taskItemIndex < 0) {
-                return 0;
+            case MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND: {
+                // STABILITY FIX: The original GetActiveBtn method crashes.
+                // This stable alternative closes the FIRST window in the group.
+                void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
+                    g_pCTaskListWndTaskBtnGroup, 0);
+                if (taskItem) {
+                    if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
+                        hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
+                    } else {
+                        hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
+                    }
+                }
+                // Break to fall through to the common closing logic below.
+                break;
             }
         }
     } else {
-        taskItemIndex = g_CTaskListWndTaskItemIndex;
+        // Not a group type we handle (e.g., a pinned item), so allow default behavior.
+        return original();
     }
 
-    HWND hWnd = nullptr;
-
-    if (taskItemIndex >= 0) {
-        void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
-            g_pCTaskListWndTaskBtnGroup, taskItemIndex);
-        if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
-            hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
-        } else {
-            hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
-        }
+    // --- Common closing logic for single items or the "first of group" case ---
+    if (!hWnd) {
+        // Suppress default action even if no window was found.
+        return 0;
     }
 
     bool ctrlDown = GetKeyState(VK_CONTROL) < 0;
@@ -341,15 +336,10 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
                    g_settings.keysToEndTaskAlt == altDown;
 
     if (endTask) {
-        if (hWnd) {
-            Wh_Log(L"Ending task for HWND %08X", (DWORD)(ULONG_PTR)hWnd);
-            CTaskBand__EndTask_Original(pThis, hWnd, TRUE);
-        } else {
-            Wh_Log(L"No HWND to end task");
-        }
+        Wh_Log(L"Ending task for HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+        CTaskBand__EndTask_Original(pThis, hWnd, TRUE);
     } else {
         Wh_Log(L"Closing HWND %08X", (DWORD)(ULONG_PTR)hWnd);
-
         POINT pt;
         GetCursorPos(&pt);
         HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
@@ -357,6 +347,7 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
             g_pCTaskListWndHandlingClick, hWnd, realTaskGroup, monitor);
     }
 
+    // Suppress the default action (launching a new instance).
     return 0;
 }
 
