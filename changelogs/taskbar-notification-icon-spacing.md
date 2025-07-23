@@ -1,3 +1,9 @@
+## 1.2 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9d0606f5ffee0316c36fe9b2c5e3a780b8f40ab8/mods/taskbar-notification-icon-spacing.wh.cpp))
+
+* Added an option to have a grid of tray icons. This was a frequently requested option for **Vertical Taskbar for Windows 11** and **Multirow taskbar for Windows 11**. This mod can now be used together with those other mods for the tray icons grid option.
+* Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.1.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/62c7f65eaecd24f1e41e34d931666715f4d37566/mods/taskbar-notification-icon-spacing.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.
