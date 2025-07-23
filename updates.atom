@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-23T14:57:15.000Z</updated>
+    <updated>2025-07-23T16:11:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Basic/Classic Theme Ribbon Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/basic-classic-theme-ribbon-fix#e8dd2fc1044b1bc14cdd5c78dc3203d62b52c4f8</id>
+        <link href="https://windhawk.net/mods/basic-classic-theme-ribbon-fix"/>
+        <updated>2025-07-23T16:11:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="basicclassicthemeribbonfix">Basic/Classic Theme Ribbon Fix</h1>
+<p>Starting with Windows 8, UIRibbon does not consider DWM being off (basic/classic theme)
+and will always add a vertical spacer for the DWM titlebar. This mod removes that and
+makes UIRibbon look nice on basic/classic again.</p>
+<h2 id="notice">Notice</h2>
+<p>This mod injects into Windows Explorer, Paint, WordPad, Windows Style Builder, and the
+Windows Live 2012 Essentials by default, which should cover most cases. If you use 
+another application that uses the built-in UIRibbon framework, go to this mod's Advanced
+tab and add it to the Custom process inclusion list.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/basic-classic-theme-ribbon-fix/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/basic-classic-theme-ribbon-fix/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix Ribbon UI Insetting for Windows 10+ 1.0]]></title>
         <id>https://windhawk.net/mods/uiribbon-insetting-fix#9067d805fc5566edcf965dc668d7d8f04944f0af</id>
@@ -390,21 +413,6 @@ site that renders when toolbars are unlocked. This mod removes that splitter.</p
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Scroll Actions 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-scroll-actions#27e1954f2906a693556907ad1dfbbb1bc4716a9d</id>
-        <link href="https://windhawk.net/mods/taskbar-scroll-actions"/>
-        <updated>2025-07-14T10:35:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to change the microphone volume.</li>
-<li>Added an option to throttle scroll operations. Useful for preventing a single scroll wheel 'flick' from switching multiple desktops.</li>
-<li>The "Customize the old taskbar on Windows 11" option no longer needs to be enabled for the mod to work with the ExplorerPatcher taskbar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

@@ -214,6 +214,34 @@
                 "version": "1.0.0"
             }
         },
+        "basic-classic-theme-ribbon-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753287072000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753287072000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-luxtheme -DWINVER=0x0A00",
+                "description": "Remove the gap between the titlebar and the ribbon when using basic theme",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "mspaint.exe",
+                    "wordpad.exe",
+                    "explorer.exe",
+                    "Windows Style Builder.exe",
+                    "WindowsLiveWriter.exe",
+                    "wlmail.exe",
+                    "MovieMaker.exe",
+                    "WLXPhotoGallery.exe"
+                ],
+                "name": "Basic/Classic Theme Ribbon Fix",
+                "version": "1.0.0"
+            }
+        },
         "basic-themer": {
             "details": {
                 "defaultSorting": 4750,
