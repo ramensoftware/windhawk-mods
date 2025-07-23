@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-23T16:43:22.000Z</updated>
+    <updated>2025-07-23T17:15:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#d1838a84bcfebc3c645250ae9dac8fdb7aa55e21</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2025-07-23T17:15:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
+<li>Added a note about the "Taskbar tray icon spacing and grid" mod for having multiple rows of tray icons.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#9d0606f5ffee0316c36fe9b2c5e3a780b8f40ab8</id>
@@ -397,23 +411,6 @@ distinct from normal progress bars.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Unlocked Toolbars Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-unlocked-toolbars-fix#82ef6abf501b9b14007d0ec0ae004b448dd5abc5</id>
-        <link href="https://windhawk.net/mods/explorer-unlocked-toolbars-fix"/>
-        <updated>2025-07-14T19:38:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerunlockedtoolbarsfix">Explorer Unlocked Toolbars Fix</h1>
-<p>In Windows Vista, a splitter was added to the bottom of the Explorer toolbar band
-site that renders when toolbars are unlocked. This mod removes that splitter.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-unlocked-toolbars-fix-before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/explorer-unlocked-toolbars-fix-after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
