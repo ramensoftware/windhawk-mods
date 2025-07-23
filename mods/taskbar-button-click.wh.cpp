@@ -74,6 +74,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 #include <psapi.h>
 
 #include <atomic>
+#include <mutex>
 
 enum {
     MULTIPLE_ITEMS_BEHAVIOR_NONE,
@@ -99,6 +100,9 @@ WinVersion g_winVersion;
 
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
+
+std::mutex g_initMutex;
+std::mutex g_hookMutex;
 
 using CTaskListWnd_HandleClick_t = long(WINAPI*)(
     LPVOID pThis,
@@ -425,6 +429,8 @@ struct EXPLORER_PATCHER_HOOK {
 };
 
 bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
+    std::lock_guard<std::mutex> lock(g_hookMutex);
+    
     if (g_explorerPatcherInitialized.exchange(true)) {
         return true;
     }
@@ -547,6 +553,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 bool HookTaskbarSymbols() {
+    std::lock_guard<std::mutex> lock(g_hookMutex);
+    
     // Taskbar.dll, explorer.exe
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         // Win11 only:
@@ -653,6 +661,8 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
+    std::lock_guard<std::mutex> lock(g_initMutex);
+    
     Wh_Log(L">");
 
     LoadSettings();
