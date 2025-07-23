@@ -190,6 +190,7 @@ BOOL FASTCALL _GetNcBtnMetrics_hook(void *pncwm, void *pnctm, HICON hAppIcon, BO
     return fOriginalResult;
 }
 
+// uxtheme.dll
 const WindhawkUtils::SYMBOL_HOOK c_uxthemeHooks[] = {
     {
         {
