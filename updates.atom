@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-23T20:49:44.000Z</updated>
+    <updated>2025-07-23T20:58:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar height and icon size 1.3.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-size#41660d0eb32800704d23663f91959e543fe6fb5f</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
+        <updated>2025-07-23T20:58:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the weather widget not being affected by the mod for Windows 11 builds with the dynamic icon sizes option.</li>
+<li>Fixed badge icons being displayed as dots when icons with size 16 are used.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.2.3]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#5c7369abff574388214084b4d8ac46fa78e11279</id>
@@ -394,22 +408,6 @@ distinct from normal progress bars.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.3.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#51c2fd314812aaa6a4596b58dc12c6aa09d4165e</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2025-07-15T18:48:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated themes: Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired.</li>
-<li>Initial adaptation of themes to <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned start menu</a>: NoRecommendedSection, Windows10, Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired, RosePine.</li>
-<li>The "Disable the new start menu layout" option now disables the redesigned start menu too. Previously, only layout changes related to the Phone Link pane were disabled.</li>
-<li>Added ThemeResource support to WindhawkBlur.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,8 @@
+## 1.3.5 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/41660d0eb32800704d23663f91959e543fe6fb5f/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed the weather widget not being affected by the mod for Windows 11 builds with the dynamic icon sizes option.
+* Fixed badge icons being displayed as dots when icons with size 16 are used.
+
 ## 1.3.4 ([Jul 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c7ad7841b9abb457146ca62506e94451f3210b05/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed broken layout when clicking on the search bar on the taskbar.
