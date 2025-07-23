@@ -1282,6 +1282,24 @@
                 "version": "1.0.1"
             }
         },
+        "disable-tray-icons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753308920000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753308920000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lshell32",
+                "description": "Disable all tray icons for a specific application",
+                "github": "https://github.com/aubymori",
+                "name": "Disable Tray Icons",
+                "version": "1.0.0"
+            }
+        },
         "disable-virtual-desktop-transition": {
             "details": {
                 "defaultSorting": 2043,
