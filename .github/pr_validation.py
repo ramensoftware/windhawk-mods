@@ -158,10 +158,20 @@ def validate_metadata(path: Path, expected_author: str):
         value, line_number = properties[key]
         github = value
         expected = f'https://github.com/{expected_author}'
-        if value != expected:
-            warnings += add_warning(
-                path, line_number, f'Expected {key[0]} to be "{expected}"'
+        if value != expected and value.lower() == expected.lower():
+            warning_msg = f'Expected {key[0]} to be "{expected}" (case-sensitive)'
+            warnings += add_warning(path, line_number, warning_msg)
+        elif value != expected:
+            warning_msg = (
+                f'Expected {key[0]} to be "{expected}".\n'
+                'Note that only the original author of the mod is allowed to submit'
+                ' updates.\n'
+                'If you are not the original author, you might want to contact them to'
+                ' submit the update instead.\n'
+                'For more information about submitting a mod update, refer to the'
+                ' "Submitting a Mod Update" section in the repository\'s README.md.'
             )
+            warnings += add_warning(path, line_number, warning_msg)
     else:
         warnings += add_warning(path, 1, f'Missing {key[0]}')
 
@@ -212,6 +222,14 @@ def validate_metadata(path: Path, expected_author: str):
                 path, line_number, f'{key[0]} requires manual verification'
             )
 
+    key = ('homepage', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if not re.match(r'https?://', value):
+            warnings += add_warning(
+                path, line_number, f'{key[0]} must start with "http://" or "https://"'
+            )
+
     key = ('compilerOptions', None)
     if key in properties:
         value, line_number = properties[key]
@@ -220,9 +238,31 @@ def validate_metadata(path: Path, expected_author: str):
                 path, line_number, f'{key[0]} require manual verification'
             )
 
+    key = ('name', None)
+    if key not in properties:
+        warnings += add_warning(path, 1, f'Missing {key[0]}')
+
     key = ('author', None)
     if key not in properties:
         warnings += add_warning(path, 1, f'Missing {key[0]}')
+
+    key = ('architecture', None)
+    if key in properties:
+        value, line_number = properties[key]
+        for arch in value.split('\n'):
+            if arch.strip() == '':
+                pass
+            elif arch not in {'x86', 'x86-64', 'amd64', 'arm64'}:
+                warnings += add_warning(
+                    path, line_number, f'Unknown architecture "{arch}"'
+                )
+            elif arch not in {'x86', 'x86-64'}:
+                warnings += add_warning(
+                    path,
+                    line_number,
+                    f'Architecture "{arch}" isn\'t commonly used, manual verification'
+                    ' is required',
+                )
 
     # Validate that this file has the required extensions
     if ''.join(path.suffixes) != '.wh.cpp':
@@ -279,7 +319,7 @@ def validate_symbol_hooks(path: Path):
     mod_source = path.read_text(encoding='utf-8')
     mod_source_lines = mod_source.splitlines()
 
-    p = r'^[ \t]*(?:const[ \t]+)?(?:CMWF_|WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
+    p = r'^[ \t]*(?:const[ \t]+)?(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
     for match in re.finditer(p, mod_source, re.MULTILINE):
         symbol_block_name = match.group(1)
 
@@ -350,6 +390,8 @@ def main():
     warnings = 0
 
     paths = [Path(p) for p in json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
+    if len(paths) == 0:
+        sys.exit('No files changed')
 
     added_count = int(os.environ['ADDED_FILES_COUNT'])
     modified_count = int(os.environ['MODIFIED_FILES_COUNT'])

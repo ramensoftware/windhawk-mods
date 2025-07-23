@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.4
+// @version         1.4.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -138,13 +138,20 @@ Labels can also be shown or hidden per-program in the settings.
     page:
 
     https://learn.microsoft.com/en-us/typography/fonts/windows_11_font_list
+- textTrimming: characterEllipsis
+  $name: Text trimming
+  $options:
+  - characterEllipsis: Trim at character with ellipsis (...)
+  - wordEllipsis: Trim at word with ellipsis (...)
+  - clip: Clip at a pixel level (Windows 11 default)
 - leftAndRightPaddingSize: 8
   $name: Left and right padding size
 - spaceBetweenIconAndLabel: 8
   $name: Space between icon and label
 - runningIndicatorHeight: 0
   $name: Running indicator height
-  $description: Set to zero for the default height
+  $description: >-
+    Set to zero for the default height, set to -1 to hide it
 - runningIndicatorVerticalOffset: 0
   $name: Running indicator vertical offset
 - alwaysShowThumbnailLabels: false
@@ -212,6 +219,7 @@ struct {
     int maximumTaskbarItemWidth;
     int fontSize;
     WindhawkUtils::StringSetting fontFamily;
+    TextTrimming textTrimming;
     int leftAndRightPaddingSize;
     int spaceBetweenIconAndLabel;
     int runningIndicatorHeight;
@@ -281,14 +289,23 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     return nullptr;
 }
 
-HWND GetTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    DWORD processId = 0;
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
-        processId != GetCurrentProcessId()) {
-        return nullptr;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
 }
@@ -357,7 +374,7 @@ std::wstring GetWindowAppId(HWND hWnd) {
 }
 
 void RecalculateLabels() {
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (!hTaskbarWnd) {
         return;
     }
@@ -473,7 +490,7 @@ double CalculateTaskbarItemWidth(FrameworkElement taskbarFrameRepeaterElement,
     // For older versions (pre-KB5022913). Only works correctly on primary
     // monitor.
     if (!taskbarFrameRepeaterEndOffset) {
-        HWND hTaskbarWnd = GetTaskbarWnd();
+        HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
         if (!hTaskbarWnd) {
             return minWidth;
         }
@@ -981,12 +998,6 @@ void UpdateTaskListButtonWithLabelStyle(
                 std::numeric_limits<double>::infinity());
         }
 
-        auto textTrimming =
-            g_unloading ? TextTrimming::Clip : TextTrimming::CharacterEllipsis;
-        if (labelControlElement.TextTrimming() != textTrimming) {
-            labelControlElement.TextTrimming(textTrimming);
-        }
-
         auto labelControlMargin = labelControlElement.Margin();
         labelControlMargin.Left =
             g_unloading ? 0
@@ -1001,16 +1012,30 @@ void UpdateTaskListButtonWithLabelStyle(
             labelControlElement.FontSize(fontSize);
         }
 
-        PCWSTR fontFamily = g_unloading ? nullptr : g_settings.fontFamily.get();
-        if (fontFamily && *fontFamily) {
-            labelControlElement.FontFamily(
-                Markup::XamlBindingHelper::ConvertValue(
-                    winrt::xaml_typename<Media::FontFamily>(),
-                    winrt::box_value(fontFamily))
-                    .as<Media::FontFamily>());
+        PCWSTR fontFamily = g_unloading ? L"" : g_settings.fontFamily.get();
+        if (*fontFamily) {
+            if (labelControlElement.FontFamily().Source() != fontFamily) {
+                labelControlElement.FontFamily(
+                    Markup::XamlBindingHelper::ConvertValue(
+                        winrt::xaml_typename<Media::FontFamily>(),
+                        winrt::box_value(fontFamily))
+                        .as<Media::FontFamily>());
+            }
         } else {
-            labelControlElement.as<DependencyObject>().ClearValue(
-                Controls::TextBlock::FontFamilyProperty());
+            auto labelControlElementDp =
+                labelControlElement.as<DependencyObject>();
+            if (labelControlElementDp.ReadLocalValue(
+                    Controls::TextBlock::FontFamilyProperty()) !=
+                DependencyProperty::UnsetValue()) {
+                labelControlElementDp.ClearValue(
+                    Controls::TextBlock::FontFamilyProperty());
+            }
+        }
+
+        auto textTrimming =
+            g_unloading ? TextTrimming::Clip : g_settings.textTrimming;
+        if (labelControlElement.TextTrimming() != textTrimming) {
+            labelControlElement.TextTrimming(textTrimming);
         }
     }
 
@@ -1070,6 +1095,9 @@ void UpdateTaskListButtonWithLabelStyle(
                                       winrt::box_value(2));
         }
 
+        double maxWidth = std::max(taskListButtonWidth - 6, 0.0);
+        indicatorElement.MaxWidth(maxWidth);
+
         double minWidth = 0;
 
         double indicatorElementWidth = indicatorElement.Width();
@@ -1087,6 +1115,10 @@ void UpdateTaskListButtonWithLabelStyle(
                 if (minWidth < 0) {
                     minWidth = 0;
                 }
+            }
+
+            if (minWidth > maxWidth) {
+                minWidth = maxWidth;
             }
         }
 
@@ -1117,6 +1149,7 @@ void UpdateTaskListButtonWithLabelStyle(
         if (!g_unloading && labelControlElement) {
             if (indicatorStyle == IndicatorStyle::left) {
                 indicatorMargin.Left =
+                    (40 - firstColumnWidthPixels) + (iconWidth - 24) +
                     (g_settings.leftAndRightPaddingSize - 8) * 2;
             } else {
                 indicatorMargin.Left = (taskListButtonWidth - minWidth) / 2 - 2;
@@ -1128,7 +1161,7 @@ void UpdateTaskListButtonWithLabelStyle(
 
         int height = g_unloading || !g_settings.runningIndicatorHeight
                          ? 3
-                         : g_settings.runningIndicatorHeight;
+                         : std::max(g_settings.runningIndicatorHeight, 0);
         indicatorElement.Height(height);
 
         int verticalOffset =
@@ -1807,6 +1840,15 @@ void LoadSettings() {
 
     g_settings.fontFamily = WindhawkUtils::StringSetting::make(L"fontFamily");
 
+    PCWSTR textTrimming = Wh_GetStringSetting(L"textTrimming");
+    g_settings.textTrimming = TextTrimming::CharacterEllipsis;
+    if (wcscmp(textTrimming, L"wordEllipsis") == 0) {
+        g_settings.textTrimming = TextTrimming::WordEllipsis;
+    } else if (wcscmp(textTrimming, L"clip") == 0) {
+        g_settings.textTrimming = TextTrimming::Clip;
+    }
+    Wh_FreeStringSetting(textTrimming);
+
     g_settings.leftAndRightPaddingSize =
         Wh_GetIntSetting(L"leftAndRightPaddingSize");
     g_settings.spaceBetweenIconAndLabel =
@@ -1827,7 +1869,7 @@ void ApplySettings() {
     if (!g_hasNativeLabelsImplementation) {
         RecalculateLabels();
     } else {
-        HWND hTaskbarWnd = GetTaskbarWnd();
+        HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
         if (!hTaskbarWnd) {
             return;
         }
@@ -1988,7 +2030,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 bool HookTaskbarDllSymbols() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -2011,7 +2054,8 @@ bool HookTaskbarDllSymbols() {
 }
 
 bool HookTaskbarDllSymbolsOldImplementation() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -2135,7 +2179,7 @@ void Wh_ModAfterInit() {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");
 
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                if (ModInitWithTaskbarView(taskbarViewModule)) {
                     Wh_ApplyHookOperations();
                 }
             }
