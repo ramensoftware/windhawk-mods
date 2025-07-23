@@ -31,15 +31,6 @@ BOOL WINAPI Shell_NotifyIconW_hook(
     DWORD dwMessage, PNOTIFYICONDATAW lpData
 )
 {
-    void *retaddr = __builtin_return_address(0);
-    HMODULE hmod;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)retaddr, &hmod);
-    if (hmod)
-    {
-        WCHAR szModName[256];
-        GetModuleFileNameW(hmod, szModName, 256);
-        Wh_Log(L"%s", szModName);
-    }
     return TRUE;
 }
 
