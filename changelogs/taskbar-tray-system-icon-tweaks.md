@@ -1,3 +1,9 @@
+## 1.2.3 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/0ceec46962865fdd3e2d7d83a83330ea1a3c1ca8/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
+
+* Added an option to hide the Studio Effects icon.
+* Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.2.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/ccea9857952abe4d8288052ac3e2ebb3c2900d1c/mods/taskbar-tray-system-icon-tweaks.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.

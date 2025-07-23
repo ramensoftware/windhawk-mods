@@ -4145,7 +4145,7 @@
                 "published": 1729973006000,
                 "rating": 10,
                 "ratingUsers": 258,
-                "updated": 1742582436000,
+                "updated": 1753311615000,
                 "users": 19127
             },
             "metadata": {
@@ -4154,7 +4154,7 @@
                 ],
                 "author": "m417z",
                 "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-                "description": "Allows hiding system icons (volume, network, battery), the bell (always or when there are no new notifications), and the \"Show desktop\" button (Windows 11 only)",
+                "description": "Allows hiding system icons: volume, network, battery, microphone, location/GPS, Studio Effects, language bar, bell (always or when there are no new notifications), and the \"Show desktop\" button (hide or set width)",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -4162,7 +4162,7 @@
                 ],
                 "name": "Taskbar tray system icon tweaks",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.2"
+                "version": "1.2.3"
             }
         },
         "taskbar-vertical": {

@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-23T22:15:20.000Z</updated>
+    <updated>2025-07-23T23:00:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#0ceec46962865fdd3e2d7d83a83330ea1a3c1ca8</id>
+        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
+        <updated>2025-07-23T23:00:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to hide the Studio Effects icon.</li>
+<li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Tray Icons 1.0.0]]></title>
         <id>https://windhawk.net/mods/disable-tray-icons#0355f5cc9a0b4128d95945a6fdc2045ce853abaf</id>
@@ -377,51 +392,6 @@ from both Windows 8.x and Windows 10 1507-1803.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Progress Bars 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-progress-bars#a11841fb5d2cfb50cff2b7c14a52551b11afa16b</id>
-        <link href="https://windhawk.net/mods/classic-progress-bars"/>
-        <updated>2025-07-16T16:22:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicprogressbars">Classic Progress Bars</h1>
-<p>Before Windows Vista, progress bars looked different, commonly being broken up into
-blocks rather than a smooth single bar. This mod restores that appearance of progress bars
-from Windows XP and before.</p>
-<h1 id="readmethemecompatibility">⚠️ READ ME! Theme compatibility ⚠️</h1>
-<p>While the default Windows 10 theme works well with this mod, third-party
-Windows XP-styled themes that use hacks to restore the old progress bar look
-may (and probably will) have incompatibilities with this mod.</p>
-<p>You should use <a href="https://github.com/aubymori/ProgressBarTest/releases/latest">this utility</a>
-to test progress bars with the mod before committing to using it system wide.</p>
-<h2 id="forthemeauthors">For theme authors</h2>
-<p>Since this mod restores the rendering from XP, you should replicate the properties
-from XP's <code>Progress</code> class closely. It should be noted that the <code>SourceShrink</code> property
-from the <code>Bar</code> part should be replicated to the <code>Chunk</code> part, or else the horizontal
-chunks will not render correctly.</p>
-<p>It should also be noted that the old <code>Chunk</code> and <code>ChunkVert</code> parts will often use 
-same images as the modern <code>Fill</code> and <code>FillVert</code> parts, so keep that in mind and try
-to make sure the default Vista+ progress bar rendering doesn't break.</p>
-<p>This mod has support for custom states on the <code>Chunk</code> and <code>ChunkVert</code> part of the <code>Progress</code>
-class:</p>
-<ul>
-<li>1 - Normal</li>
-<li>2 - Error</li>
-<li>3 - Paused</li>
-</ul>
-<p>You should add these states to your theme to make error and paused progress bars visually
-distinct from normal progress bars.</p>
-<p><strong>Before</strong>:</p>
-<p>| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/before-classic.png" alt="Before (classic)" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/before-marquee-classic.gif" alt="Before (classic, marquee)" /> |
-|-|-|
-| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/before-themed.png" alt="Before (themed)" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/before-marquee-themed.gif" alt="Before (themed, marquee)" /> |</p>
-<p><strong>After</strong>:</p>
-<p>| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/after-classic.png" alt="After (classic)" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/after-marquee-classic.gif" alt="After (classic, marquee)" /> |
-|-|-|
-| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/after-themed.png" alt="After (themed)" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-progress-bars/after-marquee-themed.gif" alt="After (themed, marquee)" /> |</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
