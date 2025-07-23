@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-23T17:15:14.000Z</updated>
+    <updated>2025-07-23T20:49:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button always on the left 1.2.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-position#5c7369abff574388214084b4d8ac46fa78e11279</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
+        <updated>2025-07-23T20:49:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
+<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
+<li>Fixed start menu layout becoming broken when settings are changed in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-multirow#d1838a84bcfebc3c645250ae9dac8fdb7aa55e21</id>
@@ -390,22 +405,6 @@ distinct from normal progress bars.</p>
 <li>Updated themes: Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired.</li>
 <li>Initial adaptation of themes to <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned start menu</a>: NoRecommendedSection, Windows10, Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired, RosePine.</li>
 <li>The "Disable the new start menu layout" option now disables the redesigned start menu too. Previously, only layout changes related to the Phone Link pane were disabled.</li>
-<li>Added ThemeResource support to WindhawkBlur.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.3.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#5e1b574b5bdd18af997aaebe764784b9dc6093ef</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2025-07-15T13:59:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated TranslucentShell.</li>
-<li>Fixed notifications causing a crash of the notification center.</li>
-<li>Fixed buggy menu hover handling.</li>
 <li>Added ThemeResource support to WindhawkBlur.</li>
 </ul>]]></content>
         <author>

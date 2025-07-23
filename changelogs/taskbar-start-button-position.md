@@ -1,3 +1,9 @@
+## 1.2.3 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5c7369abff574388214084b4d8ac46fa78e11279/mods/taskbar-start-button-position.wh.cpp))
+
+* Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+* Fixed start menu layout becoming broken when settings are changed in some cases.
+
 ## 1.2.2 ([Mar 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c57c0a2cb008722765cf652cd24c207fe8818e82/mods/taskbar-start-button-position.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.
