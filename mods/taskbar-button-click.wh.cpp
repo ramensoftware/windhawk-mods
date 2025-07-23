@@ -257,6 +257,52 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
             return 0;
         }
 
+        // ==========================================================
+        // ===== START OF THE FIX ===================================
+        // ==========================================================
+        if (g_settings.multipleItemsBehavior == MULTIPLE_ITEMS_BEHAVIOR_CLOSE_ALL) {
+            // (The code block from above goes here)
+            bool ctrlDown = GetKeyState(VK_CONTROL) < 0;
+            bool altDown = GetKeyState(VK_MENU) < 0;
+            bool endTask = (ctrlDown || altDown) &&
+                           g_settings.keysToEndTaskCtrl == ctrlDown &&
+                           g_settings.keysToEndTaskAlt == altDown;
+
+            POINT pt;
+            GetCursorPos(&pt);
+            HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+            for (int i = 0; ; i++) {
+                void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
+                    g_pCTaskListWndTaskBtnGroup, i);
+                if (!taskItem) {
+                    break;
+                }
+
+                HWND hWnd = nullptr;
+                if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
+                    hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
+                } else {
+                    hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
+                }
+
+                if (hWnd) {
+                    if (endTask) {
+                        Wh_Log(L"Ending task for HWND %08X as part of a group", (DWORD)(ULONG_PTR)hWnd);
+                        CTaskBand__EndTask_Original(pThis, hWnd, TRUE);
+                    } else {
+                        Wh_Log(L"Closing HWND %08X as part of a group", (DWORD)(ULONG_PTR)hWnd);
+                        CTaskListWnd_ProcessJumpViewCloseWindow_Original(
+                            g_pCTaskListWndHandlingClick, hWnd, realTaskGroup, monitor);
+                    }
+                }
+            }
+            
+            return 0;
+        }
+        // ==========================================================
+        // ===== END OF THE FIX =====================================
+        // ==========================================================
         if (g_settings.multipleItemsBehavior ==
             MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND) {
             void* activeTaskGroup;
