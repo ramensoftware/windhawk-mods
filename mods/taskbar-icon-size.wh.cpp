@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.3.4
+// @version         1.3.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1101,15 +1101,13 @@ int WINAPI TaskbarFrame_MeasureOverride_Hook(
     return ret;
 }
 
-void* TaskListButton_UpdateIconColumnDefinition_Original;
-
 using TaskListButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateButtonPadding_t
     TaskListButton_UpdateButtonPadding_Original;
 void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
     Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
 
-    if (!g_hasDynamicIconScaling) {
+    if (!g_hasDynamicIconScaling || g_unloading) {
         TaskListButton_UpdateButtonPadding_Original(pThis);
         return;
     }
@@ -1118,16 +1116,12 @@ void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
     // padding. Value 16 and 32 have special treatment.
     double* iconHeight = nullptr;
     double prevIconHeight;
-    if (g_hasDynamicIconScaling) {
-        size_t iconHeightOffset = GetIconHeightOffset();
-        if (iconHeightOffset) {
-            iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
-            prevIconHeight = *iconHeight;
-            double newIconHeight = g_smallIconSize ? 16 : 24;
-            Wh_Log(L"Setting iconHeight: %f->%f", prevIconHeight,
-                   newIconHeight);
-            *iconHeight = newIconHeight;
-        }
+    if (size_t iconHeightOffset = GetIconHeightOffset()) {
+        iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
+        prevIconHeight = *iconHeight;
+        double newIconHeight = g_smallIconSize ? 16 : 24;
+        Wh_Log(L"Setting iconHeight: %f->%f", prevIconHeight, newIconHeight);
+        *iconHeight = newIconHeight;
     }
 
     TaskListButton_UpdateButtonPadding_Original(pThis);
@@ -1136,6 +1130,76 @@ void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
         *iconHeight = prevIconHeight;
     }
 }
+
+using TaskListButton_OverlayIcon_t = void(WINAPI*)(void* pThis, void* param1);
+TaskListButton_OverlayIcon_t TaskListButton_OverlayIcon_Original;
+void WINAPI TaskListButton_OverlayIcon_Hook(void* pThis, void* param1) {
+    Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
+
+    if (!g_hasDynamicIconScaling || g_unloading) {
+        TaskListButton_OverlayIcon_Original(pThis, param1);
+        return;
+    }
+
+    // Value 16 causes badges to be shown as a small dot. There are still some
+    // glitches with the badges, e.g. switching from large icons to small icons
+    // doesn't update from the badge to the dot, but new badges are shown as
+    // dots with small icons. Fixing it might require hooking several additional
+    // functions. Maybe one day...
+    //
+    // This hook handles non-UWP badges (e.g. the Win7 taskbar sample).
+    double* iconHeight = nullptr;
+    double prevIconHeight;
+    if (size_t iconHeightOffset = GetIconHeightOffset()) {
+        iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
+        prevIconHeight = *iconHeight;
+        double newIconHeight = 24;
+        Wh_Log(L"Setting iconHeight: %f->%f", prevIconHeight, newIconHeight);
+        *iconHeight = newIconHeight;
+    }
+
+    TaskListButton_OverlayIcon_Original(pThis, param1);
+
+    if (iconHeight) {
+        *iconHeight = prevIconHeight;
+    }
+}
+
+using TaskListButton_UpdateBadge_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateBadge_t TaskListButton_UpdateBadge_Original;
+void WINAPI TaskListButton_UpdateBadge_Hook(void* pThis) {
+    Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
+
+    if (!g_hasDynamicIconScaling || g_unloading) {
+        TaskListButton_UpdateBadge_Original(pThis);
+        return;
+    }
+
+    // Value 16 causes badges to be shown as a small dot. There are still some
+    // glitches with the badges, e.g. switching from large icons to small icons
+    // doesn't update from the badge to the dot, but new badges are shown as
+    // dots with small icons. Fixing it might require hooking several additional
+    // functions. Maybe one day...
+    //
+    // This hook handles UWP badges (e.g. Unigram).
+    double* iconHeight = nullptr;
+    double prevIconHeight;
+    if (size_t iconHeightOffset = GetIconHeightOffset()) {
+        iconHeight = (double*)((BYTE*)pThis + iconHeightOffset);
+        prevIconHeight = *iconHeight;
+        double newIconHeight = 24;
+        Wh_Log(L"Setting iconHeight: %f->%f", prevIconHeight, newIconHeight);
+        *iconHeight = newIconHeight;
+    }
+
+    TaskListButton_UpdateBadge_Original(pThis);
+
+    if (iconHeight) {
+        *iconHeight = prevIconHeight;
+    }
+}
+
+void* TaskListButton_UpdateIconColumnDefinition_Original;
 
 LONG GetMediumTaskbarButtonExtentOffset() {
     static LONG mediumTaskbarButtonExtentOffset = []() -> LONG {
@@ -1453,12 +1517,7 @@ using AugmentedEntryPointButton_UpdateButtonPadding_t =
 AugmentedEntryPointButton_UpdateButtonPadding_t
     AugmentedEntryPointButton_UpdateButtonPadding_Original;
 void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook(void* pThis) {
-    Wh_Log(L"> hasDynamicIconScaling=%d", g_hasDynamicIconScaling);
-
-    if (g_hasDynamicIconScaling) {
-        AugmentedEntryPointButton_UpdateButtonPadding_Original(pThis);
-        return;
-    }
+    Wh_Log(L">");
 
     g_inAugmentedEntryPointButton_UpdateButtonPadding = true;
 
@@ -1470,13 +1529,7 @@ void WINAPI AugmentedEntryPointButton_UpdateButtonPadding_Hook(void* pThis) {
 using RepeatButton_Width_t = void(WINAPI*)(void* pThis, double width);
 RepeatButton_Width_t RepeatButton_Width_Original;
 void WINAPI RepeatButton_Width_Hook(void* pThis, double width) {
-    Wh_Log(L"> hasDynamicIconScaling=%d, width=%f", g_hasDynamicIconScaling,
-           width);
-
-    if (g_hasDynamicIconScaling) {
-        RepeatButton_Width_Original(pThis, width);
-        return;
-    }
+    Wh_Log(L"> width=%f", width);
 
     RepeatButton_Width_Original(pThis, width);
 
@@ -1940,15 +1993,25 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 TaskbarFrame_MeasureOverride_Hook,
             },
             {
+                {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"},
+                &TaskListButton_UpdateButtonPadding_Original,
+                TaskListButton_UpdateButtonPadding_Hook,
+            },
+            {
+                {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListButton::OverlayIcon(struct winrt::Windows::Storage::Streams::IRandomAccessStream const &))"},
+                &TaskListButton_OverlayIcon_Original,
+                TaskListButton_OverlayIcon_Hook,
+            },
+            {
+                {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateBadge(void))"},
+                &TaskListButton_UpdateBadge_Original,
+                TaskListButton_UpdateBadge_Hook,
+            },
+            {
                 {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateIconColumnDefinition(void))"},
                 &TaskListButton_UpdateIconColumnDefinition_Original,
                 nullptr,
                 true,  // Missing in older Windows 11 versions.
-            },
-            {
-                {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"},
-                &TaskListButton_UpdateButtonPadding_Original,
-                TaskListButton_UpdateButtonPadding_Hook,
             },
             {
                 {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
@@ -1967,13 +2030,11 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 ExperienceToggleButton_UpdateButtonPadding_Hook,
             },
             {
-                // Pre-DynamicIconScaling.
                 {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::AugmentedEntryPointButton::UpdateButtonPadding(void))"},
                 &AugmentedEntryPointButton_UpdateButtonPadding_Original,
                 AugmentedEntryPointButton_UpdateButtonPadding_Hook,
             },
             {
-                // Pre-DynamicIconScaling.
                 {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::Windows::UI::Xaml::Controls::Primitives::RepeatButton>::Width(double)const )"},
                 &RepeatButton_Width_Original,
                 RepeatButton_Width_Hook,
