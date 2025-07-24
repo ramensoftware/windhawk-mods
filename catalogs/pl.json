@@ -572,6 +572,28 @@
                 "version": "1.4.4"
             }
         },
+        "classic-explorer-dragdrop": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753336035000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753336035000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Isabella Lulamoon (kawapure)",
+                "compilerOptions": "-luxtheme",
+                "description": "Enables/fixes the classic drag/drop image in File Explorer.",
+                "github": "https://github.com/kawapure",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Explorer Drag/Drop",
+                "twitter": "https://twitter.com/kawaipure",
+                "version": "1.0"
+            }
+        },
         "classic-explorer-menubar": {
             "details": {
                 "defaultSorting": 693,

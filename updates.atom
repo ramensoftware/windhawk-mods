@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-23T23:00:15.000Z</updated>
+    <updated>2025-07-24T05:47:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Drag/Drop 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-dragdrop#8eb3648fa55fd8328b19f05998ce537a0269cbbe</id>
+        <link href="https://windhawk.net/mods/classic-explorer-dragdrop"/>
+        <updated>2025-07-24T05:47:15.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicexplorerdragdrop">Classic Explorer Drag/Drop</h1>
+<p>Forces the classic drag/drop image resembling the list view item itself to be used in File Explorer,
+and fixes a bug introduced in Windows 7 whereby the drag/drop image will not be displayed in classic
+theme.</p>
+<h2 id="caveats">Caveats</h2>
+<p>This does not work with the DirectUI list view used since Windows 7. In such cases, the Windows Vista
+style will always be used.</p>]]></content>
+        <author>
+            <name>Isabella Lulamoon (kawapure)</name>
+            <uri>https://github.com/kawapure</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2.3]]></title>
         <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#0ceec46962865fdd3e2d7d83a83330ea1a3c1ca8</id>
@@ -370,24 +387,6 @@ from both Windows 8.x and Windows 10 1507-1803.</p>
         <content type="html"><![CDATA[<ul>
 <li>Fixed a crash when hovering over taskbar items in recent Windows 11 builds.</li>
 <li>Fixed <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned start menu</a> being cut off. Currently it opens in the original location. Better support is planned for follow-up updates.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#97c72fa2c85a13393590bdf73464db7c6d19e8ae</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2025-07-16T23:16:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed misplaced thumbnail previews after a recent Windows 11 update.</li>
-<li>Thumbnail previews in list mode are now aligned to bottom. List mode is used when there are too many items, or when the "Disable Taskbar Thumbnails" mod is used in list mode.</li>
-<li>Fixed taskbar elements being unclickable on the monitor edges sometimes.</li>
-<li>Fixed <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned start menu</a> being cut off. Currently it opens in the original location. Better support is planned for follow-up updates.</li>
-<li>Improved notifications placement when the taskbar is on the left. The mod tried to keep notifications on the left in this case, but they sometimes still opened on the right.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
