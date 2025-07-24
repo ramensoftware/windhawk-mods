@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-24T05:47:15.000Z</updated>
+    <updated>2025-07-24T18:34:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme Explorer Search Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-explorer-search-fix#dfdd41d6b0c84e75c65896510c3ae1a38252647e</id>
+        <link href="https://windhawk.net/mods/classic-theme-explorer-search-fix"/>
+        <updated>2025-07-24T18:34:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicthemeexplorersearchfix">Classic Theme Explorer Search Fix</h1>
+<p>When using classic theme in Windows 7 and up, the colors of the placeholder
+text in Explorer's search box are hardcoded. This mod makes it use system
+colors instead.</p>
+<p><strong>Before</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-theme-explorer-search-fix/before.png" alt="Before" /></p>
+<p><strong>After</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-theme-explorer-search-fix/after.png" alt="After" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Drag/Drop 1.0]]></title>
         <id>https://windhawk.net/mods/classic-explorer-dragdrop#8eb3648fa55fd8328b19f05998ce537a0269cbbe</id>
@@ -377,20 +395,6 @@ from both Windows 8.x and Windows 10 1507-1803.</p>
         <author>
             <name>tinodin</name>
             <uri>https://github.com/tinodin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#c094b860efa76d6d481a26237c089695d6f78406</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2025-07-17T04:00:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash when hovering over taskbar items in recent Windows 11 builds.</li>
-<li>Fixed <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned start menu</a> being cut off. Currently it opens in the original location. Better support is planned for follow-up updates.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
