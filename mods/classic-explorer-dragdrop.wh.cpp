@@ -150,7 +150,8 @@ LRESULT CALLBACK CListViewHost__s_ListViewSubclassWndProc_hook(HWND hWnd, UINT u
     return lRes;
 }
 
-const WindhawkUtils::SYMBOL_HOOK rgShell32Hooks[] = {
+// shell32.dll
+const WindhawkUtils::SYMBOL_HOOK c_rgShell32Hooks[] = {
     {
         { 
             L"GetDragImageMsg"
@@ -195,7 +196,7 @@ BOOL Wh_ModInit()
             (void **)&IsAppThemed_orig
         );
         
-        if (!WindhawkUtils::HookSymbols(hmShell32, rgShell32Hooks, ARRAYSIZE(rgShell32Hooks)))
+        if (!WindhawkUtils::HookSymbols(hmShell32, c_rgShell32Hooks, ARRAYSIZE(c_rgShell32Hooks)))
         {
             Wh_Log(L"Failed to install shell32.dll hooks.");
             return FALSE;
