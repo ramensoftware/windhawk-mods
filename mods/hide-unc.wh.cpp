@@ -2,7 +2,7 @@
 // @id              hide-unc
 // @name            Hide Network UNC Paths in Explorer
 // @description     Removes UNC paths from network drives in Explorer and dialogs
-// @version         1.0
+// @version         1.0.1
 // @author          @danalec
 // @github          https://github.com/danalec
 // @include         explorer.exe
@@ -12,6 +12,8 @@
 // @exclude         winlogon.exe
 // @exclude         services.exe
 // @exclude         lsass.exe
+// @exclude         nvcplui.exe
+// @exclude         nvcontainer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -lcomctl32 -lcomdlg32 -lshell32 -lole32 -lshlwapi -luuid
 // ==/WindhawkMod==
@@ -39,23 +41,16 @@ Improved Usability for Cryptomator: Hides lengthy encrypted vault paths (e.g., s
 
 BOOL g_GetDisplayNameHooked = FALSE;
 BOOL g_GetDisplayNameOfHooked = FALSE;
+void* g_pShellItem = NULL;
+void* g_pShellFolder = NULL;
 
 void CleanUNCPath(LPWSTR text, size_t maxLen) {
-    if (!text || !*text) return;
+    if (!text || !*text || maxLen < 4) return;
     WCHAR* unc = wcsstr(text, L" (\\\\");
-    if (unc) {
-        WCHAR* p = unc + 2;
-        int depth = 1;
-        while (*p && depth > 0) {
-            if (*p == L'(') depth++;
-            else if (*p == L')') depth--;
-            p++;
-        }
-        if (*p) {
-            size_t remainingLen = wcslen(p) + 1;
-            memmove(unc, p, remainingLen * sizeof(WCHAR));
-        }
-        else *unc = L'\0';
+    if (!unc) return;
+    size_t truncateAt = unc - text;
+    if (truncateAt < maxLen) {
+        text[truncateAt] = L'\0'; 
     }
 }
 
@@ -89,6 +84,7 @@ HRESULT WINAPI SHCreateItemFromParsingName_Hook(PCWSTR pszPath, IBindCtx *pbc, R
             Wh_SetFunctionHook((*vtbl)[5], (void*)GetDisplayName_Hook, (void**)&GetDisplayName_Original);
             if (Wh_ApplyHookOperations()) {
                 g_GetDisplayNameHooked = TRUE;
+                g_pShellItem = *ppv;
             }
         }
     }
@@ -216,6 +212,7 @@ HRESULT WINAPI SHGetDesktopFolder_Hook(IShellFolder **ppshf) {
             Wh_SetFunctionHook((*vtbl)[11], (void*)GetDisplayNameOf_Hook, (void**)&GetDisplayNameOf_Original);
             if (Wh_ApplyHookOperations()) {
                 g_GetDisplayNameOfHooked = TRUE;
+                g_pShellFolder = *ppshf;
             }
         }
     }
@@ -343,4 +340,31 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    if (g_GetDisplayNameHooked && GetDisplayName_Original) {
+        if (g_pShellItem) {
+            void*** vtbl = (void***)g_pShellItem;
+            if (vtbl && *vtbl) {
+                Wh_SetFunctionHook((*vtbl)[5], (void*)GetDisplayName_Original, NULL);
+                Wh_ApplyHookOperations();
+            }
+        }
+        GetDisplayName_Original = NULL;
+        g_GetDisplayNameHooked = FALSE;
+        g_pShellItem = NULL;
+    }
+    
+    if (g_GetDisplayNameOfHooked && GetDisplayNameOf_Original) {
+        if (g_pShellFolder) {
+            void*** vtbl = (void***)g_pShellFolder;
+            if (vtbl && *vtbl) {
+                Wh_SetFunctionHook((*vtbl)[11], (void*)GetDisplayNameOf_Original, NULL);
+                Wh_ApplyHookOperations();
+            }
+        }
+        GetDisplayNameOf_Original = NULL;
+        g_GetDisplayNameOfHooked = FALSE;
+        g_pShellFolder = NULL;
+    }
+    
+    g_OrigComboBoxProc = NULL;
 }
