@@ -2,7 +2,7 @@
 // @id              hide-unc
 // @name            Hide Network UNC Paths in Explorer
 // @description     Removes UNC paths from network drives in Explorer and dialogs
-// @version         1.0.1
+// @version         1.0.2
 // @author          @danalec
 // @github          https://github.com/danalec
 // @include         explorer.exe
@@ -38,11 +38,19 @@ Improved Usability for Cryptomator: Hides lengthy encrypted vault paths (e.g., s
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
+#include <vector>
+#include <algorithm>
+#include <mutex>
+
+#include "windhawk_utils.h"
 
 BOOL g_GetDisplayNameHooked = FALSE;
 BOOL g_GetDisplayNameOfHooked = FALSE;
 void* g_pShellItem = NULL;
 void* g_pShellFolder = NULL;
+
+std::vector<HWND> g_subclassedWindows;
+std::mutex g_subclassedWindowsMutex;
 
 void CleanUNCPath(LPWSTR text, size_t maxLen) {
     if (!text || !*text || maxLen < 4) return;
@@ -276,9 +284,13 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     return SetWindowTextW_Original(hWnd, lpString);
 }
 
-WNDPROC g_OrigComboBoxProc = NULL;
-
-LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK ComboBoxSubclassProc(
+    HWND hWnd,
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam,
+    DWORD_PTR dwRefData
+) {
     if (uMsg == CB_ADDSTRING || uMsg == CB_INSERTSTRING) {
         LPWSTR text = (LPWSTR)lParam;
         if (text && wcsstr(text, L" (\\\\")) {
@@ -287,13 +299,21 @@ LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             if (buffer) {
                 wcscpy_s(buffer, len, text);
                 CleanUNCPath(buffer, len);
-                LRESULT result = CallWindowProc(g_OrigComboBoxProc, hWnd, uMsg, wParam, (LPARAM)buffer);
+                LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, (LPARAM)buffer);
                 free(buffer);
                 return result;
             }
         }
     }
-    return CallWindowProc(g_OrigComboBoxProc, hWnd, uMsg, wParam, lParam);
+    else if (uMsg == WM_NCDESTROY) {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        g_subclassedWindows.erase(
+            std::remove(g_subclassedWindows.begin(), g_subclassedWindows.end(), hWnd),
+            g_subclassedWindows.end()
+        );
+    }
+    
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 typedef HWND (WINAPI *CreateWindowExW_t)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, 
@@ -317,8 +337,10 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
             WCHAR parentClass[256];
             GetClassNameW(hWndParent, parentClass, 256);
             if (wcsstr(parentClass, L"#32770")) {
-                WNDPROC oldProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)ComboBoxSubclassProc);
-                if (oldProc && !g_OrigComboBoxProc) g_OrigComboBoxProc = oldProc;
+                if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ComboBoxSubclassProc, 0)) {
+                    std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+                    g_subclassedWindows.push_back(hWnd);
+                }
             }
         }
     }
@@ -340,6 +362,14 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        for (HWND hWnd : g_subclassedWindows) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ComboBoxSubclassProc);
+        }
+        g_subclassedWindows.clear();
+    }
+    
     if (g_GetDisplayNameHooked && GetDisplayName_Original) {
         if (g_pShellItem) {
             void*** vtbl = (void***)g_pShellItem;
@@ -365,6 +395,4 @@ void Wh_ModUninit() {
         g_GetDisplayNameOfHooked = FALSE;
         g_pShellFolder = NULL;
     }
-    
-    g_OrigComboBoxProc = NULL;
 }
