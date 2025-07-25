@@ -2,7 +2,7 @@
 // @id              hide-unc
 // @name            Hide Network UNC Paths in Explorer
 // @description     Removes UNC paths from network drives in Explorer and dialogs
-// @version         1.0.2
+// @version         1.0.3
 // @author          @danalec
 // @github          https://github.com/danalec
 // @include         explorer.exe
@@ -41,13 +41,10 @@ Improved Usability for Cryptomator: Hides lengthy encrypted vault paths (e.g., s
 #include <vector>
 #include <algorithm>
 #include <mutex>
-
-#include "windhawk_utils.h"
+#include <windhawk_utils.h>
 
 BOOL g_GetDisplayNameHooked = FALSE;
 BOOL g_GetDisplayNameOfHooked = FALSE;
-void* g_pShellItem = NULL;
-void* g_pShellFolder = NULL;
 
 std::vector<HWND> g_subclassedWindows;
 std::mutex g_subclassedWindowsMutex;
@@ -56,9 +53,17 @@ void CleanUNCPath(LPWSTR text, size_t maxLen) {
     if (!text || !*text || maxLen < 4) return;
     WCHAR* unc = wcsstr(text, L" (\\\\");
     if (!unc) return;
-    size_t truncateAt = unc - text;
-    if (truncateAt < maxLen) {
-        text[truncateAt] = L'\0'; 
+    
+    WCHAR* closing = wcschr(unc, L')');
+    if (closing) {
+        size_t remaining = wcslen(closing + 1);
+        if (remaining > 0) {
+            wmemmove(unc, closing + 1, remaining + 1);
+        } else {
+            *unc = L'\0';
+        }
+    } else {
+        *unc = L'\0';
     }
 }
 
@@ -92,7 +97,6 @@ HRESULT WINAPI SHCreateItemFromParsingName_Hook(PCWSTR pszPath, IBindCtx *pbc, R
             Wh_SetFunctionHook((*vtbl)[5], (void*)GetDisplayName_Hook, (void**)&GetDisplayName_Original);
             if (Wh_ApplyHookOperations()) {
                 g_GetDisplayNameHooked = TRUE;
-                g_pShellItem = *ppv;
             }
         }
     }
@@ -220,7 +224,6 @@ HRESULT WINAPI SHGetDesktopFolder_Hook(IShellFolder **ppshf) {
             Wh_SetFunctionHook((*vtbl)[11], (void*)GetDisplayNameOf_Hook, (void**)&GetDisplayNameOf_Original);
             if (Wh_ApplyHookOperations()) {
                 g_GetDisplayNameOfHooked = TRUE;
-                g_pShellFolder = *ppshf;
             }
         }
     }
@@ -362,37 +365,14 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    std::vector<HWND> windowsToRemove;
     {
         std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
-        for (HWND hWnd : g_subclassedWindows) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ComboBoxSubclassProc);
-        }
+        windowsToRemove = g_subclassedWindows;
         g_subclassedWindows.clear();
     }
     
-    if (g_GetDisplayNameHooked && GetDisplayName_Original) {
-        if (g_pShellItem) {
-            void*** vtbl = (void***)g_pShellItem;
-            if (vtbl && *vtbl) {
-                Wh_SetFunctionHook((*vtbl)[5], (void*)GetDisplayName_Original, NULL);
-                Wh_ApplyHookOperations();
-            }
-        }
-        GetDisplayName_Original = NULL;
-        g_GetDisplayNameHooked = FALSE;
-        g_pShellItem = NULL;
-    }
-    
-    if (g_GetDisplayNameOfHooked && GetDisplayNameOf_Original) {
-        if (g_pShellFolder) {
-            void*** vtbl = (void***)g_pShellFolder;
-            if (vtbl && *vtbl) {
-                Wh_SetFunctionHook((*vtbl)[11], (void*)GetDisplayNameOf_Original, NULL);
-                Wh_ApplyHookOperations();
-            }
-        }
-        GetDisplayNameOf_Original = NULL;
-        g_GetDisplayNameOfHooked = FALSE;
-        g_pShellFolder = NULL;
+    for (HWND hWnd : windowsToRemove) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ComboBoxSubclassProc);
     }
 }
