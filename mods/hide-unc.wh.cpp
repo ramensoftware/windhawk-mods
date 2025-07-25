@@ -37,6 +37,9 @@ Improved Usability for Cryptomator: Hides lengthy encrypted vault paths (e.g., s
 #include <shobjidl.h>
 #include <shlwapi.h>
 
+BOOL g_GetDisplayNameHooked = FALSE;
+BOOL g_GetDisplayNameOfHooked = FALSE;
+
 void CleanUNCPath(LPWSTR text, size_t maxLen) {
     if (!text || !*text) return;
     WCHAR* unc = wcsstr(text, L" (\\\\");
@@ -48,7 +51,10 @@ void CleanUNCPath(LPWSTR text, size_t maxLen) {
             else if (*p == L')') depth--;
             p++;
         }
-        if (*p) wcscpy_s(unc, maxLen - (unc - text), p);
+        if (*p) {
+            size_t remainingLen = wcslen(p) + 1;
+            memmove(unc, p, remainingLen * sizeof(WCHAR));
+        }
         else *unc = L'\0';
     }
 }
@@ -77,16 +83,12 @@ HRESULT STDMETHODCALLTYPE GetDisplayName_Hook(void* pThis, SIGDN sigdnName, LPWS
 HRESULT WINAPI SHCreateItemFromParsingName_Hook(PCWSTR pszPath, IBindCtx *pbc, REFIID riid, void **ppv) {
     HRESULT hr = SHCreateItemFromParsingName_Original(pszPath, pbc, riid, ppv);
     
-    if (SUCCEEDED(hr) && ppv && *ppv) {
+    if (SUCCEEDED(hr) && ppv && *ppv && !g_GetDisplayNameHooked) {
         void*** vtbl = (void***)*ppv;
         if (vtbl && *vtbl) {
-            if (!GetDisplayName_Original) {
-                GetDisplayName_Original = (GetDisplayName_t)(*vtbl)[5];
-                DWORD oldProtect;
-                if (VirtualProtect(&(*vtbl)[5], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
-                    (*vtbl)[5] = (void*)GetDisplayName_Hook;
-                    VirtualProtect(&(*vtbl)[5], sizeof(void*), oldProtect, &oldProtect);
-                }
+            Wh_SetFunctionHook((*vtbl)[5], (void*)GetDisplayName_Hook, (void**)&GetDisplayName_Original);
+            if (Wh_ApplyHookOperations()) {
+                g_GetDisplayNameHooked = TRUE;
             }
         }
     }
@@ -208,16 +210,12 @@ SHGetDesktopFolder_t SHGetDesktopFolder_Original;
 HRESULT WINAPI SHGetDesktopFolder_Hook(IShellFolder **ppshf) {
     HRESULT hr = SHGetDesktopFolder_Original(ppshf);
     
-    if (SUCCEEDED(hr) && ppshf && *ppshf) {
+    if (SUCCEEDED(hr) && ppshf && *ppshf && !g_GetDisplayNameOfHooked) {
         void*** vtbl = (void***)*ppshf;
         if (vtbl && *vtbl) {
-            if (!GetDisplayNameOf_Original) {
-                GetDisplayNameOf_Original = (GetDisplayNameOf_t)(*vtbl)[11];
-                DWORD oldProtect;
-                if (VirtualProtect(&(*vtbl)[11], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
-                    (*vtbl)[11] = (void*)GetDisplayNameOf_Hook;
-                    VirtualProtect(&(*vtbl)[11], sizeof(void*), oldProtect, &oldProtect);
-                }
+            Wh_SetFunctionHook((*vtbl)[11], (void*)GetDisplayNameOf_Hook, (void**)&GetDisplayNameOf_Original);
+            if (Wh_ApplyHookOperations()) {
+                g_GetDisplayNameOfHooked = TRUE;
             }
         }
     }
@@ -312,10 +310,10 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     
     if (hWnd && lpClassName) {
         WCHAR className[256] = {0};
-        if (HIWORD(lpClassName)) {
-            wcscpy_s(className, 256, lpClassName);
-        } else {
+        if (IS_INTRESOURCE(lpClassName)) {
             GetClassNameW(hWnd, className, 256);
+        } else {
+            wcscpy_s(className, 256, lpClassName);
         }
         
         if (wcscmp(className, L"ComboBox") == 0 && hWndParent) {
