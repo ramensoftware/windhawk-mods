@@ -7,6 +7,11 @@
 // @github          https://github.com/danalec
 // @include         explorer.exe
 // @include         *
+// @exclude         csrss.exe
+// @exclude         dwm.exe
+// @exclude         winlogon.exe
+// @exclude         services.exe
+// @exclude         lsass.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -lcomctl32 -lcomdlg32 -lshell32 -lole32 -lshlwapi -luuid
 // ==/WindhawkMod==
@@ -327,19 +332,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 }
 
 BOOL Wh_ModInit() {
-    WCHAR exePath[MAX_PATH];
-    GetModuleFileNameW(NULL, exePath, MAX_PATH);
-    WCHAR* exeName = wcsrchr(exePath, L'\\');
-    if (exeName) exeName++; else exeName = exePath;
-    
-    if (wcsicmp(exeName, L"csrss.exe") == 0 || 
-        wcsicmp(exeName, L"dwm.exe") == 0 ||
-        wcsicmp(exeName, L"winlogon.exe") == 0 ||
-        wcsicmp(exeName, L"services.exe") == 0 ||
-        wcsicmp(exeName, L"lsass.exe") == 0) {
-        return TRUE;
-    }
-    
     Wh_SetFunctionHook((void*)SHGetFileInfoW, (void*)SHGetFileInfoW_Hook, (void**)&SHGetFileInfoW_Original);
     Wh_SetFunctionHook((void*)SHCreateItemFromParsingName, (void*)SHCreateItemFromParsingName_Hook, (void**)&SHCreateItemFromParsingName_Original);
     Wh_SetFunctionHook((void*)SHGetDesktopFolder, (void*)SHGetDesktopFolder_Hook, (void**)&SHGetDesktopFolder_Original);
