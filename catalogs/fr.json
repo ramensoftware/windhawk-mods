@@ -2078,6 +2078,46 @@
                 "version": "1.0.2"
             }
         },
+        "hide-unc": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753571021000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753571021000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "@danalec",
+                "compilerOptions": "-lgdi32 -lcomctl32 -lcomdlg32 -lshell32 -lole32 -lshlwapi -luuid",
+                "description": "Removes UNC paths from network drives in Explorer and dialogs",
+                "exclude": [
+                    "csrss.exe",
+                    "dwm.exe",
+                    "winlogon.exe",
+                    "services.exe",
+                    "lsass.exe",
+                    "smss.exe",
+                    "wininit.exe",
+                    "conhost.exe",
+                    "fontdrvhost.exe",
+                    "audiodg.exe",
+                    "wmic.exe",
+                    "wmiapsrv.exe",
+                    "wmiprvse.exe",
+                    "alg.exe",
+                    "nvcplui.exe",
+                    "nvcontainer.exe"
+                ],
+                "github": "https://github.com/danalec",
+                "include": [
+                    "explorer.exe",
+                    "*"
+                ],
+                "name": "Hide Network UNC Paths in Explorer",
+                "version": "1.0.5"
+            }
+        },
         "hold-teams-meeting-thumbnail-in-place": {
             "details": {
                 "defaultSorting": 396,
