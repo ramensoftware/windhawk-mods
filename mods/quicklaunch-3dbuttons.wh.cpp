@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          anixx
 // @github          https://github.com/Anixx
-// @include         *
+// @include         explorer.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
