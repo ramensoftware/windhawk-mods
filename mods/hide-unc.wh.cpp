@@ -13,8 +13,7 @@
 // @exclude         services.exe
 // @exclude         lsass.exe
 // @exclude         nvcplui.exe
-// @exclude         nvcontainer.exe
-// @architecture    x86-64
+// @exclude         nvcontainer.ex
 // @compilerOptions -lgdi32 -lcomctl32 -lcomdlg32 -lshell32 -lole32 -lshlwapi -luuid
 // ==/WindhawkMod==
 
