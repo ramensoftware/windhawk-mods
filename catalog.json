@@ -1706,6 +1706,26 @@
                 "version": "1.1.1"
             }
         },
+        "explorer-toolbars-separators": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753568464000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753568464000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "anixx",
+                "description": "Adds separators around File Explorer toolbars",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Separators around File Explorer toolbars",
+                "version": "1.0.0"
+            }
+        },
         "explorer-unlocked-toolbars-fix": {
             "details": {
                 "defaultSorting": 400,
