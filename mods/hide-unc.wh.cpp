@@ -2,7 +2,7 @@
 // @id              hide-unc
 // @name            Hide Network UNC Paths in Explorer
 // @description     Removes UNC paths from network drives in Explorer and dialogs
-// @version         1.0.3
+// @version         1.0.4
 // @author          @danalec
 // @github          https://github.com/danalec
 // @include         explorer.exe
@@ -40,23 +40,28 @@ Improved Usability for Cryptomator: Hides lengthy encrypted vault paths (e.g., s
 #include <vector>
 #include <algorithm>
 #include <mutex>
+#include <atomic>
 #include <windhawk_utils.h>
 
-BOOL g_GetDisplayNameHooked = FALSE;
-BOOL g_GetDisplayNameOfHooked = FALSE;
+std::atomic<BOOL> g_GetDisplayNameHooked(FALSE);
+std::atomic<BOOL> g_GetDisplayNameOfHooked(FALSE);
 
 std::vector<HWND> g_subclassedWindows;
 std::mutex g_subclassedWindowsMutex;
 
 void CleanUNCPath(LPWSTR text, size_t maxLen) {
     if (!text || !*text || maxLen < 4) return;
+    
+    if (wcsncmp(text, L"(\\\\", 3) == 0) return;
+    
     WCHAR* unc = wcsstr(text, L" (\\\\");
     if (!unc) return;
     
     WCHAR* closing = wcschr(unc, L')');
     if (closing) {
         size_t remaining = wcslen(closing + 1);
-        if (remaining > 0) {
+        size_t availableSpace = maxLen - (unc - text);
+        if (remaining > 0 && remaining < availableSpace) {
             wmemmove(unc, closing + 1, remaining + 1);
         } else {
             *unc = L'\0';
@@ -90,12 +95,12 @@ HRESULT STDMETHODCALLTYPE GetDisplayName_Hook(void* pThis, SIGDN sigdnName, LPWS
 HRESULT WINAPI SHCreateItemFromParsingName_Hook(PCWSTR pszPath, IBindCtx *pbc, REFIID riid, void **ppv) {
     HRESULT hr = SHCreateItemFromParsingName_Original(pszPath, pbc, riid, ppv);
     
-    if (SUCCEEDED(hr) && ppv && *ppv && !g_GetDisplayNameHooked) {
+    if (SUCCEEDED(hr) && ppv && *ppv && !g_GetDisplayNameHooked.load()) {
         void*** vtbl = (void***)*ppv;
         if (vtbl && *vtbl) {
             Wh_SetFunctionHook((*vtbl)[5], (void*)GetDisplayName_Hook, (void**)&GetDisplayName_Original);
             if (Wh_ApplyHookOperations()) {
-                g_GetDisplayNameHooked = TRUE;
+                g_GetDisplayNameHooked.store(TRUE);
             }
         }
     }
@@ -217,12 +222,12 @@ SHGetDesktopFolder_t SHGetDesktopFolder_Original;
 HRESULT WINAPI SHGetDesktopFolder_Hook(IShellFolder **ppshf) {
     HRESULT hr = SHGetDesktopFolder_Original(ppshf);
     
-    if (SUCCEEDED(hr) && ppshf && *ppshf && !g_GetDisplayNameOfHooked) {
+    if (SUCCEEDED(hr) && ppshf && *ppshf && !g_GetDisplayNameOfHooked.load()) {
         void*** vtbl = (void***)*ppshf;
         if (vtbl && *vtbl) {
             Wh_SetFunctionHook((*vtbl)[11], (void*)GetDisplayNameOf_Hook, (void**)&GetDisplayNameOf_Original);
             if (Wh_ApplyHookOperations()) {
-                g_GetDisplayNameOfHooked = TRUE;
+                g_GetDisplayNameOfHooked.store(TRUE);
             }
         }
     }
@@ -235,7 +240,7 @@ DrawTextW_t DrawTextW_Original;
 
 int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format) {
     if (lpchText && wcsstr(lpchText, L" (\\\\")) {
-        int len = (cchText == -1) ? wcslen(lpchText) : cchText;
+        int len = (cchText == -1) ? wcslen(lpchText) : std::min(cchText, (int)wcslen(lpchText));
         WCHAR* buffer = (WCHAR*)malloc((len + 1) * sizeof(WCHAR));
         if (buffer) {
             wcsncpy_s(buffer, len + 1, lpchText, len);
