@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-24T18:34:46.000Z</updated>
+    <updated>2025-07-26T20:35:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[3D buttons on Quick Launch bar 1.0.0]]></title>
+        <id>https://windhawk.net/mods/quicklaunch-3dbuttons#41aa3a0f7aa0ba89de805c012943f9295c042a69</id>
+        <link href="https://windhawk.net/mods/quicklaunch-3dbuttons"/>
+        <updated>2025-07-26T20:35:26.000Z</updated>
+        <content type="html"><![CDATA[<p>Makes the buttons on the Quick Launch bar 3-dimensional, as it was the case in Windows 95 Beta.</p>
+<p>Before:</p>
+<p><img src="https://i.imgur.com/4ccDO6y.png" alt="Before" /></p>
+<p>After:</p>
+<p><img src="https://i.imgur.com/LbrokEc.png" alt="After" /></p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme Explorer Search Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-theme-explorer-search-fix#dfdd41d6b0c84e75c65896510c3ae1a38252647e</id>
@@ -375,22 +390,6 @@ from both Windows 8.x and Windows 10 1507-1803.</p>
         <updated>2025-07-18T08:23:29.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed Sunset to sunrise (location service) interfering with ApplyTheme() causing it to fail</li>
-</ul>]]></content>
-        <author>
-            <name>tinodin</name>
-            <uri>https://github.com/tinodin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Theme Switcher 1.1]]></title>
-        <id>https://windhawk.net/mods/auto-theme-switcher#549ef593719ffac5cbd7db143cc8abbf2479dc96</id>
-        <link href="https://windhawk.net/mods/auto-theme-switcher"/>
-        <updated>2025-07-17T20:32:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added Scheduling options for Sunset to Surise (location service or custom geographic coordinates)</li>
-<li>Improved ReadMe</li>
-<li>Improved Logging</li>
-<li>Made settings less cluttered by giving them descriptions</li>
 </ul>]]></content>
         <author>
             <name>tinodin</name>
