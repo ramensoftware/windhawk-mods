@@ -600,7 +600,7 @@
                 "published": 1748277761000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1748277761000,
+                "updated": 1753638541000,
                 "users": 78
             },
             "metadata": {
@@ -612,7 +612,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Explorer Menubar",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "classic-explorer-treeview": {

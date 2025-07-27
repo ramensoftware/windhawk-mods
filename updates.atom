@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-26T23:03:41.000Z</updated>
+    <updated>2025-07-27T17:49:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Menubar 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-menubar#a7488204cb7a2af7cbd92665f8c710c3138cc6bd</id>
+        <link href="https://windhawk.net/mods/classic-explorer-menubar"/>
+        <updated>2025-07-27T17:49:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Make sure it only affects explorer windows</li>
+</ul>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Network UNC Paths in Explorer 1.0.5]]></title>
         <id>https://windhawk.net/mods/hide-unc#3f6d76d5ce038d14686a9f41bff709df45d7b4f7</id>
@@ -354,49 +367,6 @@ from both Windows 8.x and Windows 10 1507-1803.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Prevent Focus Stealing 1.0.0]]></title>
-        <id>https://windhawk.net/mods/prevent-focus-stealing#bb5bb030304e6a0be4276b1a97237e05d99e2f12</id>
-        <link href="https://windhawk.net/mods/prevent-focus-stealing"/>
-        <updated>2025-07-19T19:40:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="preventfocusstealing">Prevent Focus Stealing</h1>
-<p>Focus stealing can be very annoying and disruptive to workflow and productivity.</p>
-<p>This mod can be used to prevent any app from stealing focus when it opens a window. App-specific examples can be found below.</p>
-<h2 id="performanceoptimization">Performance Optimization</h2>
-<p>By default, <strong>the mod will be injected into all processes</strong> and unload when there's no matching application in settings. To reduce overhead, enable <code>Ignore mod inclusion/exclusion lists</code> and add each executable to <code>Custom process inclusion list</code> in the <code>Advanced</code> options menu.</p>
-<h2 id="applicationsettings">Application Settings</h2>
-<ul>
-<li><code>Application Executables</code> must be one or more exe names, exe paths or path globs.</li>
-<li><code>Required Arguments</code> can be used to only include processes with specific command line arguments. All arguments must match the process.</li>
-<li><code>Excluded Arguments</code> can be used to exclude processes with specific command line arguments. Any matching argument excludes the process.</li>
-<li><code>Window Title</code> is a title prefix of the window you want to prevent focus being stolen by. Leave it blank to target all windows.</li>
-<li><code>Never Focus</code> prevents manual activation, so it should only be enabled if you never want to interact with the window.</li>
-</ul>
-<p>​</p>
-<hr />
-<p>​</p>
-<h2 id="preventingfocusbeingstolenbychromiumelectronbrowsers">Preventing focus being stolen by Chromium (Electron / Browsers)</h2>
-<p>The Chromium DevTools window is especially annoying, as it opens asynchronously and has to be reopened every time you apply changes while working on development of a Chrome extension or an Electron-based app. You can now auto reload changes and have one or more DevTools windows reopen without your editor losing focus.</p>
-<h3 id="applicationexecutables">Application Executables</h3>
-<p>Make sure <code>Application Executables</code> includes the process you are using (such as <code>electron.exe</code>, <code>brave.exe</code> or <code>chrome.exe</code>).</p>
-<h3 id="requiredarguments">Required Arguments</h3>
-<p>You can leave <code>Required Arguments</code> blank unless you only want to target a specific instance of an app, such as an electron app which you launch with custom argument during development.</p>
-<h3 id="excludedarguments">Excluded Arguments</h3>
-<p>You should set <code>Excluded Arguments</code> to <code>--type</code> for efficiency so that only the main chromium process which creates windows is hooked.</p>
-<h3 id="windowtitle">Window Title</h3>
-<ul>
-<li>Leave title blank to prevent initial focus of all windows for the application.</li>
-<li><code>Developer Tools</code> will target all DevTools windows.</li>
-<li><code>Developer Tools - https://example.com</code> will target only DevTools for that site.</li>
-<li><code>Developer Tools - chrome-extension://&lt;extension_id&gt;</code> will target only DevTools windows for that extension.</li>
-</ul>
-<h3 id="neverfocus">Never Focus</h3>
-<p>Leave <code>Never Focus</code> disabled so that you can manually activate the window and interact with it.</p>]]></content>
-        <author>
-            <name>bawNg</name>
-            <uri>https://github.com/bawNg</uri>
         </author>
     </entry>
 </feed>
