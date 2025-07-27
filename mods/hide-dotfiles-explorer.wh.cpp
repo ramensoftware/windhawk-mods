@@ -19,19 +19,12 @@ This mod automatically hides files and folders that start with a dot (.) in Wind
 - Configurable exclusion paths where dotfiles will remain visible
 
 ## Configuration
-You can exclude specific paths, folders, or files from having their dotfiles hidden. In the mod settings, add paths separated by commas:
-- Single path: C:\Projects
-- Multiple paths: C:\Program Files", "D:\My Documents"
-
-You can also exclude specific folders or files directly, for example:
-- Folder: C:\Projects\.git
-- File: C:\Projects\.env
-
-## Restarting Explorer after enabling
-Run this PowerShell command to restart Explorer and clear the icon cache:
-```powershell
-Stop-Process -Name explorer -Force; Remove-Item "$env:LOCALAPPDATA\IconCache.db" -Force -EA 0; Start-Process explorer
-```
+You can exclude specific paths, folders, or files from having their dotfiles hidden.
+In the mod settings, add paths and/or files separated by commas:
+- Exclude all dotfiles in a directory: `C:\Projects`
+- Exclude specific dotfile by full path: `C:\Projects\.gitignore`
+- Exclude specific dotfile everywhere: `.gitignore`
+- Multiple exclusions: `.gitignore, .env, C:\Projects`
 */
 // ==/WindhawkModReadme==
 
@@ -39,7 +32,7 @@ Stop-Process -Name explorer -Force; Remove-Item "$env:LOCALAPPDATA\IconCache.db"
 /*
 - excludePaths: ""
   $name: Exclude
-  $description: Paths/Files where dotfiles will remain visible (comma-separated, use quotes for paths with spaces)
+  $description: Paths/Files where dotfiles will remain visible (comma-separated, e.g. ".gitignore, .env, C:\Projects")
 */
 // ==/WindhawkModSettings==
 
@@ -50,14 +43,21 @@ Stop-Process -Name explorer -Force; Remove-Item "$env:LOCALAPPDATA\IconCache.db"
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <unordered_set>
 
+const GUID IID_IShellFolder = {0x000214E6, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
 const GUID IID_IUnknown = {0x00000000, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
 const GUID IID_IEnumIDList = {0x000214F2, 0x0000, 0x0000, {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
 const GUID IID_IPersistFolder2 = {0x1AC3D9F0, 0x175C, 0x11d1, {0x95, 0xBE, 0x00, 0x60, 0x97, 0x97, 0xEA, 0x4F}};
 
-typedef HRESULT (WINAPI *IShellFolder_EnumObjects_t)(IShellFolder* pThis, HWND hwnd, SHCONTF grfFlags, IEnumIDList** ppenumIDList);
+typedef HRESULT (WINAPI *SHCreateShellFolderView_t)(const SFV_CREATE* pcsfv, IShellView** ppsv);
+typedef HRESULT (WINAPI *SHCreateDefaultExtractIcon_t)(REFIID riid, void** ppv);
+typedef HRESULT (STDMETHODCALLTYPE *IShellFolder_EnumObjects_t)(IShellFolder* pThis, HWND hwnd, SHCONTF grfFlags, IEnumIDList** ppenumIDList);
+typedef HRESULT (STDMETHODCALLTYPE *IShellFolder_CreateViewObject_t)(IShellFolder* pThis, HWND hwndOwner, REFIID riid, void** ppv);
 
-IShellFolder_EnumObjects_t IShellFolder_EnumObjects_Original;
+SHCreateShellFolderView_t SHCreateShellFolderView_Original;
+SHCreateDefaultExtractIcon_t SHCreateDefaultExtractIcon_Original;
+std::unordered_set<void*> g_hookedVTables;
 
 std::vector<std::wstring> g_excludePaths;
 
@@ -94,20 +94,18 @@ bool IsPathExcluded(PCWSTR path) {
     if (!path || g_excludePaths.empty()) return false;
     std::wstring fullPath(path);
     std::transform(fullPath.begin(), fullPath.end(), fullPath.begin(), ::towlower);
-    if (!fullPath.empty() && fullPath.back() == L'\\') {
-        fullPath.pop_back();
-    }
+    PathRemoveBackslashW(&fullPath[0]);
+    fullPath.resize(wcslen(fullPath.c_str()));
+    
     for (const auto& excludePath : g_excludePaths) {
         std::wstring excl = excludePath;
         std::transform(excl.begin(), excl.end(), excl.begin(), ::towlower);
-        if (!excl.empty() && excl.back() == L'\\') {
-            excl.pop_back();
-        }
-        // Check for exact match (for specific files/folders)
+        PathRemoveBackslashW(&excl[0]);
+        excl.resize(wcslen(excl.c_str()));
+        
         if (fullPath == excl) {
             return true;
         }
-        // Check if path is under excluded directory
         if (fullPath.find(excl, 0) == 0) {
             if (fullPath.length() > excl.length() && fullPath[excl.length()] == L'\\') {
                 return true;
@@ -138,9 +136,6 @@ public:
             *ppvObject = static_cast<IEnumIDList*>(this);
             AddRef();
             return S_OK;
-        }
-        if (m_pOriginal) {
-            return m_pOriginal->QueryInterface(riid, ppvObject);
         }
         return E_NOINTERFACE;
     }
@@ -175,10 +170,11 @@ public:
                     PIDLIST_ABSOLUTE pidlAbs = ILCombine(pidlFolder, pidl);
                     if (pidlAbs) {
                         if (SUCCEEDED(SHGetNameFromIDList(pidlAbs, SIGDN_FILESYSPATH, &pszFullPath))) {
-                            if (!IsPathExcluded(pszFullPath)) {
-                                PCWSTR pFileName = PathFindFileNameW(pszFullPath);
-                                if (pFileName && pFileName[0] == L'.') {
-                                    shouldInclude = false;
+                            PCWSTR pFileName = PathFindFileNameW(pszFullPath);
+                            if (pFileName && pFileName[0] == L'.') {
+                                shouldInclude = false;
+                                if (IsPathExcluded(pszFullPath) || IsPathExcluded(pFileName)) {
+                                    shouldInclude = true;
                                 }
                             }
                         }
@@ -202,43 +198,7 @@ public:
     }
     STDMETHODIMP Skip(ULONG celt) {
         if (!m_pOriginal) return E_FAIL;
-        ULONG skipped = 0;
-        while (skipped < celt) {
-            LPITEMIDLIST pidl = nullptr;
-            ULONG itemsFetched = 0;
-            HRESULT hr = m_pOriginal->Next(1, &pidl, &itemsFetched);
-            if (hr != S_OK || itemsFetched == 0) {
-                return S_FALSE;
-            }
-            bool isVisible = true;
-            LPWSTR pszFullPath = nullptr;
-            PIDLIST_ABSOLUTE pidlFolder = nullptr;
-            IPersistFolder2* pPersist = nullptr;
-            if (SUCCEEDED(m_pFolder->QueryInterface(IID_IPersistFolder2, (void**)&pPersist))) {
-                if (SUCCEEDED(pPersist->GetCurFolder(&pidlFolder))) {
-                    PIDLIST_ABSOLUTE pidlAbs = ILCombine(pidlFolder, pidl);
-                    if (pidlAbs) {
-                        if (SUCCEEDED(SHGetNameFromIDList(pidlAbs, SIGDN_FILESYSPATH, &pszFullPath))) {
-                            if (!IsPathExcluded(pszFullPath)) {
-                                PCWSTR pFileName = PathFindFileNameW(pszFullPath);
-                                if (pFileName && pFileName[0] == L'.') {
-                                    isVisible = false;
-                                }
-                            }
-                        }
-                        CoTaskMemFree(pidlAbs);
-                    }
-                    CoTaskMemFree(pidlFolder);
-                }
-                pPersist->Release();
-            }
-            if (pszFullPath) CoTaskMemFree(pszFullPath);
-            CoTaskMemFree(pidl);
-            if (isVisible) {
-                skipped++;
-            }
-        }
-        return S_OK;
+        return m_pOriginal->Skip(celt);
     }
     STDMETHODIMP Reset() {
         return m_pOriginal ? m_pOriginal->Reset() : E_FAIL;
@@ -262,8 +222,19 @@ public:
     }
 };
 
-HRESULT WINAPI IShellFolder_EnumObjects_Hook(IShellFolder* pThis, HWND hwnd, SHCONTF grfFlags, IEnumIDList** ppenumIDList) {
-    HRESULT hr = IShellFolder_EnumObjects_Original(pThis, hwnd, grfFlags, ppenumIDList);
+IShellFolder_EnumObjects_t* GetEnumObjectsPtr(IShellFolder* pFolder) {
+    void** vtable = *(void***)pFolder;
+    return (IShellFolder_EnumObjects_t*)&vtable[4];
+}
+
+IShellFolder_CreateViewObject_t* GetCreateViewObjectPtr(IShellFolder* pFolder) {
+    void** vtable = *(void***)pFolder;
+    return (IShellFolder_CreateViewObject_t*)&vtable[7];
+}
+
+HRESULT STDMETHODCALLTYPE IShellFolder_EnumObjects_Hook(IShellFolder* pThis, HWND hwnd, SHCONTF grfFlags, IEnumIDList** ppenumIDList) {
+    IShellFolder_EnumObjects_t pfnOriginal = *GetEnumObjectsPtr(pThis);
+    HRESULT hr = pfnOriginal(pThis, hwnd, grfFlags, ppenumIDList);
     if (SUCCEEDED(hr) && ppenumIDList && *ppenumIDList) {
         IEnumIDList* pOriginal = *ppenumIDList;
         DotfileFilterEnum* pFiltered = new (std::nothrow) DotfileFilterEnum(pOriginal, pThis);
@@ -279,6 +250,50 @@ HRESULT WINAPI IShellFolder_EnumObjects_Hook(IShellFolder* pThis, HWND hwnd, SHC
     return hr;
 }
 
+HRESULT STDMETHODCALLTYPE IShellFolder_CreateViewObject_Hook(IShellFolder* pThis, HWND hwndOwner, REFIID riid, void** ppv) {
+    IShellFolder_CreateViewObject_t pfnOriginal = *GetCreateViewObjectPtr(pThis);
+    HRESULT hr = pfnOriginal(pThis, hwndOwner, riid, ppv);
+    if (SUCCEEDED(hr) && ppv && *ppv && IsEqualIID(riid, IID_IShellView)) {
+        void** vtable = *(void***)pThis;
+        if (g_hookedVTables.find(vtable) == g_hookedVTables.end()) {
+            if (Wh_SetFunctionHook((void*)pfnOriginal, (void*)IShellFolder_EnumObjects_Hook, nullptr)) {
+                g_hookedVTables.insert(vtable);
+            }
+        }
+    }
+    return hr;
+}
+
+void HookIShellFolder(IShellFolder* pFolder) {
+    if (!pFolder) return;
+    void** vtable = *(void***)pFolder;
+    if (g_hookedVTables.find(vtable) == g_hookedVTables.end()) {
+        IShellFolder_EnumObjects_t* ppfnEnumObjects = GetEnumObjectsPtr(pFolder);
+        IShellFolder_CreateViewObject_t* ppfnCreateViewObject = GetCreateViewObjectPtr(pFolder);
+        if (Wh_SetFunctionHook((void*)*ppfnEnumObjects, (void*)IShellFolder_EnumObjects_Hook, nullptr)) {
+            g_hookedVTables.insert(vtable);
+        }
+        Wh_SetFunctionHook((void*)*ppfnCreateViewObject, (void*)IShellFolder_CreateViewObject_Hook, nullptr);
+    }
+}
+
+HRESULT WINAPI SHCreateShellFolderView_Hook(const SFV_CREATE* pcsfv, IShellView** ppsv) {
+    if (pcsfv && pcsfv->pshf) {
+        HookIShellFolder(pcsfv->pshf);
+    }
+    return SHCreateShellFolderView_Original(pcsfv, ppsv);
+}
+
+HRESULT WINAPI SHCreateDefaultExtractIcon_Hook(REFIID riid, void** ppv) {
+    HRESULT hr = SHCreateDefaultExtractIcon_Original(riid, ppv);
+    IShellFolder* pDesktop = nullptr;
+    if (SUCCEEDED(SHGetDesktopFolder(&pDesktop))) {
+        HookIShellFolder(pDesktop);
+        pDesktop->Release();
+    }
+    return hr;
+}
+
 void LoadSettings() {
     PCWSTR excludePaths = Wh_GetStringSetting(L"excludePaths");
     ParseExcludePaths(excludePaths);
@@ -289,21 +304,26 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"shell32.dll"), "SHCreateShellFolderView"), 
+                       (void*)SHCreateShellFolderView_Hook, 
+                       (void**)&SHCreateShellFolderView_Original);
+    
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"shell32.dll"), "SHCreateDefaultExtractIcon"), 
+                       (void*)SHCreateDefaultExtractIcon_Hook, 
+                       (void**)&SHCreateDefaultExtractIcon_Original);
+    
     IShellFolder* pDesktop = nullptr;
-    HRESULT hr = SHGetDesktopFolder(&pDesktop);
-    if (FAILED(hr) || !pDesktop) {
-        return FALSE;
-    }
-    void** vtable = *(void***)pDesktop;
-    if (!Wh_SetFunctionHook(vtable[4], (void*)IShellFolder_EnumObjects_Hook, (void**)&IShellFolder_EnumObjects_Original)) {
+    if (SUCCEEDED(SHGetDesktopFolder(&pDesktop))) {
+        HookIShellFolder(pDesktop);
         pDesktop->Release();
-        return FALSE;
     }
-    pDesktop->Release();
+    
     return TRUE;
 }
 
 void Wh_ModUninit() {
+    g_hookedVTables.clear();
 }
 
 void Wh_ModSettingsChanged() {
