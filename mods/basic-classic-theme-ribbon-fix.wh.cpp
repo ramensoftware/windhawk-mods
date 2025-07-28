@@ -2,7 +2,7 @@
 // @id              basic-classic-theme-ribbon-fix
 // @name            Basic/Classic Theme Ribbon Fix
 // @description     Remove the gap between the titlebar and the ribbon when using basic theme
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         mspaint.exe
@@ -42,6 +42,12 @@ tab and add it to the Custom process inclusion list.
 #include <windhawk_utils.h>
 #include <uxtheme.h>
 
+#ifdef _WIN64
+#   define THISCALL_STR L"__cdecl"
+#else
+#   define THISCALL_STR L"__thiscall"
+#endif
+
 thread_local bool g_fReflowing = false;
 
 using GetSystemMetricsForDpi_t = decltype(&GetSystemMetricsForDpi);
@@ -60,8 +66,8 @@ int WINAPI GetSystemMetricsForDpi_hook(int nIndex, UINT dpi)
     return GetSystemMetricsForDpi_orig(nIndex, dpi);
 }
 
-void (*TBS_DockReflowAsNeeded_orig)(class TBS *);
-void TBS_DockReflowAsNeeded_hook(class TBS *pThis)
+void (__thiscall *TBS_DockReflowAsNeeded_orig)(class TBS *);
+void __thiscall TBS_DockReflowAsNeeded_hook(class TBS *pThis)
 {
     g_fReflowing = true;
     TBS_DockReflowAsNeeded_orig(pThis);
@@ -71,7 +77,9 @@ void TBS_DockReflowAsNeeded_hook(class TBS *pThis)
 const WindhawkUtils::SYMBOL_HOOK uiRibbonDllHooks[] = {
     {
         {
-            L"private: void __cdecl TBS::DockReflowAsNeeded(void)"
+            L"private: void "
+            THISCALL_STR
+            L" TBS::DockReflowAsNeeded(void)"
         },
         &TBS_DockReflowAsNeeded_orig,
         TBS_DockReflowAsNeeded_hook,
