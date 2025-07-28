@@ -220,7 +220,7 @@
                 "published": 1753287072000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1753287072000,
+                "updated": 1753737599000,
                 "users": 35
             },
             "metadata": {
@@ -239,7 +239,7 @@
                     "WLXPhotoGallery.exe"
                 ],
                 "name": "Basic/Classic Theme Ribbon Fix",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "basic-themer": {

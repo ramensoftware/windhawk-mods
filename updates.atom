@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-28T18:05:28.000Z</updated>
+    <updated>2025-07-28T21:19:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Basic/Classic Theme Ribbon Fix 1.0.1]]></title>
+        <id>https://windhawk.net/mods/basic-classic-theme-ribbon-fix#9ba0fe243b66980020f35fd47cb302f63e03c09a</id>
+        <link href="https://windhawk.net/mods/basic-classic-theme-ribbon-fix"/>
+        <updated>2025-07-28T21:19:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix for x86-32 (thanks @kawapure)</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Old Task Manager 1.0.0]]></title>
         <id>https://windhawk.net/mods/win11-old-taskmgr#dfe8ee05c26b08a9084dcfe02b03b0f75aab3008</id>
@@ -349,24 +362,6 @@ from both Windows 8.x and Windows 10 1507-1803.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Prevent Focus Stealing 1.0.1]]></title>
-        <id>https://windhawk.net/mods/prevent-focus-stealing#07ca47be112f26803db61e862625f660a9f4a952</id>
-        <link href="https://windhawk.net/mods/prevent-focus-stealing"/>
-        <updated>2025-07-20T19:46:33.000Z</updated>
-        <content type="html"><![CDATA[<p>Reimplemented support for "Never Focus" setting and made changes to settings be applied to existing windows</p>
-<ul>
-<li>Reimplemented support for "Never Focus" setting which was forgotten during overhaul</li>
-<li>"Never Focus" only prevents the app from focusing itself, while allowing manual activation by the user</li>
-<li>Changes to settings are now applied to existing window and not only new windows</li>
-<li>Titles are rechecked on late load in case reload happened between window creation and title being set</li>
-<li>Fixed timestamp being truncated after 49 days uptime on 32 bit systems</li>
-</ul>]]></content>
-        <author>
-            <name>bawNg</name>
-            <uri>https://github.com/bawNg</uri>
         </author>
     </entry>
 </feed>
