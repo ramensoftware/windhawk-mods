@@ -4992,6 +4992,29 @@
                 "version": "1.0.0"
             }
         },
+        "win11-old-taskmgr": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753725928000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753725928000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Always use the Windows 8/10 styled Task Manager on Windows 11",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "taskmgr.exe"
+                ],
+                "name": "Windows 11 Old Task Manager",
+                "version": "1.0.0"
+            }
+        },
         "win32-tray-clock-experience": {
             "details": {
                 "defaultSorting": 7580,
