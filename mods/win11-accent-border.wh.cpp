@@ -2,7 +2,7 @@
 // @id              win11-accent-border
 // @name            Windows 11 Accent Window Border
 // @description     Show the accent color on the border but not on the titlebar
-// @version         1.0.0
+// @version         1.0.1
 // @author          Guerra24
 // @github          https://github.com/Guerra24
 // @include         *
@@ -39,11 +39,23 @@ COLORREF BorderActive;
 COLORREF BorderInactive = 0x000000;
 const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
 
+void LoadColors() {
+    DWORD color;
+    DWORD colorSize = sizeof(color);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", RRF_RT_REG_DWORD, NULL, &color, &colorSize);
+
+    BorderActive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
+
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColorInactive", RRF_RT_REG_DWORD, NULL, &color, &colorSize) == ERROR_SUCCESS) {
+        BorderInactive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
+    }
+}
+
 void SetBorderColor(HWND hWnd, BOOL activate)
 {
     DWORD dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
     //Better exclude context menus
-    if ((dwStyle & WS_CAPTION) != WS_CAPTION)
+    if ((dwStyle & WS_THICKFRAME) != WS_THICKFRAME && (dwStyle & WS_CAPTION) != WS_CAPTION)
     {
         return;
     }
@@ -69,6 +81,10 @@ LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         case WM_NCACTIVATE:
             SetBorderColor(hWnd, wParam);
         break;
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            LoadColors();
+            SetBorderColor(hWnd, GetForegroundWindow() == hWnd);
+        break;
     }
 
     return result;
@@ -84,6 +100,10 @@ LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         case WM_ACTIVATE:
         case WM_NCACTIVATE:
             SetBorderColor(hWnd, wParam);
+        break;
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            LoadColors();
+            SetBorderColor(hWnd, GetForegroundWindow() == hWnd);
         break;
     }
 
@@ -142,7 +162,7 @@ BOOL CALLBACK DisableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
     if (pid == wPid) {
         DWORD dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
         //Better exclude context menus
-        if ((dwStyle & WS_CAPTION) == WS_CAPTION)
+        if ((dwStyle & WS_THICKFRAME) == WS_THICKFRAME || (dwStyle & WS_CAPTION) == WS_CAPTION)
         {
             DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &ColorDefault, sizeof(ColorDefault));
         }
@@ -156,15 +176,7 @@ BOOL CALLBACK DisableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    DWORD color;
-    DWORD colorSize = sizeof(color);
-    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", RRF_RT_REG_DWORD, NULL, &color, &colorSize);
-
-    BorderActive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
-
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColorInactive", RRF_RT_REG_DWORD, NULL, &color, &colorSize) == ERROR_SUCCESS) {
-        BorderInactive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
-    }
+    LoadColors();
 
     EnumWindows(EnableEnumWindowsCallback, GetCurrentProcessId());
     
