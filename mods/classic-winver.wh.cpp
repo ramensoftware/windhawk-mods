@@ -844,7 +844,7 @@ void _InitAboutDlg(HWND hwnd, LPABOUT_PARAMS lpap)
         }
 
         szNumBuf1[0] = L'\0';
-        if (g_spszDebugString.get()[0])
+        if (wcscmp(g_spszDebugString.get(), L"USE_DEFAULT"))
         {
             wcscpy_s(szNumBuf1, g_spszDebugString.get());
         }
