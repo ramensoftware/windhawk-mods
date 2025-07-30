@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-30T02:49:54.000Z</updated>
+    <updated>2025-07-30T03:04:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Winver 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-winver#7c1f5a38df8f51277a6b4bb1d7bd0b0e408063c2</id>
+        <link href="https://windhawk.net/mods/classic-winver"/>
+        <updated>2025-07-30T03:04:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hide divider when no about bitmap in 7+ layout</li>
+<li>This behavior is accurate to the real implementation, and is
+especially needed since <code>BrandingLoadImage</code> is seemingly broken
+outside of <code>winver.exe</code> in recent Windows 11 builds</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Winver 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-winver#7968fb15fba2d062946d129a5d2a1e489e676c75</id>
@@ -377,19 +393,6 @@ connection by pinging target hosts and provides visual feedback.</p>
         <author>
             <name>ALMAS CP</name>
             <uri>https://github.com/almas-cp</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Basic Themer 1.1.1]]></title>
-        <id>https://windhawk.net/mods/basic-themer#6f365f998004d32f55343a583a7e8eff5ce2c0c6</id>
-        <link href="https://windhawk.net/mods/basic-themer"/>
-        <updated>2025-07-22T10:18:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix for Windows 11 24H2</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

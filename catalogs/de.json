@@ -1019,7 +1019,7 @@
                 "published": 1753843794000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1753843794000,
+                "updated": 1753844643000,
                 "users": 0
             },
             "metadata": {
@@ -1031,7 +1031,7 @@
                     "*"
                 ],
                 "name": "Classic Winver",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "clientedge-in-apps": {
