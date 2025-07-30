@@ -2,7 +2,7 @@
 // @id              classic-winver
 // @name            Classic Winver
 // @description     Allows you to restore the Winver dialog from various versions of Windows
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -672,6 +672,11 @@ void ApplyLayout(HWND hwnd, LPABOUT_PARAMS lpap)
     MoveChildren(hwnd, dx - lpap->sizeOffsetOld.cx, dy - lpap->sizeOffsetOld.cy);
     lpap->sizeOffsetOld.cx = dx;
     lpap->sizeOffsetOld.cy = dy;
+
+    ShowWindow(
+        GetDlgItem(hwnd, IDD_LINE_1),
+        lpap->hbmAbout ? SW_NORMAL : SW_HIDE
+    );
 }
 
 void _InitAboutDlg(HWND hwnd, LPABOUT_PARAMS lpap)
