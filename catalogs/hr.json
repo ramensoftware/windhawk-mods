@@ -1013,6 +1013,27 @@
                 "version": "0.3"
             }
         },
+        "classic-winver": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753843794000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753843794000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lshell32 -lversion -lgdi32 -lshlwapi -lntdll",
+                "description": "Allows you to restore the Winver dialog from various versions of Windows",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Winver",
+                "version": "1.0.0"
+            }
+        },
         "clientedge-in-apps": {
             "details": {
                 "defaultSorting": 2412,

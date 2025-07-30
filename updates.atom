@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-29T04:28:44.000Z</updated>
+    <updated>2025-07-30T02:49:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Winver 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-winver#7968fb15fba2d062946d129a5d2a1e489e676c75</id>
+        <link href="https://windhawk.net/mods/classic-winver"/>
+        <updated>2025-07-30T02:49:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicwinver">Classic Winver</h1>
+<p>This mod allows you to replace the Winver dialog with one from an older version of Windows
+and to customize certain things inside of it.</p>
+<h2 id="howtouse">How to use</h2>
+<p>You will need a copy of shell32.dll from the Windows version which you want to restore the about
+dialog from, and if you are using a version from Windows Vista or above, you will also need its MUI
+file (e.g. <code>en-US\shell32.dll.mui</code>). The following versions will also need extra files:</p>
+<ul>
+<li><strong>Windows XP SP1+</strong> needs <code>xpsp1res.dll</code> for the updated dialog layout. Otherwise, the layout from
+Windows XP RTM will be used.</li>
+<li><strong>Windows XP Professional x64 Edition</strong> and <strong>Windows Server 2003</strong> need <code>msgina.dll</code> for branding
+bitmaps. Otherwise, the dialog will fail to display.</li>
+</ul>
+<p>Once you have the necessary files, enter their paths into the mod's settings. From here you can
+configure the other options to your liking.</p>
+<h2 id="windows9xdialog">Windows 9x dialog</h2>
+<p>This mod replaces the dialog opened by the <code>ShellAbout</code> API, which is what Windows NT's <code>winver.exe</code> calls.
+If you want the Windows 9x Winver applet like the image below, you may use <a href="https://github.com/aubymori/winver9x">winver9x</a>
+alongside this mod.</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/winver9x/refs/heads/main/screenshot.png" alt="winver9x" /></p>
+<h2 id="brandingforvista">Branding for Vista+</h2>
+<p>If you are using a Vista+ dialog, and want to change the branding, this is the recommended method:</p>
+<ol>
+<li>Make sure you have the System CPL from Brawllux's <a href="https://winclassic.net/thread/1779/restoring-control-panel-pages-links">Control Panel Restoration Pack</a>,
+otherwise the System CPL page will be broken.</li>
+<li>Replace the following files with their counterparts from the version you want:</li>
+</ol>
+<ul>
+<li>The entire <code>%SystemRoot%\Branding</code> folder</li>
+<li><code>%SystemRoot%\System32\winbrand.dll</code></li>
+<li><code>%SystemRoot%\SysWOW64\winbrand.dll</code></li>
+</ul>
+<p><strong>NOTE</strong>: winbrand.dll from certain beta builds may fail to load, and in that case, you should instead
+use it from an adjacent retail build.</p>
+<h2 id="previews">Previews</h2>
+<p>| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/win95.png" alt="Windows 95" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/winnt4.png" alt="Windows NT 4.0" /> |
+|-|-|
+| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/winme.png" alt="Windows Me" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/win2k.png" alt="Windows 2000" /> |
+| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/winxp.png" alt="Windows XP" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/winsrv03.png" alt="Windows Server 2003" /> |
+| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/winvista.png" alt="Windows Vista" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/win7.png" alt="Windows 7" /> |
+| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/win8dp.png" alt="Windows 8 Developer Preview" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/win81.png" alt="Windows 8.1" /> |
+| <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/win10_1507.png" alt="Windows 10 1507" /> | <img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-winver/win10_1809.png" alt="Windows 10 1809" /> |</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.1]]></title>
         <id>https://windhawk.net/mods/win11-accent-border#8b3ae1b62a9a0eb64e21503f00ee2592631de301</id>
@@ -338,20 +390,6 @@ connection by pinging target hosts and provides visual feedback.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-multirow#cc47ad5150e1f7361c3ad8ffa166dbc8fa5488da</id>
-        <link href="https://windhawk.net/mods/taskbar-multirow"/>
-        <updated>2025-07-21T15:48:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod not working on some Windows 11 builds which have one of the hooked functions inlined.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
