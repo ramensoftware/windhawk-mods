@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-30T03:04:03.000Z</updated>
+    <updated>2025-07-30T03:41:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Winver Text Customizer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/winver-text-customizer#f20a09fdf5a22bd58df5487cd972749d22cbd403</id>
+        <link href="https://windhawk.net/mods/winver-text-customizer"/>
+        <updated>2025-07-30T03:41:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winvertextcustomizer">Winver Text Customizer</h1>
+<p>This mod customizes the text sent to the <code>ShellAbout</code> API by <code>winver.exe</code>. This is useful
+if you want to have a fake "evaluation copy" text, since that is only displayed by winver.exe
+and not other instances of <code>ShellAbout</code>.</p>
+<p><strong>Preview</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/winver-text-customizer.png" alt="Preview" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Winver 1.0.1]]></title>
         <id>https://windhawk.net/mods/classic-winver#7c1f5a38df8f51277a6b4bb1d7bd0b0e408063c2</id>
@@ -345,54 +361,6 @@ would be measured incorrectly due to limitations in scope of popular DWM mods.</
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Internet Status Indicator 0.7]]></title>
-        <id>https://windhawk.net/mods/internet-status-indicator#8c144cc61e4f31a8d9443ed84d19516b484bd09d</id>
-        <link href="https://windhawk.net/mods/internet-status-indicator"/>
-        <updated>2025-07-22T11:34:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="internetstatusindicator">Internet Status Indicator</h1>
-<p>A simple network monitoring mod that provides real-time connectivity status
-directly integrated into your system tray. This mod continuously monitors your internet
-connection by pinging target hosts and provides visual feedback.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Real-time monitoring</strong>: Continuous network connectivity checks</li>
-<li><strong>Simple ping-based checking</strong>: Pings primary host, falls back to secondary if needed</li>
-<li><strong>Customizable visual indicators</strong>: Choose colors and shapes for connected/disconnected states</li>
-<li><strong>Customizable settings</strong>: Configure check intervals, target hosts, and timeouts</li>
-<li><strong>Lightweight</strong>: Minimal system resource usage</li>
-<li><strong>Simple Bitmap Icons</strong>: Clean, reliable icon rendering</li>
-</ul>
-<h2 id="visualcustomization">Visual Customization</h2>
-<ul>
-<li><strong>Custom Colors</strong>: Set different colors for connected and disconnected states</li>
-<li><strong>Shape Options</strong>: Choose between circular and square icon shapes</li>
-<li><strong>Size Control</strong>: Adjust icon size to your preference</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The mod performs periodic connectivity checks by:</p>
-<ol>
-<li>Ping primary target host (default: 8.8.8.8)</li>
-<li>If primary fails, ping secondary host (default: 1.1.1.1)</li>
-<li>If either ping succeeds: Green icon (connected)</li>
-<li>If both pings fail: Red icon (disconnected)</li>
-</ol>
-<h2 id="usage">Usage</h2>
-<p>Once installed, the mod runs automatically and provides:</p>
-<ul>
-<li>Continuous background monitoring</li>
-<li>Log entries showing connectivity status</li>
-<li>Configurable check intervals and targets</li>
-<li>Customizable visual appearance</li>
-</ul>
-<p>Check the Windhawk log to see connectivity status updates in real-time.</p>
-<h2 id="note">Note</h2>
-<p>This mod runs as part of the windhawk.exe process for better stability and resource management.</p>]]></content>
-        <author>
-            <name>ALMAS CP</name>
-            <uri>https://github.com/almas-cp</uri>
         </author>
     </entry>
 </feed>

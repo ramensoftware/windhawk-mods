@@ -5322,6 +5322,27 @@
                 "name": "Winver Custom Text",
                 "version": "1.0"
             }
+        },
+        "winver-text-customizer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1753846865000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1753846865000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lshell32",
+                "description": "Customize the text sent to ShellAbout by winver.exe",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "winver.exe"
+                ],
+                "name": "Winver Text Customizer",
+                "version": "1.0.0"
+            }
         }
     }
 }
