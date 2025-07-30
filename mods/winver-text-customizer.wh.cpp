@@ -26,9 +26,9 @@ and not other instances of `ShellAbout`.
 /*
 - app: Windows
   $name: App
-  $description: The szApp parameter, which will show up in the titlebar. If the text contains a \#
+  $description: "The szApp parameter, which will show up in the titlebar. If the text contains a #
     separator, the first part will replace the whole title text, and the second part will replace the
-    first line of text.
+    first line of text."
 - other_stuff: ""
   $name: Other stuff
   $description: The szOtherStuff parameter, which will show up in the middle of the dialog.
