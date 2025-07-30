@@ -271,8 +271,6 @@ WINVERVERSION DetermineWinverVersion(VS_FIXEDFILEINFO *pVerInfo)
     WORD wMajor = HIWORD(pVerInfo->dwFileVersionMS);
     WORD wMinor = LOWORD(pVerInfo->dwFileVersionMS);
 
-    Wh_Log(L"%u.%u", wMajor, wMinor);
-
     // shell32.dll's version from 98 through XP is weird in that it seems to follow
     // the Internet Explorer version instead of the OS version. This means the
     // following shell32.dll versions are mismatched from their OS versions:
@@ -1388,7 +1386,6 @@ INT WINAPI ShellAboutW_hook(HWND hWnd, LPCWSTR szApp, LPCWSTR szOtherStuff, HICO
     }
 
     g_winverVersion = DetermineWinverVersion(pVerInfo);
-    Wh_Log(L"%d", g_winverVersion);
     if (g_winverVersion == WVV_UNKNOWN)
     {
         WCHAR szMessage[256];
