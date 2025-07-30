@@ -2,7 +2,7 @@
 // @id              classic-winver
 // @name            Classic Winver
 // @description     Allows you to restore the Winver dialog from various versions of Windows
-// @version         1.0.1
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -79,8 +79,11 @@ use it from an adjacent retail build.
     Only displayed in Windows Vista style and before."
 - system_resources_free: -1
   $name: System resources free
-  $description: "The percentage of system resources free to display in the about dialog. Use -1 to get the
-    actual value. Only displayed in Windows 95, 98, and Me styles."
+  $description: The percentage of system resources free to display in the about dialog. Use -1 to get the
+    actual value. Only displayed in Windows 9x and Me styles.
+- version_text: Windows 95
+  $name: Version text
+  $description: The version text to display in the about dialog. Only displayed in Windows 9x and Me styles.
 - branding: professional
   $name: Branding
   $description: "Which branding bitmaps to use. This only applies on the Windows XP style.
@@ -112,15 +115,15 @@ use it from an adjacent retail build.
 - major_version: -1
   $name: Major version
   $description: The major version to display in the about dialog. Use -1 to get the actual value. Won't
-    display in Windows 95, 98, Me, and 10 styles.
+    display in Windows 9x, Me, and 10 styles.
 - minor_version: -1
   $name: Minor version
   $description: The minor version to display in the about dialog. Use -1 to get the actual value. Won't
-    display in Windows 95, 98, Me, and 10 styles.
+    display in Windows 9x, Me, and 10 styles.
 - build_number: -1
   $name: Build number
   $description: The build number to display in the about dialog. Use -1 to get the actual value. Won't
-    display in Windows 95, 98, Me, and 10 styles.
+    display in Windows 9x, Me, and 10 styles.
 - ubr: -1
   $name: Sub-build number
   $description: The sub-build number to display in the About dialog. Use -1 to get the actual value. Only
@@ -136,11 +139,11 @@ use it from an adjacent retail build.
 - csd_version: USE_DEFAULT
   $name: CSD version
   $description: The CSD version (service pack string) to display in the about dialog. Use "USE_DEFAULT"
-    to get the actual value. Won't display in Windows 95, 98, Me, and 10 styles.
+    to get the actual value. Won't display in Windows 9x, Me, and 10 styles.
 - debug_string: USE_DEFAULT
   $name: Debug string
   $description: The debug string to display in the about dialog. Use "USE_DEFAULT"
-    to get the actual value. Won't display in Windows 95, 98, and Me styles.
+    to get the actual value. Won't display in Windows 9x, and Me styles.
 */
 // ==/WindhawkModSettings==
 
@@ -224,8 +227,7 @@ HMODULE g_hmMSGina   = NULL;
 enum WINVERVERSION
 {
     WVV_UNKNOWN = 0,
-    WVV_WIN95,
-    WVV_WIN98,
+    WVV_WIN9X,
     WVV_WINNT4,
     WVV_WINME,
     WVV_WIN2K,
@@ -261,7 +263,7 @@ bool  g_fUseBuildLabEx        = false;
 WindhawkUtils::StringSetting
     g_spszShellDllPath, g_spszXPSP1ResDllPath, g_spszMSGinaDllPath,
     g_spszCopyrightYears, g_spszDisplayVersion, g_spszBuildLab, g_spszTopLineText,
-    g_spszDebugString;
+    g_spszDebugString, g_spszVersionText;
 
 // From the shell DLL's version info, determine which version of Winver the user wants
 WINVERVERSION DetermineWinverVersion(VS_FIXEDFILEINFO *pVerInfo)
@@ -269,31 +271,35 @@ WINVERVERSION DetermineWinverVersion(VS_FIXEDFILEINFO *pVerInfo)
     WORD wMajor = HIWORD(pVerInfo->dwFileVersionMS);
     WORD wMinor = LOWORD(pVerInfo->dwFileVersionMS);
 
+    Wh_Log(L"%u.%u", wMajor, wMinor);
+
     // shell32.dll's version from 98 through XP is weird in that it seems to follow
     // the Internet Explorer version instead of the OS version. This means the
     // following shell32.dll versions are mismatched from their OS versions:
     //
-    // OS         | OS version | shell32.dll version
-    // -----------+------------+--------------------
-    // Windows 98 | 4.10       | 4.72
-    // Windows Me | 4.90       | 5.50
-    // Windows XP | 5.1/5.2    | 6.0
+    // OS                                        | OS version | shell32.dll version
+    // ------------------------------------------+------------+--------------------
+    // Windows 95 and NT 4.0 with desktop update | 4.0        | 4.72
+    // Windows 98                                | 4.10       | 4.72
+    // Windows Me                                | 4.90       | 5.50
+    // Windows XP                                | 5.1/5.2    | 6.0
     switch (wMajor)
     {
         case 4:
+            // Pre-desktop update Windows 95/NT4 shell DLL
             if (wMinor == 0)
             {
                 if (pVerInfo->dwFileOS & VOS_NT)
                     return WVV_WINNT4;
                 else
-                    return WVV_WIN95;
+                    return WVV_WIN9X;
             }
-            // 98's shell32.dll has VOS_NT set for some reason.
-            // Luckily, we are able to distinguish it from 95 and
-            // NT4 by its minor version not being 0.
+            // IE4 shell DLL, which can be either from Windows 95 or NT 4.0 with
+            // the desktop update, as well as Windows 98. These all have VOS_NT set,
+            // so we have to distinguish NT and 9x by dialog layout. See _InitAboutDlg.
             else
             {
-                return WVV_WIN98;
+                return WVV_WIN9X;
             }
             break;
         case 5:
@@ -564,9 +570,8 @@ void LoadAboutBitmaps(LPABOUT_PARAMS lpap)
 
     switch (g_winverVersion)
     {
-        case WVV_WIN95:
+        case WVV_WIN9X:
         case WVV_WINNT4:
-        case WVV_WIN98:
             // The Windows logo is only shown with no app icon
             if (!lpap->hIcon)
                 lpap->hbmAbout = (HBITMAP)LoadImageW(g_hmShell, MAKEINTRESOURCE(IDB_WINDOWS),
@@ -687,6 +692,15 @@ void _InitAboutDlg(HWND hwnd, LPABOUT_PARAMS lpap)
     WCHAR szMessage[200];
     WCHAR szNumBuf1[32];
 
+    // If we have a IE4 shell DLL, we can't determine whether it's from 9x or NT
+    // based on version information alone, so we check for the presence of the
+    // "System Resources" dialog item (only present on 9x) to determine if we're
+    // 9x or NT.
+    if ((g_winverVersion == WVV_WIN9X) && !GetDlgItem(hwnd, IDD_EMSFREE))
+    {
+        g_winverVersion = WVV_WINNT4;
+    }
+
     lpap->dpiWindow = GetDpiForWindow(hwnd);
 
     // If you have a string like test1#test2, then the dialog's title will be
@@ -773,24 +787,9 @@ void _InitAboutDlg(HWND hwnd, LPABOUT_PARAMS lpap)
         }
     }
 
-    // These strings were grabbed from the registry in real 9x,
-    // so I seriously doubt they were ever localized. We'll just store
-    // them in static data here.
-    LPCWSTR pszVersion = nullptr;
-    switch (g_winverVersion)
-    {
-        case WVV_WIN95:
-            pszVersion = L"Windows 95";
-            break;
-        case WVV_WIN98:
-            pszVersion = L"Windows 98";
-            break;
-        case WVV_WINME:
-            pszVersion = L"Windows Millennium Edition";
-            break;
-    }
-    if (pszVersion)
-        SetDlgItemTextW(hwnd, IDD_VERSION, pszVersion);
+    // Version text (e.g. Windows 95) for 9x versions
+    if (g_winverVersion == WVV_WIN9X || g_winverVersion == WVV_WINME)
+        SetDlgItemTextW(hwnd, IDD_VERSION, g_spszVersionText.get());
 
     // Legacy NT version text, e.g. Version 4.0 (Build 1381: Service Pack 6)
     if ((g_winverVersion == WVV_WINNT4 || g_winverVersion >= WVV_WIN2K)
@@ -1389,6 +1388,7 @@ INT WINAPI ShellAboutW_hook(HWND hWnd, LPCWSTR szApp, LPCWSTR szOtherStuff, HICO
     }
 
     g_winverVersion = DetermineWinverVersion(pVerInfo);
+    Wh_Log(L"%d", g_winverVersion);
     if (g_winverVersion == WVV_UNKNOWN)
     {
         WCHAR szMessage[256];
@@ -1532,6 +1532,7 @@ void Wh_ModSettingsChanged(void)
     g_spszBuildLab        = WindhawkUtils::StringSetting::make(L"build_lab");
     g_spszTopLineText     = WindhawkUtils::StringSetting::make(L"top_line_text");
     g_spszDebugString     = WindhawkUtils::StringSetting::make(L"debug_string");
+    g_spszVersionText     = WindhawkUtils::StringSetting::make(L"version_text");
 
     g_dwPhysicalMemory      = Wh_GetIntSetting(L"physical_memory");
     g_dwSystemResourcesFree = Wh_GetIntSetting(L"system_resources_free");
