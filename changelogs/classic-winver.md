@@ -1,3 +1,8 @@
+## 1.1.0 ([Jul 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/08e6aef365b0d283169ceff6c0c030ad2a02a3ef/mods/classic-winver.wh.cpp))
+
+- Improve detection for 95/98/NT4 to account for IE4 desktop update shell32.dll
+  - This unfortunately means that users must enter the version text for 95 and 98, as distinction between the two is impossible
+
 ## 1.0.1 ([Jul 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7c1f5a38df8f51277a6b4bb1d7bd0b0e408063c2/mods/classic-winver.wh.cpp))
 
 - Hide divider when no about bitmap in 7+ layout

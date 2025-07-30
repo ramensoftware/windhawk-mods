@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-30T11:32:53.000Z</updated>
+    <updated>2025-07-30T19:00:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Winver 1.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-winver#08e6aef365b0d283169ceff6c0c030ad2a02a3ef</id>
+        <link href="https://windhawk.net/mods/classic-winver"/>
+        <updated>2025-07-30T19:00:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improve detection for 95/98/NT4 to account for IE4 desktop update shell32.dll</li>
+<li>This unfortunately means that users must enter the version text for 95 and 98, as distinction between the two is impossible</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Titlebar For Everyone 0.3]]></title>
         <id>https://windhawk.net/mods/titlebar-for-everyone#226d5af2bcff4c184875285a0f775e81242969fb</id>
@@ -333,29 +347,6 @@ style will always be used.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Basic/Classic Theme Ribbon Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/basic-classic-theme-ribbon-fix#e8dd2fc1044b1bc14cdd5c78dc3203d62b52c4f8</id>
-        <link href="https://windhawk.net/mods/basic-classic-theme-ribbon-fix"/>
-        <updated>2025-07-23T16:11:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="basicclassicthemeribbonfix">Basic/Classic Theme Ribbon Fix</h1>
-<p>Starting with Windows 8, UIRibbon does not consider DWM being off (basic/classic theme)
-and will always add a vertical spacer for the DWM titlebar. This mod removes that and
-makes UIRibbon look nice on basic/classic again.</p>
-<h2 id="notice">Notice</h2>
-<p>This mod injects into Windows Explorer, Paint, WordPad, Windows Style Builder, and the
-Windows Live 2012 Essentials by default, which should cover most cases. If you use 
-another application that uses the built-in UIRibbon framework, go to this mod's Advanced
-tab and add it to the Custom process inclusion list.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/basic-classic-theme-ribbon-fix/before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/basic-classic-theme-ribbon-fix/after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
