@@ -4479,7 +4479,7 @@
                 "published": 1749306524000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1751178158000,
+                "updated": 1753875173000,
                 "users": 131
             },
             "metadata": {
@@ -4511,11 +4511,12 @@
                     "mspub.exe",
                     "hwp.exe",
                     "Photos.exe",
-                    "MuseScore*.exe"
+                    "MuseScore*.exe",
+                    "ms-teams.exe"
                 ],
                 "name": "Titlebar For Everyone",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.2"
+                "version": "0.3"
             }
         },
         "tortoisegit-progress-animation-background-fix": {
