@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              hide-pin
 // @name            Hide Pin (in Explorer Navigation Pane)
-// @description     Hides pin icon in Explorer navigation pane
+// @description     Hides pin icons in File Explorer navigation pane
 // @version         1.0
 // @author          @danalec
 // @github          https://github.com/danalec
@@ -11,12 +11,13 @@
 // ==WindhawkModReadme==
 /*
 Removes pin icons from File Explorer's navigation pane by intercepting the tree view's item state queries.
+
+![Screenshot](https://i.imgur.com/cv5tsUn.png)
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <commctrl.h>
-#include <richedit.h>
 
 typedef LRESULT (WINAPI *SendMessageW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 SendMessageW_t SendMessageW_Original;
@@ -44,6 +45,21 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPar
         }
     }
     
+    if (Msg == TVM_SETIMAGELIST && wParam == TVSIL_STATE) {
+        wchar_t className[256];
+        if (GetClassNameW(hWnd, className, 256)) {
+            if (wcsicmp(className, WC_TREEVIEW) == 0 || wcsicmp(className, L"SysTreeView32") == 0) {
+                wchar_t parentClass[256];
+                HWND hParent = GetParent(hWnd);
+                if (hParent && GetClassNameW(hParent, parentClass, 256)) {
+                    if (wcsstr(parentClass, L"SHELLDLL_DefView") || wcsstr(parentClass, L"NamespaceTreeControl")) {
+                        return 0;
+                    }
+                }
+            }
+        }
+    }
+    
     return SendMessageW_Original(hWnd, Msg, wParam, lParam);
 }
 
@@ -66,39 +82,6 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
     return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
 }
 
-WNDPROC g_originalTreeWndProc = nullptr;
-
-LRESULT CALLBACK TreeViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == TVM_SETIMAGELIST && wParam == TVSIL_STATE) {
-        return 0;
-    }
-    
-    return CallWindowProc(g_originalTreeWndProc, hWnd, uMsg, wParam, lParam);
-}
-
-typedef HWND (WINAPI *CreateWindowExW_t)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
-CreateWindowExW_t CreateWindowExW_Original;
-
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    
-    if (hWnd && lpClassName && !IsBadReadPtr(lpClassName, sizeof(WCHAR))) {
-        if (wcsicmp(lpClassName, WC_TREEVIEW) == 0 || 
-            wcsicmp(lpClassName, L"SysTreeView32") == 0) {
-            wchar_t parentClass[256];
-            HWND hParent = GetParent(hWnd);
-            if (hParent && GetClassNameW(hParent, parentClass, 256)) {
-                if (wcsstr(parentClass, L"SHELLDLL_DefView") || 
-                    wcsstr(parentClass, L"NamespaceTreeControl")) {
-                    g_originalTreeWndProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)TreeViewSubclassProc);
-                }
-            }
-        }
-    }
-    
-    return hWnd;
-}
-
 BOOL Wh_ModInit() {
     Wh_SetFunctionHook(
         (void*)GetProcAddress(GetModuleHandle(L"user32.dll"), "SendMessageW"),
@@ -112,14 +95,7 @@ BOOL Wh_ModInit() {
         (void**)&DefWindowProcW_Original
     );
     
-    Wh_SetFunctionHook(
-        (void*)GetProcAddress(GetModuleHandle(L"user32.dll"), "CreateWindowExW"),
-        (void*)CreateWindowExW_Hook,
-        (void**)&CreateWindowExW_Original
-    );
-    
     return TRUE;
 }
 
-void Wh_ModUninit() {
-}
+void Wh_ModUninit() {}
