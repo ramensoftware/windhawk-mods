@@ -1,3 +1,8 @@
+## 1.4 ([Jul 31, 2025](https://github.com/ramensoftware/windhawk-mods/blob/24c3603d57434f17cfbe74185eaf7326852d4121/mods/uxtheme-hook.wh.cpp))
+
+- fix arm64 support
+- remove buggy DUI control panel header fix
+
 ## 1.3 ([Apr 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f72d105e2420a3d9145edf8ce3756f12cd0dce0c/mods/uxtheme-hook.wh.cpp))
 
 - Prevent launching settings on theme apply

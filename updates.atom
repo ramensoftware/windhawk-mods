@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-30T19:00:49.000Z</updated>
+    <updated>2025-07-31T19:07:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[UXTheme hook 1.4]]></title>
+        <id>https://windhawk.net/mods/uxtheme-hook#24c3603d57434f17cfbe74185eaf7326852d4121</id>
+        <link href="https://windhawk.net/mods/uxtheme-hook"/>
+        <updated>2025-07-31T19:07:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>fix arm64 support</li>
+<li>remove buggy DUI control panel header fix</li>
+</ul>]]></content>
+        <author>
+            <name>rounk-ctrl</name>
+            <uri>https://github.com/rounk-ctrl</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Winver 1.1.0]]></title>
         <id>https://windhawk.net/mods/classic-winver#08e6aef365b0d283169ceff6c0c030ad2a02a3ef</id>
@@ -328,21 +342,6 @@ style will always be used.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
 <li>Added a note about the "Taskbar tray icon spacing and grid" mod for having multiple rows of tray icons.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#9d0606f5ffee0316c36fe9b2c5e3a780b8f40ab8</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
-        <updated>2025-07-23T16:43:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to have a grid of tray icons. This was a frequently requested option for <strong>Vertical Taskbar for Windows 11</strong> and <strong>Multirow taskbar for Windows 11</strong>. This mod can now be used together with those other mods for the tray icons grid option.</li>
-<li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
