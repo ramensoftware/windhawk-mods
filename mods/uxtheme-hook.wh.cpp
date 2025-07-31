@@ -60,7 +60,6 @@ the colors in control panel might be weird sometimes. works fine if you leave co
 #define STDCALL  __thiscall
 #define SSTDCALL L"__thiscall"
 #endif
-typedef unsigned long QWORD;
 
 struct {
     bool preventSettings;
@@ -136,7 +135,7 @@ BOOL Wh_ModInit() {
 
     for (int i = 0; i < int(ARRAYSIZE(files)); ++i)
     {
-        HMODULE hMod = LoadLibrary(files[i]);
+        HMODULE hMod = LoadLibraryEx(files[i], NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!WindhawkUtils::HookSymbols(hMod, hooks, ARRAYSIZE(hooks)))
         {
             Wh_Log(L"Failed to hook one or more symbol functions from %s", files[i]);
