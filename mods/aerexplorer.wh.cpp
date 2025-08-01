@@ -2,7 +2,7 @@
 // @id              aerexplorer
 // @name            Aerexplorer
 // @description     Various tweaks for Windows Explorer to make it more like older versions.
-// @version         1.8.0
+// @version         1.8.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -2356,7 +2356,15 @@ void THISCALL CSplitButton__UpdateDisplay_hook(
 )
 {
     if (settings.cmdbaricons)
-        CSplitButton_UpdateIcon_orig(pThis, ExplorerCommandItem_iconIndex(pItem));
+    {
+        int nIndex = ExplorerCommandItem_iconIndex(pItem);
+        // The "Open" command on EXE files has no icon, unlike Vista.
+        // If that's the case, just grab the default document icon (the
+        // blank page)
+        if (nIndex == -1)
+            nIndex = Shell_GetCachedImageIndexW(L"shell32.dll", -1, 0);
+        CSplitButton_UpdateIcon_orig(pThis, nIndex);
+    }
     CSplitButton__UpdateDisplay_orig(pThis, pItem);
 }
 
@@ -3142,14 +3150,13 @@ BOOL Wh_ModInit(void)
     LOAD_FUNCTION(propsys, VariantToBuffer)
 
     LOAD_MODULE(ExplorerFrame)
-    HOOK_SYMBOLS(ExplorerFrame, explorerframeDllHooks)
-
     VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(ExplorerFrame, nullptr);
     if (!pVerInfo || HIWORD(pVerInfo->dwFileVersionLS) > 21332)
     {
         Wh_Log(L"Rejecting invalid or Windows 11 ExplorerFrame.dll");
         return FALSE;
     }
+    HOOK_SYMBOLS(ExplorerFrame, explorerframeDllHooks)
 
     LOAD_MODULE(shell32)
     HOOK_SYMBOLS(shell32, shell32DllHooks)
