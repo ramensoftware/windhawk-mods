@@ -92,7 +92,7 @@ Feel free to try it on other versions, but it may not work.
   $description: Dropdown icon width in address bar. Address toolbar sizing must be set to "Custom".
 - refreshwidth: 25
   $name: Refresh icon width
-  $description: Refresh icon widFth in address bar. Address toolbar sizing must be set to "Custom".
+  $description: Refresh icon width in address bar. Address toolbar sizing must be set to "Custom".
 - oldsearch: true
   $name: Old search box
   $description: Disable the EdgeHTML-based search box and use the old one instead. You must enable this option to fix the bug where the placeholder disappears.
