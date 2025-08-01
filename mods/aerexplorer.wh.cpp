@@ -92,7 +92,7 @@ Feel free to try it on other versions, but it may not work.
   $description: Dropdown icon width in address bar. Address toolbar sizing must be set to "Custom".
 - refreshwidth: 25
   $name: Refresh icon width
-  $description: Refresh icon width in address bar. Address toolbar sizing must be set to "Custom".
+  $description: Refresh icon widFth in address bar. Address toolbar sizing must be set to "Custom".
 - oldsearch: true
   $name: Old search box
   $description: Disable the EdgeHTML-based search box and use the old one instead. You must enable this option to fix the bug where the placeholder disappears.
@@ -3145,9 +3145,9 @@ BOOL Wh_ModInit(void)
     HOOK_SYMBOLS(ExplorerFrame, explorerframeDllHooks)
 
     VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(ExplorerFrame, nullptr);
-    if (HIWORD(pVerInfo->dwFileVersionLS) > 21332)
+    if (!pVerInfo || HIWORD(pVerInfo->dwFileVersionLS) > 21332)
     {
-        Wh_Log(L"Rejecting Windows 11 ExplorerFrame.dll");
+        Wh_Log(L"Rejecting invalid or Windows 11 ExplorerFrame.dll");
         return FALSE;
     }
 
