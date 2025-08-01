@@ -1,3 +1,12 @@
+## 1.8.0 ([Aug 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6944547fe6da8b6465a3cc6d1d000458e0fe0dd7/mods/aerexplorer.wh.cpp))
+
+- Fixes for classic theme
+  - NOTE: Arrows not showing on the navigation pane is a bug in comctl32.dll that will probably be fixed in a separate mod at another time.
+- Use `LoadLibraryExW` with `LOAD_LIBRARY_SEARCH_SYSTEM32` (#2063)
+- Option for "Views" dropdown on left like Windows Vista
+- Option for icons on all command bar items like Windows Vista
+- Reject ExplorerFrame.dll with a build number higher than 21332 (#1618)
+
 ## 1.7.1 ([Jun 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7f4839438dad587631cb7478c5c122417f3a5e95/mods/aerexplorer.wh.cpp))
 
 - Fix a crash caused by a missing null terminator in the navbar theme class name

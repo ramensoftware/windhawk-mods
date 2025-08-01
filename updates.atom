@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-07-31T19:07:53.000Z</updated>
+    <updated>2025-08-01T17:06:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.8.0]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#6944547fe6da8b6465a3cc6d1d000458e0fe0dd7</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2025-08-01T17:06:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixes for classic theme</li>
+<li>NOTE: Arrows not showing on the navigation pane is a bug in comctl32.dll that will probably be fixed in a separate mod at another time.</li>
+<li>Use <code>LoadLibraryExW</code> with <code>LOAD_LIBRARY_SEARCH_SYSTEM32</code> (#2063)</li>
+<li>Option for "Views" dropdown on left like Windows Vista</li>
+<li>Option for icons on all command bar items like Windows Vista</li>
+<li>Reject ExplorerFrame.dll with a build number higher than 21332 (#1618)</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[UXTheme hook 1.4]]></title>
         <id>https://windhawk.net/mods/uxtheme-hook#24c3603d57434f17cfbe74185eaf7326852d4121</id>
@@ -328,20 +346,6 @@ style will always be used.</p>]]></content>
 <li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
 <li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
 <li>Fixed start menu layout becoming broken when settings are changed in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-multirow#d1838a84bcfebc3c645250ae9dac8fdb7aa55e21</id>
-        <link href="https://windhawk.net/mods/taskbar-multirow"/>
-        <updated>2025-07-23T17:15:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
-<li>Added a note about the "Taskbar tray icon spacing and grid" mod for having multiple rows of tray icons.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
