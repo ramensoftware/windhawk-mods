@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-01T17:06:43.000Z</updated>
+    <updated>2025-08-01T18:54:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.8.1]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#35441a23d1531df1b1c756e76b67091a71e3e020</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2025-08-01T18:54:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hook <code>ExplorerFrame.dll</code> symbols <em>after</em> checking its version</li>
+<li>Fix the "Open" command for EXE files not having an icon with the Command bar icons option enabled</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Aerexplorer 1.8.0]]></title>
         <id>https://windhawk.net/mods/aerexplorer#6944547fe6da8b6465a3cc6d1d000458e0fe0dd7</id>
@@ -331,21 +345,6 @@ style will always be used.</p>]]></content>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the weather widget not being affected by the mod for Windows 11 builds with the dynamic icon sizes option.</li>
 <li>Fixed badge icons being displayed as dots when icons with size 16 are used.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.2.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#5c7369abff574388214084b4d8ac46fa78e11279</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2025-07-23T20:49:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-<li>Fixed start menu layout becoming broken when settings are changed in some cases.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

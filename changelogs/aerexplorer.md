@@ -1,3 +1,8 @@
+## 1.8.1 ([Aug 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/35441a23d1531df1b1c756e76b67091a71e3e020/mods/aerexplorer.wh.cpp))
+
+- Hook `ExplorerFrame.dll` symbols *after* checking its version
+- Fix the "Open" command for EXE files not having an icon with the Command bar icons option enabled
+
 ## 1.8.0 ([Aug 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6944547fe6da8b6465a3cc6d1d000458e0fe0dd7/mods/aerexplorer.wh.cpp))
 
 - Fixes for classic theme
