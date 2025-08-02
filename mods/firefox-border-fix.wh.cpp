@@ -25,7 +25,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     GetClassName(hWnd, lpClassName, 50);
 
     if (!wcscmp(lpClassName, L"MozillaWindowClass"))
-        {SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL);}
+        SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL);
 
     return ShowWindow_Orig(hWnd, nCmdShow);
 }
