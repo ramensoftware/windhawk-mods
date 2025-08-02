@@ -18,7 +18,20 @@ Removes pin icons from File Explorer's navigation pane by intercepting the tree 
 
 #include <windows.h>
 #include <commctrl.h>
-#include <vector>
+
+typedef BOOL (WINAPI *SetWindowSubclass_t)(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+typedef BOOL (WINAPI *RemoveWindowSubclass_t)(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass);
+typedef LRESULT (WINAPI *DefSubclassProc_t)(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+SetWindowSubclass_t pSetWindowSubclass;
+RemoveWindowSubclass_t pRemoveWindowSubclass;
+DefSubclassProc_t pDefSubclassProc;
+
+#define SetWindowSubclass pSetWindowSubclass
+#define RemoveWindowSubclass pRemoveWindowSubclass
+#define DefSubclassProc pDefSubclassProc
+
+#include <windhawk_utils.h>
 
 typedef LRESULT (WINAPI *SendMessageW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 SendMessageW_t SendMessageW_Original;
@@ -68,30 +81,12 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
     return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
 }
 
-struct SubclassedWindow {
-    HWND hWnd;
-    WNDPROC originalProc;
-};
-
-std::vector<SubclassedWindow> g_subclassedWindows;
-CRITICAL_SECTION g_cs;
-
-LRESULT CALLBACK TreeViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK TreeViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == TVM_SETIMAGELIST && wParam == TVSIL_STATE) {
         return 0;
     }
     
-    EnterCriticalSection(&g_cs);
-    for (const auto& window : g_subclassedWindows) {
-        if (window.hWnd == hWnd) {
-            WNDPROC originalProc = window.originalProc;
-            LeaveCriticalSection(&g_cs);
-            return CallWindowProc(originalProc, hWnd, uMsg, wParam, lParam);
-        }
-    }
-    LeaveCriticalSection(&g_cs);
-    
-    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 typedef HWND (WINAPI *CreateWindowExW_t)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
@@ -108,11 +103,8 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
             if (hParent && GetClassNameW(hParent, parentClass, 256)) {
                 if (wcsstr(parentClass, L"SHELLDLL_DefView") || 
                     wcsstr(parentClass, L"NamespaceTreeControl")) {
-                    WNDPROC originalProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)TreeViewSubclassProc);
-                    if (originalProc) {
-                        EnterCriticalSection(&g_cs);
-                        g_subclassedWindows.push_back({hWnd, originalProc});
-                        LeaveCriticalSection(&g_cs);
+                    if (pSetWindowSubclass) {
+                        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TreeViewSubclassProc, 0);
                     }
                 }
             }
@@ -123,7 +115,16 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 }
 
 BOOL Wh_ModInit() {
-    InitializeCriticalSection(&g_cs);
+    HMODULE hComctl32 = GetModuleHandle(L"comctl32.dll");
+    if (!hComctl32) {
+        hComctl32 = LoadLibrary(L"comctl32.dll");
+    }
+    
+    if (hComctl32) {
+        pSetWindowSubclass = (SetWindowSubclass_t)GetProcAddress(hComctl32, "SetWindowSubclass");
+        pRemoveWindowSubclass = (RemoveWindowSubclass_t)GetProcAddress(hComctl32, "RemoveWindowSubclass");
+        pDefSubclassProc = (DefSubclassProc_t)GetProcAddress(hComctl32, "DefSubclassProc");
+    }
     
     Wh_SetFunctionHook(
         (void*)GetProcAddress(GetModuleHandle(L"user32.dll"), "SendMessageW"),
@@ -146,15 +147,4 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    EnterCriticalSection(&g_cs);
-    for (const auto& window : g_subclassedWindows) {
-        if (IsWindow(window.hWnd)) {
-            SetWindowLongPtr(window.hWnd, GWLP_WNDPROC, (LONG_PTR)window.originalProc);
-        }
-    }
-    g_subclassedWindows.clear();
-    LeaveCriticalSection(&g_cs);
-    
-    DeleteCriticalSection(&g_cs);
-}
+void Wh_ModUninit() {}
