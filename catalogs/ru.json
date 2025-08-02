@@ -2309,6 +2309,26 @@
                 "version": "1.0.0"
             }
         },
+        "legacy-power-flyout": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1754126343000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1754126343000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "description": "Enables legacy power flyout on Win10 taskbar",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Legacy (Win32) power flyout",
+                "version": "1.0.0"
+            }
+        },
         "legacy-search-bar": {
             "details": {
                 "defaultSorting": 1420,
@@ -2348,6 +2368,26 @@
                 ],
                 "name": "Legacy Shell Message Boxes",
                 "version": "1.0.1"
+            }
+        },
+        "legacy-sound-flyout": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1754126331000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1754126331000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "description": "Enables legacy sound volume flyout on Win10 taskbar",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Legacy (Win32) sound volume flyout",
+                "version": "1.0.0"
             }
         },
         "lines-in-mmc": {
