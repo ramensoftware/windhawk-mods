@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-02T09:19:03.000Z</updated>
+    <updated>2025-08-02T14:03:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Legacy (Win32) clock flyout (Win11-friendly) 1.0.0]]></title>
+        <id>https://windhawk.net/mods/legacy-clock-flyout#a7e5954b6215ccfd2cfc95a3b8c5062fea86e2cb</id>
+        <link href="https://windhawk.net/mods/legacy-clock-flyout"/>
+        <updated>2025-08-02T14:03:04.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod restores the Win32 tray clock flyout on Windows 10 taskbar which may run under Windows 10 or Windows 11.
+I tried to push this as an update to the mod <code>Win32 Tray Clock Experience</code> but received no response from the author.
+The differences between this mod and the other one are as follows:</p>
+<ul>
+<li>This mod is is compatible with a Win10 taskbar running under Windows 11.</li>
+<li>This mod hooks only a Win API function, thus does not need the download of the symbols.</li>
+<li>This mod is closer to the original code from Explorer Patcher.</li>
+</ul>
+<p><img src="https://i.imgur.com/FLSsrbt.png" alt="Legacy tray clock flyout" /></p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy (Win32) power flyout 1.0.0]]></title>
         <id>https://windhawk.net/mods/legacy-power-flyout#fb3820028a4d97abf5bf64440eb7857c71bb1f7b</id>
@@ -317,21 +336,6 @@ style will always be used.</p>]]></content>
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray system icon tweaks 1.2.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-tray-system-icon-tweaks#0ceec46962865fdd3e2d7d83a83330ea1a3c1ca8</id>
-        <link href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks"/>
-        <updated>2025-07-23T23:00:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to hide the Studio Effects icon.</li>
-<li>Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

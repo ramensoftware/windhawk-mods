@@ -2285,6 +2285,27 @@
                 "version": "1.0.2"
             }
         },
+        "legacy-clock-flyout": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1754143384000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1754143384000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "anixx",
+                "compilerOptions": "-lcomctl32 -lole32",
+                "description": "Restores the Win32 tray clock flyout.",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Legacy (Win32) clock flyout (Win11-friendly)",
+                "version": "1.0.0"
+            }
+        },
         "legacy-file-copy": {
             "details": {
                 "defaultSorting": 18090,
