@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-02T14:03:04.000Z</updated>
+    <updated>2025-08-02T15:30:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Firefox border fix for Classic theme 1.0.0]]></title>
+        <id>https://windhawk.net/mods/firefox-border-fix#c5d2a985d6361f13519bce620d2c599212cf565c</id>
+        <link href="https://windhawk.net/mods/firefox-border-fix"/>
+        <updated>2025-08-02T15:30:34.000Z</updated>
+        <content type="html"><![CDATA[<p>Workaround for the Firefox bug <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1950145">1950145</a> (glitched window borders in Classic theme).
+It affects Firefox builds <code>129.0a1</code> and above.</p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Legacy (Win32) clock flyout (Win11-friendly) 1.0.0]]></title>
         <id>https://windhawk.net/mods/legacy-clock-flyout#a7e5954b6215ccfd2cfc95a3b8c5062fea86e2cb</id>
@@ -319,23 +331,6 @@ colors instead.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Drag/Drop 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-dragdrop#8eb3648fa55fd8328b19f05998ce537a0269cbbe</id>
-        <link href="https://windhawk.net/mods/classic-explorer-dragdrop"/>
-        <updated>2025-07-24T05:47:15.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicexplorerdragdrop">Classic Explorer Drag/Drop</h1>
-<p>Forces the classic drag/drop image resembling the list view item itself to be used in File Explorer,
-and fixes a bug introduced in Windows 7 whereby the drag/drop image will not be displayed in classic
-theme.</p>
-<h2 id="caveats">Caveats</h2>
-<p>This does not work with the DirectUI list view used since Windows 7. In such cases, the Windows Vista
-style will always be used.</p>]]></content>
-        <author>
-            <name>Isabella Lulamoon (kawapure)</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>

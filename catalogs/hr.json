@@ -1904,6 +1904,26 @@
                 "version": "1.0"
             }
         },
+        "firefox-border-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1754148634000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1754148634000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "anixx",
+                "description": "Mitigates Firefox bug 1950145 (glitched window borders in Classic theme)",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "firefox.exe"
+                ],
+                "name": "Firefox border fix for Classic theme",
+                "version": "1.0.0"
+            }
+        },
         "fix-basic-caption-text": {
             "details": {
                 "defaultSorting": 4720,
