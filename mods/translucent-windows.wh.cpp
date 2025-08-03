@@ -2,26 +2,29 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.5.1
+// @version         1.6.0
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
-// @compilerOptions -ldwmapi -luxtheme -lcomctl32 -lgdi32
+// @compilerOptions -ldwmapi -luxtheme -lcomctl32 -lgdi32 -ld2d1 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 
 ### Blur (AccentBlurBehind)
-![AccentBlurBehind](https://i.imgur.com/S8OGRvc.png)
+![AccentBlurBehind](https://i.imgur.com/tSf5ztk.png)
 ### Acrylic (SystemBackdrop)
-![Acrylic SystemBackdrop](https://i.imgur.com/66cAiEC.png)
+![Acrylic SystemBackdrop](https://i.imgur.com/YNktLTu.png)
 ### Mica (SystemBackdrop)
-![Mica](https://i.imgur.com/7BGDhJa.png)
+![Mica](https://i.imgur.com/1ciJJck.png)
 ### MicaAlt (SystemBackdrop)
-![MicaTabbed](https://i.imgur.com/EeviFqO.png)
+![MicaTabbed](https://i.imgur.com/5Dxj5PS.png)
 
 # FAQ
+
+* Use Windows 11 File Explorer Styler mod and select the Translucent Explorer11 theme
+in order to get translucent WinUI parts of the new file explorer
 
 * Prerequisited windows settings to enable the background effects
     - Transparency effects enabled
@@ -43,14 +46,17 @@ maximized or snapped to the edge of the screen, this is caused by default.
 
 // ==WindhawkModSettings==
 /*
-- ThemeBackground: FALSE
-  $name: Optimize windows theme
-  $description: >-
-    Fills with black color windows theme parts in order to nullify the alpha of those elements to render a clear translucent effect.
-- TextAlphaBlend: FALSE
-  $name: Text alpha blending
-  $description: >-
-    Alpha blends Windows GDI text rendering. It may not affect all rendered text (ExplorerBlurMica implementation)
+- RenderingMod:
+    - ThemeBackground: FALSE
+      $name: Windows theme custom rendering
+      $description: >-
+       Modifies parts of the Windows theme using the Direct2D graphics API and alpha blends text rendered by Windows GDI (May not affect all rendered text - ExplorerBlurMica implementation)
+    - AccentColorControls: FALSE
+      $name: Windows theme accent colorizer
+      $description: >-
+       Paint with accent color parts of windows theme. (Requires optimize windows theme)
+
+  $name: Rendering Customization
 - type: none
   $name: Effects
   $description: >-
@@ -159,14 +165,16 @@ maximized or snapped to the edge of the screen, this is caused by default.
          Entries can be process names or paths, for example:
           mspaint.exe
           C:\Windows\System32\notepad.exe
-      - ThemeBackground: FALSE
-        $name: Optimize windows theme
-        $description: >-
-         Fills with black color windows theme parts in order to nullify the alpha of those elements to render a clear translucent effect.
-      - TextAlphaBlend: FALSE
-        $name: Text alpha blending
-        $description: >-
-         Alpha blends Windows GDI text rendering. It may not affect all rendered text (ExplorerBlurMica implementation)
+      - RenderingMod:
+          - ThemeBackground: FALSE
+            $name: Windows theme custom rendering
+            $description: >-
+             Modifies parts of the Windows theme using the Direct2D graphics API and alpha blends text rendered by Windows GDI (May not affect all rendered text - ExplorerBlurMica implementation)
+          - AccentColorControls: FALSE
+            $name: Windows theme accent colorizer
+            $description: >-
+             Paint with accent color parts of windows theme. (Requires optimize windows theme)
+        $name: Rendering Customization
       - type: none
         $name: Effects
         $description: >-
@@ -277,18 +285,18 @@ maximized or snapped to the edge of the screen, this is caused by default.
 #include <uxtheme.h>
 #include <windows.h>
 #include <functional>
-#include <cmath>
 #include <random>
 #include <string>
 #include <mutex>
 #include <unordered_set>
-#include <commctrl.h>
+#include <d2d1.h>
 #include <wingdi.h>
+#include <wrl.h>
 
 
 static UINT ENABLE = 1;
 static constexpr UINT AUTO = 0; // DWMSBT_AUTO
-static constexpr UINT NONE = 1; // DWMSBT_NONE
+//static constexpr UINT NONE = 1; // DWMSBT_NONE
 static constexpr UINT MAINWINDOW = 2; // DWMSBT_MAINWINDOW
 static constexpr UINT TRANSIENTWINDOW = 3; // DWMSBT_TRANSIENTWINDOW
 static constexpr UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
@@ -321,6 +329,8 @@ using PUNICODE_STRING = PVOID;
 
 struct Settings{
     BOOL FillBg = FALSE;
+    BOOL AccentColorize = FALSE;
+    COLORREF AccentColor = 0xFFFFFFFF;
     BOOL TextAlphaBlend = FALSE;
     COLORREF AccentBlurBehindClr = 0x00000000;
     BOOL ImmersiveDarkmode = TRUE;
@@ -342,7 +352,7 @@ struct Settings{
     COLORREF CaptionInactiveTextColor = DWMWA_COLOR_DEFAULT;
     COLORREF BorderInactiveColor = DWMWA_COLOR_DEFAULT;
     
-    float RainbowSpeed = 1.0f;
+    FLOAT RainbowSpeed = 1.0f;
 
     BOOL TitlebarRainbowFlag = FALSE;
     BOOL CaptionRainbowFlag = FALSE;
@@ -368,10 +378,10 @@ struct Settings{
 
 struct ACCENT_POLICY 
 {
-    int AccentState;
-    int AccentFlags;
-    int GradientColor;
-    int AnimationId;
+    INT AccentState;
+    INT AccentFlags;
+    INT GradientColor;
+    INT AnimationId;
 };
 
 enum ACCENT_STATE
@@ -446,23 +456,34 @@ ACCENT_POLICY accent = {};
 WINCOMPATTRDATA attrib = {};
 DWM_BLURBEHIND bb = { 0 };
 
-// Credits to @m417z
-double g_recipCyclesPerSecond;
+ID2D1Factory* g_d2dFactory = nullptr;
 
-void TimerInitialize() {
+VOID InitDirect2D()
+{
+    if (!g_d2dFactory)
+    {
+        D2D1_FACTORY_OPTIONS options = {};
+        D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, options, &g_d2dFactory);
+    }
+}
+
+// Credits to @m417z
+DOUBLE g_recipCyclesPerSecond;
+
+VOID TimerInitialize() {
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    double cyclesPerSecond = static_cast<double>(freq.QuadPart);
+    DOUBLE cyclesPerSecond = static_cast<DOUBLE>(freq.QuadPart);
     g_recipCyclesPerSecond = 1.0 / cyclesPerSecond;
 }
 
-double TimerGetCycles() {
+DOUBLE TimerGetCycles() {
     LARGE_INTEGER T1;
     QueryPerformanceCounter(&T1);
-    return static_cast<double>(T1.QuadPart);
+    return static_cast<DOUBLE>(T1.QuadPart);
 }
 
-double TimerGetSeconds() {
+DOUBLE TimerGetSeconds() {
     return TimerGetCycles() * g_recipCyclesPerSecond;
 }
 
@@ -482,8 +503,9 @@ static decltype(&GetThemeBitmap) GetThemeBitmap_orig = nullptr;
 static decltype(&GetThemeColor) GetThemeColor_orig = nullptr;
 static decltype(&DrawThemeBackground) DrawThemeBackground_orig = nullptr;
 static decltype(&DrawThemeBackgroundEx) DrawThemeBackgroundEx_orig = nullptr;
+static decltype(&DefWindowProcW) DefWindowProc_orig = nullptr;
 
-void NewWindowShown(HWND); 
+VOID NewWindowShown(HWND); 
 
 BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
 {
@@ -495,7 +517,7 @@ BOOL IsWindowClass(HWND hWnd, LPCWSTR ClassName)
 }
 
 BOOL IsWindowEligible(HWND hWnd) 
-{   
+{      
     LONG_PTR styleEx = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
     
@@ -521,9 +543,194 @@ BOOL IsWindowEligible(HWND hWnd)
     return TRUE;
 }
 
+// Simulates the convertion of system accent color to Accent Light 2/Accent Dark 2 shades
+// Inspired by https://github.com/WinExperiments/AccentColorizer
+constexpr COLORREF EnhanceAccentColor(BYTE a, BYTE& r, BYTE& g, BYTE& b)
+{
+    DOUBLE inR = r / (a / 255.0) / 255.0;
+    DOUBLE inG = g / (a / 255.0) / 255.0;
+    DOUBLE inB = b / (a / 255.0) / 255.0;
+
+    BYTE accentR = GetRValue(g_settings.AccentColor);
+    BYTE accentG = GetGValue(g_settings.AccentColor);
+    BYTE accentB = GetBValue(g_settings.AccentColor);
+
+    DOUBLE accR = accentR / 255.0;
+    DOUBLE accG = accentG / 255.0;
+    DOUBLE accB = accentB / 255.0;
+
+    auto rgb_to_hsl = [](DOUBLE R, DOUBLE G, DOUBLE B, DOUBLE& H, DOUBLE& S, DOUBLE& L) {
+        DOUBLE min = std::min({ R, G, B });
+        DOUBLE max = std::max({ R, G, B });
+        DOUBLE delta = max - min;
+
+        L = (max + min) / 2.0;
+
+        if (delta == 0.0) {
+            H = 210.0;
+            S = 0.0;
+            return;
+        }
+
+        S = (L < 0.5) ? (delta / (max + min)) : (delta / (2.0 - max - min));
+
+        if (max == R)
+            H = (G - B) / delta + (G < B ? 6.0 : 0.0);
+        else if (max == G)
+            H = (B - R) / delta + 2.0;
+        else
+            H = (R - G) / delta + 4.0;
+
+        H *= 60.0;
+    };
+
+    auto hsl_to_rgb = [](DOUBLE H, DOUBLE S, DOUBLE L, DOUBLE& R, DOUBLE& G, DOUBLE& B) {
+        auto hue2rgb = [](DOUBLE p, DOUBLE q, DOUBLE t) {
+            if (t < 0.0) t += 1.0;
+            if (t > 1.0) t -= 1.0;
+            if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+            if (t < 1.0 / 2.0) return q;
+            if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+            return p;
+        };
+
+        if (S == 0) {
+            R = G = B = L;
+        } else {
+            DOUBLE q = L < 0.5 ? L * (1.0 + S) : L + S - L * S;
+            DOUBLE p = 2.0 * L - q;
+            DOUBLE h = H / 360.0;
+            R = hue2rgb(p, q, h + 1.0 / 3.0);
+            G = hue2rgb(p, q, h);
+            B = hue2rgb(p, q, h - 1.0 / 3.0);
+        }
+    };
+
+    DOUBLE inH, inS, inL;
+    rgb_to_hsl(inR, inG, inB, inH, inS, inL);
+
+    DOUBLE accH, accS, accL;
+    rgb_to_hsl(accR, accG, accB, accH, accS, accL);
+
+    DOUBLE defaultL;
+    DOUBLE dummyH, dummyS;
+    rgb_to_hsl(0.0, 120.0 / 255.0, 215.0 / 255.0, dummyH, dummyS, defaultL);
+
+    DOUBLE baseS = std::max(accS, 0.08);
+    inS *= (1.0 / baseS) * 1.0;
+    inS *= pow(accS, 0.95);
+
+    DOUBLE lightnessDelta = (defaultL * 255.0) - accL;
+    DOUBLE L255 = inL * 255.0;
+
+    DOUBLE lightHue =
+        accH < 125 ? 60 :
+        accH < 150 ? 120 :
+        accH < 240 ? 180 :
+        accH < 345 ? 300 : 420;
+
+    DOUBLE darkHue =
+        accH < 60 ? 0 :
+        accH < 180 ? 120 :
+        accH < 300 ? 240 : 360;
+
+    if (L255 > lightnessDelta) {
+        DOUBLE f = (L255 - lightnessDelta) / (255.0 - lightnessDelta);
+        inH = accH + 0.5 * (lightHue - accH) * f;
+        inL += (accL - accL) * pow(1.0 - f, 2.0) * inS;
+    } else {
+        DOUBLE f = (lightnessDelta - L255) / lightnessDelta;
+        inH = accH + 0.5 * (darkHue - accH) * f;
+        inL -= (accL - accL) * inS;
+    }
+    inS *= accS;
+
+    DOUBLE outR, outG, outB;
+    hsl_to_rgb(inH, inS, inL, outR, outG, outB);
+    
+    DOUBLE alpha = a / 255.0;
+    r = (BYTE)std::clamp(outR * 255.0 * alpha, 0.0, 255.0);
+    g = (BYTE)std::clamp(outG * 255.0 * alpha, 0.0, 255.0);
+    b = (BYTE)std::clamp(outB * 255.0 * alpha, 0.0, 255.0);
+
+    return RGB(r, g, b);
+}
+
+BOOL GetAccentColor(COLORREF& outColor)
+{
+    // In some programs, e.g. snippingtool.exe, the default blue accent color is used instead of the Windows theme with DwmGetColorizationColor.
+    // Use the immersive color API if available, fall back to DwmGetColorizationColor
+    // https://github.com/ALTaleX531/TranslucentFlyouts/blob/017970cbac7b77758ab6217628912a8d551fcf7c/Common/ThemeHelper.hpp#L278
+    static const auto s_GetImmersiveColorFromColorSetEx{ reinterpret_cast<DWORD(WINAPI*)(DWORD dwImmersiveColorSet, DWORD dwImmersiveColorType, BOOL bIgnoreHighContrast, DWORD dwHighContrastCacheMode)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(95))) };
+    static const auto s_GetImmersiveColorTypeFromName{ reinterpret_cast<DWORD(WINAPI*)(LPCWSTR name)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(96))) };
+    static const auto s_GetImmersiveUserColorSetPreference{ reinterpret_cast<DWORD(WINAPI*)(BOOL bForceCheckRegistry, BOOL bSkipCheckOnFail)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(98))) };
+
+    COLORREF AccentClr{ 0 };
+    BOOL opaque = FALSE;
+    
+    if (s_GetImmersiveColorFromColorSetEx && s_GetImmersiveColorTypeFromName && s_GetImmersiveUserColorSetPreference) 
+    {
+        AccentClr = s_GetImmersiveColorFromColorSetEx(
+            s_GetImmersiveUserColorSetPreference(FALSE, FALSE),
+            s_GetImmersiveColorTypeFromName(L"ImmersiveStartHoverBackground"),
+            TRUE,
+            0
+        );
+        outColor = RGB((AccentClr & 0xFF), (AccentClr >> 8) & 0xFF, (AccentClr >> 16) & 0xFF);
+        return TRUE;
+    }
+    else if (SUCCEEDED(DwmGetColorizationColor(&AccentClr, &opaque)))
+    {
+        outColor = RGB((AccentClr >> 16) & 0xFF, (AccentClr >> 8) & 0xFF,  AccentClr & 0xFF);
+        return TRUE;
+    }
+    else
+    {
+        outColor = DWMWA_COLOR_DEFAULT;
+        return FALSE;
+    }
+}
+
+constexpr D2D1_COLOR_F MyD2D1Color(BYTE A, BYTE R, BYTE G, BYTE B)
+{
+    return D2D1_COLOR_F{
+        static_cast<FLOAT>(R) / 255.0f,
+        static_cast<FLOAT>(G) / 255.0f,
+        static_cast<FLOAT>(B) / 255.0f,
+        static_cast<FLOAT>(A) / 255.0f
+    };
+}
+
+constexpr D2D1_COLOR_F MyD2D1Color(BYTE R, BYTE G, BYTE B)
+{
+    return MyD2D1Color(255, R, G, B);
+}
+
+constexpr D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE A, BYTE R, BYTE G, BYTE B)
+{
+    if (g_settings.AccentColorize)
+    {
+        EnhanceAccentColor(A, R, G, B);
+        return MyD2D1Color(A, R, G, B);
+    }
+    else
+        return MyD2D1Color(A, R, G, B);
+}
+
+constexpr D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE R, BYTE G, BYTE B)
+{
+    if (g_settings.AccentColorize)
+    {
+        EnhanceAccentColor(255, R, G, B);
+        return MyD2D1Color(255, R, G, B);
+    }
+    else
+        return MyD2D1Color(R, G, B);
+}
+
 HRESULT WINAPI HookedDwmSetWindowAttribute(HWND hWnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
 {
-    if(dwAttribute == DWMWA_BORDER_COLOR && IsWindowClass(hWnd, L"#32768") && g_settings.MenuBorderFlag)
+    if(dwAttribute == DWMWA_BORDER_COLOR && IsWindowClass(hWnd, L"#32768") && g_settings.MenuBorderFlag && g_settings.BorderActiveColor != DWMWA_COLOR_NONE)
             return DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &g_settings.BorderActiveColor, sizeof(COLORREF));
             
     if(!IsWindowEligible(hWnd))
@@ -561,9 +768,7 @@ HRESULT WINAPI HookedDwmExtendFrameIntoClientArea(HWND hWnd, const MARGINS* pMar
     
     if(g_settings.ExtendFrame)
     {
-        // Override Win11 Taskmgr, explorer, aerowizard calls
-        if(IsWindowClass(hWnd, L"CabinetWClass") || IsWindowClass(hWnd, L"NativeHWNDHost") 
-            || IsWindowClass(hWnd, L"TaskManagerWindow") || IsWindowClass(hWnd, L"TWizardForm"))
+        if (!IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS") )
         {
             static const MARGINS margins = {-1, -1, -1, -1};
             [[clang::musttail]]return DwmExtendFrameIntoClientArea_orig(hWnd, &margins);
@@ -603,7 +808,7 @@ HWND WINAPI HookedNtUserCreateWindowEx(DWORD dwExStyle,
 
 std::wstring GetThemeClass(HTHEME hTheme) 
 {
-    typedef HRESULT(WINAPI* pGetThemeClass)(HTHEME, LPCTSTR, int);
+    typedef HRESULT(WINAPI* pGetThemeClass)(HTHEME, LPCTSTR, INT);
     static auto GetClassName = (pGetThemeClass)GetProcAddress(GetModuleHandleW(L"uxtheme"), MAKEINTRESOURCEA(74));
 
     std::wstring ret;
@@ -617,7 +822,7 @@ std::wstring GetThemeClass(HTHEME hTheme)
 }
 
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L829
-bool AlphaBuffer(HDC hdc, LPCRECT pRc, std::function<void(HDC)> fun)
+BOOL AlphaBuffer(HDC hdc, LPCRECT pRc, std::function<VOID(HDC)> fun)
 {
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
@@ -643,14 +848,14 @@ bool AlphaBuffer(HDC hdc, LPCRECT pRc, std::function<void(HDC)> fun)
         fun(hDC);
 
         EndBufferedPaint(pbuffer, TRUE);
-        return true;
+        return TRUE;
     }
-    return false;
+    return FALSE;
 }
 
 // Fix Alpha of DrawTextW
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L859
-int WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format) 
+INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, UINT format) 
 {
     if (format & DT_CALCRECT || g_DrawThemeTextExEntry)
         return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
@@ -659,7 +864,7 @@ int WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, 
     auto fun = [&](HDC hDC) {
         hr = DrawTextWithGlow(hDC, lpchText, cchText, lprc, format,
             GetTextColor(hdc), 0, 0, 0, 0,
-            [](HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI
+            [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI
             {
                 return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
             },
@@ -668,21 +873,21 @@ int WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, 
 
     if (!AlphaBuffer(hdc, lprc, fun))
         hr = DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
-
+    
     return hr;
 }
 
 // Fix Alpha of DrawTextExW
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L887
-int WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp) 
+INT WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp) 
 {
-    thread_local bool isCurThread = false;
+    thread_local BOOL isCurThread = FALSE;
 
     if (!lpdtp && !(format & DT_CALCRECT) && !isCurThread && g_DrawThemeTextExEntry) 
     {
-        isCurThread = true;
+        isCurThread = TRUE;
         auto ret = HookedDrawTextW(hdc, lpchText, cchText, lprc, format);
-        isCurThread = false;
+        isCurThread = FALSE;
         return ret;
     }
     
@@ -690,11 +895,10 @@ int WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc,
 }
 
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L904
-BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
+BOOL WINAPI HookedExtTextOutW(HDC hdc, INT x, INT y, UINT option, const RECT* lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
 {
     std::wstring str;
     if (lpString) str = lpString;
-
 
     if (!(option & ETO_IGNORELANGUAGE) && !(option & ETO_GLYPH_INDEX) && 
         !str.empty() && g_DrawThemeTextExEntry)
@@ -723,17 +927,17 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lp
             COLORREF crText = GetTextColor(hdc);
             HRESULT hr = S_OK;
 
-            auto DrawTextCallback = [](HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI {
+            auto DrawTextCallback = [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI {
                 return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);};
 
             //Draw text in batches
             auto fun = [&](HDC hDC) 
             {
                 std::wstring batchStr;
-                bool batch = true;
+                BOOL batch = TRUE;
                 batchStr += lpString[0];
 
-                int srcExtra = GetTextCharacterExtra(hdc);
+                INT srcExtra = GetTextCharacterExtra(hdc);
                 SetTextCharacterExtra(hDC, lpDx[0]);
 
                 RECT batchRc = rc;
@@ -745,7 +949,7 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lp
                         {
                             if (!batch)
                             {
-                                batch = true;
+                                batch = TRUE;
                                 SetTextCharacterExtra(hDC, lpDx[i]);
                             }
                             batchStr += lpString[i];
@@ -753,11 +957,11 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lp
                         else
                         {
                             // Draw the previous batch first
-                            hr = DrawTextWithGlow(hDC, batchStr.c_str(), (int)batchStr.length(), &batchRc, 
+                            hr = DrawTextWithGlow(hDC, batchStr.c_str(), (INT)batchStr.length(), &batchRc, 
                                 DT_LEFT | DT_TOP | DT_SINGLELINE, crText, 0, 0, 0, 0, DrawTextCallback, 0);
                             //hr = _DrawThemeTextEx_.Org(hTheme, hDC, 0, 0, batchStr.c_str(), batchStr.length(), DT_LEFT | DT_TOP | DT_SINGLELINE, &batchRc, &dtop);
 
-                            batch = false;
+                            batch = FALSE;
                             batchStr = lpString[i];
                             SetTextCharacterExtra(hDC, lpDx[i]);
                             batchRc.left = rc.left;
@@ -766,7 +970,7 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lp
 
                     if (i == c - 1)
                     {
-                        hr = DrawTextWithGlow(hDC, batchStr.c_str(), (int)batchStr.length(), &batchRc, 
+                        hr = DrawTextWithGlow(hDC, batchStr.c_str(), (INT)batchStr.length(), &batchRc, 
                             DT_LEFT | DT_TOP | DT_SINGLELINE, crText, 0, 0, 0, 0, DrawTextCallback, 0);
                         //hr = _DrawThemeTextEx_.Org(hTheme, hDC, 0, 0, batchStr.c_str(), batchStr.length(), DT_LEFT | DT_TOP | DT_SINGLELINE, &batchRc, &dtop);
                     }
@@ -790,25 +994,26 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, int x, int y, UINT option, const RECT* lp
 
 // Prevent recursive calls within the DrawText class API and perform Alpha repair
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L1085
-HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, int iPartId, int iStateId, LPCWSTR pszText,
-        int cchText, DWORD dwTextFlags, LPCRECT pRect, const DTTOPTS* pOptions)
+HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCWSTR pszText,
+        INT cchText, DWORD dwTextFlags, LPCRECT pRect, const DTTOPTS* pOptions)
 {
-    if (pOptions && !(pOptions->dwFlags & DTT_CALCRECT) && !(pOptions->dwFlags & DTT_COMPOSITED))
+    std::wstring ThemeClassName = GetThemeClass(hTheme);
+    
+
+    if (pOptions && !(pOptions->dwFlags & DTT_CALCRECT) /*&& !(pOptions->dwFlags & DTT_COMPOSITED)*/)
     {
         HRESULT hr = S_OK;
         auto fun = [&](HDC hDC) {
-            //SetCurrentThreadDrawing(true);
             g_DrawThemeTextExEntry = TRUE;
 
             COLORREF color = pOptions->crText;
             if (!(dwTextFlags & DTT_TEXTCOLOR))
                 GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &color);
-
+            
             hr = DrawTextWithGlow(hDC, pszText, cchText, pRect, dwTextFlags,
                 color, 0, 0, 0, 0, pOptions->pfnDrawTextCallback, pOptions->lParam);
             
             g_DrawThemeTextExEntry = FALSE;
-            //SetCurrentThreadDrawing(false);
         };
 
         if (!AlphaBuffer(hdc, pRect, fun))
@@ -822,8 +1027,8 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, int iPartId, int iS
 
 // Convert to DrawThemeTextEx call
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L1072
-HRESULT WINAPI HookedDrawThemeText(HTHEME hTheme, HDC hdc, int iPartId, int iStateId, LPCTSTR pszText,
-    int cchText, DWORD dwTextFlags, DWORD dwTextFlags2, LPCRECT pRect) 
+HRESULT WINAPI HookedDrawThemeText(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCTSTR pszText,
+    INT cchText, DWORD dwTextFlags, DWORD dwTextFlags2, LPCRECT pRect) 
 {
     DTTOPTS Options = { sizeof(DTTOPTS) };
     RECT Rect = *pRect;
@@ -850,7 +1055,7 @@ Element_PaintBgT Element_PaintBg;
 VOID STDCALL Element_PaintBgHook(class Element* This, HDC hdc, class Value* value, LPRECT pRect, LPRECT pClipRect, LPRECT pExcludeRect, LPRECT pTargetRect)
 {
     //unsigned char byteValue = *(reinterpret_cast<unsigned char*>(value) + 8);
-    if ((int)(*(DWORD *)value << 26) >> 26 != 9 )
+    if ((INT)(*(DWORD *)value << 26) >> 26 != 9 )
     {
         auto v44 = *((QWORD *)value + 1);
         auto v45 = (v44+20)& 7;
@@ -859,12 +1064,12 @@ VOID STDCALL Element_PaintBgHook(class Element* This, HDC hdc, class Value* valu
         // 4-> cpanel top bar and side bar (white image)
         // 1-> some new cp page style (cp_hub_frame)
         if (v45==4)
-        { 
+        {
             HWND wnd = WindowFromDC(hdc);
             HTHEME hTh = OpenThemeData(wnd, L"ControlPanel");
             COLORREF clrBg;
             GetThemeColor(hTh, 2, 0, TMT_FILLCOLOR, &clrBg);
-            HBRUSH SolidBrush = CreateSolidBrush(clrBg);
+            HBRUSH SolidBrush = CreateSolidBrush(RGB(0, 0, 0));
             FillRect(hdc, pRect, SolidBrush);
             DeleteObject(SolidBrush);
             CloseThemeData(hTh);
@@ -880,7 +1085,7 @@ VOID STDCALL Element_PaintBgHook(class Element* This, HDC hdc, class Value* valu
     }
 }
 
-void CplDuiHook()
+VOID CplDuiHook()
 {
     WindhawkUtils::SYMBOL_HOOK dui70dll_hooks[] =
     {
@@ -888,7 +1093,7 @@ void CplDuiHook()
             {L"public: void " SSTDCALL " DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
             &Element_PaintBg,
             Element_PaintBgHook,
-            false
+            FALSE
         },
     };
 
@@ -896,7 +1101,7 @@ void CplDuiHook()
     WindhawkUtils::HookSymbols(hDui, dui70dll_hooks, ARRAYSIZE(dui70dll_hooks));
 }
 
-constexpr int SysColorElements[] = {
+constexpr INT SysColorElements[] = {
 	COLOR_SCROLLBAR ,
     COLOR_BACKGROUND ,
     COLOR_ACTIVECAPTION ,
@@ -925,13 +1130,13 @@ constexpr int SysColorElements[] = {
     COLOR_GRADIENTACTIVECAPTION ,
     COLOR_GRADIENTINACTIVECAPTION ,
     COLOR_MENUHILIGHT ,
-    COLOR_MENUBAR
-    //COLOR_HOTLIGHT
+    COLOR_MENUBAR,
+    COLOR_HOTLIGHT
 };
 
 HTHEME hTh = nullptr;
 
-void SetCurrentTheme(LPCWSTR themeclass)
+VOID SetCurrentTheme(LPCWSTR themeclass)
 {
     if (hTh != nullptr)
         hTh = nullptr;
@@ -939,7 +1144,7 @@ void SetCurrentTheme(LPCWSTR themeclass)
     hTh = OpenThemeData(NULL, themeclass); 
 }
 
-void RevertSysColors()
+VOID RevertSysColors()
 {
     SetCurrentTheme(L"SysMetrics");
     COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
@@ -954,30 +1159,42 @@ void RevertSysColors()
     hTh = nullptr;
 }
 
-void ColorizeSysColors()
+VOID ColorizeSysColors()
 {
+    // Stop recalling SetSysColors if syscolor changes have been applied.
+    // SetSysColors redraws all top level windows causing fleeckering.1
+    if (GetSysColor(5) == RGB(0, 0, 0))
+    {
+        if (g_settings.AccentColorize && GetSysColor(13) == g_settings.AccentColor)
+            return;
+        else if (!g_settings.AccentColorize)
+            return ;
+    }
+    
     COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
-
     for (UINT i = 0; i < ARRAYSIZE(SysColorElements); i++)
     {
-        if (SysColorElements[i] == COLOR_SCROLLBAR || SysColorElements[i] == COLOR_BACKGROUND || SysColorElements[i] == COLOR_INACTIVECAPTION 
-            || SysColorElements[i] == COLOR_MENU || SysColorElements[i] == COLOR_WINDOW || SysColorElements[i] == COLOR_INACTIVEBORDER || SysColorElements[i] == COLOR_INFOBK
-            || SysColorElements[i] == COLOR_GRADIENTACTIVECAPTION || SysColorElements[i] == COLOR_MENUBAR)
+        if (SysColorElements[i] == COLOR_SCROLLBAR || SysColorElements[i] == COLOR_BACKGROUND || SysColorElements[i] == COLOR_MENU 
+            || SysColorElements[i] == COLOR_WINDOW || SysColorElements[i] == COLOR_INACTIVEBORDER || SysColorElements[i] == COLOR_INFOBK
+            || SysColorElements[i] == COLOR_MENUBAR)
                 aNewColors[i] = RGB(0, 0, 0);
-        else if (SysColorElements[i] == COLOR_ACTIVECAPTION || SysColorElements[i] == COLOR_ACTIVEBORDER || SysColorElements[i] == COLOR_BTNSHADOW
-            ||SysColorElements[i] == COLOR_GRADIENTINACTIVECAPTION)
+        else if (SysColorElements[i] == COLOR_GRADIENTACTIVECAPTION || SysColorElements[i] == COLOR_INACTIVECAPTION)
+            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 0, 0);
+        else if (SysColorElements[i] == COLOR_ACTIVECAPTION || SysColorElements[i] == COLOR_GRADIENTINACTIVECAPTION)
+            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(32, 32, 32);
+        else if (SysColorElements[i] == COLOR_ACTIVEBORDER || SysColorElements[i] == COLOR_BTNSHADOW)
                 aNewColors[i] = RGB(32, 32, 32);
         else if (SysColorElements[i] == COLOR_WINDOWFRAME || SysColorElements[i] == COLOR_BTNHIGHLIGHT)
             aNewColors[i] = RGB(64, 64, 64);
-        else if (SysColorElements[i] == COLOR_MENUTEXT || SysColorElements[i] == COLOR_CAPTIONTEXT || SysColorElements[i] == COLOR_HIGHLIGHTTEXT 
-            || SysColorElements[i] == COLOR_BTNTEXT || SysColorElements[i] == COLOR_INFOTEXT)
+        else if (SysColorElements[i] == COLOR_MENUTEXT || SysColorElements[i] == COLOR_CAPTIONTEXT 
+            || SysColorElements[i] == COLOR_BTNTEXT || SysColorElements[i] == COLOR_INFOTEXT || SysColorElements[i] == COLOR_HIGHLIGHTTEXT)
                 aNewColors[i] = RGB(220, 220, 220);
         else if (SysColorElements[i] == COLOR_WINDOWTEXT)
             aNewColors[i] = RGB(240, 240, 240);
         else if (SysColorElements[i] == COLOR_APPWORKSPACE)
             aNewColors[i] = RGB(8, 8, 8);
         else if (SysColorElements[i] == COLOR_HIGHLIGHT || SysColorElements[i] == COLOR_MENUHILIGHT)
-            aNewColors[i] = RGB(0, 120, 215);
+            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 120, 215);
         else if (SysColorElements[i] == COLOR_BTNFACE)
             aNewColors[i] = RGB(1, 1, 1);
         else if (SysColorElements[i] == COLOR_GRAYTEXT)
@@ -989,16 +1206,16 @@ void ColorizeSysColors()
         else if (SysColorElements[i] == COLOR_3DLIGHT)
             aNewColors[i] = RGB(4, 4, 4);
         else if (SysColorElements[i] == COLOR_HOTLIGHT)
-            aNewColors[i] = RGB(0, 148, 251);        
+            aNewColors[i] = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 148, 251);
     }
     SetSysColors(ARRAYSIZE(SysColorElements), SysColorElements, aNewColors);
 }
 
 HRESULT WINAPI HookedGetThemeBitmap(
     HTHEME hTheme,
-    int iPartId,
-    int iStateId,
-    int iPropId,
+    INT iPartId,
+    INT iStateId,
+    INT iPropId,
     ULONG dwFlags,
     HBITMAP* phBitmap)
 {
@@ -1008,26 +1225,26 @@ HRESULT WINAPI HookedGetThemeBitmap(
     {    
         BITMAP bm = {};
         if (!GetObject(*phBitmap, sizeof(bm), &bm))
-            return false;
+            return FALSE;
 
         if (bm.bmBitsPixel != 32)
-            return false;
+            return FALSE;
 
-        int size = bm.bmWidth * bm.bmHeight * 4;
+        INT size = bm.bmWidth * bm.bmHeight * 4;
         BYTE* pBits = new BYTE[size];
         if (!pBits)
-            return false;
+            return FALSE;
 
         if (GetBitmapBits(*phBitmap, size, pBits) != size)
         {
             delete[] pBits;
-            return false;
+            return FALSE;
         }
 
-        for (int y = 0; y < bm.bmHeight; y++)
+        for (INT y = 0; y < bm.bmHeight; y++)
         {
             BYTE* pPixel = pBits + bm.bmWidth * 4 * y;
-            for (int x = 0; x < bm.bmWidth; x++, pPixel += 4)
+            for (INT x = 0; x < bm.bmWidth; x++, pPixel += 4)
             {
                 pPixel[0] = 0; //B
                 pPixel[1] = 0; //G
@@ -1042,109 +1259,44 @@ HRESULT WINAPI HookedGetThemeBitmap(
     return GetThemeBitmap_orig(hTheme, iPartId, iStateId, iPropId, dwFlags, phBitmap);
 }
 
-HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int iPropId, COLORREF *pColor) 
+HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT iPropId, COLORREF *pColor) 
 {
     HRESULT hr = GetThemeColor_orig(hTheme, iPartId, iStateId, iPropId, pColor);
-    
     std::wstring ThemeClassName = GetThemeClass(hTheme);
-    
-    if (ThemeClassName == L"Header" && iPartId == 1 && iStateId != 0  && iPropId == TMT_TEXTCOLOR)
-    {
-        *pColor = RGB(192, 192, 192);
+
+    if (ThemeClassName == L"PreviewPane" && (iPartId == 5 || iPartId == 7 || iPartId == 6) && iPropId == TMT_FILLCOLOR) {
+        *pColor = (iPartId == 6) ? RGB(192, 192, 192) : RGB(255, 255, 255);
         return S_OK;
     } 
-    else if (ThemeClassName == L"PreviewPane" && (iPartId == 5 || iPartId == 7) && iPropId == TMT_FILLCOLOR)
-    {
-        *pColor = RGB(255, 255, 255);
-        return S_OK;
-    } 
-    else if (ThemeClassName == L"PreviewPane" && iPartId == 6 && iPropId == TMT_FILLCOLOR)
-    {
-        *pColor = RGB(192, 192, 192);
-        return S_OK;
-    } 
-    /* Control Panel */
     else if (ThemeClassName == L"ControlPanelStyle" && iPropId == TMT_TEXTCOLOR)
     {
-        // BODYTITLE, GROUPTEXT, MESSAGETEXT, BODYTEXT , TITLE, CONTENTPANELLABEL
-        if ((iPartId == 19 || iPartId == 9 || iPartId == 15 
-            || iPartId == 6 || iPartId == 5 || iPartId == 4) && iStateId == 0)
+        if ((iPartId == CPANEL_BODYTITLE || iPartId == CPANEL_GROUPTEXT || iPartId == CPANEL_MESSAGETEXT 
+            || iPartId == CPANEL_BODYTEXT || iPartId == CPANEL_TITLE || iPartId == CPANEL_CONTENTPANELABEL) && iStateId == 0)
         {
             *pColor =  RGB(255, 255, 255);
             return S_OK;
         }
-        // SECTIONTITLELINK
-        if (iPartId == 11)
+        else if (iPartId == CPANEL_SECTIONTITLELINK && (iStateId == CPCL_NORMAL || iStateId == CPCL_HOT))
         {
-            if (iStateId == 1)
-            {
-                *pColor = RGB(240, 255, 240);
-                return S_OK;
-            }
-            else if (iStateId == 2)
-            {
-                *pColor = RGB(224, 255, 224);
-                return S_OK;
-            }                    
+            *pColor = (iStateId == CPCL_NORMAL) ? RGB(240, 255, 240) : RGB(224, 255, 224);
+            return S_OK;                   
         }
-        // CONTENTLINK, HELPLINK
-        if (iPartId == 10 || iPartId == 7)
+        else if (iPartId == CPANEL_CONTENTLINK || iPartId == CPANEL_HELPLINK)
         {
-            if (iStateId == 1)
-            {
-                *pColor = RGB(96, 205, 255);
-                return S_OK;
-            }
-            else if (iStateId == 2)
-            {
-                *pColor = RGB(153, 236, 255);
-                return S_OK;
-            }
-            else if (iStateId == 3)
-            {
-                *pColor = RGB(0, 148, 251);
-                return S_OK;
-            }
-            else if (iStateId == 4)
-            {
-                *pColor = RGB(96, 96, 96);
-                return S_OK;
-            }
+            *pColor = (iStateId == CPHL_NORMAL) ? RGB(96, 205, 255) : (iStateId == CPHL_HOT) ? RGB(153, 236, 255) : 
+                      (iStateId == CPHL_PRESSED) ? RGB(0, 148, 251) : RGB(96, 96, 96);
+            return S_OK;
         }
-        // TASKLIST
-        if (iPartId == 8)
+        else if (iPartId == CPANEL_TASKLINK) 
         {
-            if (iStateId == 1)
-            {
-                *pColor = RGB(190, 190, 190);
-                return S_OK;
-            }
-            else if (iStateId == 2)
-            {
-                *pColor = RGB(255, 255, 255);
-                return S_OK;
-            }
-            else if (iStateId == 3)
-            {
-                *pColor = RGB(160, 160, 160);
-                return S_OK;
-            }
-            else if (iStateId == 4)
-            {
-                *pColor = RGB(96, 96, 96);
-                return S_OK;
-            }
-            else if (iStateId == 5)
-            {
-                *pColor = RGB(255, 255, 255);
-                return S_OK;
-            }
+            *pColor = (iStateId == CPTL_NORMAL) ? RGB(190, 190, 190): (iStateId == CPTL_HOT) ? RGB(255, 255, 255) : 
+                      (iStateId == CPTL_PRESSED) ? RGB(160, 160, 160) : (iStateId == CPTL_DISABLED) ? RGB(96, 96, 96) : RGB(255, 255, 255);
+            return S_OK;
         }
     }     
     else if (ThemeClassName == L"ControlPanelStyle" && iPropId == TMT_FILLCOLORHINT)
     {
-        // CONTENTPANELINE
-        if (iPartId == 17 && iStateId == 0)
+        if (iPartId == CPANEL_CONTENTPANELINE && iStateId == 0)
         {
             *pColor = RGB(64, 64, 64);
             return S_OK;
@@ -1152,8 +1304,7 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
     }
     else if (ThemeClassName == L"ControlPanel" && iPropId == TMT_FILLCOLOR)
     {
-        // CONTENTPANE
-        if(iPartId == 2 && iStateId == 0)
+        if(iPartId == CPANEL_CONTENTPANE && iStateId == 0)
         {
             *pColor = RGB(0, 0, 0);
             return S_OK;
@@ -1170,41 +1321,151 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
         // LYBRARYPANETOPVIEW
         else if (iPartId == 9)
         {
-            if (iStateId == 1)
-            {
-                *pColor = RGB(96, 205, 255);
-                return S_OK;
-            }
-            else if (iStateId == 2)
-            {
-                *pColor = RGB(153, 236, 255);
-                return S_OK;
-            }
-            else if (iStateId == 3)
-            {
-                *pColor = RGB(0, 148, 251);
-                return S_OK;
-            }
-            else if (iStateId == 6)
-            {
-                *pColor = RGB(96, 96, 96);
-                return S_OK;
-            }
+            *pColor = (iStateId == 1) ? RGB(96, 205, 255) : (iStateId == 2) ? RGB(153, 236, 255) : (iStateId == 3) ? RGB(0, 148, 251) : RGB(96, 96, 96);
+            return S_OK;
         }  
     }
-    else if (((ThemeClassName == L"Button" && iPartId == 1) || ThemeClassName == L"Tab" || ThemeClassName == L"Combobox" 
-        || ThemeClassName == L"Toolbar") && iPropId == TMT_TEXTCOLOR)
+    else if (ThemeClassName == L"TaskDialogStyle" && iPartId == TDLG_MAININSTRUCTIONPANE)
     {
-        return hr;
+        *pColor = RGB(96,205,255);
+        return S_OK;
     }
-    else if (ThemeClassName == L"Menu" || ThemeClassName == L"ChartView" || ThemeClassName == L"TaskManager")
+    else if (ThemeClassName == L"Button" && iPropId == TMT_TEXTCOLOR)
     {
-        return hr;
+        if (iPartId == BP_PUSHBUTTON && iStateId != PBS_DISABLED)
+        {
+            *pColor = RGB(255, 255, 255);
+            return S_OK;
+        }
+        else if (iPartId != BP_PUSHBUTTON)
+        {
+            *pColor = RGB(192, 192, 192);
+            return S_OK;
+        }
     }
-    else if ((ThemeClassName == L"Button" && iPartId != 1) || ThemeClassName == L"Static")
+    else if (ThemeClassName == L"Static")
     {
         *pColor = RGB(192, 192, 192);
         return S_OK;
+    }
+    else if (ThemeClassName == L"Tab" && iPropId == TMT_TEXTCOLOR)
+    {
+        if (iStateId == CSTB_HOT)
+            *pColor = RGB(224, 224, 224);
+        else if (iStateId == CSTB_SELECTED)
+            *pColor = RGB(255, 255, 255);
+        else
+            *pColor = RGB(192, 192, 192);
+        return S_OK;
+    }
+    else if (ThemeClassName == L"Combobox" && iPropId == TMT_TEXTCOLOR)
+    {
+        if (iStateId != CBXS_DISABLED)
+            *pColor = RGB(255, 255, 255);
+        return S_OK;
+    }
+    
+    else if (ThemeClassName == L"Menu" && iPropId == TMT_TEXTCOLOR)
+    {
+        if (iPartId == MENU_BARITEM && (iStateId != MBI_DISABLED && iStateId != MBI_DISABLEDPUSHED)) {
+            *pColor = RGB(255, 255, 255);
+            return S_OK;
+        }
+        else if ((iPartId == MENU_POPUPITEM || iPartId == 27) && (iStateId != 3 && iStateId != 4)) {
+            *pColor = RGB(255, 255, 255);
+            return S_OK;
+        }
+    }
+    else if (ThemeClassName == L"Menu" && (iPropId == TMT_FILLCOLOR || iPropId == TMT_FILLCOLORHINT))
+    {
+        if (iPartId == 10) {
+            if (g_settings.MenuBorderFlag && g_settings.BorderActiveColor == DWMWA_COLOR_NONE)
+                *pColor = RGB(32, 32, 32);
+        }
+        else
+            *pColor = RGB(32, 32, 32);
+        return S_OK;
+    }
+    else if ((ThemeClassName == L"Toolbar") && iPropId == TMT_TEXTCOLOR)
+    {
+        if (iPartId == 0 && iStateId != TS_DISABLED) {
+            *pColor = RGB(255, 255, 255);
+            return S_OK;
+        }
+        if (iStateId == TS_DISABLED) {
+            *pColor = RGB(128,128,128);
+            return S_OK;
+        }
+    }
+    else if (ThemeClassName == L"ChartView")
+    {
+        if ((iPartId == 30 || iPartId == 31 || iPartId == 32) && iStateId == 1) {
+            *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(32, 102, 128);
+            return S_OK;
+        }
+    }
+    else if (ThemeClassName == L"TaskManager")
+    {
+        switch (iPartId)
+        {
+            case 2: case 41:
+            case 42:
+                *pColor = RGB(21, 21, 21);
+            case 3: case 20:
+            case 26:
+                *pColor = RGB(0, 0, 0);
+            case 4:
+                *pColor = RGB(8, 4, 0);
+            case 5:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(20, 8, 0);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(0, 0, 0);
+            case 6:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(36, 12, 0);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(12, 0, 0);
+            case 7:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(56, 16, 0);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(24, 0, 0);
+            case 8:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(80, 20, 0);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(40, 0, 0);
+            case 9:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(108, 24, 0);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(60, 0, 0);
+            case 10:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(140, 24, 0);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(84, 0, 0);
+            case 11:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(176, 32, 0);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(112, 0, 0);
+            case 12:
+                if (iPropId == TMT_FILLCOLOR) *pColor = RGB(252, 104, 42);
+                else if (iPropId == TMT_TEXTCOLOR) *pColor = RGB(140, 0, 0);
+            case 13:
+                *pColor = RGB(241, 112, 122);
+            case 14: case 15:
+            case 16: case 17:
+            case 18: case 19:
+            case 24: case 25:
+                *pColor = RGB(255, 255, 255);
+            case 21: *pColor = RGB(97, 113, 186);
+            case 22: *pColor = RGB(68, 79, 125);
+            case 23: *pColor = RGB(64, 64, 64);
+            case 27: *pColor = RGB(32, 36, 44);
+            case 28: *pColor = RGB(32, 40, 56);
+            case 29: *pColor = RGB(32, 44, 68);
+            case 30: *pColor = RGB(32, 48, 80);
+            case 31: *pColor = RGB(32, 52, 92);
+            case 32: *pColor = RGB(32, 52, 104);
+            case 33: *pColor = RGB(32, 60, 116);
+            case 34: *pColor = RGB(32, 64, 128);
+            case 35: *pColor = RGB(32, 68, 140);
+            case 36: *pColor = RGB(32, 72, 152);
+            case 37: *pColor = RGB(32, 76, 164);
+            case 38: *pColor = RGB(17, 125, 187);
+            case 39: *pColor = RGB(34, 38, 55);
+            case 40: *pColor = RGB(35, 45, 71);
+        }
+        return hr;
     }
     else
     {
@@ -1224,87 +1485,2865 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, int iPartId, int iStateId, int
             return S_OK;
         }
     }
-
     return hr;
+}
+
+HRESULT CreateBoundD2DRenderTarget(HDC hdc, LPCRECT pRect, ID2D1Factory* pFactory, ID2D1DCRenderTarget** ppRenderTarget)
+{
+    if (!pFactory || !ppRenderTarget)
+        return FALSE;
+
+    D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+        D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+        static_cast<FLOAT>(GetDeviceCaps(hdc, LOGPIXELSX)),
+        static_cast<FLOAT>(GetDeviceCaps(hdc, LOGPIXELSY)),
+        D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE,
+        D2D1_FEATURE_LEVEL_DEFAULT
+    );
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> renderTarget;
+    HRESULT hr = pFactory->CreateDCRenderTarget(&rtProps, &renderTarget);
+    if (FAILED(hr)) {
+        Wh_Log(L"Failed to create DC target [ERROR]: 0x%08X\n", hr);
+        return hr;
+    }
+
+    hr = renderTarget->BindDC(hdc, pRect);
+    if (FAILED(hr)) {
+        Wh_Log(L"Failed to Bind DC target [ERROR]: 0x%08X\n", hr);
+        return hr;
+    }
+    *ppRenderTarget = renderTarget.Detach();
+    return S_OK;
+}
+
+class CThemeCache
+{
+public:
+    std::array<HDC, 4> pushbutton;
+    std::array<HDC, 8> radiobutton;
+    std::array<HDC, 20> checkbutton;
+    std::array<HDC, 4> commandlinkbutton;
+    std::array<HDC, 3> commandlinkglyph;
+    std::array<HDC, 13> listview;
+    std::array<HDC, 4> scrollbar;
+    std::array<HDC, 4> tab;
+    std::array<HDC, 8> combobox;
+    std::array<HDC, 4> editbox;
+    std::array<HDC, 5> treeview;
+    std::array<HDC, 4> itemsview;
+    std::array<HDC, 10> progressbar;
+    std::array<HDC, 2> indeterminatebar;
+    std::array<HDC, 2> trackbar;
+    std::array<HDC, 24> trackbarthumb;
+    std::array<HDC, 2> header;
+    std::array<HDC, 1> previewseperator;
+    std::array<HDC, 4> modulebutton;
+    std::array<HDC, 4> modulelocationbutton;
+    std::array<HDC, 8> modulesplitbutton;
+    std::array<HDC, 12> navigationbutton;
+    std::array<HDC, 4> toolbarbutton;
+    std::array<HDC, 4> addressband;
+    std::array<HDC, 3> menuitem;
+
+    BOOL CachePushButton(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheRadioButton(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheCheckButton(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheCommandlinkButton(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheCommandlinkGlyph(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheListItem(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheListGroupHeader(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheScrollbar(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheScrollArrow(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheTab(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheCombobox(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheEditBox(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheTreeView(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheItemsView(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheProgressBar(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheIndeterminateBar(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheTrackBar(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheTrackBarThumb(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheTrackBarPointedThumb(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheHeader(HDC, ID2D1Factory*, INT, INT);
+    BOOL CachePreviewPaneSeperator(HDC, ID2D1Factory*);
+    BOOL CacheModuleButton(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheModuleLocationButton(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheModuleSplitButton(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheNavigationButton(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CacheToolbarButton(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheAddressBand(HDC, ID2D1Factory*, INT, INT);
+    BOOL CacheMenuItem(HDC, ID2D1Factory*, INT, INT, INT);
+
+    BOOL CreateDIB(HDC& elementHdc, HDC hDC, INT Width, INT Height)
+    {
+        if (!elementHdc) {
+            if (!(elementHdc = CreateCompatibleDC(hDC)))
+                return FALSE;
+        }
+        else if (!(elementHdc = CreateCompatibleDC(NULL)))
+            return FALSE;
+
+        BITMAPINFO bmi;
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = Width;
+        bmi.bmiHeader.biHeight = -Height;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        if (HBITMAP hOldBmp = (HBITMAP)SelectObject(elementHdc, nullptr))
+            DeleteObject(hOldBmp);
+        
+        VOID* pvBits;
+        HBITMAP hBitmap = CreateDIBSection(elementHdc, &bmi, DIB_RGB_COLORS, &pvBits, nullptr, 0);
+        if (!hBitmap)
+            return FALSE;
+        
+        SelectObject(elementHdc, hBitmap);
+        return TRUE;
+    }
+
+    VOID ClearCache()
+    {
+        for (HDC& hDC : pushbutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : radiobutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : checkbutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : commandlinkbutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : commandlinkglyph)
+            DeleteHDC(hDC);
+        for (HDC& hDC : listview)
+            DeleteHDC(hDC);
+        for (HDC& hDC : scrollbar)
+            DeleteHDC(hDC);
+        for (HDC& hDC : tab)
+            DeleteHDC(hDC);
+        for (HDC& hDC : combobox)
+            DeleteHDC(hDC);
+        for (HDC& hDC : editbox)
+            DeleteHDC(hDC);
+        for (HDC& hDC : treeview)
+            DeleteHDC(hDC);
+        for (HDC& hDC : itemsview)
+            DeleteHDC(hDC);
+        for (HDC& hDC : progressbar)
+            DeleteHDC(hDC);
+        for (HDC& hDC : indeterminatebar)
+            DeleteHDC(hDC);
+        for (HDC& hDC : trackbar)
+            DeleteHDC(hDC);
+        for (HDC& hDC : trackbarthumb)
+            DeleteHDC(hDC);
+        for (HDC& hDC : header)
+            DeleteHDC(hDC);
+        for (HDC& hDC : previewseperator)
+            DeleteHDC(hDC);
+        for (HDC& hDC : modulebutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : modulelocationbutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : modulesplitbutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : navigationbutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : toolbarbutton)
+            DeleteHDC(hDC);
+        for (HDC& hDC : addressband)
+            DeleteHDC(hDC);
+        for (HDC& hDC : menuitem)
+            DeleteHDC(hDC);
+    }
+
+    VOID DeleteHDC(HDC& hDC)
+    {
+        if (hDC) {
+            DeleteObject((HBITMAP)GetCurrentObject(hDC, OBJ_BITMAP));
+            DeleteDC(std::exchange(hDC, nullptr));
+        }
+    }
+
+    ~CThemeCache()
+    {
+        ClearCache();
+    }
+};
+CThemeCache g_cache;
+
+VOID DrawNineGridStretch(HDC hdc, HDC& srcDC, LPCRECT dstRect, INT left = 0, INT top = 0, INT right = 0, INT bottom = 0)
+{
+    HBITMAP hBmp = (HBITMAP)GetCurrentObject(srcDC, OBJ_BITMAP);
+    BITMAP bmp = {};
+    GetObject(hBmp, sizeof(bmp), &bmp);
+
+    INT srcW = bmp.bmWidth;
+    INT srcH = bmp.bmHeight;
+    INT dstW = dstRect->right - dstRect->left;
+    INT dstH = dstRect->bottom - dstRect->top;
+
+    left   = std::min(left, dstW);
+    right  = std::min(right, dstW - left);
+    top    = std::min(top, dstH);
+    bottom = std::min(bottom, dstH - top);
+
+    INT centerW = dstW - left - right;
+    INT centerH = dstH - top - bottom;
+
+    INT srcCenterW = srcW - left - right;
+    INT srcCenterH = srcH - top - bottom;
+
+    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+
+    // Full stretch
+    if (left + right >= srcW || top + bottom >= srcH)
+    {
+        AlphaBlend(hdc, dstRect->left, dstRect->top, dstW, dstH,
+                srcDC, 0, 0, srcW, srcH, blend);
+        return;
+    }
+    // Short-circuit if the entire region is fully covered by the top-left corner
+    if (dstW <= left && dstH <= top)
+    {
+        AlphaBlend(hdc, dstRect->left, dstRect->top, dstW, dstH,
+                   srcDC, 0, 0, dstW, dstH, blend);
+        return;
+    }
+    // Center
+    if (centerW > 0 && centerH > 0 && srcCenterW > 0 && srcCenterH > 0)
+    {
+        AlphaBlend(hdc, dstRect->left + left, dstRect->top + top, centerW, centerH,
+                   srcDC, left, top, srcCenterW, srcCenterH, blend);
+    }
+    // Top-left
+    if (left > 0 && top > 0)
+    {
+        AlphaBlend(hdc, dstRect->left, dstRect->top, left, top,
+                   srcDC, 0, 0, left, top, blend);
+    }
+    // Top
+    if (centerW > 0 && top > 0 && srcCenterW > 0)
+    {
+        AlphaBlend(hdc, dstRect->left + left, dstRect->top, centerW, top,
+                   srcDC, left, 0, srcCenterW, top, blend);
+    }
+    // Top-right
+    if (right > 0 && top > 0)
+    {
+        AlphaBlend(hdc, dstRect->right - right, dstRect->top, right, top,
+                   srcDC, srcW - right, 0, right, top, blend);
+    }
+    // Left
+    if (left > 0 && centerH > 0 && srcCenterH > 0)
+    {
+        AlphaBlend(hdc, dstRect->left, dstRect->top + top, left, centerH,
+                   srcDC, 0, top, left, srcCenterH, blend);
+    }
+    // Right
+    if (right > 0 && centerH > 0 && srcCenterH > 0)
+    {
+        AlphaBlend(hdc, dstRect->right - right, dstRect->top + top, right, centerH,
+                   srcDC, srcW - right, top, right, srcCenterH, blend);
+    }
+    // Bottom-left
+    if (left > 0 && bottom > 0)
+    {
+        AlphaBlend(hdc, dstRect->left, dstRect->bottom - bottom, left, bottom,
+                   srcDC, 0, srcH - bottom, left, bottom, blend);
+    }
+    // Bottom
+    if (centerW > 0 && bottom > 0 && srcCenterW > 0)
+    {
+        AlphaBlend(hdc, dstRect->left + left, dstRect->bottom - bottom, centerW, bottom,
+                   srcDC, left, srcH - bottom, srcCenterW, bottom, blend);
+    }
+    // Bottom-right
+    if (right > 0 && bottom > 0)
+    {
+        AlphaBlend(hdc, dstRect->right - right, dstRect->bottom - bottom, right, bottom,
+                   srcDC, srcW - right, srcH - bottom, right, bottom, blend);
+    }
+}
+
+BOOL PaintScroll(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if ((iPartId == SBP_UPPERTRACKVERT || iPartId == SBP_LOWERTRACKVERT
+    || iPartId == SBP_UPPERTRACKHORZ || iPartId == SBP_LOWERTRACKHORZ))
+        return TRUE;
+    if ((!g_d2dFactory ||(iPartId != SBP_THUMBBTNVERT && iPartId != SBP_THUMBBTNHORZ)))
+        return FALSE;
+    
+    INT index = (iStateId == SCRBS_NORMAL) ? 0 : 1;
+    if (iPartId == SBP_THUMBBTNHORZ) index += 2;
+
+    if (!g_cache.scrollbar[index])
+        if (!g_cache.CacheScrollbar(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    // Make scrollbar thinner by moving the rect's left and right edges
+    RECT rc = (iPartId == SBP_THUMBBTNVERT) ? 
+    RECT(static_cast<LONG>(pRect->left + ((pRect->right - pRect->left) * 0.25f)), pRect->top, static_cast<LONG>(pRect->right - ((pRect->right - pRect->left) * 0.25f)), pRect->bottom)
+    : RECT(pRect->left, static_cast<LONG>(pRect->top + ((pRect->bottom - pRect->top) * 0.25f)) , pRect->right, static_cast<LONG>(pRect->bottom - ((pRect->bottom - pRect->top) * 0.25f)));
+    DrawNineGridStretch(hdc, g_cache.scrollbar[index], &rc, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheScrollbar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.scrollbar[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.scrollbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_RECT_F thumbRect{D2D1::Rect(0, 0, width, height)};
+    D2D1_COLOR_F thumbColor = (iStateId == SCRBS_NORMAL) ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(160, 224, 224, 224);
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush = nullptr;
+    pRenderTarget->CreateSolidColorBrush(thumbColor, &brush);
+    D2D1_ROUNDED_RECT rr = {thumbRect, 4.0f, 4.0f};
+
+    pRenderTarget->BeginDraw();
+    pRenderTarget->FillRoundedRectangle(&rr, brush.Get());
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintScrollBarArrows(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId != SBP_ARROWBTN || !g_d2dFactory)
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> dcRenderTarget = nullptr;
+    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &dcRenderTarget)))
+        return FALSE;
+
+    FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
+    FLOAT height = static_cast<FLOAT>(pRect->bottom - pRect->top);
+
+    FLOAT triangleBaseWidth = 10.0f;
+    FLOAT triangleHeight = 7.0f;
+    FLOAT centerX = width / 2.0f;
+    FLOAT centerY = height / 2.0f;
+
+    D2D1_COLOR_F arrowColor;
+    if (iStateId == 2 || iStateId == 6 || iStateId == 10 || iStateId == 14)
+        arrowColor = MyD2D1Color(160, 224, 224, 224);
+    else
+        arrowColor = MyD2D1Color(128, 160, 160, 160);
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush = nullptr;
+    dcRenderTarget->CreateSolidColorBrush(arrowColor, &brush);
+    D2D1_POINT_2F points[3] = {};
+    if (iStateId >= ABS_UPNORMAL && iStateId <= ABS_UPDISABLED)
+    {
+        points[0] = D2D1::Point2F(centerX - triangleBaseWidth / 2.0f, centerY + triangleHeight / 2.0f);
+        points[1] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY + triangleHeight / 2.0f);
+        points[2] = D2D1::Point2F(centerX, centerY - triangleHeight / 2.0f);
+    }
+    else if (iStateId >= ABS_DOWNNORMAL && iStateId <= ABS_DOWNDISABLED)
+    {
+        points[0] = D2D1::Point2F(centerX - triangleBaseWidth / 2.0f, centerY - triangleHeight / 2.0f);
+        points[1] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY - triangleHeight / 2.0f);
+        points[2] = D2D1::Point2F(centerX, centerY + triangleHeight / 2.0f);
+    }
+    else if (iStateId >= ABS_LEFTNORMAL && iStateId <= ABS_LEFTDISABLED)
+    {
+        points[0] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY - triangleBaseWidth / 2.0f);
+        points[1] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
+        points[2] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY);
+    }
+    else if (iStateId >= ABS_RIGHTNORMAL && iStateId <= ABS_RIGHTDISABLED)
+    {
+        points[0] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY - triangleBaseWidth / 2.0f);
+        points[1] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
+        points[2] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY);
+    }
+
+    dcRenderTarget->BeginDraw();
+
+    Microsoft::WRL::ComPtr<ID2D1PathGeometry> triangleGeo = nullptr;
+    if (SUCCEEDED(g_d2dFactory->CreatePathGeometry(&triangleGeo)))
+    {
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink = nullptr;
+        if (SUCCEEDED(triangleGeo->Open(&sink)))
+        {
+            sink->BeginFigure(points[0], D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(points[1]);
+            sink->AddLine(points[2]);
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+
+            dcRenderTarget->FillGeometry(triangleGeo.Get(), brush.Get());
+        }
+    }
+    auto hr = dcRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintPushButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId != BP_PUSHBUTTON || !g_d2dFactory)
+        return FALSE;
+    
+    INT index = (iStateId == PBS_HOT) ? 1 : (iStateId == PBS_PRESSED) ? 2
+    : (iStateId == PBS_DISABLED) ? 3 : 0;
+
+    if (!g_cache.pushbutton[index])
+        if (!g_cache.CachePushButton(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.pushbutton[index], pRect, 3, 3, 3, 3);
+    return TRUE;
+}
+
+BOOL CThemeCache::CachePushButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.pushbutton[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.pushbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_ROUNDED_RECT rr = {
+        D2D1::RectF(0.5f, 0.5f, (FLOAT)width - 0.5f, (FLOAT)height - 0.5f),
+        3.f, 3.f
+    };
+
+    D2D1_COLOR_F fillColor =
+        (iStateId == PBS_HOT)      ? MyD2D1Color(128, 96, 96, 96) :
+        (iStateId == PBS_PRESSED)  ? MyD2D1Color(180, 60, 60, 60)  :
+        (iStateId == PBS_DISABLED) ? MyD2D1Color(64, 64, 64, 64)  :
+                                     MyD2D1Color(96, 80, 80, 80);
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+    pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 112, 112, 112), &borderBrush);
+    
+    pRenderTarget->BeginDraw();
+    pRenderTarget->FillRoundedRectangle(&rr, fillBrush.Get());
+    pRenderTarget->DrawRoundedRectangle(&rr, borderBrush.Get());
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintRadioButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId != BP_RADIOBUTTON || !g_d2dFactory)
+        return FALSE;
+    
+    INT index = iStateId - 1;
+
+    if (!g_cache.radiobutton[index])
+        if (!g_cache.CacheRadioButton(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    // Some theme parts are always fixed size so no stretching is needed
+    DrawNineGridStretch(hdc, g_cache.radiobutton[index], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT width = 13, height = 13;
+    if (!g_cache.CreateDIB(g_cache.radiobutton[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.radiobutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    FLOAT diameter = width - 1.f;
+    FLOAT x = 0.5f, y = 0.5f;
+
+    D2D1_ELLIPSE outerEllipse = D2D1::Ellipse(
+        D2D1::Point2F(x + diameter / 2.f, y + diameter / 2.f),
+        diameter / 2.f, diameter / 2.f
+    );
+
+    D2D1_COLOR_F borderColor = MyD2D1Color(96, 128, 128, 128);
+    D2D1_COLOR_F radioColor = MyD2D1Color(64, 64, 64, 64);
+    D2D1_COLOR_F innerColor = MyD2D1Color(0, 0, 0);
+    FLOAT innerRatio = 0.0f;
+
+    switch (iStateId)
+    {
+        case RBS_UNCHECKEDHOT:
+            borderColor = MyD2D1Color(144, 144, 144);
+            radioColor = MyD2D1Color(48, 144, 144, 144);
+            break;
+        case RBS_UNCHECKEDPRESSED:
+            radioColor = MyD2D1Color(64, 64, 64);
+            innerColor = MyD2D1Color(0, 0, 0);
+            innerRatio = 0.3f;
+            break;
+        case RBS_UNCHECKEDDISABLED:
+            borderColor = MyD2D1Color(64, 128, 128, 128);
+            break;
+        case RBS_CHECKEDNORMAL:
+            borderColor = radioColor = IsAccentColorPossibleD2D(105, 205, 255);
+            innerColor = MyD2D1Color(0, 0, 0);
+            innerRatio = 0.4f;
+            break;
+        case RBS_CHECKEDHOT:
+            borderColor = radioColor = IsAccentColorPossibleD2D(225, 105, 205, 255);
+            innerColor = MyD2D1Color(0, 0, 0);
+            innerRatio = 0.6f;
+            break;
+        case RBS_CHECKEDPRESSED:
+            borderColor = radioColor = IsAccentColorPossibleD2D(192, 105, 205, 255);
+            innerColor = MyD2D1Color(0, 0, 0);
+            innerRatio = 0.33f;
+            break;
+        case RBS_CHECKEDDISABLED:
+            borderColor = radioColor = MyD2D1Color(96, 96, 96);
+            innerColor = MyD2D1Color(0, 0, 0);
+            innerRatio = 0.3f;
+            break;
+    }
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush = nullptr;
+    pRenderTarget->CreateSolidColorBrush(radioColor, &brush);
+
+    pRenderTarget->BeginDraw();
+    pRenderTarget->FillEllipse(outerEllipse, brush.Get());
+    brush->SetColor(borderColor);
+    pRenderTarget->DrawEllipse(outerEllipse, brush.Get(), 1.0f);
+
+    if (innerRatio > 0.f)
+    {
+        FLOAT innerDiameter = diameter * innerRatio;
+        D2D1_ELLIPSE innerEllipse = D2D1::Ellipse(
+            D2D1::Point2F(x + diameter / 2.f, y + diameter / 2.f),
+            innerDiameter / 2.f, innerDiameter / 2.f
+        );
+
+        pRenderTarget->CreateSolidColorBrush(innerColor, &brush);
+        pRenderTarget->FillEllipse(innerEllipse, brush.Get());
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT width = 13, height = 13;
+    if (!g_cache.CreateDIB(g_cache.checkbutton[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.checkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_ROUNDED_RECT roundedRect = {
+        D2D1::RectF(0, 0, width, height),
+        3.0f, 3.0f
+    };
+
+    D2D1_COLOR_F fillColor, borderColor;
+    switch (iStateId) 
+    {
+        case CBS_UNCHECKEDNORMAL:
+            borderColor = MyD2D1Color(96, 128, 128, 128);
+            fillColor = MyD2D1Color(64, 96, 96, 96);
+            break;
+        case CBS_UNCHECKEDHOT:
+            borderColor = MyD2D1Color(144, 144, 144);
+            fillColor = MyD2D1Color(48, 144, 144, 144);
+            break;
+        case CBS_UNCHECKEDPRESSED:
+            borderColor = MyD2D1Color(96, 144, 144, 144);
+            fillColor = MyD2D1Color(48, 144, 144, 144);
+            break;
+        case CBS_UNCHECKEDDISABLED:
+            borderColor = MyD2D1Color(64, 144, 144, 144);
+            fillColor = MyD2D1Color(64, 128, 128, 128);
+            break;
+        case CBS_CHECKEDNORMAL: case CBS_MIXEDNORMAL:
+        case CBS_IMPLICITNORMAL: case CBS_EXCLUDEDNORMAL:
+            fillColor = IsAccentColorPossibleD2D(102, 206, 255);
+            break;
+        case CBS_CHECKEDHOT: case CBS_MIXEDHOT:
+        case CBS_IMPLICITHOT: case CBS_EXCLUDEDHOT:
+            fillColor = IsAccentColorPossibleD2D(224, 102, 206, 255);
+            break;
+        case CBS_CHECKEDPRESSED: case CBS_MIXEDPRESSED:
+        case CBS_IMPLICITPRESSED: case CBS_EXCLUDEDPRESSED:
+            fillColor = IsAccentColorPossibleD2D(192, 102, 206, 255);
+            break;
+        case CBS_CHECKEDDISABLED: case CBS_MIXEDDISABLED:
+        case CBS_IMPLICITDISABLED: case CBS_EXCLUDEDDISABLED:
+            fillColor = IsAccentColorPossibleD2D(96, 96, 96);
+    }
+    pRenderTarget->BeginDraw();
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> Brush = nullptr;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &Brush);
+    pRenderTarget->FillRoundedRectangle(&roundedRect, Brush.Get());
+
+    if (iStateId >= CBS_UNCHECKEDNORMAL && iStateId <= CBS_UNCHECKEDDISABLED)
+    {
+        Brush->SetColor(borderColor);
+        pRenderTarget->DrawRoundedRectangle
+            (D2D1_ROUNDED_RECT(D2D1::RectF(.5f, .5f, width - .5f, height - .5f), 3.f, 3.f), Brush.Get());
+    }
+    if (iStateId > CBS_UNCHECKEDDISABLED)
+    {
+        FLOAT glyphSize = fminf(width, height) * 0.85f;
+        FLOAT gx = (width - glyphSize) / 2.0f;
+        FLOAT gy = (height - glyphSize) / 2.0f;
+
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> geometry = nullptr;
+        g_d2dFactory->CreatePathGeometry(&geometry);
+        
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink = nullptr;
+        geometry->Open(&sink);
+        
+        if ((iStateId >= CBS_CHECKEDNORMAL && iStateId <= CBS_CHECKEDDISABLED) ||
+            (iStateId >= CBS_IMPLICITNORMAL && iStateId <= CBS_IMPLICITDISABLED)) // Checkmark
+        {
+            sink->BeginFigure(
+                D2D1::Point2F(gx + glyphSize * 0.2f, gy + glyphSize * 0.55f - 1.0f),
+                D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->AddLine(
+                D2D1::Point2F(gx + glyphSize * 0.42f, gy + glyphSize * 0.75f - 1.0f));
+            sink->AddLine(
+                D2D1::Point2F(gx + glyphSize * 0.8f, gy + glyphSize * 0.3f - 1.0f));
+            sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        }
+        if (iStateId >= CBS_EXCLUDEDNORMAL && iStateId <= CBS_EXCLUDEDDISABLED) // X
+        {
+            sink->BeginFigure(D2D1::Point2F(gx + glyphSize * 0.2f, gy + glyphSize * 0.2f), D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->AddLine(D2D1::Point2F(gx + glyphSize * 0.8f, gy + glyphSize * 0.8f));
+            sink->EndFigure(D2D1_FIGURE_END_OPEN);
+
+            sink->BeginFigure(D2D1::Point2F(gx + glyphSize * 0.8f, gy + glyphSize * 0.2f), D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->AddLine(D2D1::Point2F(gx + glyphSize * 0.2f, gy + glyphSize * 0.8f));
+            sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        }
+        if (iStateId >= CBS_MIXEDNORMAL && iStateId <= CBS_MIXEDDISABLED) // Minus
+        {
+            sink->BeginFigure(D2D1::Point2F(gx + glyphSize * 0.3f, gy - 0.5f + glyphSize * 0.5f), D2D1_FIGURE_BEGIN_HOLLOW);
+            sink->AddLine(D2D1::Point2F(gx + glyphSize * 0.7f, gy - 0.5f + glyphSize * 0.5f));
+            sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        }
+        sink->Close();
+    
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> glyphBrush = nullptr;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(0, 0, 0), &glyphBrush);
+        pRenderTarget->DrawGeometry(geometry.Get(), glyphBrush.Get(), 1.5f);
+        
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId != BP_CHECKBOX || !g_d2dFactory)
+        return FALSE;
+    
+    INT index = iStateId - 1;
+
+    if (!g_cache.checkbutton[index])
+        if (!g_cache.CacheCheckButton(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.checkbutton[index], pRect);
+    return TRUE;
+}
+
+BOOL PaintGroupBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, LPCRECT pClippedRect)
+{
+    if (!g_d2dFactory || iPartId != BP_GROUPBOX || !pRect || !hdc)
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    const FLOAT radius = 4.0f;
+    const FLOAT x = 0.5f;
+    const FLOAT y = 0.5f;
+    const FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left) - 0.5f;
+    const FLOAT h = static_cast<FLOAT>(pRect->bottom - pRect->top) - 0.5f;
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush);
+
+    pRenderTarget->BeginDraw();
+
+    Microsoft::WRL::ComPtr<ID2D1PathGeometry> geometry;
+    Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+    g_d2dFactory->CreatePathGeometry(&geometry);
+    geometry->Open(&sink);
+    
+    if (!pClippedRect) // Top line if label does clip it
+    {
+        sink->BeginFigure(D2D1::Point2F(radius, y), D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->AddLine(D2D1::Point2F(width - radius, y));
+    }
+    else
+        sink->BeginFigure(D2D1::Point2F(width - radius, y), D2D1_FIGURE_BEGIN_HOLLOW);
+
+    sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width, radius), D2D1::SizeF(radius, radius), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(D2D1::Point2F(width, h - radius));
+    sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width - radius, h), D2D1::SizeF(radius, radius), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(D2D1::Point2F(radius, h));
+    sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(x, h - radius), D2D1::SizeF(radius, radius), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(D2D1::Point2F(x, radius));
+    sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(radius + 1.f, y), D2D1::SizeF(radius, radius), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    sink->EndFigure(D2D1_FIGURE_END_OPEN);
+    if (pClippedRect && (FLOAT)(pClippedRect->top) == (FLOAT)pRect->top) 
+    {
+        // Clipped rect sides
+        const FLOAT cx = static_cast<FLOAT>(pClippedRect->left) + radius - .5f;
+        const FLOAT cx2 = static_cast<FLOAT>(pClippedRect->right) - radius;
+        // Top line right side of the label
+        pRenderTarget->DrawLine(
+            D2D1::Point2F(cx, .5f),
+            D2D1::Point2F(cx2, .5f),
+            brush.Get()
+        );
+    }
+    sink->Close();
+    pRenderTarget->DrawGeometry(geometry.Get(), brush.Get());
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+
+    return TRUE;
+}
+
+BOOL PaintCommandLink(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId != BP_COMMANDLINK || !g_d2dFactory)
+        return FALSE;
+    
+    INT index = (iStateId == CMDLS_NORMAL || iStateId == CMDLS_DISABLED) ? 0 : (iStateId == CMDLS_HOT) ? 1
+    : (iStateId == CMDLS_PRESSED) ? 2 : 3;
+
+    if (!g_cache.commandlinkbutton[index])
+        if (!g_cache.CacheCommandlinkButton(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.commandlinkbutton[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.commandlinkbutton[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.commandlinkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_ROUNDED_RECT roundedRect = { D2D1::RectF(0, 0, width, height), 4.0f, 4.0f};
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->BeginDraw();
+    switch (iStateId)
+    {
+        case CMDLS_NORMAL:
+        case CMDLS_DISABLED:
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(0, 0, 0, 0), &brush);
+            pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
+            break;
+        case CMDLS_HOT:
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(64, 160, 160, 160), &brush);
+            pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
+            break;
+        case CMDLS_PRESSED:
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(32, 160, 160, 160), &brush);
+            pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
+            break;
+        case CMDLS_DEFAULTED:
+        case CMDLS_DEFAULTED_ANIMATING:
+            roundedRect = {D2D1::RectF(1.f, 1.f, width - 1.f, height - 1.f), 3.0f, 3.0f};
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &brush);
+            pRenderTarget->DrawRoundedRectangle(&roundedRect, brush.Get(), 2.f);
+            break;
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return FALSE;
+}
+
+BOOL PaintCommandLinkGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId != BP_COMMANDLINKGLYPH || !g_d2dFactory)
+        return FALSE;
+    
+    INT index = (iStateId == CMDLGS_HOT) ? 1 : (iStateId == CMDLGS_PRESSED) ? 2
+    : (iStateId == CMDLGS_DISABLED) ? 3 : 0;
+
+    if (!g_cache.commandlinkglyph[index])
+        if (!g_cache.CacheCommandlinkGlyph(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.commandlinkglyph[index], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheCommandlinkGlyph(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT x = 0;
+    INT width = 20, height = 20;
+    if (!g_cache.CreateDIB(g_cache.commandlinkglyph[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.commandlinkglyph[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    FLOAT tailScale = 1.f;
+    D2D1_COLOR_F arrowColor = MyD2D1Color(192, 192, 192);
+    if (iStateId == CMDLGS_HOT || iStateId == CMDLGS_PRESSED) {
+        arrowColor = MyD2D1Color(255, 255, 255);
+        if (iStateId == CMDLGS_PRESSED)
+            tailScale = 0.8f;
+    }
+    else if (iStateId == CMDLGS_DISABLED)
+        arrowColor = MyD2D1Color(160, 160, 160);
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(arrowColor, &brush);
+
+    FLOAT centerY = height / 2.f;
+    FLOAT tailLength = width * tailScale;
+    FLOAT tailStartX = x;
+    FLOAT tailEndX = tailStartX + tailLength;
+
+    FLOAT headSpan = tailLength * 0.4f;
+    FLOAT headOffset = headSpan * 0.7071f; // 45 degrees
+
+    pRenderTarget->BeginDraw();
+    pRenderTarget->DrawLine(
+    D2D1::Point2F(x, centerY),
+    D2D1::Point2F(tailLength, centerY),
+    brush.Get(), 1.f
+    );
+    pRenderTarget->DrawLine(
+        D2D1::Point2F(tailEndX - headOffset, centerY - headOffset),
+        D2D1::Point2F(tailEndX, centerY),
+        brush.Get(), 1.f
+    );
+    pRenderTarget->DrawLine(
+        D2D1::Point2F(tailEndX - headOffset, centerY + headOffset),
+        D2D1::Point2F(tailEndX, centerY),
+        brush.Get()
+    );  
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL SanitizeAddressCombobox(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId)
+{
+    HTHEME MyhTheme = nullptr;
+    if ((MyhTheme = OpenThemeData(WindowFromDC(hdc), L"DarkMode_AddressComposited::ComboBox")) 
+    && (iPartId == CP_BORDER || iPartId == CP_TRANSPARENTBACKGROUND))
+    {
+        CloseThemeData(MyhTheme);
+        return TRUE;
+    }
+    CloseThemeData(MyhTheme);
+    return FALSE;
+}
+
+BOOL PaintCombobox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != CP_READONLY && iPartId != CP_BORDER))
+        return FALSE;
+    
+    INT index = (iPartId == CP_READONLY) ? iStateId - 1 : iStateId + 3;
+    
+    if (!g_cache.combobox[index])
+        if (!g_cache.CacheCombobox(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.combobox[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheCombobox(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.combobox[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    // Direct2D render target
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.combobox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_ROUNDED_RECT roundedRect = {D2D1::RectF(0.5, 0.5, width - .5f, height - .5f), 3.0f, 3.0f};
+
+    pRenderTarget->BeginDraw();
+    if (iPartId == CP_READONLY)
+    {
+        D2D1_COLOR_F fillColor = (iStateId == PBS_HOT)      ? MyD2D1Color(128, 96, 96, 96) : 
+                                 (iStateId == PBS_PRESSED)  ? MyD2D1Color(180, 60, 60, 60) :
+                                 (iStateId == PBS_DISABLED) ? MyD2D1Color(64, 64, 64, 64) :
+                                                              MyD2D1Color(96, 80, 80, 80);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> Brush;
+        pRenderTarget->CreateSolidColorBrush(fillColor, &Brush);
+        pRenderTarget->FillRoundedRectangle(&roundedRect, Brush.Get());
+
+        Brush->SetColor(MyD2D1Color(96, 112, 112, 112));
+        pRenderTarget->DrawRoundedRectangle(&roundedRect, Brush.Get());
+    }
+    else if (iPartId == CP_BORDER)
+    {
+        D2D1_COLOR_F borderColor = (iStateId == CBXS_HOT) ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(96, 128, 128, 128);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+        pRenderTarget->CreateSolidColorBrush(borderColor, &borderBrush);
+        pRenderTarget->DrawRoundedRectangle(&roundedRect, borderBrush.Get());
+
+        if (iStateId == CBXS_PRESSED) 
+        {
+            borderBrush->SetColor(IsAccentColorPossibleD2D(105, 205, 255));
+            pRenderTarget->DrawLine(
+                D2D1::Point2F(.5f, height - 1.5f),
+                D2D1::Point2F(width - .5f, height - 1.5f),
+                borderBrush.Get()
+            );
+            pRenderTarget->DrawLine(
+                D2D1::Point2F(1.5f, height - .5f),
+                D2D1::Point2F(width - 1.5f, height - .5f),
+                borderBrush.Get()
+            );
+        }
+        else if (iStateId == CBXS_DISABLED)
+        {
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> Brush;
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 80, 80, 80), &Brush);
+        }
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintEditBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != EP_EDITBORDER_NOSCROLL && iPartId != EP_EDITBORDER_HSCROLL
+    && iPartId != EP_EDITBORDER_VSCROLL && iPartId != EP_EDITBORDER_HVSCROLL))
+        return FALSE;
+
+    INT index = iStateId - 1;
+
+    if (!g_cache.editbox[index])
+        if (!g_cache.CacheEditBox(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.editbox[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheEditBox(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if(!g_cache.CreateDIB(g_cache.editbox[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.editbox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x + .5f, y + .5f, width - .5f, height - .5f), 3.f, 3.f);
+    pRenderTarget->BeginDraw();  
+    if (iStateId == ETS_NORMAL || iStateId == ETS_HOT)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        D2D1_COLOR_F borderColor = (iStateId == ETS_HOT) ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(96, 112, 112, 112);
+        pRenderTarget->CreateSolidColorBrush(borderColor, &brush);
+        pRenderTarget->DrawRoundedRectangle(rect, brush.Get());
+    }
+    else if (iStateId == ETS_SELECTED)
+    {
+        FLOAT X = .5f;
+        FLOAT Width = static_cast<FLOAT>(width) - .5f, Height = static_cast<FLOAT>(height) - .5f;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 112, 112, 112), &brush);
+        pRenderTarget->DrawRoundedRectangle(rect, brush.Get());
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> linebrush;
+        pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(105, 205, 255), &linebrush);
+        pRenderTarget->DrawLine(D2D1::Point2F(X, Height - 1.f), D2D1::Point2F(Width, Height - 1.f), linebrush.Get());
+        pRenderTarget->DrawLine(D2D1::Point2F(X + 1.f, Height), D2D1::Point2F(Width - 1.f, Height), linebrush.Get());
+    }
+    else if (iStateId == ETS_DISABLED)
+    {
+        D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush); 
+        pRenderTarget->FillRoundedRectangle(rect, brush.Get());
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintListBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory)
+        return FALSE;
+
+    ID2D1DCRenderTarget* pRenderTarget = nullptr;
+    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_RECT_F rect((FLOAT)pRect->left, (FLOAT)pRect->top,
+                    (FLOAT)pRect->right - pRect->left, (FLOAT)pRect->bottom - pRect->top);
+
+    pRenderTarget->BeginDraw();
+
+    if (iPartId == 0)
+    {   
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> Brush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &Brush);
+        pRenderTarget->FillRectangle(&rect, Brush.Get());
+    }
+    else
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush = nullptr;
+        D2D1_COLOR_F borderColor;
+        switch (iStateId)
+        {
+        case LBPSH_NORMAL:
+            borderColor = MyD2D1Color(160, 160, 160);
+            break;
+        case LBPSH_HOT:
+        case LBPSH_FOCUSED:
+            borderColor = IsAccentColorPossibleD2D(105, 205, 255);
+            break;
+        case LBPSH_DISABLED:
+            borderColor = MyD2D1Color(96, 96, 96);
+            break;
+        default:
+            borderColor = MyD2D1Color(160, 160, 160);
+            break;
+        }
+        pRenderTarget->CreateSolidColorBrush(borderColor, &borderBrush);
+        pRenderTarget->FillRectangle(&rect, borderBrush.Get());
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != CP_DROPDOWNBUTTON && iPartId != CP_DROPDOWNBUTTONRIGHT
+    && iPartId != CP_DROPDOWNBUTTONLEFT))
+        return FALSE;
+
+    ID2D1DCRenderTarget* pRenderTarget = nullptr;
+    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    D2D1_COLOR_F arrowColor;
+    switch (iStateId)
+    {
+    case CBXSL_NORMAL:
+        arrowColor = MyD2D1Color(192, 192, 192);
+        break;
+    case CBXS_HOT:
+        arrowColor = MyD2D1Color(255, 255, 255);
+        break;
+    case CBXS_PRESSED:
+        arrowColor = MyD2D1Color(160, 160, 160);
+        break;
+    case CBXS_DISABLED:
+        arrowColor = MyD2D1Color(96, 96, 96);
+        break;
+    }
+
+    FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
+    FLOAT H = static_cast<FLOAT>(pRect->bottom - pRect->top);
+    FLOAT centerX = width / 2.0f;
+    FLOAT centerY = H / 2.0f;
+
+    FLOAT arrowHeight = H * 0.22f;
+    FLOAT delta = arrowHeight / std::sqrt(2.0f);
+
+    FLOAT tipX = centerX;
+    FLOAT tipY = centerY + arrowHeight / 2.0f;
+
+    // Left flap
+    D2D1_POINT_2F ptLeft(tipX - delta, tipY - delta);
+    // Right flap
+    D2D1_POINT_2F ptRight(tipX + delta, tipY - delta);
+    // Tip
+    D2D1_POINT_2F ptTip(tipX, tipY);
+
+    pRenderTarget->BeginDraw();
+
+    pRenderTarget->CreateSolidColorBrush(arrowColor, &brush);
+    pRenderTarget->DrawLine(ptLeft, ptTip, brush.Get());
+    pRenderTarget->DrawLine(ptRight, ptTip, brush.Get());
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId == TABP_PANE || !g_d2dFactory)
+        return FALSE;
+
+    INT index = (iStateId == TIS_NORMAL) ? 0 
+              : (iStateId == TIS_HOT) ? 1 : (iStateId == TIS_DISABLED) ? 2 : 3;
+
+    if (!g_cache.tab[index])
+        if (!g_cache.CacheTab(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.tab[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheTab(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT width = 12, height = 12;
+    if(!g_cache.CreateDIB(g_cache.tab[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.tab[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    pRenderTarget->BeginDraw();
+    if (iStateId == TIS_NORMAL)
+    {
+        D2D1_RECT_F rect{0, 0, (FLOAT)width, (FLOAT)height};
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(0, 0 , 0, 0), &brush);
+        pRenderTarget->FillRectangle(rect, brush.Get());
+    }
+    else if (iStateId == TIS_HOT || iStateId == TIS_DISABLED)
+    {
+        D2D1_COLOR_F fillColor = (iStateId == TIS_HOT) ? MyD2D1Color(128, 96, 96, 96) : MyD2D1Color(96, 96, 96);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+        D2D1_ROUNDED_RECT tabRect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 4.f, 4.f);
+        pRenderTarget->FillRoundedRectangle(tabRect, brush.Get());
+    }
+    else if (iStateId == TIS_SELECTED || iStateId == TIS_FOCUSED)
+    {
+        const FLOAT desiredHeight = 2.0f;       
+        const FLOAT widthPadding  = 2.0f;
+        const FLOAT verticalOffset = 2.0f;      
+    
+        FLOAT pillLeft   = widthPadding;
+        FLOAT pillRight  = width - widthPadding;
+        FLOAT pillBottom = height - verticalOffset;
+        FLOAT pillTop    = pillBottom - desiredHeight;
+
+        FLOAT pillHeight = desiredHeight;
+        FLOAT radius     = pillHeight / 2.0f;
+
+        D2D1_ROUNDED_RECT pillRect = D2D1::RoundedRect(
+            D2D1::RectF(pillLeft, pillTop, pillRight, pillBottom),
+            radius, radius
+        );
+
+        D2D1_COLOR_F pillColor = IsAccentColorPossibleD2D(102, 206, 255);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(pillColor, &brush);
+        pRenderTarget->FillRoundedRectangle(pillRect, brush.Get());
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintTrackbar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != TKP_TRACK && iPartId != TKP_TRACKVERT))
+        return FALSE;
+    
+    INT index = (iPartId == TKP_TRACK) ? 0 : 1;
+
+    if (!g_cache.trackbar[index])
+        if (!g_cache.CacheTrackBar(hdc, g_d2dFactory, iPartId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.trackbar[index], pRect, 2, 2, 2, 2);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheTrackBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT stateIndex)
+{
+    INT width = 6, height = 6;
+    if(!g_cache.CreateDIB(g_cache.trackbar[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    pRenderTarget->BeginDraw();
+    D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 2.f, 2.f);
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush);
+    pRenderTarget->FillRoundedRectangle(&body, brush.Get());
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintTrackbarThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != TKP_THUMB && iPartId != TKP_THUMBVERT))
+        return FALSE;
+    
+    if (iStateId == TUBS_FOCUSED) iStateId = 1;
+    else if (iStateId == TUBS_DISABLED) iStateId = 4;
+    INT index = (iPartId == TKP_THUMB) ? iStateId - 1 : iStateId + 3;
+
+    if (!g_cache.trackbarthumb[index])
+        if (!g_cache.CacheTrackBarThumb(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.trackbarthumb[index], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheTrackBarThumb(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT width = 10, height = 21;
+    if (iPartId == TKP_THUMBVERT)
+        width = std::exchange(height, width);
+    
+    if(!g_cache.CreateDIB(g_cache.trackbarthumb[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255) : 
+                             (iStateId == TUBS_PRESSED) ? IsAccentColorPossibleD2D(60, 110, 180) :
+                             (iStateId == TUBS_DISABLED) ? MyD2D1Color(96, 96, 96) : MyD2D1Color(64, 64, 64);
+    D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+    pRenderTarget->BeginDraw();
+    pRenderTarget->FillRoundedRectangle(&body, brush.Get());
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintTrackBarPointedThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != TKP_THUMBBOTTOM && iPartId != TKP_THUMBTOP 
+        && iPartId != TKP_THUMBLEFT && iPartId != TKP_THUMBRIGHT))
+        return FALSE;
+
+    if (iStateId == TUBS_FOCUSED) iStateId = 1;
+    else if (iStateId == TUBS_DISABLED) iStateId = 4;
+    INT index = (iPartId == TKP_THUMBBOTTOM) ? iStateId + 7 : (iPartId == TKP_THUMBTOP) ? iStateId + 11 :
+                (iPartId == TKP_THUMBLEFT) ? iStateId + 15 : iStateId + 19;
+
+    if (!g_cache.trackbarthumb[index])
+        if (!g_cache.CacheTrackBarPointedThumb(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.trackbarthumb[index], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT width = 11, height = 19;
+    if (iPartId == TKP_THUMBLEFT || iPartId == TKP_THUMBRIGHT)
+        width = std::exchange(height, width);
+    
+    if(!g_cache.CreateDIB(g_cache.trackbarthumb[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255) : 
+                             (iStateId == TUBS_PRESSED) ? IsAccentColorPossibleD2D(60, 110, 180) :
+                             (iStateId == TUBS_DISABLED) ? MyD2D1Color(96, 96, 96) : MyD2D1Color(64, 64, 64);
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+
+    FLOAT cx = width * 0.5f;
+    FLOAT cy = height * 0.5f;
+    Microsoft::WRL::ComPtr<ID2D1PathGeometry> triangleGeo;
+    Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+
+    pRenderTarget->BeginDraw();
+    if (iPartId == TKP_THUMBBOTTOM)
+    {
+        FLOAT tipHeight = height * 0.3f;
+        FLOAT bodyHeight = height - tipHeight;
+
+        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, bodyHeight), 2.f, 2.f);
+        pRenderTarget->FillRoundedRectangle(body, brush.Get());
+
+        D2D1_POINT_2F p1 = D2D1::Point2F(cx - width * 0.5f, bodyHeight - 1.f);
+        D2D1_POINT_2F p2 = D2D1::Point2F(cx + width * 0.5f, bodyHeight - 1.f);
+        D2D1_POINT_2F p3 = D2D1::Point2F(cx, height);
+
+        g_d2dFactory->CreatePathGeometry(&triangleGeo);
+        triangleGeo->Open(&sink);
+        sink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(p2);
+        sink->AddLine(p3);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink->Close();
+        pRenderTarget->FillGeometry(triangleGeo.Get(), brush.Get());
+    }
+    else if (iPartId == TKP_THUMBTOP)
+    {
+        FLOAT tipHeight = height * 0.3f;
+        FLOAT bodyY = tipHeight;
+        FLOAT bodyHeight = height - tipHeight;
+        FLOAT bodyRadius = bodyHeight * 0.2f;
+
+        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, bodyY, width, height), bodyRadius, bodyRadius);
+        pRenderTarget->FillRoundedRectangle(body, brush.Get());
+
+        D2D1_POINT_2F p1 = D2D1::Point2F(cx - width * 0.5f, tipHeight + 1.f);
+        D2D1_POINT_2F p2 = D2D1::Point2F(cx + width * 0.5f, tipHeight + 1.f);
+        D2D1_POINT_2F p3 = D2D1::Point2F(cx, 0);
+
+        g_d2dFactory->CreatePathGeometry(&triangleGeo);
+        triangleGeo->Open(&sink);
+        sink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(p2);
+        sink->AddLine(p3);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink->Close();
+
+        pRenderTarget->FillGeometry(triangleGeo.Get(), brush.Get());
+    }
+    else if (iPartId == TKP_THUMBLEFT)
+    {
+        FLOAT tipWidth = width * 0.3f;
+        FLOAT bodyWidth = width - tipWidth;
+        FLOAT bodyRadius = bodyWidth * 0.2f;
+
+        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(tipWidth, 0, width, height), bodyRadius, bodyRadius);
+        pRenderTarget->FillRoundedRectangle(body, brush.Get());
+
+        D2D1_POINT_2F p1 = D2D1::Point2F(tipWidth + 1.f, cy - height * 0.5f);
+        D2D1_POINT_2F p2 = D2D1::Point2F(tipWidth + 1.f, cy + height * 0.5f);
+        D2D1_POINT_2F p3 = D2D1::Point2F(0, cy);
+
+        g_d2dFactory->CreatePathGeometry(&triangleGeo);
+        triangleGeo->Open(&sink);
+        sink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(p2);
+        sink->AddLine(p3);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink->Close();
+
+        pRenderTarget->FillGeometry(triangleGeo.Get(), brush.Get());
+    }
+    else if (iPartId == TKP_THUMBRIGHT)
+    {
+        FLOAT tipWidth = width * 0.3f;
+        FLOAT bodyWidth = width - tipWidth;
+        FLOAT bodyRadius = bodyWidth * 0.2f;
+
+        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, bodyWidth, height), bodyRadius, bodyRadius);
+        pRenderTarget->FillRoundedRectangle(body, brush.Get());
+
+        D2D1_POINT_2F p1 = D2D1::Point2F(bodyWidth - 1.f, cy - height * 0.5f);
+        D2D1_POINT_2F p2 = D2D1::Point2F(bodyWidth - 1.f, cy + height * 0.5f);
+        D2D1_POINT_2F p3 = D2D1::Point2F(width, cy);
+
+        g_d2dFactory->CreatePathGeometry(&triangleGeo);
+        triangleGeo->Open(&sink);
+        sink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(p2);
+        sink->AddLine(p3);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        sink->Close();
+
+        pRenderTarget->FillGeometry(triangleGeo.Get(), brush.Get());
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory)
+        return FALSE;
+    if (iPartId == PP_PULSEOVERLAY || iPartId == PP_MOVEOVERLAY || iPartId == PP_PULSEOVERLAYVERT || iPartId == PP_MOVEOVERLAYVERT)
+        return TRUE;
+
+    INT index = (iPartId == PP_FILL) ? iStateId - 1 : (iPartId == PP_FILLVERT) ? iStateId + 3 
+              : (iPartId == PP_CHUNK || iPartId == PP_CHUNKVERT) ? 8 : 9;
+    
+    if (!g_cache.progressbar[index])
+        if (!g_cache.CacheProgressBar(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    if (iPartId == PP_FILL)
+        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 11, 11, 8, 8);
+    else if (iPartId == PP_FILLVERT)
+        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 8, 11, 11);
+    else
+        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 8, 9, 9);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheProgressBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 18, height = 18;
+    if (iPartId == PP_FILL) {
+        width = 50; height = 23;
+    }
+    else if (iPartId == PP_FILLVERT) {
+        width = 23; height = 50;
+    }
+
+    if(!g_cache.CreateDIB(g_cache.progressbar[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.progressbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_RECT_F rect = D2D1::RectF(0, 0, width, height);
+    D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(rect, 3.f, 3.f);
+
+    pRenderTarget->BeginDraw();
+    if (iPartId == PP_BAR || iPartId == PP_BARVERT ||
+        iPartId == PP_TRANSPARENTBAR || iPartId == PP_TRANSPARENTBARVERT)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush);
+        pRenderTarget->FillRoundedRectangle(rounded, brush.Get());
+    }
+    else if (iPartId == PP_CHUNK || iPartId == PP_CHUNKVERT)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255), &brush);
+        pRenderTarget->FillRoundedRectangle(rounded, brush.Get());
+    }
+    else if (iPartId == PP_FILL || iPartId == PP_FILLVERT)
+    {
+        BOOL isVertical = (iPartId == PP_FILLVERT);
+        D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES props = {};
+        props.startPoint = isVertical ? D2D1::Point2F(rect.right/2, rect.bottom)
+                                      : D2D1::Point2F(rect.left, rect.bottom/2);
+        props.endPoint   = isVertical ? D2D1::Point2F(rect.right/2, rect.top)
+                                      : D2D1::Point2F(rect.right, rect.bottom/2);
+        D2D1_GRADIENT_STOP stops[2];
+
+        switch (iStateId)
+        {
+            case PBFS_NORMAL:
+            {
+                Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> solidBrush;
+                pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255), &solidBrush);
+                pRenderTarget->FillRoundedRectangle(rounded, solidBrush.Get());
+                break;
+            }
+            case PBFS_ERROR:
+            {
+                stops[0].color = MyD2D1Color(228, 48, 96);
+                stops[0].position = 0.0f;
+                stops[1].color = MyD2D1Color(255, 96, 81);
+                stops[1].position = 1.0f;
+                break;
+            }
+            case PBFS_PAUSED:
+            {
+                stops[0].color = MyD2D1Color(228, 128, 48);
+                stops[0].position = 0.0f;
+                stops[1].color = MyD2D1Color(237, 206, 80);
+                stops[1].position = 1.0f;
+                break;
+            }
+            case PBFS_PARTIAL:
+            {
+                stops[0].color = IsAccentColorPossibleD2D(0, 120, 215);
+                stops[0].position = 0.0f;
+                stops[1].color = IsAccentColorPossibleD2D(64, 160, 255);
+                stops[1].position = 1.0f;
+                break;
+            }
+        }
+        if (iStateId != PBFS_NORMAL)
+        {
+            Microsoft::WRL::ComPtr<ID2D1GradientStopCollection> gradientStops;
+            pRenderTarget->CreateGradientStopCollection(stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &gradientStops);
+
+            Microsoft::WRL::ComPtr<ID2D1LinearGradientBrush> gradientBrush;
+            pRenderTarget->CreateLinearGradientBrush(props, gradientStops.Get(), &gradientBrush);
+
+            pRenderTarget->FillRoundedRectangle(rounded, gradientBrush.Get());
+        }
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory)
+        return FALSE;
+    if (iPartId != PP_MOVEOVERLAY && iPartId != PP_MOVEOVERLAYVERT)
+        return TRUE;
+
+    INT index = (iPartId == PP_MOVEOVERLAY) ? 0 : 1;
+    
+    // Make progress bar thin
+    RECT overlayRect;
+    if (iPartId == PP_MOVEOVERLAY)
+    {
+        INT overlayHeight = (pRect->bottom - pRect->top) / 3;
+        INT overlayY = ((pRect->bottom - pRect->top) - overlayHeight) / 1.5f;
+        overlayRect = RECT(pRect->left, overlayY, pRect->right, overlayY + overlayHeight);
+    }
+    else if (iPartId == PP_MOVEOVERLAYVERT)
+    {
+        FLOAT overlayWidth = (pRect->right - pRect->left) / 3.0f;
+        FLOAT overlayX = ((pRect->right - pRect->left) - overlayWidth) / 1.5f;
+        overlayRect = RECT(overlayX, pRect->top, overlayX + overlayWidth, pRect->bottom);
+    }
+    
+    if (!g_cache.indeterminatebar[index])
+        if (!g_cache.CacheIndeterminateBar(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.indeterminatebar[index], &overlayRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT stateIndex)
+{
+    INT width = 12, height = 12;
+    if (iPartId == PP_MOVEOVERLAYVERT)
+        width = std::exchange(height, width);
+
+    if(!g_cache.CreateDIB(g_cache.indeterminatebar[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = {0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.indeterminatebar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255), &brush);
+
+    pRenderTarget->BeginDraw();
+    pRenderTarget->FillRoundedRectangle(&rounded, brush.Get());
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintListView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != 0 && iPartId != LVP_LISTITEM 
+        && iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE))
+        return FALSE;
+
+    INT index;
+    if (iPartId == 0 || iPartId == 1) 
+        index = iStateId;
+    else if (iPartId == 6)
+    {
+        if (iStateId == 2 || iStateId == 4 || iStateId == 6
+        || iStateId == 8 || iStateId == 10) index = 7;
+        else if (iStateId == 11 || iStateId == 15) index = 8;
+        else if (iStateId == 12 || iStateId == 16) index = 9;
+        else if (iStateId == 13) index = 10;
+        else if (iStateId == 14) index = 11;
+        else return FALSE; 
+    }
+    else if (iPartId == 7) index = 12;
+    else return FALSE;
+
+    if (!g_cache.listview[index])
+    {
+        if (index <= 6)
+        {
+            if (!g_cache.CacheListItem(hdc, g_d2dFactory, iPartId, iStateId, index))
+                return FALSE;
+        }
+        else
+            if (!g_cache.CacheListGroupHeader(hdc, g_d2dFactory, iPartId, iStateId, index))
+                return FALSE;
+    }
+    DrawNineGridStretch(hdc, g_cache.listview[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    if (iPartId != 0 && iPartId != LVP_LISTITEM)
+        return FALSE;
+    
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if(!g_cache.CreateDIB(g_cache.listview[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.listview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    if (iPartId == 0)
+    {
+        D2D1_RECT_F rect = D2D1::RectF(x, y, width, height);
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush);
+        pRenderTarget->BeginDraw();
+        pRenderTarget->FillRectangle(&rect, brush.Get());
+        auto hr = pRenderTarget->EndDraw();
+        if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    }
+    else
+    {
+        D2D1_COLOR_F fillColor, borderColor;
+        switch (iStateId)
+        {
+            case LISS_NORMAL:
+                fillColor = MyD2D1Color(32, 160, 160, 160);
+                borderColor = IsAccentColorPossibleD2D(102, 206, 255);
+                break;
+            case LISS_HOT:
+                fillColor = MyD2D1Color(64, 160, 160, 160);
+                break;
+            case LISS_SELECTED:
+                fillColor = MyD2D1Color(32, 160, 160, 160);
+                break;
+            case LISS_DISABLED:
+                fillColor = MyD2D1Color(64, 160, 160, 160);
+                borderColor = IsAccentColorPossibleD2D(102, 206, 255);
+                break;
+            case LISS_SELECTEDNOTFOCUS:
+                fillColor = MyD2D1Color(16, 160, 160, 160);
+                break;
+            case LISS_HOTSELECTED:
+                fillColor = MyD2D1Color(48, 160, 160, 160);
+                borderColor = IsAccentColorPossibleD2D(102, 206, 255);
+                break;
+        }
+        
+        D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 4.f, 4.f);
+        pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+        pRenderTarget->BeginDraw();
+        pRenderTarget->FillRoundedRectangle(&rounded, brush.Get());
+
+        if (iStateId == LISS_HOTSELECTED || iStateId == LISS_NORMAL || iStateId == LISS_DISABLED)
+        {
+            x = y = 1.f;
+            width = height -= 1.f;
+            rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 3.f, 3.f);
+            brush->SetColor(borderColor);
+            pRenderTarget->DrawRoundedRectangle(&rounded, brush.Get(), 2.f);
+        }
+        auto hr = pRenderTarget->EndDraw();
+        if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    }
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheListGroupHeader(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    if (iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE)
+        return FALSE;
+    
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.listview[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.listview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    if (iPartId == LVP_GROUPHEADER)
+    {
+        D2D1_COLOR_F fillColor = {};
+        D2D1_COLOR_F borderColor = {};
+
+        switch (iStateId)
+        {
+            case LVGH_OPENHOT: case LVGH_OPENSELECTEDHOT:
+            case LVGH_OPENSELECTEDNOTFOCUSEDHOT: case LVGH_OPENMIXEDSELECTIONHOT:
+            case LVGH_CLOSEHOT:
+                fillColor = MyD2D1Color(64, 160, 160, 160);
+                break;
+            case LVGH_CLOSESELECTED:
+            case LVGH_CLOSEMIXEDSELECTION:
+                fillColor = MyD2D1Color(32, 160, 160, 160);
+                break;
+            case LVGHL_CLOSEMIXEDSELECTIONHOT:
+            case LVGHL_CLOSESELECTEDHOT:
+                fillColor = MyD2D1Color(48, 160, 160, 160);
+                break;
+            case LVGHL_CLOSESELECTEDNOTFOCUSED:
+                borderColor = MyD2D1Color(255, 255, 255);
+                break;
+            case LVGHL_CLOSESELECTEDNOTFOCUSEDHOT:
+                fillColor = MyD2D1Color(64, 160, 160, 160);
+                borderColor = MyD2D1Color(255, 255, 255);
+                break;
+            default:
+                return FALSE;
+        }
+        D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 4.f, 4.f);
+        pRenderTarget->BeginDraw();
+        if (iStateId != LVGHL_CLOSESELECTEDNOTFOCUSED)
+        {
+            pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+            pRenderTarget->FillRoundedRectangle(&rounded, brush.Get());
+        }
+
+        if (iStateId == LVGHL_CLOSESELECTEDNOTFOCUSED || iStateId == LVGHL_CLOSESELECTEDNOTFOCUSEDHOT)
+        {
+            x = y = 1.f;
+            width = height -= 1.f;
+            rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 3.f, 3.f);
+            pRenderTarget->CreateSolidColorBrush(borderColor, &brush);
+            pRenderTarget->DrawRoundedRectangle(&rounded, brush.Get(), 2.f);
+        }
+        auto hr = pRenderTarget->EndDraw();
+        if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    }
+    else
+    {
+        D2D1_RECT_F rect = D2D1::RectF(x, y, width, height);
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 160, 160, 160), &brush);
+        pRenderTarget->BeginDraw();
+        pRenderTarget->FillRectangle(&rect, brush.Get());
+        auto hr = pRenderTarget->EndDraw();
+        if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    }
+    return TRUE;
+}
+
+BOOL PaintTreeView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != 0 && iPartId != TVP_TREEITEM))
+        return FALSE;
+    
+    INT index = (iPartId == 0) ? 0 : (iStateId == TREIS_HOT) ? 1 : (iStateId == TREIS_SELECTED) ? 2 :
+                (iStateId == TREIS_SELECTEDNOTFOCUS) ? 3 : 4;
+
+    if (!g_cache.treeview[index])
+        if (!g_cache.CacheTreeView(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.treeview[index], pRect, 6, 6, 5, 5);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheTreeView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.treeview[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.treeview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_ROUNDED_RECT roundedRect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+    pRenderTarget->BeginDraw();
+    if (iPartId == 0)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &borderBrush);
+        pRenderTarget->FillRectangle(D2D1::RectF(x, y, width, height), borderBrush.Get());
+    }
+    else if (iPartId == TVP_TREEITEM)
+    {
+        D2D1_COLOR_F fillColor = (iStateId == TREIS_HOT)              ? MyD2D1Color(64, 160, 160, 160) : 
+                                 (iStateId == TREIS_SELECTED)         ? MyD2D1Color(32, 160, 160, 160) :
+                                 (iStateId == TREIS_SELECTEDNOTFOCUS) ? MyD2D1Color(16, 160, 160, 160) :
+                                                                        //TREIS_HOTSELECTED
+                                                                        MyD2D1Color(48, 160, 160, 160); 
+
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+        pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
+
+        if (iStateId == TREIS_SELECTED || iStateId == TREIS_SELECTEDNOTFOCUS || iStateId == TREIS_HOTSELECTED)
+        {
+            FLOAT lineLength = height * 0.45f;
+            FLOAT offsetY = (height - lineLength) / 2;
+            brush->SetColor(IsAccentColorPossibleD2D(102, 206, 255));
+
+            D2D1_POINT_2F p1 = D2D1::Point2F(x + 0.5f, y + offsetY);
+            D2D1_POINT_2F p2 = D2D1::Point2F(x + 0.5f, y + offsetY + lineLength);
+            pRenderTarget->DrawLine(p1, p2, brush.Get());
+            p1.x += 1.0f; p2.x += 1.0f;
+            pRenderTarget->DrawLine(p1, p2, brush.Get());
+        }
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintItemsView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != 1 && iPartId != 3 && iPartId != 6))
+        return FALSE;
+
+    INT index = (iPartId == 1 && (iStateId % 2 == 1)) ? 0 :
+                (iPartId == 1 && (iStateId % 2 == 0)) ? 1 : (iStateId == 1) ? 2 : 3;
+    
+    if (!g_cache.itemsview[index])
+        if (!g_cache.CacheItemsView(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.itemsview[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheItemsView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if(!g_cache.CreateDIB(g_cache.itemsview[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.itemsview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    x = y += 1;
+    width = height -= 1;
+
+    pRenderTarget->BeginDraw();
+    if (iPartId == 1)
+    {
+        if (iStateId == 1 || iStateId == 3)
+        {
+            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+            pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(0, 96, 188), &brush);
+            pRenderTarget->FillRoundedRectangle(rect, brush.Get());
+
+            brush->SetColor(IsAccentColorPossibleD2D(0, 120, 215));
+            pRenderTarget->DrawRoundedRectangle(rect, brush.Get(), 2.0f);
+        }
+        else if (iStateId == 2 || iStateId == 4)
+        {
+            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+            pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(0, 96, 188), &fillBrush);
+            pRenderTarget->FillRoundedRectangle(rect, fillBrush.Get());
+        }
+    }
+    else if (iPartId == 3 || iPartId == 6)
+    {
+        if (iStateId == 1)
+        {
+            FLOAT radius = (iPartId == 6) ? 2.f : 3.f;
+            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), radius, radius);
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &borderBrush);
+            pRenderTarget->DrawRoundedRectangle(rect, borderBrush.Get(), 2.0f);
+        }
+        else if (iStateId == 2)
+        {
+            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x-1, y-1, width+1, height+1), 3.f, 3.f);
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 160, 160, 160), &fillBrush);
+            pRenderTarget->FillRoundedRectangle(rect, fillBrush.Get());
+        }
+    }
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintHeader(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || iPartId != HP_HEADERITEM)
+        return FALSE;
+
+    if (iStateId % 3 == 1) return TRUE;
+    INT index = (iStateId % 3 == 2) ? 0 : 1;
+    
+    if (!g_cache.header[index])
+        if (!g_cache.CacheHeader(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.header[index], pRect, 6, 0, 6, 6);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheHeader(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 14, height = 14;
+    if(!g_cache.CreateDIB(g_cache.header[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.header[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    FLOAT radius = 6.0f;
+    D2D1_COLOR_F fillColor;
+    switch (iStateId)
+    {
+        case HIS_HOT: case HIS_SORTEDHOT:
+        case HIS_ICONHOT: case HIS_ICONSORTEDHOT:
+            fillColor = MyD2D1Color(64, 160, 160, 160);
+            break;
+        case HIS_PRESSED: case HIS_SORTEDPRESSED:
+        case HIS_ICONPRESSED: case HIS_ICONSORTEDPRESSED:
+            fillColor = MyD2D1Color(32, 160, 160, 160);
+            break;
+        case HIS_NORMAL: case HIS_SORTEDNORMAL:
+        case HIS_ICONNORMAL: case HIS_ICONSORTEDNORMAL:
+            return TRUE;
+    }
+    Microsoft::WRL::ComPtr<ID2D1PathGeometry> geometry;
+    Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+    pRenderTarget->BeginDraw();
+
+    g_d2dFactory->CreatePathGeometry(&geometry);
+    geometry->Open(&sink);
+    sink->BeginFigure(D2D1::Point2F(x, y), D2D1_FIGURE_BEGIN_FILLED);
+    sink->AddLine(D2D1::Point2F(width, y));
+    sink->AddLine(D2D1::Point2F(width, height - radius));
+    sink->AddArc(D2D1::ArcSegment(
+        D2D1::Point2F(width - radius, height),
+        D2D1::SizeF(radius, radius), 0.0f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(D2D1::Point2F(radius, height));
+    sink->AddArc(D2D1::ArcSegment(
+        D2D1::Point2F(x, height - radius),
+        D2D1::SizeF(radius, radius), 0.0f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(D2D1::Point2F(x, y));
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+    pRenderTarget->FillGeometry(geometry.Get(), brush.Get());
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintPreviewPaneSeperator(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != 3 && iPartId != 4))
+        return FALSE;
+
+    if (!g_cache.previewseperator[0])
+        if (!g_cache.CachePreviewPaneSeperator(hdc, g_d2dFactory))
+            return FALSE;
+    
+    RECT rc{pRect->left+1, pRect->top, pRect->right, pRect->bottom};
+        DrawNineGridStretch(hdc, g_cache.previewseperator[0], &rc, 1, 0, 0, 0);
+    return TRUE;
+}
+
+BOOL CThemeCache::CachePreviewPaneSeperator(HDC hdc, ID2D1Factory* pFactory)
+{
+    INT x = 0, y = 0;
+    INT width = 3, height = 3;
+    if(!g_cache.CreateDIB(g_cache.previewseperator[0], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.previewseperator[0], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(MyD2D1Color(128, 160, 160, 160), &brush);
+
+    pRenderTarget->BeginDraw();
+    pRenderTarget->DrawLine(D2D1_POINT_2F(x, y), D2D1_POINT_2F(x, height), brush.Get());
+    auto hr = pRenderTarget->EndDraw();
+
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintModuleButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if ((iPartId != 3) || !g_d2dFactory)
+        return FALSE;
+    // Let windows theme paint its (transparent) buttons
+    if (iStateId == 1 || iStateId == 6) return FALSE;
+    INT index = iStateId - 2; 
+
+    if (!g_cache.modulebutton[index])
+        if (!g_cache.CacheModuleButton(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.modulebutton[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheModuleButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if(!g_cache.CreateDIB(g_cache.modulebutton[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.modulebutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_COLOR_F fillColor;
+    D2D1_COLOR_F borderColor = MyD2D1Color(255, 255, 255);
+    FLOAT Border2pxOffset = 0.f;
+    switch (iStateId) 
+    {
+        case 2: fillColor = MyD2D1Color(64, 160, 160, 160);
+            break;
+        case 3: fillColor = MyD2D1Color(32, 160, 160, 160);
+            break;
+        case 4: Border2pxOffset = 1.f;
+            break;
+        case 5: 
+            fillColor = MyD2D1Color(64, 160, 160, 160);
+            Border2pxOffset = 1.f;
+            break;
+    }
+
+    D2D1_ROUNDED_RECT roundedRect = {
+        D2D1::RectF(Border2pxOffset, Border2pxOffset,
+                    width -Border2pxOffset, height -Border2pxOffset) ,
+        3.0f, 3.0f
+    };
+
+    pRenderTarget->BeginDraw();
+    if (iStateId != 4)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+        pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+        pRenderTarget->FillRoundedRectangle(&roundedRect, fillBrush.Get());
+    }
+    if (iStateId == 4 || iStateId == 5)
+    {
+        Border2pxOffset += 1.f;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+        pRenderTarget->CreateSolidColorBrush(borderColor, &borderBrush);
+        pRenderTarget->DrawRoundedRectangle(&roundedRect, borderBrush.Get(), Border2pxOffset);
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintModuleLocation(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if ((iPartId != 9) || !g_d2dFactory)
+        return FALSE;
+    if (iStateId == 6) return FALSE;
+    INT index = iStateId - 1; 
+
+    if (!g_cache.modulelocationbutton[index])
+        if (!g_cache.CacheModuleLocationButton(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.modulelocationbutton[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheModuleLocationButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if(!g_cache.CreateDIB(g_cache.modulelocationbutton[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.modulelocationbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    D2D1_COLOR_F fillColor;
+    D2D1_COLOR_F borderColor = MyD2D1Color(255, 255, 255);
+    FLOAT Border2pxOffset = 0.f;
+    switch (iStateId) 
+    {
+        case 1:
+            fillColor = MyD2D1Color(96, 78, 78, 78);
+            borderColor = MyD2D1Color(96, 112, 112, 112);
+            break;
+        case 2:
+            fillColor = MyD2D1Color(96, 96, 96, 96);
+            borderColor = MyD2D1Color(96, 144, 144, 144);
+            break;
+        case 3:
+            fillColor = MyD2D1Color(96, 88, 88, 88);
+            borderColor = MyD2D1Color(96, 80, 80, 80);
+            break;
+        case 4:
+            Border2pxOffset = 1.f;
+            borderColor = MyD2D1Color(255, 255, 255);
+            break;
+    }
+
+    D2D1_ROUNDED_RECT roundedRect = {
+        D2D1::RectF(Border2pxOffset, Border2pxOffset,
+                    width -Border2pxOffset, height -Border2pxOffset) ,
+        3.0f, 3.0f
+    };
+
+    pRenderTarget->BeginDraw();
+    if (iStateId != 4)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+        pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+        pRenderTarget->FillRoundedRectangle(&roundedRect, fillBrush.Get());
+    }
+
+    Border2pxOffset += 1.f;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+    pRenderTarget->CreateSolidColorBrush(borderColor, &borderBrush);
+    pRenderTarget->DrawRoundedRectangle(&roundedRect, borderBrush.Get(), Border2pxOffset);
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintModuleSplitButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != 4 && iPartId != 5))
+        return FALSE;
+    if (iStateId == 1 || iStateId == 6) return FALSE;
+    INT index = (iPartId == 4) ? iStateId - 2 : iStateId + 2; 
+
+    if (!g_cache.modulesplitbutton[index])
+        if (!g_cache.CacheModuleSplitButton(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.modulesplitbutton[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 12, height = 12;
+    if(!g_cache.CreateDIB(g_cache.modulesplitbutton[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.modulesplitbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    const FLOAT radius = 3.0f;
+
+    D2D1_COLOR_F fillColor;
+    if (iStateId == 2) fillColor = MyD2D1Color(64, 160, 160, 160);
+    else if (iStateId == 3 || iStateId == 5) fillColor = MyD2D1Color(32, 160, 160, 160);
+    if (iStateId == 4) {
+        y = x += 1.f;
+        width = height -= 1;
+    }
+
+    pRenderTarget->BeginDraw();
+    if (iPartId == 4)
+    {
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+        g_d2dFactory->CreatePathGeometry(&path);
+        path->Open(&sink);
+
+        sink->BeginFigure(D2D1::Point2F(width, y), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(D2D1::Point2F(x + radius, y));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(x, radius + y), D2D1::SizeF(radius, radius),
+            0.f,
+            D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+            D2D1_ARC_SIZE_SMALL
+        ));
+        sink->AddLine(D2D1::Point2F(x, height - radius));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(x + radius, height), D2D1::SizeF(radius, radius),
+            0.f,
+            D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+            D2D1_ARC_SIZE_SMALL
+        ));
+        sink->AddLine(D2D1::Point2F(width, height));
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        sink->Close();
+
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        if (iStateId == 2 || iStateId == 3 || iStateId == 5)
+        {
+            pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+            pRenderTarget->FillGeometry(path.Get(), brush.Get());
+        }
+        else if (iStateId == 4)
+        {
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &brush);
+            pRenderTarget->DrawGeometry(path.Get(), brush.Get(), 2.f);
+        }
+    }
+    else if (iPartId == 5)
+    {
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> path;
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+        g_d2dFactory->CreatePathGeometry(&path);
+        path->Open(&sink);
+
+        sink->BeginFigure(D2D1::Point2F(x, y), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(D2D1::Point2F(width - radius, y));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width, y + radius), D2D1::SizeF(radius, radius),
+            0.f,
+            D2D1_SWEEP_DIRECTION_CLOCKWISE,
+            D2D1_ARC_SIZE_SMALL
+        ));
+        sink->AddLine(D2D1::Point2F(width, height - radius));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width - radius, height), D2D1::SizeF(radius, radius),
+            0.f,
+            D2D1_SWEEP_DIRECTION_CLOCKWISE,
+            D2D1_ARC_SIZE_SMALL
+        ));
+        sink->AddLine(D2D1::Point2F(x, height));
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        sink->Close();
+
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        if (iStateId == 2 || iStateId == 3 || iStateId == 5)
+        {
+            pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+            pRenderTarget->FillGeometry(path.Get(), brush.Get());
+        }
+        else if (iStateId == 4)
+        {
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &brush);
+            pRenderTarget->DrawGeometry(path.Get(), brush.Get(), 2.f);
+        }
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintNavigationButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory)
+        return FALSE;
+    INT index = (iPartId == NAV_BACKBUTTON) ? iStateId - 1 : (iPartId == NAV_FORWARDBUTTON) ? iStateId + 3 : iStateId + 7; 
+
+    if (!g_cache.navigationbutton[index])
+        if (!g_cache.CacheNavigationButton(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.navigationbutton[index], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+{
+    INT x = 0, y = 0;
+    INT width = 30, height = 30;
+    if (iPartId == NAV_MENUBUTTON)
+        width = 13, height = 27;
+    
+    if(!g_cache.CreateDIB(g_cache.navigationbutton[stateIndex], hdc, width, height))
+        return FALSE;
+    
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { x, y, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.navigationbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    D2D1_COLOR_F fillColor, arrowColor;
+    switch (iStateId) 
+    {
+        case NAV_BB_NORMAL:
+            arrowColor = MyD2D1Color(200, 192, 192, 192);
+            fillColor = MyD2D1Color(0, 0, 0, 0);
+            break;
+        case NAV_BB_HOT:
+            fillColor = MyD2D1Color(32, 255, 255, 255);
+            arrowColor = MyD2D1Color(200, 255, 255, 255);
+            break;
+        case NAV_BB_PRESSED:
+            fillColor = MyD2D1Color(16, 255, 255, 255);
+            arrowColor = MyD2D1Color(200, 160, 160, 160);
+            break;
+        case NAV_BB_DISABLED:
+            arrowColor = MyD2D1Color(160, 64, 64, 64);
+            fillColor = MyD2D1Color(0, 0, 0, 0);
+            break;
+    }
+
+    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    pRenderTarget->BeginDraw();
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+    pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> arrowBrush;
+    pRenderTarget->CreateSolidColorBrush(arrowColor, &arrowBrush);
+
+    if (iPartId == NAV_BACKBUTTON)
+    {
+        FLOAT centerY = height / 2.f;
+        FLOAT tailLength = width / 2.5f;
+        FLOAT tailStartX = width - (tailLength / 1.5f);
+        FLOAT tailEndX = tailStartX - tailLength;
+
+        FLOAT headSpand = tailLength * .5f;
+        FLOAT headOffset = headSpand * 0.7071f;
+
+        pRenderTarget->DrawLine(
+        D2D1::Point2F(tailStartX, centerY),
+        D2D1::Point2F(tailEndX+1.5f, centerY),
+        arrowBrush.Get(), 2.f
+        );
+        
+        pRenderTarget->DrawLine(
+            D2D1::Point2F(tailEndX + headOffset, centerY + headOffset),
+            D2D1::Point2F(tailEndX, centerY),
+            arrowBrush.Get(), 2.f
+        );
+
+        pRenderTarget->DrawLine(
+            D2D1::Point2F(tailEndX + headOffset, centerY - headOffset),
+            D2D1::Point2F(tailEndX, centerY),
+            arrowBrush.Get(), 2.15f
+        );  
+    }
+    else if (iPartId == NAV_FORWARDBUTTON)
+    {
+        FLOAT centerY = height / 2.f;
+        FLOAT tailLength = width / 2.5f;
+        FLOAT tailStartX = tailLength / 1.5f;
+        FLOAT tailEndX = tailStartX + tailLength;
+
+        FLOAT headSpand = tailLength * .5f;
+        FLOAT headOffset = headSpand * 0.7071f;
+
+        pRenderTarget->DrawLine(
+        D2D1::Point2F(tailStartX, centerY),
+        D2D1::Point2F(tailEndX-1.5f, centerY),
+        arrowBrush.Get(), 2.f
+        );
+        
+        pRenderTarget->DrawLine(
+            D2D1::Point2F(tailEndX - headOffset, centerY - headOffset),
+            D2D1::Point2F(tailEndX, centerY),
+            arrowBrush.Get(), 2.f
+        );
+
+        pRenderTarget->DrawLine(
+            D2D1::Point2F(tailEndX - headOffset, centerY + headOffset),
+            D2D1::Point2F(tailEndX, centerY),
+            arrowBrush.Get(), 2.f
+        );  
+    }
+    else if (iPartId == NAV_MENUBUTTON)
+    {
+        FLOAT centerY = height / 2.f;
+        FLOAT tailLength = width / 2.5f;
+        FLOAT leftTailStartX = tailLength / 2.f;
+        FLOAT leftTailStartY = centerY - tailLength / 2.f;
+        FLOAT rightTailStartX = width - (tailLength / 2.f);
+        FLOAT rightTailStartY = centerY - tailLength / 2.f;
+        FLOAT tip = centerY + tailLength / 2.f;
+
+        pRenderTarget->DrawLine(
+            D2D1::Point2F(leftTailStartX, leftTailStartY),
+            D2D1::Point2F(width / 2.f, tip),
+            arrowBrush.Get(), 2.f
+        );
+
+        pRenderTarget->DrawLine(
+            D2D1::Point2F(rightTailStartX, rightTailStartY),
+            D2D1::Point2F(width / 2.f, tip),
+            arrowBrush.Get(), 2.f
+        );
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintToolbarButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || (iPartId != TP_BUTTON && iPartId != TP_DROPDOWNBUTTON && iPartId != TP_SPLITBUTTON))
+        return FALSE;
+    if (iStateId == TS_NORMAL || iStateId == TS_DISABLED || iStateId == TS_NEARHOT) return FALSE;
+
+    INT index = (iStateId == TS_HOTCHECKED) ? 0 : (iStateId == TS_PRESSED) ? 1 : (iStateId == TS_CHECKED) ? 2 : 3;
+
+    if (!g_cache.toolbarbutton[index])
+        if (!g_cache.CacheToolbarButton(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.toolbarbutton[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheToolbarButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.toolbarbutton[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.toolbarbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    D2D1_COLOR_F fillColor = (iStateId == TS_HOT || iStateId == TS_OTHERSIDEHOT) ? MyD2D1Color(64, 160, 160, 160) :
+                             (iStateId == TS_PRESSED || iStateId == TS_CHECKED) ? MyD2D1Color(32, 160, 160, 160) : MyD2D1Color(48, 160, 160, 160);
+
+    pRenderTarget->BeginDraw();
+
+    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+    pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
+
+    if (iStateId == TS_HOTCHECKED || iStateId == TS_CHECKED)
+    {
+        FLOAT pillOffset = width * 0.2f;
+        D2D1_COLOR_F pillColor = IsAccentColorPossibleD2D(105, 205, 255);
+        fillBrush->SetColor(pillColor);
+        pRenderTarget->DrawLine(D2D1::Point2F(pillOffset, height-1), D2D1::Point2F(width - pillOffset, height-1), fillBrush.Get(), 2.0f);
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintAddressBand(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || iPartId != 1)
+        return FALSE;
+    INT index = iStateId - 1;
+
+    if (!g_cache.addressband[index])
+        if (!g_cache.CacheAddressBand(hdc, g_d2dFactory, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.addressband[index], pRect, 6, 6, 6, 6);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheAddressBand(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+{
+    INT width = 18, height = 18;
+    if (!g_cache.CreateDIB(g_cache.addressband[stateIndex], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.addressband[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    D2D1_COLOR_F fillColor, borderColor;
+    switch (iStateId) 
+    {
+        case 1:
+            fillColor = MyD2D1Color(48, 96, 96, 96);
+            borderColor = MyD2D1Color(64, 255, 255, 255);
+            break;
+        case 2:
+            fillColor = MyD2D1Color(96, 96, 96, 96);
+            borderColor = MyD2D1Color(64, 255, 255, 255);
+            break;
+        case 3:
+            fillColor = MyD2D1Color(24, 96, 96, 96);
+            borderColor = MyD2D1Color(64, 255, 255, 255);
+            break;
+        case 4:
+            fillColor = MyD2D1Color(0, 0, 0);
+            borderColor = IsAccentColorPossibleD2D(105, 205, 255);
+            break;
+    }
+    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 5.f, 5.f);
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+
+    pRenderTarget->BeginDraw();
+
+    pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
+    fillBrush->SetColor(borderColor);
+    pRenderTarget->DrawLine(D2D1::Point2F(2.f, height-.5f), D2D1::Point2F(width-2.f, height-.5f), fillBrush.Get());
+    pRenderTarget->DrawLine(D2D1::Point2F(1.f, height-1.5f), D2D1::Point2F(width-1.f, height-1.5f), fillBrush.Get());
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
+BOOL PaintMenu(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    // Part:14 (Win10) - Part:27 (Win11)
+    if (!g_d2dFactory || (iPartId != 27 && iPartId != MENU_POPUPITEM && iPartId != MENU_BARITEM))
+        return FALSE;
+    if ((iPartId == 27 || iPartId == MENU_POPUPITEM) && iStateId != 2) return FALSE;
+    if ((iPartId == MENU_BARITEM) && 
+        (iStateId == MBI_NORMAL || iStateId == MBI_DISABLED || iStateId == MBI_DISABLEDPUSHED)) return FALSE;
+
+    INT index = (iPartId == 27 || iPartId == MENU_POPUPITEM) ? 0 : (MBI_PUSHED) ? 1 : 2;
+
+    if (!g_cache.menuitem[index])
+        if (!g_cache.CacheMenuItem(hdc, g_d2dFactory, iPartId, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.menuitem[index], pRect, 4, 4, 4, 4);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheMenuItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT indexState)
+{
+    INT width = 12, height = 12;
+    if (!g_cache.CreateDIB(g_cache.menuitem[indexState], hdc, width, height))
+        return FALSE;
+
+    Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
+    RECT rc = { 0, 0, width, height};
+    if (FAILED(CreateBoundD2DRenderTarget(g_cache.menuitem[indexState], &rc, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+    
+    pRenderTarget->BeginDraw();
+    
+    if (iPartId == MENU_POPUPITEM || iPartId == 27)
+    {
+        D2D1_COLOR_F fillColor = IsAccentColorPossibleD2D(0, 160, 255);
+        D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 4.f, 4.f);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+        pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+        pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
+    }
+    else 
+    {
+        D2D1_COLOR_F fillColor = (iPartId == MBI_PUSHED) ? MyD2D1Color(24, 160, 160, 160) : MyD2D1Color(48, 160, 160, 160);
+        D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 4.f, 4.f);
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
+        pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
+        pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
+    }
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
 }
 
 HRESULT WINAPI HookedDrawThemeBackground(
     HTHEME hTheme,
     HDC hdc,
-    int iPartId,
-    int iStateId,
+    INT iPartId,
+    INT iStateId,
     LPCRECT pRect,
     LPCRECT pClipRect)
 {    
+    std::wstring ThemeClassName = GetThemeClass(hTheme);    
+
+    if (ThemeClassName == L"ScrollBar")
+    {
+        if (PaintScroll(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintScrollBarArrows(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Button")
+    {
+        if (PaintPushButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintRadioButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintCheckBox(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintGroupBox(hdc, iPartId, iStateId, pRect, pClipRect))
+            return S_OK;
+        else if (PaintCommandLink(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintCommandLinkGlyph(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Tab")
+    {
+        if (PaintTab(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"ComboBox")
+    {
+        // The Win32 address bar uses both the "Combobox" and "ComboBox" theme classes along with other classes
+        // ComboBox is used when the address bar is selected, while combobox is used when the drop-down window is open
+        if (SanitizeAddressCombobox(hTheme, hdc, iPartId, iStateId))
+            return S_OK;
+        else if (PaintDropDownArrow(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Combobox")
+    {
+        if (PaintCombobox(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintDropDownArrow(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Listbox")
+    {
+        if (PaintListBox(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Edit")
+    {
+        if (PaintEditBox(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"TrackBar")
+    {
+        if (PaintTrackbar(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        if (PaintTrackbarThumb(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintTrackBarPointedThumb(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Progress")
+    {
+        // The exported GetThemeClass function does not provide
+        // full string of theme class names of derived theme classes
+        // Use the OpenThemeData API instead.
+        HTHEME theme = NULL;
+        if (hTheme == (theme = OpenThemeData(WindowFromDC(hdc), L"Indeterminate::Progress")))
+        {
+            if (PaintIndeterminateProgressBar(hdc, iPartId, iStateId, pRect))
+            {
+                CloseThemeData(theme);
+                return S_OK;
+            }
+            CloseThemeData(theme);
+        }
+        else if (PaintProgressBar(hdc, iPartId, iStateId, pRect)) 
+        {
+            CloseThemeData(theme);
+            return S_OK;
+        }
+        CloseThemeData(theme);
+    } 
+    else if (ThemeClassName == L"ListView")
+    {
+        if (PaintListView(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"TreeView")
+    {
+        if (PaintTreeView(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Header")
+    {
+        if (PaintHeader(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Navigation")
+    {
+        if (PaintNavigationButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Toolbar")
+    {
+        if (PaintToolbarButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"AddressBand" || ThemeClassName == L"SearchBox")
+    {
+        if (PaintAddressBand(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Menu")
+    {
+        if (PaintMenu(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+
     HRESULT hr = DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
     
-    std::wstring ThemeClassName = GetThemeClass(hTheme);
-
-    if(((ThemeClassName == L"AddressBand" || ThemeClassName == L"SearchBox") && iPartId == 1 && (iStateId == 1 || iStateId == 2))
-        || (ThemeClassName == L"Rebar" && (iPartId == 3 || iPartId == 6) && iStateId == 0)
+    if((ThemeClassName == L"Rebar" && (iPartId == 3 || iPartId == 6) && iStateId == 0)
         || (ThemeClassName == L"Header" && (iPartId == 0 || (iPartId == 1 && (iStateId == 1 || iStateId == 4 || iStateId == 7 ))))
         || (ThemeClassName == L"TaskDialog" && iPartId == 15 && iStateId == 0)
         || (ThemeClassName == L"Tab" && iPartId == 9)
         || (ThemeClassName == L"Status" && iPartId == 0)
         || (ThemeClassName == L"Edit" && (iPartId == 3 || iPartId == 5))
-        || (ThemeClassName == L"Tooltip" && iPartId == 1)
-        /*|| (ThemeClassName == L"Menu" && iPartId == 7)*/)
+        || (ThemeClassName == L"Tooltip" && iPartId == 1))
     {
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
     }
+    else if (ThemeClassName == L"Menu" && (iPartId == MENU_BARBACKGROUND || iPartId == MENU_BARITEM))
+    {
+        if (pClipRect)
+            FillRect(hdc, pClipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        else
+            FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        return S_OK;
+    }
+    else if (ThemeClassName == L"Menu" && (iPartId == MENU_POPUPBACKGROUND || iPartId == MENU_POPUPBORDERS || iPartId == MENU_POPUPGUTTER || 
+            ((iPartId == MENU_POPUPITEM || iPartId == 27) && iStateId != 2)))
+    {
+        HBRUSH brush = CreateSolidBrush(RGB(32, 32, 32));
+        if (pClipRect)
+            FillRect(hdc, pClipRect, brush);
+        else
+            FillRect(hdc, pRect, brush);
 
+        DeleteObject(brush);
+        return S_OK;
+    }
+    else if (ThemeClassName == L"Toolbar" && iPartId == 0) {
+        HTHEME Toolbar;
+        if ((Toolbar = OpenThemeData(WindowFromDC(hdc), L"Placesbar::Toolbar"))) {
+            FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            CloseThemeData(Toolbar);
+            return S_OK;
+        }
+        CloseThemeData(Toolbar);
+    }
     return hr;
 }
 
 HRESULT WINAPI HookedDrawThemeBackgroundEx(
     HTHEME hTheme,
     HDC hdc,
-    int iPartId,
-    int iStateId,
+    INT iPartId,
+    INT iStateId,
     LPCRECT pRect,
     const DTBGOPTS* pOptions)
 {
-    HRESULT hr = DrawThemeBackgroundEx_orig(hTheme, hdc, iPartId, iStateId, pRect, pOptions);
-
     std::wstring ThemeClassName = GetThemeClass(hTheme);
+
+    if (ThemeClassName == L"ListView")
+    {
+        if (PaintListView(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Edit")
+    {
+        if (PaintEditBox(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Button")
+    {
+        if (PaintPushButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintRadioButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintCheckBox(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintCommandLink(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintCommandLinkGlyph(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"ItemsView")
+    {
+        if (PaintItemsView(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Header")
+    {
+        if (PaintHeader(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"PreviewPane")
+    {
+        if (PaintPreviewPaneSeperator(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"Progress")
+    {
+        HTHEME theme = NULL;
+        if (hTheme == (theme = OpenThemeData(WindowFromDC(hdc), L"Indeterminate::Progress")))
+        {
+            if (PaintIndeterminateProgressBar(hdc, iPartId, iStateId, pRect))
+            {
+                CloseThemeData(theme);
+                return S_OK;
+            }
+            CloseThemeData(theme);
+        }
+        else if (hTheme == (theme = OpenThemeData(WindowFromDC(hdc), L"Progress")))
+        {
+            if (PaintProgressBar(hdc, iPartId, iStateId, pRect))
+            {
+                CloseThemeData(theme);
+                return S_OK;
+            }
+            CloseThemeData(theme);
+        }
+    } 
+    else if (ThemeClassName == L"CommandModule")
+    {
+        if (PaintModuleButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintModuleSplitButton(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintModuleLocation(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+
+    HRESULT hr = DrawThemeBackgroundEx_orig(hTheme, hdc, iPartId, iStateId, pRect, pOptions);
 
     if ((ThemeClassName == L"Rebar" && (iPartId == 3 || iPartId == 6) && iStateId == 0) 
         || (ThemeClassName == L"TreeView" && iPartId == 0))
     {
         return S_OK;    
     }
-    else if ((ThemeClassName == L"PreviewPane" && (iPartId == 1 || iPartId == 3))
-        || (ThemeClassName == L"Header" && (iPartId == 0 || (iPartId == 1 && 
-        (iStateId == 1 || iStateId == 4 || iStateId == 7 ))))
+    else if ((ThemeClassName == L"PreviewPane" && iPartId == 1)
+        || (ThemeClassName == L"Header" && iPartId == 0)
         || (ThemeClassName == L"CommandModule" && iPartId == 1 && iStateId == 0)
         || (ThemeClassName == L"TaskDialog" && (iPartId == 4 || iPartId == 15 || iPartId == 8) && iStateId == 0)
         || (ThemeClassName == L"TaskDialog" && iPartId == 1)
         || (ThemeClassName == L"AeroWizard" && (iPartId == 1 || iPartId == 2 || iPartId == 3 || iPartId == 4))
         || (ThemeClassName == L"CommonItemsDialog" && iPartId == 1)
-        || (ThemeClassName == L"ControlPanel" && (iPartId == 2 || iPartId == 17 || iPartId == 18 || iPartId == 12 || iPartId == 13))
-        || (ThemeClassName == L"PreviewPane" && (iPartId == 3 || iPartId == 1)))
+        || (ThemeClassName == L"ControlPanel" && (iPartId == 2 || iPartId == 17 || iPartId == 18 || iPartId == 12 || iPartId == 13)))
     {
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
     }
-    
     return hr;
 }
 
-void ApplyFrameExtension(HWND hWnd) 
+VOID ApplyFrameExtension(HWND hWnd) 
 {
     MARGINS margins = {-1, -1, -1, -1};
     DwmExtendFrameIntoClientArea(hWnd, &margins);
 }
 
-void EnableBlurBehind(HWND hWnd)
+VOID EnableBlurBehind(HWND hWnd)
 {
     // Does not interfere with the Windows Terminal, GameBar overlay
     if(!(IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS") || IsWindowClass(hWnd, L"ApplicationFrameWindow")))
     {
-        typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
-
         bb.fEnable = TRUE;
         bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION | DWM_BB_TRANSITIONONMAXIMIZED;
         // Blurs window client area
@@ -1320,48 +4359,48 @@ void EnableBlurBehind(HWND hWnd)
         attrib.Attrib = WCA_ACCENT_POLICY;
         attrib.pvData = &accent;
         attrib.cbData = sizeof(accent);
-        
-        auto SetWindowCompositionAttribute = (pSetWindowCompositionAttribute)
-            GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
+
+        typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
+        auto SetWindowCompositionAttribute = (pSetWindowCompositionAttribute) GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
         if (SetWindowCompositionAttribute) 
             SetWindowCompositionAttribute(hWnd, &attrib);
     }
 }
 
-void SetSystemBackdrop(HWND hWnd, const UINT type)
+VOID SetSystemBackdrop(HWND hWnd, const UINT type)
 {
     DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE , &type, sizeof(UINT));
 }
 
-void EnableColoredTitlebar(HWND hWnd)
+VOID EnableColoredTitlebar(HWND hWnd)
 {
     g_settings.g_TitlebarColor = g_settings.TitlebarActiveColor;
     DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &g_settings.g_TitlebarColor, sizeof(COLORREF));
 }
 
-void EnableCaptionTextColor(HWND hWnd)
+VOID EnableCaptionTextColor(HWND hWnd)
 {
     g_settings.g_CaptionColor = g_settings.CaptionActiveTextColor;
     DwmSetWindowAttribute(hWnd, DWMWA_TEXT_COLOR, &g_settings.g_CaptionColor, sizeof(COLORREF));
 }
 
-void EnableColoredBorder(HWND hWnd)
+VOID EnableColoredBorder(HWND hWnd)
 {
     g_settings.g_BorderColor = g_settings.BorderActiveColor;
     DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &g_settings.g_BorderColor, sizeof(COLORREF));
 }
 
-void SetCornerType(HWND hWnd, const UINT type)
+VOID SetCornerType(HWND hWnd, const UINT type)
 {
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &type , sizeof(UINT));
 }
 
-static COLORREF HSLToRGB(float h, float s, float l) {
-    float c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
-    float x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
-    float m = l - c / 2.0f;
+static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
+    FLOAT c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
+    FLOAT x = c * (1.0f - fabs(fmod(h / 60.0f, 2.0f) - 1.0f));
+    FLOAT m = l - c / 2.0f;
 
-    float r_prime, g_prime, b_prime;
+    FLOAT r_prime, g_prime, b_prime;
     if (0.0f <= h && h < 60.0f) {
         r_prime = c; g_prime = x; b_prime = 0.0f;
     } else if (60.0f <= h && h < 120.0f) {
@@ -1382,7 +4421,7 @@ static COLORREF HSLToRGB(float h, float s, float l) {
     return RGB(r, g, b);
 }
 
-void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
+VOID CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 {
     HWND WndHwnd= nullptr;
     {
@@ -1403,9 +4442,9 @@ void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 	    // Credits to @m417z
         std::mt19937 gen((UINT_PTR)WndHwnd);
         std::uniform_real_distribution<> distr(0.0, 360.0);
-        double InitialHueOffset = distr(gen);
+        DOUBLE InitialHueOffset = distr(gen);
 
-        double wndHue = fmod(InitialHueOffset + TimerGetSeconds() * g_settings.RainbowSpeed, 360.0);
+        DOUBLE wndHue = fmod(InitialHueOffset + TimerGetSeconds() * g_settings.RainbowSpeed, 360.0);
 
         if (g_settings.TitlebarRainbowFlag)
         {
@@ -1429,7 +4468,7 @@ void CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
     }
 }
 
-LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
 {
     const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
     if (nCode != HC_ACTION) {
@@ -1440,7 +4479,7 @@ LRESULT CALLBACK CallWndProc(int nCode, WPARAM wParam, LPARAM lParam)
     {
         case WM_ACTIVATE:
         {
-            bool isMinimized = HIWORD(cwp->wParam);
+            BOOL isMinimized = HIWORD(cwp->wParam);
             if (!isMinimized && IsWindowEligible(cwp->hwnd))
             {
                 WORD activationState = LOWORD(cwp->wParam);
@@ -1575,7 +4614,21 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
     return TRUE;
 }
 
-void NewWindowShown(HWND hWnd) 
+static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    if (Msg == WM_DWMCOLORIZATIONCOLORCHANGED && g_settings.AccentColorize)
+    {
+        COLORREF oldAccentClr = g_settings.AccentColor;
+        GetAccentColor(g_settings.AccentColor);
+        if (oldAccentClr != g_settings.AccentColor) {
+            ColorizeSysColors();
+            g_cache.ClearCache();
+        }
+    }
+    return DefWindowProc_orig(hWnd, Msg, wParam, lParam);
+}
+
+VOID NewWindowShown(HWND hWnd) 
 {
     if(!IsWindowEligible(hWnd))
         return;
@@ -1632,40 +4685,38 @@ void NewWindowShown(HWND hWnd)
     
 }
 
-void DwmExpandFrameIntoClientAreaHook()
+VOID DwmExpandFrameIntoClientAreaHook()
 {
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"dwmapi.dll"), "DwmExtendFrameIntoClientArea"),
-                       (void*)HookedDwmExtendFrameIntoClientArea,
-                       (void**)&DwmExtendFrameIntoClientArea_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)DwmExtendFrameIntoClientArea, (VOID*)HookedDwmExtendFrameIntoClientArea, (VOID**)&DwmExtendFrameIntoClientArea_orig);
 }
 
-void DwmSetWindowAttributeHook()
+VOID DwmSetWindowAttributeHook()
 {
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"dwmapi.dll"), "DwmSetWindowAttribute"),
-                       (void*)HookedDwmSetWindowAttribute,
-                       (void**)&DwmSetWindowAttribute_orig); 
+    WindhawkUtils::SetFunctionHook((VOID*)DwmSetWindowAttribute, (VOID*)HookedDwmSetWindowAttribute, (VOID**)&DwmSetWindowAttribute_orig); 
 }
 
-void FillBackgroundElements()
+VOID FillBackgroundElements()
 {
+    InitDirect2D();
     ColorizeSysColors();
     CplDuiHook();
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "GetThemeBitmap"), (void*)HookedGetThemeBitmap, (void**)&GetThemeBitmap_orig);
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "GetThemeColor"), (void*)HookedGetColorTheme, (void**)&GetThemeColor_orig);   
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "DrawThemeBackground"), (void*)HookedDrawThemeBackground, (void**)&DrawThemeBackground_orig);
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "DrawThemeBackgroundEx"), (void*)HookedDrawThemeBackgroundEx, (void**)&DrawThemeBackgroundEx_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)DefWindowProc, (VOID*)HookedDefWindowProcW, (VOID**)&DefWindowProc_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)GetThemeBitmap, (VOID*)HookedGetThemeBitmap, (VOID**)&GetThemeBitmap_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)GetThemeColor, (VOID*)HookedGetColorTheme, (VOID**)&GetThemeColor_orig);   
+    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeBackground, (VOID*)HookedDrawThemeBackground, (VOID**)&DrawThemeBackground_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeBackgroundEx, (VOID*)HookedDrawThemeBackgroundEx, (VOID**)&DrawThemeBackgroundEx_orig);
 }
 
-void TextRenderingHook()
+VOID TextRenderingHook()
 {
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"user32.dll"), "DrawTextW"), (void*)HookedDrawTextW, (void**)&DrawTextW_orig);
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"user32.dll"), "DrawTextExW"), (void*)HookedDrawTextExW, (void**)&DrawTextExW_orig);
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "ExtTextOutW"), (void*)HookedExtTextOutW, (void**)&ExtTextOutW_orig);
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "DrawThemeText"), (void*)HookedDrawThemeText, (void**)&DrawThemeText_orig);
-    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), "DrawThemeTextEx"), (void*)HookedDrawThemeTextEx, (void**)&DrawThemeTextEx_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)DrawTextW, (VOID*)HookedDrawTextW, (VOID**)&DrawTextW_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)DrawTextExW, (VOID*)HookedDrawTextExW, (VOID**)&DrawTextExW_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)ExtTextOutW, (VOID*)HookedExtTextOutW, (VOID**)&ExtTextOutW_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeText, (VOID*)HookedDrawThemeText, (VOID**)&DrawThemeText_orig);
+    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeTextEx, (VOID*)HookedDrawThemeTextEx, (VOID**)&DrawThemeTextEx_orig);
 }
 
-void RestoreWindowCustomizations(HWND hWnd)
+VOID RestoreWindowCustomizations(HWND hWnd)
 {
     if(!IsWindowEligible(hWnd))
         return;
@@ -1727,7 +4778,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
     return TRUE;
 }
 
-void ApplyForExistingWindows()
+VOID ApplyForExistingWindows()
 {
     EnumWindows(EnumWindowsProc, 0);
 }
@@ -1748,37 +4799,17 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
     }
     else if (hexColor[0] == L'2' && hexColor[1] == L'\0') 
     {
-        // In some programs, e.g. snippingtool.exe, the default blue accent color is used instead of the Windows theme with DwmGetColorizationColor.
-        // Use the immersive color API if available, fall back to DwmGetColorizationColor
-        // https://github.com/ALTaleX531/TranslucentFlyouts/blob/017970cbac7b77758ab6217628912a8d551fcf7c/Common/ThemeHelper.hpp#L278
-        static const auto s_GetImmersiveColorFromColorSetEx{ reinterpret_cast<DWORD(WINAPI*)(DWORD dwImmersiveColorSet, DWORD dwImmersiveColorType, bool bIgnoreHighContrast, DWORD dwHighContrastCacheMode)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(95))) };
-        static const auto s_GetImmersiveColorTypeFromName{ reinterpret_cast<DWORD(WINAPI*)(LPCWSTR name)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(96))) };
-        static const auto s_GetImmersiveUserColorSetPreference{ reinterpret_cast<DWORD(WINAPI*)(bool bForceCheckRegistry, bool bSkipCheckOnFail)>(GetProcAddress(GetModuleHandleW(L"UxTheme.dll"), MAKEINTRESOURCEA(98))) };
-
-        COLORREF AccentClr{ 0 };
-        BOOL opaque = FALSE;
-        
-        if (s_GetImmersiveColorFromColorSetEx && s_GetImmersiveColorTypeFromName && s_GetImmersiveUserColorSetPreference) 
+        if (g_settings.AccentColorize)
         {
-            AccentClr = s_GetImmersiveColorFromColorSetEx(
-                s_GetImmersiveUserColorSetPreference(false, false),
-                s_GetImmersiveColorTypeFromName(L"ImmersiveStartHoverBackground"),
-                true,
-                0
-            );
-            outColor = RGB((AccentClr & 0xFF), (AccentClr >> 8) & 0xFF, (AccentClr >> 16) & 0xFF);
+            outColor =  g_settings.AccentColor;
             return TRUE;
         }
-        else if (SUCCEEDED(DwmGetColorizationColor(&AccentClr, &opaque)))
+        if (GetAccentColor(outColor))
         {
-            outColor = RGB((AccentClr >> 16) & 0xFF, (AccentClr >> 8) & 0xFF,  AccentClr & 0xFF);
+            g_settings.AccentColor = outColor;
             return TRUE;
         }
-        else
-        {
-            outColor = DWMWA_COLOR_DEFAULT;
-            return FALSE;
-        }
+        return FALSE;
     }
     else 
     {
@@ -1789,7 +4820,7 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
             return FALSE;
         }
         
-        auto hexToByte = [](WCHAR c) -> int {
+        auto hexToByte = [](WCHAR c) -> INT {
             if (c >= L'0' && c <= L'9') return c - L'0';
             if (c >= L'A' && c <= L'F') return 10 + (c - L'A');
             if (c >= L'a' && c <= L'f') return 10 + (c - L'a');
@@ -1802,18 +4833,18 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
         if (len == 8) 
         {
             alpha = 0XFF;
-            int alphaHigh = hexToByte(hexColor[0]);
-            int alphaLow  = hexToByte(hexColor[1]);
+            INT alphaHigh = hexToByte(hexColor[0]);
+            INT alphaLow  = hexToByte(hexColor[1]);
             if (alphaHigh < 0 || alphaLow < 0)
                 return FALSE;
             alpha = (alphaHigh << 4) | alphaLow;
             hexColor += 2;
         }
 
-        for (int i = 0; i < 3; ++i) 
+        for (INT i = 0; i < 3; ++i) 
         {
-            int high = hexToByte(hexColor[i * 2]);
-            int low  = hexToByte(hexColor[i * 2 + 1]);
+            INT high = hexToByte(hexColor[i * 2]);
+            INT low  = hexToByte(hexColor[i * 2 + 1]);
             if (high < 0 || low < 0)
                 return FALSE;
             rgb[i] = (high << 4) | low;
@@ -1821,19 +4852,18 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
 
         outColor = (alpha << 24) | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0];
         return TRUE;
-    
     }
 }
 
-double RainbowSpeedInput(int input)
+DOUBLE RainbowSpeedInput(INT input)
 {
     if (input < 1 || input > 100)
         return 1.0f;
 
-    return (double)input * 3.6;    
+    return (DOUBLE)input * 3.6;    
 }
 
-void GetProcStrFromPath(std::wstring& path) {
+VOID GetProcStrFromPath(std::wstring& path) {
     size_t pos = path.find_last_of(L"\\/");
     if (pos != std::wstring::npos && pos + 1 < path.length()) {
         path = path.substr(pos + 1);
@@ -1852,7 +4882,7 @@ void GetProcStrFromPath(std::wstring& path) {
     }
 }
 
-void GetCurrProcInfo(std::wstring& outName, DWORD& outPID) {
+VOID GetCurrProcInfo(std::wstring& outName, DWORD& outPID) {
     WCHAR modulePath[MAX_PATH];
     GetModuleFileNameW(NULL, modulePath, MAX_PATH);
 
@@ -1862,29 +4892,31 @@ void GetCurrProcInfo(std::wstring& outName, DWORD& outPID) {
     outPID = GetCurrentProcessId();
 }
 
-void LoadSettings(void)
+VOID LoadSettings(VOID)
 {
-    g_settings.FillBg = Wh_GetIntSetting(L"ThemeBackground");
-    if(g_settings.FillBg)
+    g_settings.AccentColorize = Wh_GetIntSetting(L"RenderingMod.AccentColorControls");
+    if (g_settings.AccentColorize)
+       g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
+
+    g_settings.FillBg = Wh_GetIntSetting(L"RenderingMod.ThemeBackground");
+    if(g_settings.FillBg) {
         FillBackgroundElements();
-
-    g_settings.TextAlphaBlend = Wh_GetIntSetting(L"TextAlphaBlend");
-    if(g_settings.TextAlphaBlend)
         TextRenderingHook();
-
-    LPCWSTR pszStyle = Wh_GetStringSetting(L"type");
-    if (0 == wcscmp(pszStyle, L"acrylicblur"))
+    }
+     
+    auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"type"));
+    if (0 == wcscmp(strStyle, L"acrylicblur"))
         g_settings.BgType = g_settings.AccentBlurBehind;
-    else if (0 == wcscmp(pszStyle, L"acrylicsystem"))
+    else if (0 == wcscmp(strStyle, L"acrylicsystem"))
         g_settings.BgType = g_settings.AcrylicSystemBackdrop;
-    else if (0 == wcscmp(pszStyle, L"mica"))
+    else if (0 == wcscmp(strStyle, L"mica"))
         g_settings.BgType = g_settings.Mica;
-    else if (0 == wcscmp(pszStyle, L"mica_tabbed"))
+    else if (0 == wcscmp(strStyle, L"mica_tabbed"))
         g_settings.BgType = g_settings.MicaAlt;
     else 
         g_settings.BgType = g_settings.Default;
 
-    GetColorSetting(Wh_GetStringSetting(L"AccentBlurBehind"), g_settings.AccentBlurBehindClr);
+    GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"AccentBlurBehind")), g_settings.AccentBlurBehindClr);
 
     g_settings.ImmersiveDarkmode = Wh_GetIntSetting(L"ImmersiveDarkTitle");
     
@@ -1892,14 +4924,13 @@ void LoadSettings(void)
     if(g_settings.ExtendFrame)
         DwmExpandFrameIntoClientAreaHook();
     
-    LPCWSTR pszCornerType = Wh_GetStringSetting(L"CornerOption");
-    if (0 == wcscmp(pszCornerType, L"notrounded"))
+    auto strCornerType = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"CornerOption"));
+    if (0 == wcscmp(strCornerType, L"notrounded"))
         g_settings.CornerPref = g_settings.NotRounded;
-    else if (0 == wcscmp(pszCornerType, L"smallround"))
+    else if (0 == wcscmp(strCornerType, L"smallround"))
         g_settings.CornerPref = g_settings.SmallRounded;
     else
         g_settings.CornerPref = g_settings.DefaultRounded;
-    Wh_FreeStringSetting(pszCornerType);
 
     g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RainbowSpeed"));
 
@@ -1907,45 +4938,37 @@ void LoadSettings(void)
     g_settings.TitlebarRainbowFlag = Wh_GetIntSetting(L"TitlebarColor.RainbowTitlebar") && g_settings.TitlebarFlag;
     if(g_settings.TitlebarFlag)
     {
-        LPCWSTR pszTitlebarStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_active");
-        g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarActiveColor);
-        pszTitlebarStyle = Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_inactive");
-        g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
+        auto strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_active"));
+        g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarActiveColor);
+        strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarColor.titlerbarstyles_inactive"));
+        g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
 
         if ((g_settings.TitlebarActiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarActiveColor == DWMWA_COLOR_NONE) ||
             (g_settings.TitlebarInactiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarInactiveColor == DWMWA_COLOR_NONE))
                 g_settings.TitlebarFlag = FALSE;
-
-        Wh_FreeStringSetting(pszTitlebarStyle);
     }
 
     g_settings.CaptionTextFlag = Wh_GetIntSetting(L"TitlebarTextColor.ColorTitlebarText");
     g_settings.CaptionRainbowFlag = Wh_GetIntSetting(L"TitlebarTextColor.RainbowTextColor") && g_settings.CaptionTextFlag;
     if(g_settings.CaptionTextFlag)
     {
-        LPCWSTR pszTitlebarTextColorStyle = Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_active");
-        g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
-        pszTitlebarTextColorStyle = Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_inactive");
-        g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
-
-        Wh_FreeStringSetting(pszTitlebarTextColorStyle);
+        auto strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_active"));
+        g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
+        strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"TitlebarTextColor.titlerbarcolorstyles_inactive"));
+        g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
     }
 
     g_settings.BorderFlag = Wh_GetIntSetting(L"BorderColor.ColorBorder");
     g_settings.BorderRainbowFlag = Wh_GetIntSetting(L"BorderColor.RainbowBorder") && g_settings.BorderFlag;
     if(g_settings.BorderFlag)
     {
-        LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"BorderColor.borderstyles_active");
-        g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderActiveColor);
-        pszBorderStyle = Wh_GetStringSetting(L"BorderColor.borderstyles_inactive");
-        g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
-
-        Wh_FreeStringSetting(pszBorderStyle);
+        auto strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor.borderstyles_active"));
+        g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderActiveColor);
+        strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BorderColor.borderstyles_inactive"));
+        g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
     }
 
     g_settings.MenuBorderFlag = Wh_GetIntSetting(L"BorderColor.MenuBorderColor");
-
-    Wh_FreeStringSetting(pszStyle);
 
     if (g_settings.TitlebarFlag || g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.BgType != g_settings.Default)
         DwmSetWindowAttributeHook();
@@ -1956,41 +4979,41 @@ void LoadSettings(void)
     std::wstring currproc = {};
     GetCurrProcInfo(currproc, currProcID);
 
-    for (int i = 0;; i++) 
+    for (INT i = 0;; i++) 
     {
-        PCWSTR program = Wh_GetStringSetting(L"RuledPrograms[%d].target", i);
+        auto program = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].target", i));
         
         BOOL hasProgram = *program;
         if (hasProgram) 
         {
-            std::wstring ruledproc = program;
+            std::wstring ruledproc = program.get();
             GetProcStrFromPath(ruledproc);
             
             if(currproc == ruledproc)
             {
-                g_settings.FillBg = Wh_GetIntSetting(L"RuledPrograms[%d].ThemeBackground", i);
-                if(g_settings.FillBg)
-                    FillBackgroundElements();
-                
-                g_settings.TextAlphaBlend = Wh_GetIntSetting(L"RuledPrograms[%d].TextAlphaBlend", i);
-                if(g_settings.TextAlphaBlend)
-                    TextRenderingHook();
+                g_settings.AccentColorize = Wh_GetIntSetting(L"RuledPrograms[%d].AccentColorControls", i);
+                if (g_settings.AccentColorize)
+                    g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
 
-                LPCWSTR pszStyle = Wh_GetStringSetting(L"RuledPrograms[%d].type", i);
-                if (0 == wcscmp(pszStyle, L"acrylicblur"))
+                g_settings.FillBg = Wh_GetIntSetting(L"RuledPrograms[%d].ThemeBackground", i);
+                if(g_settings.FillBg) {
+                    FillBackgroundElements();
+                    TextRenderingHook();
+                }
+
+                auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].type", i));
+                if (0 == wcscmp(strStyle, L"acrylicblur"))
                     g_settings.BgType = g_settings.AccentBlurBehind;
-                else if (0 == wcscmp(pszStyle, L"acrylicsystem"))
+                else if (0 == wcscmp(strStyle, L"acrylicsystem"))
                     g_settings.BgType = g_settings.AcrylicSystemBackdrop;
-                else if (0 == wcscmp(pszStyle, L"mica"))
+                else if (0 == wcscmp(strStyle, L"mica"))
                     g_settings.BgType = g_settings.Mica;
-                else if (0 == wcscmp(pszStyle, L"mica_tabbed"))
+                else if (0 == wcscmp(strStyle, L"mica_tabbed"))
                     g_settings.BgType = g_settings.MicaAlt;
                 else 
                     g_settings.BgType = g_settings.Default;
-                
-                Wh_FreeStringSetting(pszStyle);
 
-                GetColorSetting(Wh_GetStringSetting(L"RuledPrograms[%d].AccentBlurBehind", i), g_settings.AccentBlurBehindClr);
+                GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].AccentBlurBehind", i)), g_settings.AccentBlurBehindClr);
 
                 g_settings.ImmersiveDarkmode = Wh_GetIntSetting(L"RuledPrograms[%d].ImmersiveDarkTitle", i);
 
@@ -1998,14 +5021,13 @@ void LoadSettings(void)
                 if(g_settings.ExtendFrame)
                     DwmExpandFrameIntoClientAreaHook();
 
-                LPCWSTR pszCornerType = Wh_GetStringSetting(L"RuledPrograms[%d].CornerOption", i);
-                if (0 == wcscmp(pszCornerType, L"notrounded"))
+                auto strCornerType = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].CornerOption", i));
+                if (0 == wcscmp(strCornerType, L"notrounded"))
                     g_settings.CornerPref = g_settings.NotRounded;
-                else if (0 == wcscmp(pszCornerType, L"smallround"))
+                else if (0 == wcscmp(strCornerType, L"smallround"))
                     g_settings.CornerPref = g_settings.SmallRounded;
                 else
                     g_settings.CornerPref = g_settings.DefaultRounded;
-                Wh_FreeStringSetting(pszCornerType);
                 
                 g_settings.RainbowSpeed = RainbowSpeedInput(Wh_GetIntSetting(L"RuledPrograms[%d].RainbowSpeed", i));
 
@@ -2013,27 +5035,24 @@ void LoadSettings(void)
                 g_settings.TitlebarRainbowFlag = Wh_GetIntSetting(L"RuledPrograms[%d].TitlebarColor.RainbowTitlebar", i) && g_settings.TitlebarFlag;
                 if(g_settings.TitlebarFlag)
                 {
-                    LPCWSTR pszTitlebarStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarColor.Titlerbarstyles_active", i);
-                    g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarActiveColor);
-                    pszTitlebarStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarColor.Titlerbarstyles_inactive", i);
-                    g_settings.TitlebarFlag = GetColorSetting(pszTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
+                    auto strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarColor.Titlerbarstyles_active", i));
+                    g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarActiveColor);
+                    strTitlebarStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarColor.Titlerbarstyles_inactive", i));
+                    g_settings.TitlebarFlag = GetColorSetting(strTitlebarStyle, g_settings.TitlebarInactiveColor) || g_settings.TitlebarFlag;
 
                     if ((g_settings.TitlebarActiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarActiveColor == DWMWA_COLOR_NONE) ||
                         (g_settings.TitlebarInactiveColor == DWMWA_COLOR_DEFAULT || g_settings.TitlebarInactiveColor == DWMWA_COLOR_NONE))
                             g_settings.TitlebarFlag = FALSE;
-
-                    Wh_FreeStringSetting(pszTitlebarStyle);
                 }
 
                 g_settings.CaptionTextFlag = Wh_GetIntSetting(L"RuledPrograms[%d].TitlebarTextColor.ColorTitlebarText", i);
                 g_settings.CaptionRainbowFlag = Wh_GetIntSetting(L"RuledPrograms[%d].TitlebarTextColor.RainbowTextColor", i) && g_settings.CaptionTextFlag;
                 if(g_settings.CaptionTextFlag)
                 {
-                    LPCWSTR pszTitlebarTextColorStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarTextColor.titlerbarcolorstyles_active", i);
-                    g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
-                    pszTitlebarTextColorStyle = Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarTextColor.titlerbarcolorstyles_inactive", i);
-                    g_settings.CaptionTextFlag = GetColorSetting(pszTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
-                    Wh_FreeStringSetting(pszTitlebarTextColorStyle);
+                    auto strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarTextColor.titlerbarcolorstyles_active", i));
+                    g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionActiveTextColor);
+                    strTitlebarTextColorStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].TitlebarTextColor.titlerbarcolorstyles_inactive", i));
+                    g_settings.CaptionTextFlag = GetColorSetting(strTitlebarTextColorStyle, g_settings.CaptionInactiveTextColor) || g_settings.CaptionTextFlag;
                 }
 
                 g_settings.BorderFlag = Wh_GetIntSetting(L"RuledPrograms[%d].BorderColor.ColorBorder", i);
@@ -2042,11 +5061,10 @@ void LoadSettings(void)
                 g_settings.BorderRainbowFlag = Wh_GetIntSetting(L"RuledPrograms[%d].BorderColor.RainbowBorder", i) && g_settings.BorderFlag;
                 if(g_settings.BorderFlag)
                 {
-                    LPCWSTR pszBorderStyle = Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles_active", i);
-                    g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderActiveColor);
-                    pszBorderStyle = Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles_inactive", i);
-                    g_settings.BorderFlag = GetColorSetting(pszBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
-                    Wh_FreeStringSetting(pszBorderStyle);
+                    auto strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles_active", i));
+                    g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderActiveColor);
+                    strBorderStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].BorderColor.borderstyles_inactive", i));
+                    g_settings.BorderFlag = GetColorSetting(strBorderStyle, g_settings.BorderInactiveColor) || g_settings.BorderFlag;
                 }
 
                 g_settings.MenuBorderFlag = g_settings.BorderFlag;
@@ -2056,64 +5074,73 @@ void LoadSettings(void)
             }
         }
 
-        Wh_FreeStringSetting(program);
-
         if (!hasProgram) {
             break;
         }
     }   
 }
 
-BOOL Wh_ModInit(void) 
+BOOL Wh_ModInit(VOID) 
 {
     TimerInitialize();
 
     LoadSettings();
-    
+
     HMODULE hModule = GetModuleHandle(L"win32u.dll");
     if (!hModule) 
         return FALSE;
-
+        
     NtUserCreateWindowEx_t pNtUserCreateWindowEx =
         (NtUserCreateWindowEx_t)GetProcAddress(hModule, "NtUserCreateWindowEx");
     if (!pNtUserCreateWindowEx)
         return FALSE;
 
-    Wh_SetFunctionHook((void*)pNtUserCreateWindowEx,
-                       (void*)HookedNtUserCreateWindowEx,
-                       (void**)&NtUserCreateWindowEx_Original);
-
+    WindhawkUtils::SetFunctionHook((VOID*)pNtUserCreateWindowEx,
+                       (VOID*)HookedNtUserCreateWindowEx,
+                       (VOID**)&NtUserCreateWindowEx_Original);
+    
     return TRUE;
 }
 
-void Wh_ModAfterInit() 
+VOID Wh_ModAfterInit() 
 {
     #ifdef _WIN64
         const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
     #else
         const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
     #endif
-    bool isInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
+    BOOL isInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
     if (!isInitialThread)
         ApplyForExistingWindows();
 }
 
-void Wh_ModUninit(void) 
+VOID Wh_ModUninit(VOID) 
 { 
     g_settings.Unload = TRUE;
     if (g_settings.FillBg)
-        RevertSysColors();
-
-    std::unordered_set<HWND> RainbowWindows;
     {
-        std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-
-        RainbowWindows = std::move(g_rainbowWindows);
-        g_rainbowWindows.clear();
+        RevertSysColors();
+        g_d2dFactory->Release();
     }
 
-    for (auto hWnd : RainbowWindows)
-        SendMessageW(hWnd, g_msgRainbowTimer, RAINBOW_UNLOAD, 0);
+    if (!g_rainbowWindows.empty())
+    {
+        std::unordered_set<HWND> RainbowWindows;
+        {
+            std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+
+            RainbowWindows = std::move(g_rainbowWindows);
+            g_rainbowWindows.clear();
+        }
+
+        if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
+        {
+            for (auto hWnd : RainbowWindows)
+                SendMessageW(hWnd, g_msgRainbowTimer, RAINBOW_UNLOAD, 0);
+        }
+
+        RainbowWindows.clear();
+    }
     
     {
         std::lock_guard<std::mutex> guard(g_allCallWndProcHooksMutex);
@@ -2126,14 +5153,11 @@ void Wh_ModUninit(void)
     }
     
     ApplyForExistingWindows();
-
-    RainbowWindows.clear();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) 
 {
     Wh_Log(L"SettingsChanged");
-    
     *bReload = TRUE;
     return TRUE;
 }
