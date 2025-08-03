@@ -4290,15 +4290,12 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
             }
             CloseThemeData(theme);
         }
-        else if (hTheme == (theme = OpenThemeData(WindowFromDC(hdc), L"Progress")))
+        else if (PaintProgressBar(hdc, iPartId, iStateId, pRect)) 
         {
-            if (PaintProgressBar(hdc, iPartId, iStateId, pRect))
-            {
-                CloseThemeData(theme);
-                return S_OK;
-            }
             CloseThemeData(theme);
+            return S_OK;
         }
+        CloseThemeData(theme);
     } 
     else if (ThemeClassName == L"CommandModule")
     {
@@ -4681,7 +4678,6 @@ VOID NewWindowShown(HWND hWnd)
         if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
             SendMessage(hWnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
     }
-    
 }
 
 VOID DwmExpandFrameIntoClientAreaHook()
@@ -5160,5 +5156,3 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
-
-
