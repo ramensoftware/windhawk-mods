@@ -55,7 +55,6 @@ maximized or snapped to the edge of the screen, this is caused by default.
       $name: Windows theme accent colorizer
       $description: >-
        Paint with accent color parts of windows theme. (Requires optimize windows theme)
-
   $name: Rendering Customization
 - type: none
   $name: Effects
@@ -5161,4 +5160,5 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
 
