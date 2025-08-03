@@ -164,16 +164,6 @@ maximized or snapped to the edge of the screen, this is caused by default.
          Entries can be process names or paths, for example:
           mspaint.exe
           C:\Windows\System32\notepad.exe
-      - RenderingMod:
-          - ThemeBackground: FALSE
-            $name: Windows theme custom rendering
-            $description: >-
-             Modifies parts of the Windows theme using the Direct2D graphics API and alpha blends text rendered by Windows GDI (May not affect all rendered text - ExplorerBlurMica implementation)
-          - AccentColorControls: FALSE
-            $name: Windows theme accent colorizer
-            $description: >-
-             Paint with accent color parts of windows theme. (Requires optimize windows theme)
-        $name: Rendering Customization
       - type: none
         $name: Effects
         $description: >-
@@ -4986,16 +4976,6 @@ VOID LoadSettings(VOID)
             
             if(currproc == ruledproc)
             {
-                g_settings.AccentColorize = Wh_GetIntSetting(L"RuledPrograms[%d].AccentColorControls", i);
-                if (g_settings.AccentColorize)
-                    g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
-
-                g_settings.FillBg = Wh_GetIntSetting(L"RuledPrograms[%d].ThemeBackground", i);
-                if(g_settings.FillBg) {
-                    FillBackgroundElements();
-                    TextRenderingHook();
-                }
-
                 auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].type", i));
                 if (0 == wcscmp(strStyle, L"acrylicblur"))
                     g_settings.BgType = g_settings.AccentBlurBehind;
@@ -5156,3 +5136,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
