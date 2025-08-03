@@ -2,7 +2,7 @@
 // @id              firefox-border-fix
 // @name            Firefox border fix for Classic theme 
 // @description     Mitigates Firefox bug 1950145 (glitched window borders in Classic theme)
-// @version         1.0.0
+// @version         1.0.1
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         firefox.exe
@@ -21,15 +21,13 @@ using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Orig;
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 
-    WCHAR lpClassName[100];
-
-    BOOL res = ShowWindow_Orig(hWnd, nCmdShow);
-    GetClassName(hWnd, lpClassName, 100);
+    WCHAR lpClassName[50];
+    GetClassName(hWnd, lpClassName, 50);
 
     if (!wcscmp(lpClassName, L"MozillaWindowClass"))
-        {SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL);}
+        SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL);
 
-    return res;
+    return ShowWindow_Orig(hWnd, nCmdShow);
 }
 
 BOOL Wh_ModInit(void)
