@@ -545,7 +545,7 @@ BOOL IsWindowEligible(HWND hWnd)
 
 // Simulates the convertion of system accent color to Accent Light 2/Accent Dark 2 shades
 // Inspired by https://github.com/WinExperiments/AccentColorizer
-constexpr COLORREF EnhanceAccentColor(BYTE a, BYTE& r, BYTE& g, BYTE& b)
+COLORREF EnhanceAccentColor(BYTE a, BYTE& r, BYTE& g, BYTE& b)
 {
     DOUBLE inR = r / (a / 255.0) / 255.0;
     DOUBLE inG = g / (a / 255.0) / 255.0;
@@ -691,7 +691,7 @@ BOOL GetAccentColor(COLORREF& outColor)
     }
 }
 
-constexpr D2D1_COLOR_F MyD2D1Color(BYTE A, BYTE R, BYTE G, BYTE B)
+D2D1_COLOR_F MyD2D1Color(BYTE A, BYTE R, BYTE G, BYTE B)
 {
     return D2D1_COLOR_F{
         static_cast<FLOAT>(R) / 255.0f,
@@ -701,12 +701,12 @@ constexpr D2D1_COLOR_F MyD2D1Color(BYTE A, BYTE R, BYTE G, BYTE B)
     };
 }
 
-constexpr D2D1_COLOR_F MyD2D1Color(BYTE R, BYTE G, BYTE B)
+D2D1_COLOR_F MyD2D1Color(BYTE R, BYTE G, BYTE B)
 {
     return MyD2D1Color(255, R, G, B);
 }
 
-constexpr D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE A, BYTE R, BYTE G, BYTE B)
+D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE A, BYTE R, BYTE G, BYTE B)
 {
     if (g_settings.AccentColorize)
     {
@@ -717,7 +717,7 @@ constexpr D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE A, BYTE R, BYTE G, BYTE B)
         return MyD2D1Color(A, R, G, B);
 }
 
-constexpr D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE R, BYTE G, BYTE B)
+D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE R, BYTE G, BYTE B)
 {
     if (g_settings.AccentColorize)
     {
@@ -5161,3 +5161,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
