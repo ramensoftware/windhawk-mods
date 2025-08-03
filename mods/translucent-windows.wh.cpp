@@ -525,7 +525,7 @@ BOOL IsWindowEligible(HWND hWnd)
         return FALSE;
 
     // Don't block CEF apps
-    if (!((IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0")) || style & WS_POPUP || styleEx & WS_EX_APPWINDOW)
+    if (!((IsWindowClass(hWnd, L"Chrome_WidgetWin_1") || IsWindowClass(hWnd, L"Chrome_WidgetWin_0")) || style & WS_POPUP || styleEx & WS_EX_APPWINDOW || styleEx & WS_EX_DLGMODALFRAME)
         && !(style & WS_THICKFRAME || style & WS_MINIMIZEBOX || style & WS_MAXIMIZEBOX || style & 0x00000080l)) // Firefox dialog
         return FALSE;
     
@@ -5125,4 +5125,5 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
 
