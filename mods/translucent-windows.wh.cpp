@@ -984,7 +984,7 @@ BOOL WINAPI HookedExtTextOutW(HDC hdc, INT x, INT y, UINT option, const RECT* lp
 // Prevent recursive calls within the DrawText class API and perform Alpha repair
 // https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L1085
 HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCWSTR pszText,
-        INT cchText, DWORD dwTextFlags, LPCRECT pRect, const DTTOPTS* pOptions)
+        INT cchText, DWORD dwTextFlags, LPRECT pRect, const DTTOPTS* pOptions)
 {
     std::wstring ThemeClassName = GetThemeClass(hTheme);
     
@@ -1052,21 +1052,10 @@ VOID STDCALL Element_PaintBgHook(class Element* This, HDC hdc, class Value* valu
         // 3-> hovered stuff
         // 4-> cpanel top bar and side bar (white image)
         // 1-> some new cp page style (cp_hub_frame)
-        if (v45==4)
-        {
-            HWND wnd = WindowFromDC(hdc);
-            HTHEME hTh = OpenThemeData(wnd, L"ControlPanel");
-            COLORREF clrBg;
-            GetThemeColor(hTh, 2, 0, TMT_FILLCOLOR, &clrBg);
-            HBRUSH SolidBrush = CreateSolidBrush(RGB(0, 0, 0));
-            FillRect(hdc, pRect, SolidBrush);
-            DeleteObject(SolidBrush);
-            CloseThemeData(hTh);
-        }
+        if (v45 == 4)
+            FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         else
-        {
             Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
-        }
     }
     else
     {
@@ -4672,12 +4661,12 @@ VOID NewWindowShown(HWND hWnd)
 
 VOID DwmExpandFrameIntoClientAreaHook()
 {
-    WindhawkUtils::SetFunctionHook((VOID*)DwmExtendFrameIntoClientArea, (VOID*)HookedDwmExtendFrameIntoClientArea, (VOID**)&DwmExtendFrameIntoClientArea_orig);
+    WindhawkUtils::SetFunctionHook(DwmExtendFrameIntoClientArea, HookedDwmExtendFrameIntoClientArea, &DwmExtendFrameIntoClientArea_orig);
 }
 
 VOID DwmSetWindowAttributeHook()
 {
-    WindhawkUtils::SetFunctionHook((VOID*)DwmSetWindowAttribute, (VOID*)HookedDwmSetWindowAttribute, (VOID**)&DwmSetWindowAttribute_orig); 
+    WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, HookedDwmSetWindowAttribute, &DwmSetWindowAttribute_orig); 
 }
 
 VOID FillBackgroundElements()
@@ -4685,20 +4674,20 @@ VOID FillBackgroundElements()
     InitDirect2D();
     ColorizeSysColors();
     CplDuiHook();
-    WindhawkUtils::SetFunctionHook((VOID*)DefWindowProc, (VOID*)HookedDefWindowProcW, (VOID**)&DefWindowProc_orig);
-    WindhawkUtils::SetFunctionHook((VOID*)GetThemeBitmap, (VOID*)HookedGetThemeBitmap, (VOID**)&GetThemeBitmap_orig);
-    WindhawkUtils::SetFunctionHook((VOID*)GetThemeColor, (VOID*)HookedGetColorTheme, (VOID**)&GetThemeColor_orig);   
-    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeBackground, (VOID*)HookedDrawThemeBackground, (VOID**)&DrawThemeBackground_orig);
-    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeBackgroundEx, (VOID*)HookedDrawThemeBackgroundEx, (VOID**)&DrawThemeBackgroundEx_orig);
+    WindhawkUtils::SetFunctionHook(DefWindowProc, HookedDefWindowProcW, &DefWindowProc_orig);
+    WindhawkUtils::SetFunctionHook(GetThemeBitmap, HookedGetThemeBitmap, &GetThemeBitmap_orig);
+    WindhawkUtils::SetFunctionHook(GetThemeColor, HookedGetColorTheme, &GetThemeColor_orig);   
+    WindhawkUtils::SetFunctionHook(DrawThemeBackground, HookedDrawThemeBackground, &DrawThemeBackground_orig);
+    WindhawkUtils::SetFunctionHook(DrawThemeBackgroundEx, HookedDrawThemeBackgroundEx, &DrawThemeBackgroundEx_orig);
 }
 
 VOID TextRenderingHook()
 {
-    WindhawkUtils::SetFunctionHook((VOID*)DrawTextW, (VOID*)HookedDrawTextW, (VOID**)&DrawTextW_orig);
-    WindhawkUtils::SetFunctionHook((VOID*)DrawTextExW, (VOID*)HookedDrawTextExW, (VOID**)&DrawTextExW_orig);
-    WindhawkUtils::SetFunctionHook((VOID*)ExtTextOutW, (VOID*)HookedExtTextOutW, (VOID**)&ExtTextOutW_orig);
-    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeText, (VOID*)HookedDrawThemeText, (VOID**)&DrawThemeText_orig);
-    WindhawkUtils::SetFunctionHook((VOID*)DrawThemeTextEx, (VOID*)HookedDrawThemeTextEx, (VOID**)&DrawThemeTextEx_orig);
+    WindhawkUtils::SetFunctionHook(DrawTextW, HookedDrawTextW, &DrawTextW_orig);
+    WindhawkUtils::SetFunctionHook(DrawTextExW, HookedDrawTextExW, &DrawTextExW_orig);
+    WindhawkUtils::SetFunctionHook(ExtTextOutW, HookedExtTextOutW, &ExtTextOutW_orig);
+    WindhawkUtils::SetFunctionHook(DrawThemeText, HookedDrawThemeText, &DrawThemeText_orig);
+    WindhawkUtils::SetFunctionHook(DrawThemeTextEx, HookedDrawThemeTextEx, &DrawThemeTextEx_orig);
 }
 
 VOID RestoreWindowCustomizations(HWND hWnd)
@@ -5070,9 +5059,9 @@ BOOL Wh_ModInit(VOID)
     if (!pNtUserCreateWindowEx)
         return FALSE;
 
-    WindhawkUtils::SetFunctionHook((VOID*)pNtUserCreateWindowEx,
-                       (VOID*)HookedNtUserCreateWindowEx,
-                       (VOID**)&NtUserCreateWindowEx_Original);
+    WindhawkUtils::SetFunctionHook(pNtUserCreateWindowEx,
+                       HookedNtUserCreateWindowEx,
+                       &NtUserCreateWindowEx_Original);
     
     return TRUE;
 }
@@ -5136,4 +5125,3 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
-
