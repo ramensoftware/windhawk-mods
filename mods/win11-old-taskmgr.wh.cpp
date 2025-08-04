@@ -2,7 +2,7 @@
 // @id              win11-old-taskmgr
 // @name            Windows 11 Old Task Manager
 // @description     Always use the Windows 8/10 styled Task Manager on Windows 11
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         taskmgr.exe
@@ -38,6 +38,12 @@ bool IsRejuvenatedViewEnabledHelper_hook(void)
     return false;
 }
 
+bool (*ShouldTaskManagerUseDarkMode_orig)(void);
+bool ShouldTaskManagerUseDarkMode_hook(void)
+{
+    return false;
+}
+
 const WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
     {
         {
@@ -61,6 +67,14 @@ const WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
         },
         &IsRejuvenatedViewEnabledHelper_orig,
         IsRejuvenatedViewEnabledHelper_hook,
+        false
+    },
+    {
+        {
+            L"bool __cdecl ShouldTaskManagerUseDarkMode(void)"
+        },
+        &ShouldTaskManagerUseDarkMode_orig,
+        ShouldTaskManagerUseDarkMode_hook,
         false
     }
 };
