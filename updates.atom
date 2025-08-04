@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-04T08:03:21.000Z</updated>
+    <updated>2025-08-04T10:14:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.2.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#9bf555a229d798630345d558c6f1c30ffbc500ce</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2025-08-04T10:14:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the Translucent Explorer11 theme.</li>
+<li>Added ThemeResource support to WindhawkBlur.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.6.0]]></title>
         <id>https://windhawk.net/mods/translucent-windows#87d392a2bf39e964f6ffdce92a6c68d5776f01a3</id>
@@ -308,21 +322,6 @@ Improved Usability for Cryptomator: Hides lengthy encrypted vault paths (e.g., s
         <author>
             <name>@danalec</name>
             <uri>https://github.com/danalec</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Separators around File Explorer toolbars 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-toolbars-separators#3326875811c957ae1eb55fe8c57bd218c464aa90</id>
-        <link href="https://windhawk.net/mods/explorer-toolbars-separators"/>
-        <updated>2025-07-26T22:21:04.000Z</updated>
-        <content type="html"><![CDATA[<p>Adds separators around File Explorer toolbars, as in Windows 98 or Windows 2000 </p>
-<p>Before:</p>
-<p><img src="https://i.imgur.com/MqcVeUW.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://i.imgur.com/Xyzj4X2.png" alt="After" /></p>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

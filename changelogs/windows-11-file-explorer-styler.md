@@ -1,3 +1,8 @@
+## 1.2.1 ([Aug 4, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9bf555a229d798630345d558c6f1c30ffbc500ce/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Added the Translucent Explorer11 theme.
+* Added ThemeResource support to WindhawkBlur.
+
 ## 1.2 ([May 31, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c08d8c4047fd99859a2d1449a2126ec56f20ec2d/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Added a built-in blur brush object, `WindhawkBlur`, which supports the `BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`.
