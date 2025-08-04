@@ -4663,19 +4663,19 @@
                 "published": 1743352526000,
                 "rating": 9,
                 "ratingUsers": 123,
-                "updated": 1751312504000,
+                "updated": 1754294601000,
                 "users": 11780
             },
             "metadata": {
                 "author": "Undisputed00x",
-                "compilerOptions": "-ldwmapi -luxtheme -lcomctl32 -lgdi32",
+                "compilerOptions": "-ldwmapi -luxtheme -lcomctl32 -lgdi32 -ld2d1 -lmsimg32",
                 "description": "Enables native translucent effects in Windows 11",
                 "github": "https://github.com/Undisputed00x",
                 "include": [
                     "*"
                 ],
                 "name": "Translucent Windows",
-                "version": "1.5.1"
+                "version": "1.6.0"
             }
         },
         "transparent-screensaver-fix": {
