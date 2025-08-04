@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-04T10:14:57.000Z</updated>
+    <updated>2025-08-04T23:22:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Old Task Manager 1.0.1]]></title>
+        <id>https://windhawk.net/mods/win11-old-taskmgr#4f32b2163d3b8938660000bb6cf62634e022635c</id>
+        <link href="https://windhawk.net/mods/win11-old-taskmgr"/>
+        <updated>2025-08-04T23:22:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix dark mode being partially enabled</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.2.1]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#9bf555a229d798630345d558c6f1c30ffbc500ce</id>
@@ -307,21 +320,6 @@ use it from an adjacent retail build.</p>
         <author>
             <name>xalejandro</name>
             <uri>https://github.com/tetawaves</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Network UNC Paths in Explorer 1.0.5]]></title>
-        <id>https://windhawk.net/mods/hide-unc#3f6d76d5ce038d14686a9f41bff709df45d7b4f7</id>
-        <link href="https://windhawk.net/mods/hide-unc"/>
-        <updated>2025-07-26T23:03:41.000Z</updated>
-        <content type="html"><![CDATA[<p>UNC (Universal Naming Convention) paths are standardized formats for accessing network resources in Windows, typically starting with \ (e.g., \server\share\file).
-They specify the server, share, and file location without relying on local drive letters.</p>
-<p>This mod hides the UNC paths (e.g., <code>(\\\server\\share)</code>) from network drive labels in Windows Explorer, file open/save dialogs, and other UI elements.</p>
-<p>It keeps the display clean by showing only the drive name or letter, reducing visual clutter in File Explorer and dialogs, making navigation faster and less overwhelming.
-Improved Usability for Cryptomator: Hides lengthy encrypted vault paths (e.g., simplifying "\\vault-network-drive\Vault\encrypted" to just "Vault (Z:)"), enhancing readability during file access or backups.</p>]]></content>
-        <author>
-            <name>@danalec</name>
-            <uri>https://github.com/danalec</uri>
         </author>
     </entry>
 </feed>
