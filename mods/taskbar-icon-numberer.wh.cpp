@@ -348,7 +348,7 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK user32Hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
             &TaskListButton_get_IsRunning_Original,
@@ -360,7 +360,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, user32Hooks, ARRAYSIZE(user32Hooks));
+    return HookSymbols(module, user32DllHooks, ARRAYSIZE(user32DllHooks));
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
