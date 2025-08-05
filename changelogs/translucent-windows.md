@@ -1,3 +1,8 @@
+## 1.6.1 ([Aug 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a735c640a09ff65801f32dbe9e3b5f872380df19/mods/translucent-windows.wh.cpp))
+
+* Custom painted theme parts made DPI aware
+* Use system's accent palette for accent colorizer
+
 ## 1.6.0 ([Aug 4, 2025](https://github.com/ramensoftware/windhawk-mods/blob/87d392a2bf39e964f6ffdce92a6c68d5776f01a3/mods/translucent-windows.wh.cpp))
 
 * Introduce custom painted windows theme parts using the Direct2D API
