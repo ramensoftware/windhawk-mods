@@ -2,11 +2,11 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.6.0
+// @version         1.6.1
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
-// @compilerOptions -ldwmapi -luxtheme -lcomctl32 -lgdi32 -ld2d1 -lmsimg32
+// @compilerOptions -ldwmapi -luxtheme -lcomctl32 -lgdi32 -ld2d1 -lmsimg32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -35,7 +35,7 @@ in order to get translucent WinUI parts of the new file explorer
 * It is highly recommended to use the mod with black/dark window themes like the Rectify11 "Dark theme with Mica".
 
 * Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
-Light mode theme, HDR enabled, black color or white background behind the window can cause this. 
+Light mode theme, HDR enabled, 10bit color depth output, black color or white background behind the window can cause this. 
 This is because most GDI rendering operations do not preserve alpha values.
 
 * Blur effect may show a bleeding effect at the edges of a window when 
@@ -281,6 +281,7 @@ maximized or snapped to the edge of the screen, this is caused by default.
 #include <d2d1.h>
 #include <wingdi.h>
 #include <wrl.h>
+#include <ShellScalingApi.h>
 
 
 static UINT ENABLE = 1;
@@ -293,6 +294,19 @@ static constexpr UINT TABBEDWINDOW = 4; // DWMSBT_TABBEDWINDOW
 static constexpr UINT DEFAULT = 0; // DWMWCP_DEFAULT
 static constexpr UINT DONTROUND = 1; // DWMWCP_DONOTROUND
 static constexpr UINT SMALLROUND = 3; // DWMWCP_ROUNDSMALL
+
+// Get DPI value from the primary monitor without dependance to DPI-aware API
+// TODO: Get DPI per window monitor
+UINT GetDpiFromMonitor()
+{
+    // Get monitor handle without the need of a window handle
+    HMONITOR hPrimary = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    UINT dpiX = USER_DEFAULT_SCREEN_DPI, dpiY = USER_DEFAULT_SCREEN_DPI;
+    if (SUCCEEDED(GetDpiForMonitor(hPrimary, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)))
+        return dpiY;
+    return USER_DEFAULT_SCREEN_DPI;
+}
+UINT g_Dpi = GetDpiFromMonitor();
 
 UINT g_msgRainbowTimer = RegisterWindowMessage(L"Rainbow_effect");
 
@@ -309,6 +323,9 @@ thread_local BOOL g_DrawThemeTextExEntry;
 
 typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC, LPCWSTR, UINT, const RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL, DTT_CALLBACK_PROC, LPARAM);
 static auto DrawTextWithGlow = (pDrawTextWithGlow)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(126));
+
+typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
+static auto ShouldSystemUseDarkMode = (pShouldSystemUseDarkMode)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(138));
 
 thread_local HHOOK g_callWndProcHook;
 std::mutex g_allCallWndProcHooksMutex;
@@ -532,117 +549,58 @@ BOOL IsWindowEligible(HWND hWnd)
     return TRUE;
 }
 
-// Simulates the convertion of system accent color to Accent Light 2/Accent Dark 2 shades
-// Inspired by https://github.com/WinExperiments/AccentColorizer
-COLORREF EnhanceAccentColor(BYTE a, BYTE& r, BYTE& g, BYTE& b)
+enum AccentColorShade
 {
-    DOUBLE inR = r / (a / 255.0) / 255.0;
-    DOUBLE inG = g / (a / 255.0) / 255.0;
-    DOUBLE inB = b / (a / 255.0) / 255.0;
+    SystemAccentColorLight3,
+    SystemAccentColorLight2,
+    SystemAccentColorLight1,
+    SystemAccentColorBase,
+    SystemAccentColorDark1,
+    SystemAccentColorDark2,
+    SystemAccentColorDark3,
+    Unused,
+    AccentColorCount
+};
 
-    BYTE accentR = GetRValue(g_settings.AccentColor);
-    BYTE accentG = GetGValue(g_settings.AccentColor);
-    BYTE accentB = GetBValue(g_settings.AccentColor);
-
-    DOUBLE accR = accentR / 255.0;
-    DOUBLE accG = accentG / 255.0;
-    DOUBLE accB = accentB / 255.0;
-
-    auto rgb_to_hsl = [](DOUBLE R, DOUBLE G, DOUBLE B, DOUBLE& H, DOUBLE& S, DOUBLE& L) {
-        DOUBLE min = std::min({ R, G, B });
-        DOUBLE max = std::max({ R, G, B });
-        DOUBLE delta = max - min;
-
-        L = (max + min) / 2.0;
-
-        if (delta == 0.0) {
-            H = 210.0;
-            S = 0.0;
-            return;
-        }
-
-        S = (L < 0.5) ? (delta / (max + min)) : (delta / (2.0 - max - min));
-
-        if (max == R)
-            H = (G - B) / delta + (G < B ? 6.0 : 0.0);
-        else if (max == G)
-            H = (B - R) / delta + 2.0;
-        else
-            H = (R - G) / delta + 4.0;
-
-        H *= 60.0;
-    };
-
-    auto hsl_to_rgb = [](DOUBLE H, DOUBLE S, DOUBLE L, DOUBLE& R, DOUBLE& G, DOUBLE& B) {
-        auto hue2rgb = [](DOUBLE p, DOUBLE q, DOUBLE t) {
-            if (t < 0.0) t += 1.0;
-            if (t > 1.0) t -= 1.0;
-            if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
-            if (t < 1.0 / 2.0) return q;
-            if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-            return p;
-        };
-
-        if (S == 0) {
-            R = G = B = L;
-        } else {
-            DOUBLE q = L < 0.5 ? L * (1.0 + S) : L + S - L * S;
-            DOUBLE p = 2.0 * L - q;
-            DOUBLE h = H / 360.0;
-            R = hue2rgb(p, q, h + 1.0 / 3.0);
-            G = hue2rgb(p, q, h);
-            B = hue2rgb(p, q, h - 1.0 / 3.0);
-        }
-    };
-
-    DOUBLE inH, inS, inL;
-    rgb_to_hsl(inR, inG, inB, inH, inS, inL);
-
-    DOUBLE accH, accS, accL;
-    rgb_to_hsl(accR, accG, accB, accH, accS, accL);
-
-    DOUBLE defaultL;
-    DOUBLE dummyH, dummyS;
-    rgb_to_hsl(0.0, 120.0 / 255.0, 215.0 / 255.0, dummyH, dummyS, defaultL);
-
-    DOUBLE baseS = std::max(accS, 0.08);
-    inS *= (1.0 / baseS) * 1.0;
-    inS *= pow(accS, 0.95);
-
-    DOUBLE lightnessDelta = (defaultL * 255.0) - accL;
-    DOUBLE L255 = inL * 255.0;
-
-    DOUBLE lightHue =
-        accH < 125 ? 60 :
-        accH < 150 ? 120 :
-        accH < 240 ? 180 :
-        accH < 345 ? 300 : 420;
-
-    DOUBLE darkHue =
-        accH < 60 ? 0 :
-        accH < 180 ? 120 :
-        accH < 300 ? 240 : 360;
-
-    if (L255 > lightnessDelta) {
-        DOUBLE f = (L255 - lightnessDelta) / (255.0 - lightnessDelta);
-        inH = accH + 0.5 * (lightHue - accH) * f;
-        inL += (accL - accL) * pow(1.0 - f, 2.0) * inS;
-    } else {
-        DOUBLE f = (lightnessDelta - L255) / lightnessDelta;
-        inH = accH + 0.5 * (darkHue - accH) * f;
-        inL -= (accL - accL) * inS;
+class AccentPalette
+{
+public:
+    std::array<COLORREF, AccentColorCount> Colors;
+    BOOL LoadAccentPalette();
+    AccentPalette()
+    {
+        LoadAccentPalette();
     }
-    inS *= accS;
+};
+AccentPalette g_AccentPalette;
 
-    DOUBLE outR, outG, outB;
-    hsl_to_rgb(inH, inS, inL, outR, outG, outB);
-    
-    DOUBLE alpha = a / 255.0;
-    r = (BYTE)std::clamp(outR * 255.0 * alpha, 0.0, 255.0);
-    g = (BYTE)std::clamp(outG * 255.0 * alpha, 0.0, 255.0);
-    b = (BYTE)std::clamp(outB * 255.0 * alpha, 0.0, 255.0);
+BOOL AccentPalette::LoadAccentPalette()
+{
+    const LPCWSTR kAccentRegPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent";
+    const LPCWSTR kAccentPaletteValue = L"AccentPalette";
 
-    return RGB(r, g, b);
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kAccentRegPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+        return false;
+
+    BYTE data[32] = {};
+    DWORD dataSize = sizeof(data);
+    DWORD type = 0;
+
+    if (RegQueryValueExW(hKey, kAccentPaletteValue, nullptr, &type, data, &dataSize) != ERROR_SUCCESS || type != REG_BINARY || dataSize < AccentColorCount * 4)
+    {
+        RegCloseKey(hKey);
+        return false;
+    }
+
+    RegCloseKey(hKey);
+
+    for (int i = 0; i < AccentColorCount; ++i)
+    {
+        DWORD color = *reinterpret_cast<DWORD*>(&data[i * 4]);
+        Colors[i] = color;
+    }
+    return true;
 }
 
 BOOL GetAccentColor(COLORREF& outColor)
@@ -695,22 +653,36 @@ D2D1_COLOR_F MyD2D1Color(BYTE R, BYTE G, BYTE B)
     return MyD2D1Color(255, R, G, B);
 }
 
-D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE A, BYTE R, BYTE G, BYTE B)
+D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE A, BYTE R, BYTE G, BYTE B, AccentColorShade AccentShade = SystemAccentColorBase)
 {
     if (g_settings.AccentColorize)
-    {
-        EnhanceAccentColor(A, R, G, B);
+    {       
+        // Change light/dark accent shades to dark/light depending theme dark mode
+        /* if (ShouldSystemUseDarkMode() && AccentShade > 3)
+            AccentShade = static_cast<AccentColorShade>(6 - AccentShade);
+        else if (!ShouldSystemUseDarkMode() && AccentShade < 3)
+            AccentShade = static_cast<AccentColorShade>(6 - AccentShade); */
+        R = GetRValue(g_AccentPalette.Colors[(INT)AccentShade]);
+        G = GetGValue(g_AccentPalette.Colors[(INT)AccentShade]);
+        B = GetBValue(g_AccentPalette.Colors[(INT)AccentShade]);
         return MyD2D1Color(A, R, G, B);
     }
     else
         return MyD2D1Color(A, R, G, B);
 }
 
-D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE R, BYTE G, BYTE B)
+D2D1_COLOR_F IsAccentColorPossibleD2D(BYTE R, BYTE G, BYTE B, AccentColorShade AccentShade = SystemAccentColorBase)
 {
     if (g_settings.AccentColorize)
-    {
-        EnhanceAccentColor(255, R, G, B);
+    {   
+        // Change light/dark accent shades to dark/light depending theme dark mode
+        /* if (ShouldSystemUseDarkMode() && AccentShade > 3)
+            AccentShade = static_cast<AccentColorShade>(6 - AccentShade);
+        else if (!ShouldSystemUseDarkMode() && AccentShade < 3)
+            AccentShade = static_cast<AccentColorShade>(6 - AccentShade); */
+        R = GetRValue(g_AccentPalette.Colors[(INT)AccentShade]);
+        G = GetGValue(g_AccentPalette.Colors[(INT)AccentShade]);
+        B = GetBValue(g_AccentPalette.Colors[(INT)AccentShade]);
         return MyD2D1Color(255, R, G, B);
     }
     else
@@ -1474,8 +1446,8 @@ HRESULT CreateBoundD2DRenderTarget(HDC hdc, LPCRECT pRect, ID2D1Factory* pFactor
     D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_SOFTWARE,
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-        static_cast<FLOAT>(GetDeviceCaps(hdc, LOGPIXELSX)),
-        static_cast<FLOAT>(GetDeviceCaps(hdc, LOGPIXELSY)),
+        NULL,
+        NULL,
         D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE,
         D2D1_FEATURE_LEVEL_DEFAULT
     );
@@ -1764,13 +1736,16 @@ BOOL PaintScroll(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     RECT rc = (iPartId == SBP_THUMBBTNVERT) ? 
     RECT(static_cast<LONG>(pRect->left + ((pRect->right - pRect->left) * 0.25f)), pRect->top, static_cast<LONG>(pRect->right - ((pRect->right - pRect->left) * 0.25f)), pRect->bottom)
     : RECT(pRect->left, static_cast<LONG>(pRect->top + ((pRect->bottom - pRect->top) * 0.25f)) , pRect->right, static_cast<LONG>(pRect->bottom - ((pRect->bottom - pRect->top) * 0.25f)));
-    DrawNineGridStretch(hdc, g_cache.scrollbar[index], &rc, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.scrollbar[index], &rc, 6, 6, 6, 6);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheScrollbar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
-    INT width = 12, height = 12;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 18, height = 18;
+    FLOAT cornerRadius = 4.f * scale;
+
     if (!g_cache.CreateDIB(g_cache.scrollbar[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -1779,12 +1754,12 @@ BOOL CThemeCache::CacheScrollbar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, I
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.scrollbar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
-    D2D1_RECT_F thumbRect{D2D1::Rect(0, 0, width, height)};
-    D2D1_COLOR_F thumbColor = (iStateId == SCRBS_NORMAL) ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(160, 224, 224, 224);
+    D2D1_RECT_F Rect{D2D1::Rect(0, 0, width, height)};
+    D2D1_COLOR_F Color = (iStateId == SCRBS_NORMAL) ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(160, 224, 224, 224);
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush = nullptr;
-    pRenderTarget->CreateSolidColorBrush(thumbColor, &brush);
-    D2D1_ROUNDED_RECT rr = {thumbRect, 4.0f, 4.0f};
+    pRenderTarget->CreateSolidColorBrush(Color, &brush);
+    D2D1_ROUNDED_RECT rr = {Rect, cornerRadius, cornerRadius};
 
     pRenderTarget->BeginDraw();
     pRenderTarget->FillRoundedRectangle(&rr, brush.Get());
@@ -1802,11 +1777,12 @@ BOOL PaintScrollBarArrows(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &dcRenderTarget)))
         return FALSE;
 
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
     FLOAT height = static_cast<FLOAT>(pRect->bottom - pRect->top);
 
-    FLOAT triangleBaseWidth = 10.0f;
-    FLOAT triangleHeight = 7.0f;
+    FLOAT triangleBaseWidth = 10.0f * scale;
+    FLOAT triangleHeight = 7.0f * scale;
     FLOAT centerX = width / 2.0f;
     FLOAT centerY = height / 2.0f;
 
@@ -1870,20 +1846,23 @@ BOOL PaintPushButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (iPartId != BP_PUSHBUTTON || !g_d2dFactory)
         return FALSE;
-    
+
     INT index = (iStateId == PBS_HOT) ? 1 : (iStateId == PBS_PRESSED) ? 2
     : (iStateId == PBS_DISABLED) ? 3 : 0;
 
     if (!g_cache.pushbutton[index])
         if (!g_cache.CachePushButton(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.pushbutton[index], pRect, 3, 3, 3, 3);
+    DrawNineGridStretch(hdc, g_cache.pushbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CachePushButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
-    INT width = 12, height = 12;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 18, height = 18;
+    FLOAT cornerRadius = 3.f * scale;
+
     if (!g_cache.CreateDIB(g_cache.pushbutton[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -1894,7 +1873,7 @@ BOOL CThemeCache::CachePushButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId,
 
     D2D1_ROUNDED_RECT rr = {
         D2D1::RectF(0.5f, 0.5f, (FLOAT)width - 0.5f, (FLOAT)height - 0.5f),
-        3.f, 3.f
+        cornerRadius, cornerRadius
     };
 
     D2D1_COLOR_F fillColor =
@@ -1910,7 +1889,7 @@ BOOL CThemeCache::CachePushButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId,
     
     pRenderTarget->BeginDraw();
     pRenderTarget->FillRoundedRectangle(&rr, fillBrush.Get());
-    pRenderTarget->DrawRoundedRectangle(&rr, borderBrush.Get());
+    pRenderTarget->DrawRoundedRectangle(&rr, borderBrush.Get(), scale);
     auto hr = pRenderTarget->EndDraw();
     if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
     return TRUE;
@@ -1933,7 +1912,8 @@ BOOL PaintRadioButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
 BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
-    INT width = 13, height = 13;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 13 * scale, height = 13 * scale;
     if (!g_cache.CreateDIB(g_cache.radiobutton[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -1970,17 +1950,17 @@ BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
             borderColor = MyD2D1Color(64, 128, 128, 128);
             break;
         case RBS_CHECKEDNORMAL:
-            borderColor = radioColor = IsAccentColorPossibleD2D(105, 205, 255);
+            borderColor = radioColor = IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2);
             innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.4f;
             break;
         case RBS_CHECKEDHOT:
-            borderColor = radioColor = IsAccentColorPossibleD2D(225, 105, 205, 255);
+            borderColor = radioColor = IsAccentColorPossibleD2D(225, 105, 205, 255, SystemAccentColorLight3);
             innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.6f;
             break;
         case RBS_CHECKEDPRESSED:
-            borderColor = radioColor = IsAccentColorPossibleD2D(192, 105, 205, 255);
+            borderColor = radioColor = IsAccentColorPossibleD2D(192, 105, 205, 255, SystemAccentColorLight1);
             innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.33f;
             break;
@@ -1997,7 +1977,7 @@ BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
     pRenderTarget->BeginDraw();
     pRenderTarget->FillEllipse(outerEllipse, brush.Get());
     brush->SetColor(borderColor);
-    pRenderTarget->DrawEllipse(outerEllipse, brush.Get(), 1.0f);
+    pRenderTarget->DrawEllipse(outerEllipse, brush.Get(), scale);
 
     if (innerRatio > 0.f)
     {
@@ -2017,7 +1997,10 @@ BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
 
 BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
-    INT width = 13, height = 13;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 13 * scale, height = 13 * scale;
+    FLOAT cornerRadius = 4.f * scale;
+
     if (!g_cache.CreateDIB(g_cache.checkbutton[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -2028,7 +2011,7 @@ BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
 
     D2D1_ROUNDED_RECT roundedRect = {
         D2D1::RectF(0, 0, width, height),
-        3.0f, 3.0f
+        cornerRadius, cornerRadius
     };
 
     D2D1_COLOR_F fillColor, borderColor;
@@ -2052,19 +2035,19 @@ BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
             break;
         case CBS_CHECKEDNORMAL: case CBS_MIXEDNORMAL:
         case CBS_IMPLICITNORMAL: case CBS_EXCLUDEDNORMAL:
-            fillColor = IsAccentColorPossibleD2D(102, 206, 255);
+            fillColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
             break;
         case CBS_CHECKEDHOT: case CBS_MIXEDHOT:
         case CBS_IMPLICITHOT: case CBS_EXCLUDEDHOT:
-            fillColor = IsAccentColorPossibleD2D(224, 102, 206, 255);
+            fillColor = IsAccentColorPossibleD2D(224, 102, 206, 255, SystemAccentColorLight3);
             break;
         case CBS_CHECKEDPRESSED: case CBS_MIXEDPRESSED:
         case CBS_IMPLICITPRESSED: case CBS_EXCLUDEDPRESSED:
-            fillColor = IsAccentColorPossibleD2D(192, 102, 206, 255);
+            fillColor = IsAccentColorPossibleD2D(192, 102, 206, 255, SystemAccentColorLight1);
             break;
         case CBS_CHECKEDDISABLED: case CBS_MIXEDDISABLED:
         case CBS_IMPLICITDISABLED: case CBS_EXCLUDEDDISABLED:
-            fillColor = IsAccentColorPossibleD2D(96, 96, 96);
+            fillColor = MyD2D1Color(96, 96, 96);
     }
     pRenderTarget->BeginDraw();
 
@@ -2076,7 +2059,7 @@ BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
     {
         Brush->SetColor(borderColor);
         pRenderTarget->DrawRoundedRectangle
-            (D2D1_ROUNDED_RECT(D2D1::RectF(.5f, .5f, width - .5f, height - .5f), 3.f, 3.f), Brush.Get());
+        (D2D1_ROUNDED_RECT(D2D1::RectF(.5f, .5f, width - .5f, height - .5f), cornerRadius, cornerRadius), Brush.Get(), scale);
     }
     if (iStateId > CBS_UNCHECKEDDISABLED)
     {
@@ -2216,13 +2199,16 @@ BOOL PaintCommandLink(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.commandlinkbutton[index])
         if (!g_cache.CacheCommandlinkButton(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.commandlinkbutton[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.commandlinkbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
-    INT width = 12, height = 12;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 18, height = 18;
+    FLOAT cornerRadius = 4.f * scale;
+
     if (!g_cache.CreateDIB(g_cache.commandlinkbutton[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -2231,7 +2217,7 @@ BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, ID2D1Factory* pFactory, INT iS
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.commandlinkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
-    D2D1_ROUNDED_RECT roundedRect = { D2D1::RectF(0, 0, width, height), 4.0f, 4.0f};
+    D2D1_ROUNDED_RECT roundedRect = { D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius};
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     pRenderTarget->BeginDraw();
     switch (iStateId)
@@ -2251,9 +2237,9 @@ BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, ID2D1Factory* pFactory, INT iS
             break;
         case CMDLS_DEFAULTED:
         case CMDLS_DEFAULTED_ANIMATING:
-            roundedRect = {D2D1::RectF(1.f, 1.f, width - 1.f, height - 1.f), 3.0f, 3.0f};
+            roundedRect = {D2D1::RectF(1.f * scale, 1.f * scale, width - 1.f * scale, height - 1.f * scale), cornerRadius - 1.f, cornerRadius - 1.f};
             pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &brush);
-            pRenderTarget->DrawRoundedRectangle(&roundedRect, brush.Get(), 2.f);
+            pRenderTarget->DrawRoundedRectangle(&roundedRect, brush.Get(), 2.f * scale);
             break;
     }
     auto hr = pRenderTarget->EndDraw();
@@ -2278,8 +2264,9 @@ BOOL PaintCommandLinkGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
 BOOL CThemeCache::CacheCommandlinkGlyph(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT x = 0;
-    INT width = 20, height = 20;
+    INT width = 20 * scale, height = 20 * scale;
     if (!g_cache.CreateDIB(g_cache.commandlinkglyph[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -2353,13 +2340,16 @@ BOOL PaintCombobox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.combobox[index])
         if (!g_cache.CacheCombobox(hdc, g_d2dFactory, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.combobox[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.combobox[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheCombobox(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
-    INT width = 12, height = 12;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 3.f * scale;
+    INT width = 18, height = 18;
+
     if (!g_cache.CreateDIB(g_cache.combobox[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -2369,7 +2359,7 @@ BOOL CThemeCache::CacheCombobox(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.combobox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
-    D2D1_ROUNDED_RECT roundedRect = {D2D1::RectF(0.5, 0.5, width - .5f, height - .5f), 3.0f, 3.0f};
+    D2D1_ROUNDED_RECT roundedRect = {D2D1::RectF(0.5, 0.5, width - .5f, height - .5f), cornerRadius, cornerRadius};
 
     pRenderTarget->BeginDraw();
     if (iPartId == CP_READONLY)
@@ -2383,26 +2373,26 @@ BOOL CThemeCache::CacheCombobox(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
         pRenderTarget->FillRoundedRectangle(&roundedRect, Brush.Get());
 
         Brush->SetColor(MyD2D1Color(96, 112, 112, 112));
-        pRenderTarget->DrawRoundedRectangle(&roundedRect, Brush.Get());
+        pRenderTarget->DrawRoundedRectangle(&roundedRect, Brush.Get(), scale);
     }
     else if (iPartId == CP_BORDER)
     {
         D2D1_COLOR_F borderColor = (iStateId == CBXS_HOT) ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(96, 128, 128, 128);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
         pRenderTarget->CreateSolidColorBrush(borderColor, &borderBrush);
-        pRenderTarget->DrawRoundedRectangle(&roundedRect, borderBrush.Get());
+        pRenderTarget->DrawRoundedRectangle(&roundedRect, borderBrush.Get(), scale);
 
         if (iStateId == CBXS_PRESSED) 
         {
-            borderBrush->SetColor(IsAccentColorPossibleD2D(105, 205, 255));
+            borderBrush->SetColor(IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2));
             pRenderTarget->DrawLine(
-                D2D1::Point2F(.5f, height - 1.5f),
-                D2D1::Point2F(width - .5f, height - 1.5f),
+                D2D1::Point2F(cornerRadius/2 - 1.f * scale, height - 1.5f),
+                D2D1::Point2F(width - cornerRadius/2 + 1.f *scale, height - 1.5f),
                 borderBrush.Get()
             );
             pRenderTarget->DrawLine(
-                D2D1::Point2F(1.5f, height - .5f),
-                D2D1::Point2F(width - 1.5f, height - .5f),
+                D2D1::Point2F(1.5f * scale, height - .5f),
+                D2D1::Point2F(width - 1.5f * scale, height - .5f),
                 borderBrush.Get()
             );
         }
@@ -2410,6 +2400,7 @@ BOOL CThemeCache::CacheCombobox(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
         {
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> Brush;
             pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 80, 80, 80), &Brush);
+            pRenderTarget->FillRoundedRectangle(&roundedRect, Brush.Get());
         }
     }
     auto hr = pRenderTarget->EndDraw();
@@ -2428,14 +2419,16 @@ BOOL PaintEditBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.editbox[index])
         if (!g_cache.CacheEditBox(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.editbox[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.editbox[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheEditBox(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 3.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
     if(!g_cache.CreateDIB(g_cache.editbox[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -2444,14 +2437,14 @@ BOOL CThemeCache::CacheEditBox(HDC hdc, ID2D1Factory* pFactory, INT iStateId, IN
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.editbox[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
-    D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x + .5f, y + .5f, width - .5f, height - .5f), 3.f, 3.f);
+    D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x + .5f, y + .5f, width - .5f, height - .5f), cornerRadius, cornerRadius);
     pRenderTarget->BeginDraw();  
     if (iStateId == ETS_NORMAL || iStateId == ETS_HOT)
     {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
         D2D1_COLOR_F borderColor = (iStateId == ETS_HOT) ? MyD2D1Color(128, 160, 160, 160) : MyD2D1Color(96, 112, 112, 112);
         pRenderTarget->CreateSolidColorBrush(borderColor, &brush);
-        pRenderTarget->DrawRoundedRectangle(rect, brush.Get());
+        pRenderTarget->DrawRoundedRectangle(rect, brush.Get(), scale);
     }
     else if (iStateId == ETS_SELECTED)
     {
@@ -2459,15 +2452,15 @@ BOOL CThemeCache::CacheEditBox(HDC hdc, ID2D1Factory* pFactory, INT iStateId, IN
         FLOAT Width = static_cast<FLOAT>(width) - .5f, Height = static_cast<FLOAT>(height) - .5f;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
         pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 112, 112, 112), &brush);
-        pRenderTarget->DrawRoundedRectangle(rect, brush.Get());
+        pRenderTarget->DrawRoundedRectangle(rect, brush.Get(), scale);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> linebrush;
-        pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(105, 205, 255), &linebrush);
-        pRenderTarget->DrawLine(D2D1::Point2F(X, Height - 1.f), D2D1::Point2F(Width, Height - 1.f), linebrush.Get());
-        pRenderTarget->DrawLine(D2D1::Point2F(X + 1.f, Height), D2D1::Point2F(Width - 1.f, Height), linebrush.Get());
+        pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2), &linebrush);
+        pRenderTarget->DrawLine(D2D1::Point2F(cornerRadius/2 - 1.f * scale, Height - 1.f), D2D1::Point2F(width - cornerRadius/2 + 1.f * scale, Height - 1.f), linebrush.Get());
+        pRenderTarget->DrawLine(D2D1::Point2F(X + 1.f * scale, Height), D2D1::Point2F(Width - 1.f * scale , Height), linebrush.Get());
     }
     else if (iStateId == ETS_DISABLED)
     {
-        D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+        D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), cornerRadius, cornerRadius);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
         pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 96, 96), &brush); 
         pRenderTarget->FillRoundedRectangle(rect, brush.Get());
@@ -2508,7 +2501,7 @@ BOOL PaintListBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
             break;
         case LBPSH_HOT:
         case LBPSH_FOCUSED:
-            borderColor = IsAccentColorPossibleD2D(105, 205, 255);
+            borderColor = IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2);
             break;
         case LBPSH_DISABLED:
             borderColor = MyD2D1Color(96, 96, 96);
@@ -2553,13 +2546,15 @@ BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         break;
     }
 
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
     FLOAT H = static_cast<FLOAT>(pRect->bottom - pRect->top);
+
     FLOAT centerX = width / 2.0f;
     FLOAT centerY = H / 2.0f;
 
-    FLOAT arrowHeight = H * 0.22f;
-    FLOAT delta = arrowHeight / std::sqrt(2.0f);
+    FLOAT arrowHeight = H * 0.2f * scale;
+    FLOAT delta = arrowHeight / scale / std::sqrt(2.0f) ;
 
     FLOAT tipX = centerX;
     FLOAT tipY = centerY + arrowHeight / 2.0f;
@@ -2593,13 +2588,16 @@ BOOL PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.tab[index])
         if (!g_cache.CacheTab(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.tab[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.tab[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheTab(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
-    INT width = 12, height = 12;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
+    INT width = 18, height = 18;
+
     if(!g_cache.CreateDIB(g_cache.tab[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -2621,7 +2619,7 @@ BOOL CThemeCache::CacheTab(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT st
         D2D1_COLOR_F fillColor = (iStateId == TIS_HOT) ? MyD2D1Color(128, 96, 96, 96) : MyD2D1Color(96, 96, 96);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
         pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
-        D2D1_ROUNDED_RECT tabRect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 4.f, 4.f);
+        D2D1_ROUNDED_RECT tabRect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
         pRenderTarget->FillRoundedRectangle(tabRect, brush.Get());
     }
     else if (iStateId == TIS_SELECTED || iStateId == TIS_FOCUSED)
@@ -2636,14 +2634,14 @@ BOOL CThemeCache::CacheTab(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT st
         FLOAT pillTop    = pillBottom - desiredHeight;
 
         FLOAT pillHeight = desiredHeight;
-        FLOAT radius     = pillHeight / 2.0f;
+        FLOAT radius     = pillHeight / 2.0f * scale;
 
         D2D1_ROUNDED_RECT pillRect = D2D1::RoundedRect(
             D2D1::RectF(pillLeft, pillTop, pillRight, pillBottom),
             radius, radius
         );
 
-        D2D1_COLOR_F pillColor = IsAccentColorPossibleD2D(102, 206, 255);
+        D2D1_COLOR_F pillColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
         pRenderTarget->CreateSolidColorBrush(pillColor, &brush);
         pRenderTarget->FillRoundedRectangle(pillRect, brush.Get());
@@ -2706,7 +2704,10 @@ BOOL PaintTrackbarThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
 BOOL CThemeCache::CacheTrackBarThumb(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
-    INT width = 10, height = 21;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 3.f * scale;
+    INT width = 10 * scale, height = 21 * scale;
+
     if (iPartId == TKP_THUMBVERT)
         width = std::exchange(height, width);
     
@@ -2718,10 +2719,10 @@ BOOL CThemeCache::CacheTrackBarThumb(HDC hdc, ID2D1Factory* pFactory, INT iPartI
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
-    D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255) : 
-                             (iStateId == TUBS_PRESSED) ? IsAccentColorPossibleD2D(60, 110, 180) :
+    D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight3) : 
+                             (iStateId == TUBS_PRESSED) ? IsAccentColorPossibleD2D(60, 110, 180, SystemAccentColorLight1) :
                              (iStateId == TUBS_DISABLED) ? MyD2D1Color(96, 96, 96) : MyD2D1Color(64, 64, 64);
-    D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
     pRenderTarget->BeginDraw();
@@ -2751,7 +2752,9 @@ BOOL PaintTrackBarPointedThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect
 
 BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
-    INT width = 11, height = 19;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    INT width = 11 * scale, height = 19 * scale;
+
     if (iPartId == TKP_THUMBLEFT || iPartId == TKP_THUMBRIGHT)
         width = std::exchange(height, width);
     
@@ -2763,8 +2766,8 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.trackbarthumb[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
-    D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255) : 
-                             (iStateId == TUBS_PRESSED) ? IsAccentColorPossibleD2D(60, 110, 180) :
+    D2D1_COLOR_F fillColor = (iStateId == TUBS_HOT) ? IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight3) : 
+                             (iStateId == TUBS_PRESSED) ? IsAccentColorPossibleD2D(60, 110, 180, SystemAccentColorLight1) :
                              (iStateId == TUBS_DISABLED) ? MyD2D1Color(96, 96, 96) : MyD2D1Color(64, 64, 64);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
@@ -2780,7 +2783,7 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
         FLOAT tipHeight = height * 0.3f;
         FLOAT bodyHeight = height - tipHeight;
 
-        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, bodyHeight), 2.f, 2.f);
+        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, bodyHeight), 2.f * scale, 2.f * scale);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
 
         D2D1_POINT_2F p1 = D2D1::Point2F(cx - width * 0.5f, bodyHeight - 1.f);
@@ -2801,7 +2804,7 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
         FLOAT tipHeight = height * 0.3f;
         FLOAT bodyY = tipHeight;
         FLOAT bodyHeight = height - tipHeight;
-        FLOAT bodyRadius = bodyHeight * 0.2f;
+        FLOAT bodyRadius = bodyHeight * 0.2f * scale;
 
         D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, bodyY, width, height), bodyRadius, bodyRadius);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
@@ -2824,7 +2827,7 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
     {
         FLOAT tipWidth = width * 0.3f;
         FLOAT bodyWidth = width - tipWidth;
-        FLOAT bodyRadius = bodyWidth * 0.2f;
+        FLOAT bodyRadius = bodyWidth * 0.2f * scale;
 
         D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(tipWidth, 0, width, height), bodyRadius, bodyRadius);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
@@ -2847,7 +2850,7 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
     {
         FLOAT tipWidth = width * 0.3f;
         FLOAT bodyWidth = width - tipWidth;
-        FLOAT bodyRadius = bodyWidth * 0.2f;
+        FLOAT bodyRadius = bodyWidth * 0.2f * scale;
 
         D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, bodyWidth, height), bodyRadius, bodyRadius);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
@@ -2885,9 +2888,9 @@ BOOL PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         if (!g_cache.CacheProgressBar(hdc, g_d2dFactory, iPartId, iStateId, index))
             return FALSE;
     if (iPartId == PP_FILL)
-        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 11, 11, 8, 8);
+        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 10, 8, 10);
     else if (iPartId == PP_FILLVERT)
-        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 8, 11, 11);
+        DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 10, 8, 10, 8);
     else
         DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 8, 9, 9);
     return TRUE;
@@ -2895,14 +2898,15 @@ BOOL PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
 BOOL CThemeCache::CacheProgressBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 3.f * scale;
     INT x = 0, y = 0;
     INT width = 18, height = 18;
-    if (iPartId == PP_FILL) {
-        width = 50; height = 23;
-    }
-    else if (iPartId == PP_FILLVERT) {
-        width = 23; height = 50;
-    }
+
+    if (iPartId == PP_FILL) 
+        width = 50, height = 23;
+    else if (iPartId == PP_FILLVERT)
+        width = 23, height = 50;
 
     if(!g_cache.CreateDIB(g_cache.progressbar[stateIndex], hdc, width, height))
         return FALSE;
@@ -2913,7 +2917,7 @@ BOOL CThemeCache::CacheProgressBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId,
         return FALSE;
     
     D2D1_RECT_F rect = D2D1::RectF(0, 0, width, height);
-    D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(rect, 3.f, 3.f);
+    D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(rect, cornerRadius, cornerRadius);
 
     pRenderTarget->BeginDraw();
     if (iPartId == PP_BAR || iPartId == PP_BARVERT ||
@@ -2926,7 +2930,7 @@ BOOL CThemeCache::CacheProgressBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId,
     else if (iPartId == PP_CHUNK || iPartId == PP_CHUNKVERT)
     {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-        pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255), &brush);
+        pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2), &brush);
         pRenderTarget->FillRoundedRectangle(rounded, brush.Get());
     }
     else if (iPartId == PP_FILL || iPartId == PP_FILLVERT)
@@ -2944,7 +2948,7 @@ BOOL CThemeCache::CacheProgressBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId,
             case PBFS_NORMAL:
             {
                 Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> solidBrush;
-                pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255), &solidBrush);
+                pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2), &solidBrush);
                 pRenderTarget->FillRoundedRectangle(rounded, solidBrush.Get());
                 break;
             }
@@ -2966,9 +2970,9 @@ BOOL CThemeCache::CacheProgressBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId,
             }
             case PBFS_PARTIAL:
             {
-                stops[0].color = IsAccentColorPossibleD2D(0, 120, 215);
+                stops[0].color = IsAccentColorPossibleD2D(0, 120, 215, SystemAccentColorBase);
                 stops[0].position = 0.0f;
-                stops[1].color = IsAccentColorPossibleD2D(64, 160, 255);
+                stops[1].color = IsAccentColorPossibleD2D(64, 160, 255, SystemAccentColorLight2);
                 stops[1].position = 1.0f;
                 break;
             }
@@ -3016,13 +3020,16 @@ BOOL PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT p
     if (!g_cache.indeterminatebar[index])
         if (!g_cache.CacheIndeterminateBar(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.indeterminatebar[index], &overlayRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.indeterminatebar[index], &overlayRect, 6, 6, 5, 5);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 3.f * scale;
     INT width = 12, height = 12;
+
     if (iPartId == PP_MOVEOVERLAYVERT)
         width = std::exchange(height, width);
 
@@ -3034,9 +3041,9 @@ BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, ID2D1Factory* pFactory, INT iPa
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.indeterminatebar[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
-    D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255), &brush);
+    pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2), &brush);
 
     pRenderTarget->BeginDraw();
     pRenderTarget->FillRoundedRectangle(&rounded, brush.Get());
@@ -3078,7 +3085,7 @@ BOOL PaintListView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
             if (!g_cache.CacheListGroupHeader(hdc, g_d2dFactory, iPartId, iStateId, index))
                 return FALSE;
     }
-    DrawNineGridStretch(hdc, g_cache.listview[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.listview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
@@ -3087,8 +3094,11 @@ BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     if (iPartId != 0 && iPartId != LVP_LISTITEM)
         return FALSE;
     
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
+
     if(!g_cache.CreateDIB(g_cache.listview[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -3114,7 +3124,7 @@ BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
         {
             case LISS_NORMAL:
                 fillColor = MyD2D1Color(32, 160, 160, 160);
-                borderColor = IsAccentColorPossibleD2D(102, 206, 255);
+                borderColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
                 break;
             case LISS_HOT:
                 fillColor = MyD2D1Color(64, 160, 160, 160);
@@ -3124,18 +3134,18 @@ BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
                 break;
             case LISS_DISABLED:
                 fillColor = MyD2D1Color(64, 160, 160, 160);
-                borderColor = IsAccentColorPossibleD2D(102, 206, 255);
+                borderColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
                 break;
             case LISS_SELECTEDNOTFOCUS:
                 fillColor = MyD2D1Color(16, 160, 160, 160);
                 break;
             case LISS_HOTSELECTED:
                 fillColor = MyD2D1Color(48, 160, 160, 160);
-                borderColor = IsAccentColorPossibleD2D(102, 206, 255);
+                borderColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
                 break;
         }
         
-        D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 4.f, 4.f);
+        D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), cornerRadius, cornerRadius);
         pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
         pRenderTarget->BeginDraw();
         pRenderTarget->FillRoundedRectangle(&rounded, brush.Get());
@@ -3144,9 +3154,9 @@ BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
         {
             x = y = 1.f;
             width = height -= 1.f;
-            rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 3.f, 3.f);
+            rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), cornerRadius - 1.f, cornerRadius - 1.f);
             brush->SetColor(borderColor);
-            pRenderTarget->DrawRoundedRectangle(&rounded, brush.Get(), 2.f);
+            pRenderTarget->DrawRoundedRectangle(&rounded, brush.Get(), 2.f * scale);
         }
         auto hr = pRenderTarget->EndDraw();
         if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
@@ -3158,9 +3168,12 @@ BOOL CThemeCache::CacheListGroupHeader(HDC hdc, ID2D1Factory* pFactory, INT iPar
 {
     if (iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE)
         return FALSE;
-    
+
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
+
     if (!g_cache.CreateDIB(g_cache.listview[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -3200,7 +3213,7 @@ BOOL CThemeCache::CacheListGroupHeader(HDC hdc, ID2D1Factory* pFactory, INT iPar
             default:
                 return FALSE;
         }
-        D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 4.f, 4.f);
+        D2D1_ROUNDED_RECT rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), cornerRadius, cornerRadius);
         pRenderTarget->BeginDraw();
         if (iStateId != LVGHL_CLOSESELECTEDNOTFOCUSED)
         {
@@ -3212,9 +3225,9 @@ BOOL CThemeCache::CacheListGroupHeader(HDC hdc, ID2D1Factory* pFactory, INT iPar
         {
             x = y = 1.f;
             width = height -= 1.f;
-            rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), 3.f, 3.f);
+            rounded = D2D1::RoundedRect(D2D1::RectF(x, y, width , height), cornerRadius - 1.f, cornerRadius - 1.f);
             pRenderTarget->CreateSolidColorBrush(borderColor, &brush);
-            pRenderTarget->DrawRoundedRectangle(&rounded, brush.Get(), 2.f);
+            pRenderTarget->DrawRoundedRectangle(&rounded, brush.Get(), 2.f * scale);
         }
         auto hr = pRenderTarget->EndDraw();
         if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
@@ -3242,14 +3255,17 @@ BOOL PaintTreeView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.treeview[index])
         if (!g_cache.CacheTreeView(hdc, g_d2dFactory, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.treeview[index], pRect, 6, 6, 5, 5);
+    DrawNineGridStretch(hdc, g_cache.treeview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheTreeView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
+
     if (!g_cache.CreateDIB(g_cache.treeview[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -3258,7 +3274,7 @@ BOOL CThemeCache::CacheTreeView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.treeview[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
     
-    D2D1_ROUNDED_RECT roundedRect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+    D2D1_ROUNDED_RECT roundedRect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), cornerRadius, cornerRadius);
     pRenderTarget->BeginDraw();
     if (iPartId == 0)
     {
@@ -3282,7 +3298,7 @@ BOOL CThemeCache::CacheTreeView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
         {
             FLOAT lineLength = height * 0.45f;
             FLOAT offsetY = (height - lineLength) / 2;
-            brush->SetColor(IsAccentColorPossibleD2D(102, 206, 255));
+            brush->SetColor(IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2));
 
             D2D1_POINT_2F p1 = D2D1::Point2F(x + 0.5f, y + offsetY);
             D2D1_POINT_2F p2 = D2D1::Point2F(x + 0.5f, y + offsetY + lineLength);
@@ -3307,14 +3323,17 @@ BOOL PaintItemsView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.itemsview[index])
         if (!g_cache.CacheItemsView(hdc, g_d2dFactory, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.itemsview[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.itemsview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheItemsView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
+
     if(!g_cache.CreateDIB(g_cache.itemsview[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -3331,19 +3350,19 @@ BOOL CThemeCache::CacheItemsView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, I
     {
         if (iStateId == 1 || iStateId == 3)
         {
-            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), cornerRadius, cornerRadius);
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-            pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(0, 96, 188), &brush);
+            pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(0, 96, 188, SystemAccentColorLight2), &brush);
             pRenderTarget->FillRoundedRectangle(rect, brush.Get());
 
-            brush->SetColor(IsAccentColorPossibleD2D(0, 120, 215));
-            pRenderTarget->DrawRoundedRectangle(rect, brush.Get(), 2.0f);
+            brush->SetColor(IsAccentColorPossibleD2D(0, 120, 215, SystemAccentColorLight2));
+            pRenderTarget->DrawRoundedRectangle(rect, brush.Get(), 2.0f * scale);
         }
         else if (iStateId == 2 || iStateId == 4)
         {
-            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), 3.f, 3.f);
+            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), cornerRadius, cornerRadius);
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
-            pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(0, 96, 188), &fillBrush);
+            pRenderTarget->CreateSolidColorBrush(IsAccentColorPossibleD2D(0, 96, 188, SystemAccentColorLight2), &fillBrush);
             pRenderTarget->FillRoundedRectangle(rect, fillBrush.Get());
         }
     }
@@ -3351,15 +3370,15 @@ BOOL CThemeCache::CacheItemsView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, I
     {
         if (iStateId == 1)
         {
-            FLOAT radius = (iPartId == 6) ? 2.f : 3.f;
+            FLOAT radius = (iPartId == 6) ? 2.f * scale : 3.f * scale;
             D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x, y, width, height), radius, radius);
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
             pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &borderBrush);
-            pRenderTarget->DrawRoundedRectangle(rect, borderBrush.Get(), 2.0f);
+            pRenderTarget->DrawRoundedRectangle(rect, borderBrush.Get(), 2.0f * scale);
         }
         else if (iStateId == 2)
         {
-            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x-1, y-1, width+1, height+1), 3.f, 3.f);
+            D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x-1, y-1, width+1, height+1), cornerRadius, cornerRadius);
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
             pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 160, 160, 160), &fillBrush);
             pRenderTarget->FillRoundedRectangle(rect, fillBrush.Get());
@@ -3382,14 +3401,17 @@ BOOL PaintHeader(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.header[index])
         if (!g_cache.CacheHeader(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.header[index], pRect, 6, 0, 6, 6);
+    DrawNineGridStretch(hdc, g_cache.header[index], pRect, 12, 0, 11, 12);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheHeader(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 6.f * scale;
     INT x = 0, y = 0;
-    INT width = 14, height = 14;
+    INT width = 24, height = 24;
+
     if(!g_cache.CreateDIB(g_cache.header[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -3398,7 +3420,6 @@ BOOL CThemeCache::CacheHeader(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.header[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
-    FLOAT radius = 6.0f;
     D2D1_COLOR_F fillColor;
     switch (iStateId)
     {
@@ -3422,14 +3443,14 @@ BOOL CThemeCache::CacheHeader(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT
     geometry->Open(&sink);
     sink->BeginFigure(D2D1::Point2F(x, y), D2D1_FIGURE_BEGIN_FILLED);
     sink->AddLine(D2D1::Point2F(width, y));
-    sink->AddLine(D2D1::Point2F(width, height - radius));
+    sink->AddLine(D2D1::Point2F(width, height - cornerRadius));
     sink->AddArc(D2D1::ArcSegment(
-        D2D1::Point2F(width - radius, height),
-        D2D1::SizeF(radius, radius), 0.0f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
-    sink->AddLine(D2D1::Point2F(radius, height));
+        D2D1::Point2F(width - cornerRadius, height),
+        D2D1::SizeF(cornerRadius, cornerRadius), 0.0f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+    sink->AddLine(D2D1::Point2F(cornerRadius, height));
     sink->AddArc(D2D1::ArcSegment(
-        D2D1::Point2F(x, height - radius),
-        D2D1::SizeF(radius, radius), 0.0f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+        D2D1::Point2F(x, height - cornerRadius),
+        D2D1::SizeF(cornerRadius, cornerRadius), 0.0f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
     sink->AddLine(D2D1::Point2F(x, y));
     sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     sink->Close();
@@ -3490,14 +3511,17 @@ BOOL PaintModuleButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.modulebutton[index])
         if (!g_cache.CacheModuleButton(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.modulebutton[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.modulebutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheModuleButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
+
     if(!g_cache.CreateDIB(g_cache.modulebutton[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -3515,18 +3539,18 @@ BOOL CThemeCache::CacheModuleButton(HDC hdc, ID2D1Factory* pFactory, INT iStateI
             break;
         case 3: fillColor = MyD2D1Color(32, 160, 160, 160);
             break;
-        case 4: Border2pxOffset = 1.f;
+        case 4: Border2pxOffset = 1.f * scale;
             break;
         case 5: 
             fillColor = MyD2D1Color(64, 160, 160, 160);
-            Border2pxOffset = 1.f;
+            Border2pxOffset = 1.f * scale;
             break;
     }
 
     D2D1_ROUNDED_RECT roundedRect = {
         D2D1::RectF(Border2pxOffset, Border2pxOffset,
                     width -Border2pxOffset, height -Border2pxOffset) ,
-        3.0f, 3.0f
+        cornerRadius, cornerRadius
     };
 
     pRenderTarget->BeginDraw();
@@ -3558,14 +3582,16 @@ BOOL PaintModuleLocation(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.modulelocationbutton[index])
         if (!g_cache.CacheModuleLocationButton(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.modulelocationbutton[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.modulelocationbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheModuleLocationButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
     if(!g_cache.CreateDIB(g_cache.modulelocationbutton[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -3592,7 +3618,7 @@ BOOL CThemeCache::CacheModuleLocationButton(HDC hdc, ID2D1Factory* pFactory, INT
             borderColor = MyD2D1Color(96, 80, 80, 80);
             break;
         case 4:
-            Border2pxOffset = 1.f;
+            Border2pxOffset = 1.f * scale;
             borderColor = MyD2D1Color(255, 255, 255);
             break;
     }
@@ -3600,7 +3626,7 @@ BOOL CThemeCache::CacheModuleLocationButton(HDC hdc, ID2D1Factory* pFactory, INT
     D2D1_ROUNDED_RECT roundedRect = {
         D2D1::RectF(Border2pxOffset, Border2pxOffset,
                     width -Border2pxOffset, height -Border2pxOffset) ,
-        3.0f, 3.0f
+        cornerRadius, cornerRadius
     };
 
     pRenderTarget->BeginDraw();
@@ -3631,14 +3657,17 @@ BOOL PaintModuleSplitButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.modulesplitbutton[index])
         if (!g_cache.CacheModuleSplitButton(hdc, g_d2dFactory, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.modulesplitbutton[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.modulesplitbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 12, height = 12;
+    INT width = 18, height = 18;
+
     if(!g_cache.CreateDIB(g_cache.modulesplitbutton[stateIndex], hdc, width, height))
         return FALSE;
     
@@ -3646,8 +3675,6 @@ BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iP
     RECT rc = { x, y, width, height};
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.modulesplitbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
-    
-    const FLOAT radius = 3.0f;
 
     D2D1_COLOR_F fillColor;
     if (iStateId == 2) fillColor = MyD2D1Color(64, 160, 160, 160);
@@ -3666,14 +3693,14 @@ BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iP
         path->Open(&sink);
 
         sink->BeginFigure(D2D1::Point2F(width, y), D2D1_FIGURE_BEGIN_FILLED);
-        sink->AddLine(D2D1::Point2F(x + radius, y));
-        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(x, radius + y), D2D1::SizeF(radius, radius),
+        sink->AddLine(D2D1::Point2F(x + cornerRadius, y));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(x, cornerRadius + y), D2D1::SizeF(cornerRadius, cornerRadius),
             0.f,
             D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
             D2D1_ARC_SIZE_SMALL
         ));
-        sink->AddLine(D2D1::Point2F(x, height - radius));
-        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(x + radius, height), D2D1::SizeF(radius, radius),
+        sink->AddLine(D2D1::Point2F(x, height - cornerRadius));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(x + cornerRadius, height), D2D1::SizeF(cornerRadius, cornerRadius),
             0.f,
             D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
             D2D1_ARC_SIZE_SMALL
@@ -3691,7 +3718,7 @@ BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iP
         else if (iStateId == 4)
         {
             pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &brush);
-            pRenderTarget->DrawGeometry(path.Get(), brush.Get(), 2.f);
+            pRenderTarget->DrawGeometry(path.Get(), brush.Get(), 2.f * scale);
         }
     }
     else if (iPartId == 5)
@@ -3702,14 +3729,14 @@ BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iP
         path->Open(&sink);
 
         sink->BeginFigure(D2D1::Point2F(x, y), D2D1_FIGURE_BEGIN_FILLED);
-        sink->AddLine(D2D1::Point2F(width - radius, y));
-        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width, y + radius), D2D1::SizeF(radius, radius),
+        sink->AddLine(D2D1::Point2F(width - cornerRadius, y));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width, y + cornerRadius), D2D1::SizeF(cornerRadius, cornerRadius),
             0.f,
             D2D1_SWEEP_DIRECTION_CLOCKWISE,
             D2D1_ARC_SIZE_SMALL
         ));
-        sink->AddLine(D2D1::Point2F(width, height - radius));
-        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width - radius, height), D2D1::SizeF(radius, radius),
+        sink->AddLine(D2D1::Point2F(width, height - cornerRadius));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(width - cornerRadius, height), D2D1::SizeF(cornerRadius, cornerRadius),
             0.f,
             D2D1_SWEEP_DIRECTION_CLOCKWISE,
             D2D1_ARC_SIZE_SMALL
@@ -3727,7 +3754,7 @@ BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iP
         else if (iStateId == 4)
         {
             pRenderTarget->CreateSolidColorBrush(MyD2D1Color(255, 255, 255), &brush);
-            pRenderTarget->DrawGeometry(path.Get(), brush.Get(), 2.f);
+            pRenderTarget->DrawGeometry(path.Get(), brush.Get(), 2.f * scale);
         }
     }
     auto hr = pRenderTarget->EndDraw();
@@ -3750,10 +3777,13 @@ BOOL PaintNavigationButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
 BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
 {
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 30, height = 30;
+    INT width = 30 * scale, height = 30 * scale;
+    
     if (iPartId == NAV_MENUBUTTON)
-        width = 13, height = 27;
+        width = 13 * scale, height = 27 * scale;
     
     if(!g_cache.CreateDIB(g_cache.navigationbutton[stateIndex], hdc, width, height))
         return FALSE;
@@ -3783,7 +3813,7 @@ BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPa
             break;
     }
 
-    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
     pRenderTarget->BeginDraw();
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
@@ -3887,13 +3917,16 @@ BOOL PaintToolbarButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.toolbarbutton[index])
         if (!g_cache.CacheToolbarButton(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.toolbarbutton[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.toolbarbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheToolbarButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
-    INT width = 12, height = 12;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
+    INT width = 18, height = 18;
+
     if (!g_cache.CreateDIB(g_cache.toolbarbutton[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -3906,7 +3939,7 @@ BOOL CThemeCache::CacheToolbarButton(HDC hdc, ID2D1Factory* pFactory, INT iState
 
     pRenderTarget->BeginDraw();
 
-    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3.f, 3.f);
+    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
     pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
     pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
@@ -3914,7 +3947,7 @@ BOOL CThemeCache::CacheToolbarButton(HDC hdc, ID2D1Factory* pFactory, INT iState
     if (iStateId == TS_HOTCHECKED || iStateId == TS_CHECKED)
     {
         FLOAT pillOffset = width * 0.2f;
-        D2D1_COLOR_F pillColor = IsAccentColorPossibleD2D(105, 205, 255);
+        D2D1_COLOR_F pillColor = IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2);
         fillBrush->SetColor(pillColor);
         pRenderTarget->DrawLine(D2D1::Point2F(pillOffset, height-1), D2D1::Point2F(width - pillOffset, height-1), fillBrush.Get(), 2.0f);
     }
@@ -3932,13 +3965,16 @@ BOOL PaintAddressBand(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.addressband[index])
         if (!g_cache.CacheAddressBand(hdc, g_d2dFactory, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.addressband[index], pRect, 6, 6, 6, 6);
+    DrawNineGridStretch(hdc, g_cache.addressband[index], pRect, 12, 12, 11, 11);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheAddressBand(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
 {
-    INT width = 18, height = 18;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 5.f * scale;
+    INT width = 24, height = 24;
+
     if (!g_cache.CreateDIB(g_cache.addressband[stateIndex], hdc, width, height))
         return FALSE;
 
@@ -3963,10 +3999,10 @@ BOOL CThemeCache::CacheAddressBand(HDC hdc, ID2D1Factory* pFactory, INT iStateId
             break;
         case 4:
             fillColor = MyD2D1Color(0, 0, 0);
-            borderColor = IsAccentColorPossibleD2D(105, 205, 255);
+            borderColor = IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2);
             break;
     }
-    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 5.f, 5.f);
+    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
     pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
 
@@ -3974,8 +4010,8 @@ BOOL CThemeCache::CacheAddressBand(HDC hdc, ID2D1Factory* pFactory, INT iStateId
 
     pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
     fillBrush->SetColor(borderColor);
-    pRenderTarget->DrawLine(D2D1::Point2F(2.f, height-.5f), D2D1::Point2F(width-2.f, height-.5f), fillBrush.Get());
-    pRenderTarget->DrawLine(D2D1::Point2F(1.f, height-1.5f), D2D1::Point2F(width-1.f, height-1.5f), fillBrush.Get());
+    pRenderTarget->DrawLine(D2D1::Point2F(cornerRadius/2, height-.5f), D2D1::Point2F(width-cornerRadius/2, height-.5f), fillBrush.Get());
+    pRenderTarget->DrawLine(D2D1::Point2F(cornerRadius/2 - 1.5f, height-1.5f), D2D1::Point2F(width - cornerRadius/2 + 1.5f, height-1.5f), fillBrush.Get());
 
     auto hr = pRenderTarget->EndDraw();
     if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
@@ -3996,13 +4032,16 @@ BOOL PaintMenu(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (!g_cache.menuitem[index])
         if (!g_cache.CacheMenuItem(hdc, g_d2dFactory, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.menuitem[index], pRect, 4, 4, 4, 4);
+    DrawNineGridStretch(hdc, g_cache.menuitem[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
 BOOL CThemeCache::CacheMenuItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT indexState)
 {
-    INT width = 12, height = 12;
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
+    INT width = 18, height = 18;
+
     if (!g_cache.CreateDIB(g_cache.menuitem[indexState], hdc, width, height))
         return FALSE;
 
@@ -4015,8 +4054,8 @@ BOOL CThemeCache::CacheMenuItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     
     if (iPartId == MENU_POPUPITEM || iPartId == 27)
     {
-        D2D1_COLOR_F fillColor = IsAccentColorPossibleD2D(0, 160, 255);
-        D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 4.f, 4.f);
+        D2D1_COLOR_F fillColor = IsAccentColorPossibleD2D(0, 160, 255, SystemAccentColorLight1);
+        D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
         pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
         pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
@@ -4024,7 +4063,7 @@ BOOL CThemeCache::CacheMenuItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     else 
     {
         D2D1_COLOR_F fillColor = (iPartId == MBI_PUSHED) ? MyD2D1Color(24, 160, 160, 160) : MyD2D1Color(48, 160, 160, 160);
-        D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 4.f, 4.f);
+        D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
         pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
         pRenderTarget->FillRoundedRectangle(&Rect, fillBrush.Get());
@@ -4597,6 +4636,7 @@ static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, L
         GetAccentColor(g_settings.AccentColor);
         if (oldAccentClr != g_settings.AccentColor) {
             ColorizeSysColors();
+            g_AccentPalette.LoadAccentPalette();
             g_cache.ClearCache();
         }
     }
@@ -5125,5 +5165,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
-
 
