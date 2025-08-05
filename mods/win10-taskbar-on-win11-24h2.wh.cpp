@@ -39,7 +39,7 @@ Known issues:
 
 * Notification toasts may cause Explore crash, it is recommended to disable notifications.
 
-* The keyboard layout uindicator displays the language name vertically rather than horizontally.
+* The keyboard layout indicator displays the language name vertically rather than horizontally.
 
 */
 // ==/WindhawkModReadme==
