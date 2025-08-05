@@ -296,7 +296,6 @@ static constexpr UINT DONTROUND = 1; // DWMWCP_DONOTROUND
 static constexpr UINT SMALLROUND = 3; // DWMWCP_ROUNDSMALL
 
 // Get DPI value from the primary monitor without dependance to DPI-aware API
-// Windows core programs like file explorer have most of its windows DPI-unaware
 // TODO: Get DPI per window monitor
 UINT GetDpiFromMonitor()
 {
@@ -5166,3 +5165,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
