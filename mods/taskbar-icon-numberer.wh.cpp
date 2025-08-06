@@ -24,6 +24,8 @@ Features:
 - Works with Windows 11 taskbar
 - Supports both light and dark themes
 
+![](https://raw.githubusercontent.com/jsfdez/images/main/taskbar-icon-numberer.wh.cpp.png)
+
 The numbers correspond to the Windows + [number] keyboard shortcuts for quick app launching.
 */
 // ==/WindhawkModReadme==
@@ -42,16 +44,10 @@ The numbers correspond to the Windows + [number] keyboard shortcuts for quick ap
   $description: Size of the overlay numbers (8-16)
 - numberColor: "#FFFFFF"
   $name: Number color
-  $description: Text color for the numbers (hex format #RRGGBB or #AARRGGBB)
+  $description: Text color for the numbers (hex format "#RRGGBB" or "#AARRGGBB")
 - backgroundColor: "#80000000"
   $name: Stroke/outline color
-  $description: Outline color around the numbers for better visibility (hex format #RRGGBB or #AARRGGBB)
-- showOnlyRunning: true
-  $name: Show only on running apps
-  $description: Only show numbers on apps that are currently running
-- maxNumbers: 10
-  $name: Maximum numbers to show
-  $description: Maximum number of taskbar items to number (1-10)
+  $description: Outline color around the numbers for better visibility (hex format "#RRGGBB" or "#AARRGGBB")
 */
 // ==/WindhawkModSettings==
 
@@ -80,6 +76,18 @@ using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
+void LogException(const char* functionName) {
+    try {
+        std::rethrow_exception(std::current_exception());
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"[%S] WinRT exception: 0x%08X - %s", functionName, ex.code(), ex.message().c_str());
+    } catch (std::exception const& ex) {
+        Wh_Log(L"[%S] Standard exception: %S", functionName, ex.what());
+    } catch (...) {
+        Wh_Log(L"[%S] Unknown exception", functionName);
+    }
+}
+
 winrt::Windows::UI::Color ParseHexColor(const std::wstring& hex) {
     winrt::Windows::UI::Color color{};
     if (hex.length() >= 7 && hex[0] == L'#') {
@@ -97,6 +105,7 @@ winrt::Windows::UI::Color ParseHexColor(const std::wstring& hex) {
             }
         } catch (...) {
             color.A = 255; color.R = 255; color.G = 255; color.B = 255;
+            LogException(__FUNCTION__);
         }
     } else {
         color.A = 255; color.R = 255; color.G = 255; color.B = 255;
@@ -116,8 +125,6 @@ struct {
     int numberSize;
     std::wstring numberColor;
     std::wstring backgroundColor;
-    bool showOnlyRunning;
-    int maxNumbers;
 } g_settings;
 
 std::atomic<bool> g_taskbarViewDllLoaded;
@@ -146,6 +153,7 @@ FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
         }
     } catch (...) {
         // Ignore errors
+        LogException(__FUNCTION__);
     }
     return nullptr;
 }
@@ -162,6 +170,7 @@ bool TaskListButton_IsRunning(FrameworkElement taskListButtonElement) {
             &isRunning);
         return isRunning;
     } catch (...) {
+        LogException(__FUNCTION__);
         return false;
     }
 }
@@ -254,12 +263,58 @@ void CreateNumberOverlay(FrameworkElement taskListButtonElement, int number) {
         
     } catch (...) {
         // Ignore errors
+        LogException(__FUNCTION__);
+    }
+}
+
+void RemoveOverlay(winrt::Windows::UI::Xaml::FrameworkElement& button) {
+    auto iconPanel = FindChildByName(button, L"IconPanel");
+    if (iconPanel) {
+        auto existingOverlay =
+            FindChildByName(iconPanel, L"WindhawkNumberOverlay");
+        if (existingOverlay) {
+            auto panelChildren = iconPanel.as<Panel>().Children();
+            uint32_t index;
+            if (panelChildren.IndexOf(existingOverlay, index)) {
+                panelChildren.RemoveAt(index);
+            }
+        }
     }
 }
 
 void ClearAllOverlays() {
     std::lock_guard<std::mutex> lock(g_overlayMutex);
+    auto predicate = [](auto& button) {
+        RemoveOverlay((winrt::Windows::UI::Xaml::FrameworkElement&)button);
+    };
+    std::for_each(g_numberedButtons.begin(), g_numberedButtons.end(), predicate);
     g_numberedButtons.clear();
+}
+
+// {0BD894F2-EDFC-5DDF-A166-2DB14BBFDF35}
+constexpr winrt::guid IItemsRepeater{
+    0x0BD894F2,
+    0xEDFC,
+    0x5DDF,
+    {0xA1, 0x66, 0x2D, 0xB1, 0x4B, 0xBF, 0xDF, 0x35}};
+    
+FrameworkElement ItemsRepeater_TryGetElement(
+    FrameworkElement taskbarFrameRepeaterElement,
+    int index) {
+    winrt::Windows::Foundation::IUnknown pThis = nullptr;
+    taskbarFrameRepeaterElement.as(IItemsRepeater, winrt::put_abi(pThis));
+
+    using TryGetElement_t =
+        HRESULT(WINAPI*)(void* pThis, int index, void** uiElement);
+
+    void** vtable = *(void***)winrt::get_abi(pThis);
+    auto TryGetElement = (TryGetElement_t)vtable[20];
+
+    void* uiElement = nullptr;
+    TryGetElement(winrt::get_abi(pThis), index, &uiElement);
+
+    return UIElement{uiElement, winrt::take_ownership_from_abi}
+        .try_as<FrameworkElement>();
 }
 
 void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
@@ -274,49 +329,49 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
         // Collect all TaskListButtons with their X positions
         std::vector<std::pair<double, FrameworkElement>> buttons;
         
+        Wh_Log(L"Total children found: %d", static_cast<int>(children.Size()));
+        
         for (uint32_t i = 0; i < children.Size(); i++) {
-            auto child = children.GetAt(i).try_as<FrameworkElement>();
+            auto child = ItemsRepeater_TryGetElement(panel, i);
+            // auto child = children.GetAt(i).try_as<FrameworkElement>();
             if (!child || child.Name() != L"TaskListButton") continue;
+
+            // More comprehensive filtering
+            if (child.Visibility() != Visibility::Visible) continue;
+            
+            if (child.ActualWidth() <= 0 || child.ActualHeight() <= 0) continue;
             
             double x = child.ActualOffset().x;
+            if (x < 0) continue;
+            
+            // Check opacity
+            if (child.Opacity() <= 0.1) continue;
+            
+            Wh_Log(L"Button %d: Valid (x=%f, w=%f, h=%f)", i, x, child.ActualWidth(), child.ActualHeight());
             buttons.push_back({x, child});
         }
+        
+        Wh_Log(L"Valid buttons after filtering: %d", static_cast<int>(buttons.size()));
         
         // Sort by X position (left to right)
         std::sort(buttons.begin(), buttons.end(), 
                   [](const auto& a, const auto& b) { return a.first < b.first; });
         
         // Number buttons in visual order
-        int buttonIndex = 0;
-        for (const auto& [x, button] : buttons) {
-            if (buttonIndex >= g_settings.maxNumbers) break;
+        for (int i = 0; i < buttons.size(); i++) {
+            auto button = buttons[i].second;
             
-            bool shouldShow = true;
-            if (g_settings.showOnlyRunning) {
-                shouldShow = TaskListButton_IsRunning(button);
-            }
-            
-            if (shouldShow) {
-                buttonIndex++;
-                CreateNumberOverlay(button, buttonIndex);
+            if (i >= 10) {
+                // Remove overlay for apps beyond max numbers
+                RemoveOverlay(button);
             } else {
-                // Remove overlay
-                auto iconPanel = FindChildByName(button, L"IconPanel");
-                if (iconPanel) {
-                    auto existingOverlay = FindChildByName(iconPanel, L"WindhawkNumberOverlay");
-                    if (existingOverlay) {
-                        auto panelChildren = iconPanel.as<Panel>().Children();
-                        uint32_t index;
-                        if (panelChildren.IndexOf(existingOverlay, index)) {
-                            panelChildren.RemoveAt(index);
-                        }
-                    }
-                }
+                Wh_Log(L"Creating overlay for button %d with number %d", i, i + 1);
+                CreateNumberOverlay(button, i + 1);
             }
         }
         
-    } catch (...) {
-        // Ignore errors
+    } catch (...) { 
+        LogException(__FUNCTION__);
     }
 }
 
@@ -344,11 +399,12 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
         
     } catch (...) {
         // Ignore errors
+        LogException(__FUNCTION__);
     }
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
             &TaskListButton_get_IsRunning_Original,
@@ -360,7 +416,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, user32DllHooks, ARRAYSIZE(user32DllHooks));
+    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -414,12 +470,6 @@ void LoadSettings() {
     PCWSTR backgroundColor = Wh_GetStringSetting(L"backgroundColor");
     g_settings.backgroundColor = backgroundColor;
     Wh_FreeStringSetting(backgroundColor);
-
-    g_settings.showOnlyRunning = Wh_GetIntSetting(L"showOnlyRunning");
-    
-    g_settings.maxNumbers = Wh_GetIntSetting(L"maxNumbers");
-    if (g_settings.maxNumbers < 1) g_settings.maxNumbers = 1;
-    if (g_settings.maxNumbers > 10) g_settings.maxNumbers = 10;
 }
 
 BOOL Wh_ModInit() {
