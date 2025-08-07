@@ -2,7 +2,7 @@
 // @id              titlebar-for-everyone
 // @name            Titlebar For Everyone
 // @description     Force native title bars and frames for various programs
-// @version         0.3
+// @version         0.4
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -53,14 +53,13 @@
 * WinUI apps
     * PowerToys apps
     * New Photos app
-    * Known issues: Some WinUI apps may show visual artifacts in their custom title bar area
 * WPF apps
     * Visual Studio (tested: 2022)
     * PowerToys Workspaces
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
     * Tested: 2010 and LTSC 2021 (Win10 mode)
-    * Known issues: On LTSC 2021, only Classic frames are shown (neither Basic nor DWM)
+    * Known issues: Only Classic frames are shown, neither Basic nor DWM, unless it's using the Aero mode (in 2007 or 2010)
 * Some WebView2 apps
     * New Outlook
     * Microsoft 365 Copilot
@@ -178,31 +177,26 @@ BOOL isBrave = FALSE;
 #pragma region Subclassing
 LRESULT CALLBACK HideSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
-    case WM_SHOWWINDOW:
-        // Hide again immediately
-        return 0; // Swallow the show request
-
-    case WM_WINDOWPOSCHANGING: {
-        WINDOWPOS* pos = (WINDOWPOS*)lParam;
-        if (pos->flags & SWP_SHOWWINDOW) {
-            pos->flags &= ~SWP_SHOWWINDOW;  // Remove the show flag
-            pos->flags |= SWP_HIDEWINDOW;   // Force hide
+        case WM_SHOWWINDOW:
+            return 0;
+        case WM_WINDOWPOSCHANGING: {
+            WINDOWPOS* pos = (WINDOWPOS*)lParam;
+            if (pos->flags & SWP_SHOWWINDOW) {
+                pos->flags &= ~SWP_SHOWWINDOW;
+                pos->flags |= SWP_HIDEWINDOW;
+            }
+            break;
         }
-        break;
-    }
-
-    case WM_WINDOWPOSCHANGED: {
-        WINDOWPOS* pos = (WINDOWPOS*)lParam;
-        if ((pos->flags & SWP_SHOWWINDOW) && IsWindowVisible(hWnd)) {
-            ShowWindow(hWnd, SW_HIDE);  // Backup in case it still becomes visible
+        case WM_WINDOWPOSCHANGED: {
+            WINDOWPOS* pos = (WINDOWPOS*)lParam;
+            if ((pos->flags & SWP_SHOWWINDOW) && IsWindowVisible(hWnd)) {
+                ShowWindow(hWnd, SW_HIDE);  // Backup in case it still becomes visible
+            }
+            break;
         }
-        break;
+        default:
+            break;
     }
-
-    default:
-        break;
-    }
-
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
@@ -272,7 +266,7 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
 
     // Fix a specific issue with Visual Studio's "Show/Hide debug targets" window
     // It simply renders nothing when WM_NCCALCSIZE is subclassed
-    if (mode == MODE_VS && (style & WS_MAXIMIZEBOX) == 0) {
+    if (mode == MODE_VS && (style & 0x60C0000) != 0 && exStyle == 0x80101) {
         return;
     }
 
@@ -319,10 +313,10 @@ void SetWinUICustomControlsVisibility(HWND parent, BOOL visible) {
         ShowWindow(windowControlHwnd, visible);
         if (visible) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(windowControlHwnd, HideSubclassProc);
-            Wh_Log(L"Restored ReunionWindowingCaptionControls");
+            Wh_Log(L"Restored TeamsOverlay");
         } else {
             if (WindhawkUtils::SetWindowSubclassFromAnyThread(windowControlHwnd, HideSubclassProc, 0)) {
-                Wh_Log(L"Hid ReunionWindowingCaptionControls (%p)", windowControlHwnd);
+                Wh_Log(L"Hid TeamsOverlay (%p)", windowControlHwnd);
             }
         }
     }
