@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.3
+// @version           1.3.1
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
+// @exclude           firefox.exe
 // @compilerOptions   -lUxTheme -lGdi32
 
 // @name              Dark mode context menus
@@ -320,7 +321,8 @@ void Wh_ModSettingsChanged()
 }
 
 //Import functions
-BOOL Wh_ModInit() {
+BOOL Wh_ModInit()
+{
     if(!IsAPISupported())
     {
         Wh_Log(L"Outdated Windows version!");
