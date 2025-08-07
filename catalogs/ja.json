@@ -4581,7 +4581,7 @@
                 "published": 1749306524000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1753875173000,
+                "updated": 1754581652000,
                 "users": 164
             },
             "metadata": {
@@ -4618,7 +4618,7 @@
                 ],
                 "name": "Titlebar For Everyone",
                 "twitter": "https://twitter.com/Ingan121",
-                "version": "0.3"
+                "version": "0.4"
             }
         },
         "tortoisegit-progress-animation-background-fix": {
