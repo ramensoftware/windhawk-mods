@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.6.1
+// @version         1.6.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -820,7 +820,7 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
 {
     if (format & DT_CALCRECT || g_DrawThemeTextExEntry)
         return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
-
+    
     HRESULT hr = S_OK;
     auto fun = [&](HDC hDC) {
         hr = DrawTextWithGlow(hDC, lpchText, cchText, lprc, format,
@@ -960,8 +960,7 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iS
 {
     std::wstring ThemeClassName = GetThemeClass(hTheme);
     
-
-    if (pOptions && !(pOptions->dwFlags & DTT_CALCRECT) /*&& !(pOptions->dwFlags & DTT_COMPOSITED)*/)
+    if (pOptions && !(pOptions->dwFlags & DTT_CALCRECT) && !((pOptions->dwFlags & DTT_COMPOSITED) && ThemeClassName != L"Menu"))
     {
         HRESULT hr = S_OK;
         auto fun = [&](HDC hDC) {
@@ -1930,20 +1929,21 @@ BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
         diameter / 2.f, diameter / 2.f
     );
 
-    D2D1_COLOR_F borderColor = MyD2D1Color(96, 128, 128, 128);
-    D2D1_COLOR_F radioColor = MyD2D1Color(64, 64, 64, 64);
+    D2D1_COLOR_F borderColor, radioColor;
     D2D1_COLOR_F innerColor = MyD2D1Color(0, 0, 0);
     FLOAT innerRatio = 0.0f;
 
     switch (iStateId)
     {
+        case CBS_UNCHECKEDNORMAL:
+            borderColor = MyD2D1Color(96, 128, 128, 128);
+            radioColor = MyD2D1Color(64, 64, 64, 64);
         case RBS_UNCHECKEDHOT:
             borderColor = MyD2D1Color(144, 144, 144);
             radioColor = MyD2D1Color(48, 144, 144, 144);
             break;
         case RBS_UNCHECKEDPRESSED:
             radioColor = MyD2D1Color(64, 64, 64);
-            innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.3f;
             break;
         case RBS_UNCHECKEDDISABLED:
@@ -1951,22 +1951,18 @@ BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
             break;
         case RBS_CHECKEDNORMAL:
             borderColor = radioColor = IsAccentColorPossibleD2D(105, 205, 255, SystemAccentColorLight2);
-            innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.4f;
             break;
         case RBS_CHECKEDHOT:
             borderColor = radioColor = IsAccentColorPossibleD2D(225, 105, 205, 255, SystemAccentColorLight3);
-            innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.6f;
             break;
         case RBS_CHECKEDPRESSED:
             borderColor = radioColor = IsAccentColorPossibleD2D(192, 105, 205, 255, SystemAccentColorLight1);
-            innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.33f;
             break;
         case RBS_CHECKEDDISABLED:
             borderColor = radioColor = MyD2D1Color(96, 96, 96);
-            innerColor = MyD2D1Color(0, 0, 0);
             innerRatio = 0.3f;
             break;
     }
@@ -1999,7 +1995,7 @@ BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT width = 13 * scale, height = 13 * scale;
-    FLOAT cornerRadius = 4.f * scale;
+    FLOAT cornerRadius = 3.f * scale;
 
     if (!g_cache.CreateDIB(g_cache.checkbutton[stateIndex], hdc, width, height))
         return FALSE;
@@ -2129,7 +2125,7 @@ BOOL PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
 BOOL PaintGroupBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, LPCRECT pClippedRect)
 {
-    if (!g_d2dFactory || iPartId != BP_GROUPBOX || !pRect || !hdc)
+    if (!g_d2dFactory)
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
@@ -2521,7 +2517,7 @@ BOOL PaintListBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory || (iPartId != CP_DROPDOWNBUTTON && iPartId != CP_DROPDOWNBUTTONRIGHT
-    && iPartId != CP_DROPDOWNBUTTONLEFT))
+        && iPartId != CP_DROPDOWNBUTTONLEFT))
         return FALSE;
 
     ID2D1DCRenderTarget* pRenderTarget = nullptr;
@@ -2548,30 +2544,24 @@ BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
-    FLOAT H = static_cast<FLOAT>(pRect->bottom - pRect->top);
+    FLOAT height = static_cast<FLOAT>(pRect->bottom - pRect->top);
+    FLOAT centerX = width / 2.f;
+    FLOAT centerY = height / 2.f;
 
-    FLOAT centerX = width / 2.0f;
-    FLOAT centerY = H / 2.0f;
+    FLOAT arrowLength = fminf(width, height) * 0.25f;
+    // 60 degree angle
+    FLOAT dx = arrowLength * 0.866f;
+    FLOAT dy = arrowLength * 0.5f;
 
-    FLOAT arrowHeight = H * 0.2f * scale;
-    FLOAT delta = arrowHeight / scale / std::sqrt(2.0f) ;
-
-    FLOAT tipX = centerX;
-    FLOAT tipY = centerY + arrowHeight / 2.0f;
-
-    // Left flap
-    D2D1_POINT_2F ptLeft(tipX - delta, tipY - delta);
-    // Right flap
-    D2D1_POINT_2F ptRight(tipX + delta, tipY - delta);
-    // Tip
-    D2D1_POINT_2F ptTip(tipX, tipY);
-
-    pRenderTarget->BeginDraw();
+    D2D1_POINT_2F ptTip   = D2D1::Point2F(centerX, centerY + dy);
+    D2D1_POINT_2F ptLeft  = D2D1::Point2F(centerX - dx, centerY - dy);
+    D2D1_POINT_2F ptRight = D2D1::Point2F(centerX + dx, centerY - dy);
 
     pRenderTarget->CreateSolidColorBrush(arrowColor, &brush);
-    pRenderTarget->DrawLine(ptLeft, ptTip, brush.Get());
-    pRenderTarget->DrawLine(ptRight, ptTip, brush.Get());
 
+    pRenderTarget->BeginDraw();
+    pRenderTarget->DrawLine(ptLeft, ptTip, brush.Get(), scale);
+    pRenderTarget->DrawLine(ptRight, ptTip, brush.Get(), scale);
     auto hr = pRenderTarget->EndDraw();
     if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
     return TRUE;
@@ -2782,8 +2772,9 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
     {
         FLOAT tipHeight = height * 0.3f;
         FLOAT bodyHeight = height - tipHeight;
+        FLOAT bodyRadius = 2.f * scale;
 
-        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, bodyHeight), 2.f * scale, 2.f * scale);
+        D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, width, bodyHeight), bodyRadius, bodyRadius);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
 
         D2D1_POINT_2F p1 = D2D1::Point2F(cx - width * 0.5f, bodyHeight - 1.f);
@@ -2803,8 +2794,7 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
     {
         FLOAT tipHeight = height * 0.3f;
         FLOAT bodyY = tipHeight;
-        FLOAT bodyHeight = height - tipHeight;
-        FLOAT bodyRadius = bodyHeight * 0.2f * scale;
+        FLOAT bodyRadius = 2.f * scale;
 
         D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, bodyY, width, height), bodyRadius, bodyRadius);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
@@ -2826,8 +2816,7 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
     else if (iPartId == TKP_THUMBLEFT)
     {
         FLOAT tipWidth = width * 0.3f;
-        FLOAT bodyWidth = width - tipWidth;
-        FLOAT bodyRadius = bodyWidth * 0.2f * scale;
+        FLOAT bodyRadius = 2.f * scale;
 
         D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(tipWidth, 0, width, height), bodyRadius, bodyRadius);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
@@ -2850,7 +2839,7 @@ BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT
     {
         FLOAT tipWidth = width * 0.3f;
         FLOAT bodyWidth = width - tipWidth;
-        FLOAT bodyRadius = bodyWidth * 0.2f * scale;
+        FLOAT bodyRadius = 2.f * scale;
 
         D2D1_ROUNDED_RECT body = D2D1::RoundedRect(D2D1::RectF(0, 0, bodyWidth, height), bodyRadius, bodyRadius);
         pRenderTarget->FillRoundedRectangle(body, brush.Get());
@@ -3796,7 +3785,7 @@ BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPa
     switch (iStateId) 
     {
         case NAV_BB_NORMAL:
-            arrowColor = MyD2D1Color(200, 192, 192, 192);
+            arrowColor = MyD2D1Color(255, 255, 255);
             fillColor = MyD2D1Color(0, 0, 0, 0);
             break;
         case NAV_BB_HOT:
@@ -3831,24 +3820,24 @@ BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPa
         FLOAT tailEndX = tailStartX - tailLength;
 
         FLOAT headSpand = tailLength * .5f;
-        FLOAT headOffset = headSpand * 0.7071f;
+        FLOAT headOffset = headSpand * 0.866f;
 
         pRenderTarget->DrawLine(
         D2D1::Point2F(tailStartX, centerY),
         D2D1::Point2F(tailEndX+1.5f, centerY),
-        arrowBrush.Get(), 2.f
+        arrowBrush.Get(), 1.5f
         );
         
         pRenderTarget->DrawLine(
             D2D1::Point2F(tailEndX + headOffset, centerY + headOffset),
             D2D1::Point2F(tailEndX, centerY),
-            arrowBrush.Get(), 2.f
+            arrowBrush.Get(), 1.5f
         );
 
         pRenderTarget->DrawLine(
             D2D1::Point2F(tailEndX + headOffset, centerY - headOffset),
             D2D1::Point2F(tailEndX, centerY),
-            arrowBrush.Get(), 2.15f
+            arrowBrush.Get(), 1.5f
         );  
     }
     else if (iPartId == NAV_FORWARDBUTTON)
@@ -3859,18 +3848,18 @@ BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPa
         FLOAT tailEndX = tailStartX + tailLength;
 
         FLOAT headSpand = tailLength * .5f;
-        FLOAT headOffset = headSpand * 0.7071f;
+        FLOAT headOffset = headSpand * 0.866f;
 
         pRenderTarget->DrawLine(
         D2D1::Point2F(tailStartX, centerY),
         D2D1::Point2F(tailEndX-1.5f, centerY),
-        arrowBrush.Get(), 2.f
+        arrowBrush.Get(), 1.5f
         );
         
         pRenderTarget->DrawLine(
             D2D1::Point2F(tailEndX - headOffset, centerY - headOffset),
             D2D1::Point2F(tailEndX, centerY),
-            arrowBrush.Get(), 2.f
+            arrowBrush.Get(), 1.5f
         );
 
         pRenderTarget->DrawLine(
@@ -3881,25 +3870,20 @@ BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPa
     }
     else if (iPartId == NAV_MENUBUTTON)
     {
+        FLOAT centerX = width / 2.f;
         FLOAT centerY = height / 2.f;
-        FLOAT tailLength = width / 2.5f;
-        FLOAT leftTailStartX = tailLength / 2.f;
-        FLOAT leftTailStartY = centerY - tailLength / 2.f;
-        FLOAT rightTailStartX = width - (tailLength / 2.f);
-        FLOAT rightTailStartY = centerY - tailLength / 2.f;
-        FLOAT tip = centerY + tailLength / 2.f;
 
-        pRenderTarget->DrawLine(
-            D2D1::Point2F(leftTailStartX, leftTailStartY),
-            D2D1::Point2F(width / 2.f, tip),
-            arrowBrush.Get(), 2.f
-        );
+        FLOAT arrowLength = std::min(width, height) * 0.33f;
+        // 60 degree angle
+        FLOAT dx = arrowLength * 0.866f;
+        FLOAT dy = arrowLength * 0.5f;
 
-        pRenderTarget->DrawLine(
-            D2D1::Point2F(rightTailStartX, rightTailStartY),
-            D2D1::Point2F(width / 2.f, tip),
-            arrowBrush.Get(), 2.f
-        );
+        D2D1_POINT_2F ptTip   = D2D1::Point2F(centerX, centerY + dy);
+        D2D1_POINT_2F ptLeft  = D2D1::Point2F(centerX - dx, centerY - dy);
+        D2D1_POINT_2F ptRight = D2D1::Point2F(centerX + dx, centerY - dy);
+
+        pRenderTarget->DrawLine(ptLeft, ptTip, arrowBrush.Get(), 2.f);
+        pRenderTarget->DrawLine(ptRight, ptTip, arrowBrush.Get(), 2.f);
     }
     auto hr = pRenderTarget->EndDraw();
     if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
@@ -4081,7 +4065,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
     LPCRECT pRect,
     LPCRECT pClipRect)
 {    
-    std::wstring ThemeClassName = GetThemeClass(hTheme);    
+    std::wstring ThemeClassName = GetThemeClass(hTheme);
 
     if (ThemeClassName == L"ScrollBar")
     {
@@ -4098,12 +4082,22 @@ HRESULT WINAPI HookedDrawThemeBackground(
             return S_OK;
         else if (PaintCheckBox(hdc, iPartId, iStateId, pRect))
             return S_OK;
-        else if (PaintGroupBox(hdc, iPartId, iStateId, pRect, pClipRect))
-            return S_OK;
         else if (PaintCommandLink(hdc, iPartId, iStateId, pRect))
             return S_OK;
         else if (PaintCommandLinkGlyph(hdc, iPartId, iStateId, pRect))
             return S_OK;
+        else if (iPartId == BP_GROUPBOX)
+        {
+            HTHEME hGroupBoxTheme;
+            if (hTheme == (hGroupBoxTheme = OpenThemeData(WindowFromDC(hdc), L"Button")))
+            {
+                if (PaintGroupBox(hdc, iPartId, iStateId, pRect, pClipRect)) {
+                    CloseThemeData(hGroupBoxTheme);
+                    return S_OK;
+                }
+            }
+            CloseThemeData(hGroupBoxTheme);
+        }
     }
     else if (ThemeClassName == L"Tab")
     {
