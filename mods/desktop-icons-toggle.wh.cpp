@@ -3,7 +3,8 @@
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons visibility with a configurable hotkey (default: Ctrl+Alt+D)
 // @version         1.3.0
-// @author          Assistant
+// @author          Cinabutts
+// @github          https://github.com/Cinabutts
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -lkernel32 -lshell32
