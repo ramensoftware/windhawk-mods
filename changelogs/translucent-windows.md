@@ -1,3 +1,7 @@
+## 1.6.2 ([Aug 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/79eae3a6c6eedc3c5c77b7eedaaf2121ddfa71e9/mods/translucent-windows.wh.cpp))
+
+* Fixed ExplorerPatcher taskbar theme bugs
+
 ## 1.6.1 ([Aug 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a735c640a09ff65801f32dbe9e3b5f872380df19/mods/translucent-windows.wh.cpp))
 
 * Custom painted theme parts made DPI aware
