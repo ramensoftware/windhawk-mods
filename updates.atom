@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-07T20:43:32.000Z</updated>
+    <updated>2025-08-08T04:50:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Drag-n-Drop Lite 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-dragdrop-lite#8a1dacf7d8056396f8ffab60509942a8e9817a6d</id>
+        <link href="https://windhawk.net/mods/classic-explorer-dragdrop-lite"/>
+        <updated>2025-08-08T04:50:30.000Z</updated>
+        <content type="html"><![CDATA[<p>This is a maximally stripped down version of the mod "Classic Explorer Drag/Drop" by Isabella Lulamoon (@kawapure).
+It is intended for restoring the Drag &amp; Drop image of the items being dragged the way it was in Win 95 - Win XP.</p>
+<p>The differences with the original mod are as follows:</p>
+<ul>
+<li><p>This mod does not download the debug symbols</p></li>
+<li><p>This mod hooks only a WinAPI function, thus architecture-independent (can work on ARM, for instance)</p></li>
+<li><p>From the user's perspective this mod enables effect of dragged items in cases where the original mod suppresses. 
+So, expect visibility of the dragged items in more use cases.</p></li>
+</ul>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dark mode context menus 1.3.1]]></title>
         <id>https://windhawk.net/mods/dark-menus#ca342adbf51da6ba433036de9b0704c95d010b08</id>
@@ -260,22 +279,6 @@ The differences between this mod and the other one are as follows:</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Winver Text Customizer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/winver-text-customizer#f20a09fdf5a22bd58df5487cd972749d22cbd403</id>
-        <link href="https://windhawk.net/mods/winver-text-customizer"/>
-        <updated>2025-07-30T03:41:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winvertextcustomizer">Winver Text Customizer</h1>
-<p>This mod customizes the text sent to the <code>ShellAbout</code> API by <code>winver.exe</code>. This is useful
-if you want to have a fake "evaluation copy" text, since that is only displayed by winver.exe
-and not other instances of <code>ShellAbout</code>.</p>
-<p><strong>Preview</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/winver-text-customizer.png" alt="Preview" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
