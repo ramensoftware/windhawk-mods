@@ -3876,7 +3876,7 @@
                 "published": 1646604429000,
                 "rating": 10,
                 "ratingUsers": 519,
-                "updated": 1742574983000,
+                "updated": 1754759537000,
                 "users": 35479
             },
             "featured": true,
@@ -3885,8 +3885,8 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-D__USE_MINGW_ANSI_STDIO=0 -lole32 -loleaut32 -lruntimeobject -lversion -lwininet",
-                "description": "Customize the taskbar clock: define a custom date/time format, add a news feed, customize fonts and colors, and more",
+                "compilerOptions": "-lole32 -loleaut32 -lpdh -lruntimeobject -lshlwapi -lversion -lwininet",
+                "description": "Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM), custom fonts and colors, and more",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -3894,7 +3894,7 @@
                 ],
                 "name": "Taskbar Clock Customization",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.5.2"
+                "version": "1.6"
             }
         },
         "taskbar-disappearing-icon-fix-win11": {

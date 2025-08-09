@@ -1,3 +1,15 @@
+## 1.6 ([Aug 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/8eb638d7f86c52bde93c6050ca3232bdf7baa5ef/mods/taskbar-clock-customization.wh.cpp))
+
+* Added patterns for realtime system performance metrics:
+  * `%upload_speed%` - system-wide upload transfer rate.
+  * `%download_speed%` - system-wide download transfer rate.
+  * `%cpu%` - CPU usage.
+  * `%ram%` - RAM usage.
+* Added the `%weather%` pattern for weather information, powered by [wttr.in](https://wttr.in/).
+* Added the content mode option to web content items, which can be used to strip/decode HTML and XML tags.
+* Added the content search/replace option to web content items to apply regular expression-based search and replace operations to the extracted content.
+* Improved compatibility with status bar programs such as YASB and Zebar.
+
 ## 1.5.2 ([Mar 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a2cd3cd75b7491b7f38a2ea3cf51ae71f164f119/mods/taskbar-clock-customization.wh.cpp))
 
 * Fixed an incompatibility with recent Windows 11 preview builds.
