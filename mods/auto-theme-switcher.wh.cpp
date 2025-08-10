@@ -1,80 +1,131 @@
 // ==WindhawkMod==
 // @id              auto-theme-switcher
 // @name            Auto Theme Switcher
-// @description     Automatically switch between light and dark appearance/wallpaper/theme based on a set schedule with custom script support
-// @version         1.0.4
+// @description     Automatically switch between light and dark appearance/wallpapers/themes based on a custom hours/sunset to sunrise with custom script support
+// @version         1.1.1
 // @author          tinodin
 // @github          https://github.com/tinodin
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32
+// @compilerOptions -lole32 -loleaut32 -lwindowsapp -lruntimeobject -lkernel32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Auto Theme Switcher
 
-Configure the schedule for light and dark (By default: `07:00` for light, `19:00` for dark)
+### Scheduling Modes  
+*(default: Set custom hours)*
 
-Choose between 3 different modes (By default: `Switch between light and dark appearance`)
-- Switch between light and dark appearance
-- Switch between light and dark appearance + wallpapers
-    - Provide paths to wallpapers (By default: `img0.jpg` for light, `img19.jpg` for dark)
-- Switch between light and dark themes
-    - Provide paths to `.theme` files (By default: `aero.theme` for light, `dark.theme` for dark)
+- Set custom hours for light and dark  
+    - *(default: `07:00` for light, `19:00` for dark)*  
+- Sunset to sunrise (location service)
+- Sunset to sunrise (custom geographic coordinates)
+  - *(default: `0` for Latitude, `0` for Longitude)*  
+  - Coordinates can be found at [latlong.net](https://www.latlong.net/)
 
-    - Themes shipped with Windows are located in: `C:\Windows\Resources\Themes`
+### Switching Modes  
+*(default: Switch between light and dark appearance)*
 
-    - Saved or imported themes are located in: `%LOCALAPPDATA%\Microsoft\Windows\Themes`
+- Switch between light and dark appearance  
+- Switch between light and dark appearance + wallpapers  
+  - Provide wallpaper paths 
+    - *(default: `img0.jpg` for light, `img19.jpg` for dark)*  
+- Switch between light and dark themes  
+  - Provide paths to `.theme` files 
+    - *(default: `aero.theme` for light, `dark.theme` for dark)*  
+    - Windows built-in themes: `C:\Windows\Resources\Themes`  
+    - Saved/imported themes: `%LOCALAPPDATA%\Microsoft\Windows\Themes`  
+    - To create custom `.theme` files, use Windows Personalization settings ([video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg))
 
-    - To create custom `.theme` files, use the Personalization settings in Windows [Video guide](https://www.youtube.com/watch?v=-QWR6NQZAUg)
+### Custom Script
+*(default: None)*
 
-Provide path to custom script
-- The script will be executed on every switch with -light/-dark argument
+- Provide path to a script/executable that runs on every switch with `-light` or `-dark` argument
 
-If you do not want the wallpaper to be applied to the lock screen, disable *Apply Wallpaper to Lock screen*
+### Lock Screen
+*(default: Enabled)*
+
+- Apply Wallpaper to the Lock Screen
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- Light: 07:00
-  $name: Light mode time
-- Dark: 19:00
-  $name: Dark mode time
-- mode: appearance
-  $name: Mode
+- ScheduleMode: CustomHours
+  $name: Scheduling Mode
   $options:
-  - appearance: Switch between light and dark appearance
-  - wallpaper: Switch between light and dark appearance + wallpapers
-  - theme: Switch between light and dark themes
+  - CustomHours: Set custom hours
+  - LocationService: Sunset to sunrise (location service)
+  - CustomCoordinates: Sunset to sunrise (custom geographic coordinates)
+- CustomLight: 07:00
+  $name: Light Mode Time
+  $description: Set custom hours
+- CustomDark: 19:00
+  $name: Dark Mode Time
+  $description: Set custom hours
+- Latitude: "0"
+  $name: Latitude
+  $description: Sunset to sunrise (custom geographic coordinates)
+- Longitude: "0"
+  $name: Longitude
+  $description: Sunset to sunrise (custom geographic coordinates)
+- switchMode: Appearance
+  $name: Switching Mode
+  $options:
+  - Appearance: Switch between light and dark appearance
+  - Wallpaper: Switch between light and dark appearance + wallpapers
+  - Theme: Switch between light and dark themes
 - LightWallpaperPath: "C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg"
-  $name: Light mode wallpaper path
+  $name: Light Mode Wallpaper Path
+  $description: Switch between light and dark appearance + wallpapers
 - DarkWallpaperPath: "C:\\Windows\\Web\\Wallpaper\\Windows\\img19.jpg"
-  $name: Dark mode wallpaper path
+  $name: Dark Mode Wallpaper Path
+  $description: Switch between light and dark appearance + wallpapers
 - LightThemePath: "C:\\Windows\\Resources\\Themes\\aero.theme"
-  $name: Light mode theme path
+  $name: Light Mode Theme Path
+  $description: Switch between light and dark themes
 - DarkThemePath: "C:\\Windows\\Resources\\Themes\\dark.theme"
-  $name: Dark mode theme path
+  $name: Dark Mode Theme Path
+  $description: Switch between light and dark themes
 - ScriptPath: ""
-  $name: Custom script path
+  $name: Custom Script Path
 - LockScreen: true
   $name: Apply Wallpaper to Lock screen
 */
 // ==/WindhawkModSettings==
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include <fstream>
 #include <comdef.h>
 #include <winrt/base.h>
+#include <winrt/Windows.Devices.Geolocation.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.System.h>
+
+using namespace winrt;
+using namespace Windows::Devices::Geolocation;
+using namespace winrt::Windows::System;
 
 HANDLE g_timer = nullptr;
 HANDLE g_timerThread = nullptr;
 HANDLE g_wakeEvent = nullptr;
 bool g_exitFlag = false;
+
+std::wstring g_scheduleMode;
 SYSTEMTIME g_lightTime, g_darkTime;
-std::wstring g_mode;
+double g_latitude, g_longitude;
+
+std::wstring g_switchMode;
+
 std::wstring g_lightWallpaperPath, g_darkWallpaperPath;
 std::wstring g_lightThemePath, g_darkThemePath;
+
 std::wstring g_scriptPath;
+
+bool g_lockScreen = true;
 
 enum Appearance {
     light,
@@ -99,6 +150,7 @@ void RunScript(bool useLightTheme) {
         std::wstring args = L"-NoProfile -ExecutionPolicy Bypass -File \"" + g_scriptPath + L"\" " + params;
         if ((INT_PTR)ShellExecuteW(nullptr, L"open", L"powershell.exe", args.c_str(), nullptr, SW_HIDE) <= 32) {
             Wh_Log(L"Failed to launch script");
+            return;
         } else {
             Wh_Log(L"Successfully launched script: %s", args.c_str());
         }
@@ -107,6 +159,7 @@ void RunScript(bool useLightTheme) {
     {
         if ((INT_PTR)ShellExecuteW(nullptr, L"open", g_scriptPath.c_str(), params.c_str(), nullptr, SW_HIDE) <= 32) {
             Wh_Log(L"Failed to launch script");
+            return;
         } else {
             Wh_Log(L"Successfully launched script: %s %s", g_scriptPath.c_str(), params.c_str());
         }
@@ -118,7 +171,7 @@ void ApplyLockScreen() {
     DWORD size = sizeof(currentWallpaper);
 
     if (RegGetValueW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", L"WallPaper", RRF_RT_REG_SZ, nullptr, currentWallpaper, &size) != ERROR_SUCCESS) {
-        Wh_Log(L"Failed to apply lock Screen");
+        Wh_Log(L"Failed to apply lock screen");
         return;
     }
 
@@ -128,12 +181,12 @@ void ApplyLockScreen() {
     if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization", 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
         if (RegSetValueExW(hKey, L"LockScreenImage", 0, REG_SZ, (const BYTE*)wallpaperPath.c_str(), (DWORD)((wallpaperPath.size() + 1) * sizeof(wchar_t))) != ERROR_SUCCESS) {
             RegCloseKey(hKey);
-            Wh_Log(L"Failed to apply lock Screen");
+            Wh_Log(L"Failed to apply lock screen");
             return;
         }
         RegCloseKey(hKey);
     } else {
-        Wh_Log(L"Failed to apply lock Screen");
+        Wh_Log(L"Failed to apply lock screen");
         return;
     }
 
@@ -141,17 +194,17 @@ void ApplyLockScreen() {
         for (PCWSTR valueName : { L"LockScreenImagePath", L"LockScreenImageUrl" }) {
             if (RegSetValueExW(hKey, valueName, 0, REG_SZ, (const BYTE*)wallpaperPath.c_str(), (DWORD)((wallpaperPath.size() + 1) * sizeof(wchar_t))) != ERROR_SUCCESS) {
                 RegCloseKey(hKey);
-                Wh_Log(L"Failed to apply lock Screen");
+                Wh_Log(L"Failed to apply lock screen");
                 return;
             }
         }
         RegCloseKey(hKey);
     } else {
-        Wh_Log(L"Failed to apply lock Screen");
+        Wh_Log(L"Failed to apply lock screen");
         return;
     }
 
-    Wh_Log(L"Successfully applied lock Screen");
+    Wh_Log(L"Successfully applied lock screen");
 }
 
 bool IsAppearanceApplied(Appearance appearance) {
@@ -230,6 +283,7 @@ void ApplyAppearance(Appearance appearance) {
         Wh_Log(L"Successfully applied %s appearance", appearance == light ? L"light" : L"dark");
     } else {
         Wh_Log(L"Failed to apply %s appearance", appearance == light ? L"light" : L"dark");
+        return;
     }
 
     SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ImmersiveColorSet", SMTO_ABORTIFHUNG, 100, nullptr);
@@ -280,6 +334,7 @@ void ApplyTheme(PCWSTR themePath) {
     hr = ApplyThemeMethod(pThemeManager.get(), bstrTheme);
     if (FAILED(hr)) {
         Wh_Log(L"Failed to apply theme");
+        return;
     }
 
     Wh_Log(L"Successfully applied theme");
@@ -292,7 +347,7 @@ void Apply(bool useLightTheme) {
     PCWSTR themePath = useLightTheme ? g_lightThemePath.c_str() : g_darkThemePath.c_str();
     bool changed = false;
 
-    if (g_mode == L"theme") {
+    if (g_switchMode == L"Theme") {
         if (*themePath) {
             for (;;) {
                 if (g_exitFlag) return;
@@ -350,7 +405,7 @@ void Apply(bool useLightTheme) {
             }
         }
     } else {
-        if (g_mode == L"wallpaper" && *wallpaperPath) {
+        if (g_switchMode == L"Wallpaper" && *wallpaperPath) {
             if (!IsWallpaperApplied(wallpaperPath)) {
                 ApplyWallpaper(wallpaperPath);
                 changed = true;
@@ -479,6 +534,158 @@ void StartScheduler() {
     g_timerThread = CreateThread(nullptr, 0, ThemeScheduler, nullptr, 0, nullptr);
 }
 
+BasicGeoposition GetLocation()
+{
+    auto permission = Geolocator::RequestAccessAsync().get();
+
+    if (permission == GeolocationAccessStatus::Allowed)
+    {
+        Geolocator locator;
+        locator.DesiredAccuracy(PositionAccuracy::Default);
+
+        Geoposition location = locator.GetGeopositionAsync().get();
+
+        return location.Coordinate().Point().Position();
+    }
+    else
+    {
+        if (Geolocator::DefaultGeoposition())
+        {
+            return Geolocator::DefaultGeoposition().Value();
+        }
+        else
+        {
+            Wh_Log(L"Location services are disabled");
+
+            winrt::Windows::System::Launcher::LaunchUriAsync(winrt::Windows::Foundation::Uri(L"ms-settings:privacy-location"));
+
+            return {};
+        }
+    }
+}
+
+// Based on:
+// https://github.com/aureldussauge/SunriseSunset
+// Licensed under Apache License 2.0
+class Sunriset {
+public:
+    static void SunriseSunset(int year, int month, int day, double lat, double lng, double& tsunrise, double& tsunset) {
+        SunriseSunsetCore(year, month, day, lng, lat, SunriseSunsetAltitude, true, tsunrise, tsunset);
+    }
+
+private:
+    static constexpr double SunriseSunsetAltitude = -35.0 / 60.0;
+    static constexpr double RadDeg = 180.0 / M_PI;
+    static constexpr double DegRad = M_PI / 180.0;
+    static constexpr double INV360 = 1.0 / 360.0;
+
+    static long daysSince2000Jan0(int y, int m, int d) {
+        return (367L * y - ((7 * (y + ((m + 9) / 12))) / 4) + ((275 * m) / 9) + d - 730530L);
+    }
+
+    static double sind(double x) { return sin(x * DegRad); }
+    static double cosd(double x) { return cos(x * DegRad); }
+    static double tand(double x) { return tan(x * DegRad); }
+    static double atand(double x) { return RadDeg * atan(x); }
+    static double asind(double x) { return RadDeg * asin(x); }
+    static double acosd(double x) { return RadDeg * acos(x); }
+    static double atan2d(double y, double x) { return RadDeg * atan2(y, x); }
+
+    static double revolution(double x) {
+        return (x - 360.0 * floor(x * INV360));
+    }
+
+    static double rev180(double x) {
+        return (x - 360.0 * floor(x * INV360 + 0.5));
+    }
+
+    static void sunpos(double d, double& lon, double& r) {
+        double M = revolution(356.0470 + 0.9856002585 * d);
+        double w = 282.9404 + 4.70935E-5 * d;
+        double e = 0.016709 - 1.151E-9 * d;
+        double E = M + e * RadDeg * sind(M) * (1.0 + e * cosd(M));
+        double x = cosd(E) - e;
+        double y = sqrt(1.0 - e * e) * sind(E);
+        r = sqrt(x * x + y * y);
+        double v = atan2d(y, x);
+        lon = v + w;
+        if (lon >= 360.0) lon -= 360.0;
+    }
+
+    static void sun_RA_dec(double d, double& RA, double& dec, double& r) {
+        double lon, obl_ecl, x, y, z;
+        sunpos(d, lon, r);
+        x = r * cosd(lon);
+        y = r * sind(lon);
+        obl_ecl = 23.4393 - 3.563E-7 * d;
+        z = y * sind(obl_ecl);
+        y = y * cosd(obl_ecl);
+        RA = atan2d(y, x);
+        dec = atan2d(z, sqrt(x * x + y * y));
+    }
+
+    static double GMST0(double d) {
+        return revolution((180.0 + 356.0470 + 282.9404) + (0.9856002585 + 4.70935E-5) * d);
+    }
+
+    static int SunriseSunsetCore(int year, int month, int day, double lon, double lat,
+        double altit, bool upper_limb, double& trise, double& tset) {
+        double d = daysSince2000Jan0(year, month, day) + 0.5 - lon / 360.0;
+        double sidtime = revolution(GMST0(d) + 180.0 + lon);
+        double sRA, sdec, sr;
+        sun_RA_dec(d, sRA, sdec, sr);
+        double tsouth = 12.0 - rev180(sidtime - sRA) / 15.0;
+        double sradius = 0.2666 / sr;
+        if (upper_limb) altit -= sradius;
+        double cost = (sind(altit) - sind(lat) * sind(sdec)) / (cosd(lat) * cosd(sdec));
+        double t;
+        int rc = 0;
+        if (cost >= 1.0) {
+            rc = -1; t = 0.0;
+        }
+        else if (cost <= -1.0) {
+            rc = +1; t = 12.0;
+        }
+        else {
+            t = acosd(cost) / 15.0;
+        }
+        trise = tsouth - t;
+        tset = tsouth + t;
+        return rc;
+    }
+};
+
+void GetSunriseSunsetTimes(double latitude, double longitude, SYSTEMTIME& sunrise, SYSTEMTIME& sunset)
+{
+    time_t now = time(nullptr);
+    struct tm* now_tm = gmtime(&now);
+    int year = now_tm->tm_year + 1900;
+    int month = now_tm->tm_mon + 1;
+    int day = now_tm->tm_mday;
+
+    double tsunrise, tsunset;
+    Sunriset::SunriseSunset(year, month, day, latitude, longitude, tsunrise, tsunset);
+
+    auto convertToLocalSystemTime = [](double timeVal, SYSTEMTIME& localST)
+    {
+        SYSTEMTIME utcST = {};
+        utcST.wYear = 2000;
+        utcST.wMonth = 1;
+        utcST.wDay = 1;
+        utcST.wHour = static_cast<WORD>(timeVal);
+        utcST.wMinute = static_cast<WORD>((timeVal - utcST.wHour) * 60);
+        utcST.wSecond = static_cast<WORD>((((timeVal - utcST.wHour) * 60) - utcST.wMinute) * 60);
+
+        FILETIME utcFT, localFT;
+        SystemTimeToFileTime(&utcST, &utcFT);
+        FileTimeToLocalFileTime(&utcFT, &localFT);
+        FileTimeToSystemTime(&localFT, &localST);
+    };
+
+    convertToLocalSystemTime(tsunrise, sunrise);
+    convertToLocalSystemTime(tsunset, sunset);
+}
+
 std::wstring TrimQuotes(const std::wstring& str) {
     size_t start = 0;
     size_t end = str.length();
@@ -488,17 +695,49 @@ std::wstring TrimQuotes(const std::wstring& str) {
 }
 
 void LoadSettings() {
-    auto rawLight = Wh_GetStringSetting(L"Light");
-    g_lightTime = ParseScheduleTime(rawLight);
-    if (rawLight) Wh_FreeStringSetting(rawLight);
+    auto rawScheduleMode = Wh_GetStringSetting(L"ScheduleMode");
+    g_scheduleMode = rawScheduleMode ? std::wstring(rawScheduleMode) : L"CustomHours";
+    if (rawScheduleMode) Wh_FreeStringSetting(rawScheduleMode);
 
-    auto rawDark = Wh_GetStringSetting(L"Dark");
-    g_darkTime = ParseScheduleTime(rawDark);
+    auto rawLight = Wh_GetStringSetting(L"CustomLight");
+    auto rawDark = Wh_GetStringSetting(L"CustomDark");
+
+    auto rawLatitude = Wh_GetStringSetting(L"Latitude");
+    g_latitude = rawLatitude ? _wtof(rawLatitude) : 0.0;
+    if (rawLatitude) Wh_FreeStringSetting(rawLatitude);
+
+    auto rawLongitude = Wh_GetStringSetting(L"Longitude");
+    g_longitude = rawLongitude ? _wtof(rawLongitude) : 0.0;
+    if (rawLongitude) Wh_FreeStringSetting(rawLongitude);
+
+    if (g_scheduleMode == L"CustomHours") {
+        g_lightTime = ParseScheduleTime(rawLight);
+        g_darkTime = ParseScheduleTime(rawDark);
+    } else if (g_scheduleMode == L"LocationService") {
+        BasicGeoposition pos = GetLocation();
+
+        SYSTEMTIME sunriseTime, sunsetTime;
+        GetSunriseSunsetTimes(pos.Latitude, pos.Longitude, sunriseTime, sunsetTime);
+
+        g_lightTime = sunriseTime;
+        g_darkTime = sunsetTime;
+
+    } else if (g_scheduleMode == L"CustomCoordinates") {
+        SYSTEMTIME sunriseTime, sunsetTime;
+        GetSunriseSunsetTimes(g_latitude, g_longitude, sunriseTime, sunsetTime);
+
+        g_lightTime = sunriseTime;
+        g_darkTime = sunsetTime;
+    }
+    
+    Wh_Log(L"Light: %02d:%02d:%02d, Dark: %02d:%02d:%02d", g_lightTime.wHour, g_lightTime.wMinute, g_lightTime.wSecond, g_darkTime.wHour, g_darkTime.wMinute, g_darkTime.wSecond);
+
+    if (rawLight) Wh_FreeStringSetting(rawLight);
     if (rawDark) Wh_FreeStringSetting(rawDark);
 
-    auto rawMode = Wh_GetStringSetting(L"mode");
-    g_mode = rawMode ? std::wstring(rawMode) : L"appearance";
-    if (rawMode) Wh_FreeStringSetting(rawMode);
+    auto rawSwitchMode = Wh_GetStringSetting(L"SwitchMode");
+    g_switchMode = rawSwitchMode ? std::wstring(rawSwitchMode) : L"Appearance";
+    if (rawSwitchMode) Wh_FreeStringSetting(rawSwitchMode);
 
     auto rawLightWallpaperPath = Wh_GetStringSetting(L"LightWallpaperPath");
     g_lightWallpaperPath = rawLightWallpaperPath ? TrimQuotes(rawLightWallpaperPath) : L"";
@@ -519,6 +758,8 @@ void LoadSettings() {
     auto rawScriptPath = Wh_GetStringSetting(L"ScriptPath");
     g_scriptPath = rawScriptPath ? TrimQuotes(rawScriptPath) : L"";
     if (rawScriptPath) Wh_FreeStringSetting(rawScriptPath);
+
+    g_lockScreen = Wh_GetIntSetting(L"LockScreen", 1) != 0;
 }
 
 BOOL WhTool_ModInit() {
