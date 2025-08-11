@@ -2011,6 +2011,27 @@
                 "version": "1.0"
             }
         },
+        "fix-explorer-white-flash": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1754930019000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1754930019000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Mgg Sk",
+                "compilerOptions": "-lGdi32",
+                "description": "Fixes white flashes when creating new tabs in \"This PC\".",
+                "github": "https://github.com/MGGSK",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Fix white flashes in explorer",
+                "version": "1.0"
+            }
+        },
         "fix-qt-scrollbar-grippers": {
             "details": {
                 "defaultSorting": 594,
