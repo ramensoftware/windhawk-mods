@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-09T17:12:17.000Z</updated>
+    <updated>2025-08-11T09:47:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win+D per monitor(show desktop) 1.1.20250811]]></title>
+        <id>https://windhawk.net/mods/win-d-per-monitor#1e6e18f3884de1bcaecd5eeb0db5a4ced8155e93</id>
+        <link href="https://windhawk.net/mods/win-d-per-monitor"/>
+        <updated>2025-08-11T09:47:39.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="newfeatures">New Features</h3>
+<ul>
+<li>Add option to ignore topmost tool windows</li>
+<li>Add configurable minimum window size</li>
+<li>Optimize window switching to prevent taskbar flashing</li>
+</ul>
+<h3 id="fixes">Fixes</h3>
+<ul>
+<li>https://github.com/ramensoftware/windhawk/discussions/597</li>
+<li>https://github.com/ramensoftware/windhawk-mods/issues/2056</li>
+</ul>]]></content>
+        <author>
+            <name>easyatm</name>
+            <uri>https://github.com/easyatm</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.6]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#8eb638d7f86c52bde93c6050ca3232bdf7baa5ef</id>
@@ -271,20 +292,6 @@ The differences between this mod and the other one are as follows:</p>
         <author>
             <name>rounk-ctrl</name>
             <uri>https://github.com/rounk-ctrl</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Winver 1.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-winver#08e6aef365b0d283169ceff6c0c030ad2a02a3ef</id>
-        <link href="https://windhawk.net/mods/classic-winver"/>
-        <updated>2025-07-30T19:00:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improve detection for 95/98/NT4 to account for IE4 desktop update shell32.dll</li>
-<li>This unfortunately means that users must enter the version text for 95 and 98, as distinction between the two is impossible</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

@@ -5034,7 +5034,7 @@
                 "published": 1734370095000,
                 "rating": 10,
                 "ratingUsers": 25,
-                "updated": 1734370095000,
+                "updated": 1754905659000,
                 "users": 1585
             },
             "metadata": {
@@ -5045,8 +5045,8 @@
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Win+D per monitor",
-                "version": "1.0.20241214"
+                "name": "Win+D per monitor(show desktop)",
+                "version": "1.1.20250811"
             }
         },
         "win10-colored-borders": {
