@@ -251,7 +251,7 @@ int WINAPI ShellMessageBoxW_Hook(HINSTANCE hAppInst, HWND hWnd, LPCWSTR lpcText,
     return result;
 }
 
-const WindhawkUtils::SYMBOL_HOOK g_shlwapiHooks[] = 
+const WindhawkUtils::SYMBOL_HOOK g_shlwapiDllHooks[] = 
 {
     {
         {
@@ -283,8 +283,8 @@ BOOL Wh_ModInit()
         
     if (!WindhawkUtils::HookSymbols(
         g_hShlwApi,
-        g_shlwapiHooks,
-        ARRAYSIZE(g_shlwapiHooks)))
+        g_shlwapiDllHooks,
+        ARRAYSIZE(g_shlwapiDllHooks)))
         return FALSE;
 
     SoftModalMessageBox = (SoftModalMessageBox_T)GetProcAddress(g_hUser32, "SoftModalMessageBox");
