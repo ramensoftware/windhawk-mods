@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM), custom fonts and colors, and more
-// @version         1.6.1
+// @version         1.6.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1658,12 +1658,16 @@ class QueryDataCollectionSession {
 
     bool AddMetric(MetricType type) {
         PCWSTR counter_path;
+        bool is_wildcard = false;
+
         switch (type) {
             case MetricType::kDownloadSpeed:
                 counter_path = L"\\Network Interface(*)\\Bytes Received/sec";
+                is_wildcard = true;
                 break;
             case MetricType::kUploadSpeed:
                 counter_path = L"\\Network Interface(*)\\Bytes Sent/sec";
+                is_wildcard = true;
                 break;
             case MetricType::kCpu:
                 counter_path = L"\\Processor(_Total)\\% Processor Time";
@@ -1672,15 +1676,33 @@ class QueryDataCollectionSession {
                 return false;
         }
 
-        PDH_HCOUNTER counter;
-        HRESULT hr = PdhAddEnglishCounter(query_, counter_path, 0, &counter);
-        if (FAILED(hr)) {
-            Wh_Log(L"PdhAddEnglishCounter error %08X", hr);
+        auto& metric = metrics_[static_cast<int>(type)];
+        if (!metric.counters.empty()) {
             return false;
         }
 
-        counters_[static_cast<int>(type)] = counter;
-        return true;
+        if (is_wildcard) {
+            for (const auto& path : ExpandEnglishWildcard(counter_path)) {
+                PDH_HCOUNTER counter;
+                HRESULT hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
+                if (SUCCEEDED(hr)) {
+                    metric.counters.push_back(counter);
+                } else {
+                    Wh_Log(L"PdhAddCounter error %08X", hr);
+                }
+            }
+        } else {
+            PDH_HCOUNTER counter;
+            HRESULT hr =
+                PdhAddEnglishCounter(query_, counter_path, 0, &counter);
+            if (SUCCEEDED(hr)) {
+                metric.counters.push_back(counter);
+            } else {
+                Wh_Log(L"PdhAddEnglishCounter error %08X", hr);
+            }
+        }
+
+        return !metric.counters.empty();
     }
 
     bool SampleData() {
@@ -1694,27 +1716,102 @@ class QueryDataCollectionSession {
     }
 
     double QueryData(MetricType type) {
-        PDH_HCOUNTER counter = counters_[static_cast<int>(type)];
+        const auto& metric = metrics_[static_cast<int>(type)];
 
-        PDH_FMT_COUNTERVALUE val;
-        HRESULT hr =
-            PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr, &val);
-        if (FAILED(hr)) {
-            Wh_Log(L"PdhGetFormattedCounterValue error %08X", hr);
-            return 0;
+        double sum = 0.0;
+        for (auto counter : metric.counters) {
+            PDH_FMT_COUNTERVALUE val;
+            HRESULT hr = PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE,
+                                                     nullptr, &val);
+            if (SUCCEEDED(hr)) {
+                sum += val.doubleValue;
+            } else {
+                Wh_Log(L"PdhGetFormattedCounterValue error %08X", hr);
+            }
         }
 
-        return val.doubleValue;
+        return sum;
     }
 
    private:
+    // Implemented according to the note here:
+    // https://learn.microsoft.com/en-us/windows/win32/api/pdh/nf-pdh-pdhaddenglishcounterw
+    std::vector<std::wstring> ExpandEnglishWildcard(PCWSTR wildcard_path) {
+        // Step 1: Add English counter with wildcards to get localized path.
+        PDH_HCOUNTER temp_counter;
+        HRESULT hr =
+            PdhAddEnglishCounter(query_, wildcard_path, 0, &temp_counter);
+        if (FAILED(hr)) {
+            Wh_Log(L"PdhAddEnglishCounter error %08X", hr);
+            return {};
+        }
+
+        // Step 2: Get counter info to obtain localized full path.
+        DWORD required = 0;
+        hr = PdhGetCounterInfo(temp_counter, FALSE, &required, nullptr);
+        if (FAILED(hr) && hr != static_cast<HRESULT>(PDH_MORE_DATA)) {
+            Wh_Log(L"PdhGetCounterInfo (size) error %08X", hr);
+            PdhRemoveCounter(temp_counter);
+            return {};
+        }
+
+        if (required == 0) {
+            PdhRemoveCounter(temp_counter);
+            return {};
+        }
+
+        std::vector<BYTE> counter_info_buffer(required);
+        PDH_COUNTER_INFO* counter_info =
+            reinterpret_cast<PDH_COUNTER_INFO*>(counter_info_buffer.data());
+
+        hr = PdhGetCounterInfo(temp_counter, FALSE, &required, counter_info);
+        PdhRemoveCounter(temp_counter);
+        if (FAILED(hr)) {
+            Wh_Log(L"PdhGetCounterInfo error %08X", hr);
+            return {};
+        }
+
+        // Step 3: Expand wildcards using the localized path.
+        required = 0;
+        hr = PdhExpandWildCardPath(nullptr, counter_info->szFullPath, nullptr,
+                                   &required, 0);
+        if (FAILED(hr) && hr != static_cast<HRESULT>(PDH_MORE_DATA)) {
+            Wh_Log(L"PdhExpandWildCardPath (localized, size) error %08X", hr);
+            return {};
+        }
+
+        if (required == 0) {
+            return {};
+        }
+
+        std::vector<WCHAR> path_buffer(required);
+        hr = PdhExpandWildCardPath(nullptr, counter_info->szFullPath,
+                                   path_buffer.data(), &required, 0);
+        if (FAILED(hr)) {
+            Wh_Log(L"PdhExpandWildCardPath (localized) error %08X", hr);
+            return {};
+        }
+
+        std::vector<std::wstring> out_paths;
+        WCHAR* p = path_buffer.data();
+        while (*p) {
+            Wh_Log(L"Expanded localized path: %s", p);
+            out_paths.emplace_back(p);
+            p += wcslen(p) + 1;
+        }
+        return out_paths;
+    }
+
+    struct MetricData {
+        std::vector<PDH_HCOUNTER> counters;
+    };
+
     PDH_HQUERY query_;
-    PDH_HCOUNTER counters_[static_cast<int>(MetricType::kCount)]{};
+    MetricData metrics_[static_cast<int>(MetricType::kCount)];
 };
 
-std::optional<QueryDataCollectionSession> g_queryDataCollectionSession;
-ULONGLONG g_queryDataCollectionLastSampleTime;
-DWORD g_queryDataCollectionIndex;
+std::optional<QueryDataCollectionSession> g_dataCollectionSession;
+DWORD g_dataCollectionLastFormatIndex;
 
 void DataCollectionSessionInit() {
     bool metrics[static_cast<int>(MetricType::kCount)]{};
@@ -1731,7 +1828,7 @@ void DataCollectionSessionInit() {
     }
 
     try {
-        g_queryDataCollectionSession.emplace();
+        g_dataCollectionSession.emplace();
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"Error %08X", hr);
@@ -1740,18 +1837,18 @@ void DataCollectionSessionInit() {
 
     for (size_t i = 0; i < ARRAYSIZE(metrics); i++) {
         MetricType metric = static_cast<MetricType>(i);
-        g_queryDataCollectionSession->AddMetric(metric);
+        g_dataCollectionSession->AddMetric(metric);
     }
 
-    g_queryDataCollectionSession->SampleData();
+    g_dataCollectionSession->SampleData();
 }
 
 void DataCollectionSessionUninit() {
-    g_queryDataCollectionSession.reset();
-    g_queryDataCollectionIndex = 0;
+    g_dataCollectionSession.reset();
+    g_dataCollectionLastFormatIndex = 0;
 }
 
-void DataCollectionSampleIfNeeded() {
+DWORD GetDataCollectionFormatIndex() {
     FILETIME formatTimeFt{};
     SystemTimeToFileTime(&g_formatTime, &formatTimeFt);
     ULARGE_INTEGER formatTimeInt{
@@ -1762,14 +1859,17 @@ void DataCollectionSampleIfNeeded() {
     constexpr ULONGLONG kSecondIn100Ns = 10000000ULL;
     ULONGLONG interval =
         kSecondIn100Ns * std::max(g_settings.dataCollectionUpdateInterval, 1);
-    ULONGLONG expectedSampleTime = formatTimeInt.QuadPart / interval * interval;
-    if (g_queryDataCollectionLastSampleTime != expectedSampleTime) {
-        if (g_queryDataCollectionSession) {
-            g_queryDataCollectionSession->SampleData();
+    return static_cast<DWORD>(formatTimeInt.QuadPart / interval);
+}
+
+void DataCollectionSampleIfNeeded() {
+    DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
+    if (g_dataCollectionLastFormatIndex != dataCollectionFormatIndex) {
+        if (g_dataCollectionSession) {
+            g_dataCollectionSession->SampleData();
         }
 
-        g_queryDataCollectionIndex++;
-        g_queryDataCollectionLastSampleTime = expectedSampleTime;
+        g_dataCollectionLastFormatIndex = dataCollectionFormatIndex;
     }
 }
 
@@ -1854,9 +1954,10 @@ PCWSTR GetMetricFormatted(FormattedString<N>& formattedString,
                           MetricType metricType) {
     DataCollectionSampleIfNeeded();
 
-    if (formattedString.formatIndex != g_queryDataCollectionIndex) {
-        if (g_queryDataCollectionSession) {
-            double val = g_queryDataCollectionSession->QueryData(metricType);
+    DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
+    if (formattedString.formatIndex != dataCollectionFormatIndex) {
+        if (g_dataCollectionSession) {
+            double val = g_dataCollectionSession->QueryData(metricType);
             if (metricType == MetricType::kUploadSpeed ||
                 metricType == MetricType::kDownloadSpeed) {
                 FormatTransferSpeed(val, formattedString.buffer,
@@ -1870,7 +1971,7 @@ PCWSTR GetMetricFormatted(FormattedString<N>& formattedString,
             wcscpy_s(formattedString.buffer, L"-");
         }
 
-        formattedString.formatIndex = g_queryDataCollectionIndex;
+        formattedString.formatIndex = dataCollectionFormatIndex;
     }
 
     return formattedString.buffer;
@@ -1890,13 +1991,11 @@ PCWSTR GetCpuFormatted() {
 }
 
 PCWSTR GetRamFormatted() {
-    DataCollectionSampleIfNeeded();
-
-    if (g_ramFormatted.formatIndex != g_queryDataCollectionIndex) {
+    DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
+    if (g_ramFormatted.formatIndex != dataCollectionFormatIndex) {
         MEMORYSTATUSEX status{
             .dwLength = sizeof(status),
         };
-
         if (GlobalMemoryStatusEx(&status)) {
             FormatPercentValue(status.dwMemoryLoad, g_ramFormatted.buffer,
                                ARRAYSIZE(g_ramFormatted.buffer));
@@ -1904,7 +2003,7 @@ PCWSTR GetRamFormatted() {
             wcscpy_s(g_ramFormatted.buffer, L"-");
         }
 
-        g_ramFormatted.formatIndex = g_queryDataCollectionIndex;
+        g_ramFormatted.formatIndex = dataCollectionFormatIndex;
     }
 
     return g_ramFormatted.buffer;
@@ -2182,7 +2281,7 @@ void WINAPI ClockSystemTrayIconDataModel_RefreshIcon_Hook(LPVOID pThis,
 
     g_refreshIconThreadId = GetCurrentThreadId();
     g_refreshIconNeedToAdjustTimer = g_settings.showSeconds ||
-                                     g_queryDataCollectionSession ||
+                                     g_dataCollectionSession ||
                                      !g_webContentLoaded;
 
     ClockSystemTrayIconDataModel_RefreshIcon_Original(pThis, param1);
@@ -2917,7 +3016,7 @@ ClockButton_UpdateTextStringsIfNecessary_Hook(LPVOID pThis, bool* param1) {
 
     g_updateTextStringThreadId = 0;
 
-    if (g_settings.showSeconds || g_queryDataCollectionSession ||
+    if (g_settings.showSeconds || g_dataCollectionSession ||
         !g_webContentLoaded) {
         // Return the time-out value for the time of the next update.
         SYSTEMTIME time;
