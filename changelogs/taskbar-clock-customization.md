@@ -1,3 +1,7 @@
+## 1.6.2 ([Aug 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/725fd582986a072d0dc02c11281a56d30c3c2576/mods/taskbar-clock-customization.wh.cpp))
+
+* Fixed performance metrics (upload/download speed) always showing zero values on non-English systems. The fix in version 1.6.1 was incomplete.
+
 ## 1.6.1 ([Aug 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7068e6957690dc8bb1c1d1449041593fc34ff51e/mods/taskbar-clock-customization.wh.cpp))
 
 * Added an option to customize the weather units (USCS/SI).

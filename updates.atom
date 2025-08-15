@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-15T17:09:53.000Z</updated>
+    <updated>2025-08-15T19:15:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.6.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#725fd582986a072d0dc02c11281a56d30c3c2576</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2025-08-15T19:15:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed performance metrics (upload/download speed) always showing zero values on non-English systems. The fix in version 1.6.1 was incomplete.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.6.1]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#7068e6957690dc8bb1c1d1449041593fc34ff51e</id>
@@ -280,20 +293,6 @@ The differences between this mod and the other one are as follows:</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.8.1]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#35441a23d1531df1b1c756e76b67091a71e3e020</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2025-08-01T18:54:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hook <code>ExplorerFrame.dll</code> symbols <em>after</em> checking its version</li>
-<li>Fix the "Open" command for EXE files not having an icon with the Command bar icons option enabled</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
