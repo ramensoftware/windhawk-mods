@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM), custom fonts and colors, and more
-// @version         1.6
+// @version         1.6.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -38,7 +38,7 @@ _News (default mod settings)_
 ![Weather screenshot](https://i.imgur.com/Re7mQd6.png) \
 _Weather_
 
-![System performance metrics screenshot](https://i.imgur.com/vXWvFU2.png) \
+![System performance metrics screenshot](https://i.imgur.com/QhyYv0D.png) \
 _System performance metrics_
 
 ## Available patterns
@@ -78,12 +78,12 @@ patterns can be used:
   * `%download_speed%` - system-wide download transfer rate.
   * `%cpu%` - CPU usage.
   * `%ram%` - RAM usage.
+* `%weather%` - Weather information, powered by [wttr.in](https://wttr.in/),
+  using the location and format configured in settings.
 * `%web<n>%` - the web contents as configured in settings, truncated with
   ellipsis, where `<n>` is the web contents number.
 * `%web<n>_full%` - the full web contents as configured in settings, where `<n>`
   is the web contents number.
-* `%weather%` - Weather information, powered by [wttr.in](https://wttr.in/),
-  using the location and format configured in settings.
 * `%newline%` - a newline.
 
 ## Text styles
@@ -156,6 +156,25 @@ styles, such as the font color and size.
   $description: >-
     The update interval, in seconds, of the system performance metrics such as
     CPU and RAM usage.
+- WebContentWeatherLocation: ""
+  $name: Weather location
+  $description: >-
+    Get weather information for a specific location. Keep empty to use the
+    current location. For details, refer to the documentation of wttr.in.
+- WebContentWeatherFormat: "%c \uD83C\uDF21\uFE0F%t \uD83C\uDF2C\uFE0F%w"
+  $name: Weather format
+  $description: >-
+    The weather information format. For details, refer to the documentation of
+    wttr.in.
+- WebContentWeatherUnits: autoDetect
+  $name: Weather units
+  $description: >-
+    The weather units. For details, refer to the documentation of wttr.in.
+  $options:
+  - autoDetect: Auto (default)
+  - uscs: USCS (used by default in US)
+  - metric: Metric (SI) (used by default everywhere except US)
+  - metricMsWind: Metric (SI), but show wind speed in m/s
 - WebContentsItems:
   - - Url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
       $name: Web content URL
@@ -192,21 +211,12 @@ styles, such as the font color and size.
       $description: Longer strings will be truncated with ellipsis.
   $name: Web content items
   $description: >-
-    Will be used to fetch data displayed in place of the %web<n>%,
+    Will be used to fetch data displayed in place of the %web<n>% and
     %web<n>_full% patterns, where <n> is the web contents number.
-- WebContentWeatherLocation: ""
-  $name: Weather location
-  $description: >-
-    Get weather information for a specific location. Keep empty to use the
-    current location. For details, refer to the documentation of wttr.in.
-- WebContentWeatherFormat: "%c \uD83C\uDF21\uFE0F%t \uD83C\uDF2C\uFE0F%w"
-  $name: Weather format
-  $description: >-
-    The weather information format. For details, refer to the documentation of
-    wttr.in.
 - WebContentsUpdateInterval: 10
   $name: Web content update interval
-  $description: The update interval, in minutes, of the web content items.
+  $description: >-
+    The update interval, in minutes, of the weather and the web content items.
 - TimeZones: ["Eastern Standard Time"]
   $name: Time zones
   $description: >-
@@ -393,6 +403,13 @@ using namespace winrt::Windows::UI::Xaml;
 #define URL_ESCAPE_ASCII_URI_COMPONENT 0x00080000
 #endif
 
+enum class WebContentWeatherUnits {
+    autoDetect,
+    uscs,
+    metric,
+    metricMsWind,
+};
+
 enum class ContentMode {
     plainText,
     html,
@@ -437,9 +454,10 @@ struct {
     int maxWidth;
     int textSpacing;
     int dataCollectionUpdateInterval;
-    std::vector<WebContentsSettings> webContentsItems;
     StringSetting webContentWeatherLocation;
     StringSetting webContentWeatherFormat;
+    WebContentWeatherUnits webContentWeatherUnits;
+    std::vector<WebContentsSettings> webContentsItems;
     int webContentsUpdateInterval;
     std::vector<StringSetting> timeZones;
     TextStyleSettings timeStyle;
@@ -819,7 +837,21 @@ bool UpdateWeatherWebContent() {
 
     std::wstring weatherUrl = L"https://wttr.in/";
     weatherUrl += EscapeUrlComponent(g_settings.webContentWeatherLocation);
-    weatherUrl += L"?format=";
+    weatherUrl += L'?';
+    switch (g_settings.webContentWeatherUnits) {
+        case WebContentWeatherUnits::autoDetect:
+            break;
+        case WebContentWeatherUnits::uscs:
+            weatherUrl += L"u&";
+            break;
+        case WebContentWeatherUnits::metric:
+            weatherUrl += L"m&";
+            break;
+        case WebContentWeatherUnits::metricMsWind:
+            weatherUrl += L"M&";
+            break;
+    }
+    weatherUrl += L"format=";
     weatherUrl += EscapeUrlComponent(format.c_str());
     std::optional<std::wstring> urlContent = GetUrlContent(weatherUrl.c_str());
     if (!urlContent) {
@@ -1605,7 +1637,6 @@ enum class MetricType {
     kUploadSpeed,
     kDownloadSpeed,
     kCpu,
-    kRam,
 
     kCount,
 };
@@ -1627,53 +1658,29 @@ class QueryDataCollectionSession {
 
     bool AddMetric(MetricType type) {
         PCWSTR counter_path;
-        bool is_wildcard = false;
-
         switch (type) {
             case MetricType::kDownloadSpeed:
                 counter_path = L"\\Network Interface(*)\\Bytes Received/sec";
-                is_wildcard = true;
                 break;
             case MetricType::kUploadSpeed:
                 counter_path = L"\\Network Interface(*)\\Bytes Sent/sec";
-                is_wildcard = true;
                 break;
             case MetricType::kCpu:
                 counter_path = L"\\Processor(_Total)\\% Processor Time";
-                break;
-            case MetricType::kRam:
-                counter_path = L"\\Memory\\% Committed Bytes In Use";
                 break;
             default:
                 return false;
         }
 
-        auto& metric = metrics_[static_cast<int>(type)];
-        if (!metric.counters.empty()) {
+        PDH_HCOUNTER counter;
+        HRESULT hr = PdhAddEnglishCounter(query_, counter_path, 0, &counter);
+        if (FAILED(hr)) {
+            Wh_Log(L"PdhAddEnglishCounter error %08X", hr);
             return false;
         }
 
-        if (is_wildcard) {
-            for (const auto& path : ExpandWildcard(counter_path)) {
-                PDH_HCOUNTER counter;
-                HRESULT hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
-                if (SUCCEEDED(hr)) {
-                    metric.counters.push_back(counter);
-                } else {
-                    Wh_Log(L"PdhAddCounter error %08X", hr);
-                }
-            }
-        } else {
-            PDH_HCOUNTER counter;
-            HRESULT hr = PdhAddCounter(query_, counter_path, 0, &counter);
-            if (SUCCEEDED(hr)) {
-                metric.counters.push_back(counter);
-            } else {
-                Wh_Log(L"PdhAddCounter error %08X", hr);
-            }
-        }
-
-        return !metric.counters.empty();
+        counters_[static_cast<int>(type)] = counter;
+        return true;
     }
 
     bool SampleData() {
@@ -1687,61 +1694,22 @@ class QueryDataCollectionSession {
     }
 
     double QueryData(MetricType type) {
-        const auto& metric = metrics_[static_cast<int>(type)];
+        PDH_HCOUNTER counter = counters_[static_cast<int>(type)];
 
-        double sum = 0.0;
-        for (auto counter : metric.counters) {
-            PDH_FMT_COUNTERVALUE val;
-            HRESULT hr = PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE,
-                                                     nullptr, &val);
-            if (SUCCEEDED(hr)) {
-                sum += val.doubleValue;
-            } else {
-                Wh_Log(L"PdhGetFormattedCounterValue error %08X", hr);
-            }
+        PDH_FMT_COUNTERVALUE val;
+        HRESULT hr =
+            PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr, &val);
+        if (FAILED(hr)) {
+            Wh_Log(L"PdhGetFormattedCounterValue error %08X", hr);
+            return 0;
         }
 
-        return sum;
+        return val.doubleValue;
     }
 
    private:
-    std::vector<std::wstring> ExpandWildcard(PCWSTR wildcard_path) {
-        DWORD required = 0;
-        HRESULT hr = PdhExpandWildCardPath(nullptr, wildcard_path, nullptr,
-                                           &required, 0);
-        if (FAILED(hr) && hr != static_cast<HRESULT>(PDH_MORE_DATA)) {
-            Wh_Log(L"PdhExpandWildCardPath error %08X", hr);
-            return {};
-        }
-
-        if (required == 0) {
-            return {};
-        }
-
-        std::vector<WCHAR> buffer(required);
-        hr = PdhExpandWildCardPath(nullptr, wildcard_path, buffer.data(),
-                                   &required, 0);
-        if (FAILED(hr)) {
-            Wh_Log(L"PdhExpandWildCardPath error %08X", hr);
-            return {};
-        }
-
-        std::vector<std::wstring> out_paths;
-        WCHAR* p = buffer.data();
-        while (*p) {
-            Wh_Log(L"Expanded path: %s", p);
-            out_paths.emplace_back(p);
-            p += wcslen(p) + 1;
-        }
-        return out_paths;
-    }
-
-    struct MetricData {
-        std::vector<PDH_HCOUNTER> counters;
-    };
-
     PDH_HQUERY query_;
-    MetricData metrics_[static_cast<int>(MetricType::kCount)];
+    PDH_HCOUNTER counters_[static_cast<int>(MetricType::kCount)]{};
 };
 
 std::optional<QueryDataCollectionSession> g_queryDataCollectionSession;
@@ -1756,8 +1724,6 @@ void DataCollectionSessionInit() {
         IsStrInDateTimePatternSettings(L"%download_speed%");
     metrics[static_cast<int>(MetricType::kCpu)] =
         IsStrInDateTimePatternSettings(L"%cpu%");
-    metrics[static_cast<int>(MetricType::kRam)] =
-        IsStrInDateTimePatternSettings(L"%ram%");
 
     if (!std::any_of(std::begin(metrics), std::end(metrics),
                      [](bool x) { return x; })) {
@@ -1807,19 +1773,80 @@ void DataCollectionSampleIfNeeded() {
     }
 }
 
-void FormatInternetSpeed(int bytesPerSec, PWSTR buffer, size_t bufferSize) {
-    constexpr int kKb = 1024;
-    constexpr int kMb = kKb * 1024;
-
-    if (bytesPerSec >= kMb) {
-        swprintf_s(buffer, bufferSize, L"%.1f Mb/s",
-                   static_cast<double>(bytesPerSec) / kMb);
-    } else if (bytesPerSec >= kKb) {
-        swprintf_s(buffer, bufferSize, L"%.1f Kb/s",
-                   static_cast<double>(bytesPerSec) / kKb);
-    } else {
-        swprintf_s(buffer, bufferSize, L"%d B/s", bytesPerSec);
+std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
+    int valStrLen = _scwprintf(L"%.17f", val);
+    if (valStrLen < 0) {
+        return std::wstring();
     }
+
+    std::wstring valStr(valStrLen + 1, L'\0');
+    if (swprintf_s(valStr.data(), valStr.size(), L"%.17f", val) < 0) {
+        return std::wstring();
+    }
+
+    WCHAR decSep[4];
+    if (!GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, decSep,
+                         ARRAYSIZE(decSep))) {
+        // Fallback.
+        decSep[0] = L'.';
+        decSep[1] = L'\0';
+    }
+
+    NUMBERFMTW fmt{
+        .NumDigits = digitsAfterDecimal,
+        .LeadingZero = 1,
+        .lpDecimalSep = const_cast<LPWSTR>(decSep),
+        .lpThousandSep = const_cast<LPWSTR>(L""),
+    };
+
+    // Query required size.
+    int needed = GetNumberFormatEx(LOCALE_NAME_USER_DEFAULT, 0, valStr.c_str(),
+                                   &fmt, nullptr, 0);
+    if (needed == 0) {
+        return std::wstring();
+    }
+
+    // Format.
+    std::wstring out(needed - 1, L'\0');
+    if (GetNumberFormatEx(LOCALE_NAME_USER_DEFAULT, 0, valStr.c_str(), &fmt,
+                          out.data(), needed) == 0) {
+        return std::wstring();
+    }
+
+    return out;
+}
+
+void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
+    double valMb = val / (1024 * 1024);
+
+    // Keep identical width for <1000 values.
+    int digitsAfterDecimal = 0;
+    PCWSTR prefix = L"";
+    if (valMb < 10) {
+        digitsAfterDecimal = 2;
+    } else if (valMb < 100) {
+        digitsAfterDecimal = 1;
+    } else if (valMb < 1000) {
+        // Punctuation Space.
+        prefix = L"\u2008";
+    }
+
+    std::wstring valMbFormatted = FormatLocaleNum(valMb, digitsAfterDecimal);
+
+    swprintf_s(buffer, bufferSize, L"%s%s MB/s", prefix,
+               valMbFormatted.c_str());
+}
+
+void FormatPercentValue(int val, PWSTR buffer, size_t bufferSize) {
+    // Cap to 99 to keep identical width in all cases.
+    if (val == 100) {
+        val = 99;
+    }
+
+    // Pad to keep identical width in all cases.
+    PCWSTR prefix = val < 10 ? L"  " : L"";
+
+    swprintf_s(buffer, bufferSize, L"%s%d%%", prefix, val);
 }
 
 template <size_t N>
@@ -1832,15 +1859,15 @@ PCWSTR GetMetricFormatted(FormattedString<N>& formattedString,
             double val = g_queryDataCollectionSession->QueryData(metricType);
             if (metricType == MetricType::kUploadSpeed ||
                 metricType == MetricType::kDownloadSpeed) {
-                FormatInternetSpeed(val, formattedString.buffer,
+                FormatTransferSpeed(val, formattedString.buffer,
                                     ARRAYSIZE(formattedString.buffer));
             } else {
-                swprintf_s(formattedString.buffer, L"%d%%",
-                           static_cast<int>(val));
+                FormatPercentValue(static_cast<int>(val),
+                                   formattedString.buffer,
+                                   ARRAYSIZE(formattedString.buffer));
             }
         } else {
-            wcscpy_s(formattedString.buffer, ARRAYSIZE(formattedString.buffer),
-                     L"-");
+            wcscpy_s(formattedString.buffer, L"-");
         }
 
         formattedString.formatIndex = g_queryDataCollectionIndex;
@@ -1863,7 +1890,24 @@ PCWSTR GetCpuFormatted() {
 }
 
 PCWSTR GetRamFormatted() {
-    return GetMetricFormatted(g_ramFormatted, MetricType::kRam);
+    DataCollectionSampleIfNeeded();
+
+    if (g_ramFormatted.formatIndex != g_queryDataCollectionIndex) {
+        MEMORYSTATUSEX status{
+            .dwLength = sizeof(status),
+        };
+
+        if (GlobalMemoryStatusEx(&status)) {
+            FormatPercentValue(status.dwMemoryLoad, g_ramFormatted.buffer,
+                               ARRAYSIZE(g_ramFormatted.buffer));
+        } else {
+            wcscpy_s(g_ramFormatted.buffer, L"-");
+        }
+
+        g_ramFormatted.formatIndex = g_queryDataCollectionIndex;
+    }
+
+    return g_ramFormatted.buffer;
 }
 
 int ResolveFormatTokenWithDigit(std::wstring_view format,
@@ -3364,6 +3408,22 @@ void LoadSettings() {
     g_settings.textSpacing = Wh_GetIntSetting(L"TextSpacing");
     g_settings.dataCollectionUpdateInterval =
         Wh_GetIntSetting(L"DataCollectionUpdateInterval");
+    g_settings.webContentWeatherLocation =
+        StringSetting::make(L"WebContentWeatherLocation");
+    g_settings.webContentWeatherFormat =
+        StringSetting::make(L"WebContentWeatherFormat");
+
+    g_settings.webContentWeatherUnits = WebContentWeatherUnits::autoDetect;
+    StringSetting webContentWeatherUnits =
+        StringSetting::make(L"WebContentWeatherUnits");
+    if (wcscmp(webContentWeatherUnits, L"uscs") == 0) {
+        g_settings.webContentWeatherUnits = WebContentWeatherUnits::uscs;
+    } else if (wcscmp(webContentWeatherUnits, L"metric") == 0) {
+        g_settings.webContentWeatherUnits = WebContentWeatherUnits::metric;
+    } else if (wcscmp(webContentWeatherUnits, L"metricMsWind") == 0) {
+        g_settings.webContentWeatherUnits =
+            WebContentWeatherUnits::metricMsWind;
+    }
 
     g_settings.webContentsItems.clear();
     for (int i = 0;; i++) {
@@ -3412,11 +3472,6 @@ void LoadSettings() {
 
         g_settings.webContentsItems.push_back(std::move(item));
     }
-
-    g_settings.webContentWeatherLocation =
-        StringSetting::make(L"WebContentWeatherLocation");
-    g_settings.webContentWeatherFormat =
-        StringSetting::make(L"WebContentWeatherFormat");
 
     g_settings.webContentsUpdateInterval =
         Wh_GetIntSetting(L"WebContentsUpdateInterval");
