@@ -1,3 +1,12 @@
+## 1.6.1 ([Aug 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7068e6957690dc8bb1c1d1449041593fc34ff51e/mods/taskbar-clock-customization.wh.cpp))
+
+* Added an option to customize the weather units (USCS/SI).
+* Improved performance metrics formatting to reduce text width changes:
+  * CPU and RAM show 0-99 values, and single digit values are padded with spaces.
+  * Upload/download speeds always show MB/s in a way that keeps the width constant for most values. Also, the current locale decimal separator is used (e.g. 12.3 or 12,3).
+* Switched to a more accurate RAM usage calculation method.
+* Fixed performance metrics (upload/download speed, CPU, RAM) always showing zero values on non-English systems.
+
 ## 1.6 ([Aug 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/8eb638d7f86c52bde93c6050ca3232bdf7baa5ef/mods/taskbar-clock-customization.wh.cpp))
 
 * Added patterns for realtime system performance metrics:

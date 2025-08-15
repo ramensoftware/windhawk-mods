@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-11T16:33:39.000Z</updated>
+    <updated>2025-08-15T17:09:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.6.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#7068e6957690dc8bb1c1d1449041593fc34ff51e</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2025-08-15T17:09:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to customize the weather units (USCS/SI).</li>
+<li>Improved performance metrics formatting to reduce text width changes:</li>
+<li>CPU and RAM show 0-99 values, and single digit values are padded with spaces.</li>
+<li>Upload/download speeds always show MB/s in a way that keeps the width constant for most values. Also, the current locale decimal separator is used (e.g. 12.3 or 12,3).</li>
+<li>Switched to a more accurate RAM usage calculation method.</li>
+<li>Fixed performance metrics (upload/download speed, CPU, RAM) always showing zero values on non-English systems.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix white flashes in explorer 1.0]]></title>
         <id>https://windhawk.net/mods/fix-explorer-white-flash#8ea73ccb7d2ede7776bda2e243360a34201e6552</id>
@@ -272,24 +290,6 @@ The differences between this mod and the other one are as follows:</p>
         <content type="html"><![CDATA[<ul>
 <li>Hook <code>ExplorerFrame.dll</code> symbols <em>after</em> checking its version</li>
 <li>Fix the "Open" command for EXE files not having an icon with the Command bar icons option enabled</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aerexplorer 1.8.0]]></title>
-        <id>https://windhawk.net/mods/aerexplorer#6944547fe6da8b6465a3cc6d1d000458e0fe0dd7</id>
-        <link href="https://windhawk.net/mods/aerexplorer"/>
-        <updated>2025-08-01T17:06:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixes for classic theme</li>
-<li>NOTE: Arrows not showing on the navigation pane is a bug in comctl32.dll that will probably be fixed in a separate mod at another time.</li>
-<li>Use <code>LoadLibraryExW</code> with <code>LOAD_LIBRARY_SEARCH_SYSTEM32</code> (#2063)</li>
-<li>Option for "Views" dropdown on left like Windows Vista</li>
-<li>Option for icons on all command bar items like Windows Vista</li>
-<li>Reject ExplorerFrame.dll with a build number higher than 21332 (#1618)</li>
 </ul>]]></content>
         <author>
             <name>aubymori</name>
