@@ -156,6 +156,21 @@ styles, such as the font color and size.
   $description: >-
     The update interval, in seconds, of the system performance metrics such as
     CPU and RAM usage.
+- NetworkMetricsUnit: mbs
+  $name: Network metrics unit
+  $description: >-
+    The unit to use for displaying the upload/download transfer rate.
+  $options:
+  - mbs: MB/s
+  - mbits: MBit/s
+- NetworkMetricsShowUnit: true
+  $name: Network metrics show unit
+  $description: Show the unit next to the upload/download transfer rate.
+- NetworkMetricsFixedDecimals: -1
+  $name: Network metrics fixed decimal places
+  $description: >-
+    Always use this amount of decimal places for the upload/download transfer rate
+    (-1 means auto/same width).
 - WebContentWeatherLocation: ""
   $name: Weather location
   $description: >-
@@ -417,6 +432,11 @@ enum class ContentMode {
     xmlHtml,
 };
 
+enum class NetworkMetricsUnits {
+    mbs,
+    mbits,
+};
+
 struct WebContentsSettings {
     StringSetting url;
     StringSetting blockStart;
@@ -454,6 +474,9 @@ struct {
     int maxWidth;
     int textSpacing;
     int dataCollectionUpdateInterval;
+    NetworkMetricsUnits networkMetricsUnit;
+    bool networkMetricsShowUnit;
+    int networkMetricsFixedDecimals;
     StringSetting webContentWeatherLocation;
     StringSetting webContentWeatherFormat;
     WebContentWeatherUnits webContentWeatherUnits;
@@ -1917,24 +1940,46 @@ std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
 }
 
 void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
-    double valMb = val / (1024 * 1024);
+    double valUnit;
+    PCWSTR unit = L"";
 
-    // Keep identical width for <1000 values.
-    int digitsAfterDecimal = 0;
-    PCWSTR prefix = L"";
-    if (valMb < 10) {
-        digitsAfterDecimal = 2;
-    } else if (valMb < 100) {
-        digitsAfterDecimal = 1;
-    } else if (valMb < 1000) {
-        // Punctuation Space.
-        prefix = L"\u2008";
+    switch (g_settings.networkMetricsUnit) {
+        case NetworkMetricsUnits::mbs:
+            valUnit = val / (1024 * 1024);
+            unit = L" MB/s";
+            break;
+        case NetworkMetricsUnits::mbits:
+            valUnit = val * 8.0 / 1000000.0;
+            unit = L" MBit/s";
+            break;
     }
 
-    std::wstring valMbFormatted = FormatLocaleNum(valMb, digitsAfterDecimal);
+    if (!g_settings.networkMetricsShowUnit) {
+        unit = L"";
+    }
 
-    swprintf_s(buffer, bufferSize, L"%s%s MB/s", prefix,
-               valMbFormatted.c_str());
+    int digitsAfterDecimal = 0;
+    PCWSTR prefix = L"";
+
+    if (g_settings.networkMetricsFixedDecimals == -1) {
+        // Keep identical width for <1000 values.
+        if (valUnit < 10) {
+            digitsAfterDecimal = 2;
+        } else if (valUnit < 100) {
+            digitsAfterDecimal = 1;
+        } else if (valUnit < 1000) {
+            // Punctuation Space.
+            prefix = L"\u2008";
+        }
+    }
+    else {
+        digitsAfterDecimal = g_settings.networkMetricsFixedDecimals;
+    }
+
+    std::wstring valUnitFormatted = FormatLocaleNum(valUnit, digitsAfterDecimal);
+
+    swprintf_s(buffer, bufferSize, L"%s%s%s", prefix,
+               valUnitFormatted.c_str(), unit);
 }
 
 void FormatPercentValue(int val, PWSTR buffer, size_t bufferSize) {
@@ -3507,6 +3552,17 @@ void LoadSettings() {
     g_settings.textSpacing = Wh_GetIntSetting(L"TextSpacing");
     g_settings.dataCollectionUpdateInterval =
         Wh_GetIntSetting(L"DataCollectionUpdateInterval");
+    
+    g_settings.networkMetricsUnit = NetworkMetricsUnits::mbs;
+    StringSetting networkMetricsUnit =
+        StringSetting::make(L"NetworkMetricsUnit");
+    if (wcscmp(networkMetricsUnit, L"mbits") == 0) {
+        g_settings.networkMetricsUnit = NetworkMetricsUnits::mbits;
+    }
+
+    g_settings.networkMetricsShowUnit = Wh_GetIntSetting(L"NetworkMetricsShowUnit");
+    g_settings.networkMetricsFixedDecimals = Wh_GetIntSetting(L"NetworkMetricsFixedDecimals");
+
     g_settings.webContentWeatherLocation =
         StringSetting::make(L"WebContentWeatherLocation");
     g_settings.webContentWeatherFormat =
