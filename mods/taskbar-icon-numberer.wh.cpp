@@ -8,7 +8,7 @@
 // @homepage        https://tightcorner.substack.com/p/reverse-engineering-windows-11s-taskbar
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -Wextra -lcomctl32
+// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -735,6 +735,7 @@ void WINAPI TaskListButton_UpdateBadgeSize_Hook(void* pThis) {
 
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
