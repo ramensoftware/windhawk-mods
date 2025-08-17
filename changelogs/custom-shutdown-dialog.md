@@ -1,3 +1,8 @@
+## 1.2.0 ([Aug 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cf2747a1e098e6c5840eadc398ae88f1b87271cc/mods/custom-shutdown-dialog.wh.cpp))
+
+- Don't rely on symbol hooks for shutdown dialog
+- Allow user to replace disconnect dialog
+
 ## 1.1.1 ([Nov 10, 2024](https://github.com/ramensoftware/windhawk-mods/blob/0e446407ccb4725b2eb9061b584e45e304a281ad/mods/custom-shutdown-dialog.wh.cpp))
 
 - Remove unnecessary symbol hook, `LogoffWindowsDialog` is exported by ordinal

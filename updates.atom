@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-15T19:15:21.000Z</updated>
+    <updated>2025-08-17T18:10:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom Shutdown Dialog 1.2.0]]></title>
+        <id>https://windhawk.net/mods/custom-shutdown-dialog#cf2747a1e098e6c5840eadc398ae88f1b87271cc</id>
+        <link href="https://windhawk.net/mods/custom-shutdown-dialog"/>
+        <updated>2025-08-17T18:10:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Don't rely on symbol hooks for shutdown dialog</li>
+<li>Allow user to replace disconnect dialog</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.6.2]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#725fd582986a072d0dc02c11281a56d30c3c2576</id>
@@ -279,17 +293,6 @@ The differences between this mod and the other one are as follows:</p>
         <link href="https://windhawk.net/mods/legacy-power-flyout"/>
         <updated>2025-08-02T09:19:03.000Z</updated>
         <content type="html"><![CDATA[<p>Enables legacy power flyout on Windows 10 taskbar (running under either Windows 10 or Windows 11).</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Legacy (Win32) sound volume flyout 1.0.0]]></title>
-        <id>https://windhawk.net/mods/legacy-sound-flyout#4121e230d3bc5efef7f372c7f64c487a4341d61f</id>
-        <link href="https://windhawk.net/mods/legacy-sound-flyout"/>
-        <updated>2025-08-02T09:18:51.000Z</updated>
-        <content type="html"><![CDATA[<p>Enables legacy sound volume flyout on Windows 10 taskbar (running under either Windows 10 or Windows 11).</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
