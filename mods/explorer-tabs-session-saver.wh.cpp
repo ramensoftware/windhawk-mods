@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              explorer-tabs-session-saver
 // @name            Explorer Tabs Session Saver
-// @description     Saves and restores Explorer tabs when reopening
-// @version         1.0
-// @author          You
+// @description     Saves and restores your Explorer tab session
+// @github          https://github.com/noX1st
+// @version         1.0.0
+// @author          noX1st
 // @include         explorer.exe
 // @compilerOptions -lshlwapi -lole32 -loleaut32 -lshell32 -luuid
 // ==/WindhawkMod==
