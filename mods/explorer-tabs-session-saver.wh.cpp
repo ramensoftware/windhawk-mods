@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-tabs-session-saver
 // @name            Explorer Tabs Session Saver
-// @description     Saves and restores your Explorer tab session
-// @github          https://github.com/noX1st
+// @description     Saves and restores Explorer tabs when reopening
+// @github          https://github.com/noX1st/explorer-tabs-session-saver
 // @version         1.0.0
 // @author          noX1st
 // @include         explorer.exe
@@ -27,15 +27,6 @@ Tab session save path - C:\Users\"User"\AppData\Roaming\WindhawkModsData\explore
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
-/*
-- enableSaving: true
-  $name: Enable saving and restoring
-  $description: >-
-    Enables or disables the main feature of the mod: saving and restoring tabs.
-*/
-// ==/WindhawkModSettings==
-
 #include <windhawk_api.h>
 #include <windows.h>
 #include <shlobj.h>
@@ -50,24 +41,20 @@ HANDLE g_hMainThread = NULL;
 bool   g_bIsRunning  = false;
 std::vector<std::wstring> g_lastKnownTabs;
 static volatile LONG g_restoreScheduled = 0;
-bool g_isSavingEnabled = true;
-
-void LoadSettings() {
-    g_isSavingEnabled = Wh_GetIntSetting(L"enableSaving");
-}
 
 std::wstring GetTabListFilePath() {
-    wchar_t* appDataPath = NULL;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appDataPath))) {
-        std::wstring modPath = appDataPath;
-        CoTaskMemFree(appDataPath);
-
-        modPath += L"\\WindhawkModsData\\explorer-tabs-session-saver";
-        SHCreateDirectoryExW(NULL, modPath.c_str(), NULL);
-        modPath += L"\\LastExplorerTabs.txt";
-        return modPath;
+    wchar_t modPathBuffer[MAX_PATH];
+    if (!Wh_GetModStoragePath(modPathBuffer, MAX_PATH)) {
+        Wh_Log(L"Failed to get mod storage path.");
+        return L"";
     }
-    return L"";
+
+    std::wstring modPath = modPathBuffer;
+
+    SHCreateDirectoryExW(NULL, modPath.c_str(), NULL);
+
+    modPath += L"\\LastExplorerTabs.txt";
+    return modPath;
 }
 
 std::vector<std::wstring> GetCurrentTabs() {
@@ -79,7 +66,7 @@ std::vector<std::wstring> GetCurrentTabs() {
 
     long count = 0;
     pShellWindows->get_Count(&count);
-    for (long i = 0; i < count; i++) {
+    for (long i = count - 1; i >= 0; i--) {
         VARIANT v; VariantInit(&v); v.vt = VT_I4; v.lVal = i;
         IDispatch* pDispatch = NULL;
         if (SUCCEEDED(pShellWindows->Item(v, &pDispatch)) && pDispatch) {
@@ -115,12 +102,14 @@ std::vector<std::wstring> GetCurrentTabs() {
         }
     }
     pShellWindows->Release();
+    std::reverse(currentTabs.begin(), currentTabs.end());
     return currentTabs;
 }
 
 void WriteTabsToFile(const std::vector<std::wstring>& tabs) {
     std::wstring filePath = GetTabListFilePath();
     if (filePath.empty()) return;
+
     std::wofstream tabFile(filePath.c_str());
     if (tabFile.is_open()) {
         for (const auto& tab : tabs) {
@@ -132,6 +121,7 @@ void WriteTabsToFile(const std::vector<std::wstring>& tabs) {
 void RestoreTabs() {
     std::wstring filePath = GetTabListFilePath();
     if (filePath.empty()) return;
+
     std::wifstream tabFile(filePath.c_str());
     if (!tabFile.is_open()) return;
 
@@ -141,7 +131,9 @@ void RestoreTabs() {
         if (!line.empty()) paths.push_back(line);
     }
     tabFile.close();
+
     DeleteFileW(filePath.c_str());
+
     if (paths.empty()) return;
 
     for (const auto& path : paths) {
@@ -155,18 +147,17 @@ void RestoreTabs() {
     }
 }
 
-typedef HWND (WINAPI *CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD,
-    int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-CreateWindowExW_t pCreateWindowExW_Orig = NULL;
-
-DWORD WINAPI RestoreTabsThread(LPVOID) {
+DWORD WINAPI RestoreTabsThread(LPVOID lpParam) {
     // wait until the first Explorer window is ready
-    HWND hwnd = NULL;
-    for (int i = 0; i < 30 && !(hwnd = FindWindowW(L"CabinetWClass", NULL)); i++) {
-        Sleep(100);
+    HWND targetHwnd = (HWND)lpParam;
+    if (!IsWindow(targetHwnd)) {
+        Wh_Log(L"RestoreTabsThread: Invalid window handle received.");
+        return 1;
     }
 
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    Wh_Log(L"RestoreTabsThread: Triggered for window %p.", targetHwnd);
+
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (SUCCEEDED(hr)) {
         RestoreTabs();
         CoUninitialize();
@@ -174,26 +165,28 @@ DWORD WINAPI RestoreTabsThread(LPVOID) {
     return 0;
 }
 
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) 
-{
-    HWND hwnd = pCreateWindowExW_Orig(dwExStyle, lpClassName, lpWindowName,
-                                      dwStyle, X, Y, nWidth, nHeight,
-                                      hWndParent, hMenu, hInstance, lpParam);
+typedef HWND (WINAPI *CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+CreateWindowExW_t pCreateWindowExW_Orig = NULL;
 
-    if (!hwnd) {
-        return hwnd;
-    }
+HWND WINAPI CreateWindowExW_Hook(
+    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
+    int X, int Y, int nWidth, int nHeight,
+    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam
+) {
+    HWND hwnd = pCreateWindowExW_Orig(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
-    wchar_t cls[64] = {};
-    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && lstrcmpW(cls, L"CabinetWClass") == 0) {
-        // trigger restore once per Explorer restart
-        if (InterlockedCompareExchange(&g_restoreScheduled, 1, 0) == 0) {
-            std::wstring filePath = GetTabListFilePath();
-            if (!filePath.empty() && PathFileExistsW(filePath.c_str())) {
-                HANDLE h = CreateThread(NULL, 0, RestoreTabsThread, NULL, 0, NULL);
-                if (h) CloseHandle(h);
+    if (hwnd) {
+        wchar_t className[64];
+        if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) && lstrcmpW(className, L"CabinetWClass") == 0) {
+            // trigger restore once per Explorer restart
+            if (InterlockedCompareExchange(&g_restoreScheduled, 1, 0) == 0) {
+                std::wstring filePath = GetTabListFilePath();
+                if (!filePath.empty() && PathFileExistsW(filePath.c_str())) {
+                    HANDLE hThread = CreateThread(NULL, 0, RestoreTabsThread, (LPVOID)hwnd, 0, NULL);
+                    if (hThread) {
+                        CloseHandle(hThread);
+                    }
+                }
             }
         }
     }
@@ -202,60 +195,53 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 }
 
 DWORD WINAPI MainThread(LPVOID) {
-    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     while (g_bIsRunning) {
-        std::vector<std::wstring> tabs = GetCurrentTabs();
-        if (!tabs.empty()) {
-            std::sort(tabs.begin(), tabs.end());
-            if (tabs != g_lastKnownTabs) {
-                WriteTabsToFile(tabs);
-                g_lastKnownTabs = std::move(tabs);
+        std::vector<std::wstring> currentTabs = GetCurrentTabs();
+        
+        if (currentTabs != g_lastKnownTabs) {
+            if (currentTabs.empty() && !g_lastKnownTabs.empty()) {
+                WriteTabsToFile(g_lastKnownTabs);
+                Wh_Log(L"Last explorer window closed, saving final session.");
             }
-        } else {
-            // reset restore flag when no Explorer windows
+            else {
+                WriteTabsToFile(currentTabs);
+            }
+            
+            g_lastKnownTabs = currentTabs;
+        }
+
+        if (currentTabs.empty()) {
             InterlockedExchange(&g_restoreScheduled, 0);
         }
+
         Sleep(2000);
     }
+
     CoUninitialize();
     return 0;
 }
 
-BOOL Wh_ModInit() {
-    LoadSettings();
 
-    if (!g_isSavingEnabled) {
-        return TRUE;
-    }
+BOOL Wh_ModInit() {
+    Wh_Log(L"Initializing Explorer Tabs Session Saver...");
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&pCreateWindowExW_Orig);
+    
     g_bIsRunning = true;
     g_hMainThread = CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
+    
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    if (!g_isSavingEnabled) {
-        return;
-    }
-    
+    Wh_Log(L"Uninitializing Explorer Tabs Session Saver...");
+
     g_bIsRunning = false;
     if (g_hMainThread) {
         WaitForSingleObject(g_hMainThread, 2500);
         CloseHandle(g_hMainThread);
         g_hMainThread = NULL;
     }
-
-    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    std::vector<std::wstring> finalTabs = GetCurrentTabs();
-    if (!finalTabs.empty()) {
-        WriteTabsToFile(finalTabs);
-    }
-    CoUninitialize();
-}
-
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    *bReload = TRUE;
-    return TRUE;
 }
