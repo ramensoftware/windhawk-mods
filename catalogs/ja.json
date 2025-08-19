@@ -1746,6 +1746,27 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-tabs-session-saver": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1755630528000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1755630528000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "noX1st",
+                "compilerOptions": "-lshlwapi -lole32 -loleaut32 -lshell32 -luuid",
+                "description": "Saves and restores Explorer tabs when reopening",
+                "github": "https://github.com/noX1st",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer Tabs Session Saver",
+                "version": "1.0.0"
+            }
+        },
         "explorer-toolbar-links-item": {
             "details": {
                 "defaultSorting": 1548,

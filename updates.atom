@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-19T12:37:52.000Z</updated>
+    <updated>2025-08-19T19:08:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Tabs Session Saver 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-tabs-session-saver#d68af8498ecee1053d17b0deffc195638d859df2</id>
+        <link href="https://windhawk.net/mods/explorer-tabs-session-saver"/>
+        <updated>2025-08-19T19:08:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertabssessionsaver">Explorer Tabs Session Saver</h1>
+<p>This mod saves open Explorer tabs and automatically restores them when Explorer restarts.</p>
+<p><img src="https://i.imgur.com/5ehPFaL.gif" alt="Demonstration" /></p>
+<p>It works independently of the built-in Windows feature "Restore previous folder windows at logon".</p>
+<p>Tab session save path - C:\Users\"User"\AppData\Roaming\WindhawkModsData\explorer-tabs-session-saver\LastExplorerTabs.txt</p>
+<p><strong>NOTE:</strong> To restore tabs into a single Explorer window, the <a href="https://github.com/w4po/ExplorerTabUtility">Explorer Tab Utility</a> program is required with its "Window Hook" feature enabled (or any similar program with such functionality). Otherwise, each tab will be restored in its own separate window.</p>
+<p><em>Tested on Windows 11 24H2 26100.4946.</em></p>]]></content>
+        <author>
+            <name>noX1st</name>
+            <uri>https://github.com/noX1st</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix white flashes in explorer 1.1]]></title>
         <id>https://windhawk.net/mods/fix-explorer-white-flash#ad4983dc8113ccf21e2bc5aecc5fadec6b58965e</id>
@@ -277,25 +294,6 @@ so does not need the download of the debugging symbols.</p>]]></content>
         <updated>2025-08-02T15:30:34.000Z</updated>
         <content type="html"><![CDATA[<p>Workaround for the Firefox bug <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1950145">1950145</a> (glitched window borders in Classic theme).
 It affects Firefox builds <code>129.0a1</code> and above.</p>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Legacy (Win32) clock flyout (Win11-friendly) 1.0.0]]></title>
-        <id>https://windhawk.net/mods/legacy-clock-flyout#a7e5954b6215ccfd2cfc95a3b8c5062fea86e2cb</id>
-        <link href="https://windhawk.net/mods/legacy-clock-flyout"/>
-        <updated>2025-08-02T14:03:04.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod restores the Win32 tray clock flyout on Windows 10 taskbar which may run under Windows 10 or Windows 11.
-I tried to push this as an update to the mod <code>Win32 Tray Clock Experience</code> but received no response from the author.
-The differences between this mod and the other one are as follows:</p>
-<ul>
-<li>This mod is is compatible with a Win10 taskbar running under Windows 11.</li>
-<li>This mod hooks only a Win API function, thus does not need the download of the symbols.</li>
-<li>This mod is closer to the original code from Explorer Patcher.</li>
-</ul>
-<p><img src="https://i.imgur.com/FLSsrbt.png" alt="Legacy tray clock flyout" /></p>]]></content>
         <author>
             <name>anixx</name>
             <uri>https://github.com/Anixx</uri>
