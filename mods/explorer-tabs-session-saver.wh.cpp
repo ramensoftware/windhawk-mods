@@ -2,7 +2,7 @@
 // @id              explorer-tabs-session-saver
 // @name            Explorer Tabs Session Saver
 // @description     Saves and restores Explorer tabs when reopening
-// @github          https://github.com/noX1st/explorer-tabs-session-saver
+// @github          https://github.com/noX1st
 // @version         1.0.0
 // @author          noX1st
 // @include         explorer.exe
