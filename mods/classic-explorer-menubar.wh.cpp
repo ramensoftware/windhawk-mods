@@ -2,7 +2,7 @@
 // @id              classic-explorer-menubar
 // @name            Classic Explorer Menubar
 // @description     Turns off theming in Explorer menu bar
-// @version         1.0
+// @version         1.0.1
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         explorer.exe
@@ -33,8 +33,10 @@ LRESULT (THISCALL *CMenuStaticToolbar__DefWindowProc_orig)(void *pThis, HWND hWn
 LRESULT THISCALL CMenuStaticToolbar__DefWindowProc_hook(void *pThis, HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     HTHEME hTheme = OpenThemeData(hWnd, L"TOOLBAR");
+    WCHAR szClassName[256];
+    GetClassNameW(GetAncestor(hWnd, GA_ROOT), szClassName, 256);
 
-    if (hTheme)
+    if (hTheme && !wcscmp(szClassName, L"CabinetWClass"))
     {
         SetWindowTheme(hWnd, L"", L"");
         SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL);
@@ -48,7 +50,7 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L"Init");
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32) 
     {
         Wh_Log(L"Failed to load shell32.dll");

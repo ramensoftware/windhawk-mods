@@ -2,7 +2,7 @@
 // @id              titlebar-for-everyone
 // @name            Titlebar For Everyone
 // @description     Force native title bars and frames for various programs
-// @version         0.2
+// @version         0.4
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -30,6 +30,7 @@
 // @include         hwp.exe
 // @include         Photos.exe
 // @include         MuseScore*.exe
+// @include         ms-teams.exe
 // @compilerOptions -lcomctl32 -luxtheme -lgdi32 -lshlwapi
 // ==/WindhawkMod==
 
@@ -52,17 +53,17 @@
 * WinUI apps
     * PowerToys apps
     * New Photos app
-    * Known issues: Some WinUI apps may show visual artifacts in their custom title bar area
 * WPF apps
     * Visual Studio (tested: 2022)
     * PowerToys Workspaces
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
     * Tested: 2010 and LTSC 2021 (Win10 mode)
-    * Known issues: On LTSC 2021, only Classic frames are shown (neither Basic nor DWM)
+    * Known issues: Only Classic frames are shown, neither Basic nor DWM, unless it's using the Aero mode (in 2007 or 2010)
 * Some WebView2 apps
     * New Outlook
     * Microsoft 365 Copilot
+    * Microsoft Teams (new unified app, not the Electron-based Teams Classic)
 * Qt apps
     * MuseScore
     * Known issues: If the mod loads after a window is open, the window content will look downscaled a bit
@@ -76,6 +77,10 @@
     * For Electron apps: try finding a built-in option to enable native frames first. If missing, patch files in `resources\app(.asar)` to override `frame: false` or `titleBarStyle: 'hidden'` to `frame: true` or `titleBarStyle: 'default'`
     * 1Password: add `"appearance.useCustomTitleBar": false` to `%localappdata%\1Password\settings\settings.json`
     * VSCode & forks (including Windhawk UI): Press F1, search and click `Preferences: Open Settings (UI)`, find `Window: Title Bar Style`, and set it to `native`
+* Programs that this mod can remove duplicate window controls
+    * Chromium browsers (noted above)
+    * WinUI apps (PowerToys, New Photos)
+    * New Teams
 ## Not supported programs
 * UWP apps
     * Use [this mod](https://winclassic.net/thread/2041/remove-windows-10s-uwp-titlebars) instead
@@ -86,7 +91,7 @@
 * NVIDIA apps
     * In the executable folder, look for `<exe name without extension>.json` (usually in the same directory or in `\Resources`), and change `nv-custom-black-window=true` to false
 ## Notes
-* This mod does not deal with visual inconsistencies (e.g. duplicate window controls)
+* This mod does not deal with visual inconsistencies, such as duplicate window controls, except for programs noted above
 * Forcing the addition of your program to the inclusion list may work even if it's missing from the default list if it falls within the categories above (e.g., Chromium, WinUI)
 * For other apps, you'll need to try adjusting the subclassing logic to get your target window to be subclassed properly
 */
@@ -145,7 +150,8 @@
 enum WorkingMode {
     MODE_DEFAULT,
     MODE_OUTLOOK,
-    MODE_CHROMIUM
+    MODE_CHROMIUM,
+    MODE_VS
 };
 
 enum ClientEdgeSetting {
@@ -169,6 +175,31 @@ wchar_t steamIndexHtmlModded[MAX_PATH];
 BOOL isBrave = FALSE;
 
 #pragma region Subclassing
+LRESULT CALLBACK HideSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    switch (uMsg) {
+        case WM_SHOWWINDOW:
+            return 0;
+        case WM_WINDOWPOSCHANGING: {
+            WINDOWPOS* pos = (WINDOWPOS*)lParam;
+            if (pos->flags & SWP_SHOWWINDOW) {
+                pos->flags &= ~SWP_SHOWWINDOW;
+                pos->flags |= SWP_HIDEWINDOW;
+            }
+            break;
+        }
+        case WM_WINDOWPOSCHANGED: {
+            WINDOWPOS* pos = (WINDOWPOS*)lParam;
+            if ((pos->flags & SWP_SHOWWINDOW) && IsWindowVisible(hWnd)) {
+                ShowWindow(hWnd, SW_HIDE);  // Backup in case it still becomes visible
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_PAINT:
@@ -187,9 +218,11 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         }
         break;
         case WM_NCCALCSIZE:
+        {
             if (mode == MODE_OUTLOOK) {
                 DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
+        }
         case WM_NCACTIVATE:
         case WM_NCPAINT:
         case WM_NCHITTEST:
@@ -231,6 +264,12 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
         return;
     }
 
+    // Fix a specific issue with Visual Studio's "Show/Hide debug targets" window
+    // It simply renders nothing when WM_NCCALCSIZE is subclassed
+    if (mode == MODE_VS && (style & 0x60C0000) != 0 && exStyle == 0x80101) {
+        return;
+    }
+
     if (!onlyUpdateStyle) {
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
             Wh_Log(L"Subclassed %p", hWnd);
@@ -253,6 +292,45 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
     SetWindowLongW(hWnd, GWL_STYLE, style);
     SetWindowLongW(hWnd, GWL_EXSTYLE, exStyle);
     SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+}
+
+void SetWinUICustomControlsVisibility(HWND parent, BOOL visible) {
+    HWND ncInputSrcHwnd = FindWindowExW(parent, NULL, L"InputNonClientPointerSource", NULL);
+    HWND windowControlHwnd = FindWindowExW(parent, NULL, L"ReunionWindowingCaptionControls", NULL);
+    HWND teamsOverlayHwnd = FindWindowExW(parent, NULL, L"TeamsOverlay", NULL);
+    if (ncInputSrcHwnd) {
+        ShowWindow(ncInputSrcHwnd, visible);
+        if (visible) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(ncInputSrcHwnd, HideSubclassProc);
+            Wh_Log(L"Restored InputNonClientPointerSource");
+        } else {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(ncInputSrcHwnd, HideSubclassProc, 0)) {
+                Wh_Log(L"Hid InputNonClientPointerSource (%p)", ncInputSrcHwnd);
+            }
+        }
+    }
+    if (windowControlHwnd) {
+        ShowWindow(windowControlHwnd, visible);
+        if (visible) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(windowControlHwnd, HideSubclassProc);
+            Wh_Log(L"Restored TeamsOverlay");
+        } else {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(windowControlHwnd, HideSubclassProc, 0)) {
+                Wh_Log(L"Hid TeamsOverlay (%p)", windowControlHwnd);
+            }
+        }
+    }
+    if (teamsOverlayHwnd) {
+        ShowWindow(teamsOverlayHwnd, visible);
+        if (visible) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(teamsOverlayHwnd, HideSubclassProc);
+            Wh_Log(L"Restored ReunionWindowingCaptionControls");
+        } else {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(teamsOverlayHwnd, HideSubclassProc, 0)) {
+                Wh_Log(L"Hid ReunionWindowingCaptionControls (%p)", teamsOverlayHwnd);
+            }
+        }
+    }
 }
 
 BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
@@ -278,6 +356,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
         // WinUI
         } else if (wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
             isTarget = true;
+            SetWinUICustomControlsVisibility(hWnd, FALSE);
         // Steam
         } else if (wcscmp(className, L"SDL_app") == 0) {
             isTarget = true;
@@ -304,6 +383,10 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
         // Qt apps
         } else if (wcsstr(className, L"QWindowIcon") != 0) {
             isTarget = true;
+        // New Teams
+        } else if (wcsstr(className, L"TeamsWebView") != 0) {
+            isTarget = true;
+            SetWinUICustomControlsVisibility(hWnd, FALSE);
         }
 
         if (isTarget) {
@@ -319,6 +402,7 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     // Unsubclass all windows belonging to this process
     if (pid == GetCurrentProcessId()) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+        SetWinUICustomControlsVisibility(hWnd, TRUE);
         if (lParam == 1) {
             SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
         }
@@ -368,6 +452,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
         } else if (wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
             if (dwStyle & WS_CAPTION) {
                 isTarget = true;
+                SetWinUICustomControlsVisibility(hWnd, FALSE);
             }
         // Steam with workarounds
         } else if (isSteam && wcscmp(className, L"Chrome_RenderWidgetHostHWND") == 0) {
@@ -385,6 +470,18 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
         // Qt apps
         } else if (wcsstr(className, L"QWindowIcon") != 0) {
             isTarget = true;
+        // New Teams
+        } else if (wcsstr(className, L"TeamsWebView") != 0) {
+            isTarget = true;
+            SetWinUICustomControlsVisibility(hWnd, FALSE);
+        // WinUI / Teams custom controls
+        } else if (wcsstr(className, L"InputNonClientPointerSource") != 0 ||
+            wcsstr(className, L"ReunionWindowingCaptionControls") != 0 ||
+            wcsstr(className, L"TeamsOverlay") != 0
+        ) {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, HideSubclassProc, 0)) {
+                Wh_Log(L"Hid %s (%p)", className, hWnd);
+            }
         }
 
         if (isTarget) {
@@ -573,7 +670,12 @@ BOOL Wh_ModInit() {
         steamPrepared = PrepareSteamIndexHtml();
     }
 
-    isBrave = wcsstr(_wcsupr(modulePath), L"BRAVE.EXE") != NULL;
+    isBrave = wcsstr(modulePath, L"BRAVE.EXE") != NULL;
+
+    if (wcsstr(modulePath, L"DEVENV.EXE") != NULL) {
+        Wh_Log(L"Visual Studio detected");
+        mode = MODE_VS;
+    }
 
     LoadSettings();
 
