@@ -2,7 +2,7 @@
 // @id              windows-11-file-explorer-styler
 // @name            Windows 11 File Explorer Styler
 // @description     Customize the File Explorer with themes contributed by others or create your own
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -54,6 +54,12 @@ NoCommandBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-
 [![MicaBar](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/MicaBar/screenshot-small.png)
 \
 MicaBar](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/MicaBar/README.md)
+
+[![Translucent
+Explorer11](https://raw.githubusercontent.com/ramensoftware/windows-11-file-explorer-styling-guide/main/Themes/Translucent%20Explorer11/screenshot-small.png)
+\
+Translucent
+Explorer11](https://github.com/ramensoftware/windows-11-file-explorer-styling-guide/blob/main/Themes/Translucent%20Explorer11/README.md)
 
 More themes can be found in the **Themes** section of [The Windows 11 file
 explorer styling
@@ -109,8 +115,10 @@ specified visual state.
 
 For the XAML syntax, in addition to the built-in taskbar objects, the mod
 provides a built-in blur brush via the `WindhawkBlur` object, which supports the
-`BlurAmount` and `TintColor` properties. For example: `Fill:=<WindhawkBlur
-BlurAmount="10" TintColor="#80FF00FF"/>`.
+`BlurAmount`, `TintColor`, and `TintOpacity` properties. For example:
+`Fill:=<WindhawkBlur BlurAmount="10" TintColor="#80FF00FF"/>`. Theme resources
+are also supported, for example: `Fill:=<WindhawkBlur BlurAmount="18"
+TintColor="{ThemeResource SystemAccentColorDark1}" TintOpacity="0.5"/>`.
 
 Targets and styles starting with two slashes (`//`) are ignored. This can be
 useful for temporarily disabling a target or style.
@@ -146,6 +154,7 @@ from the **TranslucentTB** project.
   - Tabless: Tabless
   - NoCommandBar: NoCommandBar
   - MicaBar: MicaBar
+  - Translucent Explorer11: Translucent Explorer11
 - controlStyles:
   - - target: ""
       $name: Target
@@ -340,6 +349,31 @@ const Theme g_themeMicaBar = {{
         L"Background=Transparent"}},
 }, {}, /*explorerFrameContainerHeight=*/0};
 
+const Theme g_themeTranslucent_Explorer11 = {{
+    ThemeTargetStyles{L"Grid#CommandBarControlRootGrid", {
+        L"Background=Transparent",
+        L"BorderThickness=0,0,0,1",
+        L"BorderBrush=#40A0A0A0"}},
+    ThemeTargetStyles{L"CommandBar#FileExplorerCommandBar", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Grid#NavigationBarControlGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"TabViewItem > Grid#LayoutRoot > Canvas > Microsoft.UI.Xaml.Shapes.Path#SelectedBackgroundPath", {
+        L"Fill=#40404040"}},
+    ThemeTargetStyles{L"Grid#HomeViewRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"FileExplorerExtensions.GalleryViewControl#GalleryViewControl > Grid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.Grid#GalleryRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"ToolTip", {
+        L"Background:=<AcrylicBrush TintColor=\"#121212\" Opacity=\"0.3\"/>"}},
+    ThemeTargetStyles{L"Grid#DetailsViewControlRootGrid", {
+        L"Background=Transparent"}},
+    ThemeTargetStyles{L"StackPanel#DetailsViewThumbnail > Grid", {
+        L"Background=Transparent"}},
+}, {}, /*explorerFrameContainerHeight=*/0};
+
 // clang-format on
 
 struct {
@@ -469,6 +503,10 @@ void VisualTreeWatcher::UnadviseVisualTreeChange()
 HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
 {
     Wh_Log(L"========================================");
+
+    if (!g_initializedForThread) {
+        Wh_Log(L"NOTE: Not initialized for thread %u", GetCurrentThreadId());
+    }
 
     switch (mutationType)
     {
@@ -1473,7 +1511,7 @@ void SetOrClearValue(DependencyObject elementDo,
             std::get_if<winrt::Windows::Foundation::IInspectable>(
                 &overrideValue)) {
         value = *inspectable;
-    } else if (auto* blurBrashParams =
+    } else if (auto* blurBrushParams =
                    std::get_if<XamlBlurBrushParams>(&overrideValue)) {
         if (auto uiElement = elementDo.try_as<UIElement>()) {
             auto compositor =
@@ -1481,8 +1519,8 @@ void SetOrClearValue(DependencyObject elementDo,
                     .Compositor();
 
             value = winrt::make<XamlBlurBrush>(std::move(compositor),
-                                               blurBrashParams->blurAmount,
-                                               blurBrashParams->tint);
+                                               blurBrushParams->blurAmount,
+                                               blurBrushParams->tint);
         } else {
             Wh_Log(L"Can't get UIElement for blur brush");
             return;
@@ -1596,13 +1634,17 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     }
     substr = substr.substr(0, substr.size() - std::size(kWindhawkBlurSuffix));
 
-    auto value = XamlBlurBrushParams{
-        .blurAmount = 0,
-        .tint = {},
-    };
+    bool pendingTintColorThemeResource = false;
+    wf::Numerics::float4 tint{};
+    float tintOpacity = std::numeric_limits<float>::quiet_NaN();
+    float blurAmount = 0;
 
-    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
+    constexpr auto kTintColorThemeResourcePrefix =
+        L"TintColor=\"{ThemeResource"sv;
+    constexpr auto kTintColorThemeResourceSuffix = L"}\""sv;
     constexpr auto kTintColorPrefix = L"TintColor=\"#"sv;
+    constexpr auto kTintOpacityPrefix = L"TintOpacity=\""sv;
+    constexpr auto kBlurAmountPrefix = L"BlurAmount=\""sv;
     for (const auto prop : SplitStringView(substr, L" ")) {
         const auto propSubstr = TrimStringView(prop);
         if (propSubstr.empty()) {
@@ -1612,12 +1654,44 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
         Wh_Log(L"  %.*s", static_cast<int>(propSubstr.length()),
                propSubstr.data());
 
-        if (propSubstr.starts_with(kBlurAmountPrefix) &&
-            propSubstr.back() == L'\"') {
-            auto valStr = propSubstr.substr(
-                std::size(kBlurAmountPrefix),
-                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
-            value.blurAmount = std::stoi(std::wstring(valStr));
+        if (pendingTintColorThemeResource) {
+            if (!propSubstr.ends_with(kTintColorThemeResourceSuffix)) {
+                throw std::runtime_error(
+                    "WindhawkBlur: Invalid TintColor theme resource syntax");
+            }
+
+            pendingTintColorThemeResource = false;
+
+            auto themeResourceName = propSubstr.substr(
+                0,
+                propSubstr.size() - std::size(kTintColorThemeResourceSuffix));
+
+            auto resources = Application::Current().Resources();
+            auto resource = resources.TryLookup(
+                winrt::box_value(winrt::hstring(themeResourceName)));
+            if (resource) {
+                if (auto colorBrush =
+                        resource.try_as<mux::Media::SolidColorBrush>()) {
+                    auto color = colorBrush.Color();
+                    tint = {color.R / 255.0f, color.G / 255.0f,
+                            color.B / 255.0f, color.A / 255.0f};
+                } else if (auto color =
+                               resource.try_as<winrt::Windows::UI::Color>()) {
+                    tint = {color->R / 255.0f, color->G / 255.0f,
+                            color->B / 255.0f, color->A / 255.0f};
+                } else {
+                    Wh_Log(L"Resource type is unsupported: %s",
+                           winrt::get_class_name(resource).c_str());
+                }
+            } else {
+                Wh_Log(L"Failed to find resource");
+            }
+
+            continue;
+        }
+
+        if (propSubstr == kTintColorThemeResourcePrefix) {
+            pendingTintColorThemeResource = true;
             continue;
         }
 
@@ -1645,14 +1719,50 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             uint8_t r = LOBYTE(HIWORD(valNum));
             uint8_t g = HIBYTE(LOWORD(valNum));
             uint8_t b = LOBYTE(LOWORD(valNum));
-            value.tint = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            tint = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+            continue;
+        }
+
+        if (propSubstr.starts_with(kTintOpacityPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kTintOpacityPrefix),
+                propSubstr.size() - std::size(kTintOpacityPrefix) - 1);
+            tintOpacity = std::stof(std::wstring(valStr));
+            continue;
+        }
+
+        if (propSubstr.starts_with(kBlurAmountPrefix) &&
+            propSubstr.back() == L'\"') {
+            auto valStr = propSubstr.substr(
+                std::size(kBlurAmountPrefix),
+                propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
+            blurAmount = std::stof(std::wstring(valStr));
             continue;
         }
 
         throw std::runtime_error("WindhawkBlur: Bad property");
     }
 
-    return value;
+    if (pendingTintColorThemeResource) {
+        throw std::runtime_error(
+            "WindhawkBlur: Unterminated TintColor theme resource");
+    }
+
+    if (!std::isnan(tintOpacity)) {
+        if (tintOpacity < 0.0f) {
+            tintOpacity = 0.0f;
+        } else if (tintOpacity > 1.0f) {
+            tintOpacity = 1.0f;
+        }
+
+        tint.w = tintOpacity;
+    }
+
+    return XamlBlurBrushParams{
+        .blurAmount = blurAmount,
+        .tint = tint,
+    };
 }
 
 Style GetStyleFromXamlSetters(const std::wstring_view type,
@@ -1727,7 +1837,9 @@ const PropertyOverrides& GetResolvedPropertyOverrides(
 
             for (const auto& rule : styleRules) {
                 propertyOverrideValues.push_back(
-                    ParseNonXamlPropertyOverrideValue(rule.value));
+                    rule.isXamlValue
+                        ? ParseNonXamlPropertyOverrideValue(rule.value)
+                        : std::nullopt);
 
                 xaml += L"        <Setter Property=\"";
                 xaml += EscapeXmlAttribute(rule.name);
@@ -2552,6 +2664,8 @@ void ProcessAllStylesFromSettings() {
         theme = &g_themeNoCommandBar;
     } else if (wcscmp(themeName, L"MicaBar") == 0) {
         theme = &g_themeMicaBar;
+    } else if (wcscmp(themeName, L"Translucent Explorer11") == 0) {
+        theme = &g_themeTranslucent_Explorer11;
     }
     Wh_FreeStringSetting(themeName);
 
@@ -2932,7 +3046,8 @@ XamlIslandViewAdapter_get_DesiredSizeInPhysicalPixels_Hook(void* pThis,
 }
 
 bool HookWindowsUIFileExplorerSymbols() {
-    HMODULE module = LoadLibrary(L"Windows.UI.FileExplorer.dll");
+    HMODULE module = LoadLibraryEx(L"Windows.UI.FileExplorer.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Couldn't load Windows.UI.FileExplorer.dll");
         return false;
@@ -2955,6 +3070,130 @@ bool HookWindowsUIFileExplorerSymbols() {
     return true;
 }
 
+PTP_TIMER g_statsTimer;
+
+bool StartStatsTimer() {
+    static constexpr WCHAR kStatsBaseUrl[] =
+        L"https://github.com/ramensoftware/"
+        L"windows-11-file-explorer-styling-guide/"
+        L"releases/download/stats-v1/";
+
+    ULONGLONG lastStatsTime = 0;
+    Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
+                      sizeof(lastStatsTime));
+
+    // -1 can be set for disabling the stats timer.
+    if (lastStatsTime == 0xFFFFFFFF'FFFFFFFF) {
+        return false;
+    }
+
+    FILETIME currentTimeFt;
+    GetSystemTimeAsFileTime(&currentTimeFt);
+
+    ULONGLONG currentTime = ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
+                            currentTimeFt.dwLowDateTime;
+
+    constexpr ULONGLONG k10Minutes = 10 * 60 * 10000000LL;
+    constexpr ULONGLONG k24Hours = 24 * 60 * 60 * 10000000LL;
+
+    ULONGLONG minDueTime = currentTime + k10Minutes;
+    ULONGLONG maxDueTime = currentTime + k24Hours;
+
+    ULONGLONG dueTime = k24Hours - (currentTime - lastStatsTime);
+    if (dueTime < minDueTime) {
+        dueTime = minDueTime;
+    } else if (dueTime > maxDueTime) {
+        dueTime = maxDueTime;
+    }
+
+    g_statsTimer = CreateThreadpoolTimer(
+        [](PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER) {
+            Wh_Log(L">");
+
+            string_setting_unique_ptr themeName(Wh_GetStringSetting(L"theme"));
+            if (!*themeName.get()) {
+                return;
+            }
+
+            HANDLE mutex =
+                CreateMutex(nullptr, FALSE, L"WindhawkStats_" WH_MOD_ID);
+            if (mutex) {
+                WaitForSingleObject(mutex, INFINITE);
+            }
+
+            ULONGLONG lastStatsTime = 0;
+            Wh_GetBinaryValue(L"statsTimerLastTime", &lastStatsTime,
+                              sizeof(lastStatsTime));
+
+            FILETIME currentTimeFt;
+            GetSystemTimeAsFileTime(&currentTimeFt);
+            ULONGLONG currentTime =
+                ((ULONGLONG)currentTimeFt.dwHighDateTime << 32) |
+                currentTimeFt.dwLowDateTime;
+
+            const WH_URL_CONTENT* content = nullptr;
+            if (currentTime - lastStatsTime >= k10Minutes) {
+                Wh_SetBinaryValue(L"statsTimerLastTime", &currentTime,
+                                  sizeof(currentTime));
+
+                std::wstring themeNameEscaped = themeName.get();
+                std::replace(themeNameEscaped.begin(), themeNameEscaped.end(),
+                             L' ', L'_');
+
+                std::wstring statsUrl = kStatsBaseUrl;
+                statsUrl += themeNameEscaped;
+                statsUrl += L".txt";
+
+                Wh_Log(L"Submitting stats to %s", statsUrl.c_str());
+
+                content = Wh_GetUrlContent(statsUrl.c_str(), nullptr);
+            } else {
+                Wh_Log(L"Skipping, last submission %llu seconds ago",
+                       (currentTime - lastStatsTime) / 10000000LL);
+            }
+
+            if (mutex) {
+                ReleaseMutex(mutex);
+                CloseHandle(mutex);
+            }
+
+            if (!content) {
+                Wh_Log(L"Failed to get stats content");
+                return;
+            }
+
+            if (content->statusCode != 200) {
+                Wh_Log(L"Stats content status code: %d", content->statusCode);
+            }
+
+            Wh_FreeUrlContent(content);
+            Wh_Log(L"Stats content submitted");
+        },
+        nullptr, nullptr);
+    if (!g_statsTimer) {
+        Wh_Log(L"Failed to create stats timer");
+        return false;
+    }
+
+    constexpr DWORD k24HoursInMs = 24 * 60 * 60 * 1000;
+    constexpr ULONGLONG k10MinutesInMs = 10 * 60 * 1000;
+
+    FILETIME dueTimeFt;
+    dueTimeFt.dwLowDateTime = (DWORD)(dueTime & 0xFFFFFFFF);
+    dueTimeFt.dwHighDateTime = (DWORD)(dueTime >> 32);
+    SetThreadpoolTimer(g_statsTimer, &dueTimeFt, k24HoursInMs, k10MinutesInMs);
+    return true;
+}
+
+void StopStatsTimer() {
+    if (g_statsTimer) {
+        SetThreadpoolTimer(g_statsTimer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(g_statsTimer, TRUE);
+        CloseThreadpoolTimer(g_statsTimer);
+        g_statsTimer = nullptr;
+    }
+}
+
 void LoadSettings() {
     g_settings.explorerFrameContainerHeight =
         Wh_GetIntSetting(L"explorerFrameContainerHeight");
@@ -2968,7 +3207,8 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
                        (void**)&CreateWindowExW_Original);
 
-    HMODULE user32Module = LoadLibrary(L"user32.dll");
+    HMODULE user32Module =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (user32Module) {
         void* pCreateWindowInBand =
             (void*)GetProcAddress(user32Module, "CreateWindowInBand");
@@ -2988,6 +3228,8 @@ BOOL Wh_ModInit() {
     }
 
     HookWindowsUIFileExplorerSymbols();
+
+    StartStatsTimer();
 
     return TRUE;
 }
@@ -3010,6 +3252,8 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    StopStatsTimer();
 
     UninitializeSettingsAndTap();
 
