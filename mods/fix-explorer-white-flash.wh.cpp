@@ -2,7 +2,7 @@
 // @id              fix-explorer-white-flash
 // @name            Fix white flashes in explorer
 // @description     Fixes white flashes when creating new tabs in "This PC".
-// @version         1.0
+// @version         1.1
 // @author          Mgg Sk
 // @github          https://github.com/MGGSK
 // @include         explorer.exe
@@ -26,18 +26,7 @@ Fixes white flashes when creating new tabs in "This PC".
 #include <windhawk_utils.h>
 #include <Windows.h>
 
-const COLORREF g_windowColor = 0x191919;
-const HBRUSH g_windowBrush = CreateSolidBrush(g_windowColor);
-
-using GetSysColor_T = decltype(&GetSysColor);
-GetSysColor_T GetSysColor_Original;
-
-DWORD WINAPI GetSysColor_Hook(int nIndex)
-{
-    if(nIndex == COLOR_WINDOW)
-        return g_windowColor;
-    return GetSysColor_Original(nIndex);
-}
+const HBRUSH g_windowBrush = CreateSolidBrush(0x191919);
 
 using GetSysColorBrush_T = decltype(&GetSysColorBrush);
 GetSysColorBrush_T GetSysColorBrush_Original;
@@ -46,14 +35,16 @@ HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
 {
     if(nIndex == COLOR_WINDOW)
         return g_windowBrush;
+
     return GetSysColorBrush_Original(nIndex);
 }
 
 BOOL Wh_ModInit()
 {
-    bool failed = !WindhawkUtils::SetFunctionHook(GetSysColor, GetSysColor_Hook, &GetSysColor_Original);
-    failed |= !WindhawkUtils::SetFunctionHook(GetSysColorBrush, GetSysColorBrush_Hook, &GetSysColorBrush_Original);
-    return !failed;
+    return WindhawkUtils::SetFunctionHook(
+            GetSysColorBrush,
+            GetSysColorBrush_Hook, 
+            &GetSysColorBrush_Original);
 }
 
 void Wh_ModUninit()
