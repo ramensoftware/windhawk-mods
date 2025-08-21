@@ -32,6 +32,14 @@ Some users prefer the older, less rounded, less visually distracting, and more c
 - Works with multiple Office apps (Word, Excel, PowerPoint, Outlook, OneNote, Publisher, Access).
 - UI style patching is permanent throughout the lifetime of the process; mod loading/unloading won't result in unexpected behavior and crashes.
 
+## Screenshots
+
+### Office 2016
+![Office 2016 style preview](https://i.imgur.com/PaxRT8T.png)
+
+### Office 2019
+![Office 2019 style preview](https://i.imgur.com/9gOgYxY.png)
+
 ## ⚠️ Note
 - Older styles may lack icons for new features such as *Copilot*. Those are not covered by this mod.
 - Be advised that Microsoft can remove the older styles anytime in the future. When that happens, I do not plan on resurrecting the older styles.
