@@ -30,7 +30,8 @@ in order to get translucent WinUI parts of the new file explorer
     - Transparency effects enabled
     - Energy saver disabled
 #
-* The background effects do not affect most modern windows (UWP/WinUI), and windows with hardcoded colors.
+* The background effects do not affect most modern windows (UWP/WinUI), 
+apps with different front-end rendering (e.g Electron, Chromium etc.. programs) and native windows with hardcoded colors
 
 * It is highly recommended to use the mod with black/dark window themes like the Rectify11 "Dark theme with Mica".
 
@@ -50,11 +51,15 @@ maximized or snapped to the edge of the screen, this is caused by default.
     - ThemeBackground: FALSE
       $name: Windows theme custom rendering
       $description: >-
-       Modifies parts of the Windows theme using the Direct2D graphics API and alpha blends text rendered by Windows GDI
+       Modifies parts of the Windows theme using the Direct2D graphics API.
     - AccentColorControls: FALSE
       $name: Windows theme accent colorizer
       $description: >-
        Paint with accent color parts of windows theme. (Requires Windows theme custom rendering)
+    - TextAlphaBlend: FALSE
+      $name: Text alpha blending
+      $description: >-
+       Alpha blends Windows GDI text rendering.
   $name: Rendering Customization
 - type: none
   $name: Effects
@@ -5039,10 +5044,12 @@ VOID LoadSettings(VOID)
        g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
 
     g_settings.FillBg = Wh_GetIntSetting(L"RenderingMod.ThemeBackground");
-    if(g_settings.FillBg) {
+    if(g_settings.FillBg)
         FillBackgroundElements();
+    
+    g_settings.TextAlphaBlend = Wh_GetIntSetting(L"RenderingMod.TextAlphaBlend");
+    if(g_settings.TextAlphaBlend)
         TextRenderingHook();
-    }
      
     auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"type"));
     if (0 == wcscmp(strStyle, L"acrylicblur"))
