@@ -251,8 +251,8 @@ GetChpeRanges(const IMAGE_DOS_HEADER* dosHeader, const IMAGE_NT_HEADERS_T* ntHea
 
     DWORD directorySize = opt->DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].Size;
 
-    auto* cfg = (const IMAGE_LOAD_CONFIG_DIRECTORY_T*)((const char*)dosHeader
-        + opt->DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].VirtualAddress);
+    const IMAGE_LOAD_CONFIG_DIRECTORY_T* cfg = (const IMAGE_LOAD_CONFIG_DIRECTORY_T*)(
+        (const char*)dosHeader + opt->DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].VirtualAddress);
 
     constexpr DWORD kMinSize = offsetof(IMAGE_LOAD_CONFIG_DIRECTORY_T, CHPEMetadataPointer)
         + sizeof(IMAGE_LOAD_CONFIG_DIRECTORY_T::CHPEMetadataPointer);
@@ -268,14 +268,13 @@ GetChpeRanges(const IMAGE_DOS_HEADER* dosHeader, const IMAGE_NT_HEADERS_T* ntHea
     }
 
     // Either IMAGE_CHPE_METADATA_X86 or IMAGE_ARM64EC_METADATA.
-    const void* metadata = (const char*)dosHeader + cfg->CHPEMetadataPointer - opt->ImageBase;
+    const IMAGE_ARM64EC_METADATA* metadata = (const IMAGE_ARM64EC_METADATA*)(
+        (const char*)dosHeader + cfg->CHPEMetadataPointer - opt->ImageBase);
 
-    ULONG codeMapRva = ((const ULONG*)metadata)[1];
-    ULONG codeMapCount = ((const ULONG*)metadata)[2];
+    const IMAGE_CHPE_RANGE_ENTRY* codeMap = (const IMAGE_CHPE_RANGE_ENTRY*)(
+        (const char*)dosHeader + metadata->CodeMap);
 
-    const IMAGE_CHPE_RANGE_ENTRY* codeMap = (const IMAGE_CHPE_RANGE_ENTRY*)((const char*)dosHeader + codeMapRva);
-
-    return std::span(codeMap, codeMapCount);
+    return std::span(codeMap, metadata->CodeMapCount);
 }
 
 inline UINT_PTR RVAToFileOffset(PBYTE pBase, UINT_PTR rva)
