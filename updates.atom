@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-22T13:57:17.000Z</updated>
+    <updated>2025-08-22T19:59:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove "Exit Fullscreen" popup in Chrome 1.1]]></title>
+        <id>https://windhawk.net/mods/remove-fullscreen-popup-chrome#332fbde670638a896bcbf760f8a2648bf572f6f2</id>
+        <link href="https://windhawk.net/mods/remove-fullscreen-popup-chrome"/>
+        <updated>2025-08-22T19:59:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="removeexitfullscreenpopupinchromeoperaoperagx">Remove "Exit Fullscreen" popup in Chrome/Opera/OperaGX</h1>
+<p>A simple mod to remove the annoying “TO EXIT FULLSCREEN PRESS ESC/F11” popup in Chrome, Opera and OperaGX.</p>
+<p><img src="https://raw.githubusercontent.com/lorenzoc01/remove-chrome-fullscreen-popup/main/screenshots/chrome.png" alt="Chrome" />
+<img src="https://raw.githubusercontent.com/lorenzoc01/remove-chrome-fullscreen-popup/main/screenshots/operagx.png" alt="OperaGX" /></p>
+<h2 id="important">⚠ Important</h2>
+<p>Based on testing, the mod works as intended. However, it <strong>may also hide other windows</strong> that share similar properties with the popup.</p>
+<p>Check the <a href="https://github.com/lorenzoc01/remove-chrome-fullscreen-popup">Github Repo</a> for more details.</p>]]></content>
+        <author>
+            <name>lorenzoc01</name>
+            <uri>https://github.com/lorenzoc01</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Office UI Reverter 1.0.0]]></title>
         <id>https://windhawk.net/mods/office-ui-reverter#831a104114b7c9b8afab89247e83a17f99694eb4</id>
@@ -322,19 +339,6 @@ so does not need the download of the debugging symbols.</p>]]></content>
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Old Task Manager 1.0.1]]></title>
-        <id>https://windhawk.net/mods/win11-old-taskmgr#4f32b2163d3b8938660000bb6cf62634e022635c</id>
-        <link href="https://windhawk.net/mods/win11-old-taskmgr"/>
-        <updated>2025-08-04T23:22:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix dark mode being partially enabled</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
