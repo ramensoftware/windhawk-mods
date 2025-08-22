@@ -41,6 +41,7 @@ Some users prefer the older, less rounded, less visually distracting, and more c
 ![Office 2019 style preview](https://i.imgur.com/9gOgYxY.png)
 
 ## ⚠️ Note
+- Please close all windows of an Office program and relaunch it to apply the new style.
 - Older styles may lack icons for new features such as *Copilot*. Those are not covered by this mod.
 - Be advised that Microsoft can remove the older styles anytime in the future. When that happens, I do not plan on resurrecting the older styles.
 
@@ -189,7 +190,7 @@ inline void SectionBeginAndSize(HMODULE hModule, const char* pszSectionName, PBY
             for (unsigned int i = 0; i < ntHeader->FileHeader.NumberOfSections; ++i)
             {
                 PIMAGE_SECTION_HEADER section = firstSection + i;
-                if (!strcmp((const char*)section->Name, pszSectionName))
+                if (strncmp((const char*)section->Name, pszSectionName, IMAGE_SIZEOF_SHORT_NAME) == 0)
                 {
                     *beginSection = (PBYTE)dosHeader + section->VirtualAddress;
                     *sizeSection = section->SizeOfRawData;
