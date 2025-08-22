@@ -2465,11 +2465,16 @@ BOOL IsAddressInnerBackground(HTHEME hTheme, HDC hdc, INT iPartId)
 BOOL PaintEditBox(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory || (iPartId != EP_EDITBORDER_NOSCROLL && iPartId != EP_EDITBORDER_HSCROLL
-    && iPartId != EP_EDITBORDER_VSCROLL && iPartId != EP_EDITBORDER_HVSCROLL 
+    && iPartId != EP_EDITBORDER_VSCROLL && iPartId != EP_EDITBORDER_HVSCROLL && iPartId != EP_BACKGROUND
     && (!IsAddressInnerBackground(hTheme, hdc, iPartId))
     ))
         return FALSE;
 
+    // Remove editbox white background flashing
+    if (iPartId ==  EP_BACKGROUND) {
+        FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        return TRUE;
+    }
     INT index = (iPartId == EP_BACKGROUNDWITHBORDER) ? 3 : (iStateId == 1) ? 0 : iStateId - 2;
 
     if (!g_cache.editbox[index])
@@ -4343,7 +4348,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
         || (ThemeClassName == L"TaskDialog" && iPartId == 15 && iStateId == 0)
         || (ThemeClassName == L"Tab" && iPartId == 9)
         || (ThemeClassName == L"Status" && iPartId == 0)
-        || (ThemeClassName == L"Edit" && iPartId == 3)
         || (ThemeClassName == L"Tooltip" && iPartId == 1))
     {
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
@@ -5298,4 +5302,3 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
-
