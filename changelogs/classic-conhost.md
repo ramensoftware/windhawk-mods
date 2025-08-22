@@ -1,3 +1,8 @@
+## 1.0.4 ([Aug 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/df270512478c2bfbca51404953790687d18bdc52/mods/classic-conhost.wh.cpp))
+
+- Remove erroneous `SetPriorityClass` call
+- Update mod title and README to make deprecation more clear
+
 ## 1.0.3 ([Aug 17, 2024](https://github.com/ramensoftware/windhawk-mods/blob/688cd3ace4db50a66fc0952c94aff0f0d6ec5396/mods/classic-conhost.wh.cpp))
 
 Add deprecation notice to README

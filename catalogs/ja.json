@@ -532,7 +532,7 @@
                 "published": 1697883443000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1723931998000,
+                "updated": 1755865779000,
                 "users": 261
             },
             "metadata": {
@@ -544,8 +544,8 @@
                     "*",
                     "conhost.exe"
                 ],
-                "name": "Classic Conhost",
-                "version": "1.0.3"
+                "name": "Classic Conhost [Deprecated]",
+                "version": "1.0.4"
             }
         },
         "classic-desktop-icons": {
