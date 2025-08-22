@@ -2,11 +2,10 @@
 // @id              hide-pin
 // @name            Hide Pin (in Explorer Navigation Pane)
 // @description     Hides pin icons in File Explorer navigation pane
-// @version         1.0.1
+// @version         1.0
 // @author          @danalec
 // @github          https://github.com/danalec
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -14,7 +13,6 @@
 Removes pin icons from File Explorer's navigation pane by intercepting the tree view's item state queries.
 
 ![Screenshot](https://i.imgur.com/cv5tsUn.png)
-
 */
 // ==/WindhawkModReadme==
 
@@ -39,50 +37,50 @@ typedef LRESULT (WINAPI *SendMessageW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPA
 SendMessageW_t SendMessageW_Original;
 
 LRESULT WINAPI SendMessageW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-        if (Msg == TVM_GETITEM || Msg == TVM_GETITEMW) {
-            LRESULT result = SendMessageW_Original(hWnd, Msg, wParam, lParam);
-            
-            if (result && lParam) {
-                TVITEMW* pItem = (TVITEMW*)lParam;
-                if (pItem->mask & TVIF_STATE) {
-                    pItem->state &= ~TVIS_OVERLAYMASK;
-                }
-            }
-            
-            return result;
-        }
+    if (Msg == TVM_GETITEM || Msg == TVM_GETITEMW) {
+        LRESULT result = SendMessageW_Original(hWnd, Msg, wParam, lParam);
         
-        if (Msg == TVM_SETITEM || Msg == TVM_SETITEMW) {
-            if (lParam) {
-                TVITEMW* pItem = (TVITEMW*)lParam;
-                if (pItem->mask & TVIF_STATE) {
-                    pItem->state &= ~TVIS_OVERLAYMASK;
-                }
+        if (result && lParam) {
+            TVITEMW* pItem = (TVITEMW*)lParam;
+            if (pItem->mask & TVIF_STATE) {
+                pItem->state &= ~TVIS_OVERLAYMASK;
             }
         }
         
-        return SendMessageW_Original(hWnd, Msg, wParam, lParam);
+        return result;
     }
     
+    if (Msg == TVM_SETITEM || Msg == TVM_SETITEMW) {
+        if (lParam) {
+            TVITEMW* pItem = (TVITEMW*)lParam;
+            if (pItem->mask & TVIF_STATE) {
+                pItem->state &= ~TVIS_OVERLAYMASK;
+            }
+        }
+    }
+    
+    return SendMessageW_Original(hWnd, Msg, wParam, lParam);
+}
+
 typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 DefWindowProcW_t DefWindowProcW_Original;
 
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-        if (Msg == WM_NOTIFY) {
-            NMHDR* pNmhdr = (NMHDR*)lParam;
-            if (pNmhdr && pNmhdr->code == TVN_GETDISPINFOW) {
-                NMTVDISPINFOW* pDispInfo = (NMTVDISPINFOW*)lParam;
-                
-                if (pDispInfo->item.mask & TVIF_STATE) {
-                    pDispInfo->item.state &= ~TVIS_OVERLAYMASK;
-                    pDispInfo->item.stateMask &= ~TVIS_OVERLAYMASK;
-                }
+    if (Msg == WM_NOTIFY) {
+        NMHDR* pNmhdr = (NMHDR*)lParam;
+        if (pNmhdr && pNmhdr->code == TVN_GETDISPINFOW) {
+            NMTVDISPINFOW* pDispInfo = (NMTVDISPINFOW*)lParam;
+            
+            if (pDispInfo->item.mask & TVIF_STATE) {
+                pDispInfo->item.state &= ~TVIS_OVERLAYMASK;
+                pDispInfo->item.stateMask &= ~TVIS_OVERLAYMASK;
             }
         }
-        
-        return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
     }
     
+    return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+}
+
 LRESULT CALLBACK TreeViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == TVM_SETIMAGELIST && wParam == TVSIL_STATE) {
         return 0;
@@ -90,30 +88,30 @@ LRESULT CALLBACK TreeViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
     
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
-    
+
 typedef HWND (WINAPI *CreateWindowExW_t)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 CreateWindowExW_t CreateWindowExW_Original;
 
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     
-    if (hwnd && lpClassName && HIWORD(lpClassName)) {
-        if (wcscmp(lpClassName, WC_TREEVIEW) == 0 || 
-            wcscmp(lpClassName, L"SysTreeView32") == 0) {
+    if (hWnd && lpClassName && HIWORD(lpClassName)) {
+        if (wcsicmp(lpClassName, WC_TREEVIEW) == 0 || 
+            wcsicmp(lpClassName, L"SysTreeView32") == 0) {
             wchar_t parentClass[256];
-            HWND hParent = GetParent(hwnd);
+            HWND hParent = GetParent(hWnd);
             if (hParent && GetClassNameW(hParent, parentClass, 256)) {
                 if (wcsstr(parentClass, L"SHELLDLL_DefView") || 
                     wcsstr(parentClass, L"NamespaceTreeControl")) {
                     if (pSetWindowSubclass) {
-                        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TreeViewSubclassProc, 0);
+                        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TreeViewSubclassProc, 0);
                     }
                 }
             }
         }
     }
     
-    return hwnd;
+    return hWnd;
 }
 
 BOOL Wh_ModInit() {
@@ -147,12 +145,6 @@ BOOL Wh_ModInit() {
     );
     
     return TRUE;
-}
-
-void Wh_ModAfterInit() {
-}
-
-void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {}
