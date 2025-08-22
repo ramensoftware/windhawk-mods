@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              hide-dotfiles-explorer
-// @name            Hide Dotfiles (Explorer only) v1.0.1
+// @name            Hide Dotfiles (Explorer only)
 // @description     Hide dotfiles and folders starting with . in Windows Explorer and Desktop
 // @version         1.0.1
 // @author          @danalec
@@ -67,12 +67,9 @@ Examples:
 #include <shobjidl.h>
 #include <winternl.h>
 #include <windhawk_utils.h>
-#include <mutex>
 #include <vector>
 #include <string>
 #include <algorithm>
-
-std::mutex g_hookMutex;
 
 struct {
     std::vector<std::wstring> dotfileWhitelist;
@@ -109,9 +106,6 @@ typedef NTSTATUS (NTAPI* NtQueryDirectoryFileEx_t)(
 );
 
 NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
-
-typedef HRESULT (WINAPI* SHCreateShellFolderView_t)(LPCITEMIDLIST pidl, IShellFolderView** ppv);
-SHCreateShellFolderView_t SHCreateShellFolderView_Original;
 
 typedef HANDLE (WINAPI* FindFirstFileW_t)(LPCWSTR lpFileName, LPWIN32_FIND_DATAW lpFindFileData);
 FindFirstFileW_t FindFirstFileW_Original;
@@ -176,11 +170,14 @@ void ParseSettings(const std::wstring& dotfileWhitelistStr, const std::wstring& 
     parseList(alwaysHideStr, g_settings.alwaysHide);
 }
 
-bool ShouldHideFile(const WCHAR* fullPath, const WCHAR* fileName) {
+bool ShouldHideFile(const WCHAR* fileName) {
     if (!fileName || !fileName[0]) return false;
     
+    if (wcscmp(fileName, L".") == 0 || wcscmp(fileName, L"..") == 0) {
+        return false;
+    }
+    
     if (fileName[0] == L'.') {
-        // Case-insensitive comparison for dotfiles
         std::wstring fileNameLower(fileName);
         std::ranges::transform(fileNameLower, fileNameLower.begin(), ::towlower);
         
@@ -192,7 +189,6 @@ bool ShouldHideFile(const WCHAR* fullPath, const WCHAR* fileName) {
             }) == g_settings.dotfileWhitelist.end();
     }
     
-    // Case-insensitive comparison for always hide
     std::wstring fileNameLower(fileName);
     std::ranges::transform(fileNameLower, fileNameLower.begin(), ::towlower);
     
@@ -203,170 +199,6 @@ bool ShouldHideFile(const WCHAR* fullPath, const WCHAR* fileName) {
             return itemLower == fileNameLower;
         }) != g_settings.alwaysHide.end();
 }
-
-thread_local WCHAR g_currentPath[MAX_PATH] = {0};
-
-bool GetCurrentDirectoryFromHandle(HANDLE fileHandle) {
-    WCHAR path[MAX_PATH] = {0};
-    DWORD pathLen = GetFinalPathNameByHandleW(fileHandle, path, MAX_PATH, FILE_NAME_NORMALIZED);
-    
-    if (pathLen > 0 && pathLen < MAX_PATH) {
-        if (wcsncmp(path, L"\\\\?\\\\?", 4) == 0) {
-            wcscpy_s(g_currentPath, MAX_PATH, path + 4);
-        } else {
-            wcscpy_s(g_currentPath, MAX_PATH, path);
-        }
-        return true;
-    }
-    
-    g_currentPath[0] = L'\0';
-    return false;
-}
-
-class FileVisibilityFilterEnum : public IEnumIDList {
-private:
-    IEnumIDList* m_pOriginal;
-    IShellFolder* m_pFolder;
-    LONG m_cRef;
-
-    bool ShouldHideItem(PCIDLIST_RELATIVE pidl) {
-        if (!m_pFolder || !pidl) return false;
-    
-        STRRET strret;
-        if (FAILED(m_pFolder->GetDisplayNameOf(pidl, SHGDN_FORPARSING | SHGDN_INFOLDER, &strret))) {
-            return false;
-        }
-        
-        WCHAR szName[MAX_PATH];
-        if (FAILED(StrRetToBufW(&strret, pidl, szName, MAX_PATH))) {
-            return false;
-        }
-        
-        WCHAR* pFileName = PathFindFileNameW(szName);
-        if (!pFileName) {
-            pFileName = szName;
-        }
-        
-        if (wcscmp(pFileName, L".") == 0 || wcscmp(pFileName, L"..") == 0) {
-            return false;
-        }
-        
-        WCHAR fullPath[MAX_PATH] = {0};
-        if (SUCCEEDED(m_pFolder->GetDisplayNameOf(pidl, SHGDN_FORPARSING, &strret))) {
-            StrRetToBufW(&strret, pidl, fullPath, MAX_PATH);
-
-            std::replace(fullPath, fullPath + wcslen(fullPath), L'/', L'\\');
-        }
-        bool shouldHide = ShouldHideFile(fullPath, pFileName);
-        return shouldHide;
-    }
-
-public:
-    FileVisibilityFilterEnum(IEnumIDList* pOriginal, IShellFolder* pFolder) 
-        : m_pOriginal(pOriginal), m_pFolder(pFolder), m_cRef(1) {
-        if (m_pOriginal) m_pOriginal->AddRef();
-        if (m_pFolder) m_pFolder->AddRef();
-    }
-
-    virtual ~FileVisibilityFilterEnum() {
-        if (m_pOriginal) m_pOriginal->Release();
-        if (m_pFolder) m_pFolder->Release();
-    }
-
-    STDMETHODIMP QueryInterface(REFIID riid, void** ppvObject) override {
-        if (!ppvObject) return E_INVALIDARG;
-        
-        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IEnumIDList)) {
-            *ppvObject = static_cast<IEnumIDList*>(this);
-            AddRef();
-            return S_OK;
-        }
-        
-        *ppvObject = nullptr;
-        return E_NOINTERFACE;
-    }
-
-    STDMETHODIMP_(ULONG) AddRef() override {
-        return InterlockedIncrement(&m_cRef);
-    }
-    
-    STDMETHODIMP_(ULONG) Release() override {
-        LONG cRef = InterlockedDecrement(&m_cRef);
-        if (cRef == 0) {
-            delete this;
-        }
-        return cRef;
-    }
-
-    STDMETHODIMP Next(ULONG celt, LPITEMIDLIST* rgelt, ULONG* pceltFetched) override {
-        if (!m_pOriginal) return E_FAIL;
-        
-        ULONG fetched = 0;
-        ULONG totalFetched = 0;
-        
-        while (totalFetched < celt) {
-            LPITEMIDLIST pidl = nullptr;
-            HRESULT hr = m_pOriginal->Next(1, &pidl, &fetched);
-            
-            if (hr != S_OK || !pidl) {
-                break;
-            }
-            
-            if (!ShouldHideItem(pidl)) {
-                rgelt[totalFetched] = pidl;
-                totalFetched++;
-            } else {
-                CoTaskMemFree(pidl);
-            }
-        }
-        
-        if (pceltFetched) {
-            *pceltFetched = totalFetched;
-        }
-        
-        return (totalFetched == celt) ? S_OK : S_FALSE;
-    }
-
-    STDMETHODIMP Skip(ULONG celt) override {
-        if (!m_pOriginal) return E_FAIL;
-        
-        ULONG skipped = 0;
-        while (skipped < celt) {
-            LPITEMIDLIST pidl = nullptr;
-            ULONG fetched = 0;
-            HRESULT hr = m_pOriginal->Next(1, &pidl, &fetched);
-            
-            if (hr != S_OK || !pidl) {
-                break;
-            }
-            
-            if (!ShouldHideItem(pidl)) {
-                skipped++;
-            }
-            
-            CoTaskMemFree(pidl);
-        }
-        
-        return (skipped == celt) ? S_OK : S_FALSE;
-    }
-
-    STDMETHODIMP Reset() override {
-        return m_pOriginal ? m_pOriginal->Reset() : E_FAIL;
-    }
-
-    STDMETHODIMP Clone(IEnumIDList** ppenum) override {
-        if (!ppenum || !m_pOriginal) return E_INVALIDARG;
-        
-        IEnumIDList* pCloned = nullptr;
-        HRESULT hr = m_pOriginal->Clone(&pCloned);
-        if (SUCCEEDED(hr)) {
-            *ppenum = new FileVisibilityFilterEnum(pCloned, m_pFolder);
-            pCloned->Release();
-        }
-        
-        return hr;
-    }
-};
 
 
 
@@ -382,81 +214,31 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) {
     ULONG_PTR totalBytesWritten = 0;
     
     while (totalBytesRead < *bytesReturned) {
-        ULONG nextEntryOffset = 0;
-        WCHAR* fileName = nullptr;
-        ULONG fileNameLength = 0;
+        ULONG nextEntryOffset = currentEntry->NextEntryOffset;
+        ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
         
-        if constexpr (std::is_same_v<FileInfoType, FILE_DIRECTORY_INFORMATION>) {
-            nextEntryOffset = currentEntry->NextEntryOffset;
-            fileName = currentEntry->FileName;
-            fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_FULL_DIR_INFORMATION>) {
-            nextEntryOffset = currentEntry->NextEntryOffset;
-            fileName = currentEntry->FileName;
-            fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_BOTH_DIR_INFORMATION>) {
-            nextEntryOffset = currentEntry->NextEntryOffset;
-            fileName = currentEntry->FileName;
-            fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_NAMES_INFORMATION>) {
-            nextEntryOffset = currentEntry->NextEntryOffset;
-            fileName = currentEntry->FileName;
-            fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_BOTH_DIR_INFORMATION>) {
-            nextEntryOffset = currentEntry->NextEntryOffset;
-            fileName = currentEntry->FileName;
-            fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_FULL_DIR_INFORMATION>) {
-            nextEntryOffset = currentEntry->NextEntryOffset;
-            fileName = currentEntry->FileName;
-            fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        }
-        
-        ULONG currentEntrySize = nextEntryOffset;
-        if (nextEntryOffset == 0) {
-            currentEntrySize = *bytesReturned - totalBytesRead;
-        }
+        WCHAR fileName[MAX_PATH] = {0};
+        ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
+        wcsncpy_s(fileName, MAX_PATH, currentEntry->FileName, fileNameLength);
         
         bool shouldHide = false;
-        if (fileName && fileNameLength > 0) {
-            std::wstring fileNameStr(fileName, fileNameLength);
-            
-            if (fileNameStr != L"." && fileNameStr != L"..") {
-                shouldHide = ShouldHideFile(g_currentPath, fileNameStr.c_str());
-            }
+        if (fileNameLength > 0 && wcscmp(fileName, L".") != 0 && wcscmp(fileName, L"..") != 0) {
+            shouldHide = ShouldHideFile(fileName);
         }
         
         if (!shouldHide) {
             if (writeEntry != currentEntry) {
                 memmove(writeEntry, currentEntry, currentEntrySize);
             }
-            
             if (nextEntryOffset == 0) {
-                if constexpr (std::is_same_v<FileInfoType, FILE_DIRECTORY_INFORMATION>) {
-                    writeEntry->NextEntryOffset = 0;
-                } else if constexpr (std::is_same_v<FileInfoType, FILE_FULL_DIR_INFORMATION>) {
-                    writeEntry->NextEntryOffset = 0;
-                } else if constexpr (std::is_same_v<FileInfoType, FILE_BOTH_DIR_INFORMATION>) {
-                    writeEntry->NextEntryOffset = 0;
-                } else if constexpr (std::is_same_v<FileInfoType, FILE_NAMES_INFORMATION>) {
-                    writeEntry->NextEntryOffset = 0;
-                } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_BOTH_DIR_INFORMATION>) {
-                    writeEntry->NextEntryOffset = 0;
-                } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_FULL_DIR_INFORMATION>) {
-                    writeEntry->NextEntryOffset = 0;
-                }
+                writeEntry->NextEntryOffset = 0;
             }
-            
             totalBytesWritten += currentEntrySize;
-            writeEntry = reinterpret_cast<FileInfoType*>(
-                reinterpret_cast<BYTE*>(writeEntry) + currentEntrySize);
+            writeEntry = reinterpret_cast<FileInfoType*>(reinterpret_cast<BYTE*>(writeEntry) + currentEntrySize);
         }
         
         totalBytesRead += currentEntrySize;
-        
-        if (nextEntryOffset == 0) {
-            break;
-        }
+        if (nextEntryOffset == 0) break;
         
         currentEntry = reinterpret_cast<FileInfoType*>(
             reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
@@ -464,46 +246,13 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) {
     
     if (totalBytesWritten > 0) {
         FileInfoType* lastEntry = static_cast<FileInfoType*>(FileInformation);
-        ULONG_PTR bytesProcessed = 0;
-        
-        while (bytesProcessed < totalBytesWritten) {
-            ULONG nextOffset = 0;
-            if constexpr (std::is_same_v<FileInfoType, FILE_DIRECTORY_INFORMATION>) {
-                nextOffset = lastEntry->NextEntryOffset;
-            } else if constexpr (std::is_same_v<FileInfoType, FILE_FULL_DIR_INFORMATION>) {
-                nextOffset = lastEntry->NextEntryOffset;
-            } else if constexpr (std::is_same_v<FileInfoType, FILE_BOTH_DIR_INFORMATION>) {
-                nextOffset = lastEntry->NextEntryOffset;
-            } else if constexpr (std::is_same_v<FileInfoType, FILE_NAMES_INFORMATION>) {
-                nextOffset = lastEntry->NextEntryOffset;
-            } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_BOTH_DIR_INFORMATION>) {
-                nextOffset = lastEntry->NextEntryOffset;
-            } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_FULL_DIR_INFORMATION>) {
-                nextOffset = lastEntry->NextEntryOffset;
-            }
-            
-            if (nextOffset == 0) {
-                break;
-            }
-            
-            bytesProcessed += nextOffset;
+        while (lastEntry->NextEntryOffset && 
+               (reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset < 
+                reinterpret_cast<BYTE*>(FileInformation) + totalBytesWritten)) {
             lastEntry = reinterpret_cast<FileInfoType*>(
-                reinterpret_cast<BYTE*>(lastEntry) + nextOffset);
+                reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset);
         }
-        
-        if constexpr (std::is_same_v<FileInfoType, FILE_DIRECTORY_INFORMATION>) {
-            lastEntry->NextEntryOffset = 0;
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_FULL_DIR_INFORMATION>) {
-            lastEntry->NextEntryOffset = 0;
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_BOTH_DIR_INFORMATION>) {
-            lastEntry->NextEntryOffset = 0;
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_NAMES_INFORMATION>) {
-            lastEntry->NextEntryOffset = 0;
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_BOTH_DIR_INFORMATION>) {
-            lastEntry->NextEntryOffset = 0;
-        } else if constexpr (std::is_same_v<FileInfoType, FILE_ID_FULL_DIR_INFORMATION>) {
-            lastEntry->NextEntryOffset = 0;
-        }
+        lastEntry->NextEntryOffset = 0;
     }
     
     *bytesReturned = totalBytesWritten;
@@ -553,11 +302,9 @@ NTSTATUS NTAPI NtQueryDirectoryFile_Hook(
         ReturnSingleEntry, FileName, RestartScan);
     
     if (NT_SUCCESS(status) && IoStatusBlock && FileInformation) {
-        if (GetCurrentDirectoryFromHandle(FileHandle)) {
-            ULONG_PTR bytesReturned = IoStatusBlock->Information;
-            ProcessDirectoryListing(FileInformation, FileInformationClass, &bytesReturned);
-            IoStatusBlock->Information = bytesReturned;
-        }
+        ULONG_PTR bytesReturned = IoStatusBlock->Information;
+        ProcessDirectoryListing(FileInformation, FileInformationClass, &bytesReturned);
+        IoStatusBlock->Information = bytesReturned;
     }
     
     return status;
@@ -581,23 +328,12 @@ NTSTATUS NTAPI NtQueryDirectoryFileEx_Hook(
         QueryFlags, FileName);
     
     if (NT_SUCCESS(status) && IoStatusBlock && FileInformation) {
-        if (GetCurrentDirectoryFromHandle(FileHandle)) {
-            ULONG_PTR bytesReturned = IoStatusBlock->Information;
-            ProcessDirectoryListing(FileInformation, FileInformationClass, &bytesReturned);
-            IoStatusBlock->Information = bytesReturned;
-        }
+        ULONG_PTR bytesReturned = IoStatusBlock->Information;
+        ProcessDirectoryListing(FileInformation, FileInformationClass, &bytesReturned);
+        IoStatusBlock->Information = bytesReturned;
     }
     
     return status;
-}
-
-void LoadSettings() {
-    std::lock_guard<std::mutex> lock(g_hookMutex);
-    
-    std::wstring dotfileWhitelistStr = Wh_GetStringSetting(L"dotfileWhitelist");
-    std::wstring alwaysHideStr = Wh_GetStringSetting(L"alwaysHide");
-    
-    ParseSettings(dotfileWhitelistStr, alwaysHideStr);
 }
 
 BOOL Wh_ModInit() {
@@ -644,19 +380,20 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-
-
 HANDLE WINAPI FindFirstFileW_Hook(LPCWSTR lpFileName, LPWIN32_FIND_DATAW lpFindFileData) {
     HANDLE hFind = FindFirstFileW_Original(lpFileName, lpFindFileData);
     
     if (hFind != INVALID_HANDLE_VALUE && lpFindFileData) {
-        WCHAR fileName[MAX_PATH];
-        wcscpy_s(fileName, MAX_PATH, lpFindFileData->cFileName);
+        if (wcscmp(lpFindFileData->cFileName, L".") == 0 || wcscmp(lpFindFileData->cFileName, L"..") == 0) {
+            return hFind;
+        }
         
-        if (ShouldHideFile(lpFileName, fileName)) {
+        if (ShouldHideFile(lpFindFileData->cFileName)) {
             while (FindNextFileW_Original(hFind, lpFindFileData)) {
-                wcscpy_s(fileName, MAX_PATH, lpFindFileData->cFileName);
-                if (!ShouldHideFile(lpFileName, fileName)) {
+                if (wcscmp(lpFindFileData->cFileName, L".") == 0 || wcscmp(lpFindFileData->cFileName, L"..") == 0) {
+                    return hFind;
+                }
+                if (!ShouldHideFile(lpFindFileData->cFileName)) {
                     return hFind;
                 }
             }
@@ -672,10 +409,11 @@ BOOL WINAPI FindNextFileW_Hook(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileDa
     BOOL result = FindNextFileW_Original(hFindFile, lpFindFileData);
     
     while (result && lpFindFileData) {
-        WCHAR fileName[MAX_PATH];
-        wcscpy_s(fileName, MAX_PATH, lpFindFileData->cFileName);
+        if (wcscmp(lpFindFileData->cFileName, L".") == 0 || wcscmp(lpFindFileData->cFileName, L"..") == 0) {
+            return TRUE;
+        }
         
-        if (!ShouldHideFile(nullptr, fileName)) {
+        if (!ShouldHideFile(lpFindFileData->cFileName)) {
             return TRUE;
         }
         
@@ -686,5 +424,7 @@ BOOL WINAPI FindNextFileW_Hook(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileDa
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
+    std::wstring dotfileWhitelistStr = Wh_GetStringSetting(L"dotfileWhitelist");
+    std::wstring alwaysHideStr = Wh_GetStringSetting(L"alwaysHide");
+    ParseSettings(dotfileWhitelistStr, alwaysHideStr);
 }
