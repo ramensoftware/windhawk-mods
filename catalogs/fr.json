@@ -3058,6 +3058,36 @@
                 "version": "1.1"
             }
         },
+        "office-ui-reverter": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1755871037000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1755871037000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Amrsatrio",
+                "description": "Reverts Office 2022+/365 UI to Office 2016/2019",
+                "github": "https://github.com/Amrsatrio",
+                "include": [
+                    "WINWORD.EXE",
+                    "EXCEL.EXE",
+                    "POWERPNT.EXE",
+                    "OUTLOOK.EXE",
+                    "ONENOTE.EXE",
+                    "MSPUB.EXE",
+                    "MSACCESS.EXE"
+                ],
+                "name": "Office UI Reverter",
+                "twitter": "https://twitter.com/amrsatrio",
+                "version": "1.0.0"
+            }
+        },
         "old-auto-colorization": {
             "details": {
                 "defaultSorting": 1530,
