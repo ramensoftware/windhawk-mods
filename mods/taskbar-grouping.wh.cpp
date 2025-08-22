@@ -2,14 +2,14 @@
 // @id              taskbar-grouping
 // @name            Disable grouping on the taskbar
 // @description     Causes a separate button to be created on the taskbar for each new window
-// @version         1.3.9
+// @version         1.3.10
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -D__USE_MINGW_ANSI_STDIO=0 -lcomctl32 -lole32 -loleaut32 -lshlwapi -lversion
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshlwapi -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -59,10 +59,14 @@ or a similar tool), enable the relevant option in the mod's settings.
   - keepInPlace: Pinned items remain in place
   - keepInPlaceAndNoUngrouping: >-
       Pinned items remain in place, group running instances
-- placeUngroupedItemsTogether: false
+- placeUngroupedItemsTogether: "0"
   $name: Place ungrouped items together
   $description: >-
     Place each newly opened item next to existing items it would group with.
+  $options:
+  - 0: Off
+  - 1: On
+  - nonPinnedOnly: On, ignore pinned items
 - useWindowIcons: false
   $name: Use window icons
   $description: >-
@@ -141,6 +145,12 @@ enum class PinnedItemsMode {
     keepInPlaceAndNoUngrouping,
 };
 
+enum class PlaceUngroupedItemsTogetherMode {
+    off,
+    on,
+    nonPinnedOnly,
+};
+
 enum class GroupingMode {
     regular,
     inverse,
@@ -148,7 +158,7 @@ enum class GroupingMode {
 
 struct {
     PinnedItemsMode pinnedItemsMode;
-    bool placeUngroupedItemsTogether;
+    PlaceUngroupedItemsTogetherMode placeUngroupedItemsTogether;
     bool useWindowIcons;
     std::unordered_set<std::wstring> excludedProgramItems;
     std::vector<std::wstring> customGroupNames;
@@ -918,7 +928,9 @@ int WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
 
     Wh_Log(L">");
 
-    if (!g_settings.placeUngroupedItemsTogether || i != DA_LAST || !p) {
+    if (g_settings.placeUngroupedItemsTogether ==
+            PlaceUngroupedItemsTogetherMode::off ||
+        i != DA_LAST || !p) {
         return original();
     }
 
@@ -942,6 +954,14 @@ int WINAPI DPA_InsertPtr_Hook(HDPA hdpa, int i, void* p) {
         PVOID taskGroupIter = CTaskBtnGroup_GetGroup_Original(taskBtnGroupIter);
         if (!taskGroupIter) {
             continue;
+        }
+
+        if (g_settings.placeUngroupedItemsTogether ==
+            PlaceUngroupedItemsTogetherMode::nonPinnedOnly) {
+            bool pinned = CTaskGroup_GetFlags_Original(taskGroupIter) & 1;
+            if (pinned) {
+                continue;
+            }
         }
 
         g_compareStringOrdinalHookThreadId = GetCurrentThreadId();
@@ -1780,7 +1800,8 @@ bool HookTaskbarSymbols() {
     if (g_winVersion <= WinVersion::Win10) {
         module = GetModuleHandle(nullptr);
     } else {
-        module = LoadLibrary(L"taskbar.dll");
+        module = LoadLibraryEx(L"taskbar.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!module) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
@@ -1806,8 +1827,19 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(pinnedItemsMode);
 
+    PCWSTR placeUngroupedItemsTogetherMode =
+        Wh_GetStringSetting(L"placeUngroupedItemsTogether");
     g_settings.placeUngroupedItemsTogether =
-        Wh_GetIntSetting(L"placeUngroupedItemsTogether");
+        PlaceUngroupedItemsTogetherMode::off;
+    if (wcscmp(placeUngroupedItemsTogetherMode, L"1") == 0) {
+        g_settings.placeUngroupedItemsTogether =
+            PlaceUngroupedItemsTogetherMode::on;
+    } else if (wcscmp(placeUngroupedItemsTogetherMode, L"nonPinnedOnly") == 0) {
+        g_settings.placeUngroupedItemsTogether =
+            PlaceUngroupedItemsTogetherMode::nonPinnedOnly;
+    }
+    Wh_FreeStringSetting(placeUngroupedItemsTogetherMode);
+
     g_settings.useWindowIcons = Wh_GetIntSetting(L"useWindowIcons");
 
     g_settings.excludedProgramItems.clear();
@@ -1934,6 +1966,8 @@ BOOL Wh_ModInit() {
 
     WindhawkUtils::Wh_SetFunctionHookT(DPA_DeletePtr, DPA_DeletePtr_Hook,
                                        &DPA_DeletePtr_Original);
+
+    g_initialized = true;
 
     return TRUE;
 }
