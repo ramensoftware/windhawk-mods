@@ -539,37 +539,20 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L">");
 
-    // Don't patch if we're not loaded during startup
-    // https://github.com/ramensoftware/windhawk/wiki/Development-tips#avoid-mod-loading-on-process-startup
-#ifdef _WIN64
-    const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
-#else
-    const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
-#endif
-    bool bIsInitialThread = *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
-    if (!bIsInitialThread)
-    {
-        return TRUE;
-    }
-
     LoadSettings();
 
     HMODULE hMso40UI = GetModuleHandleW(L"mso40uiWin32Client.dll");
-    if (hMso40UI)
-    {
-        g_bMso40UILoaded = true;
-        HookMso40UISymbols(hMso40UI);
-    }
-    else
-    {
-        Wh_Log(L"mso40uiWin32Client.dll not loaded yet");
-    }
-
-    if (!g_bMso40UILoaded)
+    if (!hMso40UI)
     {
         HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
         LoadLibraryExW_t pfnLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
         WindhawkUtils::SetFunctionHook(pfnLoadLibraryExW, HookedLoadLibraryExW, &g_pfnOriginalLoadLibraryExW);
+    }
+    else
+    {
+        /*g_bMso40UILoaded = true;
+        HookMso40UISymbols(hMso40UI);*/
+        Wh_Log(L"mso40uiWin32Client.dll has already been loaded, we're too late");
     }
 
     return TRUE;
