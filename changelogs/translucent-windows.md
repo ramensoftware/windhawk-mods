@@ -1,3 +1,9 @@
+## 1.6.3 ([Aug 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/796ddb18e418ccf836aff5de138b2e5fdd783320/mods/translucent-windows.wh.cpp))
+
+* Fixed text alpha blending method, which now affects all texts rendered from GDI
+* Fixed bug in a symbol signature resulting in a prolonged symbol fetching popup window
+* Minor custom theme tweaks
+
 ## 1.6.2 ([Aug 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/79eae3a6c6eedc3c5c77b7eedaaf2121ddfa71e9/mods/translucent-windows.wh.cpp))
 
 * Fixed ExplorerPatcher taskbar theme bugs
