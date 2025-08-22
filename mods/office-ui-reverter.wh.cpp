@@ -43,7 +43,6 @@ Some users prefer the older, less rounded, less visually distracting, and more c
 ## ⚠️ Note
 - Older styles may lack icons for new features such as *Copilot*. Those are not covered by this mod.
 - Be advised that Microsoft can remove the older styles anytime in the future. When that happens, I do not plan on resurrecting the older styles.
-  - As long as Access still uses the Office 2019 style, there's no need to worry about it.
 
 ## Technical Details
 - Hooks `LoadLibraryExW` to detect when `mso40uiWin32Client.dll` is loaded.
