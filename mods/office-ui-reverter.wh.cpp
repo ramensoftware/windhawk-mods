@@ -41,6 +41,7 @@ Some users prefer the older, less rounded, less visually distracting, and more c
 ![Office 2019 style preview](https://i.imgur.com/9gOgYxY.png)
 
 ## ⚠️ Note
+- Early injection to Office processes is required to patch the UI style. This means the process used to launch Office must not be excluded from Windhawk injection.
 - Please close all windows of an Office program and relaunch it to apply the new style.
 - Older styles may lack icons for new features such as *Copilot*. Those are not covered by this mod.
 - Be advised that Microsoft can remove the older styles anytime in the future. When that happens, I do not plan on resurrecting the older styles.
