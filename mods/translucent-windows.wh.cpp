@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.6.2
+// @version         1.6.3
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -30,12 +30,13 @@ in order to get translucent WinUI parts of the new file explorer
     - Transparency effects enabled
     - Energy saver disabled
 #
-* The background effects do not affect modern windows (UWP/WinUI)
+* The background effects do not affect most modern windows (UWP/WinUI), 
+apps with different front-end rendering (e.g Electron, Chromium etc.. programs) and native windows with hardcoded colors
 
 * It is highly recommended to use the mod with black/dark window themes like the Rectify11 "Dark theme with Mica".
 
 * Extending effects to the entire window can result in text being unreadable or even invisible in some cases. 
-Light mode theme, HDR enabled, 10bit color depth output, black color or white background behind the window can cause this. 
+HDR enabled, 10bit color depth output, black color or white background behind the window can cause this. 
 This is because most GDI rendering operations do not preserve alpha values.
 
 * Blur effect may show a bleeding effect at the edges of a window when 
@@ -50,11 +51,15 @@ maximized or snapped to the edge of the screen, this is caused by default.
     - ThemeBackground: FALSE
       $name: Windows theme custom rendering
       $description: >-
-       Modifies parts of the Windows theme using the Direct2D graphics API and alpha blends text rendered by Windows GDI (May not affect all rendered text - ExplorerBlurMica implementation)
+       Modifies parts of the Windows theme using the Direct2D graphics API.
     - AccentColorControls: FALSE
       $name: Windows theme accent colorizer
       $description: >-
        Paint with accent color parts of windows theme. (Requires Windows theme custom rendering)
+    - TextAlphaBlend: FALSE
+      $name: Text alpha blending
+      $description: >-
+       Alpha blends Windows GDI text rendering.
   $name: Rendering Customization
 - type: none
   $name: Effects
@@ -272,14 +277,12 @@ maximized or snapped to the edge of the screen, this is caused by default.
 #include <dwmapi.h>
 #include <vssym32.h>
 #include <uxtheme.h>
-#include <windows.h>
-#include <functional>
 #include <random>
 #include <string>
+#include <array>
 #include <mutex>
 #include <unordered_set>
 #include <d2d1.h>
-#include <wingdi.h>
 #include <wrl.h>
 #include <ShellScalingApi.h>
 
@@ -319,13 +322,14 @@ std::wstring g_RainbowPropStr = L"Windhawk_TranslucentMod_Rainbow";
 std::mutex g_rainbowWindowsMutex;
 std::unordered_set<HWND> g_rainbowWindows;
 
-thread_local BOOL g_DrawThemeTextExEntry;
+thread_local BOOL g_DrawTextWithGlowEntry;
 
 typedef HRESULT(WINAPI* pDrawTextWithGlow)(HDC, LPCWSTR, UINT, const RECT*, DWORD, COLORREF, COLORREF, UINT, UINT, BOOL, DTT_CALLBACK_PROC, LPARAM);
 static auto DrawTextWithGlow = (pDrawTextWithGlow)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(126));
 
-typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
-static auto ShouldSystemUseDarkMode = (pShouldSystemUseDarkMode)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(138));
+// Detect system dark/light theme mode
+//typedef HRESULT(WINAPI* pShouldSystemUseDarkMode)();
+//static auto ShouldSystemUseDarkMode = (pShouldSystemUseDarkMode)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(138));
 
 thread_local HHOOK g_callWndProcHook;
 std::mutex g_allCallWndProcHooksMutex;
@@ -500,7 +504,6 @@ static decltype(&DwmExtendFrameIntoClientArea) DwmExtendFrameIntoClientArea_orig
 static decltype(&DwmSetWindowAttribute) DwmSetWindowAttribute_orig = nullptr;
 
 static decltype(&DrawTextW) DrawTextW_orig = nullptr;
-static decltype(&DrawTextExW) DrawTextExW_orig = nullptr;
 static decltype(&ExtTextOutW) ExtTextOutW_orig = nullptr;
 static decltype(&DrawThemeText) DrawThemeText_orig = nullptr;
 static decltype(&DrawThemeTextEx) DrawThemeTextEx_orig = nullptr;
@@ -782,9 +785,14 @@ std::wstring GetThemeClass(HTHEME hTheme)
     return ret;
 }
 
-// https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L829
-BOOL AlphaBuffer(HDC hdc, LPCRECT pRc, std::function<VOID(HDC)> fun)
+// Fix Alpha of DrawTextW
+// https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L859
+INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, UINT format) 
 {
+    if (format & DT_CALCRECT || g_DrawTextWithGlowEntry)
+        return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
+    
+    HRESULT hr = S_OK;
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
 
     BP_PAINTPARAMS bpParam;
@@ -794,10 +802,10 @@ BOOL AlphaBuffer(HDC hdc, LPCRECT pRc, std::function<VOID(HDC)> fun)
     bpParam.pBlendFunction = &bf;
     
     HDC hDC = nullptr;
-    HPAINTBUFFER pbuffer = BeginBufferedPaint(hdc, pRc, BPBF_TOPDOWNDIB, &bpParam, &hDC);
-    
-    if (pbuffer && hDC && fun)
+    HPAINTBUFFER pbuffer = BeginBufferedPaint(hdc, lprc, BPBF_TOPDOWNDIB, &bpParam, &hDC);
+    if (pbuffer && hDC)
     {
+        g_DrawTextWithGlowEntry = TRUE;
         // Set the original DC information
         SelectObject(hDC, GetCurrentObject(hdc, OBJ_FONT));
         SetBkMode(hDC, GetBkMode(hdc));
@@ -806,151 +814,173 @@ BOOL AlphaBuffer(HDC hdc, LPCRECT pRc, std::function<VOID(HDC)> fun)
         SetTextCharacterExtra(hDC, GetTextCharacterExtra(hdc));
         //SetTextColor(hDC, GetTextColor(hdc));
 
-        fun(hDC);
+        hr = DrawTextWithGlow(hDC, lpchText, cchText, lprc, format,
+        GetTextColor(hdc), 0, 0, 0, 0,
+        [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI
+        {
+            return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
+        },
+        0);
 
         EndBufferedPaint(pbuffer, TRUE);
-        return TRUE;
+        g_DrawTextWithGlowEntry = FALSE;
+        return (SUCCEEDED(hr)) ? TRUE : DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
     }
-    return FALSE;
+    return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
 }
 
-// Fix Alpha of DrawTextW
-// https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L859
-INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, UINT format) 
+BOOL WINAPI HookedExtTextOutW(
+    HDC hdc,
+    INT x,
+    INT y,
+    UINT options,
+    const RECT* lprect,
+    LPCWSTR lpString,
+    UINT c,
+    const INT* lpDx)
 {
-    if (format & DT_CALCRECT || g_DrawThemeTextExEntry)
-        return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
+    if (!hdc || (!lpString && options != ETO_OPAQUE)  || g_DrawTextWithGlowEntry)
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);  
+
+    RECT textRect {0};
+    SIZE textSize = {0};
     
-    HRESULT hr = S_OK;
-    auto fun = [&](HDC hDC) {
-        hr = DrawTextWithGlow(hDC, lpchText, cchText, lprc, format,
-            GetTextColor(hdc), 0, 0, 0, 0,
-            [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI
-            {
-                return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
-            },
-            0);
-    };
-
-    if (!AlphaBuffer(hdc, lprc, fun))
-        hr = DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
-    
-    return hr;
-}
-
-// Fix Alpha of DrawTextExW
-// https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L887
-INT WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp) 
-{
-    thread_local BOOL isCurThread = FALSE;
-
-    if (!lpdtp && !(format & DT_CALCRECT) && !isCurThread && g_DrawThemeTextExEntry) 
-    {
-        isCurThread = TRUE;
-        auto ret = HookedDrawTextW(hdc, lpchText, cchText, lprc, format);
-        isCurThread = FALSE;
-        return ret;
+    if (lprect) {
+        // Pass one line (borders) drawings
+        if (options == ETO_OPAQUE && 
+        ((lprect->right-lprect->left) == 1 || (lprect->bottom-lprect->top) == 1))
+            textRect = *lprect;
+        else if (options != ETO_OPAQUE)
+            textRect = *lprect;
     }
-    
-    return DrawTextExW_orig(hdc, lpchText, cchText, lprc, format, lpdtp);
-}
-
-// https://github.com/Maplespe/ExplorerBlurMica/blob/79c0ef4d017e32890e107ff98113507f831608b6/ExplorerBlurMica/HookDef.cpp#L904
-BOOL WINAPI HookedExtTextOutW(HDC hdc, INT x, INT y, UINT option, const RECT* lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
-{
-    std::wstring str;
-    if (lpString) str = lpString;
-
-    if (!(option & ETO_IGNORELANGUAGE) && !(option & ETO_GLYPH_INDEX) && 
-        !str.empty() && g_DrawThemeTextExEntry)
+    else if (options == ETO_GLYPH_INDEX)
     {
-        RECT rect = { 0 };
-        if (lprect)
-            rect = *lprect;
-        
-        // DT_NOPREFIX prevents special char '&' from rendering an extra underline or invisible char.
-        if (!(option & ETO_OPAQUE || option & ETO_CLIPPED))
-            DrawTextW_orig(hdc, lpString, c, &rect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_CALCRECT | DT_NOPREFIX);
-        
-        if (!lpDx) {
-            HookedDrawTextW(hdc, lpString, c, &rect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+        if (GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize))
+        {
+            textRect.left   = x;
+            textRect.top    = y - textSize.cy;
+            textRect.right  = x + textSize.cx ;
+            textRect.bottom = textSize.cy + y;
         }
         else
+            return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    }
+    else if (options == ETO_IGNORELANGUAGE)
+    {
+        if(!GetClipBox(hdc, &textRect)) // GetClipBox has a performance impact, not ideal
+            return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    }
+    else
+    {
+        if (GetTextExtentPoint32W(hdc, lpString, c, &textSize))
         {
-            RECT rc = { x, y, x + (rect.right - rect.left), y + (rect.bottom - rect.top) };
-
-            if (option & ETO_CLIPPED)
-            {
-                SaveDC(hdc);
-                IntersectClipRect(hdc, rect.left, rect.top, rect.right, rect.bottom);
-            }
-
-            COLORREF crText = GetTextColor(hdc);
-            HRESULT hr = S_OK;
-
-            auto DrawTextCallback = [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI {
-                return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);};
-
-            //Draw text in batches
-            auto fun = [&](HDC hDC) 
-            {
-                std::wstring batchStr;
-                BOOL batch = TRUE;
-                batchStr += lpString[0];
-
-                INT srcExtra = GetTextCharacterExtra(hdc);
-                SetTextCharacterExtra(hDC, lpDx[0]);
-
-                RECT batchRc = rc;
-                for (UINT i = 0; i < c; i++)
-                {
-                    if (i != 0) 
-                    {
-                        if (lpDx[i] == lpDx[i - 1]) 
-                        {
-                            if (!batch)
-                            {
-                                batch = TRUE;
-                                SetTextCharacterExtra(hDC, lpDx[i]);
-                            }
-                            batchStr += lpString[i];
-                        }
-                        else
-                        {
-                            // Draw the previous batch first
-                            hr = DrawTextWithGlow(hDC, batchStr.c_str(), (INT)batchStr.length(), &batchRc, 
-                                DT_LEFT | DT_TOP | DT_SINGLELINE, crText, 0, 0, 0, 0, DrawTextCallback, 0);
-                            //hr = _DrawThemeTextEx_.Org(hTheme, hDC, 0, 0, batchStr.c_str(), batchStr.length(), DT_LEFT | DT_TOP | DT_SINGLELINE, &batchRc, &dtop);
-
-                            batch = FALSE;
-                            batchStr = lpString[i];
-                            SetTextCharacterExtra(hDC, lpDx[i]);
-                            batchRc.left = rc.left;
-                        }
-                    }
-
-                    if (i == c - 1)
-                    {
-                        hr = DrawTextWithGlow(hDC, batchStr.c_str(), (INT)batchStr.length(), &batchRc, 
-                            DT_LEFT | DT_TOP | DT_SINGLELINE, crText, 0, 0, 0, 0, DrawTextCallback, 0);
-                        //hr = _DrawThemeTextEx_.Org(hTheme, hDC, 0, 0, batchStr.c_str(), batchStr.length(), DT_LEFT | DT_TOP | DT_SINGLELINE, &batchRc, &dtop);
-                    }
-
-                    rc.left += lpDx[i];
-                }
-                SetTextCharacterExtra(hDC, srcExtra);
-            };
-
-            if (!AlphaBuffer(hdc, &rc, fun))
-                hr = ExtTextOutW_orig(hdc, x, y, option, lprect, lpString, c, lpDx);
-
-            if (option & ETO_CLIPPED)
-                RestoreDC(hdc, -1);
+            textRect.left   = x;
+            textRect.top    = y - textSize.cy;
+            textRect.right  = x + textSize.cx;
+            textRect.bottom = textSize.cy + y; 
         }
-        return TRUE;
+        else
+            return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
     }
     
-    return ExtTextOutW_orig(hdc, x, y, option, lprect, lpString, c, lpDx);
+    INT textRectWidth = textRect.right - textRect.left;
+    INT textRectHeight = textRect.bottom - textRect.top;
+
+    if (textRectWidth <= 0 || textRectHeight <= 0)
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    
+    COLORREF origTextColor = GetTextColor(hdc);
+    COLORREF origBkColor = GetBkColor(hdc);
+    COLORREF highlightSysClr = GetSysColor(COLOR_HIGHLIGHT);
+    
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth       = textRectWidth;
+    bmi.bmiHeader.biHeight      = -textRectHeight;
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    VOID* pixels = nullptr;
+    HDC memDC = CreateCompatibleDC(hdc);
+    if (!memDC)
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+
+    HBITMAP dib = CreateDIBSection(memDC, &bmi, DIB_RGB_COLORS, &pixels, NULL, 0);
+    if (!dib) {
+        DeleteDC(memDC);
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+   }
+    HGDIOBJ oldBmp  = SelectObject(memDC, dib);
+    HGDIOBJ oldFont = SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
+    SetTextAlign(memDC, GetTextAlign(hdc));
+    SetBkMode(memDC, TRANSPARENT);
+
+    RECT pRect;
+    if (lprect) {
+        pRect = {lprect->left - textRect.left, lprect->top - textRect.top, 
+        lprect->right - textRect.left, lprect->bottom - textRect.top};
+    }
+    
+    // The opaque text background applied to the background of text within editboxes
+    if (options & ETO_OPAQUE)
+    {
+        if (origBkColor == highlightSysClr) {
+            FillRect(hdc, lprect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            HBRUSH brush = CreateSolidBrush(origBkColor);
+            FillRect(memDC, &pRect, brush);
+            DeleteObject(brush);
+        }
+        else if (origBkColor != 0x00383838) // bypass editbox BkColor on open/save dialogs
+        {
+            FillRect(hdc, lprect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            HBRUSH brush = CreateSolidBrush(origBkColor);
+            FillRect(memDC, &pRect, brush);
+            DeleteObject(brush);
+        }
+    }
+        
+    // White text mask
+    SetTextColor(memDC, RGB(255, 255, 255));
+
+    // Render text with removed the opaque background text flag, because it has already been done by us
+    WINBOOL res = ExtTextOutW_orig(memDC, x - textRect.left, y - textRect.top, options &~ ETO_OPAQUE, &pRect, lpString, c, lpDx);
+
+    BYTE txtR = GetRValue(origTextColor);
+    BYTE txtG = GetGValue(origTextColor);
+    BYTE txtB = GetBValue(origTextColor);
+
+    BYTE dstB = !(options & ETO_OPAQUE) ? 0 : GetBValue(origBkColor);
+    BYTE dstG = !(options & ETO_OPAQUE) ? 0 : GetGValue(origBkColor);
+    BYTE dstR = !(options & ETO_OPAQUE) ? 0 : GetRValue(origBkColor);
+
+    // Alpha Blend
+    BYTE alpha;
+    BYTE* p = (BYTE*)pixels;
+    for (INT i = 0; i < textRectWidth * textRectHeight; ++i) {
+        // Rec.709/sRGB luminance 
+        alpha = (BYTE)((p[2] * 54 + p[1] * 183 + p[0] * 19) >> 8);
+        if (alpha) 
+        {
+            p[0] = (BYTE)((txtB * alpha + dstB * (255 - alpha)) >> 8); // B
+            p[1] = (BYTE)((txtG * alpha + dstG * (255 - alpha)) >> 8); // G
+            p[2] = (BYTE)((txtR * alpha + dstR * (255 - alpha)) >> 8); // R
+            // full alpha highlight background fixes antialiased pixel bleed
+            p[3] = (options & ETO_OPAQUE && (origBkColor == highlightSysClr)) ? 255 : alpha; // A
+        }
+        p += 4;
+    }
+
+    // Blend composited text
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(hdc, textRect.left, textRect.top, textRectWidth, textRectHeight,
+               memDC, 0, 0, textRectWidth, textRectHeight, blend);
+
+    SelectObject(memDC, oldFont);
+    SelectObject(memDC, oldBmp);
+    DeleteObject(dib);
+    DeleteDC(memDC);
+    return res;
 }
 
 // Prevent recursive calls within the DrawText class API and perform Alpha repair
@@ -962,26 +992,39 @@ HRESULT WINAPI HookedDrawThemeTextEx(HTHEME hTheme, HDC hdc, INT iPartId, INT iS
     
     if (pOptions && !(pOptions->dwFlags & DTT_CALCRECT) && !((pOptions->dwFlags & DTT_COMPOSITED) && ThemeClassName != L"Menu"))
     {
-        HRESULT hr = S_OK;
-        auto fun = [&](HDC hDC) {
-            g_DrawThemeTextExEntry = TRUE;
+        HRESULT hr;
+        BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+
+        BP_PAINTPARAMS bpParam;
+        bpParam.cbSize = sizeof(BP_PAINTPARAMS);
+        bpParam.dwFlags = BPPF_ERASE;
+        bpParam.prcExclude = nullptr;
+        bpParam.pBlendFunction = &bf;
+        
+        HDC hDC = nullptr;
+        HPAINTBUFFER pbuffer = BeginBufferedPaint(hdc, pRect, BPBF_TOPDOWNDIB, &bpParam, &hDC);
+        if (pbuffer && hDC)
+        {
+            g_DrawTextWithGlowEntry = TRUE;
+            // Set the original DC information
+            SelectObject(hDC, GetCurrentObject(hdc, OBJ_FONT));
+            SetBkMode(hDC, GetBkMode(hdc));
+            SetBkColor(hDC, GetBkColor(hdc));
+            SetTextAlign(hDC, GetTextAlign(hdc));
+            SetTextCharacterExtra(hDC, GetTextCharacterExtra(hdc));
+            //SetTextColor(hDC, GetTextColor(hdc));
 
             COLORREF color = pOptions->crText;
-            if (!(dwTextFlags & DTT_TEXTCOLOR))
-                GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &color);
+            GetThemeColor(hTheme, iPartId, iStateId, TMT_TEXTCOLOR, &color);
             
             hr = DrawTextWithGlow(hDC, pszText, cchText, pRect, dwTextFlags,
                 color, 0, 0, 0, 0, pOptions->pfnDrawTextCallback, pOptions->lParam);
-            
-            g_DrawThemeTextExEntry = FALSE;
-        };
 
-        if (!AlphaBuffer(hdc, pRect, fun))
-            return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags, (LPRECT)pRect, pOptions);
-
-        return hr;
+            EndBufferedPaint(pbuffer, TRUE);
+            g_DrawTextWithGlowEntry = FALSE;
+            return (SUCCEEDED(hr)) ? TRUE : FALSE;
+        }
     }
-   
     return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags, (LPRECT)pRect, pOptions);
 }
 
@@ -999,25 +1042,15 @@ HRESULT WINAPI HookedDrawThemeText(HTHEME hTheme, HDC hdc, INT iPartId, INT iSta
     return ret;
 }
 
-#ifdef _WIN64
-#define STDCALL  __cdecl
-#define SSTDCALL L"__cdecl"
-#else
-#define STDCALL  __stdcall
-#define SSTDCALL L"__stdcall"
-#endif
-
-typedef unsigned __int64 QWORD;
-
 // https://github.com/ramensoftware/windhawk-mods/blob/15e5d9838349e4b927ed8ac5433e9894ff6cda28/mods/uxtheme-hook.wh.cpp#L90
-typedef VOID(STDCALL *Element_PaintBgT)(class Element*, HDC , class Value*, LPRECT, LPRECT, LPRECT, LPRECT);
+typedef VOID(CALLBACK *Element_PaintBgT)(class Element*, HDC , class Value*, LPRECT, LPRECT, LPRECT, LPRECT);
 Element_PaintBgT Element_PaintBg;
-VOID STDCALL Element_PaintBgHook(class Element* This, HDC hdc, class Value* value, LPRECT pRect, LPRECT pClipRect, LPRECT pExcludeRect, LPRECT pTargetRect)
+VOID CALLBACK Element_PaintBgHook(class Element* This, HDC hdc, class Value* value, LPRECT pRect, LPRECT pClipRect, LPRECT pExcludeRect, LPRECT pTargetRect)
 {
     //unsigned char byteValue = *(reinterpret_cast<unsigned char*>(value) + 8);
     if ((INT)(*(DWORD *)value << 26) >> 26 != 9 )
     {
-        auto v44 = *((QWORD *)value + 1);
+        auto v44 = *((__int64 *)value + 1);
         auto v45 = (v44+20)& 7;
         // 6-> selection
         // 3-> hovered stuff
@@ -1029,9 +1062,7 @@ VOID STDCALL Element_PaintBgHook(class Element* This, HDC hdc, class Value* valu
             Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
     }
     else
-    {
         Element_PaintBg(This, hdc, value, pRect, pClipRect, pExcludeRect, pTargetRect);
-    }
 }
 
 VOID CplDuiHook()
@@ -1039,7 +1070,13 @@ VOID CplDuiHook()
     WindhawkUtils::SYMBOL_HOOK dui70dll_hooks[] =
     {
         {
-            {L"public: void " SSTDCALL " DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
+            {
+                #ifdef _WIN64
+                    L"public: void __cdecl DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"
+                #else
+                    L"public: void __thiscall DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"
+                #endif
+            },
             &Element_PaintBg,
             Element_PaintBgHook,
             FALSE
@@ -1111,7 +1148,7 @@ VOID RevertSysColors()
 VOID ColorizeSysColors()
 {
     // Stop recalling SetSysColors if syscolor changes have been applied.
-    // SetSysColors redraws all top level windows causing fleeckering.1
+    // SetSysColors redraws all top level windows causing flickering.
     if (GetSysColor(5) == RGB(0, 0, 0))
     {
         if (g_settings.AccentColorize && GetSysColor(13) == g_settings.AccentColor)
@@ -1292,11 +1329,13 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
             return S_OK;
         }
     }
+    /*
     else if (ThemeClassName == L"Static")
     {
         *pColor = RGB(192, 192, 192);
         return S_OK;
     }
+    */
     else if (ThemeClassName == L"Tab" && iPropId == TMT_TEXTCOLOR)
     {
         if (iStateId == CSTB_HOT)
@@ -1414,16 +1453,11 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
             case 39: *pColor = RGB(34, 38, 55);
             case 40: *pColor = RGB(35, 45, 71);
         }
-        return hr;
+        return S_OK;
     }
     else
     {
-        if (iPropId == TMT_TEXTCOLOR)
-        {
-            *pColor = RGB(255,255,255);
-            return S_OK;
-        }
-        else if (iPropId == TMT_FILLCOLOR)
+        if (iPropId == TMT_FILLCOLOR)
         {
             *pColor = RGB(0,0,0);
             return S_OK;
@@ -1434,6 +1468,13 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
             return S_OK;
         }
     }
+
+    if (iPropId == TMT_TEXTCOLOR)
+    {
+        *pColor = RGB(255,255,255);
+        return S_OK;
+    }
+    
     return hr;
 }
 
@@ -1475,13 +1516,13 @@ public:
     std::array<HDC, 20> checkbutton;
     std::array<HDC, 4> commandlinkbutton;
     std::array<HDC, 3> commandlinkglyph;
-    std::array<HDC, 13> listview;
+    std::array<HDC, 14> listview;
     std::array<HDC, 4> scrollbar;
     std::array<HDC, 4> tab;
     std::array<HDC, 8> combobox;
     std::array<HDC, 4> editbox;
     std::array<HDC, 5> treeview;
-    std::array<HDC, 4> itemsview;
+    std::array<HDC, 6> itemsview;
     std::array<HDC, 10> progressbar;
     std::array<HDC, 2> indeterminatebar;
     std::array<HDC, 2> trackbar;
@@ -1492,38 +1533,38 @@ public:
     std::array<HDC, 4> modulelocationbutton;
     std::array<HDC, 8> modulesplitbutton;
     std::array<HDC, 12> navigationbutton;
-    std::array<HDC, 4> toolbarbutton;
+    std::array<HDC, 5> toolbarbutton;
     std::array<HDC, 4> addressband;
     std::array<HDC, 3> menuitem;
 
-    BOOL CachePushButton(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheRadioButton(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheCheckButton(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheCommandlinkButton(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheCommandlinkGlyph(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheListItem(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheListGroupHeader(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheScrollbar(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheScrollArrow(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheTab(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheCombobox(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheEditBox(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheTreeView(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheItemsView(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheProgressBar(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheIndeterminateBar(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheTrackBar(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheTrackBarThumb(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheTrackBarPointedThumb(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheHeader(HDC, ID2D1Factory*, INT, INT);
-    BOOL CachePreviewPaneSeperator(HDC, ID2D1Factory*);
-    BOOL CacheModuleButton(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheModuleLocationButton(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheModuleSplitButton(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheNavigationButton(HDC, ID2D1Factory*, INT, INT, INT);
-    BOOL CacheToolbarButton(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheAddressBand(HDC, ID2D1Factory*, INT, INT);
-    BOOL CacheMenuItem(HDC, ID2D1Factory*, INT, INT, INT);
+    BOOL CachePushButton(HDC, INT, INT);
+    BOOL CacheRadioButton(HDC, LPCRECT, INT, INT);
+    BOOL CacheCheckButton(HDC, LPCRECT, INT, INT);
+    BOOL CacheCommandlinkButton(HDC, INT, INT);
+    BOOL CacheCommandlinkGlyph(HDC, INT, INT);
+    BOOL CacheListItem(HDC, INT, INT, INT);
+    BOOL CacheListGroupHeader(HDC, INT, INT, INT);
+    BOOL CacheScrollbar(HDC, INT, INT, INT);
+    BOOL CacheScrollArrow(HDC, INT, INT);
+    BOOL CacheTab(HDC, INT, INT);
+    BOOL CacheCombobox(HDC, INT, INT, INT);
+    BOOL CacheEditBox(HDC, INT, INT, INT);
+    BOOL CacheTreeView(HDC, INT, INT, INT);
+    BOOL CacheItemsView(HDC, INT, INT, INT);
+    BOOL CacheProgressBar(HDC, INT, INT, INT);
+    BOOL CacheIndeterminateBar(HDC, INT, INT);
+    BOOL CacheTrackBar(HDC, INT, INT);
+    BOOL CacheTrackBarThumb(HDC, INT, INT, INT);
+    BOOL CacheTrackBarPointedThumb(HDC, INT, INT, INT);
+    BOOL CacheHeader(HDC, INT, INT);
+    BOOL CachePreviewPaneSeperator(HDC);
+    BOOL CacheModuleButton(HDC, INT, INT);
+    BOOL CacheModuleLocationButton(HDC, INT, INT);
+    BOOL CacheModuleSplitButton(HDC,INT, INT, INT);
+    BOOL CacheNavigationButton(HDC, INT, INT, INT);
+    BOOL CacheToolbarButton(HDC, INT, INT);
+    BOOL CacheAddressBand(HDC, INT, INT);
+    BOOL CacheMenuItem(HDC, INT, INT, INT);
 
     BOOL CreateDIB(HDC& elementHdc, HDC hDC, INT Width, INT Height)
     {
@@ -1729,7 +1770,7 @@ BOOL PaintScroll(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     if (iPartId == SBP_THUMBBTNHORZ) index += 2;
 
     if (!g_cache.scrollbar[index])
-        if (!g_cache.CacheScrollbar(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheScrollbar(hdc, iPartId, iStateId, index))
             return FALSE;
     // Make scrollbar thinner by moving the rect's left and right edges
     RECT rc = (iPartId == SBP_THUMBBTNVERT) ? 
@@ -1739,7 +1780,7 @@ BOOL PaintScroll(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     return TRUE;
 }
 
-BOOL CThemeCache::CacheScrollbar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheScrollbar(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT width = 18, height = 18;
@@ -1780,43 +1821,60 @@ BOOL PaintScrollBarArrows(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     FLOAT width = static_cast<FLOAT>(pRect->right - pRect->left);
     FLOAT height = static_cast<FLOAT>(pRect->bottom - pRect->top);
 
-    FLOAT triangleBaseWidth = 10.0f * scale;
-    FLOAT triangleHeight = 7.0f * scale;
+    FLOAT triangleBaseWidth = 7.0f * scale;
+    FLOAT triangleHeight = 4.5f * scale;
     FLOAT centerX = width / 2.0f;
     FLOAT centerY = height / 2.0f;
 
     D2D1_COLOR_F arrowColor;
-    if (iStateId == 2 || iStateId == 6 || iStateId == 10 || iStateId == 14)
-        arrowColor = MyD2D1Color(160, 224, 224, 224);
-    else
+    if (iStateId == 2 || iStateId == 6 || iStateId == 10 || iStateId == 14) {
+        triangleBaseWidth = 8.0f * scale;
+        triangleHeight = 5.5f * scale;
+        arrowColor = MyD2D1Color(192, 224, 224, 224);
+    }
+    else if (iStateId == 4 || iStateId == 8 || iStateId == 12 || iStateId == 16)
+        arrowColor = MyD2D1Color(192, 64, 64, 64);
+    else 
         arrowColor = MyD2D1Color(128, 160, 160, 160);
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush = nullptr;
     dcRenderTarget->CreateSolidColorBrush(arrowColor, &brush);
-    D2D1_POINT_2F points[3] = {};
+    D2D1_POINT_2F points[6] = {};
     if (iStateId >= ABS_UPNORMAL && iStateId <= ABS_UPDISABLED)
     {
-        points[0] = D2D1::Point2F(centerX - triangleBaseWidth / 2.0f, centerY + triangleHeight / 2.0f);
-        points[1] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY + triangleHeight / 2.0f);
-        points[2] = D2D1::Point2F(centerX, centerY - triangleHeight / 2.0f);
+        points[0] = D2D1::Point2F(centerX-1 - triangleBaseWidth / 2.0f, centerY + triangleHeight / 2.0f);
+        points[1] = D2D1::Point2F(centerX-1 - triangleBaseWidth / 2.0f, centerY+2 + triangleHeight / 2.0f);
+        points[2] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY+2 + triangleHeight / 2.0f);
+        points[3] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY + triangleHeight / 2.0f);
+        points[4] = D2D1::Point2F(centerX, centerY - triangleHeight / 2.0f);
+        points[5] = D2D1::Point2F(centerX-1, centerY - triangleHeight / 2.0f);
     }
     else if (iStateId >= ABS_DOWNNORMAL && iStateId <= ABS_DOWNDISABLED)
     {
-        points[0] = D2D1::Point2F(centerX - triangleBaseWidth / 2.0f, centerY - triangleHeight / 2.0f);
-        points[1] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY - triangleHeight / 2.0f);
-        points[2] = D2D1::Point2F(centerX, centerY + triangleHeight / 2.0f);
+        points[0] = D2D1::Point2F(centerX-1 - triangleBaseWidth / 2.0f, centerY - triangleHeight / 2.0f);
+        points[1] = D2D1::Point2F(centerX-1 - triangleBaseWidth / 2.0f, centerY-2 - triangleHeight / 2.0f);
+        points[2] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY-2 - triangleHeight / 2.0f);
+        points[3] = D2D1::Point2F(centerX + triangleBaseWidth / 2.0f, centerY - triangleHeight / 2.0f);
+        points[4] = D2D1::Point2F(centerX, centerY + triangleHeight / 2.0f);
+        points[5] = D2D1::Point2F(centerX-1, centerY + triangleHeight / 2.0f);
     }
     else if (iStateId >= ABS_LEFTNORMAL && iStateId <= ABS_LEFTDISABLED)
     {
-        points[0] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY - triangleBaseWidth / 2.0f);
-        points[1] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
-        points[2] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY);
+        points[0] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY - 1 - triangleBaseWidth / 2.0f);
+        points[1] = D2D1::Point2F(centerX+2 + triangleHeight / 2.0f, centerY - 1 - triangleBaseWidth / 2.0f);
+        points[2] = D2D1::Point2F(centerX+2 + triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
+        points[3] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
+        points[4] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY);
+        points[5] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY-1);
     }
     else if (iStateId >= ABS_RIGHTNORMAL && iStateId <= ABS_RIGHTDISABLED)
     {
-        points[0] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY - triangleBaseWidth / 2.0f);
-        points[1] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
-        points[2] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY);
+        points[0] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY-1 - triangleBaseWidth / 2.0f);
+        points[1] = D2D1::Point2F(centerX-2 - triangleHeight / 2.0f, centerY-1 - triangleBaseWidth / 2.0f);
+        points[2] = D2D1::Point2F(centerX-2 - triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
+        points[3] = D2D1::Point2F(centerX - triangleHeight / 2.0f, centerY + triangleBaseWidth / 2.0f);
+        points[4] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY);
+        points[5] = D2D1::Point2F(centerX + triangleHeight / 2.0f, centerY-1);
     }
 
     dcRenderTarget->BeginDraw();
@@ -1830,6 +1888,9 @@ BOOL PaintScrollBarArrows(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
             sink->BeginFigure(points[0], D2D1_FIGURE_BEGIN_FILLED);
             sink->AddLine(points[1]);
             sink->AddLine(points[2]);
+            sink->AddLine(points[3]);
+            sink->AddLine(points[4]);
+            sink->AddLine(points[5]);
             sink->EndFigure(D2D1_FIGURE_END_CLOSED);
             sink->Close();
 
@@ -1850,13 +1911,13 @@ BOOL PaintPushButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     : (iStateId == PBS_DISABLED) ? 3 : 0;
 
     if (!g_cache.pushbutton[index])
-        if (!g_cache.CachePushButton(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CachePushButton(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.pushbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CachePushButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CachePushButton(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT width = 18, height = 18;
@@ -1902,22 +1963,22 @@ BOOL PaintRadioButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = iStateId - 1;
 
     if (!g_cache.radiobutton[index])
-        if (!g_cache.CacheRadioButton(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheRadioButton(hdc, pRect, iStateId, index))
             return FALSE;
     // Some theme parts are always fixed size so no stretching is needed
     DrawNineGridStretch(hdc, g_cache.radiobutton[index], pRect);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheRadioButton(HDC hdc, LPCRECT pRect,  INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
-    INT width = 13 * scale, height = 13 * scale;
+    FLOAT width = pRect->right-pRect->left, height = pRect->bottom-pRect->top;
     if (!g_cache.CreateDIB(g_cache.radiobutton[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
-    RECT rc = { 0, 0, width, height};
+    RECT rc = { 0, 0, (INT)width, (INT)height};
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.radiobutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
@@ -1991,17 +2052,31 @@ BOOL CThemeCache::CacheRadioButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
     return TRUE;
 }
 
-BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+{
+    if (iPartId != BP_CHECKBOX || !g_d2dFactory)
+        return FALSE;
+    
+    INT index = iStateId - 1;
+
+    if (!g_cache.checkbutton[index])
+        if (!g_cache.CacheCheckButton(hdc, pRect, iStateId, index))
+            return FALSE;
+    DrawNineGridStretch(hdc, g_cache.checkbutton[index], pRect);
+    return TRUE;
+}
+
+BOOL CThemeCache::CacheCheckButton(HDC hdc, LPCRECT pRect, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
-    INT width = 13 * scale, height = 13 * scale;
+    FLOAT width = pRect->right-pRect->left, height = pRect->bottom-pRect->top;
     FLOAT cornerRadius = 3.f * scale;
 
     if (!g_cache.CreateDIB(g_cache.checkbutton[stateIndex], hdc, width, height))
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1DCRenderTarget> pRenderTarget;
-    RECT rc = { 0, 0, width, height};
+    RECT rc = { 0, 0, (INT)width, (INT)height};
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.checkbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
 
@@ -2051,6 +2126,9 @@ BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
     pRenderTarget->CreateSolidColorBrush(fillColor, &Brush);
     pRenderTarget->FillRoundedRectangle(&roundedRect, Brush.Get());
 
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> glyphBrush = nullptr;
+    pRenderTarget->CreateSolidColorBrush(MyD2D1Color(0, 0, 0), &glyphBrush);
+
     if (iStateId >= CBS_UNCHECKEDNORMAL && iStateId <= CBS_UNCHECKEDDISABLED)
     {
         Brush->SetColor(borderColor);
@@ -2058,68 +2136,37 @@ BOOL CThemeCache::CacheCheckButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId
         (D2D1_ROUNDED_RECT(D2D1::RectF(.5f, .5f, width - .5f, height - .5f), cornerRadius, cornerRadius), Brush.Get(), scale);
     }
     if (iStateId > CBS_UNCHECKEDDISABLED)
-    {
-        FLOAT glyphSize = fminf(width, height) * 0.85f;
-        FLOAT gx = (width - glyphSize) / 2.0f;
-        FLOAT gy = (height - glyphSize) / 2.0f;
-
-        Microsoft::WRL::ComPtr<ID2D1PathGeometry> geometry = nullptr;
-        g_d2dFactory->CreatePathGeometry(&geometry);
-        
-        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink = nullptr;
-        geometry->Open(&sink);
-        
+    {       
         if ((iStateId >= CBS_CHECKEDNORMAL && iStateId <= CBS_CHECKEDDISABLED) ||
             (iStateId >= CBS_IMPLICITNORMAL && iStateId <= CBS_IMPLICITDISABLED)) // Checkmark
         {
-            sink->BeginFigure(
-                D2D1::Point2F(gx + glyphSize * 0.2f, gy + glyphSize * 0.55f - 1.0f),
-                D2D1_FIGURE_BEGIN_HOLLOW);
-            sink->AddLine(
-                D2D1::Point2F(gx + glyphSize * 0.42f, gy + glyphSize * 0.75f - 1.0f));
-            sink->AddLine(
-                D2D1::Point2F(gx + glyphSize * 0.8f, gy + glyphSize * 0.3f - 1.0f));
-            sink->EndFigure(D2D1_FIGURE_END_OPEN);
+            FLOAT centerX = width/2.f - 2*scale;
+            FLOAT centerY = height/2.f + 2.5*scale;
+            FLOAT rightLen = width *.65f ;
+            FLOAT leftLen  = width *.3f;
+
+            DOUBLE dxyR = rightLen * 0.7071067;
+
+            DOUBLE dxL = leftLen * 0.5;
+            DOUBLE dyL = leftLen * 0.8660254;
+
+            D2D1_POINT_2F ptTip   = D2D1::Point2F(centerX, centerY);
+            D2D1_POINT_2F ptLeft  = D2D1::Point2F(ptTip.x - dxL, ptTip.y - dyL);
+            D2D1_POINT_2F ptRight = D2D1::Point2F(ptTip.x + dxyR, ptTip.y - dxyR);
+
+            pRenderTarget->DrawLine(ptLeft, ptTip, glyphBrush.Get(), scale * 1.2f);
+            pRenderTarget->DrawLine(ptTip, ptRight, glyphBrush.Get(), scale * 1.2f);
         }
         if (iStateId >= CBS_EXCLUDEDNORMAL && iStateId <= CBS_EXCLUDEDDISABLED) // X
         {
-            sink->BeginFigure(D2D1::Point2F(gx + glyphSize * 0.2f, gy + glyphSize * 0.2f), D2D1_FIGURE_BEGIN_HOLLOW);
-            sink->AddLine(D2D1::Point2F(gx + glyphSize * 0.8f, gy + glyphSize * 0.8f));
-            sink->EndFigure(D2D1_FIGURE_END_OPEN);
-
-            sink->BeginFigure(D2D1::Point2F(gx + glyphSize * 0.8f, gy + glyphSize * 0.2f), D2D1_FIGURE_BEGIN_HOLLOW);
-            sink->AddLine(D2D1::Point2F(gx + glyphSize * 0.2f, gy + glyphSize * 0.8f));
-            sink->EndFigure(D2D1_FIGURE_END_OPEN);
+            pRenderTarget->DrawLine((D2D1::Point2F(width *.3f, height/3.f)), (D2D1::Point2F(width *.7f, height/1.5f)), glyphBrush.Get());
+            pRenderTarget->DrawLine((D2D1::Point2F(width *.3f, height/1.5f)), (D2D1::Point2F(width *.7f, height/3.f)), glyphBrush.Get()); 
         }
         if (iStateId >= CBS_MIXEDNORMAL && iStateId <= CBS_MIXEDDISABLED) // Minus
-        {
-            sink->BeginFigure(D2D1::Point2F(gx + glyphSize * 0.3f, gy - 0.5f + glyphSize * 0.5f), D2D1_FIGURE_BEGIN_HOLLOW);
-            sink->AddLine(D2D1::Point2F(gx + glyphSize * 0.7f, gy - 0.5f + glyphSize * 0.5f));
-            sink->EndFigure(D2D1_FIGURE_END_OPEN);
-        }
-        sink->Close();
-    
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> glyphBrush = nullptr;
-        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(0, 0, 0), &glyphBrush);
-        pRenderTarget->DrawGeometry(geometry.Get(), glyphBrush.Get(), 1.5f);
-        
+            pRenderTarget->DrawLine((D2D1::Point2F(width *.3f, height/2.f)), (D2D1::Point2F(width *.7f, height/2.f)), glyphBrush.Get());        
     }
     auto hr = pRenderTarget->EndDraw();
     if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
-    return TRUE;
-}
-
-BOOL PaintCheckBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
-{
-    if (iPartId != BP_CHECKBOX || !g_d2dFactory)
-        return FALSE;
-    
-    INT index = iStateId - 1;
-
-    if (!g_cache.checkbutton[index])
-        if (!g_cache.CacheCheckButton(hdc, g_d2dFactory, iStateId, index))
-            return FALSE;
-    DrawNineGridStretch(hdc, g_cache.checkbutton[index], pRect);
     return TRUE;
 }
 
@@ -2193,13 +2240,13 @@ BOOL PaintCommandLink(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     : (iStateId == CMDLS_PRESSED) ? 2 : 3;
 
     if (!g_cache.commandlinkbutton[index])
-        if (!g_cache.CacheCommandlinkButton(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheCommandlinkButton(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.commandlinkbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT width = 18, height = 18;
@@ -2224,11 +2271,11 @@ BOOL CThemeCache::CacheCommandlinkButton(HDC hdc, ID2D1Factory* pFactory, INT iS
             pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
             break;
         case CMDLS_HOT:
-            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(64, 160, 160, 160), &brush);
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 144, 144, 144), &brush);
             pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
             break;
         case CMDLS_PRESSED:
-            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(32, 160, 160, 160), &brush);
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(64, 144, 144, 144), &brush);
             pRenderTarget->FillRoundedRectangle(&roundedRect, brush.Get());
             break;
         case CMDLS_DEFAULTED:
@@ -2252,13 +2299,13 @@ BOOL PaintCommandLinkGlyph(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     : (iStateId == CMDLGS_DISABLED) ? 3 : 0;
 
     if (!g_cache.commandlinkglyph[index])
-        if (!g_cache.CacheCommandlinkGlyph(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheCommandlinkGlyph(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.commandlinkglyph[index], pRect);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheCommandlinkGlyph(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheCommandlinkGlyph(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT x = 0;
@@ -2316,13 +2363,12 @@ BOOL CThemeCache::CacheCommandlinkGlyph(HDC hdc, ID2D1Factory* pFactory, INT iSt
 BOOL SanitizeAddressCombobox(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId)
 {
     HTHEME MyhTheme = nullptr;
-    if ((MyhTheme = OpenThemeData(WindowFromDC(hdc), L"DarkMode_AddressComposited::ComboBox")) 
+    if ((MyhTheme = OpenThemeData(WindowFromDC(hdc), L"AddressComposited::ComboBox")) 
     && (iPartId == CP_BORDER || iPartId == CP_TRANSPARENTBACKGROUND))
     {
         CloseThemeData(MyhTheme);
         return TRUE;
     }
-    CloseThemeData(MyhTheme);
     return FALSE;
 }
 
@@ -2334,13 +2380,13 @@ BOOL PaintCombobox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iPartId == CP_READONLY) ? iStateId - 1 : iStateId + 3;
     
     if (!g_cache.combobox[index])
-        if (!g_cache.CacheCombobox(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheCombobox(hdc, iPartId, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.combobox[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheCombobox(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheCombobox(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 3.f * scale;
@@ -2404,22 +2450,43 @@ BOOL CThemeCache::CacheCombobox(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     return TRUE;
 }
 
-BOOL PaintEditBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+BOOL IsAddressInnerBackground(HTHEME hTheme, HDC hdc, INT iPartId)
+{
+    HTHEME theme = NULL;
+    if ((theme = OpenThemeData(WindowFromDC(hdc), L"AddressComposited::Edit")) && iPartId == EP_BACKGROUNDWITHBORDER)
+    {
+        CloseThemeData(theme);
+        return TRUE;
+    }
+    CloseThemeData(theme);
+    return FALSE;
+}
+
+BOOL PaintEditBox(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory || (iPartId != EP_EDITBORDER_NOSCROLL && iPartId != EP_EDITBORDER_HSCROLL
-    && iPartId != EP_EDITBORDER_VSCROLL && iPartId != EP_EDITBORDER_HVSCROLL))
+    && iPartId != EP_EDITBORDER_VSCROLL && iPartId != EP_EDITBORDER_HVSCROLL && iPartId != EP_BACKGROUND
+    && (!IsAddressInnerBackground(hTheme, hdc, iPartId))
+    ))
         return FALSE;
 
-    INT index = iStateId - 1;
+    // Remove editbox white background flashing
+    if (iPartId ==  EP_BACKGROUND) {
+        FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        return TRUE;
+    }
+    INT index = (iPartId == EP_BACKGROUNDWITHBORDER) ? 3 : (iStateId == 1) ? 0 : iStateId - 2;
 
     if (!g_cache.editbox[index])
-        if (!g_cache.CacheEditBox(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheEditBox(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.editbox[index], pRect, 9, 9, 8, 8);
+    // hide the borders of the inner black background of EP_BACKGROUNDWITHBORDER theme class by expanding the black drawing.
+    RECT rc = (iPartId == EP_BACKGROUNDWITHBORDER) ? RECT{pRect->left-1, pRect->top-1, pRect->right+3,pRect->bottom+1} : *pRect;
+    DrawNineGridStretch(hdc, g_cache.editbox[index], &rc, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheEditBox(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheEditBox(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 3.f * scale;
@@ -2435,6 +2502,13 @@ BOOL CThemeCache::CacheEditBox(HDC hdc, ID2D1Factory* pFactory, INT iStateId, IN
 
     D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x + .5f, y + .5f, width - .5f, height - .5f), cornerRadius, cornerRadius);
     pRenderTarget->BeginDraw();  
+    if (iPartId == EP_BACKGROUNDWITHBORDER)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(0, 0, 0), &brush);
+        D2D1_RECT_F rc (0, 0, (FLOAT)width, (FLOAT)height);
+        pRenderTarget->FillRectangle(&rc, brush.Get());
+    }
     if (iStateId == ETS_NORMAL || iStateId == ETS_HOT)
     {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
@@ -2514,7 +2588,7 @@ BOOL PaintListBox(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     return TRUE;
 }
 
-BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
+BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, BOOL addressPart)
 {
     if (!g_d2dFactory || (iPartId != CP_DROPDOWNBUTTON && iPartId != CP_DROPDOWNBUTTONRIGHT
         && iPartId != CP_DROPDOWNBUTTONLEFT))
@@ -2548,7 +2622,7 @@ BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     FLOAT centerX = width / 2.f;
     FLOAT centerY = height / 2.f;
 
-    FLOAT arrowLength = fminf(width, height) * 0.25f;
+    FLOAT arrowLength = (addressPart) ? fminf(width, height) *  0.14f : fminf(width, height) *  0.25f;
     // 60 degree angle
     FLOAT dx = arrowLength * 0.866f;
     FLOAT dy = arrowLength * 0.5f;
@@ -2560,8 +2634,8 @@ BOOL PaintDropDownArrow(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     pRenderTarget->CreateSolidColorBrush(arrowColor, &brush);
 
     pRenderTarget->BeginDraw();
-    pRenderTarget->DrawLine(ptLeft, ptTip, brush.Get(), scale);
-    pRenderTarget->DrawLine(ptRight, ptTip, brush.Get(), scale);
+    pRenderTarget->DrawLine(ptLeft, ptTip, brush.Get(), scale*1.2f);
+    pRenderTarget->DrawLine(ptRight, ptTip, brush.Get(), scale*1.2f);
     auto hr = pRenderTarget->EndDraw();
     if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
     return TRUE;
@@ -2576,13 +2650,14 @@ BOOL PaintTab(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
               : (iStateId == TIS_HOT) ? 1 : (iStateId == TIS_DISABLED) ? 2 : 3;
 
     if (!g_cache.tab[index])
-        if (!g_cache.CacheTab(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheTab(hdc, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.tab[index], pRect, 9, 9, 8, 8);
+    RECT newRc = {pRect->left-1, pRect->top-1, pRect->right+1, pRect->bottom+1};
+    DrawNineGridStretch(hdc, g_cache.tab[index], &newRc, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheTab(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheTab(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -2615,7 +2690,7 @@ BOOL CThemeCache::CacheTab(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT st
     else if (iStateId == TIS_SELECTED || iStateId == TIS_FOCUSED)
     {
         const FLOAT desiredHeight = 2.0f;       
-        const FLOAT widthPadding  = 2.0f;
+        const FLOAT widthPadding  = 5.0f;
         const FLOAT verticalOffset = 2.0f;      
     
         FLOAT pillLeft   = widthPadding;
@@ -2649,13 +2724,13 @@ BOOL PaintTrackbar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iPartId == TKP_TRACK) ? 0 : 1;
 
     if (!g_cache.trackbar[index])
-        if (!g_cache.CacheTrackBar(hdc, g_d2dFactory, iPartId, index))
+        if (!g_cache.CacheTrackBar(hdc, iPartId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.trackbar[index], pRect, 2, 2, 2, 2);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheTrackBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT stateIndex)
+BOOL CThemeCache::CacheTrackBar(HDC hdc, INT iPartId, INT stateIndex)
 {
     INT width = 6, height = 6;
     if(!g_cache.CreateDIB(g_cache.trackbar[stateIndex], hdc, width, height))
@@ -2686,13 +2761,13 @@ BOOL PaintTrackbarThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iPartId == TKP_THUMB) ? iStateId - 1 : iStateId + 3;
 
     if (!g_cache.trackbarthumb[index])
-        if (!g_cache.CacheTrackBarThumb(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheTrackBarThumb(hdc, iPartId, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.trackbarthumb[index], pRect);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheTrackBarThumb(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheTrackBarThumb(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 3.f * scale;
@@ -2734,13 +2809,13 @@ BOOL PaintTrackBarPointedThumb(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect
                 (iPartId == TKP_THUMBLEFT) ? iStateId + 15 : iStateId + 19;
 
     if (!g_cache.trackbarthumb[index])
-        if (!g_cache.CacheTrackBarPointedThumb(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheTrackBarPointedThumb(hdc, iPartId, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.trackbarthumb[index], pRect);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheTrackBarPointedThumb(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     INT width = 11 * scale, height = 19 * scale;
@@ -2874,7 +2949,7 @@ BOOL PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
               : (iPartId == PP_CHUNK || iPartId == PP_CHUNKVERT) ? 8 : 9;
     
     if (!g_cache.progressbar[index])
-        if (!g_cache.CacheProgressBar(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheProgressBar(hdc, iPartId, iStateId, index))
             return FALSE;
     if (iPartId == PP_FILL)
         DrawNineGridStretch(hdc, g_cache.progressbar[index], pRect, 8, 10, 8, 10);
@@ -2885,7 +2960,7 @@ BOOL PaintProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     return TRUE;
 }
 
-BOOL CThemeCache::CacheProgressBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheProgressBar(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 3.f * scale;
@@ -3007,13 +3082,13 @@ BOOL PaintIndeterminateProgressBar(HDC hdc, INT iPartId, INT iStateId, LPCRECT p
     }
     
     if (!g_cache.indeterminatebar[index])
-        if (!g_cache.CacheIndeterminateBar(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheIndeterminateBar(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.indeterminatebar[index], &overlayRect, 6, 6, 5, 5);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT stateIndex)
+BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, INT iPartId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 3.f * scale;
@@ -3044,13 +3119,13 @@ BOOL CThemeCache::CacheIndeterminateBar(HDC hdc, ID2D1Factory* pFactory, INT iPa
 BOOL PaintListView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory || (iPartId != 0 && iPartId != LVP_LISTITEM 
-        && iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE))
+        && iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE && iPartId != LVP_COLUMNDETAIL))
         return FALSE;
 
     INT index;
-    if (iPartId == 0 || iPartId == 1) 
-        index = iStateId;
-    else if (iPartId == 6)
+    if (iPartId == 0 || iPartId == LVP_LISTITEM) 
+        index = (!iPartId) ? 0 : iStateId;
+    else if (iPartId == LVP_GROUPHEADER)
     {
         if (iStateId == 2 || iStateId == 4 || iStateId == 6
         || iStateId == 8 || iStateId == 10) index = 7;
@@ -3060,25 +3135,26 @@ BOOL PaintListView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         else if (iStateId == 14) index = 11;
         else return FALSE; 
     }
-    else if (iPartId == 7) index = 12;
+    else if (iPartId == LVP_GROUPHEADERLINE) index = 12;
+    else if (iPartId == LVP_COLUMNDETAIL) index = 13;
     else return FALSE;
 
     if (!g_cache.listview[index])
     {
         if (index <= 6)
         {
-            if (!g_cache.CacheListItem(hdc, g_d2dFactory, iPartId, iStateId, index))
+            if (!g_cache.CacheListItem(hdc, iPartId, iStateId, index))
                 return FALSE;
         }
         else
-            if (!g_cache.CacheListGroupHeader(hdc, g_d2dFactory, iPartId, iStateId, index))
+            if (!g_cache.CacheListGroupHeader(hdc, iPartId, iStateId, index))
                 return FALSE;
     }
     DrawNineGridStretch(hdc, g_cache.listview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheListItem(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     if (iPartId != 0 && iPartId != LVP_LISTITEM)
         return FALSE;
@@ -3112,24 +3188,24 @@ BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
         switch (iStateId)
         {
             case LISS_NORMAL:
-                fillColor = MyD2D1Color(32, 160, 160, 160);
+                fillColor = MyD2D1Color(96, 144, 144, 144);
                 borderColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
                 break;
             case LISS_HOT:
-                fillColor = MyD2D1Color(64, 160, 160, 160);
+                fillColor = MyD2D1Color(96, 144, 144, 144);
                 break;
             case LISS_SELECTED:
-                fillColor = MyD2D1Color(32, 160, 160, 160);
+                fillColor = MyD2D1Color(64, 144, 144, 144);
                 break;
             case LISS_DISABLED:
-                fillColor = MyD2D1Color(64, 160, 160, 160);
+                fillColor = MyD2D1Color(96, 144, 144, 144);
                 borderColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
                 break;
             case LISS_SELECTEDNOTFOCUS:
-                fillColor = MyD2D1Color(16, 160, 160, 160);
+                fillColor = MyD2D1Color(32, 144, 144, 144);
                 break;
             case LISS_HOTSELECTED:
-                fillColor = MyD2D1Color(48, 160, 160, 160);
+                fillColor = MyD2D1Color(64, 144, 144, 144);
                 borderColor = IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2);
                 break;
         }
@@ -3153,15 +3229,15 @@ BOOL CThemeCache::CacheListItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     return TRUE;
 }
 
-BOOL CThemeCache::CacheListGroupHeader(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheListGroupHeader(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
-    if (iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE)
+    if (iPartId != LVP_GROUPHEADER && iPartId != LVP_GROUPHEADERLINE && iPartId != LVP_COLUMNDETAIL)
         return FALSE;
 
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
     INT x = 0, y = 0;
-    INT width = 18, height = 18;
+    INT width = (iPartId == LVP_COLUMNDETAIL) ? 2 : 18, height = (iPartId == LVP_COLUMNDETAIL) ? 1 : 18;
 
     if (!g_cache.CreateDIB(g_cache.listview[stateIndex], hdc, width, height))
         return FALSE;
@@ -3172,7 +3248,17 @@ BOOL CThemeCache::CacheListGroupHeader(HDC hdc, ID2D1Factory* pFactory, INT iPar
         return FALSE;
 
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    if (iPartId == LVP_GROUPHEADER)
+    if (iPartId == LVP_COLUMNDETAIL)
+    {
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+        pRenderTarget->CreateSolidColorBrush(MyD2D1Color(128, 160, 160, 160), &brush);
+
+        pRenderTarget->BeginDraw();
+        pRenderTarget->DrawLine(D2D1_POINT_2F(width, y), D2D1_POINT_2F(width, height), brush.Get());
+        auto hr = pRenderTarget->EndDraw();
+        if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    }
+    else if (iPartId == LVP_GROUPHEADER)
     {
         D2D1_COLOR_F fillColor = {};
         D2D1_COLOR_F borderColor = {};
@@ -3182,21 +3268,21 @@ BOOL CThemeCache::CacheListGroupHeader(HDC hdc, ID2D1Factory* pFactory, INT iPar
             case LVGH_OPENHOT: case LVGH_OPENSELECTEDHOT:
             case LVGH_OPENSELECTEDNOTFOCUSEDHOT: case LVGH_OPENMIXEDSELECTIONHOT:
             case LVGH_CLOSEHOT:
-                fillColor = MyD2D1Color(64, 160, 160, 160);
+                fillColor = MyD2D1Color(96, 144, 144, 144);
                 break;
             case LVGH_CLOSESELECTED:
             case LVGH_CLOSEMIXEDSELECTION:
-                fillColor = MyD2D1Color(32, 160, 160, 160);
+                fillColor = MyD2D1Color(64, 144, 144, 144);
                 break;
             case LVGHL_CLOSEMIXEDSELECTIONHOT:
             case LVGHL_CLOSESELECTEDHOT:
-                fillColor = MyD2D1Color(48, 160, 160, 160);
+                fillColor = MyD2D1Color(64, 144, 144, 144);
                 break;
             case LVGHL_CLOSESELECTEDNOTFOCUSED:
                 borderColor = MyD2D1Color(255, 255, 255);
                 break;
             case LVGHL_CLOSESELECTEDNOTFOCUSEDHOT:
-                fillColor = MyD2D1Color(64, 160, 160, 160);
+                fillColor = MyD2D1Color(96, 144, 144, 144);
                 borderColor = MyD2D1Color(255, 255, 255);
                 break;
             default:
@@ -3242,13 +3328,13 @@ BOOL PaintTreeView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
                 (iStateId == TREIS_SELECTEDNOTFOCUS) ? 3 : 4;
 
     if (!g_cache.treeview[index])
-        if (!g_cache.CacheTreeView(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheTreeView(hdc, iPartId, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.treeview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheTreeView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheTreeView(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -3273,11 +3359,11 @@ BOOL CThemeCache::CacheTreeView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     }
     else if (iPartId == TVP_TREEITEM)
     {
-        D2D1_COLOR_F fillColor = (iStateId == TREIS_HOT)              ? MyD2D1Color(64, 160, 160, 160) : 
-                                 (iStateId == TREIS_SELECTED)         ? MyD2D1Color(32, 160, 160, 160) :
-                                 (iStateId == TREIS_SELECTEDNOTFOCUS) ? MyD2D1Color(16, 160, 160, 160) :
+        D2D1_COLOR_F fillColor = (iStateId == TREIS_HOT)              ? MyD2D1Color(96, 144, 144, 144) : 
+                                 (iStateId == TREIS_SELECTED)         ? MyD2D1Color(64, 144, 144, 144) :
+                                 (iStateId == TREIS_SELECTEDNOTFOCUS) ? MyD2D1Color(32, 144, 144, 144) :
                                                                         //TREIS_HOTSELECTED
-                                                                        MyD2D1Color(48, 160, 160, 160); 
+                                                                        MyD2D1Color(64, 144, 144, 144); 
 
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
         pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
@@ -3307,16 +3393,16 @@ BOOL PaintItemsView(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
         return FALSE;
 
     INT index = (iPartId == 1 && (iStateId % 2 == 1)) ? 0 :
-                (iPartId == 1 && (iStateId % 2 == 0)) ? 1 : (iStateId == 1) ? 2 : 3;
+                (iPartId == 1 && (iStateId % 2 == 0)) ? 1 : (iPartId == 6) ? iStateId + 1 : iStateId + 3;
     
     if (!g_cache.itemsview[index])
-        if (!g_cache.CacheItemsView(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheItemsView(hdc, iPartId, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.itemsview[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheItemsView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheItemsView(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -3369,7 +3455,7 @@ BOOL CThemeCache::CacheItemsView(HDC hdc, ID2D1Factory* pFactory, INT iPartId, I
         {
             D2D1_ROUNDED_RECT rect = D2D1::RoundedRect(D2D1::RectF(x-1, y-1, width+1, height+1), cornerRadius, cornerRadius);
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
-            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(96, 160, 160, 160), &fillBrush);
+            pRenderTarget->CreateSolidColorBrush(MyD2D1Color(128, 144, 144, 144), &fillBrush);
             pRenderTarget->FillRoundedRectangle(rect, fillBrush.Get());
         }
     }
@@ -3388,13 +3474,13 @@ BOOL PaintHeader(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iStateId % 3 == 2) ? 0 : 1;
     
     if (!g_cache.header[index])
-        if (!g_cache.CacheHeader(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheHeader(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.header[index], pRect, 12, 0, 11, 12);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheHeader(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheHeader(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 6.f * scale;
@@ -3414,11 +3500,11 @@ BOOL CThemeCache::CacheHeader(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT
     {
         case HIS_HOT: case HIS_SORTEDHOT:
         case HIS_ICONHOT: case HIS_ICONSORTEDHOT:
-            fillColor = MyD2D1Color(64, 160, 160, 160);
+            fillColor = MyD2D1Color(96, 144, 144, 144);
             break;
         case HIS_PRESSED: case HIS_SORTEDPRESSED:
         case HIS_ICONPRESSED: case HIS_ICONSORTEDPRESSED:
-            fillColor = MyD2D1Color(32, 160, 160, 160);
+            fillColor = MyD2D1Color(64, 144, 144, 144);
             break;
         case HIS_NORMAL: case HIS_SORTEDNORMAL:
         case HIS_ICONNORMAL: case HIS_ICONSORTEDNORMAL:
@@ -3458,15 +3544,15 @@ BOOL PaintPreviewPaneSeperator(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect
         return FALSE;
 
     if (!g_cache.previewseperator[0])
-        if (!g_cache.CachePreviewPaneSeperator(hdc, g_d2dFactory))
+        if (!g_cache.CachePreviewPaneSeperator(hdc))
             return FALSE;
     
     RECT rc{pRect->left+1, pRect->top, pRect->right, pRect->bottom};
-        DrawNineGridStretch(hdc, g_cache.previewseperator[0], &rc, 1, 0, 0, 0);
+    DrawNineGridStretch(hdc, g_cache.previewseperator[0], &rc, 1, 0, 0, 0);
     return TRUE;
 }
 
-BOOL CThemeCache::CachePreviewPaneSeperator(HDC hdc, ID2D1Factory* pFactory)
+BOOL CThemeCache::CachePreviewPaneSeperator(HDC hdc)
 {
     INT x = 0, y = 0;
     INT width = 3, height = 3;
@@ -3498,13 +3584,13 @@ BOOL PaintModuleButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = iStateId - 2; 
 
     if (!g_cache.modulebutton[index])
-        if (!g_cache.CacheModuleButton(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheModuleButton(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.modulebutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheModuleButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheModuleButton(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -3524,14 +3610,14 @@ BOOL CThemeCache::CacheModuleButton(HDC hdc, ID2D1Factory* pFactory, INT iStateI
     FLOAT Border2pxOffset = 0.f;
     switch (iStateId) 
     {
-        case 2: fillColor = MyD2D1Color(64, 160, 160, 160);
+        case 2: fillColor = MyD2D1Color(96, 144, 144, 144);
             break;
-        case 3: fillColor = MyD2D1Color(32, 160, 160, 160);
+        case 3: fillColor = MyD2D1Color(64, 144, 144, 144);
             break;
         case 4: Border2pxOffset = 1.f * scale;
             break;
         case 5: 
-            fillColor = MyD2D1Color(64, 160, 160, 160);
+            fillColor = MyD2D1Color(96, 144, 144, 144);
             Border2pxOffset = 1.f * scale;
             break;
     }
@@ -3569,13 +3655,13 @@ BOOL PaintModuleLocation(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = iStateId - 1; 
 
     if (!g_cache.modulelocationbutton[index])
-        if (!g_cache.CacheModuleLocationButton(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheModuleLocationButton(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.modulelocationbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheModuleLocationButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheModuleLocationButton(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -3644,13 +3730,14 @@ BOOL PaintModuleSplitButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iPartId == 4) ? iStateId - 2 : iStateId + 2; 
 
     if (!g_cache.modulesplitbutton[index])
-        if (!g_cache.CacheModuleSplitButton(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheModuleSplitButton(hdc, iPartId, iStateId, index))
             return FALSE;
-    DrawNineGridStretch(hdc, g_cache.modulesplitbutton[index], pRect, 9, 9, 8, 8);
+    RECT newRc = (iPartId == 4 && iStateId == 4) ? RECT{pRect->left, pRect->top, pRect->right+2, pRect->bottom} : *pRect;
+    DrawNineGridStretch(hdc, g_cache.modulesplitbutton[index], &newRc, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -3666,8 +3753,8 @@ BOOL CThemeCache::CacheModuleSplitButton(HDC hdc, ID2D1Factory* pFactory, INT iP
         return FALSE;
 
     D2D1_COLOR_F fillColor;
-    if (iStateId == 2) fillColor = MyD2D1Color(64, 160, 160, 160);
-    else if (iStateId == 3 || iStateId == 5) fillColor = MyD2D1Color(32, 160, 160, 160);
+    if (iStateId == 2) fillColor = MyD2D1Color(96, 144, 144, 144);
+    else if (iStateId == 3 || iStateId == 5) fillColor = MyD2D1Color(64, 144, 144, 144);
     if (iStateId == 4) {
         y = x += 1.f;
         width = height -= 1;
@@ -3755,16 +3842,16 @@ BOOL PaintNavigationButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory)
         return FALSE;
-    INT index = (iPartId == NAV_BACKBUTTON) ? iStateId - 1 : (iPartId == NAV_FORWARDBUTTON) ? iStateId + 3 : iStateId + 7; 
+    INT index = (iPartId == NAV_BACKBUTTON) ? iStateId - 1 : (iPartId == NAV_FORWARDBUTTON) ? iStateId + 3 : iStateId + 7;
 
     if (!g_cache.navigationbutton[index])
-        if (!g_cache.CacheNavigationButton(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheNavigationButton(hdc, iPartId, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.navigationbutton[index], pRect);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheNavigationButton(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheNavigationButton(HDC hdc, INT iPartId, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -3899,13 +3986,13 @@ BOOL PaintToolbarButton(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iStateId == TS_HOTCHECKED) ? 0 : (iStateId == TS_PRESSED) ? 1 : (iStateId == TS_CHECKED) ? 2 : 3;
 
     if (!g_cache.toolbarbutton[index])
-        if (!g_cache.CacheToolbarButton(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheToolbarButton(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.toolbarbutton[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheToolbarButton(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheToolbarButton(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -3918,8 +4005,8 @@ BOOL CThemeCache::CacheToolbarButton(HDC hdc, ID2D1Factory* pFactory, INT iState
     RECT rc = { 0, 0, width, height};
     if (FAILED(CreateBoundD2DRenderTarget(g_cache.toolbarbutton[stateIndex], &rc, g_d2dFactory, &pRenderTarget)))
         return FALSE;
-    D2D1_COLOR_F fillColor = (iStateId == TS_HOT || iStateId == TS_OTHERSIDEHOT) ? MyD2D1Color(64, 160, 160, 160) :
-                             (iStateId == TS_PRESSED || iStateId == TS_CHECKED) ? MyD2D1Color(32, 160, 160, 160) : MyD2D1Color(48, 160, 160, 160);
+    D2D1_COLOR_F fillColor = (iStateId == TS_HOT || iStateId == TS_OTHERSIDEHOT) ? MyD2D1Color(96, 144, 144, 144) :
+                             (iStateId == TS_PRESSED || iStateId == TS_CHECKED) ? MyD2D1Color(64, 144, 144, 144) : MyD2D1Color(80, 144, 144, 144);
 
     pRenderTarget->BeginDraw();
 
@@ -3940,6 +4027,54 @@ BOOL CThemeCache::CacheToolbarButton(HDC hdc, ID2D1Factory* pFactory, INT iState
     return TRUE;
 }
 
+BOOL PaintToolbarSplitDropDown(HDC hdc, INT iPartId,  INT iStateId, LPCRECT pRect)
+{
+    if (!g_d2dFactory || iPartId != TP_SPLITBUTTONDROPDOWN)
+        return FALSE;
+    
+    FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
+    FLOAT cornerRadius = 4.f * scale;
+    INT width = (pRect->right - pRect->left), height = (pRect->bottom - pRect->top);
+
+    ID2D1DCRenderTarget* pRenderTarget = nullptr;
+    if (FAILED(CreateBoundD2DRenderTarget(hdc, pRect, g_d2dFactory, &pRenderTarget)))
+        return FALSE;
+
+    D2D1_COLOR_F fillColor = (iStateId == TS_HOT || iStateId == TS_HOTCHECKED || iStateId == TS_OTHERSIDEHOT) ? MyD2D1Color(96, 144, 144, 144) : 
+                             (iStateId == TS_PRESSED || iStateId == TS_CHECKED) ? MyD2D1Color(64, 144, 144, 144) : MyD2D1Color(0, 0, 0, 0);
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
+    pRenderTarget->CreateSolidColorBrush(fillColor, &brush);
+    
+    D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(1.f, 0.f, (FLOAT)width, (FLOAT)height),cornerRadius, cornerRadius);
+    FLOAT centerX = width/2.f + 1;
+    FLOAT centerY = height/2.f;
+
+    FLOAT arrowLen = width * .25f;
+    FLOAT dx = arrowLen * 0.707f;
+
+    pRenderTarget->BeginDraw();
+
+    pRenderTarget->FillRoundedRectangle(&Rect, brush.Get());
+    if (iStateId == TS_DISABLED) 
+        brush->SetColor(MyD2D1Color(64, 64, 64));
+    else
+        brush->SetColor(MyD2D1Color(255, 255, 255));
+
+    if (iStateId == TS_PRESSED) {
+        pRenderTarget->DrawLine(D2D1::Point2F(centerX , centerY + arrowLen/2.f), D2D1::Point2F(centerX - dx , centerY - arrowLen/2.f), brush.Get(), scale * 1.5f);
+        pRenderTarget->DrawLine(D2D1::Point2F(centerX , centerY + arrowLen/2.f), D2D1::Point2F(centerX + dx, centerY - arrowLen/2.f), brush.Get(), scale * 1.5f);
+    }
+    else {
+        pRenderTarget->DrawLine(D2D1::Point2F(centerX + arrowLen/2.f, centerY), D2D1::Point2F(centerX - arrowLen/2.f, centerY - dx), brush.Get(), scale * 1.5f);
+        pRenderTarget->DrawLine(D2D1::Point2F(centerX + arrowLen/2.f, centerY), D2D1::Point2F(centerX - arrowLen/2.f, centerY + dx), brush.Get(), scale * 1.5f);
+    }
+
+    auto hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {Wh_Log(L"Failed D2D drawing [ERROR]: 0x%08X\n", hr); return FALSE;}
+    return TRUE;
+}
+
 BOOL PaintAddressBand(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
 {
     if (!g_d2dFactory || iPartId != 1)
@@ -3947,13 +4082,13 @@ BOOL PaintAddressBand(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = iStateId - 1;
 
     if (!g_cache.addressband[index])
-        if (!g_cache.CacheAddressBand(hdc, g_d2dFactory, iStateId, index))
+        if (!g_cache.CacheAddressBand(hdc, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.addressband[index], pRect, 12, 12, 11, 11);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheAddressBand(HDC hdc, ID2D1Factory* pFactory, INT iStateId, INT stateIndex)
+BOOL CThemeCache::CacheAddressBand(HDC hdc, INT iStateId, INT stateIndex)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 5.f * scale;
@@ -4014,13 +4149,13 @@ BOOL PaintMenu(HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect)
     INT index = (iPartId == 27 || iPartId == MENU_POPUPITEM) ? 0 : (MBI_PUSHED) ? 1 : 2;
 
     if (!g_cache.menuitem[index])
-        if (!g_cache.CacheMenuItem(hdc, g_d2dFactory, iPartId, iStateId, index))
+        if (!g_cache.CacheMenuItem(hdc, iPartId, iStateId, index))
             return FALSE;
     DrawNineGridStretch(hdc, g_cache.menuitem[index], pRect, 9, 9, 8, 8);
     return TRUE;
 }
 
-BOOL CThemeCache::CacheMenuItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, INT iStateId, INT indexState)
+BOOL CThemeCache::CacheMenuItem(HDC hdc, INT iPartId, INT iStateId, INT indexState)
 {
     FLOAT scale = (FLOAT)g_Dpi / USER_DEFAULT_SCREEN_DPI;
     FLOAT cornerRadius = 4.f * scale;
@@ -4046,7 +4181,7 @@ BOOL CThemeCache::CacheMenuItem(HDC hdc, ID2D1Factory* pFactory, INT iPartId, IN
     }
     else 
     {
-        D2D1_COLOR_F fillColor = (iPartId == MBI_PUSHED) ? MyD2D1Color(24, 160, 160, 160) : MyD2D1Color(48, 160, 160, 160);
+        D2D1_COLOR_F fillColor = (iPartId == MBI_PUSHED) ? MyD2D1Color(64, 144, 144, 144) : MyD2D1Color(128, 96, 96, 96);
         D2D1_ROUNDED_RECT Rect = D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), cornerRadius, cornerRadius);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> fillBrush;
         pRenderTarget->CreateSolidColorBrush(fillColor, &fillBrush);
@@ -4110,14 +4245,14 @@ HRESULT WINAPI HookedDrawThemeBackground(
         // ComboBox is used when the address bar is selected, while combobox is used when the drop-down window is open
         if (SanitizeAddressCombobox(hTheme, hdc, iPartId, iStateId))
             return S_OK;
-        else if (PaintDropDownArrow(hdc, iPartId, iStateId, pRect))
+        else if (PaintDropDownArrow(hdc, iPartId, iStateId, pRect, TRUE))
             return S_OK;
     }
     else if (ThemeClassName == L"Combobox")
     {
         if (PaintCombobox(hdc, iPartId, iStateId, pRect))
             return S_OK;
-        else if (PaintDropDownArrow(hdc, iPartId, iStateId, pRect))
+        else if (PaintDropDownArrow(hdc, iPartId, iStateId, pRect, FALSE))
             return S_OK;
     }
     else if (ThemeClassName == L"Listbox")
@@ -4127,7 +4262,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
     }
     else if (ThemeClassName == L"Edit")
     {
-        if (PaintEditBox(hdc, iPartId, iStateId, pRect))
+        if (PaintEditBox(hTheme, hdc, iPartId, iStateId, pRect))
             return S_OK;
     }
     else if (ThemeClassName == L"TrackBar")
@@ -4183,6 +4318,15 @@ HRESULT WINAPI HookedDrawThemeBackground(
     }
     else if (ThemeClassName == L"Toolbar")
     {
+        HTHEME theme = NULL;
+        if ((theme = OpenThemeData(WindowFromDC(hdc), L"BB::Toolbar")))
+        {
+            if (PaintToolbarSplitDropDown(hdc, iPartId, iStateId, pRect)) {
+                CloseThemeData(theme);
+                return S_OK;
+            }
+            CloseThemeData(theme);
+        }
         if (PaintToolbarButton(hdc, iPartId, iStateId, pRect))
             return S_OK;
     }
@@ -4204,7 +4348,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
         || (ThemeClassName == L"TaskDialog" && iPartId == 15 && iStateId == 0)
         || (ThemeClassName == L"Tab" && iPartId == 9)
         || (ThemeClassName == L"Status" && iPartId == 0)
-        || (ThemeClassName == L"Edit" && (iPartId == 3 || iPartId == 5))
         || (ThemeClassName == L"Tooltip" && iPartId == 1))
     {
         FillRect(hdc, pRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
@@ -4237,7 +4380,6 @@ HRESULT WINAPI HookedDrawThemeBackground(
             CloseThemeData(Toolbar);
             return S_OK;
         }
-        CloseThemeData(Toolbar);
     }
     return hr;
 }
@@ -4259,7 +4401,7 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
     }
     else if (ThemeClassName == L"Edit")
     {
-        if (PaintEditBox(hdc, iPartId, iStateId, pRect))
+        if (PaintEditBox(hTheme ,hdc, iPartId, iStateId, pRect))
             return S_OK;
     }
     else if (ThemeClassName == L"Button")
@@ -4718,7 +4860,6 @@ VOID FillBackgroundElements()
 VOID TextRenderingHook()
 {
     WindhawkUtils::SetFunctionHook(DrawTextW, HookedDrawTextW, &DrawTextW_orig);
-    WindhawkUtils::SetFunctionHook(DrawTextExW, HookedDrawTextExW, &DrawTextExW_orig);
     WindhawkUtils::SetFunctionHook(ExtTextOutW, HookedExtTextOutW, &ExtTextOutW_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeText, HookedDrawThemeText, &DrawThemeText_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeTextEx, HookedDrawThemeTextEx, &DrawThemeTextEx_orig);
@@ -4907,10 +5048,12 @@ VOID LoadSettings(VOID)
        g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
 
     g_settings.FillBg = Wh_GetIntSetting(L"RenderingMod.ThemeBackground");
-    if(g_settings.FillBg) {
+    if(g_settings.FillBg)
         FillBackgroundElements();
+    
+    g_settings.TextAlphaBlend = Wh_GetIntSetting(L"RenderingMod.TextAlphaBlend");
+    if(g_settings.TextAlphaBlend)
         TextRenderingHook();
-    }
      
     auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"type"));
     if (0 == wcscmp(strStyle, L"acrylicblur"))
@@ -5159,4 +5302,3 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
-
