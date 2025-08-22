@@ -1,3 +1,8 @@
+## 1.3.10 ([Aug 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/33da2cbc03614b05db6da7fbcaf009ca7060e2e6/mods/taskbar-grouping.wh.cpp))
+
+* The "Place ungrouped items together" option can now be applied only for non-pinned items.
+* Fixed the mod not applying on boot when used with ExplorerPatcher.
+
 ## 1.3.9 ([May 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/fd599038b18456c3a0bee87e2f2e3b0e2d321dfb/mods/taskbar-grouping.wh.cpp))
 
 * Fixed jump list menus closing right after opening in some cases.
