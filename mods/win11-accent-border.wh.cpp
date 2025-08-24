@@ -2,7 +2,7 @@
 // @id              win11-accent-border
 // @name            Windows 11 Accent Window Border
 // @description     Show the accent color on the border but not on the titlebar
-// @version         1.0.1
+// @version         1.0.2
 // @author          Guerra24
 // @github          https://github.com/Guerra24
 // @include         *
@@ -42,7 +42,7 @@ const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
 void LoadColors() {
     DWORD color;
     DWORD colorSize = sizeof(color);
-    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", RRF_RT_REG_DWORD, NULL, &color, &colorSize);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent", L"AccentColorMenu", RRF_RT_REG_DWORD, NULL, &color, &colorSize);
 
     BorderActive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
 
