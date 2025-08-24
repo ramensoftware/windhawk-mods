@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-22T19:59:34.000Z</updated>
+    <updated>2025-08-24T06:25:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.2]]></title>
+        <id>https://windhawk.net/mods/win11-accent-border#f251191b1143234f2924240a3cca66f31a0e4947</id>
+        <link href="https://windhawk.net/mods/win11-accent-border"/>
+        <updated>2025-08-24T06:25:42.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixes #2348</p>
+<p>Something appears to be messing with DWM registry keys in WinAppSDK MSIX packaged apps that make them not update in sync. This also affects DWM APIs and messages. Explorer's keys appear to behave correctly and update in sync with everything else and contain the same value so use those instead.</p>]]></content>
+        <author>
+            <name>Guerra24</name>
+            <uri>https://github.com/Guerra24</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove "Exit Fullscreen" popup in Chrome 1.1]]></title>
         <id>https://windhawk.net/mods/remove-fullscreen-popup-chrome#332fbde670638a896bcbf760f8a2648bf572f6f2</id>
@@ -325,20 +337,6 @@ so does not need the download of the debugging symbols.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.6.1]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#a735c640a09ff65801f32dbe9e3b5f872380df19</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-08-05T19:49:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Custom painted theme parts made DPI aware</li>
-<li>Use system's accent palette for accent colorizer</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>

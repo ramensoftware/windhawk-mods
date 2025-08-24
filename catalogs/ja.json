@@ -5216,7 +5216,7 @@
                 "published": 1749228741000,
                 "rating": 10,
                 "ratingUsers": 9,
-                "updated": 1753763324000,
+                "updated": 1756016742000,
                 "users": 1201
             },
             "metadata": {
@@ -5231,7 +5231,7 @@
                     "*"
                 ],
                 "name": "Windows 11 Accent Window Border",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "win11-old-taskmgr": {
