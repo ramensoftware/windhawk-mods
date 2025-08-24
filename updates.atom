@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-24T06:25:42.000Z</updated>
+    <updated>2025-08-24T07:57:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.3]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#bdd9ada4189479dd475c3db41ee033f5ef190a17</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-08-24T07:57:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.66-1.2.71</li>
+<li>Changing the playback speed is no longer supported on Spotify 1.2.67 and higher due to Spotify blocking the way this mod changed it</li>
+<li>Fix basic frames being drawn wrongly when entering and exiting the full-screen mode, when the native frames are disabled</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.2]]></title>
         <id>https://windhawk.net/mods/win11-accent-border#f251191b1143234f2924240a3cca66f31a0e4947</id>
@@ -326,17 +341,6 @@ so does not need the download of the debugging symbols.</p>]]></content>
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable Win10 taskbar on Win11 24H2 0.1.2]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#54dde4e2305ee64046cb84ffb2520f83dfe26f4f</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
-        <updated>2025-08-05T22:15:42.000Z</updated>
-        <content type="html"><![CDATA[<p>Update readme</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
