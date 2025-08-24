@@ -1141,7 +1141,6 @@ BOOL HookCreateTrackPlayer(char* pbExecutable, BOOL shouldFindSetPlaybackSpeed) 
     // This only works on Spotify x64 1.2.45 and newer
     // Don't find SetPlaybackSpeed on a known unsupported version, as finding non-existent instructions will delay startup
     if (shouldFindSetPlaybackSpeed) {
-        // Try the new one first, as the old one has matches to other functions, causing crashes when wrongly called
         SetPlaybackSpeed = (SetPlaybackSpeed_t)PatchMemory(L"SetPlaybackSpeed", pbExecutable, SetPlaybackSpeed_instructions, {}, 0, 1);
         Wh_Log(L"SetPlaybackSpeed at %p", SetPlaybackSpeed);
     }
