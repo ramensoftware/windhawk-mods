@@ -1,3 +1,8 @@
+## 1.1.0 ([Aug 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/199530383fec21b64c31aa1d8ec2a656aa6838b8/mods/spoof-light-dark-theme.wh.cpp))
+
+- Hook more registry functions to support more applications
+- Expand environment variables when reading spoof paths
+
 ## 1.0.2 ([Jul 6, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6957e8c744705ce82a7baa9d6b9d821423fec60c/mods/spoof-light-dark-theme.wh.cpp))
 
 - Fix "Invalid parameter passed to C runtime function" log spam
