@@ -2,7 +2,7 @@
 // @id              spoof-light-dark-theme
 // @name            Spoof Light/Dark Theme
 // @description     Use light/dark theme on an application basis
-// @version         1.0.2
+// @version         1.1.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -36,7 +36,8 @@ bool g_fSpoofTheme = false;
 // If spoofing, this dictates whether we're spoofing light or dark.
 bool g_fDarkTheme = false;
 
-typedef enum _KEY_INFORMATION_CLASS {
+typedef enum _KEY_INFORMATION_CLASS
+{
     KeyBasicInformation,
     KeyNodeInformation,
     KeyFullInformation,
@@ -49,6 +50,12 @@ typedef enum _KEY_INFORMATION_CLASS {
     KeyLayerInformation,
     MaxKeyInfoClass
 } KEY_INFORMATION_CLASS;
+
+typedef struct _KEY_NAME_INFORMATION
+{
+    ULONG NameLength;
+    WCHAR Name[1];
+} KEY_NAME_INFORMATION, *PKEY_NAME_INFORMATION;
 
 EXTERN_C NTSYSAPI NTSTATUS NTAPI NtQueryKey(
     IN HANDLE KeyHandle,
@@ -69,6 +76,82 @@ bool EndsWith(const wchar_t *str, const wchar_t *suffix)
     return 0 == wcsnicmp(str + lenstr - lensuffix, suffix, lensuffix);
 }
 
+/**
+  * Applies the dark mode spoof to the arguments of a registry call.
+  * 
+  * If fAnsi is set, lpSubKey and lpValueName will be treated as ANSI
+  * strings (LPCSTR)
+  */
+void ApplyDarkModeSpoof(
+    LSTATUS lStatus,
+    HKEY    hkey,
+    LPCWSTR lpSubKey,
+    LPCWSTR lpValueName,
+    LPDWORD lpcbData,
+    bool    fAnsi,
+    LPDWORD lpData
+)
+{
+    ULONG ulAlloc = 0;
+    NTSTATUS status;
+    KEY_NAME_INFORMATION *pNameInfo = nullptr;
+    HKEY hkeyQuery = hkey;
+    bool fOpenedSubKey = false;
+
+    if (!g_fSpoofTheme || lStatus != ERROR_SUCCESS || !hkey || !lpValueName || !lpcbData || !lpData)
+        return;
+
+    // Check value name
+    bool fIsLightThemeValue;
+    if (fAnsi)
+        fIsLightThemeValue = !stricmp((LPCSTR)lpValueName, "AppsUseLightTheme");
+    else
+        fIsLightThemeValue = !wcsicmp(lpValueName, L"AppsUseLightTheme");
+
+    if (!fIsLightThemeValue)
+        goto cleanup;
+
+    if (lpSubKey && (fAnsi ? *(LPCSTR)lpSubKey : *lpSubKey))
+    {
+        hkeyQuery = NULL;
+        if (fAnsi)
+            RegOpenKeyExA(hkey, (LPCSTR)lpSubKey, 0, KEY_READ, &hkeyQuery);
+        else
+            RegOpenKeyExW(hkey, lpSubKey, 0, KEY_READ, &hkeyQuery);
+        if (!hkeyQuery)
+            goto cleanup;
+        fOpenedSubKey = true;
+    }
+
+    // Check key name
+    status = NtQueryKey(hkeyQuery, KeyNameInformation, nullptr, 0, &ulAlloc);
+    if (status != STATUS_BUFFER_TOO_SMALL)
+        goto cleanup;
+
+    // Add space for null terminator and allocate
+    ulAlloc += sizeof(WCHAR);
+    pNameInfo = (KEY_NAME_INFORMATION *)LocalAlloc(LPTR, ulAlloc);
+    if (!pNameInfo)
+        goto cleanup;
+    ZeroMemory(pNameInfo, ulAlloc);
+
+    status = NtQueryKey(hkeyQuery, KeyNameInformation, pNameInfo, ulAlloc, &ulAlloc);
+    if (status != STATUS_SUCCESS)
+        goto cleanup;
+
+    if (!EndsWith(pNameInfo->Name, L"\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"))
+        goto cleanup;
+
+    *lpData = !g_fDarkTheme;
+
+cleanup:
+    if (pNameInfo)
+        LocalFree(pNameInfo);
+
+    if (fOpenedSubKey)
+        RegCloseKey(hkeyQuery);
+}
+
 using RegQueryValueExW_t = decltype(&RegQueryValueExW);
 RegQueryValueExW_t RegQueryValueExW_orig;
 LSTATUS WINAPI RegQueryValueExW_hook(
@@ -81,30 +164,57 @@ LSTATUS WINAPI RegQueryValueExW_hook(
 )
 {
     LSTATUS lStatus = RegQueryValueExW_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-    if (g_fSpoofTheme && ERROR_SUCCESS == lStatus && lpData && lpValueName && 0 == wcsicmp(lpValueName, L"AppsUseLightTheme"))
-    {
-        ULONG ulSize = 0;
-        NTSTATUS status = NtQueryKey(hKey, KeyNameInformation, nullptr, 0, &ulSize);
-        if (status == STATUS_BUFFER_TOO_SMALL)
-        {
-            ulSize += 2;
-            LPWSTR lpBuffer = new WCHAR[ulSize / sizeof(WCHAR)];
-            if (lpBuffer)
-            {
-                status = NtQueryKey(hKey, KeyNameInformation, lpBuffer, ulSize, &ulSize);
-                if (status == STATUS_SUCCESS)
-                {
-                    LPCWSTR lpKeyName = lpBuffer + 2;
-                    lpBuffer[ulSize / sizeof(WCHAR)] = L'\0';
-                    if (EndsWith(lpKeyName, L"\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"))
-                    {
-                        *(LPDWORD)lpData = !g_fDarkTheme;
-                    }
-                }
-                delete[] lpBuffer;
-            }
-        }
-    }
+    ApplyDarkModeSpoof(lStatus, hKey, nullptr, lpValueName, lpcbData, false, (LPDWORD)lpData);
+    return lStatus;
+}
+
+using RegQueryValueExA_t = decltype(&RegQueryValueExA);
+RegQueryValueExA_t RegQueryValueExA_orig;
+LSTATUS WINAPI RegQueryValueExA_hook(
+    HKEY    hKey,
+    LPCSTR  lpValueName,
+    LPDWORD lpReserved,
+    LPDWORD lpType,
+    LPBYTE  lpData,
+    LPDWORD lpcbData
+)
+{
+    LSTATUS lStatus = RegQueryValueExA_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+    ApplyDarkModeSpoof(lStatus, hKey, nullptr, (LPCWSTR)lpValueName, lpcbData, true, (LPDWORD)lpData);
+    return lStatus;
+}
+
+using RegGetValueW_t = decltype(&RegGetValueW);
+RegGetValueW_t RegGetValueW_orig;
+LSTATUS WINAPI RegGetValueW_hook(
+    HKEY    hkey,
+    LPCWSTR lpSubKey,
+    LPCWSTR lpValue,
+    DWORD   dwFlags,
+    LPDWORD pdwType,
+    PVOID   pvData,
+    LPDWORD pcbData
+)
+{
+    LSTATUS lStatus = RegGetValueW_orig(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    ApplyDarkModeSpoof(lStatus, hkey, lpSubKey, lpValue, pcbData, false, (LPDWORD)pvData);
+    return lStatus;
+}
+
+using RegGetValueA_t = decltype(&RegGetValueA);
+RegGetValueA_t RegGetValueA_orig;
+LSTATUS WINAPI RegGetValueA_hook(
+    HKEY    hkey,
+    LPCSTR  lpSubKey,
+    LPCSTR  lpValue,
+    DWORD   dwFlags,
+    LPDWORD pdwType,
+    PVOID   pvData,
+    LPDWORD pcbData
+)
+{
+    LSTATUS lStatus = RegGetValueA_orig(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+    ApplyDarkModeSpoof(lStatus, hkey, (LPCWSTR)lpSubKey, (LPCWSTR)lpValue, pcbData, true, (LPDWORD)pvData);
     return lStatus;
 }
 
@@ -132,15 +242,18 @@ void UpdateSpoofInfo(void)
             break;
         }
 
+        WCHAR szExpandedPath[MAX_PATH];
+        ExpandEnvironmentStringsW(szPath, szExpandedPath, ARRAYSIZE(szExpandedPath));
+        Wh_FreeStringSetting(szPath);
+
         // Does the current application path or name match the spoof?
         WCHAR *pBackslash = wcsrchr(szAppPath, L'\\');
-        if (0 == wcsicmp(szAppPath, szPath)
-        || (pBackslash && 0 == wcsicmp(pBackslash + 1, szPath)))
+        if (0 == wcsicmp(szAppPath, szExpandedPath)
+        || (pBackslash && 0 == wcsicmp(pBackslash + 1, szExpandedPath)))
         {
             g_fSpoofTheme = true;
             g_fDarkTheme = Wh_GetIntSetting(L"spoofs[%d].dark", i);
         }
-        Wh_FreeStringSetting(szPath);
 
         if (g_fSpoofTheme)
         {
@@ -158,23 +271,38 @@ void Wh_ModSettingsChanged(void)
     UpdateSpoofInfo();
 }
 
+#define HOOK(func)                                                                         \
+    if (!Wh_SetFunctionHook((void *)func, (void *)func ## _hook, (void **)&func ## _orig)) \
+    {                                                                                      \
+        Wh_Log(L"Failed to hook %s", L ## #func);                                          \
+        return FALSE;                                                                      \
+    }
+
 BOOL Wh_ModInit(void)
 {
     UpdateSpoofInfo();
 
-    Wh_SetFunctionHook(
-        (void *)RegQueryValueExW,
-        (void *)RegQueryValueExW_hook,
-        (void **)&RegQueryValueExW_orig
-    );
-    void *ShouldAppsUseDarkMode = (void *)GetProcAddress(LoadLibraryW(L"uxtheme.dll"), (LPCSTR)132);
+    HOOK(RegQueryValueExW);
+    HOOK(RegQueryValueExA);
+    HOOK(RegGetValueW);
+    HOOK(RegGetValueA);
+
+    HMODULE hUxTheme = LoadLibraryExW(L"UxTheme.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!hUxTheme)
+    {
+        Wh_Log(L"Failed to load UxTheme.dll");
+        return FALSE;
+    }
+
+    void *ShouldAppsUseDarkMode = (void *)GetProcAddress(hUxTheme, (LPCSTR)132);
     if (ShouldAppsUseDarkMode)
     {
-        Wh_SetFunctionHook(
-            (void *)ShouldAppsUseDarkMode,
-            (void *)ShouldAppsUseDarkMode_hook,
-            (void **)&ShouldAppsUseDarkMode_orig
-        );
+        HOOK(ShouldAppsUseDarkMode);
+    }
+    else
+    {
+        Wh_Log(L"Failed to get address of ShouldAppsUseDarkMode");
+        return FALSE;
     }
 
     return TRUE;
