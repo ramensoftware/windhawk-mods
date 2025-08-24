@@ -5,8 +5,6 @@
 // @version         1.0.0
 // @author          aubymori
 // @github          https://github.com/aubymori
-// @twitter         https://twitter.com/jack
-// @homepage        https://your-personal-homepage.example.com/
 // @include         *
 // @compilerOptions -lcomdlg32
 // ==/WindhawkMod==
