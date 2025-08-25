@@ -37,6 +37,8 @@ MUI system).
 
 #include <stdio.h>
 
+bool g_fLangSet = false;
+
 void UpdateUILanguage(void)
 {
     LPWSTR pszLanguages = nullptr;
@@ -94,7 +96,7 @@ void UpdateUILanguage(void)
         }
     }
 
-    if (!SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, pszLanguages, nullptr))
+    if ((pszLanguages || g_fLangSet) || !SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, pszLanguages, nullptr))
     {
         DWORD dwErr = GetLastError();
         if (dwErr != ERROR_CANNOT_IMPERSONATE)
@@ -126,6 +128,8 @@ void UpdateUILanguage(void)
         }
     }
 
+    g_fLangSet = (pszLanguages != nullptr);
+
     if (pszLanguages)
         LocalFree(pszLanguages);
 }
@@ -143,5 +147,6 @@ BOOL Wh_ModInit(void)
 
 void Wh_ModUninit(void)
 {
-    SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, nullptr, nullptr);
+    if (g_fLangSet)
+        SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, nullptr, nullptr);
 }
