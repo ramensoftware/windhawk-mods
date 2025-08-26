@@ -1,3 +1,12 @@
+## 1.6.3 ([Aug 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a1e5471c16c55ce3827e8f85367aafa200d0e69a/mods/taskbar-clock-customization.wh.cpp))
+
+* Added more settings for system performance metrics:
+  * Network metrics format: MB/s or MBit/s, with or without KB/s or KBit/s, optionally use a number only.
+  * Fixed decimal places for network metrics (e.g. always show a single digit after the period).
+  * Percentage format for CPU/RAM: Custom or no padding for a single digit.
+* Use "Processor Utility" metric instead of "Processor Time" for a more accurate CPU usage calculation.
+* Fixed compatibility with Windows feature flag 38762814, which makes the clock clickable on all taskbars.
+
 ## 1.6.2 ([Aug 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/725fd582986a072d0dc02c11281a56d30c3c2576/mods/taskbar-clock-customization.wh.cpp))
 
 * Fixed performance metrics (upload/download speed) always showing zero values on non-English systems. The fix in version 1.6.1 was incomplete.
