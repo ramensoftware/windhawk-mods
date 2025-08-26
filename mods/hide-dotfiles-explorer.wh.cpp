@@ -170,8 +170,8 @@ bool ShouldHideFile(std::wstring_view fileName) noexcept {
     }
     
     auto matchesPattern = [](std::wstring_view name, const std::vector<std::wstring>& patterns) noexcept -> bool {
-        return std::ranges::any_of(patterns, [name](const std::wstring& pattern) {
-            std::wstring temp(name);
+        std::wstring temp(name);
+        return std::ranges::any_of(patterns, [&temp](const std::wstring& pattern) {
             return PathMatchSpecW(temp.c_str(), pattern.c_str()) != FALSE;
         });
     };
