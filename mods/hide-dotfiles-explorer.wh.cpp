@@ -30,18 +30,30 @@ Files are completely hidden from view regardless of Explorer's hidden file visib
 You can exclude specific files from being hidden using the dotfile whitelist, or specify 
 additional files to always hide regardless of whether they start with a dot.
 
+### Display Modes
+Choose how dotfiles should be handled:
+- **Never show**: Files are completely hidden from directory listings (default)
+- **Show as hidden**: Files are shown with the hidden attribute (like Unix `ls -a`)
+- **Show as system**: Files are shown with both hidden and system attributes
+
 ### Filename Matching
 - **Case-insensitive**: Filenames are matched regardless of case (e.g., `.Gitignore` will match `.gitignore`)
-- **Exact matching**: Full filename must match exactly (no partial matches)
+- **Pattern matching**: Supports wildcards using Windows pattern matching syntax
+  - `*` matches zero or more characters
+  - `?` matches exactly one character
+  - Examples: `.env*` matches `.env`, `.env.local`, `.env.production`
 
 ### Settings
-- **Dotfile Whitelist**: List of dotfiles to show (e.g., `.gitignore`, `.env`)
-- **Always Hide**: List of filenames to always hide, even if they don't start with a dot (e.g., `desktop.ini`, `Thumbs.db`)
+- **Display Mode**: How to handle dotfiles (Never show, Show as hidden, Show as system)
+- **Dotfile Whitelist**: List of dotfile patterns to show (e.g., `.gitignore`, `.env*`, `.*.config`)
+- **Always Hide**: List of filename patterns to always hide, even if they don't start with a dot (e.g., `desktop.ini`, `Thumbs.db`, `*.tmp`)
 
 Examples:
 - To show `.gitignore`: add `.gitignore` to dotfile whitelist
+- To show all `.env*` files: add `.env*` to dotfile whitelist
 - To hide `desktop.ini`: add `desktop.ini` to always-hide list
-- `.env.local` will not be shown if only `.env` is whitelisted
+- To hide all `.tmp` files: add `*.tmp` to always-hide list
+- `.env.local` will be shown if `.env*` is whitelisted
 
 ## Important Notes
 - **No file attributes are modified** - hidden files retain their original attributes
@@ -53,12 +65,19 @@ Examples:
 
 // ==WindhawkModSettings==
 /*
+- displayMode: neverShow
+  $name: Display Mode
+  $description: How to handle dotfiles in directory listings
+  $options:
+  - neverShow: Never show files (completely hidden)
+  - showAsHidden: Show files as hidden (with hidden attribute)
+  - showAsSystem: Show files as system (with hidden+system attributes)
 - dotfileWhitelist: [""]
   $name: Dotfile Whitelist
-  $description: List of dotfiles to show
+  $description: List of dotfile patterns to show
 - alwaysHide: [""]
   $name: Always Hide
-  $description: List of filenames to always hide regardless of dotfile status
+  $description: List of filename patterns to always hide regardless of dotfile status
 */
 // ==/WindhawkModSettings==
 
@@ -71,7 +90,14 @@ Examples:
 #include <string>
 #include <algorithm>
 
+enum class DisplayMode {
+    NeverShow,
+    ShowAsHidden,
+    ShowAsSystem
+};
+
 struct {
+    DisplayMode displayMode = DisplayMode::NeverShow;
     std::vector<std::wstring> dotfileWhitelist;
     std::vector<std::wstring> alwaysHide;
 } g_settings;
@@ -111,6 +137,16 @@ NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
 void ParseSettings() {
     g_settings.dotfileWhitelist.clear();
     g_settings.alwaysHide.clear();
+    
+    PCWSTR displayModeStr = Wh_GetStringSetting(L"displayMode");
+    if (wcscmp(displayModeStr, L"showAsHidden") == 0) {
+        g_settings.displayMode = DisplayMode::ShowAsHidden;
+    } else if (wcscmp(displayModeStr, L"showAsSystem") == 0) {
+        g_settings.displayMode = DisplayMode::ShowAsSystem;
+    } else {
+        g_settings.displayMode = DisplayMode::NeverShow;
+    }
+    Wh_FreeStringSetting(displayModeStr);
     
     auto loadSettingList = [](const wchar_t* settingName, std::vector<std::wstring>& target) {
         for (int i = 0;; i++) {
@@ -163,53 +199,95 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noe
         return;
     }
     
-    auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
-    auto* writeEntry = currentEntry;
-    ULONG_PTR totalBytesRead = 0;
-    ULONG_PTR totalBytesWritten = 0;
-    
-    const auto* const bufferEnd = reinterpret_cast<const BYTE*>(FileInformation) + *bytesReturned;
-    
-    while (totalBytesRead < *bytesReturned) {
-        const ULONG nextEntryOffset = currentEntry->NextEntryOffset;
-        const ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
+    if (g_settings.displayMode == DisplayMode::NeverShow) {
+        // Original behavior: completely hide files
+        auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
+        auto* writeEntry = currentEntry;
+        ULONG_PTR totalBytesRead = 0;
+        ULONG_PTR totalBytesWritten = 0;
         
-        const ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        const std::wstring_view fileName(currentEntry->FileName, fileNameLength);
+        const auto* const bufferEnd = reinterpret_cast<const BYTE*>(FileInformation) + *bytesReturned;
         
-        const bool shouldHide = fileNameLength > 0 && ShouldHideFile(fileName);
-        
-        if (!shouldHide) {
-            if (writeEntry != currentEntry) {
-                std::memmove(writeEntry, currentEntry, currentEntrySize);
+        while (totalBytesRead < *bytesReturned) {
+            const ULONG nextEntryOffset = currentEntry->NextEntryOffset;
+            const ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
+            
+            const ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
+            const std::wstring_view fileName(currentEntry->FileName, fileNameLength);
+            
+            const bool shouldHide = fileNameLength > 0 && ShouldHideFile(fileName);
+            
+            if (!shouldHide) {
+                if (writeEntry != currentEntry) {
+                    std::memmove(writeEntry, currentEntry, currentEntrySize);
+                }
+                totalBytesWritten += currentEntrySize;
+                writeEntry = reinterpret_cast<FileInfoType*>(reinterpret_cast<BYTE*>(writeEntry) + currentEntrySize);
             }
-            totalBytesWritten += currentEntrySize;
-            writeEntry = reinterpret_cast<FileInfoType*>(reinterpret_cast<BYTE*>(writeEntry) + currentEntrySize);
+            
+            totalBytesRead += currentEntrySize;
+            
+            if (nextEntryOffset == 0 || 
+                reinterpret_cast<const BYTE*>(currentEntry) + nextEntryOffset >= bufferEnd) {
+                break;
+            }
+            
+            currentEntry = reinterpret_cast<FileInfoType*>(
+                reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
         }
         
-        totalBytesRead += currentEntrySize;
-        
-        if (nextEntryOffset == 0 || 
-            reinterpret_cast<const BYTE*>(currentEntry) + nextEntryOffset >= bufferEnd) {
-            break;
+        if (totalBytesWritten > 0) {
+            auto* lastEntry = static_cast<FileInfoType*>(FileInformation);
+            while (lastEntry->NextEntryOffset && 
+                   reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset < 
+                   reinterpret_cast<BYTE*>(FileInformation) + totalBytesWritten) {
+                lastEntry = reinterpret_cast<FileInfoType*>(
+                    reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset);
+            }
+            lastEntry->NextEntryOffset = 0;
         }
         
-        currentEntry = reinterpret_cast<FileInfoType*>(
-            reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
+        *bytesReturned = totalBytesWritten;
+    } else {
+        // New behavior: modify file attributes instead of hiding
+        auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
+        ULONG_PTR totalBytesRead = 0;
+        
+        const auto* const bufferEnd = reinterpret_cast<const BYTE*>(FileInformation) + *bytesReturned;
+        
+        while (totalBytesRead < *bytesReturned) {
+            const ULONG nextEntryOffset = currentEntry->NextEntryOffset;
+            const ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
+            
+            const ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
+            const std::wstring_view fileName(currentEntry->FileName, fileNameLength);
+            
+            const bool shouldModify = fileNameLength > 0 && ShouldHideFile(fileName);
+            
+            if (shouldModify) {
+                DWORD newAttributes = 0;
+                if (g_settings.displayMode == DisplayMode::ShowAsHidden) {
+                    newAttributes = FILE_ATTRIBUTE_HIDDEN;
+                } else if (g_settings.displayMode == DisplayMode::ShowAsSystem) {
+                    newAttributes = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+                }
+                
+                if (newAttributes != 0) {
+                    currentEntry->FileAttributes |= newAttributes;
+                }
+            }
+            
+            totalBytesRead += currentEntrySize;
+            
+            if (nextEntryOffset == 0 || 
+                reinterpret_cast<const BYTE*>(currentEntry) + nextEntryOffset >= bufferEnd) {
+                break;
+            }
+            
+            currentEntry = reinterpret_cast<FileInfoType*>(
+                reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
+        }
     }
-    
-    if (totalBytesWritten > 0) {
-        auto* lastEntry = static_cast<FileInfoType*>(FileInformation);
-        while (lastEntry->NextEntryOffset && 
-               reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset < 
-               reinterpret_cast<BYTE*>(FileInformation) + totalBytesWritten) {
-            lastEntry = reinterpret_cast<FileInfoType*>(
-                reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset);
-        }
-        lastEntry->NextEntryOffset = 0;
-    }
-    
-    *bytesReturned = totalBytesWritten;
 }
 
 void ProcessDirectoryListing(LPVOID FileInformation, FILE_INFORMATION_CLASS FileInformationClass, ULONG_PTR* bytesReturned) noexcept {
