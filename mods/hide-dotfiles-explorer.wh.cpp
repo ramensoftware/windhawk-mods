@@ -24,7 +24,6 @@ Files are completely hidden from view regardless of Explorer's hidden file visib
 - **Independent of Explorer settings**: Works regardless of whether "Show hidden files" is enabled or disabled
 - **No file attribute modification**: Files remain unchanged on disk
 - **System-wide filtering**: Affects all Explorer views and file dialogs
-- **Performance optimized**: Uses low-level NT API hooks for minimal overhead
 
 ## Configuration
 You can exclude specific files from being hidden using the dotfile whitelist, or specify 
@@ -89,7 +88,6 @@ Examples:
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <type_traits>
 
 enum class DisplayMode {
     NeverShow,
@@ -134,7 +132,6 @@ typedef NTSTATUS (NTAPI* NtQueryDirectoryFileEx_t)(
 
 NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
 
-
 void ParseSettings() {
     g_settings.dotfileWhitelist.clear();
     g_settings.alwaysHide.clear();
@@ -172,27 +169,18 @@ bool ShouldHideFile(std::wstring_view fileName) noexcept {
         return false;
     }
     
-    auto caseInsensitiveCompare = [](std::wstring_view lhs, std::wstring_view rhs) noexcept -> bool {
-        return lhs.size() == rhs.size() && 
-               std::ranges::equal(lhs, rhs, [](wchar_t a, wchar_t b) noexcept {
-                   return ::towlower(a) == ::towlower(b);
-               });
+    auto matchesPattern = [](std::wstring_view name, const std::vector<std::wstring>& patterns) noexcept -> bool {
+        return std::ranges::any_of(patterns, [name](const std::wstring& pattern) {
+            return PathMatchSpecW(name.data(), pattern.c_str()) != FALSE;
+        });
     };
     
     if (fileName[0] == L'.') {
-        return !std::ranges::any_of(g_settings.dotfileWhitelist, 
-            [fileName, &caseInsensitiveCompare](const std::wstring& item) {
-                return caseInsensitiveCompare(fileName, std::wstring_view(item));
-            });
+        return !matchesPattern(fileName, g_settings.dotfileWhitelist);
     }
     
-    return std::ranges::any_of(g_settings.alwaysHide, 
-        [fileName, &caseInsensitiveCompare](const std::wstring& item) {
-            return caseInsensitiveCompare(fileName, std::wstring_view(item));
-        });
+    return matchesPattern(fileName, g_settings.alwaysHide);
 }
-
-
 
 template<typename FileInfoType>
 void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noexcept {
@@ -249,18 +237,9 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noe
         }
         
         *bytesReturned = totalBytesWritten;
-    } else {
-        // New behavior: modify file attributes instead of hiding
-        // Only apply to structures that have FileAttributes
-        if constexpr (std::is_same_v<FileInfoType, FILE_DIRECTORY_INFORMATION> ||
-                      std::is_same_v<FileInfoType, FILE_FULL_DIR_INFORMATION> ||
-                      std::is_same_v<FileInfoType, FILE_BOTH_DIR_INFORMATION> ||
-                      std::is_same_v<FileInfoType, FILE_ID_BOTH_DIR_INFORMATION> ||
-                      std::is_same_v<FileInfoType, FILE_ID_FULL_DIR_INFORMATION>) {
-            
+    } else if constexpr (requires(FileInfoType t) { t.FileAttributes; }) {
             auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
             ULONG_PTR totalBytesRead = 0;
-            
             const auto* const bufferEnd = reinterpret_cast<const BYTE*>(FileInformation) + *bytesReturned;
             
             while (totalBytesRead < *bytesReturned) {
@@ -270,14 +249,17 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noe
                 const ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
                 const std::wstring_view fileName(currentEntry->FileName, fileNameLength);
                 
-                const bool shouldModify = fileNameLength > 0 && ShouldHideFile(fileName);
-                
-                if (shouldModify) {
+                if (fileNameLength > 0 && ShouldHideFile(fileName)) {
                     DWORD newAttributes = 0;
-                    if (g_settings.displayMode == DisplayMode::ShowAsHidden) {
-                        newAttributes = FILE_ATTRIBUTE_HIDDEN;
-                    } else if (g_settings.displayMode == DisplayMode::ShowAsSystem) {
-                        newAttributes = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+                    switch (g_settings.displayMode) {
+                        case DisplayMode::ShowAsHidden:
+                            newAttributes = FILE_ATTRIBUTE_HIDDEN;
+                            break;
+                        case DisplayMode::ShowAsSystem:
+                            newAttributes = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+                            break;
+                        default:
+                            break;
                     }
                     
                     if (newAttributes != 0) {
@@ -296,9 +278,6 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noe
                     reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
             }
         }
-        // For FILE_NAMES_INFORMATION and other structures without FileAttributes, we can't modify attributes
-        // so we fall back to hiding behavior even when displayMode != NeverShow
-    }
 }
 
 void ProcessDirectoryListing(LPVOID FileInformation, FILE_INFORMATION_CLASS FileInformationClass, ULONG_PTR* bytesReturned) noexcept {
