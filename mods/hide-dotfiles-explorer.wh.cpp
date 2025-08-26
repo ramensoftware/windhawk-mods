@@ -89,6 +89,7 @@ Examples:
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <type_traits>
 
 enum class DisplayMode {
     NeverShow,
@@ -250,43 +251,53 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noe
         *bytesReturned = totalBytesWritten;
     } else {
         // New behavior: modify file attributes instead of hiding
-        auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
-        ULONG_PTR totalBytesRead = 0;
-        
-        const auto* const bufferEnd = reinterpret_cast<const BYTE*>(FileInformation) + *bytesReturned;
-        
-        while (totalBytesRead < *bytesReturned) {
-            const ULONG nextEntryOffset = currentEntry->NextEntryOffset;
-            const ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
+        // Only apply to structures that have FileAttributes
+        if constexpr (std::is_same_v<FileInfoType, FILE_DIRECTORY_INFORMATION> ||
+                      std::is_same_v<FileInfoType, FILE_FULL_DIR_INFORMATION> ||
+                      std::is_same_v<FileInfoType, FILE_BOTH_DIR_INFORMATION> ||
+                      std::is_same_v<FileInfoType, FILE_ID_BOTH_DIR_INFORMATION> ||
+                      std::is_same_v<FileInfoType, FILE_ID_FULL_DIR_INFORMATION>) {
             
-            const ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-            const std::wstring_view fileName(currentEntry->FileName, fileNameLength);
+            auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
+            ULONG_PTR totalBytesRead = 0;
             
-            const bool shouldModify = fileNameLength > 0 && ShouldHideFile(fileName);
+            const auto* const bufferEnd = reinterpret_cast<const BYTE*>(FileInformation) + *bytesReturned;
             
-            if (shouldModify) {
-                DWORD newAttributes = 0;
-                if (g_settings.displayMode == DisplayMode::ShowAsHidden) {
-                    newAttributes = FILE_ATTRIBUTE_HIDDEN;
-                } else if (g_settings.displayMode == DisplayMode::ShowAsSystem) {
-                    newAttributes = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+            while (totalBytesRead < *bytesReturned) {
+                const ULONG nextEntryOffset = currentEntry->NextEntryOffset;
+                const ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
+                
+                const ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
+                const std::wstring_view fileName(currentEntry->FileName, fileNameLength);
+                
+                const bool shouldModify = fileNameLength > 0 && ShouldHideFile(fileName);
+                
+                if (shouldModify) {
+                    DWORD newAttributes = 0;
+                    if (g_settings.displayMode == DisplayMode::ShowAsHidden) {
+                        newAttributes = FILE_ATTRIBUTE_HIDDEN;
+                    } else if (g_settings.displayMode == DisplayMode::ShowAsSystem) {
+                        newAttributes = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+                    }
+                    
+                    if (newAttributes != 0) {
+                        currentEntry->FileAttributes |= newAttributes;
+                    }
                 }
                 
-                if (newAttributes != 0) {
-                    currentEntry->FileAttributes |= newAttributes;
+                totalBytesRead += currentEntrySize;
+                
+                if (nextEntryOffset == 0 || 
+                    reinterpret_cast<const BYTE*>(currentEntry) + nextEntryOffset >= bufferEnd) {
+                    break;
                 }
+                
+                currentEntry = reinterpret_cast<FileInfoType*>(
+                    reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
             }
-            
-            totalBytesRead += currentEntrySize;
-            
-            if (nextEntryOffset == 0 || 
-                reinterpret_cast<const BYTE*>(currentEntry) + nextEntryOffset >= bufferEnd) {
-                break;
-            }
-            
-            currentEntry = reinterpret_cast<FileInfoType*>(
-                reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
         }
+        // For FILE_NAMES_INFORMATION and other structures without FileAttributes, we can't modify attributes
+        // so we fall back to hiding behavior even when displayMode != NeverShow
     }
 }
 
