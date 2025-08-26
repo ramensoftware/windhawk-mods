@@ -107,15 +107,6 @@ typedef NTSTATUS (NTAPI* NtQueryDirectoryFileEx_t)(
 
 NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
 
-typedef HANDLE (WINAPI* FindFirstFileW_t)(LPCWSTR lpFileName, LPWIN32_FIND_DATAW lpFindFileData);
-FindFirstFileW_t FindFirstFileW_Original;
-
-typedef BOOL (WINAPI* FindNextFileW_t)(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileData);
-FindNextFileW_t FindNextFileW_Original;
-
-HANDLE WINAPI FindFirstFileW_Hook(LPCWSTR lpFileName, LPWIN32_FIND_DATAW lpFindFileData);
-BOOL WINAPI FindNextFileW_Hook(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileData);
-
 std::wstring TrimWhitespace(const std::wstring& str) {
     size_t start = str.find_first_not_of(L" \t\r\n");
     if (start == std::wstring::npos) return L"";
@@ -346,18 +337,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     
-    HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!hKernel32) {
-        return FALSE;
-    }
-    
     NtQueryDirectoryFile_Original = (NtQueryDirectoryFile_t)GetProcAddress(hNtDll, "NtQueryDirectoryFile");
     NtQueryDirectoryFileEx_Original = (NtQueryDirectoryFileEx_t)GetProcAddress(hNtDll, "NtQueryDirectoryFileEx");
-    FindFirstFileW_Original = (FindFirstFileW_t)GetProcAddress(hKernel32, "FindFirstFileW");
-    FindNextFileW_Original = (FindNextFileW_t)GetProcAddress(hKernel32, "FindNextFileW");
-    
-    if (!NtQueryDirectoryFile_Original || !NtQueryDirectoryFileEx_Original || 
-        !FindFirstFileW_Original || !FindNextFileW_Original) {
+    if (!NtQueryDirectoryFile_Original || !NtQueryDirectoryFileEx_Original) {
         return FALSE;
     }
     
@@ -369,58 +351,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     
-    if (!Wh_SetFunctionHook((void*)FindFirstFileW_Original, (void*)FindFirstFileW_Hook, (void**)&FindFirstFileW_Original)) {
-        return FALSE;
-    }
-    
-    if (!Wh_SetFunctionHook((void*)FindNextFileW_Original, (void*)FindNextFileW_Hook, (void**)&FindNextFileW_Original)) {
-        return FALSE;
-    }
+
     
     return TRUE;
-}
-
-HANDLE WINAPI FindFirstFileW_Hook(LPCWSTR lpFileName, LPWIN32_FIND_DATAW lpFindFileData) {
-    HANDLE hFind = FindFirstFileW_Original(lpFileName, lpFindFileData);
-    
-    if (hFind != INVALID_HANDLE_VALUE && lpFindFileData) {
-        if (wcscmp(lpFindFileData->cFileName, L".") == 0 || wcscmp(lpFindFileData->cFileName, L"..") == 0) {
-            return hFind;
-        }
-        
-        if (ShouldHideFile(lpFindFileData->cFileName)) {
-            while (FindNextFileW_Original(hFind, lpFindFileData)) {
-                if (wcscmp(lpFindFileData->cFileName, L".") == 0 || wcscmp(lpFindFileData->cFileName, L"..") == 0) {
-                    return hFind;
-                }
-                if (!ShouldHideFile(lpFindFileData->cFileName)) {
-                    return hFind;
-                }
-            }
-            FindClose(hFind);
-            return INVALID_HANDLE_VALUE;
-        }
-    }
-
-    return hFind;
-}
-
-BOOL WINAPI FindNextFileW_Hook(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileData) {
-    BOOL result = FindNextFileW_Original(hFindFile, lpFindFileData);
-    
-    while (result && lpFindFileData) {
-        if (wcscmp(lpFindFileData->cFileName, L".") == 0 || wcscmp(lpFindFileData->cFileName, L"..") == 0) {
-            return TRUE;
-        }
-        
-        if (!ShouldHideFile(lpFindFileData->cFileName)) {
-            return TRUE;
-        }
-        
-        result = FindNextFileW_Original(hFindFile, lpFindFileData);
-    }
-    
-    return result;
 }
 
 void Wh_ModSettingsChanged() {
