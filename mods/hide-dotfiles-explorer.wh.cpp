@@ -52,10 +52,10 @@ Examples:
 
 // ==WindhawkModSettings==
 /*
-- dotfileWhitelist: []
+- dotfileWhitelist: [""]
   $name: Dotfile Whitelist
   $description: List of dotfiles to show
-- alwaysHide: []
+- alwaysHide: [""]
   $name: Always Hide
   $description: List of filenames to always hide regardless of dotfile status
 */
@@ -66,7 +66,6 @@ Examples:
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <winternl.h>
-#include <windhawk_utils.h>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -147,26 +146,26 @@ bool ShouldHideFile(const WCHAR* fileName) {
         return false;
     }
     
+    std::wstring_view fileNameView(fileName);
+    
+    auto caseInsensitiveCompare = [](std::wstring_view lhs, std::wstring_view rhs) -> bool {
+        if (lhs.size() != rhs.size()) return false;
+        for (size_t i = 0; i < lhs.size(); ++i) {
+            if (::towlower(lhs[i]) != ::towlower(rhs[i])) return false;
+        }
+        return true;
+    };
+    
     if (fileName[0] == L'.') {
-        std::wstring fileNameLower(fileName);
-        std::ranges::transform(fileNameLower, fileNameLower.begin(), ::towlower);
-        
         return std::ranges::find_if(g_settings.dotfileWhitelist, 
-            [&fileNameLower](const std::wstring& item) {
-                std::wstring itemLower(item);
-                std::ranges::transform(itemLower, itemLower.begin(), ::towlower);
-                return itemLower == fileNameLower;
+            [fileNameView, &caseInsensitiveCompare](const std::wstring& item) {
+                return caseInsensitiveCompare(fileNameView, std::wstring_view(item));
             }) == g_settings.dotfileWhitelist.end();
     }
     
-    std::wstring fileNameLower(fileName);
-    std::ranges::transform(fileNameLower, fileNameLower.begin(), ::towlower);
-    
     return std::ranges::find_if(g_settings.alwaysHide, 
-        [&fileNameLower](const std::wstring& item) {
-            std::wstring itemLower(item);
-            std::ranges::transform(itemLower, itemLower.begin(), ::towlower);
-            return itemLower == fileNameLower;
+        [fileNameView, &caseInsensitiveCompare](const std::wstring& item) {
+            return caseInsensitiveCompare(fileNameView, std::wstring_view(item));
         }) != g_settings.alwaysHide.end();
 }
 
