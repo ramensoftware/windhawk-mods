@@ -13,7 +13,7 @@
 /*
 This mod hides files and folders starting with a dot (.) in Windows Explorer and Desktop, similar to Unix/Linux systems.
 
-![Screenshot](https://i.imgur.com/3PYbQe7.png)
+![Screenshot](https://i.imgur.com/y75mPVQ.png)
 
 ## How It Works
 This mod **filters files directly from directory listings** at the system level.
@@ -189,7 +189,6 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noe
     }
     
     if (g_settings.displayMode == DisplayMode::NeverShow) {
-        // Original behavior: completely hide files
         auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
         auto* writeEntry = currentEntry;
         ULONG_PTR totalBytesRead = 0;
