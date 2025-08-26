@@ -3161,6 +3161,27 @@
                 "version": "1.2"
             }
         },
+        "per-app-ui-language": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1756209869000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1756209869000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Set the Windows UI language per application.",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Per-Application UI Language",
+                "version": "1.0.0"
+            }
+        },
         "pinned-items-double-click": {
             "details": {
                 "defaultSorting": 6780,
