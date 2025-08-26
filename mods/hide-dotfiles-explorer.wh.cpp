@@ -134,11 +134,16 @@ void ParseSettings(const std::wstring& dotfileWhitelistStr, const std::wstring& 
     auto parseList = [](const std::wstring& str, std::vector<std::wstring>& target) {
         if (str.empty()) return;
         
+        std::vector<std::wstring> tokens;
         std::wstring current;
-        current.reserve(str.size());
+        bool inQuotes = false;
         
-        for (wchar_t c : str) {
-            if (c == L',') {
+        for (size_t i = 0; i < str.length(); ++i) {
+            wchar_t c = str[i];
+            
+            if (c == L'"') {
+                inQuotes = !inQuotes;
+            } else if (c == L',' && !inQuotes) {
                 current = TrimWhitespace(current);
                 if (!current.empty()) {
                     current = ParseQuotedString(current);
