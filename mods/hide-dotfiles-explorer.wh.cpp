@@ -11,13 +11,14 @@
 
 // ==WindhawkModReadme==
 /*
-This mod hides files and folders starting with a dot (.) in Windows Explorer and Desktop, 
-similar to Unix/Linux systems.
+This mod hides files and folders starting with a dot (.) in Windows Explorer and Desktop, similar to Unix/Linux systems.
 
 ![Screenshot](https://i.imgur.com/3PYbQe7.png)
 
 ## How It Works
-This mod **filters files directly from directory listings** at the system level. It does **not** modify file attributes (like the "hidden" attribute) and **does not** depend on Windows Explorer's "Show hidden files" setting. Files are completely hidden from view regardless of Explorer's hidden file visibility settings.
+This mod **filters files directly from directory listings** at the system level.
+It does **not** modify file attributes (like the "hidden" attribute) and **does not** depend on Windows Explorer's "Show hidden files" setting.
+Files are completely hidden from view regardless of Explorer's hidden file visibility settings.
 
 ## Key Benefits
 - **Independent of Explorer settings**: Works regardless of whether "Show hidden files" is enabled or disabled
@@ -107,116 +108,101 @@ typedef NTSTATUS (NTAPI* NtQueryDirectoryFileEx_t)(
 NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
 
 
-
 void ParseSettings() {
     g_settings.dotfileWhitelist.clear();
     g_settings.alwaysHide.clear();
     
-    // Parse dotfile whitelist
-    for (int i = 0;; i++) {
-        PCWSTR item = Wh_GetStringSetting(L"dotfileWhitelist[%d]", i);
-        bool hasItem = *item;
-        if (hasItem) {
-            g_settings.dotfileWhitelist.emplace_back(item);
+    auto loadSettingList = [](const wchar_t* settingName, std::vector<std::wstring>& target) {
+        for (int i = 0;; i++) {
+            PCWSTR item = Wh_GetStringSetting(settingName, i);
+            if (!*item) {
+                Wh_FreeStringSetting(item);
+                break;
+            }
+            target.emplace_back(item);
+            Wh_FreeStringSetting(item);
         }
-        Wh_FreeStringSetting(item);
-        if (!hasItem) {
-            break;
-        }
-    }
+    };
     
-    // Parse always hide list
-    for (int i = 0;; i++) {
-        PCWSTR item = Wh_GetStringSetting(L"alwaysHide[%d]", i);
-        bool hasItem = *item;
-        if (hasItem) {
-            g_settings.alwaysHide.emplace_back(item);
-        }
-        Wh_FreeStringSetting(item);
-        if (!hasItem) {
-            break;
-        }
-    }
+    loadSettingList(L"dotfileWhitelist[%d]", g_settings.dotfileWhitelist);
+    loadSettingList(L"alwaysHide[%d]", g_settings.alwaysHide);
 }
 
-bool ShouldHideFile(const WCHAR* fileName) {
-    if (!fileName || !fileName[0]) return false;
+bool ShouldHideFile(std::wstring_view fileName) noexcept {
+    if (fileName.empty()) return false;
     
-    if (wcscmp(fileName, L".") == 0 || wcscmp(fileName, L"..") == 0) {
+    if (fileName == L"." || fileName == L"..") {
         return false;
     }
     
-    std::wstring_view fileNameView(fileName);
-    
-    auto caseInsensitiveCompare = [](std::wstring_view lhs, std::wstring_view rhs) -> bool {
-        if (lhs.size() != rhs.size()) return false;
-        for (size_t i = 0; i < lhs.size(); ++i) {
-            if (::towlower(lhs[i]) != ::towlower(rhs[i])) return false;
-        }
-        return true;
+    auto caseInsensitiveCompare = [](std::wstring_view lhs, std::wstring_view rhs) noexcept -> bool {
+        return lhs.size() == rhs.size() && 
+               std::ranges::equal(lhs, rhs, [](wchar_t a, wchar_t b) noexcept {
+                   return ::towlower(a) == ::towlower(b);
+               });
     };
     
     if (fileName[0] == L'.') {
-        return std::ranges::find_if(g_settings.dotfileWhitelist, 
-            [fileNameView, &caseInsensitiveCompare](const std::wstring& item) {
-                return caseInsensitiveCompare(fileNameView, std::wstring_view(item));
-            }) == g_settings.dotfileWhitelist.end();
+        return !std::ranges::any_of(g_settings.dotfileWhitelist, 
+            [fileName, &caseInsensitiveCompare](const std::wstring& item) {
+                return caseInsensitiveCompare(fileName, std::wstring_view(item));
+            });
     }
     
-    return std::ranges::find_if(g_settings.alwaysHide, 
-        [fileNameView, &caseInsensitiveCompare](const std::wstring& item) {
-            return caseInsensitiveCompare(fileNameView, std::wstring_view(item));
-        }) != g_settings.alwaysHide.end();
+    return std::ranges::any_of(g_settings.alwaysHide, 
+        [fileName, &caseInsensitiveCompare](const std::wstring& item) {
+            return caseInsensitiveCompare(fileName, std::wstring_view(item));
+        });
 }
 
 
 
 template<typename FileInfoType>
-void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) {
+void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) noexcept {
     if (!FileInformation || !bytesReturned || *bytesReturned == 0) {
         return;
     }
     
-    FileInfoType* currentEntry = static_cast<FileInfoType*>(FileInformation);
-    FileInfoType* writeEntry = currentEntry;
+    auto* currentEntry = static_cast<FileInfoType*>(FileInformation);
+    auto* writeEntry = currentEntry;
     ULONG_PTR totalBytesRead = 0;
     ULONG_PTR totalBytesWritten = 0;
     
+    const auto* const bufferEnd = reinterpret_cast<const BYTE*>(FileInformation) + *bytesReturned;
+    
     while (totalBytesRead < *bytesReturned) {
-        ULONG nextEntryOffset = currentEntry->NextEntryOffset;
-        ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
+        const ULONG nextEntryOffset = currentEntry->NextEntryOffset;
+        const ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
         
-        ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        std::wstring fileName(currentEntry->FileName, fileNameLength);
+        const ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
+        const std::wstring_view fileName(currentEntry->FileName, fileNameLength);
         
-        bool shouldHide = false;
-        if (fileNameLength > 0 && fileName != L"." && fileName != L"..") {
-            shouldHide = ShouldHideFile(fileName.c_str());
-        }
+        const bool shouldHide = fileNameLength > 0 && ShouldHideFile(fileName);
         
         if (!shouldHide) {
             if (writeEntry != currentEntry) {
-                memmove(writeEntry, currentEntry, currentEntrySize);
-            }
-            if (nextEntryOffset == 0) {
-                writeEntry->NextEntryOffset = 0;
+                std::memmove(writeEntry, currentEntry, currentEntrySize);
             }
             totalBytesWritten += currentEntrySize;
             writeEntry = reinterpret_cast<FileInfoType*>(reinterpret_cast<BYTE*>(writeEntry) + currentEntrySize);
         }
         
         totalBytesRead += currentEntrySize;
-        if (nextEntryOffset == 0) break;
+        
+        if (nextEntryOffset == 0 || 
+            reinterpret_cast<const BYTE*>(currentEntry) + nextEntryOffset >= bufferEnd) {
+            break;
+        }
         
         currentEntry = reinterpret_cast<FileInfoType*>(
             reinterpret_cast<BYTE*>(currentEntry) + nextEntryOffset);
     }
     
     if (totalBytesWritten > 0) {
-        FileInfoType* lastEntry = static_cast<FileInfoType*>(FileInformation);
+        auto* lastEntry = static_cast<FileInfoType*>(FileInformation);
         while (lastEntry->NextEntryOffset && 
-               (reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset < 
-                reinterpret_cast<BYTE*>(FileInformation) + totalBytesWritten)) {
+               reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset < 
+               reinterpret_cast<BYTE*>(FileInformation) + totalBytesWritten) {
             lastEntry = reinterpret_cast<FileInfoType*>(
                 reinterpret_cast<BYTE*>(lastEntry) + lastEntry->NextEntryOffset);
         }
@@ -226,7 +212,7 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) {
     *bytesReturned = totalBytesWritten;
 }
 
-void ProcessDirectoryListing(LPVOID FileInformation, FILE_INFORMATION_CLASS FileInformationClass, ULONG_PTR* bytesReturned) {
+void ProcessDirectoryListing(LPVOID FileInformation, FILE_INFORMATION_CLASS FileInformationClass, ULONG_PTR* bytesReturned) noexcept {
     switch (FileInformationClass) {
         case FileDirectoryInformation:
             FilterFilesInDirectory<FILE_DIRECTORY_INFORMATION>(FileInformation, bytesReturned);
@@ -262,9 +248,9 @@ NTSTATUS NTAPI NtQueryDirectoryFile_Hook(
     FILE_INFORMATION_CLASS FileInformationClass,
     BOOLEAN ReturnSingleEntry,
     PUNICODE_STRING FileName,
-    BOOLEAN RestartScan) {
+    BOOLEAN RestartScan) noexcept {
     
-    NTSTATUS status = NtQueryDirectoryFile_Original(
+    const NTSTATUS status = NtQueryDirectoryFile_Original(
         FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock,
         FileInformation, Length, FileInformationClass,
         ReturnSingleEntry, FileName, RestartScan);
@@ -288,9 +274,9 @@ NTSTATUS NTAPI NtQueryDirectoryFileEx_Hook(
     ULONG Length,
     FILE_INFORMATION_CLASS FileInformationClass,
     ULONG QueryFlags,
-    PUNICODE_STRING FileName) {
+    PUNICODE_STRING FileName) noexcept {
     
-    NTSTATUS status = NtQueryDirectoryFileEx_Original(
+    const NTSTATUS status = NtQueryDirectoryFileEx_Original(
         FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock,
         FileInformation, Length, FileInformationClass,
         QueryFlags, FileName);
@@ -307,26 +293,26 @@ NTSTATUS NTAPI NtQueryDirectoryFileEx_Hook(
 BOOL Wh_ModInit() {
     ParseSettings();
     
-    HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
+    const HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
     if (!hNtDll) {
         return FALSE;
     }
     
-    NtQueryDirectoryFile_Original = (NtQueryDirectoryFile_t)GetProcAddress(hNtDll, "NtQueryDirectoryFile");
-    NtQueryDirectoryFileEx_Original = (NtQueryDirectoryFileEx_t)GetProcAddress(hNtDll, "NtQueryDirectoryFileEx");
+    NtQueryDirectoryFile_Original = reinterpret_cast<NtQueryDirectoryFile_t>(
+        GetProcAddress(hNtDll, "NtQueryDirectoryFile"));
+    NtQueryDirectoryFileEx_Original = reinterpret_cast<NtQueryDirectoryFileEx_t>(
+        GetProcAddress(hNtDll, "NtQueryDirectoryFileEx"));
+    
     if (!NtQueryDirectoryFile_Original || !NtQueryDirectoryFileEx_Original) {
         return FALSE;
     }
     
-    if (!Wh_SetFunctionHook((void*)NtQueryDirectoryFile_Original, (void*)NtQueryDirectoryFile_Hook, (void**)&NtQueryDirectoryFile_Original)) {
-        return FALSE;
-    }
-    
-    if (!Wh_SetFunctionHook((void*)NtQueryDirectoryFileEx_Original, (void*)NtQueryDirectoryFileEx_Hook, (void**)&NtQueryDirectoryFileEx_Original)) {
-        return FALSE;
-    }
-    
-    return TRUE;
+    return Wh_SetFunctionHook(reinterpret_cast<void*>(NtQueryDirectoryFile_Original), 
+                              reinterpret_cast<void*>(NtQueryDirectoryFile_Hook), 
+                              reinterpret_cast<void**>(&NtQueryDirectoryFile_Original)) &&
+           Wh_SetFunctionHook(reinterpret_cast<void*>(NtQueryDirectoryFileEx_Original), 
+                              reinterpret_cast<void*>(NtQueryDirectoryFileEx_Hook), 
+                              reinterpret_cast<void**>(&NtQueryDirectoryFileEx_Original));
 }
 
 void Wh_ModSettingsChanged() {
