@@ -96,7 +96,7 @@ void UpdateUILanguage(void)
         }
     }
 
-    if ((pszLanguages || g_fLangSet) || !SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, pszLanguages, nullptr))
+    if ((pszLanguages || g_fLangSet) && !SetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, pszLanguages, nullptr))
     {
         DWORD dwErr = GetLastError();
         if (dwErr != ERROR_CANNOT_IMPERSONATE)
