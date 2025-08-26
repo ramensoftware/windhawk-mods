@@ -5261,7 +5261,7 @@
                 "published": 1753725928000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1754349765000,
+                "updated": 1756212599000,
                 "users": 131
             },
             "metadata": {
@@ -5275,7 +5275,7 @@
                     "taskmgr.exe"
                 ],
                 "name": "Windows 11 Old Task Manager",
-                "version": "1.0.1"
+                "version": "1.1.0"
             }
         },
         "win32-tray-clock-experience": {

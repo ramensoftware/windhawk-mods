@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-26T12:04:29.000Z</updated>
+    <updated>2025-08-26T12:49:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Old Task Manager 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win11-old-taskmgr#12a0091ea30ed9663ca0f2d61582a22f832d10fa</id>
+        <link href="https://windhawk.net/mods/win11-old-taskmgr"/>
+        <updated>2025-08-26T12:49:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Revise method to be more universal and less buggy</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Per-Application UI Language 1.0.0]]></title>
         <id>https://windhawk.net/mods/per-app-ui-language#87693e168ff23a04cd69cd495fb083a951a99f82</id>
@@ -341,19 +354,6 @@ So, expect visibility of the dragged items in more use cases.</p></li>
         <author>
             <name>anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.3.1]]></title>
-        <id>https://windhawk.net/mods/dark-menus#ca342adbf51da6ba433036de9b0704c95d010b08</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2025-08-07T20:43:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix crashes in Firefox as reported in <a href="https://github.com/MGGSK/DarkMenus/issues/9">this issue</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>
