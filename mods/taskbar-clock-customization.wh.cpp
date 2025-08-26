@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM), custom fonts and colors, and more
-// @version         1.6.2
+// @version         1.6.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -151,11 +151,40 @@ styles, such as the font color and size.
   $description: >-
     Set to zero for the default system value. A negative value can be used for
     negative spacing.
-- DataCollectionUpdateInterval: 1
-  $name: System performance metrics update interval
+- DataCollection:
+  - NetworkMetricsFormat: mbs
+    $name: Network metrics format
+    $description: >-
+      The format to use for displaying the upload/download transfer rate.
+    $options:
+    - mbs: MB/s
+    - mbsNumberOnly: MB/s, number only
+    - mbsDynamic: MB/s or KB/s (dynamic)
+    - mbits: MBit/s
+    - mbitsNumberOnly: MBit/s, number only
+    - mbitsDynamic: MBit/s or KBit/s (dynamic)
+  - NetworkMetricsFixedDecimals: -1
+    $name: Network metrics fixed decimal places
+    $description: >-
+      Always use this amount of decimal places for the upload/download transfer
+      rate (-1 means auto/same width).
+  - PercentageFormat: spacePaddingAndSymbol
+    $name: Percentage format
+    $description: >-
+      The format to use for displaying the CPU/RAM usage percentage.
+    $options:
+    - spacePaddingAndSymbol: Pad with spaces, add percentage symbol
+    - spacePadding: Pad with spaces, number only
+    - zeroPadding: Pad with zeros, number only
+    - noPadding: No padding, number only
+  - UpdateInterval: 1
+    $name: Update interval
+    $description: >-
+      The update interval, in seconds, of the system performance metrics.
+  $name: System performance metrics
   $description: >-
-    The update interval, in seconds, of the system performance metrics such as
-    CPU and RAM usage.
+    Settings for system performance metrics: upload/download transfer rate and
+    CPU/RAM usage.
 - WebContentWeatherLocation: ""
   $name: Weather location
   $description: >-
@@ -403,6 +432,29 @@ using namespace winrt::Windows::UI::Xaml;
 #define URL_ESCAPE_ASCII_URI_COMPONENT 0x00080000
 #endif
 
+enum class NetworkMetricsFormat {
+    mbs,
+    mbsNumberOnly,
+    mbsDynamic,
+    mbits,
+    mbitsNumberOnly,
+    mbitsDynamic,
+};
+
+enum class PercentageFormat {
+    spacePaddingAndSymbol,
+    spacePadding,
+    zeroPadding,
+    noPadding,
+};
+
+struct DataCollectionSettings {
+    NetworkMetricsFormat networkMetricsFormat;
+    int networkMetricsFixedDecimals;
+    PercentageFormat percentageFormat;
+    int updateInterval;
+};
+
 enum class WebContentWeatherUnits {
     autoDetect,
     uscs,
@@ -453,7 +505,7 @@ struct {
     int height;
     int maxWidth;
     int textSpacing;
-    int dataCollectionUpdateInterval;
+    DataCollectionSettings dataCollection;
     StringSetting webContentWeatherLocation;
     StringSetting webContentWeatherFormat;
     WebContentWeatherUnits webContentWeatherUnits;
@@ -1670,7 +1722,7 @@ class QueryDataCollectionSession {
                 is_wildcard = true;
                 break;
             case MetricType::kCpu:
-                counter_path = L"\\Processor(_Total)\\% Processor Time";
+                counter_path = L"\\Processor Information(_Total)\\% Processor Utility";
                 break;
             default:
                 return false;
@@ -1858,7 +1910,7 @@ DWORD GetDataCollectionFormatIndex() {
 
     constexpr ULONGLONG kSecondIn100Ns = 10000000ULL;
     ULONGLONG interval =
-        kSecondIn100Ns * std::max(g_settings.dataCollectionUpdateInterval, 1);
+        kSecondIn100Ns * std::max(g_settings.dataCollection.updateInterval, 1);
     return static_cast<DWORD>(formatTimeInt.QuadPart / interval);
 }
 
@@ -1917,36 +1969,110 @@ std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
 }
 
 void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
-    double valMb = val / (1024 * 1024);
+    constexpr int kKBInBytes = 1024;
+    constexpr int kMBInBytes = 1024 * kKBInBytes;
+    constexpr int kKbitInBytes = 1000 / 8;
+    constexpr int kMbitInBytes = 1000 * kKbitInBytes;
 
-    // Keep identical width for <1000 values.
-    int digitsAfterDecimal = 0;
-    PCWSTR prefix = L"";
-    if (valMb < 10) {
-        digitsAfterDecimal = 2;
-    } else if (valMb < 100) {
-        digitsAfterDecimal = 1;
-    } else if (valMb < 1000) {
-        // Punctuation Space.
-        prefix = L"\u2008";
+    double valUnit;
+    PCWSTR unit = L"";
+
+    switch (g_settings.dataCollection.networkMetricsFormat) {
+        case NetworkMetricsFormat::mbs:
+            valUnit = val / kMBInBytes;
+            unit = L" MB/s";
+            break;
+
+        case NetworkMetricsFormat::mbsNumberOnly:
+            valUnit = val / kMBInBytes;
+            break;
+
+        case NetworkMetricsFormat::mbsDynamic:
+            if (val / kKBInBytes < 1000) {
+                valUnit = val / kKBInBytes;
+                unit = L" KB/s";
+            } else {
+                valUnit = val / kMBInBytes;
+                unit = L" MB/s";
+            }
+            break;
+
+        case NetworkMetricsFormat::mbits:
+            valUnit = val / kMbitInBytes;
+            unit = L" MBit/s";
+            break;
+
+        case NetworkMetricsFormat::mbitsNumberOnly:
+            valUnit = val / kMbitInBytes;
+            break;
+
+        case NetworkMetricsFormat::mbitsDynamic:
+            if (val / kKbitInBytes < 1000) {
+                valUnit = val / kKbitInBytes;
+                unit = L" KBit/s";
+            } else {
+                valUnit = val / kMbitInBytes;
+                unit = L" MBit/s";
+            }
+            break;
     }
 
-    std::wstring valMbFormatted = FormatLocaleNum(valMb, digitsAfterDecimal);
+    int digitsAfterDecimal = 0;
+    PCWSTR prefix = L"";
 
-    swprintf_s(buffer, bufferSize, L"%s%s MB/s", prefix,
-               valMbFormatted.c_str());
+    if (g_settings.dataCollection.networkMetricsFixedDecimals == -1) {
+        // Keep identical width for <1000 values.
+        if (valUnit < 10) {
+            digitsAfterDecimal = 2;
+        } else if (valUnit < 100) {
+            digitsAfterDecimal = 1;
+        } else if (valUnit < 1000) {
+            // Punctuation Space.
+            prefix = L"\u2008";
+        }
+    } else {
+        digitsAfterDecimal =
+            g_settings.dataCollection.networkMetricsFixedDecimals;
+    }
+
+    std::wstring valUnitFormatted =
+        FormatLocaleNum(valUnit, digitsAfterDecimal);
+
+    swprintf_s(buffer, bufferSize, L"%s%s%s", prefix, valUnitFormatted.c_str(),
+               unit);
 }
 
 void FormatPercentValue(int val, PWSTR buffer, size_t bufferSize) {
     // Cap to 99 to keep identical width in all cases.
-    if (val == 100) {
+    if (val >= 100) {
         val = 99;
     }
 
-    // Pad to keep identical width in all cases.
-    PCWSTR prefix = val < 10 ? L"  " : L"";
+    PCWSTR padding = L"";
+    PCWSTR suffix = L"";
 
-    swprintf_s(buffer, bufferSize, L"%s%d%%", prefix, val);
+    switch (g_settings.dataCollection.percentageFormat) {
+        case PercentageFormat::spacePaddingAndSymbol:
+            padding = L"  ";
+            suffix = L"%";
+            break;
+
+        case PercentageFormat::spacePadding:
+            padding = L"  ";
+            break;
+
+        case PercentageFormat::zeroPadding:
+            padding = L"0";
+            break;
+
+        case PercentageFormat::noPadding:
+            break;
+    }
+
+    // Pad to keep identical width in all cases.
+    PCWSTR prefix = val < 10 ? padding : L"";
+
+    swprintf_s(buffer, bufferSize, L"%s%d%s", prefix, val, suffix);
 }
 
 template <size_t N>
@@ -2236,16 +2362,22 @@ using ClockSystemTrayIconDataModel_RefreshIcon_t = void(WINAPI*)(
 );
 ClockSystemTrayIconDataModel_RefreshIcon_t
     ClockSystemTrayIconDataModel_RefreshIcon_Original;
+ClockSystemTrayIconDataModel_RefreshIcon_t
+    ClockSystemTrayIconDataModel2_RefreshIcon_Original;
 
 using ClockSystemTrayIconDataModel_GetTimeToolTipString_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
 ClockSystemTrayIconDataModel_GetTimeToolTipString_t
     ClockSystemTrayIconDataModel_GetTimeToolTipString_Original;
+ClockSystemTrayIconDataModel_GetTimeToolTipString_t
+    ClockSystemTrayIconDataModel2_GetTimeToolTipString_Original;
 
 using ClockSystemTrayIconDataModel_GetTimeToolTipString2_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
 ClockSystemTrayIconDataModel_GetTimeToolTipString2_t
     ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original;
+ClockSystemTrayIconDataModel_GetTimeToolTipString2_t
+    ClockSystemTrayIconDataModel2_GetTimeToolTipString2_Original;
 
 using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(LPVOID pThis);
 DateTimeIconContent_OnApplyTemplate_t
@@ -2275,19 +2407,35 @@ using ThreadPoolTimer_CreateTimer_lambda_t = LPVOID(WINAPI*)(DWORD_PTR** param1,
 ThreadPoolTimer_CreateTimer_lambda_t
     ThreadPoolTimer_CreateTimer_lambda_Original;
 
-void WINAPI ClockSystemTrayIconDataModel_RefreshIcon_Hook(LPVOID pThis,
-                                                          LPVOID param1) {
-    Wh_Log(L">");
-
+void ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
+    LPVOID pThis,
+    LPVOID param1,
+    ClockSystemTrayIconDataModel_RefreshIcon_t original) {
     g_refreshIconThreadId = GetCurrentThreadId();
     g_refreshIconNeedToAdjustTimer = g_settings.showSeconds ||
                                      g_dataCollectionSession ||
                                      !g_webContentLoaded;
 
-    ClockSystemTrayIconDataModel_RefreshIcon_Original(pThis, param1);
+    original(pThis, param1);
 
     g_refreshIconThreadId = 0;
     g_refreshIconNeedToAdjustTimer = false;
+}
+
+void WINAPI ClockSystemTrayIconDataModel_RefreshIcon_Hook(LPVOID pThis,
+                                                          LPVOID param1) {
+    Wh_Log(L">");
+
+    ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
+        pThis, param1, ClockSystemTrayIconDataModel_RefreshIcon_Original);
+}
+
+void WINAPI ClockSystemTrayIconDataModel2_RefreshIcon_Hook(LPVOID pThis,
+                                                           LPVOID param1) {
+    Wh_Log(L">");
+
+    ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
+        pThis, param1, ClockSystemTrayIconDataModel2_RefreshIcon_Original);
 }
 
 void UpdateToolTipString(LPVOID tooltipPtrPtr) {
@@ -2345,6 +2493,24 @@ void UpdateToolTipString(LPVOID tooltipPtrPtr) {
     *(shared_hstring_header**)tooltipPtrPtr = tooltipHeaderNew;
 }
 
+LPVOID ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook_Impl(
+    LPVOID pThis,
+    LPVOID param1,
+    LPVOID param2,
+    LPVOID param3,
+    LPVOID param4,
+    ClockSystemTrayIconDataModel_GetTimeToolTipString_t original) {
+    g_inGetTimeToolTipString = true;
+
+    LPVOID ret = original(pThis, param1, param2, param3, param4);
+
+    UpdateToolTipString(ret);
+
+    g_inGetTimeToolTipString = false;
+
+    return ret;
+}
+
 LPVOID WINAPI
 ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook(LPVOID pThis,
                                                        LPVOID param1,
@@ -2353,10 +2519,35 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook(LPVOID pThis,
                                                        LPVOID param4) {
     Wh_Log(L">");
 
+    return ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook_Impl(
+        pThis, param1, param2, param3, param4,
+        ClockSystemTrayIconDataModel_GetTimeToolTipString_Original);
+}
+
+LPVOID WINAPI
+ClockSystemTrayIconDataModel2_GetTimeToolTipString_Hook(LPVOID pThis,
+                                                        LPVOID param1,
+                                                        LPVOID param2,
+                                                        LPVOID param3,
+                                                        LPVOID param4) {
+    Wh_Log(L">");
+
+    return ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook_Impl(
+        pThis, param1, param2, param3, param4,
+        ClockSystemTrayIconDataModel2_GetTimeToolTipString_Original);
+}
+
+LPVOID
+ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook_Impl(
+    LPVOID pThis,
+    LPVOID param1,
+    LPVOID param2,
+    LPVOID param3,
+    LPVOID param4,
+    ClockSystemTrayIconDataModel_GetTimeToolTipString2_t original) {
     g_inGetTimeToolTipString = true;
 
-    LPVOID ret = ClockSystemTrayIconDataModel_GetTimeToolTipString_Original(
-        pThis, param1, param2, param3, param4);
+    LPVOID ret = original(pThis, param1, param2, param3, param4);
 
     UpdateToolTipString(ret);
 
@@ -2373,16 +2564,22 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook(LPVOID pThis,
                                                         LPVOID param4) {
     Wh_Log(L">");
 
-    g_inGetTimeToolTipString = true;
+    return ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook_Impl(
+        pThis, param1, param2, param3, param4,
+        ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original);
+}
 
-    LPVOID ret = ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original(
-        pThis, param1, param2, param3, param4);
+LPVOID WINAPI
+ClockSystemTrayIconDataModel2_GetTimeToolTipString2_Hook(LPVOID pThis,
+                                                         LPVOID param1,
+                                                         LPVOID param2,
+                                                         LPVOID param3,
+                                                         LPVOID param4) {
+    Wh_Log(L">");
 
-    UpdateToolTipString(ret);
-
-    g_inGetTimeToolTipString = false;
-
-    return ret;
+    return ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook_Impl(
+        pThis, param1, param2, param3, param4,
+        ClockSystemTrayIconDataModel2_GetTimeToolTipString2_Original);
 }
 
 FrameworkElement FindChildByName(FrameworkElement element,
@@ -3372,69 +3569,88 @@ bool HookWin10TaskbarSymbols() {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
-            &ClockSystemTrayIconDataModel_RefreshIcon_Original,
-            ClockSystemTrayIconDataModel_RefreshIcon_Hook,
-        },
-        {
-            {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
-            &ClockSystemTrayIconDataModel_GetTimeToolTipString_Original,
-            ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook,
-            true,
-        },
-        {
-            {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString2(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
-            &ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original,
-            ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook,
-            true,
-        },
-        {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
-            &DateTimeIconContent_OnApplyTemplate_Original,
-            DateTimeIconContent_OnApplyTemplate_Hook,
-            true,
-        },
-        {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * *))"},
-            &BadgeIconContent_get_ViewModel_Original,
-            BadgeIconContent_get_ViewModel_Hook,
-            true,
-        },
-        {
-            {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME *,struct _TIME_DYNAMIC_ZONE_INFORMATION *,class SystemTrayTelemetry::ClockUpdate &))"},
-            &ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Original,
-            ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Hook,
-            true,  // Until Windows 11 version 21H2.
-        },
-        {
-            {LR"(public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second(void)const )"},
-            &ICalendar_Second_Original,
-            ICalendar_Second_Hook,
-            true,  // Until Windows 11 version 21H2.
-        },
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
-                LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &))",
-                // Windows 11 21H2:
-                LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl winrt::impl::consume_Windows_System_Threading_IThreadPoolTimerStatics<struct winrt::Windows::System::Threading::IThreadPoolTimerStatics>::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &)const )",
+                {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
+                &ClockSystemTrayIconDataModel_RefreshIcon_Original,
+                ClockSystemTrayIconDataModel_RefreshIcon_Hook,
             },
-            &ThreadPoolTimer_CreateTimer_Original,
-            ThreadPoolTimer_CreateTimer_Hook,
-            true,  // Only for more precise clock, see comment in the hook.
-        },
-        {
             {
-                LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
-                // Windows 11 21H2:
-                LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
+                {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel2::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
+                &ClockSystemTrayIconDataModel2_RefreshIcon_Original,
+                ClockSystemTrayIconDataModel2_RefreshIcon_Hook,
+                true,  // Added with feature flag 38762814
             },
-            &ThreadPoolTimer_CreateTimer_lambda_Original,
-            ThreadPoolTimer_CreateTimer_lambda_Hook,
-            true,  // Only for more precise clock, see comment in the hook.
-        },
-    };
+            {
+                {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
+                &ClockSystemTrayIconDataModel_GetTimeToolTipString_Original,
+                ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook,
+                true,
+            },
+            {
+                {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel2::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
+                &ClockSystemTrayIconDataModel2_GetTimeToolTipString_Original,
+                ClockSystemTrayIconDataModel2_GetTimeToolTipString_Hook,
+                true,  // Added with feature flag 38762814
+            },
+            {
+                {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString2(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
+                &ClockSystemTrayIconDataModel_GetTimeToolTipString2_Original,
+                ClockSystemTrayIconDataModel_GetTimeToolTipString2_Hook,
+                true,
+            },
+            {
+                {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel2::GetTimeToolTipString2(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
+                &ClockSystemTrayIconDataModel2_GetTimeToolTipString2_Original,
+                ClockSystemTrayIconDataModel2_GetTimeToolTipString2_Hook,
+                true,  // Added with feature flag 38762814
+            },
+            {
+                {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+                &DateTimeIconContent_OnApplyTemplate_Original,
+                DateTimeIconContent_OnApplyTemplate_Hook,
+                true,
+            },
+            {
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::BadgeIconContent,struct winrt::SystemTray::IBadgeIconContent>::get_ViewModel(void * *))"},
+                &BadgeIconContent_get_ViewModel_Original,
+                BadgeIconContent_get_ViewModel_Hook,
+                true,
+            },
+            {
+                {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME *,struct _TIME_DYNAMIC_ZONE_INFORMATION *,class SystemTrayTelemetry::ClockUpdate &))"},
+                &ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Original,
+                ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Hook,
+                true,  // Until Windows 11 version 21H2.
+            },
+            {
+                {LR"(public: int __cdecl winrt::impl::consume_Windows_Globalization_ICalendar<struct winrt::Windows::Globalization::ICalendar>::Second(void)const )"},
+                &ICalendar_Second_Original,
+                ICalendar_Second_Hook,
+                true,  // Until Windows 11 version 21H2.
+            },
+            {
+                {
+                    LR"(public: static __cdecl winrt::Windows::System::Threading::ThreadPoolTimer::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &))",
+                    // Windows 11 21H2:
+                    LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl winrt::impl::consume_Windows_System_Threading_IThreadPoolTimerStatics<struct winrt::Windows::System::Threading::IThreadPoolTimerStatics>::CreateTimer(struct winrt::Windows::System::Threading::TimerElapsedHandler const &,class std::chrono::duration<__int64,struct std::ratio<1,10000000> > const &)const )",
+                },
+                &ThreadPoolTimer_CreateTimer_Original,
+                ThreadPoolTimer_CreateTimer_Hook,
+                true,  // Only for more precise clock, see comment in the hook.
+            },
+            {
+                {
+                    LR"(public: __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
+                    // Windows 11 21H2:
+                    LR"(public: struct winrt::Windows::System::Threading::ThreadPoolTimer __cdecl <lambda_b19cf72fe9674443383aa89d5c22450b>::operator()(struct winrt::Windows::System::Threading::IThreadPoolTimerStatics const &)const )",
+                },
+                &ThreadPoolTimer_CreateTimer_lambda_Original,
+                ThreadPoolTimer_CreateTimer_lambda_Hook,
+                true,  // Only for more precise clock, see comment in the hook.
+            },
+        };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
@@ -3505,8 +3721,48 @@ void LoadSettings() {
     g_settings.height = Wh_GetIntSetting(L"Height");
     g_settings.maxWidth = Wh_GetIntSetting(L"MaxWidth");
     g_settings.textSpacing = Wh_GetIntSetting(L"TextSpacing");
-    g_settings.dataCollectionUpdateInterval =
-        Wh_GetIntSetting(L"DataCollectionUpdateInterval");
+
+    g_settings.dataCollection.networkMetricsFormat = NetworkMetricsFormat::mbs;
+    StringSetting networkMetricsFormat =
+        StringSetting::make(L"DataCollection.NetworkMetricsFormat");
+    if (wcscmp(networkMetricsFormat, L"mbsNumberOnly") == 0) {
+        g_settings.dataCollection.networkMetricsFormat =
+            NetworkMetricsFormat::mbsNumberOnly;
+    } else if (wcscmp(networkMetricsFormat, L"mbsDynamic") == 0) {
+        g_settings.dataCollection.networkMetricsFormat =
+            NetworkMetricsFormat::mbsDynamic;
+    } else if (wcscmp(networkMetricsFormat, L"mbits") == 0) {
+        g_settings.dataCollection.networkMetricsFormat =
+            NetworkMetricsFormat::mbits;
+    } else if (wcscmp(networkMetricsFormat, L"mbitsNumberOnly") == 0) {
+        g_settings.dataCollection.networkMetricsFormat =
+            NetworkMetricsFormat::mbitsNumberOnly;
+    } else if (wcscmp(networkMetricsFormat, L"mbitsDynamic") == 0) {
+        g_settings.dataCollection.networkMetricsFormat =
+            NetworkMetricsFormat::mbitsDynamic;
+    }
+
+    g_settings.dataCollection.networkMetricsFixedDecimals =
+        Wh_GetIntSetting(L"DataCollection.NetworkMetricsFixedDecimals");
+
+    g_settings.dataCollection.percentageFormat =
+        PercentageFormat::spacePaddingAndSymbol;
+    StringSetting percentageFormat =
+        StringSetting::make(L"DataCollection.PercentageFormat");
+    if (wcscmp(percentageFormat, L"spacePadding") == 0) {
+        g_settings.dataCollection.percentageFormat =
+            PercentageFormat::spacePadding;
+    } else if (wcscmp(percentageFormat, L"zeroPadding") == 0) {
+        g_settings.dataCollection.percentageFormat =
+            PercentageFormat::zeroPadding;
+    } else if (wcscmp(percentageFormat, L"noPadding") == 0) {
+        g_settings.dataCollection.percentageFormat =
+            PercentageFormat::noPadding;
+    }
+
+    g_settings.dataCollection.updateInterval =
+        Wh_GetIntSetting(L"DataCollection.UpdateInterval");
+
     g_settings.webContentWeatherLocation =
         StringSetting::make(L"WebContentWeatherLocation");
     g_settings.webContentWeatherFormat =
