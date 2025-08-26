@@ -2,12 +2,73 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-26T12:49:59.000Z</updated>
+    <updated>2025-08-26T13:13:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Dotfiles (Explorer only) 1.0.1]]></title>
+        <id>https://windhawk.net/mods/hide-dotfiles-explorer#62d4270742fb122bbaf15b7cc64c0b12b2a47f54</id>
+        <link href="https://windhawk.net/mods/hide-dotfiles-explorer"/>
+        <updated>2025-08-26T13:13:55.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod hides files and folders starting with a dot (.) in Windows Explorer and Desktop, similar to Unix/Linux systems.</p>
+<p><img src="https://i.imgur.com/y75mPVQ.png" alt="Screenshot" /></p>
+<h2 id="howitworks">How It Works</h2>
+<p>This mod <strong>filters files directly from directory listings</strong> at the system level.
+It does <strong>not</strong> modify file attributes (like the "hidden" attribute) and <strong>does not</strong> depend on Windows Explorer's "Show hidden files" setting.
+Files are completely hidden from view regardless of Explorer's hidden file visibility settings.</p>
+<h2 id="keybenefits">Key Benefits</h2>
+<ul>
+<li><strong>Independent of Explorer settings</strong>: Works regardless of whether "Show hidden files" is enabled or disabled</li>
+<li><strong>No file attribute modification</strong>: Files remain unchanged on disk</li>
+<li><strong>System-wide filtering</strong>: Affects all Explorer views and file dialogs</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<p>You can exclude specific files from being hidden using the dotfile whitelist, or specify 
+additional files to always hide regardless of whether they start with a dot.</p>
+<h3 id="displaymodes">Display Modes</h3>
+<p>Choose how dotfiles should be handled:</p>
+<ul>
+<li><strong>Never show</strong>: Files are completely hidden from directory listings (default)</li>
+<li><strong>Show as hidden</strong>: Files are shown with the hidden attribute (like Unix <code>ls -a</code>)</li>
+<li><strong>Show as system</strong>: Files are shown with both hidden and system attributes</li>
+</ul>
+<h3 id="filenamematching">Filename Matching</h3>
+<ul>
+<li><strong>Case-insensitive</strong>: Filenames are matched regardless of case (e.g., <code>.Gitignore</code> will match <code>.gitignore</code>)</li>
+<li><strong>Pattern matching</strong>: Supports wildcards using Windows pattern matching syntax</li>
+<li><code>*</code> matches zero or more characters</li>
+<li><code>?</code> matches exactly one character</li>
+<li>Examples: <code>.env*</code> matches <code>.env</code>, <code>.env.local</code>, <code>.env.production</code></li>
+</ul>
+<h3 id="settings">Settings</h3>
+<ul>
+<li><strong>Display Mode</strong>: How to handle dotfiles (Never show, Show as hidden, Show as system)</li>
+<li><strong>Dotfile Whitelist</strong>: List of dotfile patterns to show (e.g., <code>.gitignore</code>, <code>.env*</code>, <code>.*.config</code>)</li>
+<li><strong>Always Hide</strong>: List of filename patterns to always hide, even if they don't start with a dot (e.g., <code>desktop.ini</code>, <code>Thumbs.db</code>, <code>*.tmp</code>)</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>To show <code>.gitignore</code>: add <code>.gitignore</code> to dotfile whitelist</li>
+<li>To show all <code>.env*</code> files: add <code>.env*</code> to dotfile whitelist</li>
+<li>To hide <code>desktop.ini</code>: add <code>desktop.ini</code> to always-hide list</li>
+<li>To hide all <code>.tmp</code> files: add <code>*.tmp</code> to always-hide list</li>
+<li><code>.env.local</code> will be shown if <code>.env*</code> is whitelisted</li>
+</ul>
+<h2 id="importantnotes">Important Notes</h2>
+<ul>
+<li><strong>No file attributes are modified</strong> - hidden files retain their original attributes</li>
+<li><strong>Independent of Explorer settings</strong> - works regardless of "Show hidden files" setting</li>
+<li><strong>Other applications</strong> can still access these files normally</li>
+<li><strong>Command Prompt/PowerShell</strong> will still show these files unless specifically filtered</li>
+</ul>]]></content>
+        <author>
+            <name>@danalec</name>
+            <uri>https://github.com/danalec</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Old Task Manager 1.1.0]]></title>
         <id>https://windhawk.net/mods/win11-old-taskmgr#12a0091ea30ed9663ca0f2d61582a22f832d10fa</id>
@@ -335,25 +396,6 @@ MUI system).</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Drag-n-Drop Lite 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-dragdrop-lite#8a1dacf7d8056396f8ffab60509942a8e9817a6d</id>
-        <link href="https://windhawk.net/mods/classic-explorer-dragdrop-lite"/>
-        <updated>2025-08-08T04:50:30.000Z</updated>
-        <content type="html"><![CDATA[<p>This is a maximally stripped down version of the mod "Classic Explorer Drag/Drop" by Isabella Lulamoon (@kawapure).
-It is intended for restoring the Drag &amp; Drop image of the items being dragged the way it was in Win 95 - Win XP.</p>
-<p>The differences with the original mod are as follows:</p>
-<ul>
-<li><p>This mod does not download the debug symbols</p></li>
-<li><p>This mod hooks only a WinAPI function, thus architecture-independent (can work on ARM, for instance)</p></li>
-<li><p>From the user's perspective this mod enables effect of dragged items in cases where the original mod suppresses. 
-So, expect visibility of the dragged items in more use cases.</p></li>
-</ul>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

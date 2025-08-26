@@ -2185,6 +2185,27 @@
                 "version": "1.0.1"
             }
         },
+        "hide-dotfiles-explorer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1756214035000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1756214035000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "@danalec",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi",
+                "description": "Hide dotfiles and folders starting with . in Windows Explorer and Desktop",
+                "github": "https://github.com/danalec",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Hide Dotfiles (Explorer only)",
+                "version": "1.0.1"
+            }
+        },
         "hide-search-bar": {
             "details": {
                 "defaultSorting": 3969,
