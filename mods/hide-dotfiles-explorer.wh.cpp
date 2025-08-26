@@ -30,12 +30,12 @@ You can exclude specific files from being hidden using the dotfile whitelist, or
 additional files to always hide regardless of whether they start with a dot.
 
 ### Filename Matching
-- **Case-sensitive**: Filenames must match exactly including case (e.g., `.Gitignore` will not match `.gitignore`)
+- **Case-insensitive**: Filenames are matched regardless of case (e.g., `.Gitignore` will match `.gitignore`)
 - **Exact matching**: Full filename must match exactly (no partial matches)
 
 ### Settings
-- **Dotfile Whitelist**: Comma-separated list of dotfiles to show (e.g., `.gitignore,.env`)
-- **Always Hide**: Comma-separated list of filenames to always hide, even if they don't start with a dot (e.g., `desktop.ini,Thumbs.db`)
+- **Dotfile Whitelist**: List of dotfiles to show (e.g., `.gitignore`, `.env`)
+- **Always Hide**: List of filenames to always hide, even if they don't start with a dot (e.g., `desktop.ini`, `Thumbs.db`)
 
 Examples:
 - To show `.gitignore`: add `.gitignore` to dotfile whitelist
@@ -52,12 +52,12 @@ Examples:
 
 // ==WindhawkModSettings==
 /*
-- dotfileWhitelist: ""
+- dotfileWhitelist: []
   $name: Dotfile Whitelist
-  $description: Comma-separated list of dotfiles to show
-- alwaysHide: ""
+  $description: List of dotfiles to show
+- alwaysHide: []
   $name: Always Hide
-  $description: Comma-separated list of filenames to always hide regardless of dotfile status
+  $description: List of filenames to always hide regardless of dotfile status
 */
 // ==/WindhawkModSettings==
 
@@ -107,63 +107,37 @@ typedef NTSTATUS (NTAPI* NtQueryDirectoryFileEx_t)(
 
 NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
 
-std::wstring TrimWhitespace(const std::wstring& str) {
-    size_t start = str.find_first_not_of(L" \t\r\n");
-    if (start == std::wstring::npos) return L"";
-    size_t end = str.find_last_not_of(L" \t\r\n");
-    return str.substr(start, end - start + 1);
-}
 
-std::wstring ToLowerCase(const std::wstring& str) {
-    std::wstring result = str;
-    std::transform(result.begin(), result.end(), result.begin(), ::towlower);
-    return result;
-}
 
-std::wstring ParseQuotedString(const std::wstring& str) {
-    if (str.length() >= 2 && str.front() == L'"' && str.back() == L'"') {
-        return str.substr(1, str.length() - 2);
-    }
-    return str;
-}
-
-void ParseSettings(const std::wstring& dotfileWhitelistStr, const std::wstring& alwaysHideStr) {
+void ParseSettings() {
     g_settings.dotfileWhitelist.clear();
     g_settings.alwaysHide.clear();
     
-    auto parseList = [](const std::wstring& str, std::vector<std::wstring>& target) {
-        if (str.empty()) return;
-        
-        std::vector<std::wstring> tokens;
-        std::wstring current;
-        bool inQuotes = false;
-        
-        for (size_t i = 0; i < str.length(); ++i) {
-            wchar_t c = str[i];
-            
-            if (c == L'"') {
-                inQuotes = !inQuotes;
-            } else if (c == L',' && !inQuotes) {
-                current = TrimWhitespace(current);
-                if (!current.empty()) {
-                    current = ParseQuotedString(current);
-                    target.push_back(std::move(current));
-                }
-                current.clear();
-            } else {
-                current += c;
-            }
+    // Parse dotfile whitelist
+    for (int i = 0;; i++) {
+        PCWSTR item = Wh_GetStringSetting(L"dotfileWhitelist[%d]", i);
+        bool hasItem = *item;
+        if (hasItem) {
+            g_settings.dotfileWhitelist.emplace_back(item);
         }
-        
-        current = TrimWhitespace(current);
-        if (!current.empty()) {
-            current = ParseQuotedString(current);
-            target.push_back(std::move(current));
+        Wh_FreeStringSetting(item);
+        if (!hasItem) {
+            break;
         }
-    };
+    }
     
-    parseList(dotfileWhitelistStr, g_settings.dotfileWhitelist);
-    parseList(alwaysHideStr, g_settings.alwaysHide);
+    // Parse always hide list
+    for (int i = 0;; i++) {
+        PCWSTR item = Wh_GetStringSetting(L"alwaysHide[%d]", i);
+        bool hasItem = *item;
+        if (hasItem) {
+            g_settings.alwaysHide.emplace_back(item);
+        }
+        Wh_FreeStringSetting(item);
+        if (!hasItem) {
+            break;
+        }
+    }
 }
 
 bool ShouldHideFile(const WCHAR* fileName) {
@@ -213,13 +187,12 @@ void FilterFilesInDirectory(void* FileInformation, ULONG_PTR* bytesReturned) {
         ULONG nextEntryOffset = currentEntry->NextEntryOffset;
         ULONG currentEntrySize = nextEntryOffset ? nextEntryOffset : (*bytesReturned - totalBytesRead);
         
-        WCHAR fileName[MAX_PATH] = {0};
         ULONG fileNameLength = currentEntry->FileNameLength / sizeof(WCHAR);
-        wcsncpy_s(fileName, MAX_PATH, currentEntry->FileName, fileNameLength);
+        std::wstring fileName(currentEntry->FileName, fileNameLength);
         
         bool shouldHide = false;
-        if (fileNameLength > 0 && wcscmp(fileName, L".") != 0 && wcscmp(fileName, L"..") != 0) {
-            shouldHide = ShouldHideFile(fileName);
+        if (fileNameLength > 0 && fileName != L"." && fileName != L"..") {
+            shouldHide = ShouldHideFile(fileName.c_str());
         }
         
         if (!shouldHide) {
@@ -333,9 +306,7 @@ NTSTATUS NTAPI NtQueryDirectoryFileEx_Hook(
 }
 
 BOOL Wh_ModInit() {
-    std::wstring dotfileWhitelistStr = Wh_GetStringSetting(L"dotfileWhitelist");
-    std::wstring alwaysHideStr = Wh_GetStringSetting(L"alwaysHide");
-    ParseSettings(dotfileWhitelistStr, alwaysHideStr);
+    ParseSettings();
     
     HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
     if (!hNtDll) {
@@ -356,13 +327,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     
-
-    
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
-    std::wstring dotfileWhitelistStr = Wh_GetStringSetting(L"dotfileWhitelist");
-    std::wstring alwaysHideStr = Wh_GetStringSetting(L"alwaysHide");
-    ParseSettings(dotfileWhitelistStr, alwaysHideStr);
+    ParseSettings();
 }
