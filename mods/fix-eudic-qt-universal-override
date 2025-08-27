@@ -1,0 +1,68 @@
+// ==WindhawkMod==
+// @id              fix-eudic-qt-universal-override
+// @name            Fix white flashes in Eudic (Universal Paint Override)
+// @description     Aggressively fixes ALL flashes in eudic.exe by hooking BeginPaint for ALL windows without checks.
+// @version         6.0
+// @author          SilasYang
+// @include         eudic.exe
+// @compilerOptions -lGdi32 -lUser32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+!!! WARNING: This is an aggressive, universal version that may cause UI issues. !!!
+
+This mod fixes the white flash in Eudic (eudic.exe) by brute force.
+It hooks the core GDI function `BeginPaint` and forcibly paints the background of EVERY window created by the eudic.exe process dark gray.
+This will fix all flashes but may also incorrectly color text input boxes, content areas, and other controls, potentially making them unreadable.
+Use this script if targeted fixes have failed.
+*/
+// ==/WindhawkModReadme==
+
+#include <windhawk_utils.h>
+#include <Windows.h>
+
+// 创建一个深灰色的画刷
+const HBRUSH g_windowBrush = CreateSolidBrush(0x191919);
+
+// 为 BeginPaint 函数指针创建一个类型别名
+using BeginPaint_t = decltype(&BeginPaint);
+BeginPaint_t BeginPaint_Original;
+
+// 我们用来替换原始函数的挂钩函数
+HDC WINAPI BeginPaint_Hook(HWND hWnd, LPPAINTSTRUCT lpPaint)
+{
+    // 检查窗口句柄是否有效
+    if (hWnd)
+    {
+        // 对 eudic.exe 创建的每一个窗口都执行强制背景绘制。
+        HDC hdc = GetDC(hWnd);
+        if (hdc)
+        {
+            RECT rect;
+            GetClientRect(hWnd, &rect);
+            FillRect(hdc, &rect, g_windowBrush);
+            ReleaseDC(hWnd, hdc);
+        }
+    }
+
+    // 无论如何，都必须调用原始的 BeginPaint 函数，否则程序会崩溃
+    return BeginPaint_Original(hWnd, lpPaint);
+}
+
+
+// 模组初始化函数
+BOOL Wh_ModInit()
+{
+    return WindhawkUtils::SetFunctionHook(
+            (void*)BeginPaint,
+            (void*)BeginPaint_Hook,
+            (void**)&BeginPaint_Original);
+}
+
+// 模组卸载函数
+void Wh_ModUninit()
+{
+    if (g_windowBrush)
+        DeleteObject(g_windowBrush);
+}
