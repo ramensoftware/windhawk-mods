@@ -56,6 +56,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WINDHAWK_MODS_LAST_DEPLOY_PATH: ${{ runner.temp }}\last_deploy
           WINDHAWK_PATH: ${{ runner.temp }}\windhawk
+      - name: Archive mod images
+        run: python scripts/archive_mod_images.py
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         with:
