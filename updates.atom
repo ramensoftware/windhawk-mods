@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-26T13:13:55.000Z</updated>
+    <updated>2025-08-30T11:31:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Visual Studio Anti-Rich-Header 1.1]]></title>
+        <id>https://windhawk.net/mods/visual-studio-anti-rich-header#1cb2850923f9f5406dae5a15508f72000798c126</id>
+        <link href="https://windhawk.net/mods/visual-studio-anti-rich-header"/>
+        <updated>2025-08-30T11:31:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved pattern matching to be compatible with more Visual Studio versions, and made it less likely to break in the future.</li>
+<li>Improved performance.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Dotfiles (Explorer only) 1.0.1]]></title>
         <id>https://windhawk.net/mods/hide-dotfiles-explorer#62d4270742fb122bbaf15b7cc64c0b12b2a47f54</id>
@@ -375,27 +389,6 @@ MUI system).</p>
         <author>
             <name>easyatm</name>
             <uri>https://github.com/easyatm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#8eb638d7f86c52bde93c6050ca3232bdf7baa5ef</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2025-08-09T17:12:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added patterns for realtime system performance metrics:</li>
-<li><code>%upload_speed%</code> - system-wide upload transfer rate.</li>
-<li><code>%download_speed%</code> - system-wide download transfer rate.</li>
-<li><code>%cpu%</code> - CPU usage.</li>
-<li><code>%ram%</code> - RAM usage.</li>
-<li>Added the <code>%weather%</code> pattern for weather information, powered by <a href="https://wttr.in/">wttr.in</a>.</li>
-<li>Added the content mode option to web content items, which can be used to strip/decode HTML and XML tags.</li>
-<li>Added the content search/replace option to web content items to apply regular expression-based search and replace operations to the extracted content.</li>
-<li>Improved compatibility with status bar programs such as YASB and Zebar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

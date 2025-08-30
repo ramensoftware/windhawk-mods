@@ -1,3 +1,8 @@
+## 1.1 ([Aug 30, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1cb2850923f9f5406dae5a15508f72000798c126/mods/visual-studio-anti-rich-header.wh.cpp))
+
+* Improved pattern matching to be compatible with more Visual Studio versions, and made it less likely to break in the future.
+* Improved performance.
+
 ## 1.0.3 ([Nov 22, 2024](https://github.com/ramensoftware/windhawk-mods/blob/5c2c1aee4460b052b77496e4cbb4f00bddba510b/mods/visual-studio-anti-rich-header.wh.cpp))
 
 * Added support for a newer version of link.exe which comes with Visual Studio 2022 version 17.12.1.

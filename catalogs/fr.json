@@ -5053,7 +5053,7 @@
                 "published": 1646604429000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1732236176000,
+                "updated": 1756553484000,
                 "users": 24
             },
             "metadata": {
@@ -5066,7 +5066,7 @@
                 ],
                 "name": "Visual Studio Anti-Rich-Header",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.3"
+                "version": "1.1"
             }
         },
         "vmware-disable-upgrade-dialog": {
