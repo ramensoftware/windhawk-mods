@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-30T11:31:24.000Z</updated>
+    <updated>2025-08-31T10:58:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix white flashes in explorer 1.2]]></title>
+        <id>https://windhawk.net/mods/fix-explorer-white-flash#d52cfd08d6535f2b921a39b202e23039744e912b</id>
+        <link href="https://windhawk.net/mods/fix-explorer-white-flash"/>
+        <updated>2025-08-31T10:58:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The mod is now compatible with light mode (https://github.com/ramensoftware/windhawk-mods/issues/2378)</li>
+</ul>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Visual Studio Anti-Rich-Header 1.1]]></title>
         <id>https://windhawk.net/mods/visual-studio-anti-rich-header#1cb2850923f9f5406dae5a15508f72000798c126</id>
@@ -368,27 +381,6 @@ MUI system).</p>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win+D per monitor(show desktop) 1.1.20250811]]></title>
-        <id>https://windhawk.net/mods/win-d-per-monitor#1e6e18f3884de1bcaecd5eeb0db5a4ced8155e93</id>
-        <link href="https://windhawk.net/mods/win-d-per-monitor"/>
-        <updated>2025-08-11T09:47:39.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="newfeatures">New Features</h3>
-<ul>
-<li>Add option to ignore topmost tool windows</li>
-<li>Add configurable minimum window size</li>
-<li>Optimize window switching to prevent taskbar flashing</li>
-</ul>
-<h3 id="fixes">Fixes</h3>
-<ul>
-<li>https://github.com/ramensoftware/windhawk/discussions/597</li>
-<li>https://github.com/ramensoftware/windhawk-mods/issues/2056</li>
-</ul>]]></content>
-        <author>
-            <name>easyatm</name>
-            <uri>https://github.com/easyatm</uri>
         </author>
     </entry>
 </feed>

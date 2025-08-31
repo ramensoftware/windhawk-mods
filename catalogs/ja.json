@@ -2038,7 +2038,7 @@
                 "published": 1754930019000,
                 "rating": 10,
                 "ratingUsers": 22,
-                "updated": 1755607072000,
+                "updated": 1756637937000,
                 "users": 479
             },
             "metadata": {
@@ -2050,7 +2050,7 @@
                     "explorer.exe"
                 ],
                 "name": "Fix white flashes in explorer",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "fix-qt-scrollbar-grippers": {
