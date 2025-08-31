@@ -17,7 +17,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Quick Hide Desktop Icons
+# Quick Hide Desktop Icons 
 
 ## Introduction / 概要
 - This mod allows you to temporarily hide desktop icons for a clean and clutter-free desktop experience.  
