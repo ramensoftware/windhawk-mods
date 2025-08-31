@@ -8,12 +8,11 @@
 // @description:zh-CN   通过可自定义的热键或鼠标点击快速隐藏/显示桌面图标
 // @description:zh-TW   透過可自訂的快捷鍵或滑鼠點擊快速隱藏/顯示桌面圖標
 // @description:ja-JP   カスタマイズ可能なホットキーまたはマウスクリックでデスクトップアイコンを素早く非表示/表示
-// @version             0.2.3
+// @version             0.2.4
 // @author              youlanan
 // @github              https://github.com/youlanan
 // @include             explorer.exe
 // @compilerOptions     -luser32 -lshell32 -lcomctl32
-// @license             MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -172,7 +171,10 @@ HWND FindDesktopIconsWindow() {
         HWND defView = FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
         if (defView) {
             HWND listView = FindWindowExW(defView, nullptr, L"SysListView32", nullptr);
-            if (listView) return listView;
+            if (listView) {
+                Wh_Log(L"Found desktop icons window via Progman: %p", listView);
+                return listView;
+            }
         }
     }
 
@@ -181,7 +183,10 @@ HWND FindDesktopIconsWindow() {
         HWND defView = FindWindowExW(workerW, nullptr, L"SHELLDLL_DefView", nullptr);
         if (defView) {
             HWND listView = FindWindowExW(defView, nullptr, L"SysListView32", nullptr);
-            if (listView) return listView;
+            if (listView) {
+                Wh_Log(L"Found desktop icons window via WorkerW: %p", listView);
+                return listView;
+            }
         }
     }
 
@@ -191,6 +196,7 @@ HWND FindDesktopIconsWindow() {
 
 // Toggle desktop icons visibility
 void ToggleDesktopIcons() {
+    // Always attempt to find desktop window if not set
     if (!g_desktopListView) {
         g_desktopListView = FindDesktopIconsWindow();
     }
@@ -210,28 +216,41 @@ void ToggleDesktopIcons() {
 
 // Check if modifier keys match requirements
 bool CheckModifiers() {
-    return ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) == g_settings.useCtrl &&
-           ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) == g_settings.useAlt &&
-           ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) == g_settings.useShift;
+    bool result = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) == g_settings.useCtrl &&
+                  ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) == g_settings.useAlt &&
+                  ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) == g_settings.useShift;
+    Wh_Log(L"Modifiers check: ctrl=%d, alt=%d, shift=%d, result=%d",
+           g_settings.useCtrl, g_settings.useAlt, g_settings.useShift, result);
+    return result;
 }
 
 // Check if point is in desktop empty area
 bool IsDesktopEmptyArea(HWND hWnd, POINT pt) {
-    if (!g_desktopListView) return false;
+    if (!g_desktopListView) {
+        g_desktopListView = FindDesktopIconsWindow();
+        if (!g_desktopListView) return false;
+    }
 
     HWND defView = GetParent(g_desktopListView);
-    if (!defView) return false;
+    if (!defView) {
+        Wh_Log(L"Failed to get parent defView");
+        return false;
+    }
 
     ClientToScreen(hWnd, &pt);
     ScreenToClient(defView, &pt);
 
     if (hWnd == g_desktopListView && !g_iconsHidden) {
         LVHITTESTINFO ht = {pt};
-        return ListView_HitTest(g_desktopListView, &ht) == -1;
+        bool isEmpty = ListView_HitTest(g_desktopListView, &ht) == -1;
+        Wh_Log(L"Hit test on ListView: isEmpty=%d, x=%ld, y=%ld", isEmpty, pt.x, pt.y);
+        return isEmpty;
     } else if (hWnd == defView || hWnd == g_desktopListView) {
+        Wh_Log(L"Point in defView or ListView: x=%ld, y=%ld", pt.x, pt.y);
         return true;
     }
 
+    Wh_Log(L"Not in desktop empty area: hwnd=%p", hWnd);
     return false;
 }
 
@@ -240,7 +259,6 @@ bool HandleMouseClick(const MSG* lpMsg) {
     if (g_settings.triggerMode == 1) return false; // Keyboard only
 
     UINT targetDown, targetDbl;
-    bool isRightButton = false;
     switch (g_settings.mouseButton) {
         case 0: // Left
             targetDown = WM_LBUTTONDOWN;
@@ -249,13 +267,13 @@ bool HandleMouseClick(const MSG* lpMsg) {
         case 1: // Right
             targetDown = WM_RBUTTONDOWN;
             targetDbl = WM_RBUTTONDBLCLK;
-            isRightButton = true;
             break;
         case 2: // Middle
             targetDown = WM_MBUTTONDOWN;
             targetDbl = WM_MBUTTONDBLCLK;
             break;
         default:
+            Wh_Log(L"Invalid mouseButton: %d", g_settings.mouseButton);
             return false;
     }
 
@@ -294,6 +312,11 @@ bool HandleMouseClick(const MSG* lpMsg) {
     if (g_settings.clickType == 0) { // Single
         shouldToggle = !isDblMsg && !isWithinDouble;
     } else { // Double
+        // For right button, only handle single clicks to avoid context menu
+        if (g_settings.mouseButton == 1) {
+            Wh_Log(L"Skipping right button double-click to preserve context menu");
+            return false;
+        }
         shouldToggle = isDblMsg || isWithinDouble;
     }
 
@@ -308,7 +331,7 @@ bool HandleMouseClick(const MSG* lpMsg) {
         return true;
     }
 
-    return isRightButton; // Consume right-click to prevent context menu
+    return false;
 }
 
 // Handle keyboard input
@@ -403,7 +426,8 @@ BOOL Wh_ModInit() {
 
     Wh_SetFunctionHook((void*)DispatchMessageW, (void*)DispatchMessageW_Hook, (void**)&DispatchMessageW_Original);
 
-    g_desktopListView = FindDesktopIconsWindow();
+    // Initialize g_desktopListView lazily in ToggleDesktopIcons
+    Wh_Log(L"Deferring desktop window search to first toggle");
 
     Wh_Log(L"Initialized");
     return TRUE;
