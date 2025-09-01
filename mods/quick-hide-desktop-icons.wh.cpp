@@ -8,7 +8,7 @@
 // @description:zh-CN   通过可自定义的热键或鼠标点击快速隐藏/显示桌面图标
 // @description:zh-TW   透過可自訂的快捷鍵或滑鼠點擊快速隱藏/顯示桌面圖標
 // @description:ja-JP   カスタマイズ可能なホットキーまたはマウスクリックでデスクトップアイコンを素早く非表示/表示
-// @version             0.2.4
+// @version             0.2.6
 // @author              youlanan
 // @github              https://github.com/youlanan
 // @include             explorer.exe
@@ -72,19 +72,15 @@
   $description:ja-JP: 使用するマウスボタン
   $options:
   - left: Left button
-  - right: Right button
   - middle: Middle button
   $options:zh-CN:
   - left: 左键
-  - right: 右键
   - middle: 中键
   $options:zh-TW:
   - left: 左鍵
-  - right: 右鍵
   - middle: 中鍵
   $options:ja-JP:
   - left: 左ボタン
-  - right: 右ボタン
   - middle: 中ボタン
 
 - clickType: double
@@ -145,311 +141,342 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <windhawk_api.h>
+#include <wchar.h>
 
-// Settings structure
+// Debug logging
+#ifndef QH_DEBUG
+#define QH_DEBUG 0
+#endif
+#if QH_DEBUG
+#define QH_LOG(...) Wh_Log(__VA_ARGS__)
+#else
+#define QH_LOG(...) (void)0
+#endif
+
+// Settings
 struct ModSettings {
     int triggerMode; // 0=mouse, 1=keyboard, 2=both
-    int mouseButton; // 0=left, 1=right, 2=middle
+    int mouseButton; // 0=left, 2=middle
     int clickType;   // 0=single, 1=double
     bool useCtrl;
     bool useAlt;
     bool useShift;
-    int hotkey;      // Virtual key code
+    int hotkey;
     bool enableSound;
 } g_settings;
 
-// State variables
+// System metrics cache
+static int g_dblClickX = 0;
+static int g_dblClickY = 0;
+static DWORD g_dblClickTime = 0;
+
+// State
 static bool g_iconsHidden = false;
 static HWND g_desktopListView = nullptr;
+static HWND g_defView = nullptr;
+static volatile LONG g_toggleLock = 0;
+
+// Double-click detection
 static DWORD g_lastClickTime = 0;
 static POINT g_lastClickPos = {0, 0};
 
-// Find desktop icons window
-HWND FindDesktopIconsWindow() {
-    HWND progman = FindWindowW(L"Progman", nullptr);
-    if (progman) {
-        HWND defView = FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
-        if (defView) {
-            HWND listView = FindWindowExW(defView, nullptr, L"SysListView32", nullptr);
-            if (listView) {
-                Wh_Log(L"Found desktop icons window via Progman: %p", listView);
-                return listView;
-            }
+// Hook
+using DispatchMessageW_t = decltype(&DispatchMessageW);
+static DispatchMessageW_t DispatchMessageW_Original = nullptr;
+
+// Shell process
+static bool g_isShellProcess = false;
+static DWORD g_shellPid = 0;
+static HWND g_lastWorkerW = nullptr;
+
+static DWORD GetShellProcessIdCached() {
+    if (g_shellPid) return g_shellPid;
+    HWND shellWnd = GetShellWindow();
+    if (!shellWnd) return 0;
+    GetWindowThreadProcessId(shellWnd, &g_shellPid);
+    return g_shellPid;
+}
+
+// Convert string to virtual key code
+int StringToVK(PCWSTR str) {
+    if (!str || !*str) return VK_F12;
+    wchar_t tmp[32];
+    wcsncpy_s(tmp, _countof(tmp), str, _TRUNCATE);
+    _wcsupr_s(tmp, _countof(tmp));
+
+    if (tmp[0] == L'F' && wcslen(tmp) >= 2) {
+        int n = _wtoi(tmp + 1);
+        if (n >= 1 && n <= 24) return VK_F1 + (n - 1);
+    }
+    if (wcslen(tmp) == 1) {
+        SHORT vk = VkKeyScanW(tmp[0]);
+        if (vk != -1) return LOBYTE(vk);
+    }
+    if (wcscmp(tmp, L"ESC") == 0) return VK_ESCAPE;
+    if (wcscmp(tmp, L"TAB") == 0) return VK_TAB;
+    if (wcscmp(tmp, L"SPACE") == 0) return VK_SPACE;
+    if (wcscmp(tmp, L"ENTER") == 0 || wcscmp(tmp, L"RETURN") == 0) return VK_RETURN;
+    return VK_F12;
+}
+
+// Clear cached handles
+static void InvalidateCachedDesktopHandles() {
+    g_desktopListView = nullptr;
+    g_defView = nullptr;
+    g_lastWorkerW = nullptr;
+}
+
+// Find desktop DefView
+HWND FindDefView() {
+    if (g_defView && IsWindow(g_defView)) return g_defView;
+
+    DWORD currentPid = GetCurrentProcessId();
+    DWORD shellPid = GetShellProcessIdCached();
+    HWND shellWnd = GetShellWindow();
+    HWND defView = shellWnd ? FindWindowExW(shellWnd, nullptr, L"SHELLDLL_DefView", nullptr) : nullptr;
+
+    if (defView) {
+        DWORD pid;
+        GetWindowThreadProcessId(defView, &pid);
+        if (pid == currentPid || (shellPid && pid == shellPid)) {
+            g_defView = defView;
+            return g_defView;
         }
     }
 
-    HWND workerW = nullptr;
-    while ((workerW = FindWindowExW(nullptr, workerW, L"WorkerW", nullptr))) {
-        HWND defView = FindWindowExW(workerW, nullptr, L"SHELLDLL_DefView", nullptr);
+    HWND worker = g_lastWorkerW && IsWindow(g_lastWorkerW) ? g_lastWorkerW : nullptr;
+    DWORD start = GetTickCount();
+    while ((worker = FindWindowExW(nullptr, worker, L"WorkerW", nullptr))) {
+        if (GetTickCount() - start > 200) break;
+        defView = FindWindowExW(worker, nullptr, L"SHELLDLL_DefView", nullptr);
         if (defView) {
-            HWND listView = FindWindowExW(defView, nullptr, L"SysListView32", nullptr);
-            if (listView) {
-                Wh_Log(L"Found desktop icons window via WorkerW: %p", listView);
-                return listView;
+            DWORD pid;
+            GetWindowThreadProcessId(defView, &pid);
+            if (pid == currentPid || (shellPid && pid == shellPid)) {
+                g_defView = defView;
+                g_lastWorkerW = worker;
+                return g_defView;
             }
         }
     }
-
-    Wh_Log(L"Failed to find desktop icons window");
     return nullptr;
 }
 
-// Toggle desktop icons visibility
-void ToggleDesktopIcons() {
-    // Always attempt to find desktop window if not set
-    if (!g_desktopListView) {
-        g_desktopListView = FindDesktopIconsWindow();
-    }
+// Get desktop ListView
+HWND GetDesktopListView() {
+    if (g_desktopListView && IsWindow(g_desktopListView)) return g_desktopListView;
+    HWND defView = FindDefView();
+    if (!defView) return nullptr;
 
-    if (g_desktopListView) {
-        ShowWindow(g_desktopListView, g_iconsHidden ? SW_SHOW : SW_HIDE);
-        g_iconsHidden = !g_iconsHidden;
-        Wh_Log(L"Desktop icons %s", g_iconsHidden ? L"hidden" : L"shown");
-
-        if (g_settings.enableSound) {
-            MessageBeep(MB_OK);
-        }
-    } else {
-        Wh_Log(L"Desktop icons window not found");
+    HWND list = FindWindowExW(defView, nullptr, L"SysListView32", L"FolderView");
+    if (!list) list = FindWindowExW(defView, nullptr, L"SysListView32", nullptr);
+    if (list) {
+        g_desktopListView = list;
+        g_defView = defView;
+        return g_desktopListView;
     }
+    return nullptr;
 }
 
-// Check if modifier keys match requirements
+// Check if point is on desktop background
+bool IsPointOnDesktopBackground(POINT ptScreen) {
+    HWND h = WindowFromPoint(ptScreen);
+    if (!h) return false;
+
+    for (HWND cur = h; cur; cur = GetParent(cur)) {
+        if (cur == g_desktopListView || cur == g_defView) return true;
+        wchar_t cls[64];
+        if (GetClassNameW(cur, cls, _countof(cls))) {
+            if (_wcsicmp(cls, L"WorkerW") == 0 || _wcsicmp(cls, L"Progman") == 0 ||
+                _wcsicmp(cls, L"SHELLDLL_DefView") == 0) return true;
+        }
+    }
+
+    HWND shell = GetShellWindow();
+    return shell && (h == shell || IsChild(shell, h));
+}
+
+// Toggle desktop icons
+void ToggleDesktopIcons() {
+    if (InterlockedCompareExchange(&g_toggleLock, 1, 0)) return;
+    struct AutoUnlock { ~AutoUnlock() { InterlockedExchange(&g_toggleLock, 0); } } unlock;
+
+    HWND lv = GetDesktopListView();
+    if (!lv) return;
+
+    ShowWindow(lv, g_iconsHidden ? SW_SHOW : SW_HIDE);
+    g_iconsHidden = !g_iconsHidden;
+    if (g_settings.enableSound) MessageBeep(MB_OK);
+    QH_LOG(L"Icons toggled: %d", g_iconsHidden);
+}
+
+// Check modifier keys
 bool CheckModifiers() {
-    bool result = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) == g_settings.useCtrl &&
-                  ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) == g_settings.useAlt &&
-                  ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) == g_settings.useShift;
-    Wh_Log(L"Modifiers check: ctrl=%d, alt=%d, shift=%d, result=%d",
-           g_settings.useCtrl, g_settings.useAlt, g_settings.useShift, result);
-    return result;
+    if (g_settings.useCtrl && !(GetAsyncKeyState(VK_CONTROL) & 0x8000)) return false;
+    if (g_settings.useAlt && !(GetAsyncKeyState(VK_MENU) & 0x8000)) return false;
+    if (g_settings.useShift && !(GetAsyncKeyState(VK_SHIFT) & 0x8000)) return false;
+    return true;
 }
 
 // Check if point is in desktop empty area
-bool IsDesktopEmptyArea(HWND hWnd, POINT pt) {
-    if (!g_desktopListView) {
-        g_desktopListView = FindDesktopIconsWindow();
-        if (!g_desktopListView) return false;
+bool IsDesktopEmptyArea(HWND hWnd, POINT ptScreen) {
+    if (!hWnd || !IsPointOnDesktopBackground(ptScreen)) return false;
+
+    HWND list = GetDesktopListView();
+    if (list && !g_iconsHidden) {
+        POINT ptList = ptScreen;
+        ScreenToClient(list, &ptList);
+        LVHITTESTINFO ht = { ptList };
+        return ListView_HitTest(list, &ht) == -1;
     }
-
-    HWND defView = GetParent(g_desktopListView);
-    if (!defView) {
-        Wh_Log(L"Failed to get parent defView");
-        return false;
-    }
-
-    ClientToScreen(hWnd, &pt);
-    ScreenToClient(defView, &pt);
-
-    if (hWnd == g_desktopListView && !g_iconsHidden) {
-        LVHITTESTINFO ht = {pt};
-        bool isEmpty = ListView_HitTest(g_desktopListView, &ht) == -1;
-        Wh_Log(L"Hit test on ListView: isEmpty=%d, x=%ld, y=%ld", isEmpty, pt.x, pt.y);
-        return isEmpty;
-    } else if (hWnd == defView || hWnd == g_desktopListView) {
-        Wh_Log(L"Point in defView or ListView: x=%ld, y=%ld", pt.x, pt.y);
-        return true;
-    }
-
-    Wh_Log(L"Not in desktop empty area: hwnd=%p", hWnd);
-    return false;
+    return true;
 }
 
-// Handle mouse click
-bool HandleMouseClick(const MSG* lpMsg) {
-    if (g_settings.triggerMode == 1) return false; // Keyboard only
+// Handle mouse messages
+bool HandleMouseMsg(const MSG* lpMsg) {
+    if (!lpMsg || g_settings.triggerMode == 1) return false;
 
-    UINT targetDown, targetDbl;
-    switch (g_settings.mouseButton) {
-        case 0: // Left
-            targetDown = WM_LBUTTONDOWN;
-            targetDbl = WM_LBUTTONDBLCLK;
-            break;
-        case 1: // Right
-            targetDown = WM_RBUTTONDOWN;
-            targetDbl = WM_RBUTTONDBLCLK;
-            break;
-        case 2: // Middle
-            targetDown = WM_MBUTTONDOWN;
-            targetDbl = WM_MBUTTONDBLCLK;
-            break;
-        default:
-            Wh_Log(L"Invalid mouseButton: %d", g_settings.mouseButton);
-            return false;
-    }
-
-    if (lpMsg->message != targetDown && lpMsg->message != targetDbl) {
-        Wh_Log(L"Ignored message: %u", lpMsg->message);
-        return false;
-    }
-
-    if (!CheckModifiers()) {
-        Wh_Log(L"Modifiers check failed: ctrl=%d, alt=%d, shift=%d",
-               g_settings.useCtrl, g_settings.useAlt, g_settings.useShift);
-        return false;
-    }
+    UINT downMsg = g_settings.mouseButton == 0 ? WM_LBUTTONDOWN : WM_MBUTTONDOWN;
+    UINT dblMsg = g_settings.mouseButton == 0 ? WM_LBUTTONDBLCLK : WM_MBUTTONDBLCLK;
+    if (lpMsg->message != downMsg && lpMsg->message != dblMsg) return false;
+    if (!CheckModifiers()) return false;
 
     POINT pt = {GET_X_LPARAM(lpMsg->lParam), GET_Y_LPARAM(lpMsg->lParam)};
-    if (!IsDesktopEmptyArea(lpMsg->hwnd, pt)) {
-        Wh_Log(L"Not in desktop empty area: hwnd=%p, x=%ld, y=%ld", lpMsg->hwnd, pt.x, pt.y);
-        return false;
-    }
-
     POINT ptScreen = pt;
     ClientToScreen(lpMsg->hwnd, &ptScreen);
+    if (!IsDesktopEmptyArea(lpMsg->hwnd, ptScreen)) return false;
 
-    DWORD currentTime = GetTickCount();
-    int cxDbl = GetSystemMetrics(SM_CXDOUBLECLK) / 2;
-    int cyDbl = GetSystemMetrics(SM_CYDOUBLECLK) / 2;
-    bool isWithinDouble = (currentTime - g_lastClickTime <= GetDoubleClickTime()) &&
-                          (abs(ptScreen.x - g_lastClickPos.x) <= cxDbl) &&
-                          (abs(ptScreen.y - g_lastClickPos.y) <= cyDbl);
-    bool isDblMsg = (lpMsg->message == targetDbl);
-
-    Wh_Log(L"Mouse event: msg=%u, isDblMsg=%d, isWithinDouble=%d, time=%u, x=%ld, y=%ld",
-           lpMsg->message, isDblMsg, isWithinDouble, currentTime, ptScreen.x, ptScreen.y);
-
-    bool shouldToggle = false;
-    if (g_settings.clickType == 0) { // Single
-        shouldToggle = !isDblMsg && !isWithinDouble;
-    } else { // Double
-        // For right button, only handle single clicks to avoid context menu
-        if (g_settings.mouseButton == 1) {
-            Wh_Log(L"Skipping right button double-click to preserve context menu");
-            return false;
+    DWORD now = GetTickCount();
+    bool isSystemDbl = lpMsg->message == dblMsg;
+    bool isManualDbl = false;
+    if (!isSystemDbl) {
+        DWORD dt = now - g_lastClickTime;
+        int dx = abs(pt.x - g_lastClickPos.x);
+        int dy = abs(pt.y - g_lastClickPos.y);
+        if (dt <= g_dblClickTime && dx <= g_dblClickX && dy <= g_dblClickY) {
+            isManualDbl = true;
         }
-        shouldToggle = isDblMsg || isWithinDouble;
     }
 
-    g_lastClickTime = currentTime;
-    g_lastClickPos = ptScreen;
+    bool isDbl = isSystemDbl || isManualDbl;
+    bool should = g_settings.clickType == 0 ? !isDbl : isDbl;
 
-    if (shouldToggle) {
-        Wh_Log(L"Triggering toggle with %s %s click",
-               (g_settings.mouseButton == 0 ? L"left" : g_settings.mouseButton == 1 ? L"right" : L"middle"),
-               g_settings.clickType == 0 ? L"single" : L"double");
+    g_lastClickTime = now;
+    g_lastClickPos = pt;
+
+    if (should) {
         ToggleDesktopIcons();
         return true;
     }
-
     return false;
 }
 
-// Handle keyboard input
-bool HandleKeyboard(const MSG* lpMsg) {
-    if (g_settings.triggerMode == 0) return false; // Mouse only
-
-    if (lpMsg->message == WM_KEYDOWN &&
-        lpMsg->wParam == g_settings.hotkey &&
-        CheckModifiers()) {
-        Wh_Log(L"Keyboard trigger: key=%d", lpMsg->wParam);
+// Handle keyboard messages
+bool HandleKeyboardMsg(const MSG* lpMsg) {
+    if (!lpMsg || g_settings.triggerMode == 0) return false;
+    if (lpMsg->message == WM_KEYDOWN && (int)lpMsg->wParam == g_settings.hotkey && CheckModifiers()) {
         ToggleDesktopIcons();
         return true;
     }
-
     return false;
 }
 
-// Hook function for DispatchMessageW
-using DispatchMessageW_t = decltype(&DispatchMessageW);
-DispatchMessageW_t DispatchMessageW_Original;
+// DispatchMessageW hook
 LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
-    if (lpMsg && (HandleKeyboard(lpMsg) || HandleMouseClick(lpMsg))) {
-        return 0; // Message handled
+    if (lpMsg && (lpMsg->message == WM_KEYDOWN ||
+                  (lpMsg->message >= WM_MOUSEFIRST && lpMsg->message <= WM_MOUSELAST)) &&
+        (HandleKeyboardMsg(lpMsg) || HandleMouseMsg(lpMsg))) {
+        return 0;
     }
     return DispatchMessageW_Original(lpMsg);
 }
 
-// Load settings from Windhawk
+// Load settings
 void LoadSettings() {
-    // Initialize with default values
     g_settings = {0, 0, 1, false, false, false, VK_F12, false};
+    g_dblClickX = GetSystemMetrics(SM_CXDOUBLECLK) / 2;
+    g_dblClickY = GetSystemMetrics(SM_CYDOUBLECLK) / 2;
+    g_dblClickTime = GetDoubleClickTime();
 
-    // Buffer for string settings
-    WCHAR buffer[64];
-
-    // Load triggerMode
-    PCWSTR triggerMode = Wh_GetStringSetting(L"triggerMode");
-    if (wcscmp(triggerMode, L"keyboard") == 0) g_settings.triggerMode = 1;
-    else if (wcscmp(triggerMode, L"both") == 0) g_settings.triggerMode = 2;
-    else g_settings.triggerMode = 0; // Default to mouse
-    Wh_FreeStringSetting(triggerMode);
-
-    // Load mouseButton
-    PCWSTR mouseButton = Wh_GetStringSetting(L"mouseButton");
-    if (wcscmp(mouseButton, L"right") == 0) g_settings.mouseButton = 1;
-    else if (wcscmp(mouseButton, L"middle") == 0) g_settings.mouseButton = 2;
-    else g_settings.mouseButton = 0; // Default to left
-    Wh_FreeStringSetting(mouseButton);
-
-    // Load clickType
-    PCWSTR clickType = Wh_GetStringSetting(L"clickType");
-    g_settings.clickType = (wcscmp(clickType, L"single") == 0) ? 0 : 1; // Default to double
-    Wh_FreeStringSetting(clickType);
-
-    // Load modifiers
-    g_settings.useCtrl = Wh_GetIntSetting(L"modifiers.ctrl");
-    g_settings.useAlt = Wh_GetIntSetting(L"modifiers.alt");
-    g_settings.useShift = Wh_GetIntSetting(L"modifiers.shift");
-
-    // Load hotkey
+    PCWSTR trigger = Wh_GetStringSetting(L"triggerMode");
+    PCWSTR button = Wh_GetStringSetting(L"mouseButton");
+    PCWSTR click = Wh_GetStringSetting(L"clickType");
     PCWSTR hotkey = Wh_GetStringSetting(L"hotkey");
-    if (wcslen(hotkey) > 0) {
-        if (wcscmp(hotkey, L"F1") == 0) g_settings.hotkey = VK_F1;
-        else if (wcscmp(hotkey, L"F2") == 0) g_settings.hotkey = VK_F2;
-        else if (wcscmp(hotkey, L"F3") == 0) g_settings.hotkey = VK_F3;
-        else if (wcscmp(hotkey, L"F4") == 0) g_settings.hotkey = VK_F4;
-        else if (wcscmp(hotkey, L"F5") == 0) g_settings.hotkey = VK_F5;
-        else if (wcscmp(hotkey, L"F6") == 0) g_settings.hotkey = VK_F6;
-        else if (wcscmp(hotkey, L"F7") == 0) g_settings.hotkey = VK_F7;
-        else if (wcscmp(hotkey, L"F8") == 0) g_settings.hotkey = VK_F8;
-        else if (wcscmp(hotkey, L"F9") == 0) g_settings.hotkey = VK_F9;
-        else if (wcscmp(hotkey, L"F10") == 0) g_settings.hotkey = VK_F10;
-        else if (wcscmp(hotkey, L"F11") == 0) g_settings.hotkey = VK_F11;
-        else if (wcscmp(hotkey, L"F12") == 0) g_settings.hotkey = VK_F12;
-        else g_settings.hotkey = (int)hotkey[0]; // Fallback to first char
-    }
+
+    g_settings.triggerMode = trigger ? (wcscmp(trigger, L"keyboard") == 0 ? 1 : wcscmp(trigger, L"both") == 0 ? 2 : 0) : 0;
+    g_settings.mouseButton = button && wcscmp(button, L"middle") == 0 ? 2 : 0;
+    g_settings.clickType = click && wcscmp(click, L"single") == 0 ? 0 : 1;
+    g_settings.hotkey = hotkey ? StringToVK(hotkey) : VK_F12;
+
+    Wh_FreeStringSetting(trigger);
+    Wh_FreeStringSetting(button);
+    Wh_FreeStringSetting(click);
     Wh_FreeStringSetting(hotkey);
 
-    // Load enableSound
-    g_settings.enableSound = Wh_GetIntSetting(L"enableSound");
+    g_settings.useCtrl = Wh_GetIntSetting(L"modifiers.ctrl") != 0;
+    g_settings.useAlt = Wh_GetIntSetting(L"modifiers.alt") != 0;
+    g_settings.useShift = Wh_GetIntSetting(L"modifiers.shift") != 0;
+    g_settings.enableSound = Wh_GetIntSetting(L"enableSound") != 0;
 
-    Wh_Log(L"Settings loaded: triggerMode=%d, mouseButton=%d, clickType=%d, hotkey=%d, ctrl=%d, alt=%d, shift=%d, sound=%d",
-           g_settings.triggerMode, g_settings.mouseButton, g_settings.clickType, g_settings.hotkey,
-           g_settings.useCtrl, g_settings.useAlt, g_settings.useShift, g_settings.enableSound);
+    QH_LOG(L"Settings loaded");
 }
 
-// Initialize mod
+// Update hook state
+static void EnsureHookState() {
+    DWORD currentPid = GetCurrentProcessId();
+    DWORD shellPid = GetShellProcessIdCached();
+    bool isShellNow = shellPid && shellPid == currentPid;
+
+    if (isShellNow && !g_isShellProcess) {
+        g_isShellProcess = true;
+        if (!DispatchMessageW_Original) {
+            Wh_SetFunctionHook((void*)DispatchMessageW, (void*)DispatchMessageW_Hook, (void**)&DispatchMessageW_Original);
+            QH_LOG(L"Hook installed");
+        }
+    } else if (!isShellNow && g_isShellProcess) {
+        g_isShellProcess = false;
+        if (DispatchMessageW_Original) {
+            #ifdef Wh_RemoveFunctionHook
+            Wh_RemoveFunctionHook((void*)DispatchMessageW, (void*)DispatchMessageW_Hook);
+            #endif
+            DispatchMessageW_Original = nullptr;
+            QH_LOG(L"Hook removed");
+        }
+    }
+}
+
+// Initialize
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing");
-
     LoadSettings();
-
-    Wh_SetFunctionHook((void*)DispatchMessageW, (void*)DispatchMessageW_Hook, (void**)&DispatchMessageW_Original);
-
-    // Initialize g_desktopListView lazily in ToggleDesktopIcons
-    Wh_Log(L"Deferring desktop window search to first toggle");
-
-    Wh_Log(L"Initialized");
+    g_shellPid = 0;
+    EnsureHookState();
+    QH_LOG(L"Initialized");
     return TRUE;
 }
 
-// Uninitialize mod
+// Uninitialize
 void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing");
-
-    if (g_iconsHidden && g_desktopListView) {
+    if (g_iconsHidden && g_desktopListView && IsWindow(g_desktopListView)) {
         ShowWindow(g_desktopListView, SW_SHOW);
         g_iconsHidden = false;
-        Wh_Log(L"Restored desktop icons");
+        QH_LOG(L"Icons restored");
     }
-
-    g_desktopListView = nullptr;
-    Wh_Log(L"Uninitialized");
+    if (DispatchMessageW_Original) {
+        #ifdef Wh_RemoveFunctionHook
+        Wh_RemoveFunctionHook((void*)DispatchMessageW, (void*)DispatchMessageW_Hook);
+        #endif
+        DispatchMessageW_Original = nullptr;
+        QH_LOG(L"Hook removed");
+    }
+    InvalidateCachedDesktopHandles();
+    QH_LOG(L"Uninitialized");
 }
 
 // Settings changed
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"Settings changed");
     LoadSettings();
-    Wh_Log(L"Settings reloaded");
+    g_shellPid = 0;
+    EnsureHookState();
+    QH_LOG(L"Settings updated");
 }
