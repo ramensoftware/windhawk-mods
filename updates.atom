@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-08-31T10:58:57.000Z</updated>
+    <updated>2025-09-01T21:04:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.5.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#423d9610b97bf4c6b11590948ca171b9b56a3c81</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2025-09-01T21:04:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated themes: TranslucentTaskbar, Windows7.</li>
+<li>Added themes: Plasma, WindowGlass, BottomDensy (NoInd).</li>
+<li>Added ThemeResource support to WindhawkBlur.</li>
+<li>Fixed the mod having no effect on the keyboard layout popup dialog.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix white flashes in explorer 1.2]]></title>
         <id>https://windhawk.net/mods/fix-explorer-white-flash#d52cfd08d6535f2b921a39b202e23039744e912b</id>
@@ -365,22 +381,6 @@ MUI system).</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix white flashes in explorer 1.0]]></title>
-        <id>https://windhawk.net/mods/fix-explorer-white-flash#8ea73ccb7d2ede7776bda2e243360a34201e6552</id>
-        <link href="https://windhawk.net/mods/fix-explorer-white-flash"/>
-        <updated>2025-08-11T16:33:39.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fixwhiteflashesinexplorer">Fix white flashes in explorer</h1>
-<p>Fixes white flashes when creating new tabs in "This PC".</p>
-<h3 id="before">Before</h3>
-<p><img src="https://raw.githubusercontent.com/MGGSK/MGGSK/refs/heads/main/WindhawkModReadmeImages/fix-explorer-white-flash-before.png" alt="Before" /></p>
-<h3 id="after">After</h3>
-<p><img src="https://raw.githubusercontent.com/MGGSK/MGGSK/refs/heads/main/WindhawkModReadmeImages/fix-explorer-white-flash-after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>

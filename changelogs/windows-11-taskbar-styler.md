@@ -1,3 +1,10 @@
+## 1.5.1 ([Sep 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/423d9610b97bf4c6b11590948ca171b9b56a3c81/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Updated themes: TranslucentTaskbar, Windows7.
+* Added themes: Plasma, WindowGlass, BottomDensy (NoInd).
+* Added ThemeResource support to WindhawkBlur.
+* Fixed the mod having no effect on the keyboard layout popup dialog.
+
 ## 1.5 ([Jul 11, 2025](https://github.com/ramensoftware/windhawk-mods/blob/fbce0bace35249e6ec4996e0b4a9b2bb07017352/mods/windows-11-taskbar-styler.wh.cpp))
 
 * The mod now handles all explorer.exe threads, which allows styling additional components: the volume popup, Alt+Tab, Win+Tab, the language popup, snap layout popups, and maybe other elements.
