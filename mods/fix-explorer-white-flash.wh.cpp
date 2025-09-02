@@ -2,7 +2,7 @@
 // @id              fix-explorer-white-flash
 // @name            Fix white flashes in explorer
 // @description     Fixes white flashes when creating new tabs in "This PC".
-// @version         1.0
+// @version         1.2
 // @author          Mgg Sk
 // @github          https://github.com/MGGSK
 // @include         explorer.exe
@@ -26,38 +26,48 @@ Fixes white flashes when creating new tabs in "This PC".
 #include <windhawk_utils.h>
 #include <Windows.h>
 
-const COLORREF g_windowColor = 0x191919;
-const HBRUSH g_windowBrush = CreateSolidBrush(g_windowColor);
+const HBRUSH g_windowBrush = CreateSolidBrush(0x191919);
+HMODULE g_hUxTheme = nullptr;
 
-using GetSysColor_T = decltype(&GetSysColor);
-GetSysColor_T GetSysColor_Original;
+using ShouldAppsUseDarkMode_T = bool(WINAPI*)();
+ShouldAppsUseDarkMode_T ShouldAppsUseDarkMode = nullptr;
 
-DWORD WINAPI GetSysColor_Hook(int nIndex)
-{
-    if(nIndex == COLOR_WINDOW)
-        return g_windowColor;
-    return GetSysColor_Original(nIndex);
-}
-
-using GetSysColorBrush_T = decltype(&GetSysColorBrush);
-GetSysColorBrush_T GetSysColorBrush_Original;
-
+decltype(&GetSysColorBrush) GetSysColorBrush_Original;
 HBRUSH WINAPI GetSysColorBrush_Hook(int nIndex)
 {
-    if(nIndex == COLOR_WINDOW)
+    if(nIndex == COLOR_WINDOW && ShouldAppsUseDarkMode())
         return g_windowBrush;
+
     return GetSysColorBrush_Original(nIndex);
 }
 
 BOOL Wh_ModInit()
 {
-    bool failed = !WindhawkUtils::SetFunctionHook(GetSysColor, GetSysColor_Hook, &GetSysColor_Original);
-    failed |= !WindhawkUtils::SetFunctionHook(GetSysColorBrush, GetSysColorBrush_Hook, &GetSysColorBrush_Original);
-    return !failed;
+    g_hUxTheme = LoadLibraryExW(L"UxTheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if(!g_hUxTheme)
+    {
+        Wh_Log(L"Failed to load UxTheme.dll!");
+        return FALSE;
+    }
+
+    ShouldAppsUseDarkMode = (ShouldAppsUseDarkMode_T)GetProcAddress(g_hUxTheme, MAKEINTRESOURCEA(132));
+    if(!ShouldAppsUseDarkMode)
+    {
+        Wh_Log(L"Failed to load ShouldAppsUseDarkMode!");
+        return FALSE;
+    }
+
+    return WindhawkUtils::SetFunctionHook(
+            GetSysColorBrush,
+            GetSysColorBrush_Hook, 
+            &GetSysColorBrush_Original);
 }
 
 void Wh_ModUninit()
 {
     if(g_windowBrush)
         DeleteObject(g_windowBrush);
+
+    if(g_hUxTheme)
+        FreeLibrary(g_hUxTheme);
 }
