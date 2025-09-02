@@ -4,7 +4,7 @@
 // @description    Hide the pin/unpin icons in Windows 11 taskbar using XAML visual tree monitoring
 // @version        1.0.0
 // @author         @danalec
-// @github         https://github.com/danalec/windhawk-mods
+// @github         https://github.com/danalec
 // @include        explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
