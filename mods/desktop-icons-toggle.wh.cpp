@@ -30,9 +30,12 @@ This mod allows you to toggle the visibility of desktop icons using a configurab
 4. Icons will be restored when you toggle again or disable the mod
 
 ## Settings
-- **Ctrl Key**: Enable/disable Ctrl key requirement for the hotkey
-- **Alt Key**: Enable/disable Alt key requirement for the hotkey  
+- **Modifier Keys**: Configure which modifier keys (Ctrl, Alt) are required for the hotkey
+  - **Ctrl**: Enable/disable Ctrl key requirement
+  - **Alt**: Enable/disable Alt key requirement  
 - **Hotkey Character**: The character key to use (A-Z, 0-9)
+
+**Note**: At least one modifier key must be selected for security and to prevent accidental activation.
 
 ## Compatibility
 - Windows 10 (1903+)
@@ -44,12 +47,13 @@ This mod allows you to toggle the visibility of desktop icons using a configurab
 
 // ==WindhawkModSettings==
 /*
-- UseCtrl: true
-  $name: Use Ctrl key
-  $description: Enable or disable Ctrl key requirement for the hotkey - At least ONE modifier must be active
-- UseAlt: true
-  $name: Use Alt key
-  $description: Enable or disable Alt key requirement for the hotkey
+- modifierKeys:
+  - Ctrl: true
+  - Alt: true
+  $name: Modifier keys
+  $description: >-
+    A combination of modifier keys that must be pressed along with the hotkey
+    character. At least one modifier must be selected.
 - HotkeyChar: D
   $name: Hotkey Character
   $description: The character key to use (A-Z, 0-9)
@@ -447,9 +451,9 @@ void RestoreIconsToVisible() {
 
 // Load settings from Windhawk configuration
 void LoadSettings() {
-    // Load settings from Windhawk
-    g_state.bUseCtrl = (BOOL)Wh_GetIntSetting(L"UseCtrl", TRUE);
-    g_state.bUseAlt = (BOOL)Wh_GetIntSetting(L"UseAlt", TRUE);
+    // Load settings from Windhawk using the nested structure like taskbar-button-click
+    g_state.bUseCtrl = (BOOL)Wh_GetIntSetting(L"modifierKeys.Ctrl", TRUE);
+    g_state.bUseAlt = (BOOL)Wh_GetIntSetting(L"modifierKeys.Alt", TRUE);
     PCWSTR hotkeyCharStr = Wh_GetStringSetting(L"HotkeyChar");
     if (hotkeyCharStr && wcslen(hotkeyCharStr) > 0) {
         // Convert to uppercase for consistency
