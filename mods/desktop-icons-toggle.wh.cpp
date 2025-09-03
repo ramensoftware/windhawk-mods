@@ -46,13 +46,13 @@ This mod allows you to toggle the visibility of desktop icons using a configurab
 /*
 - UseCtrl: true
   $name: Use Ctrl key
-  $description: Enable or disable Ctrl key requirement for the hotkey - Atleast ONE modifier must be active
+  $description: Enable or disable Ctrl key requirement for the hotkey - At least ONE modifier must be active
 - UseAlt: true
   $name: Use Alt key
   $description: Enable or disable Alt key requirement for the hotkey
 - HotkeyChar: D
   $name: Hotkey Character
-  $description: The character key to use (Capital A-Z, 0-9)
+  $description: The character key to use (A-Z, 0-9)
 */
 // ==/WindhawkModSettings==
 
@@ -92,8 +92,12 @@ LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARA
 
 // Utility function to check if hotkey combination matches settings
 BOOL IsHotkeyMatch(WPARAM wParam) {
-    // Check if the pressed key matches our configured character (handle both cases)
-    if (wParam != g_state.cHotkeyChar && wParam != (g_state.cHotkeyChar + 32)) {
+    // Convert to uppercase for consistent comparison
+    WCHAR upperKey = (WCHAR)CharUpperW((LPWSTR)MAKELONG(wParam, 0));
+    WCHAR configKey = (WCHAR)CharUpperW((LPWSTR)MAKELONG(g_state.cHotkeyChar, 0));
+    
+    // Check if the pressed key matches our configured character
+    if (upperKey != configKey) {
         return FALSE;
     }
     
@@ -225,7 +229,10 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             // Handle Ctrl+character combinations that produce control codes
             if (wParam > 0 && wParam < 32) {
                 WCHAR expectedChar = wParam + 64; // Convert control code back to character
-                if (expectedChar == g_state.cHotkeyChar) {
+                WCHAR upperExpected = (WCHAR)CharUpperW((LPWSTR)MAKELONG(expectedChar, 0));
+                WCHAR upperConfig = (WCHAR)CharUpperW((LPWSTR)MAKELONG(g_state.cHotkeyChar, 0));
+                
+                if (upperExpected == upperConfig) {
                     SHORT altState = GetAsyncKeyState(VK_MENU);
                     if ((altState & 0x8000) && g_state.bUseAlt) {
                         Wh_Log(L"Hotkey detected via WM_CHAR in ShellView window");
@@ -237,7 +244,12 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             break;
     }
     
-    return CallWindowProcW(g_state.pOriginalShellViewWndProc, hwnd, uMsg, wParam, lParam);
+    // Ensure we have a valid original procedure before calling it
+    if (g_state.pOriginalShellViewWndProc) {
+        return CallWindowProcW(g_state.pOriginalShellViewWndProc, hwnd, uMsg, wParam, lParam);
+    }
+    
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 // Custom window procedure for ListView (fallback)
@@ -253,7 +265,12 @@ LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
             break;
     }
     
-    return CallWindowProcW(g_state.pOriginalListViewWndProc, hwnd, uMsg, wParam, lParam);
+    // Ensure we have a valid original procedure before calling it
+    if (g_state.pOriginalListViewWndProc) {
+        return CallWindowProcW(g_state.pOriginalListViewWndProc, hwnd, uMsg, wParam, lParam);
+    }
+    
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 // Custom window procedure for Program Manager (for global hotkey handling)
@@ -268,7 +285,12 @@ LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARA
             break;
     }
     
-    return CallWindowProcW(g_state.pOriginalProgmanWndProc, hwnd, uMsg, wParam, lParam);
+    // Ensure we have a valid original procedure before calling it
+    if (g_state.pOriginalProgmanWndProc) {
+        return CallWindowProcW(g_state.pOriginalProgmanWndProc, hwnd, uMsg, wParam, lParam);
+    }
+    
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 // Setup hotkey handling by subclassing windows
@@ -417,10 +439,12 @@ void LoadSettings() {
     g_state.bUseAlt = (BOOL)Wh_GetIntSetting(L"UseAlt", TRUE);
     PCWSTR hotkeyCharStr = Wh_GetStringSetting(L"HotkeyChar");
     if (hotkeyCharStr && wcslen(hotkeyCharStr) > 0) {
-        g_state.cHotkeyChar = hotkeyCharStr[0];
+        // Convert to uppercase for consistency
+        g_state.cHotkeyChar = (WCHAR)CharUpperW((LPWSTR)MAKELONG(hotkeyCharStr[0], 0));
     } else {
         g_state.cHotkeyChar = L'D'; // Default fallback
     }
+    Wh_FreeStringSetting(hotkeyCharStr);
     
     // Ensure we have at least one modifier key
     if (!g_state.bUseCtrl && !g_state.bUseAlt) {
