@@ -226,7 +226,11 @@ void ToggleDesktopIcons() {
     
     // Apply the visibility change
     int showCommand = g_state.bIconsVisible ? SW_SHOW : SW_HIDE;
-    if (ShowWindow(g_state.hDesktopListView, showCommand)) {
+    ShowWindow(g_state.hDesktopListView, showCommand);
+    
+    // Verify the operation worked by checking actual window visibility
+    BOOL actuallyVisible = IsWindowVisible(g_state.hDesktopListView);
+    if (actuallyVisible == g_state.bIconsVisible) {
         Wh_Log(L"Successfully changed desktop icons visibility");
     } else {
         Wh_Log(L"Failed to change desktop icons visibility");
@@ -435,7 +439,10 @@ void RestoreIconsToVisible() {
     
     // Only restore if currently hidden
     if (!IsWindowVisible(g_state.hDesktopListView)) {
-        if (ShowWindow(g_state.hDesktopListView, SW_SHOW)) {
+        ShowWindow(g_state.hDesktopListView, SW_SHOW);
+        
+        // Verify the operation worked
+        if (IsWindowVisible(g_state.hDesktopListView)) {
             g_state.bIconsVisible = TRUE;
             InvalidateRect(nullptr, nullptr, TRUE);
             UpdateWindow(GetDesktopWindow());
