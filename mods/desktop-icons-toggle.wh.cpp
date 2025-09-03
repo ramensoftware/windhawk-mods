@@ -2,7 +2,7 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons visibility with a configurable hotkey (default: Ctrl+Alt+D)
-// @version         1.3.0
+// @version         1.3.1
 // @author          Cinabutts
 // @github          https://github.com/Cinabutts
 // @include         explorer.exe
@@ -356,7 +356,11 @@ BOOL SetupHotkeyHandling() {
         }
     } else {
         DWORD error = GetLastError();
-        Wh_Log(L"Failed to register global hotkey (error: %lu), using window subclassing only", error);
+        if (error == 1408) { // ERROR_HOTKEY_ALREADY_REGISTERED
+            Wh_Log(L"Global hotkey already in use by another application (error: %lu) - this is normal, using window subclassing only", error);
+        } else {
+            Wh_Log(L"Failed to register global hotkey (error: %lu), using window subclassing only", error);
+        }
     }
     
     // Subclass the SHELLDLL_DefView window for keyboard input
