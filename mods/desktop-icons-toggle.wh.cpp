@@ -464,7 +464,9 @@ void LoadSettings() {
     } else {
         g_state.cHotkeyChar = L'D'; // Default fallback
     }
-    Wh_FreeStringSetting(hotkeyCharStr);
+    if (hotkeyCharStr) {
+        Wh_FreeStringSetting(hotkeyCharStr);
+    }
     
     // Ensure we have at least one modifier key
     if (!g_state.bUseCtrl && !g_state.bUseAlt) {
