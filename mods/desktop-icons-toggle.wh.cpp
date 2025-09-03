@@ -70,6 +70,7 @@ struct ModState {
     HWND hShellViewWindow;
     WNDPROC pOriginalShellViewWndProc;
     WNDPROC pOriginalListViewWndProc;
+    WNDPROC pOriginalProgmanWndProc;
     BOOL bIconsVisible;
     BOOL bInitialized;
     
@@ -87,11 +88,12 @@ void CleanupHotkeyHandling();
 void RestoreIconsToVisible();
 LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Utility function to check if hotkey combination matches settings
 BOOL IsHotkeyMatch(WPARAM wParam) {
-    // Check if the pressed key matches our configured character
-    if (wParam != g_state.cHotkeyChar && wParam != (g_state.cHotkeyChar + 32)) { // Handle both cases
+    // Check if the pressed key matches our configured character (handle both cases)
+    if (wParam != g_state.cHotkeyChar && wParam != (g_state.cHotkeyChar + 32)) {
         return FALSE;
     }
     
@@ -101,7 +103,14 @@ BOOL IsHotkeyMatch(WPARAM wParam) {
     BOOL ctrlPressed = (ctrlState & 0x8000) != 0;
     BOOL altPressed = (altState & 0x8000) != 0;
     
-    return (ctrlPressed == g_state.bUseCtrl) && (altPressed == g_state.bUseAlt);
+    // Must match the configured modifier combination exactly
+    BOOL modifiersMatch = (ctrlPressed == g_state.bUseCtrl) && (altPressed == g_state.bUseAlt);
+    
+    if (modifiersMatch) {
+        Wh_Log(L"Hotkey match: Key=%c, Ctrl=%d, Alt=%d", (char)wParam, ctrlPressed, altPressed);
+    }
+    
+    return modifiersMatch;
 }
 
 // Find the desktop ListView window
@@ -166,15 +175,36 @@ void ToggleDesktopIcons() {
         }
     }
     
+    // Verify the window is still valid
+    if (!IsWindow(g_state.hDesktopListView)) {
+        Wh_Log(L"Desktop ListView window is no longer valid, searching again");
+        g_state.hDesktopListView = FindDesktopListView();
+        if (!g_state.hDesktopListView) {
+            Wh_Log(L"Failed to find valid desktop ListView");
+            return;
+        }
+    }
+    
+    // Check current visibility state to ensure consistency
+    BOOL currentlyVisible = IsWindowVisible(g_state.hDesktopListView);
+    
     // Toggle the visibility state
-    g_state.bIconsVisible = !g_state.bIconsVisible;
+    g_state.bIconsVisible = !currentlyVisible;
     
     // Apply the visibility change
     int showCommand = g_state.bIconsVisible ? SW_SHOW : SW_HIDE;
-    ShowWindow(g_state.hDesktopListView, showCommand);
+    if (ShowWindow(g_state.hDesktopListView, showCommand)) {
+        Wh_Log(L"Successfully changed desktop icons visibility");
+    } else {
+        Wh_Log(L"Failed to change desktop icons visibility");
+        // Revert state on failure
+        g_state.bIconsVisible = currentlyVisible;
+        return;
+    }
     
     // Force desktop refresh
     InvalidateRect(nullptr, nullptr, TRUE);
+    UpdateWindow(GetDesktopWindow());
     
     Wh_Log(L"Desktop icons %s", g_state.bIconsVisible ? L"shown" : L"hidden");
 }
@@ -226,6 +256,21 @@ LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
     return CallWindowProcW(g_state.pOriginalListViewWndProc, hwnd, uMsg, wParam, lParam);
 }
 
+// Custom window procedure for Program Manager (for global hotkey handling)
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_HOTKEY:
+            if (wParam == HOTKEY_ID) {
+                Wh_Log(L"Global hotkey detected (ID: %d)", (int)wParam);
+                ToggleDesktopIcons();
+                return 0;
+            }
+            break;
+    }
+    
+    return CallWindowProcW(g_state.pOriginalProgmanWndProc, hwnd, uMsg, wParam, lParam);
+}
+
 // Setup hotkey handling by subclassing windows
 BOOL SetupHotkeyHandling() {
     // Find Program Manager window for hotkey registration
@@ -237,13 +282,26 @@ BOOL SetupHotkeyHandling() {
     
     Wh_Log(L"Found Program Manager window: %p", g_state.hDesktopWindow);
     
-    // Try to register the global hotkey (optional, as we also use window subclassing)
+    // Try to register the global hotkey
     UINT modifiers = 0;
     if (g_state.bUseCtrl) modifiers |= MOD_CONTROL;
     if (g_state.bUseAlt) modifiers |= MOD_ALT;
     
     if (RegisterHotKey(g_state.hDesktopWindow, HOTKEY_ID, modifiers, g_state.cHotkeyChar)) {
         Wh_Log(L"Successfully registered global hotkey");
+        
+        // Subclass the Program Manager window to handle WM_HOTKEY messages
+        g_state.pOriginalProgmanWndProc = (WNDPROC)SetWindowLongPtrW(
+            g_state.hDesktopWindow, 
+            GWLP_WNDPROC, 
+            (LONG_PTR)CustomProgmanWndProc
+        );
+        
+        if (g_state.pOriginalProgmanWndProc) {
+            Wh_Log(L"Successfully subclassed Program Manager window: %p", g_state.hDesktopWindow);
+        } else {
+            Wh_Log(L"Failed to subclass Program Manager window");
+        }
     } else {
         DWORD error = GetLastError();
         Wh_Log(L"Failed to register global hotkey (error: %lu), using window subclassing only", error);
@@ -288,6 +346,16 @@ void CleanupHotkeyHandling() {
     if (g_state.hDesktopWindow) {
         UnregisterHotKey(g_state.hDesktopWindow, HOTKEY_ID);
         Wh_Log(L"Unregistered global hotkey");
+    }
+    
+    // Restore Program Manager window procedure
+    if (g_state.hDesktopWindow && g_state.pOriginalProgmanWndProc) {
+        SetWindowLongPtrW(g_state.hDesktopWindow, GWLP_WNDPROC, (LONG_PTR)g_state.pOriginalProgmanWndProc);
+        Wh_Log(L"Restored Program Manager window procedure");
+        g_state.pOriginalProgmanWndProc = nullptr;
+    }
+    
+    if (g_state.hDesktopWindow) {
         g_state.hDesktopWindow = nullptr;
     }
     
@@ -308,11 +376,37 @@ void CleanupHotkeyHandling() {
 
 // Restore icons to visible state
 void RestoreIconsToVisible() {
-    if (!g_state.bIconsVisible && g_state.hDesktopListView) {
-        ShowWindow(g_state.hDesktopListView, SW_SHOW);
-        InvalidateRect(nullptr, nullptr, TRUE);
+    if (!g_state.hDesktopListView) {
+        g_state.hDesktopListView = FindDesktopListView();
+        if (!g_state.hDesktopListView) {
+            Wh_Log(L"Cannot restore icons - desktop ListView not found");
+            return;
+        }
+    }
+    
+    // Verify the window is still valid
+    if (!IsWindow(g_state.hDesktopListView)) {
+        Wh_Log(L"Desktop ListView window is no longer valid during restore");
+        g_state.hDesktopListView = FindDesktopListView();
+        if (!g_state.hDesktopListView) {
+            Wh_Log(L"Failed to find valid desktop ListView during restore");
+            return;
+        }
+    }
+    
+    // Only restore if currently hidden
+    if (!IsWindowVisible(g_state.hDesktopListView)) {
+        if (ShowWindow(g_state.hDesktopListView, SW_SHOW)) {
+            g_state.bIconsVisible = TRUE;
+            InvalidateRect(nullptr, nullptr, TRUE);
+            UpdateWindow(GetDesktopWindow());
+            Wh_Log(L"Desktop icons restored to visible state");
+        } else {
+            Wh_Log(L"Failed to restore desktop icons visibility");
+        }
+    } else {
         g_state.bIconsVisible = TRUE;
-        Wh_Log(L"Desktop icons restored to visible state");
+        Wh_Log(L"Desktop icons were already visible");
     }
 }
 
@@ -394,20 +488,22 @@ void Wh_ModAfterInit() {
     
     // Try to find ListView again if not found initially
     if (!g_state.hDesktopListView) {
+        Wh_Log(L"Desktop ListView not found during init, retrying after delay...");
         Sleep(2000); // Give explorer more time to fully load
         g_state.hDesktopListView = FindDesktopListView();
         if (g_state.hDesktopListView) {
             g_state.bIconsVisible = IsWindowVisible(g_state.hDesktopListView);
             Wh_Log(L"ListView found in after init: %p (visible: %d)", 
                    g_state.hDesktopListView, g_state.bIconsVisible);
-            
-            // Setup hotkey handling if it wasn't done before
-            if (!g_state.hDesktopWindow) {
-                SetupHotkeyHandling();
-            }
         } else {
             Wh_Log(L"Still could not find ListView in after init");
         }
+    }
+    
+    // Setup or re-setup hotkey handling if needed
+    if (!g_state.hDesktopWindow || !g_state.pOriginalProgmanWndProc) {
+        Wh_Log(L"Setting up hotkey handling in after init");
+        SetupHotkeyHandling();
     }
 }
 
