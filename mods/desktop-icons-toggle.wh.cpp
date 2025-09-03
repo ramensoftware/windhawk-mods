@@ -357,7 +357,7 @@ BOOL SetupHotkeyHandling() {
     } else {
         DWORD error = GetLastError();
         if (error == 1408) { // ERROR_HOTKEY_ALREADY_REGISTERED
-            Wh_Log(L"Global hotkey already in use by another application (error: %lu) - this is normal, using window subclassing only", error);
+            Wh_Log(L"Global hotkey already in use by another application (error: %lu) - using window subclassing only", error);
         } else {
             Wh_Log(L"Failed to register global hotkey (error: %lu), using window subclassing only", error);
         }
@@ -544,4 +544,3 @@ void Wh_ModSettingsChanged() {
     // Setup hotkey handling with new settings
     SetupHotkeyHandling();
 }
-
