@@ -91,9 +91,16 @@ LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARA
 
 // Utility function to check if hotkey combination matches settings
 BOOL IsHotkeyMatch(WPARAM wParam) {
-    // Convert to uppercase for consistent comparison
-    WCHAR upperKey = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)wParam);
-    WCHAR configKey = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)g_state.cHotkeyChar);
+    // Convert to uppercase for consistent comparison - simple character conversion
+    WCHAR upperKey = (WCHAR)wParam;
+    if (upperKey >= L'a' && upperKey <= L'z') {
+        upperKey = upperKey - L'a' + L'A';
+    }
+    
+    WCHAR configKey = g_state.cHotkeyChar;
+    if (configKey >= L'a' && configKey <= L'z') {
+        configKey = configKey - L'a' + L'A';
+    }
     
     // Check if the pressed key matches our configured character
     if (upperKey != configKey) {
@@ -246,9 +253,16 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         case WM_CHAR:
             // Handle Ctrl+character combinations that produce control codes
             if (wParam > 0 && wParam < 32) {
-                WCHAR expectedChar = wParam + 64; // Convert control code back to character
-                WCHAR upperExpected = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)expectedChar);
-                WCHAR upperConfig = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)g_state.cHotkeyChar);
+                WCHAR expectedChar = (WCHAR)(wParam + 64); // Convert control code back to character
+                WCHAR upperExpected = expectedChar;
+                if (upperExpected >= L'a' && upperExpected <= L'z') {
+                    upperExpected = upperExpected - L'a' + L'A';
+                }
+                
+                WCHAR upperConfig = g_state.cHotkeyChar;
+                if (upperConfig >= L'a' && upperConfig <= L'z') {
+                    upperConfig = upperConfig - L'a' + L'A';
+                }
                 
                 if (upperExpected == upperConfig) {
                     SHORT altState = GetAsyncKeyState(VK_MENU);
@@ -439,7 +453,10 @@ void LoadSettings() {
     PCWSTR hotkeyCharStr = Wh_GetStringSetting(L"HotkeyChar");
     if (hotkeyCharStr && wcslen(hotkeyCharStr) > 0) {
         // Convert to uppercase for consistency
-        g_state.cHotkeyChar = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)hotkeyCharStr[0]);
+        g_state.cHotkeyChar = hotkeyCharStr[0];
+        if (g_state.cHotkeyChar >= L'a' && g_state.cHotkeyChar <= L'z') {
+            g_state.cHotkeyChar = g_state.cHotkeyChar - L'a' + L'A';
+        }
     } else {
         g_state.cHotkeyChar = L'D'; // Default fallback
     }
