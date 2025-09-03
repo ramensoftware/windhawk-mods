@@ -85,15 +85,15 @@ BOOL SetupHotkeyHandling();
 void CleanupHotkeyHandling();
 void RestoreIconsToVisible();
 BOOL IsWindowInCurrentProcess(HWND hwnd);
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
+LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 
 // Utility function to check if hotkey combination matches settings
 BOOL IsHotkeyMatch(WPARAM wParam) {
     // Convert to uppercase for consistent comparison
-    WCHAR upperKey = (WCHAR)CharUpperW((LPWSTR)MAKELONG(wParam, 0));
-    WCHAR configKey = (WCHAR)CharUpperW((LPWSTR)MAKELONG(g_state.cHotkeyChar, 0));
+    WCHAR upperKey = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)wParam);
+    WCHAR configKey = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)g_state.cHotkeyChar);
     
     // Check if the pressed key matches our configured character
     if (upperKey != configKey) {
@@ -232,7 +232,7 @@ void ToggleDesktopIcons() {
 }
 
 // Custom window procedure for SHELLDLL_DefView
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     switch (uMsg) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -247,8 +247,8 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             // Handle Ctrl+character combinations that produce control codes
             if (wParam > 0 && wParam < 32) {
                 WCHAR expectedChar = wParam + 64; // Convert control code back to character
-                WCHAR upperExpected = (WCHAR)CharUpperW((LPWSTR)MAKELONG(expectedChar, 0));
-                WCHAR upperConfig = (WCHAR)CharUpperW((LPWSTR)MAKELONG(g_state.cHotkeyChar, 0));
+                WCHAR upperExpected = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)expectedChar);
+                WCHAR upperConfig = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)g_state.cHotkeyChar);
                 
                 if (upperExpected == upperConfig) {
                     SHORT altState = GetAsyncKeyState(VK_MENU);
@@ -270,7 +270,7 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 }
 
 // Custom window procedure for ListView
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     switch (uMsg) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -290,7 +290,7 @@ LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
 }
 
 // Custom window procedure for Program Manager (for global hotkey handling)
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     switch (uMsg) {
         case WM_HOTKEY:
             if (wParam == HOTKEY_ID) {
@@ -439,7 +439,7 @@ void LoadSettings() {
     PCWSTR hotkeyCharStr = Wh_GetStringSetting(L"HotkeyChar");
     if (hotkeyCharStr && wcslen(hotkeyCharStr) > 0) {
         // Convert to uppercase for consistency
-        g_state.cHotkeyChar = (WCHAR)CharUpperW((LPWSTR)MAKELONG(hotkeyCharStr[0], 0));
+        g_state.cHotkeyChar = (WCHAR)CharUpperW((LPWSTR)(UINTPTR)hotkeyCharStr[0]);
     } else {
         g_state.cHotkeyChar = L'D'; // Default fallback
     }
