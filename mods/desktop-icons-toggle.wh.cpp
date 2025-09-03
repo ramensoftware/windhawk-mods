@@ -121,7 +121,7 @@ BOOL IsHotkeyMatch(WPARAM wParam) {
     BOOL modifiersMatch = (ctrlPressed == g_state.bUseCtrl) && (altPressed == g_state.bUseAlt);
     
     if (modifiersMatch) {
-        Wh_Log(L"Hotkey match: Key=%c, Ctrl=%d, Alt=%d", (char)wParam, ctrlPressed, altPressed);
+        Wh_Log(L"Hotkey match: Key=%lc, Ctrl=%d, Alt=%d", (wchar_t)wParam, ctrlPressed, altPressed);
     }
     
     return modifiersMatch;
