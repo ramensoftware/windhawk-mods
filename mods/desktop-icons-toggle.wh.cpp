@@ -93,18 +93,35 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
 
-// Utility function to check if hotkey combination matches settings
-BOOL IsHotkeyMatch(WPARAM wParam) {
-    // Convert to uppercase for consistent comparison - simple character conversion
-    WCHAR upperKey = (WCHAR)wParam;
-    if (upperKey >= L'a' && upperKey <= L'z') {
-        upperKey = upperKey - L'a' + L'A';
+// Helper function to convert character to uppercase
+WCHAR ToUpperCase(WCHAR ch) {
+    if (ch >= L'a' && ch <= L'z') {
+        return ch - L'a' + L'A';
+    }
+    return ch;
+}
+
+// Helper function to validate and refresh ListView handle if needed
+BOOL EnsureValidListView() {
+    if (g_state.hDesktopListView && IsWindow(g_state.hDesktopListView)) {
+        return TRUE;
     }
     
-    WCHAR configKey = g_state.cHotkeyChar;
-    if (configKey >= L'a' && configKey <= L'z') {
-        configKey = configKey - L'a' + L'A';
+    Wh_Log(L"Desktop ListView invalid, searching again...");
+    g_state.hDesktopListView = FindDesktopListView();
+    if (!g_state.hDesktopListView) {
+        Wh_Log(L"Failed to find valid desktop ListView");
+        return FALSE;
     }
+    
+    return TRUE;
+}
+
+// Utility function to check if hotkey combination matches settings
+BOOL IsHotkeyMatch(WPARAM wParam) {
+    // Convert both keys to uppercase for consistent comparison
+    WCHAR upperKey = ToUpperCase((WCHAR)wParam);
+    WCHAR configKey = ToUpperCase(g_state.cHotkeyChar);
     
     // Check if the pressed key matches our configured character
     if (upperKey != configKey) {
@@ -200,22 +217,8 @@ HWND FindDesktopListView() {
 void ToggleDesktopIcons() {
     Wh_Log(L"ToggleDesktopIcons called");
     
-    if (!g_state.hDesktopListView) {
-        g_state.hDesktopListView = FindDesktopListView();
-        if (!g_state.hDesktopListView) {
-            Wh_Log(L"Failed to find desktop ListView for toggle operation");
-            return;
-        }
-    }
-    
-    // Verify the window is still valid
-    if (!IsWindow(g_state.hDesktopListView)) {
-        Wh_Log(L"Desktop ListView window is no longer valid, searching again");
-        g_state.hDesktopListView = FindDesktopListView();
-        if (!g_state.hDesktopListView) {
-            Wh_Log(L"Failed to find valid desktop ListView");
-            return;
-        }
+    if (!EnsureValidListView()) {
+        return;
     }
     
     // Check current visibility state to ensure consistency
@@ -262,15 +265,8 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             // Handle Ctrl+character combinations that produce control codes
             if (wParam > 0 && wParam < 32) {
                 WCHAR expectedChar = (WCHAR)(wParam + 64); // Convert control code back to character
-                WCHAR upperExpected = expectedChar;
-                if (upperExpected >= L'a' && upperExpected <= L'z') {
-                    upperExpected = upperExpected - L'a' + L'A';
-                }
-                
-                WCHAR upperConfig = g_state.cHotkeyChar;
-                if (upperConfig >= L'a' && upperConfig <= L'z') {
-                    upperConfig = upperConfig - L'a' + L'A';
-                }
+                WCHAR upperExpected = ToUpperCase(expectedChar);
+                WCHAR upperConfig = ToUpperCase(g_state.cHotkeyChar);
                 
                 if (upperExpected == upperConfig) {
                     SHORT altState = GetAsyncKeyState(VK_MENU);
@@ -419,22 +415,9 @@ void CleanupHotkeyHandling() {
 
 // Restore icons to visible state
 void RestoreIconsToVisible() {
-    if (!g_state.hDesktopListView) {
-        g_state.hDesktopListView = FindDesktopListView();
-        if (!g_state.hDesktopListView) {
-            Wh_Log(L"Cannot restore icons - desktop ListView not found");
-            return;
-        }
-    }
-    
-    // Verify the window is still valid
-    if (!IsWindow(g_state.hDesktopListView)) {
-        Wh_Log(L"Desktop ListView window is no longer valid during restore");
-        g_state.hDesktopListView = FindDesktopListView();
-        if (!g_state.hDesktopListView) {
-            Wh_Log(L"Failed to find valid desktop ListView during restore");
-            return;
-        }
+    if (!EnsureValidListView()) {
+        Wh_Log(L"Cannot restore icons - desktop ListView not found");
+        return;
     }
     
     // Only restore if currently hidden
@@ -464,10 +447,7 @@ void LoadSettings() {
     PCWSTR hotkeyCharStr = Wh_GetStringSetting(L"HotkeyChar");
     if (hotkeyCharStr && wcslen(hotkeyCharStr) > 0) {
         // Convert to uppercase for consistency
-        g_state.cHotkeyChar = hotkeyCharStr[0];
-        if (g_state.cHotkeyChar >= L'a' && g_state.cHotkeyChar <= L'z') {
-            g_state.cHotkeyChar = g_state.cHotkeyChar - L'a' + L'A';
-        }
+        g_state.cHotkeyChar = ToUpperCase(hotkeyCharStr[0]);
     } else {
         g_state.cHotkeyChar = L'D'; // Default fallback
     }
@@ -532,37 +512,25 @@ void Wh_ModUninit() {
 
 // Called after initialization is complete
 void Wh_ModAfterInit() {
-    Wh_Log(L"Desktop Icons Toggle mod after init");
-    
     // Try to find ListView again if not found initially
     if (!g_state.hDesktopListView) {
         Wh_Log(L"Desktop ListView not found during init, retrying...");
-        g_state.hDesktopListView = FindDesktopListView();
-        if (g_state.hDesktopListView) {
-            g_state.bIconsVisible = IsWindowVisible(g_state.hDesktopListView);
-            Wh_Log(L"ListView found in after init: %p (visible: %d)", 
-                   g_state.hDesktopListView, g_state.bIconsVisible);
-        } else {
-            Wh_Log(L"Still could not find ListView in after init");
-        }
+        EnsureValidListView();
     }
     
     // Setup or re-setup hotkey handling if needed
     if (!g_state.hDesktopWindow) {
-        Wh_Log(L"Setting up hotkey handling in after init");
         SetupHotkeyHandling();
     }
 }
 
 // Called before uninitialization
 void Wh_ModBeforeUninit() {
-    Wh_Log(L"Desktop Icons Toggle mod before uninit");
+    // This function is called before Wh_ModUninit
 }
 
 // Called when settings are changed
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"Desktop Icons Toggle mod settings changed");
-    
     // Cleanup current hotkey handling
     CleanupHotkeyHandling();
     
