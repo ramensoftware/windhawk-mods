@@ -57,7 +57,9 @@ This mod allows you to toggle the visibility of desktop icons using a configurab
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <commctrl.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 
 // Constants
 static const UINT HOTKEY_ID = 0x1001;
@@ -68,11 +70,7 @@ struct ModState {
     HWND hDesktopListView;
     HWND hDesktopWindow;
     HWND hShellViewWindow;
-    WNDPROC pOriginalShellViewWndProc;
-    WNDPROC pOriginalListViewWndProc;
-    WNDPROC pOriginalProgmanWndProc;
     BOOL bIconsVisible;
-    BOOL bInitialized;
     
     // Settings
     BOOL bUseCtrl;
@@ -86,9 +84,10 @@ void ToggleDesktopIcons();
 BOOL SetupHotkeyHandling();
 void CleanupHotkeyHandling();
 void RestoreIconsToVisible();
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+BOOL IsWindowInCurrentProcess(HWND hwnd);
+LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
 // Utility function to check if hotkey combination matches settings
 BOOL IsHotkeyMatch(WPARAM wParam) {
@@ -117,6 +116,19 @@ BOOL IsHotkeyMatch(WPARAM wParam) {
     return modifiersMatch;
 }
 
+// Check if a window belongs to the current process
+BOOL IsWindowInCurrentProcess(HWND hwnd) {
+    if (!hwnd) {
+        return FALSE;
+    }
+    
+    DWORD currentProcessId = GetCurrentProcessId();
+    DWORD windowProcessId;
+    GetWindowThreadProcessId(hwnd, &windowProcessId);
+    
+    return (currentProcessId == windowProcessId);
+}
+
 // Find the desktop ListView window
 HWND FindDesktopListView() {
     Wh_Log(L"Searching for desktop ListView...");
@@ -139,10 +151,11 @@ HWND FindDesktopListView() {
         HWND hWorkerW = nullptr;
         while ((hWorkerW = FindWindowExW(nullptr, hWorkerW, L"WorkerW", nullptr)) != nullptr) {
             hShellView = FindWindowExW(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
-            if (hShellView) {
+            if (hShellView && IsWindowInCurrentProcess(hShellView)) {
                 Wh_Log(L"Found SHELLDLL_DefView under WorkerW: %p", hShellView);
                 break;
             }
+            hShellView = nullptr; // Reset if not in current process
         }
     } else {
         Wh_Log(L"Found SHELLDLL_DefView under Progman: %p", hShellView);
@@ -159,8 +172,13 @@ HWND FindDesktopListView() {
     // Find the ListView control
     HWND hListView = FindWindowExW(hShellView, nullptr, L"SysListView32", L"FolderView");
     if (hListView) {
-        Wh_Log(L"Found desktop ListView: %p", hListView);
-        return hListView;
+        // Verify this ListView belongs to the current process
+        if (IsWindowInCurrentProcess(hListView)) {
+            Wh_Log(L"Found desktop ListView: %p", hListView);
+            return hListView;
+        } else {
+            Wh_Log(L"Found ListView but it belongs to a different process, skipping");
+        }
     }
     
     Wh_Log(L"SysListView32 control not found");
@@ -214,7 +232,7 @@ void ToggleDesktopIcons() {
 }
 
 // Custom window procedure for SHELLDLL_DefView
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -242,18 +260,17 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 }
             }
             break;
+            
+        case WM_NCDESTROY:
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CustomShellViewWndProc);
+            break;
     }
     
-    // Ensure we have a valid original procedure before calling it
-    if (g_state.pOriginalShellViewWndProc) {
-        return CallWindowProcW(g_state.pOriginalShellViewWndProc, hwnd, uMsg, wParam, lParam);
-    }
-    
-    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
-// Custom window procedure for ListView (fallback)
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+// Custom window procedure for ListView
+LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -263,18 +280,17 @@ LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
                 return 0;
             }
             break;
+            
+        case WM_NCDESTROY:
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CustomListViewWndProc);
+            break;
     }
     
-    // Ensure we have a valid original procedure before calling it
-    if (g_state.pOriginalListViewWndProc) {
-        return CallWindowProcW(g_state.pOriginalListViewWndProc, hwnd, uMsg, wParam, lParam);
-    }
-    
-    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
 // Custom window procedure for Program Manager (for global hotkey handling)
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_HOTKEY:
             if (wParam == HOTKEY_ID) {
@@ -283,14 +299,13 @@ LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARA
                 return 0;
             }
             break;
+            
+        case WM_NCDESTROY:
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CustomProgmanWndProc);
+            break;
     }
     
-    // Ensure we have a valid original procedure before calling it
-    if (g_state.pOriginalProgmanWndProc) {
-        return CallWindowProcW(g_state.pOriginalProgmanWndProc, hwnd, uMsg, wParam, lParam);
-    }
-    
-    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
 // Setup hotkey handling by subclassing windows
@@ -313,13 +328,10 @@ BOOL SetupHotkeyHandling() {
         Wh_Log(L"Successfully registered global hotkey");
         
         // Subclass the Program Manager window to handle WM_HOTKEY messages
-        g_state.pOriginalProgmanWndProc = (WNDPROC)SetWindowLongPtrW(
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
             g_state.hDesktopWindow, 
-            GWLP_WNDPROC, 
-            (LONG_PTR)CustomProgmanWndProc
-        );
-        
-        if (g_state.pOriginalProgmanWndProc) {
+            CustomProgmanWndProc, 
+            0)) {
             Wh_Log(L"Successfully subclassed Program Manager window: %p", g_state.hDesktopWindow);
         } else {
             Wh_Log(L"Failed to subclass Program Manager window");
@@ -331,28 +343,22 @@ BOOL SetupHotkeyHandling() {
     
     // Subclass the SHELLDLL_DefView window for keyboard input
     if (g_state.hShellViewWindow) {
-        g_state.pOriginalShellViewWndProc = (WNDPROC)SetWindowLongPtrW(
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
             g_state.hShellViewWindow, 
-            GWLP_WNDPROC, 
-            (LONG_PTR)CustomShellViewWndProc
-        );
-        
-        if (g_state.pOriginalShellViewWndProc) {
+            CustomShellViewWndProc, 
+            0)) {
             Wh_Log(L"Successfully subclassed SHELLDLL_DefView window: %p", g_state.hShellViewWindow);
         } else {
             Wh_Log(L"Failed to subclass SHELLDLL_DefView window");
         }
     }
     
-    // Also subclass the ListView as a fallback
+    // Also subclass the ListView for additional hotkey detection
     if (g_state.hDesktopListView) {
-        g_state.pOriginalListViewWndProc = (WNDPROC)SetWindowLongPtrW(
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
             g_state.hDesktopListView, 
-            GWLP_WNDPROC, 
-            (LONG_PTR)CustomListViewWndProc
-        );
-        
-        if (g_state.pOriginalListViewWndProc) {
+            CustomListViewWndProc, 
+            0)) {
             Wh_Log(L"Successfully subclassed ListView window: %p", g_state.hDesktopListView);
         } else {
             Wh_Log(L"Failed to subclass ListView window");
@@ -362,7 +368,7 @@ BOOL SetupHotkeyHandling() {
     return TRUE;
 }
 
-// Cleanup hotkey handling and restore original window procedures
+// Cleanup hotkey handling and remove window subclasses
 void CleanupHotkeyHandling() {
     // Unregister global hotkey
     if (g_state.hDesktopWindow) {
@@ -370,29 +376,22 @@ void CleanupHotkeyHandling() {
         Wh_Log(L"Unregistered global hotkey");
     }
     
-    // Restore Program Manager window procedure
-    if (g_state.hDesktopWindow && g_state.pOriginalProgmanWndProc) {
-        SetWindowLongPtrW(g_state.hDesktopWindow, GWLP_WNDPROC, (LONG_PTR)g_state.pOriginalProgmanWndProc);
-        Wh_Log(L"Restored Program Manager window procedure");
-        g_state.pOriginalProgmanWndProc = nullptr;
-    }
-    
+    // Remove window subclasses (the WindhawkUtils system handles cleanup automatically)
     if (g_state.hDesktopWindow) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_state.hDesktopWindow, CustomProgmanWndProc);
+        Wh_Log(L"Removed Program Manager window subclass");
         g_state.hDesktopWindow = nullptr;
     }
     
-    // Restore SHELLDLL_DefView window procedure
-    if (g_state.hShellViewWindow && g_state.pOriginalShellViewWndProc) {
-        SetWindowLongPtrW(g_state.hShellViewWindow, GWLP_WNDPROC, (LONG_PTR)g_state.pOriginalShellViewWndProc);
-        Wh_Log(L"Restored SHELLDLL_DefView window procedure");
-        g_state.pOriginalShellViewWndProc = nullptr;
+    if (g_state.hShellViewWindow) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_state.hShellViewWindow, CustomShellViewWndProc);
+        Wh_Log(L"Removed SHELLDLL_DefView window subclass");
+        g_state.hShellViewWindow = nullptr;
     }
     
-    // Restore ListView window procedure
-    if (g_state.hDesktopListView && g_state.pOriginalListViewWndProc) {
-        SetWindowLongPtrW(g_state.hDesktopListView, GWLP_WNDPROC, (LONG_PTR)g_state.pOriginalListViewWndProc);
-        Wh_Log(L"Restored ListView window procedure");
-        g_state.pOriginalListViewWndProc = nullptr;
+    if (g_state.hDesktopListView) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_state.hDesktopListView, CustomListViewWndProc);
+        Wh_Log(L"Removed ListView window subclass");
     }
 }
 
@@ -481,7 +480,6 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to setup hotkey handling, but continuing...");
     }
     
-    g_state.bInitialized = TRUE;
     Wh_Log(L"Desktop Icons Toggle mod initialized successfully");
     return TRUE;
 }
@@ -489,10 +487,6 @@ BOOL Wh_ModInit() {
 // Windhawk mod cleanup
 void Wh_ModUninit() {
     Wh_Log(L"Desktop Icons Toggle mod uninitializing...");
-    
-    if (!g_state.bInitialized) {
-        return;
-    }
     
     // Restore icons before cleanup
     RestoreIconsToVisible();
@@ -512,8 +506,7 @@ void Wh_ModAfterInit() {
     
     // Try to find ListView again if not found initially
     if (!g_state.hDesktopListView) {
-        Wh_Log(L"Desktop ListView not found during init, retrying after delay...");
-        Sleep(2000); // Give explorer more time to fully load
+        Wh_Log(L"Desktop ListView not found during init, retrying...");
         g_state.hDesktopListView = FindDesktopListView();
         if (g_state.hDesktopListView) {
             g_state.bIconsVisible = IsWindowVisible(g_state.hDesktopListView);
@@ -525,7 +518,7 @@ void Wh_ModAfterInit() {
     }
     
     // Setup or re-setup hotkey handling if needed
-    if (!g_state.hDesktopWindow || !g_state.pOriginalProgmanWndProc) {
+    if (!g_state.hDesktopWindow) {
         Wh_Log(L"Setting up hotkey handling in after init");
         SetupHotkeyHandling();
     }
@@ -534,7 +527,6 @@ void Wh_ModAfterInit() {
 // Called before uninitialization
 void Wh_ModBeforeUninit() {
     Wh_Log(L"Desktop Icons Toggle mod before uninit");
-    RestoreIconsToVisible();
 }
 
 // Called when settings are changed
