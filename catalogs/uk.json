@@ -3540,7 +3540,7 @@
                 "published": 1733774874000,
                 "rating": 9,
                 "ratingUsers": 14,
-                "updated": 1733774874000,
+                "updated": 1756941717000,
                 "users": 1318
             },
             "metadata": {
@@ -3551,7 +3551,7 @@
                     "nvcontainer.exe"
                 ],
                 "name": "Shadowplay anti-disable",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "shadowplay-single-folder": {
