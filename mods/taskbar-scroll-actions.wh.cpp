@@ -1,12 +1,11 @@
 // ==WindhawkMod==
-// @id              taskbar-scroll-actions
-// @name            Taskbar Scroll Actions
-// @description     Assign actions for scrolling over the taskbar, including virtual desktop switching and monitor brightness control
-// @version         1.1
-// @author          m417z
-// @github          https://github.com/m417z
-// @twitter         https://twitter.com/m417z
-// @homepage        https://m417z.com/
+// @id              taskbar-scroll-actions-zones
+// @name            Taskbar Scroll Actions (Zones)
+// @description     Assign different actions for scrolling over different zones of the taskbar, including virtual desktop switching, monitor brightness control, and volume control
+// @version         0.7
+// @author          ALMAS CP
+// @github          https://github.com/almas-cp
+// @homepage        https://github.com/almas-cp
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lversion
@@ -22,20 +21,20 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Scroll Actions
+# Taskbar Scroll Actions (Zones)
 
-Assign actions for scrolling over the taskbar, including virtual desktop
-switching and monitor brightness control.
+Assign different actions for scrolling over different zones of the taskbar, including virtual desktop
+switching, monitor brightness control, and volume control.
 
-Currently, the following actions are supported:
+The taskbar can be divided into 1 or 2 zones, and each zone can be assigned a different action:
 
 * Switch virtual desktop
 * Change monitor brightness
+* Change system volume
+* Change microphone volume
 
-Also check out the following related mods:
-
-* Taskbar Volume Control
-* Cycle taskbar buttons with mouse wheel
+You can configure how many zones to create and what action each zone should perform.
+You can also control whether system popups appear for volume changes.
 
 **Note:** Some laptop touchpads might not support scrolling over the taskbar. A
 workaround is to use the "pinch to zoom" gesture. For details, check out [a
@@ -46,11 +45,25 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 
 // ==WindhawkModSettings==
 /*
-- scrollAction: virtualDesktopSwitch
-  $name: Scroll action
+- numberOfZones: 2
+  $name: Number of zones
+  $description: How many zones to divide the taskbar into
+  $options:
+  - 1: Single zone
+  - 2: Two zones
+- zone1Action: brightnessChange
+  $name: Zone 1 action (leftmost/topmost)
   $options:
   - virtualDesktopSwitch: Switch virtual desktop
   - brightnessChange: Change monitor brightness
+  - systemVolumeChange: Change system volume
+  - micVolumeChange: Change microphone volume
+- zone2Action: systemVolumeChange
+  $name: Zone 2 action (rightmost/bottommost)
+  $options:
+  - virtualDesktopSwitch: Switch virtual desktop
+  - brightnessChange: Change monitor brightness
+  - systemVolumeChange: Change system volume
   - micVolumeChange: Change microphone volume
 - scrollArea: taskbar
   $name: Scroll area
@@ -58,11 +71,21 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   - taskbar: The taskbar
   - notificationArea: The tray area
   - taskbarWithoutNotificationArea: The taskbar without the tray area
-- scrollStep: 1
-  $name: Scroll step
+- zone1ScrollStep: 5
+  $name: Zone 1 scroll step
   $description: >-
     Allows to configure the change that will occur with each notch of mouse
-    wheel movement.
+    wheel movement in zone 1.
+- zone2ScrollStep: 5
+  $name: Zone 2 scroll step
+  $description: >-
+    Allows to configure the change that will occur with each notch of mouse
+    wheel movement in zone 2.
+- showVolumePopup: true
+  $name: Show system volume popup
+  $description: >-
+    Show the Windows system volume popup when changing system volume.
+    Microphone volume changes are always silent.
 - throttleMs: 0
   $name: Throttle time (milliseconds)
   $description: >-
@@ -97,6 +120,7 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 enum class ScrollAction {
     virtualDesktopSwitch,
     brightnessChange,
+    systemVolumeChange,
     micVolumeChange,
 };
 
@@ -107,9 +131,13 @@ enum class ScrollArea {
 };
 
 struct {
-    ScrollAction scrollAction;
+    int numberOfZones;
+    ScrollAction zone1Action;
+    ScrollAction zone2Action;
     ScrollArea scrollArea;
-    int scrollStep;
+    int zone1ScrollStep;
+    int zone2ScrollStep;
+    bool showVolumePopup;
     int throttleMs;
     bool reverseScrollingDirection;
     bool oldTaskbarOnWin11;
@@ -147,6 +175,9 @@ int g_nWinVersion;
 int g_nExplorerVersion;
 HWND g_hTaskbarWnd;
 DWORD g_dwTaskbarThreadId;
+
+// Add shell hook message for volume popup
+UINT g_uShellHookMsg = RegisterWindowMessage(L"SHELLHOOK");
 
 #pragma region functions
 
@@ -280,28 +311,54 @@ bool GetNotificationAreaRect(HWND hMMTaskbarWnd, RECT* rcResult) {
     return true;
 }
 
-bool IsPointInsideScrollArea(HWND hMMTaskbarWnd, POINT pt) {
+int GetZoneFromPoint(HWND hMMTaskbarWnd, POINT pt) {
+    RECT rc;
+    
     switch (g_settings.scrollArea) {
         case ScrollArea::taskbar: {
-            RECT rc;
-            return GetWindowRect(hMMTaskbarWnd, &rc) && PtInRect(&rc, pt);
+            if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
+                return -1; // Not in taskbar
+            }
+            break;
         }
 
         case ScrollArea::notificationArea: {
-            RECT rc;
-            return GetNotificationAreaRect(hMMTaskbarWnd, &rc) &&
-                   PtInRect(&rc, pt);
+            if (!GetNotificationAreaRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
+                return -1; // Not in notification area
+            }
+            break;
         }
 
         case ScrollArea::taskbarWithoutNotificationArea: {
-            RECT rc;
-            return GetWindowRect(hMMTaskbarWnd, &rc) && PtInRect(&rc, pt) &&
-                   (!GetNotificationAreaRect(hMMTaskbarWnd, &rc) ||
-                    !PtInRect(&rc, pt));
+            RECT rcNotify;
+            if (!GetWindowRect(hMMTaskbarWnd, &rc) || !PtInRect(&rc, pt)) {
+                return -1; // Not in taskbar
+            }
+            if (GetNotificationAreaRect(hMMTaskbarWnd, &rcNotify) && PtInRect(&rcNotify, pt)) {
+                return -1; // In notification area, but we want taskbar without it
+            }
+            break;
         }
     }
 
-    return false;
+    if (g_settings.numberOfZones == 1) {
+        return 0; // Single zone
+    }
+
+    // Determine which zone the point is in (for 2 zones)
+    bool isHorizontal = (rc.right - rc.left) > (rc.bottom - rc.top);
+    int totalSize = isHorizontal ? (rc.right - rc.left) : (rc.bottom - rc.top);
+    int pointPos = isHorizontal ? (pt.x - rc.left) : (pt.y - rc.top);
+    
+    int zoneSize = totalSize / 2;
+    int zone = pointPos / zoneSize;
+    
+    // Ensure zone is within bounds
+    if (zone >= 2) {
+        zone = 1;
+    }
+    
+    return zone;
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -404,6 +461,40 @@ BOOL WindowsVersionInit() {
         return FALSE;
 
     return TRUE;
+}
+
+// Improved function to send volume popup using WM_APPCOMMAND
+bool PostAppCommand(SHORT appCommand, int count) {
+    if (!g_hTaskbarWnd) {
+        return false;
+    }
+
+    HWND hReBarWindow32 =
+        FindWindowEx(g_hTaskbarWnd, nullptr, L"ReBarWindow32", nullptr);
+    if (!hReBarWindow32) {
+        return false;
+    }
+
+    HWND hMSTaskSwWClass =
+        FindWindowEx(hReBarWindow32, nullptr, L"MSTaskSwWClass", nullptr);
+    if (!hMSTaskSwWClass) {
+        return false;
+    }
+
+    for (int i = 0; i < count; i++) {
+        PostMessage(hMSTaskSwWClass, g_uShellHookMsg, HSHELL_APPCOMMAND,
+                    MAKELPARAM(0, appCommand));
+    }
+
+    return true;
+}
+
+// Function to show system volume popup - improved version
+void ShowSystemVolumePopup(int direction) {
+    if (!g_settings.showVolumePopup) return;
+
+    SHORT appCommand = (direction > 0) ? APPCOMMAND_VOLUME_UP : APPCOMMAND_VOLUME_DOWN;
+    PostAppCommand(appCommand, 1);
 }
 
 #pragma endregion  // functions
@@ -782,7 +873,7 @@ bool SwitchDesktopViaKeyboardShortcut(int clicks) {
     return true;
 }
 
-#pragma region microphone_volume
+#pragma region volume
 
 const static GUID XIID_IMMDeviceEnumerator = {
     0xA95664D2,
@@ -800,38 +891,55 @@ const static GUID XIID_IAudioEndpointVolume = {
     0x4546,
     {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
+bool g_bSystemVolInitialized;
 bool g_bMicVolInitialized;
-IMMDeviceEnumerator* g_pDeviceEnumerator;
+IMMDeviceEnumerator* g_pSystemDeviceEnumerator;
+IMMDeviceEnumerator* g_pMicDeviceEnumerator;
+
+void SystemVolInit() {
+    HRESULT hr = CoCreateInstance(
+        XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
+        XIID_IMMDeviceEnumerator, (LPVOID*)&g_pSystemDeviceEnumerator);
+    if (FAILED(hr))
+        g_pSystemDeviceEnumerator = NULL;
+}
 
 void MicVolInit() {
     HRESULT hr = CoCreateInstance(
         XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
-        XIID_IMMDeviceEnumerator, (LPVOID*)&g_pDeviceEnumerator);
+        XIID_IMMDeviceEnumerator, (LPVOID*)&g_pMicDeviceEnumerator);
     if (FAILED(hr))
-        g_pDeviceEnumerator = NULL;
+        g_pMicDeviceEnumerator = NULL;
 }
 
-void MicVolUninit() {
-    if (g_pDeviceEnumerator) {
-        g_pDeviceEnumerator->Release();
-        g_pDeviceEnumerator = NULL;
+void SystemVolUninit() {
+    if (g_pSystemDeviceEnumerator) {
+        g_pSystemDeviceEnumerator->Release();
+        g_pSystemDeviceEnumerator = NULL;
     }
 }
 
-BOOL AddMicMasterVolumeLevelScalar(float fMasterVolumeAdd) {
+void MicVolUninit() {
+    if (g_pMicDeviceEnumerator) {
+        g_pMicDeviceEnumerator->Release();
+        g_pMicDeviceEnumerator = NULL;
+    }
+}
+
+BOOL AddSystemMasterVolumeLevelScalar(float fMasterVolumeAdd, bool showPopup) {
     IMMDevice* defaultDevice = NULL;
     IAudioEndpointVolume* endpointVolume = NULL;
     HRESULT hr;
     float fMasterVolume;
     BOOL bSuccess = FALSE;
 
-    if (!g_bMicVolInitialized) {
-        MicVolInit();
-        g_bMicVolInitialized = true;
+    if (!g_bSystemVolInitialized) {
+        SystemVolInit();
+        g_bSystemVolInitialized = true;
     }
 
-    if (g_pDeviceEnumerator) {
-        hr = g_pDeviceEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole,
+    if (g_pSystemDeviceEnumerator) {
+        hr = g_pSystemDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole,
                                                           &defaultDevice);
         if (SUCCEEDED(hr)) {
             hr = defaultDevice->Activate(XIID_IAudioEndpointVolume,
@@ -850,6 +958,12 @@ BOOL AddMicMasterVolumeLevelScalar(float fMasterVolumeAdd) {
                     if (SUCCEEDED(endpointVolume->SetMasterVolumeLevelScalar(
                             fMasterVolume, NULL))) {
                         bSuccess = TRUE;
+                        
+                        // Show popup if requested
+                        if (showPopup) {
+                            int direction = (fMasterVolumeAdd > 0) ? 1 : -1;
+                            ShowSystemVolumePopup(direction);
+                        }
                     }
                 }
 
@@ -863,14 +977,75 @@ BOOL AddMicMasterVolumeLevelScalar(float fMasterVolumeAdd) {
     return bSuccess;
 }
 
-#pragma endregion  // microphone_volume
+BOOL AddMicMasterVolumeLevelScalar(float fMasterVolumeAdd) {
+    IMMDevice* defaultDevice = NULL;
+    IAudioEndpointVolume* endpointVolume = NULL;
+    HRESULT hr;
+    float fMasterVolume;
+    BOOL bSuccess = FALSE;
+
+    if (!g_bMicVolInitialized) {
+        MicVolInit();
+        g_bMicVolInitialized = true;
+    }
+
+    if (g_pMicDeviceEnumerator) {
+        hr = g_pMicDeviceEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole,
+                                                          &defaultDevice);
+        if (SUCCEEDED(hr)) {
+            hr = defaultDevice->Activate(XIID_IAudioEndpointVolume,
+                                         CLSCTX_INPROC_SERVER, NULL,
+                                         (LPVOID*)&endpointVolume);
+            if (SUCCEEDED(hr)) {
+                if (SUCCEEDED(endpointVolume->GetMasterVolumeLevelScalar(
+                        &fMasterVolume))) {
+                    fMasterVolume += fMasterVolumeAdd;
+
+                    if (fMasterVolume < 0.0)
+                        fMasterVolume = 0.0;
+                    else if (fMasterVolume > 1.0)
+                        fMasterVolume = 1.0;
+
+                    if (SUCCEEDED(endpointVolume->SetMasterVolumeLevelScalar(
+                            fMasterVolume, NULL))) {
+                        bSuccess = TRUE;
+                        // Microphone volume changes are always silent (no popup)
+                    }
+                }
+
+                endpointVolume->Release();
+            }
+
+            defaultDevice->Release();
+        }
+    }
+
+    return bSuccess;
+}
+
+#pragma endregion  // volume
 
 DWORD g_lastScrollTime;
 int g_lastScrollDeltaRemainder;
 DWORD g_lastActionTime;
 
-void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam) {
-    int delta = GET_WHEEL_DELTA_WPARAM(wParam) * g_settings.scrollStep;
+ScrollAction GetActionForZone(int zone) {
+    if (zone == 0) return g_settings.zone1Action;
+    if (zone == 1) return g_settings.zone2Action;
+    return g_settings.zone1Action; // fallback
+}
+
+int GetScrollStepForZone(int zone) {
+    if (zone == 0) return g_settings.zone1ScrollStep;
+    if (zone == 1) return g_settings.zone2ScrollStep;
+    return g_settings.zone1ScrollStep; // fallback
+}
+
+void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam, int zone) {
+    ScrollAction action = GetActionForZone(zone);
+    int scrollStep = GetScrollStepForZone(zone);
+    
+    int delta = GET_WHEEL_DELTA_WPARAM(wParam) * scrollStep;
 
     if (g_settings.reverseScrollingDirection) {
         delta = -delta;
@@ -881,13 +1056,12 @@ void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam) {
     }
 
     int clicks = delta / WHEEL_DELTA;
-    Wh_Log(L"%d clicks (delta=%d)", clicks, delta);
+    Wh_Log(L"Zone %d: %d clicks (delta=%d)", zone, clicks, delta);
 
     if (clicks != 0 && g_settings.throttleMs > 0) {
         if (GetTickCount() - g_lastActionTime < (DWORD)g_settings.throttleMs) {
             // It's too soon, ignore this scroll event.
             clicks = 0;
-
             // Reset reminder too.
             delta = 0;
         } else if (clicks < -1 || clicks > 1) {
@@ -900,22 +1074,30 @@ void InvokeScrollAction(WPARAM wParam, LPARAM lMousePosParam) {
     }
 
     if (clicks != 0) {
-        switch (g_settings.scrollAction) {
+        switch (action) {
             case ScrollAction::virtualDesktopSwitch:
                 SwitchDesktopViaKeyboardShortcut(clicks);
                 break;
 
             case ScrollAction::brightnessChange: {
-                int brightness = GetBrightness();
-                if (brightness != -1) {
-                    Wh_Log(L"Changing brightness from %d to %d", brightness,
-                           brightness + clicks);
-                    SetBrightness(brightness + clicks);
+                int oldBrightness = GetBrightness();
+                if (oldBrightness != -1) {
+                    int newBrightness = oldBrightness + clicks;
+                    Wh_Log(L"Changing brightness from %d to %d", oldBrightness, newBrightness);
+                    SetBrightness(newBrightness);
                 } else {
                     Wh_Log(L"Error getting current brightness");
                 }
                 break;
             }
+
+            case ScrollAction::systemVolumeChange:
+                if (AddSystemMasterVolumeLevelScalar(clicks * 0.01f, g_settings.showVolumePopup)) {
+                    Wh_Log(L"Changed system volume by %d%%", clicks);
+                } else {
+                    Wh_Log(L"Error changing system volume");
+                }
+                break;
 
             case ScrollAction::micVolumeChange:
                 if (AddMicMasterVolumeLevelScalar(clicks * 0.01f)) {
@@ -1002,8 +1184,9 @@ bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     pt.x = GET_X_LPARAM(lParam);
     pt.y = GET_Y_LPARAM(lParam);
 
-    if (!IsPointInsideScrollArea(hWnd, pt)) {
-        return false;
+    int zone = GetZoneFromPoint(hWnd, pt);
+    if (zone == -1) {
+        return false; // Not in any valid zone
     }
 
     // Allows to steal focus.
@@ -1011,7 +1194,7 @@ bool OnMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     ZeroMemory(&input, sizeof(INPUT));
     SendInput(1, &input, sizeof(INPUT));
 
-    InvokeScrollAction(wParam, lParam);
+    InvokeScrollAction(wParam, lParam, zone);
 
     return true;
 }
@@ -1280,14 +1463,34 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
 }
 
 void LoadSettings() {
-    PCWSTR scrollAction = Wh_GetStringSetting(L"scrollAction");
-    g_settings.scrollAction = ScrollAction::virtualDesktopSwitch;
-    if (wcscmp(scrollAction, L"brightnessChange") == 0) {
-        g_settings.scrollAction = ScrollAction::brightnessChange;
-    } else if (wcscmp(scrollAction, L"micVolumeChange") == 0) {
-        g_settings.scrollAction = ScrollAction::micVolumeChange;
+    g_settings.numberOfZones = Wh_GetIntSetting(L"numberOfZones");
+    if (g_settings.numberOfZones < 1 || g_settings.numberOfZones > 2) {
+        g_settings.numberOfZones = 2; // Default to 2 zones
     }
-    Wh_FreeStringSetting(scrollAction);
+
+    // Parse Zone 1 Action
+    PCWSTR zone1Action = Wh_GetStringSetting(L"zone1Action");
+    g_settings.zone1Action = ScrollAction::brightnessChange; // Default to brightness change
+    if (wcscmp(zone1Action, L"virtualDesktopSwitch") == 0) {
+        g_settings.zone1Action = ScrollAction::virtualDesktopSwitch;
+    } else if (wcscmp(zone1Action, L"systemVolumeChange") == 0) {
+        g_settings.zone1Action = ScrollAction::systemVolumeChange;
+    } else if (wcscmp(zone1Action, L"micVolumeChange") == 0) {
+        g_settings.zone1Action = ScrollAction::micVolumeChange;
+    }
+    Wh_FreeStringSetting(zone1Action);
+
+    // Parse Zone 2 Action
+    PCWSTR zone2Action = Wh_GetStringSetting(L"zone2Action");
+    g_settings.zone2Action = ScrollAction::systemVolumeChange; // Default to system volume
+    if (wcscmp(zone2Action, L"virtualDesktopSwitch") == 0) {
+        g_settings.zone2Action = ScrollAction::virtualDesktopSwitch;
+    } else if (wcscmp(zone2Action, L"brightnessChange") == 0) {
+        g_settings.zone2Action = ScrollAction::brightnessChange;
+    } else if (wcscmp(zone2Action, L"micVolumeChange") == 0) {
+        g_settings.zone2Action = ScrollAction::micVolumeChange;
+    }
+    Wh_FreeStringSetting(zone2Action);
 
     PCWSTR scrollArea = Wh_GetStringSetting(L"scrollArea");
     g_settings.scrollArea = ScrollArea::taskbar;
@@ -1298,7 +1501,9 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(scrollArea);
 
-    g_settings.scrollStep = Wh_GetIntSetting(L"scrollStep");
+    g_settings.zone1ScrollStep = Wh_GetIntSetting(L"zone1ScrollStep");
+    g_settings.zone2ScrollStep = Wh_GetIntSetting(L"zone2ScrollStep");
+    g_settings.showVolumePopup = Wh_GetIntSetting(L"showVolumePopup");
     g_settings.throttleMs = Wh_GetIntSetting(L"throttleMs");
     g_settings.reverseScrollingDirection =
         Wh_GetIntSetting(L"reverseScrollingDirection");
@@ -1442,6 +1647,7 @@ void Wh_ModUninit() {
         }
     }
 
+    SystemVolUninit();
     MicVolUninit();
 }
 
