@@ -8,17 +8,14 @@
 // @homepage        https://tightcorner.substack.com/p/reverse-engineering-windows-11s-taskbar
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -Wextra -lcomctl32
+// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Taskbar Icon Numberer for Windows 11
-
 Displays keyboard shortcut numbers (1-9, 0) as overlays on Windows 11 taskbar icons, replicating the functionality of the classic 7+ Taskbar Numberer tool.
-
 ![](https://raw.githubusercontent.com/jsfdez/images/main/taskbar-icon-numberer.wh.cpp.png)
-
 ## Features
 - Numbers 1-9 for first nine apps, 0 for tenth app
 - Fully customizable appearance (position, size, colors)
@@ -26,14 +23,11 @@ Displays keyboard shortcut numbers (1-9, 0) as overlays on Windows 11 taskbar ic
 - Supports light and dark themes
 - Hidden overlays for apps beyond position 10
 - Efficient overlay management with minimal performance impact
-
 ## Usage
 Numbers correspond to Windows + [number] keyboard shortcuts for quick app launching. Simply press Win+1 to open the first app, Win+2 for second, etc.
-
 ## Known Issues
 - Numbers don't appear until first taskbar interaction (hover over any button)
 - Occasional wrong numbers during initial display (self-corrects after reordering)
-
 ## Customization
 Configure number position (corners), font size (8-16px), text color, and stroke color through mod settings.
 */
@@ -78,7 +72,6 @@ Configure number position (corners), font size (8-16px), text color, and stroke 
 #include <atomic>
 #include <string>
 #include <unordered_set>
-#include <set>
 #include <mutex>
 #include <vector>
 #include <functional>
@@ -97,17 +90,11 @@ using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
-using TaskListButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
-TaskListButton_UpdateButtonPadding_t TaskListButton_UpdateButtonPadding_Original;
-
-using TaskListButton_UpdateBadgeSize_t = void(WINAPI*)(void* pThis);
-TaskListButton_UpdateBadgeSize_t TaskListButton_UpdateBadgeSize_Original;
-
 enum class NumberPosition {
     topLeft,
     topRight,
     bottomLeft,
-    bottomRight
+    bottomRight,
 };
 
 struct {
@@ -123,14 +110,30 @@ struct ButtonInformation {
     FrameworkElement overlay = nullptr;
     int currentNumber = -1;
     bool isVisible = false;
-    bool operator<(const ButtonInformation& other) const { return winrt::get_abi(button) < winrt::get_abi(other.button); }
+    
+    // Constructor for easier creation
+    explicit ButtonInformation(const FrameworkElement& button = nullptr) : button(button) {}
+    
+    bool isSameButton(const FrameworkElement& otherButton) const {
+        auto thisButton = button.get();
+        if (!thisButton) return false;
+        return winrt::get_abi(thisButton.as<winrt::Windows::Foundation::IUnknown>()) == winrt::get_abi(otherButton.as<winrt::Windows::Foundation::IUnknown>());
+    }
 };
 
-std::atomic<bool> g_taskbarViewDllLoaded;
-std::atomic<bool> g_unloading;
-std::atomic<DWORD> g_initialTime;
+// Simplified globals
+std::atomic<bool> g_taskbarViewDllLoaded{false};
+std::atomic<bool> g_unloading{false};
 std::mutex g_overlayMutex;
-std::set<ButtonInformation> g_trackedButtons;
+std::vector<ButtonInformation> g_trackedButtons;
+
+// Helper function to find button in vector
+auto FindButtonInVector = [](const std::vector<ButtonInformation>& buttons, const FrameworkElement& targetButton) {
+    return std::find_if(buttons.begin(), buttons.end(), 
+        [&targetButton](const ButtonInformation& info) {
+            return info.isSameButton(targetButton);
+        });
+};
 
 // Utility functions
 void LogException(const char* functionName) {
@@ -287,24 +290,30 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     return true;
 }
 
+// Simplified text creation helper
+TextBlock CreateTextBlock(const std::wstring& text, double fontSize, const winrt::Windows::UI::Color& color, const Thickness& margin = {}) {
+    TextBlock textBlock;
+    textBlock.Text(text);
+    textBlock.FontSize(fontSize);
+    textBlock.Margin(margin);
+    
+    auto brush = SolidColorBrush();
+    brush.Color(color);
+    textBlock.Foreground(brush);
+    
+    return textBlock;
+}
+
 FrameworkElement CreateNumberOverlay(int number) {
+    if (number < 1) {
+        Wh_Log(L"CreateNumberOverlay: Invalid number %d, skipping creation", number);
+        return nullptr;
+    }
+    
     try {
-        // Validate number range to prevent invalid numbers like 11
-        if (number < 1) {
-            Wh_Log(L"CreateNumberOverlay: Invalid number %d, skipping creation", number);
-            return nullptr;
-        }
-        
-        TextBlock numberText;
-        numberText.Text(number == 10 ? L"0" : std::to_wstring(number));
-        numberText.FontSize(g_settings.numberSize);
-        
-        Wh_Log(L"CreateNumberOverlay: Creating overlay with number %d", number);
-        
+        std::wstring text = (number == 10) ? L"0" : std::to_wstring(number);
         auto textColor = ParseHexColor(g_settings.numberColor);
-        auto brush = SolidColorBrush();
-        brush.Color(textColor);
-        numberText.Foreground(brush);
+        auto strokeColor = ParseHexColor(g_settings.backgroundColor);
         
         Grid textContainer;
         textContainer.Name(L"WindhawkNumberOverlay");
@@ -314,23 +323,17 @@ FrameworkElement CreateNumberOverlay(int number) {
             for (int dy = -1; dy <= 1; dy++) {
                 if (dx == 0 && dy == 0) continue;
                 
-                TextBlock strokeText;
-                strokeText.Text(number == 10 ? L"0" : std::to_wstring(number));
-                strokeText.FontSize(g_settings.numberSize);
-                strokeText.Margin(Thickness{static_cast<double>(dx), static_cast<double>(dy), 0, 0});
-                
-                auto strokeColor = ParseHexColor(g_settings.backgroundColor);
-                auto strokeBrush = SolidColorBrush();
-                strokeBrush.Color(strokeColor);
-                strokeText.Foreground(strokeBrush);
-                
+                auto strokeText = CreateTextBlock(text, g_settings.numberSize, strokeColor, 
+                    Thickness{static_cast<double>(dx), static_cast<double>(dy), 0, 0});
                 textContainer.Children().Append(strokeText);
             }
         }
         
+        // Main text
+        auto numberText = CreateTextBlock(text, g_settings.numberSize, textColor);
         textContainer.Children().Append(numberText);
         
-        // Position based on settings
+        // Set position and properties
         switch (g_settings.numberPosition) {
             case NumberPosition::topLeft:
                 textContainer.HorizontalAlignment(HorizontalAlignment::Left);
@@ -349,18 +352,43 @@ FrameworkElement CreateNumberOverlay(int number) {
                 textContainer.VerticalAlignment(VerticalAlignment::Bottom);
                 break;
         }
-        textContainer.Margin(Thickness{0, 0, 2, 2});
         
+        textContainer.Margin(Thickness{0, 0, 2, 2});
         Canvas::SetZIndex(textContainer, 1000);
+        
         if (number > 10) {
             textContainer.Visibility(Visibility::Collapsed);
         }
         
+        Wh_Log(L"CreateNumberOverlay: Created overlay with number %d", number);
         return textContainer;
         
     } catch (...) {
         LogException(__FUNCTION__);
         return nullptr;
+    }
+}
+
+// Simplified button cleanup
+void CleanupButtonOverlays(const ButtonInformation& buttonInfo) {
+    try {
+        auto button = buttonInfo.button.get();
+        if (!button) return;
+        
+        auto iconPanel = FindChildByName(button, L"IconPanel");
+        if (!iconPanel) return;
+        
+        auto panelChildren = iconPanel.as<Panel>().Children();
+        for (uint32_t j = 0; j < panelChildren.Size();) {
+            auto child = panelChildren.GetAt(j).try_as<FrameworkElement>();
+            if (child && child.Name() == L"WindhawkNumberOverlay") {
+                panelChildren.RemoveAt(j);
+            } else {
+                j++;
+            }
+        }
+    } catch (...) {
+        LogException(__FUNCTION__);
     }
 }
 
@@ -373,30 +401,9 @@ void RemoveAllNumberOverlays() {
             try {
                 std::lock_guard<std::mutex> lock(g_overlayMutex);
                 for (const auto& buttonInfo : g_trackedButtons) {
-                    try {
-                        auto button = buttonInfo.button;
-                        if (button) {
-                            auto iconPanel = FindChildByName(button.get(), L"IconPanel");
-                            if (iconPanel) {
-                                // Remove ALL overlays with our name
-                                auto panelChildren = iconPanel.as<Panel>().Children();
-                                for (uint32_t j = 0; j < panelChildren.Size();) {
-                                    auto child = panelChildren.GetAt(j).try_as<FrameworkElement>();
-                                    if (child && child.Name() == L"WindhawkNumberOverlay") {
-                                        panelChildren.RemoveAt(j);
-                                    } else {
-                                        j++;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (...) {
-                        LogException(__FUNCTION__);
-                    }
+                    CleanupButtonOverlays(buttonInfo);
                 }
-                
                 g_trackedButtons.clear();
-                
             } catch (...) {
                 LogException(__FUNCTION__);
             }
@@ -406,54 +413,41 @@ void RemoveAllNumberOverlays() {
     }
 }
 
+// Simplified overlay update for settings changes
+void UpdateOverlayAppearance(Grid& grid, const std::wstring& text) {
+    auto children = grid.Children();
+    children.Clear();
+    
+    auto textColor = ParseHexColor(g_settings.numberColor);
+    auto strokeColor = ParseHexColor(g_settings.backgroundColor);
+    
+    // Create stroke effect
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            if (dx == 0 && dy == 0) continue;
+            
+            auto strokeText = CreateTextBlock(text, g_settings.numberSize, strokeColor,
+                Thickness{static_cast<double>(dx), static_cast<double>(dy), 0, 0});
+            children.Append(strokeText);
+        }
+    }
+    
+    // Main text
+    auto numberText = CreateTextBlock(text, g_settings.numberSize, textColor);
+    children.Append(numberText);
+}
+
 void UpdateOverlayWithNewSettings(const ButtonInformation& buttonInformation) {
     if (!buttonInformation.overlay) {
-        Wh_Log(L"UpdateOverlayWithNewSettings: No overlay to update for button %p", &buttonInformation.button);
+        Wh_Log(L"UpdateOverlayWithNewSettings: No overlay to update");
         return;
     }
     
-    Wh_Log(L"UpdateOverlayWithNewSettings: Updating overlay for button %p, number %d", &buttonInformation.button, buttonInformation.currentNumber);
-    
     try {
         auto grid = buttonInformation.overlay.as<Grid>();
-        auto children = grid.Children();
         std::wstring text = (buttonInformation.currentNumber == 10) ? L"0" : std::to_wstring(buttonInformation.currentNumber);
         
-        // Clear existing children
-        children.Clear();
-        
-        // Recreate with new settings
-        auto textColor = ParseHexColor(g_settings.numberColor);
-        auto strokeColor = ParseHexColor(g_settings.backgroundColor);
-        
-        // Create stroke effect
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                if (dx == 0 && dy == 0) continue;
-                
-                TextBlock strokeText;
-                strokeText.Text(text);
-                strokeText.FontSize(g_settings.numberSize);
-                strokeText.Margin(Thickness{static_cast<double>(dx), static_cast<double>(dy), 0, 0});
-                
-                auto strokeBrush = SolidColorBrush();
-                strokeBrush.Color(strokeColor);
-                strokeText.Foreground(strokeBrush);
-                
-                children.Append(strokeText);
-            }
-        }
-        
-        // Main text
-        TextBlock numberText;
-        numberText.Text(text);
-        numberText.FontSize(g_settings.numberSize);
-        
-        auto brush = SolidColorBrush();
-        brush.Color(textColor);
-        numberText.Foreground(brush);
-        
-        children.Append(numberText);
+        UpdateOverlayAppearance(grid, text);
         
         // Update position
         switch (g_settings.numberPosition) {
@@ -475,27 +469,41 @@ void UpdateOverlayWithNewSettings(const ButtonInformation& buttonInformation) {
                 break;
         }
         
-        Wh_Log(L"UpdateOverlayWithNewSettings: Successfully updated overlay for button %p", &buttonInformation.button);
+        Wh_Log(L"UpdateOverlayWithNewSettings: Successfully updated overlay");
         
     } catch (...) {
-        Wh_Log(L"UpdateOverlayWithNewSettings: Failed to update overlay for button %p", &buttonInformation.button);
+        Wh_Log(L"UpdateOverlayWithNewSettings: Failed to update overlay");
         LogException(__FUNCTION__);
     }
 }
 
+void RemoveExistingOverlays(FrameworkElement iconPanel) {
+    auto panelChildren = iconPanel.as<Panel>().Children();
+    uint32_t removedCount = 0;
+    for (uint32_t j = 0; j < panelChildren.Size();) {
+        auto child = panelChildren.GetAt(j).try_as<FrameworkElement>();
+        if (child && child.Name() == L"WindhawkNumberOverlay") {
+            panelChildren.RemoveAt(j);
+            removedCount++;
+        } else {
+            j++;
+        }
+    }
+    if (removedCount > 0) {
+        Wh_Log(L"RemoveExistingOverlays: Removed %d old overlays", removedCount);
+    }
+}
+
 void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, void* buttonPointer) {
-    if (!taskListButtonElement || g_unloading) return;
-    
-    // Validate number range immediately to prevent invalid overlays
-    if (number < 1) {
-        Wh_Log(L"UpdateButtonOverlay: Invalid number %d for button %p, skipping", number, buttonPointer);
+    if (!taskListButtonElement || g_unloading || number < 1) {
+        if (number < 1) Wh_Log(L"UpdateButtonOverlay: Invalid number %d, skipping", number);
         return;
     }
     
     try {
         auto iconPanelElement = FindChildByName(taskListButtonElement, L"IconPanel");
         if (!iconPanelElement) {
-            Wh_Log(L"UpdateButtonOverlay: No IconPanel found for button %p", buttonPointer);
+            Wh_Log(L"UpdateButtonOverlay: No IconPanel found");
             return;
         }
 
@@ -503,109 +511,53 @@ void UpdateButtonOverlay(FrameworkElement taskListButtonElement, int number, voi
         
         winrt::Windows::Foundation::IUnknown buttonIUnknown;
         winrt::copy_from_abi(buttonIUnknown, buttonPointer);
-        auto button = buttonIUnknown.try_as<FrameworkElement>();
+        auto button = buttonIUnknown.as<FrameworkElement>();
 
-        auto it = g_trackedButtons.find(ButtonInformation(button));
+        auto it = FindButtonInVector(g_trackedButtons, button);
         ButtonInformation buttonInfo;
+        
         if (it != g_trackedButtons.end()) {
             buttonInfo = *it;
             g_trackedButtons.erase(it);
-            Wh_Log(L"UpdateButtonOverlay: Found existing button %p, current number %d, new number %d", 
-                   buttonPointer, buttonInfo.currentNumber, number);
+            Wh_Log(L"UpdateButtonOverlay: Found existing button, current number %d, new number %d", 
+                   buttonInfo.currentNumber, number);
         } else {
             buttonInfo = ButtonInformation(button);
-            Wh_Log(L"UpdateButtonOverlay: New button %p, number %d", buttonPointer, number);
+            Wh_Log(L"UpdateButtonOverlay: New button, number %d", number);
         }
         
         const bool shouldShow = number <= 10;
         const bool visibilityChanged = buttonInfo.isVisible != shouldShow;
         const bool numberChanged = buttonInfo.currentNumber != number;
-        bool needsNewOverlay = !buttonInfo.overlay;
+        const bool needsNewOverlay = !buttonInfo.overlay || (numberChanged && buttonInfo.overlay);
         
-        Wh_Log(L"UpdateButtonOverlay: Button %p - number=%d, shouldShow=%d, visibilityChanged=%d, numberChanged=%d, needsNewOverlay=%d", buttonPointer, number, shouldShow, visibilityChanged, numberChanged, needsNewOverlay);
-        
-        // Always update if number changed, even if it was > 10 before
         if (!visibilityChanged && !numberChanged && !needsNewOverlay) {
-            Wh_Log(L"UpdateButtonOverlay: No changes needed for button %p", buttonPointer);
-            g_trackedButtons.insert(buttonInfo);
+            g_trackedButtons.push_back(buttonInfo);
             return;
-        }
-        
-        // Force recreation for buttons that moved positions significantly
-        // This ensures reordering updates work correctly
-        if (numberChanged && !needsNewOverlay && buttonInfo.overlay) {
-            Wh_Log(L"UpdateButtonOverlay: Position change detected for button %p (%d -> %d), forcing recreation", buttonPointer, buttonInfo.currentNumber, number);
-            needsNewOverlay = true;
-        }
-        
-        // Update existing overlay if only number changed
-        if (buttonInfo.overlay && !needsNewOverlay && !visibilityChanged && numberChanged) {
-            Wh_Log(L"UpdateButtonOverlay: Updating text for button %p from %d to %d", 
-                   buttonPointer, buttonInfo.currentNumber, number);
-            try {
-                auto grid = buttonInfo.overlay.as<Grid>();
-                auto children = grid.Children();
-                std::wstring newText = (number == 10) ? L"0" : std::to_wstring(number);
-                
-                // Update all TextBlock children (stroke + main text)
-                for (uint32_t i = 0; i < children.Size(); i++) {
-                    auto textBlock = children.GetAt(i).try_as<TextBlock>();
-                    if (textBlock) {
-                        textBlock.Text(newText);
-                    }
-                }
-                Wh_Log(L"UpdateButtonOverlay: Successfully updated text for button %p", buttonPointer);
-            } catch (...) {
-                Wh_Log(L"UpdateButtonOverlay: Failed to update text for button %p, will recreate overlay", buttonPointer);
-                needsNewOverlay = true;
-            }
         }
         
         // Create new overlay if needed
         if (needsNewOverlay) {
-            Wh_Log(L"UpdateButtonOverlay: Creating new overlay for button %p, number %d", buttonPointer, number);
-            
-            // Only remove ALL overlays if we're creating a new one (to handle position changes)
-            auto panelChildren = iconPanelElement.as<Panel>().Children();
-            uint32_t removedCount = 0;
-            for (uint32_t j = 0; j < panelChildren.Size();) {
-                auto child = panelChildren.GetAt(j).try_as<FrameworkElement>();
-                if (child && child.Name() == L"WindhawkNumberOverlay") {
-                    panelChildren.RemoveAt(j);
-                    removedCount++;
-                } else {
-                    j++;
-                }
-            }
-            if (removedCount > 0) {
-                Wh_Log(L"UpdateButtonOverlay: Removed %d old overlays from button %p", removedCount, buttonPointer);
-            }
+            RemoveExistingOverlays(iconPanelElement);
             buttonInfo.overlay = nullptr;
             
             auto newOverlay = CreateNumberOverlay(number);
             if (newOverlay) {
                 iconPanelElement.as<Panel>().Children().Append(newOverlay);
                 buttonInfo.overlay = newOverlay;
-                Wh_Log(L"UpdateButtonOverlay: Successfully created new overlay for button %p", buttonPointer);
-            } else {
-                Wh_Log(L"UpdateButtonOverlay: Failed to create overlay for button %p", buttonPointer);
             }
         }
         
         // Update visibility
         if (buttonInfo.overlay && visibilityChanged) {
-            auto newVisibility = shouldShow ? Visibility::Visible : Visibility::Collapsed;
-            buttonInfo.overlay.Visibility(newVisibility);
-            Wh_Log(L"UpdateButtonOverlay: Changed visibility for button %p to %s", buttonPointer, shouldShow ? L"Visible" : L"Collapsed");
+            buttonInfo.overlay.Visibility(shouldShow ? Visibility::Visible : Visibility::Collapsed);
         }
         
         buttonInfo.currentNumber = number;
         buttonInfo.isVisible = shouldShow;
-        
-        g_trackedButtons.insert(buttonInfo);
+        g_trackedButtons.push_back(buttonInfo);
         
     } catch (...) {
-        Wh_Log(L"UpdateButtonOverlay: Exception occurred for button %p", buttonPointer);
         LogException(__FUNCTION__);
     }
 }
@@ -638,14 +590,14 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
             buttons.push_back({x, child});
         }
         
-        // Skip processing if no buttons or during initial setup
         if (buttons.empty()) {
             Wh_Log(L"UpdateAllTaskbarNumbers: No valid buttons found, skipping");
             return;
         }
         
-        // Sort by X position (left to right)
-        std::sort(buttons.begin(), buttons.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::sort(buttons.begin(), buttons.end(), [](const auto& a, const auto& b) { 
+            return a.first < b.first; 
+        });
         
         Wh_Log(L"UpdateAllTaskbarNumbers: Found %zu taskbar buttons", buttons.size());
         
@@ -660,29 +612,31 @@ void UpdateAllTaskbarNumbers(FrameworkElement taskbarRepeater) {
             auto it = g_trackedButtons.begin();
             size_t removedCount = 0;
             while (it != g_trackedButtons.end()) {
-                if (currentButtons.find(it->button.get()) == currentButtons.end()) {
+                auto button = it->button.get();
+                if (!button || currentButtons.find(button) == currentButtons.end()) {
                     it = g_trackedButtons.erase(it);
                     removedCount++;
                 } else {
                     ++it;
                 }
             }
-            if (removedCount > 0) Wh_Log(L"UpdateAllTaskbarNumbers: Removed %zu buttons no longer present", removedCount);
+            if (removedCount > 0) {
+                Wh_Log(L"UpdateAllTaskbarNumbers: Removed %zu buttons no longer present", removedCount);
+            }
         }
 
-        // Update overlays for all buttons - ensure correct numbering
         for (size_t i = 0; i < buttons.size(); i++) {
             auto button = buttons[i].second;
             void* buttonPointer = winrt::get_abi(button.as<winrt::Windows::Foundation::IUnknown>());
             int buttonNumber = static_cast<int>(i + 1);
             
-            // Validate button number is in expected range
             if (buttonNumber < 1 || buttonNumber > static_cast<int>(buttons.size())) {
                 Wh_Log(L"UpdateAllTaskbarNumbers: Invalid button number %d for button %zu", buttonNumber, i);
                 continue;
             }
             
-            Wh_Log(L"UpdateAllTaskbarNumbers: Button %zu at position %.1f gets number %d", i, buttons[i].first, buttonNumber);
+            Wh_Log(L"UpdateAllTaskbarNumbers: Button %zu at position %.1f gets number %d", 
+                   i, buttons[i].first, buttonNumber);
             UpdateButtonOverlay(button, buttonNumber, buttonPointer);
         }
         
@@ -720,27 +674,6 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     }
 }
 
-// Also hook UpdateButtonPadding which is called during layout updates
-void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
-    if (TaskListButton_UpdateButtonPadding_Original) {
-        TaskListButton_UpdateButtonPadding_Original(pThis);
-    }
-    
-    // This function is called during layout updates - call our UpdateVisualStates hook
-    TaskListButton_UpdateVisualStates_Hook(pThis);
-}
-
-// Hook UpdateBadgeSize which is also called during updates
-void WINAPI TaskListButton_UpdateBadgeSize_Hook(void* pThis) {
-    if (TaskListButton_UpdateBadgeSize_Original) {
-        TaskListButton_UpdateBadgeSize_Original(pThis);
-    }
-    
-    // Also trigger overlay creation here
-    TaskListButton_UpdateVisualStates_Hook(pThis);
-}
-
-
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
@@ -748,16 +681,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
             TaskListButton_UpdateVisualStates_Hook,
-        },
-        {
-            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"},
-            &TaskListButton_UpdateButtonPadding_Original,
-            TaskListButton_UpdateButtonPadding_Hook,
-        },
-        {
-            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateBadgeSize(void))"},
-            &TaskListButton_UpdateBadgeSize_Original,
-            TaskListButton_UpdateBadgeSize_Hook,
         },
     };
 
@@ -800,7 +723,6 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    g_initialTime = GetTickCount();
     LoadSettings();
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
@@ -841,8 +763,9 @@ void Wh_ModSettingsChanged() {
             
             Wh_Log(L"Updating %zu tracked buttons with new settings", g_trackedButtons.size());
             
-            // Update existing overlays with new settings
-            for (const auto& buttonInfo : g_trackedButtons) UpdateOverlayWithNewSettings(buttonInfo);
+            for (const auto& buttonInfo : g_trackedButtons) {
+                UpdateOverlayWithNewSettings(buttonInfo);
+            }
         }, nullptr);
     }
 }
