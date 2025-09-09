@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              magnifier-headless
 // @name            Magnifier Headless Mode
-// @description     Blocks all Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
-// @version         0.1.2
+// @description     Blocks the Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
+// @version         0.1.3
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -12,64 +12,26 @@
 
 // ==WindhawkModReadme==
 /*
-Blocks all Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
+Blocks the Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
-
-// Global flag for clean shutdown
-volatile BOOL g_shouldStop = FALSE;
-
-// Function to check if window is magnifier by class name (more reliable)
-BOOL IsMagnifierWindow(HWND hwnd) {
-    wchar_t className[256] = {0};
-    GetClassNameW(hwnd, className, 256);
-    
-    // Check for known Magnifier class names
-    return (wcscmp(className, L"MagUIClass") == 0 ||
-            wcscmp(className, L"ScreenMagnifierUIWnd") == 0);
-}
-
-// Hide magnifier windows by class name
-void HideMagnifierWindows() {
-    // Find by MagUIClass
-    HWND hwnd = FindWindowW(L"MagUIClass", NULL);
-    if (hwnd) {
-        ShowWindow(hwnd, SW_HIDE);
-    }
-    
-    // Find by ScreenMagnifierUIWnd
-    hwnd = FindWindowW(L"ScreenMagnifierUIWnd", NULL);
-    if (hwnd) {
-        ShowWindow(hwnd, SW_HIDE);
-    }
-}
-
-// Monitoring thread with proper shutdown
-DWORD WINAPI MonitorThread(LPVOID lpParam) {
-    while (!g_shouldStop) {
-        HideMagnifierWindows();
-        
-        // Sleep with early exit check
-        for (int i = 0; i < 50 && !g_shouldStop; i++) {
-            Sleep(10); // Total 500ms but can exit early
-        }
-    }
-    return 0;
-}
-
-HANDLE g_thread = NULL;
 
 // ShowWindow hook to catch magnifier show attempts
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original;
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    // If it's a magnifier window trying to show, hide it instead
-    if (IsMagnifierWindow(hWnd) && 
-        (nCmdShow == SW_SHOW || nCmdShow == SW_RESTORE || nCmdShow == SW_MAXIMIZE)) {
-        return ShowWindow_Original(hWnd, SW_HIDE);
+    // Check if it's a magnifier window by class name
+    wchar_t className[256] = {0};
+    if (GetClassNameW(hWnd, className, 256)) {
+        if (wcscmp(className, L"MagUIClass") == 0) {
+            // If magnifier trying to show, hide it instead
+            if (nCmdShow == SW_SHOW || nCmdShow == SW_RESTORE || nCmdShow == SW_MAXIMIZE) {
+                return ShowWindow_Original(hWnd, SW_HIDE);
+            }
+        }
     }
     
     return ShowWindow_Original(hWnd, nCmdShow);
@@ -98,10 +60,10 @@ HWND WINAPI CreateWindowExW_Hook(
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam
     );
     
-    // If created window is magnifier, hide it immediately
+    // Check if lpClassName is a valid string pointer
     if (hwnd && lpClassName) {
-        if (wcscmp(lpClassName, L"MagUIClass") == 0 ||
-            wcscmp(lpClassName, L"ScreenMagnifierUIWnd") == 0) {
+        BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+        if (bTextualClassName && wcscmp(lpClassName, L"MagUIClass") == 0) {
             ShowWindow(hwnd, SW_HIDE);
         }
     }
@@ -111,62 +73,33 @@ HWND WINAPI CreateWindowExW_Hook(
 
 // Mod initialization
 BOOL Wh_ModInit() {
-    g_shouldStop = FALSE;
+    // Set up hooks using Windhawk API
+    Wh_SetFunctionHook(
+        (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "ShowWindow"),
+        (void*)ShowWindow_Hook,
+        (void**)&ShowWindow_Original
+    );
     
-    // Initial hide
-    HideMagnifierWindows();
+    Wh_SetFunctionHook(
+        (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowExW"),
+        (void*)CreateWindowExW_Hook,
+        (void**)&CreateWindowExW_Original
+    );
     
-    // Create monitoring thread
-    g_thread = CreateThread(NULL, 0, MonitorThread, NULL, 0, NULL);
+    // Initial hide of any existing magnifier windows
+    HWND hwnd = FindWindowW(L"MagUIClass", NULL);
+    if (hwnd) {
+        ShowWindow(hwnd, SW_HIDE);
+    }
     
     return TRUE;
 }
 
-// Proper cleanup without TerminateThread
+// Cleanup
 void Wh_ModUninit() {
-    // Signal thread to stop
-    g_shouldStop = TRUE;
-    
-    // Wait for thread to finish properly
-    if (g_thread) {
-        WaitForSingleObject(g_thread, 2000); // Wait max 2 seconds
-        CloseHandle(g_thread);
-        g_thread = NULL;
-    }
-    
-    // Restore magnifier windows by class name
+    // Restore magnifier window if it exists
     HWND hwnd = FindWindowW(L"MagUIClass", NULL);
     if (hwnd) {
         ShowWindow(hwnd, SW_SHOW);
     }
-    
-    hwnd = FindWindowW(L"ScreenMagnifierUIWnd", NULL);
-    if (hwnd) {
-        ShowWindow(hwnd, SW_SHOW);
-    }
-}
-
-// Hook setup
-BOOL Wh_ModSettingsInit() {
-    return TRUE;
-}
-
-BOOL Wh_ModBeforeSymbolLoading() {
-    // Hook ShowWindow
-    if (!Wh_SetFunctionHook(
-        (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "ShowWindow"),
-        (void*)ShowWindow_Hook,
-        (void**)&ShowWindow_Original)) {
-        return FALSE;
-    }
-    
-    // Hook CreateWindowExW
-    if (!Wh_SetFunctionHook(
-        (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowExW"),
-        (void*)CreateWindowExW_Hook,
-        (void**)&CreateWindowExW_Original)) {
-        return FALSE;
-    }
-    
-    return TRUE;
 }
