@@ -2,7 +2,7 @@
 // @id              magnifier-headless
 // @name            Magnifier Headless Mode
 // @description     Blocks the Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
-// @version         0.1.3
+// @version         0.1.5
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -73,22 +73,32 @@ HWND WINAPI CreateWindowExW_Hook(
 
 // Mod initialization
 BOOL Wh_ModInit() {
-    // Set up hooks using Windhawk API
-    Wh_SetFunctionHook(
+    // Set up ShowWindow hook
+    if (!Wh_SetFunctionHook(
         (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "ShowWindow"),
         (void*)ShowWindow_Hook,
         (void**)&ShowWindow_Original
-    );
+    )) {
+        Wh_Log(L"Failed to hook ShowWindow");
+        return FALSE;
+    }
     
-    Wh_SetFunctionHook(
+    // Set up CreateWindowExW hook  
+    if (!Wh_SetFunctionHook(
         (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowExW"),
         (void*)CreateWindowExW_Hook,
         (void**)&CreateWindowExW_Original
-    );
+    )) {
+        Wh_Log(L"Failed to hook CreateWindowExW");
+        return FALSE;
+    }
+    
+    Wh_Log(L"Hooks installed successfully");
     
     // Initial hide of any existing magnifier windows
     HWND hwnd = FindWindowW(L"MagUIClass", NULL);
-    if (hwnd) {
+    if (hwnd && IsWindowVisible(hwnd)) {
+        Wh_Log(L"Found existing magnifier window, hiding it");
         ShowWindow(hwnd, SW_HIDE);
     }
     
@@ -97,6 +107,8 @@ BOOL Wh_ModInit() {
 
 // Cleanup
 void Wh_ModUninit() {
+    Wh_Log(L"Mod unloading, restoring magnifier window");
+    
     // Restore magnifier window if it exists
     HWND hwnd = FindWindowW(L"MagUIClass", NULL);
     if (hwnd) {
