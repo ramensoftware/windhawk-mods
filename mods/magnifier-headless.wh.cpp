@@ -2,7 +2,7 @@
 // @id              magnifier-headless
 // @name            Magnifier Headless Mode
 // @description     Blocks the Magnifier window creation, keeping zoom functionality with win+"-" and win+"+" keyboard shortcuts.
-// @version         0.1.5
+// @version         0.1.5.3
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -71,8 +71,46 @@ HWND WINAPI CreateWindowExW_Hook(
     return hwnd;
 }
 
+// SetWindowPos hook to catch all window positioning/showing
+using SetWindowPos_t = decltype(&SetWindowPos);
+SetWindowPos_t SetWindowPos_Original;
+
+BOOL WINAPI SetWindowPos_Hook(
+    HWND hWnd,
+    HWND hWndInsertAfter,
+    int X,
+    int Y,
+    int cx,
+    int cy,
+    UINT uFlags
+) {
+    // Check if it's a magnifier window trying to show
+    wchar_t className[256] = {0};
+    if (GetClassNameW(hWnd, className, 256)) {
+        if (wcscmp(className, L"MagUIClass") == 0) {
+            // If trying to show window, force it to hide instead
+            if (!(uFlags & SWP_HIDEWINDOW)) {
+                Wh_Log(L"Intercepting SetWindowPos on MagUIClass - forcing hide");
+                return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags | SWP_HIDEWINDOW);
+            }
+        }
+    }
+    
+    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
 // Mod initialization
 BOOL Wh_ModInit() {
+    // Set up SetWindowPos hook (catches most window show operations)
+    if (!Wh_SetFunctionHook(
+        (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowPos"),
+        (void*)SetWindowPos_Hook,
+        (void**)&SetWindowPos_Original
+    )) {
+        Wh_Log(L"Failed to hook SetWindowPos");
+        return FALSE;
+    }
+    
     // Set up ShowWindow hook
     if (!Wh_SetFunctionHook(
         (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "ShowWindow"),
