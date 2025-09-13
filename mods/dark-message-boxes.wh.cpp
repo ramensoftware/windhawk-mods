@@ -31,7 +31,7 @@ Forces dark mode for all win32 message / shell message boxes.
 #include <thread>
 
 #define HASFLAG(value, flag) ((value & flag) == flag)
-#define DPIVALUE(value) (IsProcessDPIAware() ? (value * ((double)GetDpiForSystem() / 96)) : value)
+#define DPIVALUE(hWnd, value) (IsProcessDPIAware() ? (value * ((double)GetDpiForWindow(hWnd) / 96)) : value)
 
 struct MSGBOXDATA
 {
@@ -95,7 +95,7 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
     
         RECT rcBottomBar;
         GetClientRect(hWnd, &rcBottomBar);
-        rcBottomBar.top = rcBottomBar.bottom - DPIVALUE(45);
+        rcBottomBar.top = rcBottomBar.bottom - DPIVALUE(hWnd, 45);
 
         FillRect(hdc, &rcBottomBar, g_barBackground);
         EndPaint(hWnd, &ps);
@@ -174,7 +174,7 @@ LRESULT CALLBACK TextProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DW
         if(!g_hTextFont)
         {
             g_hTextFont = CreateFontW(
-                DPIVALUE(16), 0, 0, 0, FW_NORMAL,
+                DPIVALUE(hWnd, 16), 0, 0, 0, FW_NORMAL,
                 FALSE, FALSE, FALSE,
                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
                 DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
