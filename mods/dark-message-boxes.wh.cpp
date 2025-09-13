@@ -208,7 +208,7 @@ BOOL CALLBACK MsgBoxWindowEnumProc(HWND hWnd, LPARAM lParam)
     SetWindowTheme(hWnd, L"DarkMode_Explorer", nullptr);
 
     DWORD dwStyle = GetWindowLongW(hWnd, GWL_STYLE);
-    if(HASFLAG(dwStyle,SS_ICON))
+    if(HASFLAG(dwStyle, SS_ICON))
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, IconProc, lParam);
     else if(HASFLAG(dwStyle, SS_EDITCONTROL))
         WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TextProc, NULL);
@@ -253,12 +253,33 @@ int WINAPI ShellMessageBoxW_Hook(HINSTANCE hAppInst, HWND hWnd, LPCWSTR lpcText,
     va_list args;
     va_start(args, fuStyle);
 
-    PWSTR lpcMessage = ConstructMessageStringW(hAppInst, lpcText, &args);
+    PWSTR lpMessage = ConstructMessageStringW(hAppInst, lpcText, &args);
     
-    MSGBOXPARAMSW params{ sizeof(params), hWnd, hAppInst, lpcText, lpcTitle, fuStyle };
+    MSGBOXPARAMSW params{ sizeof(params), hWnd, hAppInst, lpMessage, lpcTitle, fuStyle };
     int result = MessageBoxIndirectW(&params);
 
-    LocalFree(lpcMessage);
+    LocalFree(lpMessage);
+    va_end(args);
+    return result;
+}
+
+using ConstructMessageStringA_T = LPSTR(__fastcall*)(HINSTANCE hInstance, LPCSTR lpszMessage, va_list* args);
+ConstructMessageStringA_T ConstructMessageStringA;
+
+using ShellMessageBoxA_T = decltype(&ShellMessageBoxA);
+ShellMessageBoxA_T ShellMessageBoxA_Original;
+
+int WINAPI ShellMessageBoxA_Hook(HINSTANCE hAppInst, HWND hWnd, LPCSTR lpcText, LPCSTR lpcTitle, UINT fuStyle, ...)
+{
+    va_list args;
+    va_start(args, fuStyle);
+
+    PSTR lpMessage = ConstructMessageStringA(hAppInst, lpcText, &args);
+    
+    MSGBOXPARAMSA params{ sizeof(params), hWnd, hAppInst, lpMessage, lpcTitle, fuStyle };
+    int result = MessageBoxIndirectA(&params);
+
+    LocalFree(lpMessage);
     va_end(args);
     return result;
 }
@@ -274,6 +295,18 @@ const WindhawkUtils::SYMBOL_HOOK ShlwapiDllHooks[] =
 #endif
         },
         &ConstructMessageStringW,
+        nullptr,
+        false
+    },
+    {
+        {
+#ifdef _WIN64
+            L"ConstructMessageStringA"
+#else
+            L"_ConstructMessageStringA@12"
+#endif
+        },
+        &ConstructMessageStringA,
         nullptr,
         false
     }
@@ -304,6 +337,9 @@ BOOL Wh_ModInit()
         return FALSE;
 
     if(!WindhawkUtils::SetFunctionHook(ShellMessageBoxW, ShellMessageBoxW_Hook, &ShellMessageBoxW_Original))
+        return FALSE;
+
+    if(!WindhawkUtils::SetFunctionHook(ShellMessageBoxA, ShellMessageBoxA_Hook, &ShellMessageBoxA_Original))
         return FALSE;
 
     return WindhawkUtils::SetFunctionHook(SoftModalMessageBox, SoftModalMessageBox_hook, &SoftModalMessageBox_Original);
