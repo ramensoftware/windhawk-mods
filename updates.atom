@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-03T23:21:57.000Z</updated>
+    <updated>2025-09-13T00:55:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.8]]></title>
+        <id>https://windhawk.net/mods/explorer-frame-classic#6f51e042633377e716a98ab8daae0c62f03cbbe7</id>
+        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
+        <updated>2025-09-13T00:55:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with a recent Windows 11 update. You may need to restart Explorer after updating the mod to apply the fix.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Shadowplay anti-disable 1.1]]></title>
         <id>https://windhawk.net/mods/shadowplay-do-not-disable#fb5aa7b3d86de82a02b608d181be01def5c0afec</id>
@@ -365,19 +378,6 @@ MUI system).</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.6.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#725fd582986a072d0dc02c11281a56d30c3c2576</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2025-08-15T19:15:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed performance metrics (upload/download speed) always showing zero values on non-English systems. The fix in version 1.6.1 was incomplete.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

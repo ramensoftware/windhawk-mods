@@ -1,3 +1,7 @@
+## 1.0.8 ([Sep 13, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6f51e042633377e716a98ab8daae0c62f03cbbe7/mods/explorer-frame-classic.wh.cpp))
+
+* Fixed compatibility with a recent Windows 11 update. You may need to restart Explorer after updating the mod to apply the fix.
+
 ## 1.0.7 ([Mar 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a711e63f4888424695b6d70a58c72861359ffe0a/mods/explorer-frame-classic.wh.cpp))
 
 * Fixed compatibility with new Windows 11 builds:
