@@ -31,6 +31,7 @@ Forces dark mode for all win32 message / shell message boxes.
 #include <thread>
 
 #define HASFLAG(value, flag) ((value & flag) == flag)
+#define DPIVALUE(value) (IsProcessDPIAware() ? (value * ((double)GetDpiForSystem() / 96)) : value)
 
 struct MSGBOXDATA
 {
@@ -70,11 +71,7 @@ HMODULE g_hUser32 = nullptr;
 HMODULE g_hShlwApi = nullptr;
 HMODULE g_hImageres = nullptr;
 
-HFONT g_hTextFont = CreateFontW(
-    16, 0, 0, 0, FW_NORMAL,
-    FALSE, FALSE, FALSE,
-    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
-    DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+HFONT g_hTextFont = nullptr;
 
 void PaintBackground(HWND hWnd, HDC hdc)
 {
@@ -98,7 +95,7 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
     
         RECT rcBottomBar;
         GetClientRect(hWnd, &rcBottomBar);
-        rcBottomBar.top = rcBottomBar.bottom - 45;
+        rcBottomBar.top = rcBottomBar.bottom - DPIVALUE(45);
 
         FillRect(hdc, &rcBottomBar, g_barBackground);
         EndPaint(hWnd, &ps);
@@ -109,6 +106,12 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
     {
         PaintBackground(hWnd, (HDC)wParam);
         return 0;
+    }
+
+    case WM_DPICHANGED:
+    {
+        DeleteObject(g_hTextFont);
+        break;
     }
 
     default:break;
@@ -167,6 +170,15 @@ LRESULT CALLBACK TextProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DW
 
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, 0xFFFFFF);
+
+        if(!g_hTextFont)
+        {
+            g_hTextFont = CreateFontW(
+                DPIVALUE(16), 0, 0, 0, FW_NORMAL,
+                FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
+                DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        }
         SelectObject(hdc, g_hTextFont);
 
         RECT rcClient;
