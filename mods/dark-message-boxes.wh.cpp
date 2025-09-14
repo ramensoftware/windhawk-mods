@@ -31,7 +31,7 @@ Forces dark mode for all win32 message / shell message boxes.
 #include <thread>
 
 #define HASFLAG(value, flag) ((value & flag) == flag)
-#define DPIVALUE(hWnd, value) (IsProcessDPIAware() ? (value * ((double)GetDpiForWindow(hWnd) / 96)) : value)
+#define DPIVALUE(hWnd, value) (IsProcessDPIAware() ? ((value) * ((double)GetDpiForWindow(hWnd) / 96)) : (value))
 
 struct MSGBOXDATA
 {
@@ -83,9 +83,20 @@ void PaintBackground(HWND hWnd, HDC hdc)
 
 LRESULT CALLBACK DialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR)
 {
+    static int buttonHeight = NULL;
+
     switch (uMsg)
     {
     case WM_CTLCOLORBTN:
+        if(!buttonHeight)
+        {
+            RECT rcBtn;
+            GetWindowRect((HWND)lParam, &rcBtn);
+            buttonHeight = rcBtn.bottom - rcBtn.top;
+            
+            InvalidateRect(hWnd, nullptr, TRUE);
+            UpdateWindow(hWnd);
+        }
         return (LRESULT)g_barBackground;
 
     case WM_PAINT:
@@ -95,7 +106,7 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
     
         RECT rcBottomBar;
         GetClientRect(hWnd, &rcBottomBar);
-        rcBottomBar.top = rcBottomBar.bottom - DPIVALUE(hWnd, 45);
+        rcBottomBar.top = rcBottomBar.bottom - DPIVALUE(hWnd, 25) - buttonHeight;
 
         FillRect(hdc, &rcBottomBar, g_barBackground);
         EndPaint(hWnd, &ps);
