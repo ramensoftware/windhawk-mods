@@ -3133,6 +3133,27 @@
                 "version": "1.0.0"
             }
         },
+        "old-regedit-tree-icons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1757960294000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1757960294000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lcomctl32",
+                "description": "Makes the tree view in regedit use the icons from 2000/XP",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "regedit.exe"
+                ],
+                "name": "Old Regedit Tree Icons",
+                "version": "1.0.0"
+            }
+        },
         "old-this-pc-commands": {
             "details": {
                 "defaultSorting": 8020,
