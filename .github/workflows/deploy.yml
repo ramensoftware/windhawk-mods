@@ -21,9 +21,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: Checkout last deployed images
+        uses: actions/checkout@v5
+        with:
+          ref: 'pages'
+          sparse-checkout: 'images'
+          sparse-checkout-cone-mode: false
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
