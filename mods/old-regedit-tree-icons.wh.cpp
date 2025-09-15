@@ -97,23 +97,16 @@ DECLARE_HOOK_FUNCTION(void, WINAPI, AddSystemImageIcon,
 
 #define STDCALL_STR FOR_64_32(L"__cdecl", L"__stdcall")
 
-#define BEGIN_SYMBOL_HOOKS(name) const WindhawkUtils::SYMBOL_HOOK name[] = {
-
-#define SIMPLE_SYMBOL_HOOK(name, ...) \
-{                                     \
-    {                                 \
-        __VA_ARGS__                   \
-    },                                \
-    &name ## _orig,                   \
-    name ## _hook,                    \
-    false                             \
-},
-
-#define END_SYMBOL_HOOKS()       };
-
-BEGIN_SYMBOL_HOOKS(regeditExeHooks)
-    SIMPLE_SYMBOL_HOOK(AddSystemImageIcon, L"void " STDCALL_STR L" AddSystemImageIcon(struct _IMAGELIST *,enum SHSTOCKICONID)")
-END_SYMBOL_HOOKS()
+const WindhawkUtils::SYMBOL_HOOK regeditExeHooks[] = {
+    {
+        {
+            L"void " STDCALL_STR L" AddSystemImageIcon(struct _IMAGELIST *,enum SHSTOCKICONID)"
+        },
+        &AddSystemImageIcon_orig,
+        AddSystemImageIcon_hook,
+        false
+    }
+};
 
 BOOL Wh_ModInit(void)
 {
