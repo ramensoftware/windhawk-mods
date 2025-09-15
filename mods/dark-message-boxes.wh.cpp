@@ -22,6 +22,14 @@ Forces dark mode for all win32 message / shell message boxes.
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- LargeFont: false
+  $name: Increase font size
+  $description: Makes the message font larger for better acessibility.
+*/
+// ==/WindhawkModSettings==
+
 #include <windhawk_utils.h>
 #include <windhawk_api.h>
 
@@ -122,6 +130,7 @@ LRESULT CALLBACK DialogProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
     case WM_DPICHANGED:
     {
         DeleteObject(g_hTextFont);
+        g_hTextFont = nullptr;
         break;
     }
 
@@ -184,8 +193,9 @@ LRESULT CALLBACK TextProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DW
 
         if(!g_hTextFont)
         {
+            int fontSize = Wh_GetIntSetting(L"LargeFont") ? 20 : 16;
             g_hTextFont = CreateFontW(
-                DPIVALUE(hWnd, 16), 0, 0, 0, FW_NORMAL,
+                DPIVALUE(hWnd, fontSize), 0, 0, 0, FW_NORMAL,
                 FALSE, FALSE, FALSE,
                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 
                 DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
@@ -264,7 +274,7 @@ int WINAPI ShellMessageBoxW_Hook(HINSTANCE hAppInst, HWND hWnd, LPCWSTR lpcText,
     va_list args;
     va_start(args, fuStyle);
 
-    PWSTR lpMessage = ConstructMessageStringW(hAppInst, lpcText, &args);
+    LPWSTR lpMessage = ConstructMessageStringW(hAppInst, lpcText, &args);
     
     MSGBOXPARAMSW params{ sizeof(params), hWnd, hAppInst, lpMessage, lpcTitle, fuStyle };
     int result = MessageBoxIndirectW(&params);
@@ -285,7 +295,7 @@ int WINAPI ShellMessageBoxA_Hook(HINSTANCE hAppInst, HWND hWnd, LPCSTR lpcText, 
     va_list args;
     va_start(args, fuStyle);
 
-    PSTR lpMessage = ConstructMessageStringA(hAppInst, lpcText, &args);
+    LPSTR lpMessage = ConstructMessageStringA(hAppInst, lpcText, &args);
     
     MSGBOXPARAMSA params{ sizeof(params), hWnd, hAppInst, lpMessage, lpcTitle, fuStyle };
     int result = MessageBoxIndirectA(&params);
