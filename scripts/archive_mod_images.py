@@ -46,7 +46,7 @@ def download_image(url: str, save_path: Path):
 
 
 def process_code_files(code_folder: Path, images_folder: Path):
-    stale_images = list(images_folder.glob("*"))
+    stale_images = list(images_folder.rglob("*"))
 
     image_urls: set[str] = set()
     for file_path in code_folder.glob("*.wh.cpp"):
