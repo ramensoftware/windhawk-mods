@@ -90,12 +90,10 @@ DECLARE_HOOK_FUNCTION(void, WINAPI, AddSystemImageIcon,
 }
 
 #ifdef _WIN64
-#   define FOR_64_32(for64, for32) for64
+#   define STDCALL_STR L"__cdecl"
 #else
-#   define FOR_64_32(for64, for32) for32
+#   define STDCALL_STR L"__stdcall"
 #endif
-
-#define STDCALL_STR FOR_64_32(L"__cdecl", L"__stdcall")
 
 const WindhawkUtils::SYMBOL_HOOK regeditExeHooks[] = {
     {
