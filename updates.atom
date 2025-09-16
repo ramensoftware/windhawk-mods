@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-15T18:18:14.000Z</updated>
+    <updated>2025-09-16T18:18:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Old Regedit Tree Icons 1.0.1]]></title>
+        <id>https://windhawk.net/mods/old-regedit-tree-icons#ef91bc164a6e483c54e1796c80d328ece473f582</id>
+        <link href="https://windhawk.net/mods/old-regedit-tree-icons"/>
+        <updated>2025-09-16T18:18:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Support Windows 7</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old Regedit Tree Icons 1.0.0]]></title>
         <id>https://windhawk.net/mods/old-regedit-tree-icons#cef63c833694e83e1be21b120e64b507a28c5db7</id>
@@ -371,20 +384,6 @@ MUI system).</p>
         <author>
             <name>noX1st</name>
             <uri>https://github.com/noX1st</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fix white flashes in explorer 1.1]]></title>
-        <id>https://windhawk.net/mods/fix-explorer-white-flash#ad4983dc8113ccf21e2bc5aecc5fadec6b58965e</id>
-        <link href="https://windhawk.net/mods/fix-explorer-white-flash"/>
-        <updated>2025-08-19T12:37:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Bug fixes</li>
-<li>Code cleanup</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>

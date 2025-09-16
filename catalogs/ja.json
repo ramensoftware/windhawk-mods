@@ -3139,7 +3139,7 @@
                 "published": 1757960294000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1757960294000,
+                "updated": 1758046734000,
                 "users": 0
             },
             "metadata": {
@@ -3151,7 +3151,7 @@
                     "regedit.exe"
                 ],
                 "name": "Old Regedit Tree Icons",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "old-this-pc-commands": {
