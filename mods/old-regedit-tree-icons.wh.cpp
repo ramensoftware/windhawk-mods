@@ -2,7 +2,7 @@
 // @id              old-regedit-tree-icons
 // @name            Old Regedit Tree Icons
 // @description     Makes the tree view in regedit use the icons from 2000/XP
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         regedit.exe
@@ -100,7 +100,10 @@ DECLARE_HOOK_FUNCTION(void, WINAPI, AddSystemImageIcon,
 const WindhawkUtils::SYMBOL_HOOK regeditExeHooks[] = {
     {
         {
-            L"void " STDCALL_STR L" AddSystemImageIcon(struct _IMAGELIST *,enum SHSTOCKICONID)"
+            // Windows 10 (C++ linkage):
+            L"void " STDCALL_STR L" AddSystemImageIcon(struct _IMAGELIST *,enum SHSTOCKICONID)",
+            // Windows 7 (C linkage):
+            FOR_64_32(L"AddSystemImageIcon", L"_AddSystemImageIcon@8")
         },
         &AddSystemImageIcon_orig,
         AddSystemImageIcon_hook,
