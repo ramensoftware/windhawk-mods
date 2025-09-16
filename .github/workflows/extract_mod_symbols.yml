@@ -18,4 +18,4 @@ jobs:
           python-version: '3.x'
       - name: Extract mod symbols
         run: |
-          python .github/extract_mod_symbols.py --mods-folder mods --output-file -
+          python .github/extract_mod_symbols.py mods -
