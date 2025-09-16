@@ -103,7 +103,11 @@ const WindhawkUtils::SYMBOL_HOOK regeditExeHooks[] = {
             // Windows 10 (C++ linkage):
             L"void " STDCALL_STR L" AddSystemImageIcon(struct _IMAGELIST *,enum SHSTOCKICONID)",
             // Windows 7 (C linkage):
-            FOR_64_32(L"AddSystemImageIcon", L"_AddSystemImageIcon@8")
+#ifdef _WIN64
+            L"AddSystemImageIcon"
+#else
+            L"_AddSystemImageIcon@8"
+#endif
         },
         &AddSystemImageIcon_orig,
         AddSystemImageIcon_hook,
