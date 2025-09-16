@@ -14,6 +14,8 @@ from functools import cache
 from pathlib import Path
 from typing import Optional, TextIO, Tuple
 
+from extract_mod_symbols import get_mod_symbols
+
 DISALLOWED_AUTHORS = [
     # https://github.com/ramensoftware/windhawk-mods/pull/676
     'arukateru',
@@ -409,6 +411,15 @@ def main():
 
     for path in paths:
         warnings += parse_file(path, pr_author)
+
+        try:
+            mod_symbols = get_mod_symbols(path, [])
+            print('Extracted symbols:\n' + json.dumps(mod_symbols, indent=2))
+        except Exception as e:
+            print(f'Symbol extraction error: {e}')
+            warnings += add_warning(
+                path, 1, 'Failed to extract symbols, manual inspection required'
+            )
 
     if warnings > 0:
         sys.exit(f'Got {warnings} warnings, please inspect the PR')
