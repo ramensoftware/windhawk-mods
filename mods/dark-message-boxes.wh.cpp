@@ -375,5 +375,6 @@ void Wh_ModUninit()
     DeleteObject(g_background);
     DeleteObject(g_btnBackground);
 
-    DeleteObject(g_hTextFont);
+    if(g_hTextFont)
+        DeleteObject(g_hTextFont);
 }
