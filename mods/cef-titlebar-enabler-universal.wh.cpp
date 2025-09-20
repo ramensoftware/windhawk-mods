@@ -2,14 +2,14 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.2
+// @version         1.3
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
-// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32
+// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,6 +20,7 @@
 * Only works on apps using native CEF top-level windows
     * Steam uses SDL for its top-level windows (except DevTools), so this mod doesn't work with Steam
 * Electron apps are NOT supported! Just patch asar to override `frame: false` to true in BrowserWindow creation
+* Try my [Titlebar for Everyone](https://windhawk.net/mods/titlebar-for-everyone) mod for other apps
 ## Features for Spotify
 * Enable native frames and title bars on the main window
 * Enable native frames and title bars on other windows, including Miniplayer, DevTools, etc.
@@ -32,13 +33,13 @@
 * Force enable Chrome extension support
 * Use the settings tab on the mod details page to configure the features
 ## Notes
-* Supported CEF versions: 90.4 to 134
+* Supported CEF versions: 90.4 to 139
     * This mod won't work with versions before 90.4
     * Versions after 132 may work, but are not tested
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.65 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.71 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -115,7 +116,7 @@
   $name: Playback speed
   $name:ko-KR: 재생 속도
   $description: "Enter a decimal number. Value 1.0 represents a normal speed\n
-    Requires an x64 version of the Spotify client newer than 1.2.36\n
+    Requires an x64 version of the Spotify client between 1.2.36 and 1.2.66\n
     Spotify 1.2.36-1.2.44: The change will take effect from the next track\n
     Spotify 1.2.45+: The change will be applied immediately\n
     This feature is not available while playing on another device"
@@ -169,8 +170,11 @@
 128: 1.2.47-1.2.48
 129: 1.2.49-1.2.50
 130: 1.2.51-1.2.52
-131: 1.2.53, 1.2.55-1.2.61
-134: 1.2.62-1.2.65
+131: 1.2.53-1.2.61
+134: 1.2.62-1.2.69
+138: 1.2.70
+139: 1.2.71
+See https://www.spotify.com/opensource/ for more
 */
 
 #include <libloaderapi.h>
@@ -199,7 +203,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 134
+#define LAST_TESTED_CEF_VERSION 139
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
@@ -267,7 +271,7 @@ cte_offset_t get_window_handle_offsets[] = {
     {124, ANY_MINOR, 0x18c, 0x318},
     {130, ANY_MINOR, 0x18c, 0x318},
     {131, ANY_MINOR, 0x194, 0x328},
-    {136, ANY_MINOR, 0x194, 0x328}
+    {139, ANY_MINOR, 0x194, 0x328}
 };
 
 cte_offset_t set_background_color_offsets[] = {
@@ -602,7 +606,15 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             break;
         case WM_NCPAINT:
             if (hWnd == g_mainHwnd && FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL && cte_settings.transparentrendering && !cte_settings.showframe && !IsDwmEnabled()) {
-                // Do not draw anything
+                // Paint black background in non-client area
+                HDC hdc = GetWindowDC(hWnd);
+                if (hdc) {
+                    RECT rect;
+                    GetWindowRect(hWnd, &rect);
+                    OffsetRect(&rect, -rect.left, -rect.top); // Convert to client-relative coords
+                    FillRect(hdc, &rect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+                    ReleaseDC(hWnd, hdc);
+                }
                 return 0;
             }
         case WM_NCHITTEST:
@@ -715,7 +727,14 @@ std::string ReplaceAll(std::string str, const std::string& from, const std::stri
 }
 
 // Pass an empty targetPatch to use it as a regex search
-int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::string& targetRegex, const std::vector<uint8_t>& targetPatch, int expectedSection = -1, int maxMatch = -1) {
+// identifier: String to identify the match, used for caching
+// pbExecutable: Base address to search, pass EXE or DLL address
+// targetRegex: Target regex string to search
+// targetPatch: Bytes to replace the matched memory, pass an empty vector to use it as a simple regex search
+// expectedSection: Section number to search, pass -1 to search all
+// maxMatch: Max numbers of matches, pass -1 to search the whole memory region for all matches (not recommended for performance reasons)
+// verifyRegex: Regex string to use for verifying the cache match
+int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::string& targetRegex, const std::vector<uint8_t>& targetPatch, int expectedSection = -1, int maxMatch = -1, const std::string& verifyRegex = "") {
     IMAGE_DOS_HEADER* pDosHeader = (IMAGE_DOS_HEADER*)pbExecutable;
     IMAGE_NT_HEADERS* pNtHeader = (IMAGE_NT_HEADERS*)((char*)pDosHeader + pDosHeader->e_lfanew);
     IMAGE_SECTION_HEADER* pSectionHeader = (IMAGE_SECTION_HEADER*)((char*)&pNtHeader->OptionalHeader + pNtHeader->FileHeader.SizeOfOptionalHeader);
@@ -745,6 +764,9 @@ int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::stri
                     Wh_Log(L"Cache offset out of bounds; invalidating...");
                     Wh_DeleteValue(key.c_str());
                 } else {
+                    if (!verifyRegex.empty()) {
+                        regex = std::regex(verifyRegex, std::regex::optimize);
+                    }
                     std::string_view candidate(pbExecutable + cachedOffset, targetRegex.size());
                     if (std::regex_search(candidate.begin(), candidate.end(), regex)) {
                         char* addr = pbExecutable + cachedOffset;
@@ -772,6 +794,9 @@ int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::stri
                             continue;
                         }
                         std::string_view candidate(pbExecutable + cachedOffset, targetPatch.size());
+                        if (!verifyRegex.empty()) {
+                            regex = std::regex(verifyRegex, std::regex::optimize);
+                        }
                         if (std::regex_search(candidate.begin(), candidate.end(), regex)) {
                             char* addr = pbExecutable + cachedOffset;
                             DWORD oldProtect;
@@ -2473,8 +2498,6 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    char* pbExecutable = (char*)GetModuleHandle(NULL);
-
     #ifdef _WIN64
         const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
     #else
@@ -2567,6 +2590,46 @@ BOOL Wh_ModInit() {
         Wh_SetFunctionHook((void*)CreateProcessAsUserW, (void*)CreateProcessAsUserW_hook,
                            (void**)&CreateProcessAsUserW_original);
 
+        char* pbExecutable = NULL;
+        // Spotify 1.2.70 (CEF 138) introduced a separate Spotify.dll which contains the core logic
+        // All the existing patch matches exist in this DLL
+        // Limit the Spotify.dll use only to 1.2.70 and above, as downgrading to older versions
+        //   from 1.2.70 does not remove the redundant Spotify.dll in the installation directory
+        if (major >= 138) {
+            pbExecutable = (char*)LoadLibrary(L"Spotify.dll");
+        }
+        if (pbExecutable == NULL) {
+            pbExecutable = (char*)GetModuleHandle(NULL);
+        }
+
+        int spMajor = 0;
+        int spMinor = 0;
+        int spBuild = 0;
+        int spRevision = 0;
+        HRSRC hRes = FindResourceW((HMODULE)pbExecutable, MAKEINTRESOURCE(1), RT_VERSION);
+        if (hRes) {
+            HGLOBAL hGlobal = LoadResource((HMODULE)pbExecutable, hRes);
+            if (hGlobal) {
+                LPVOID lpData = LockResource(hGlobal);
+                if (lpData) {
+                    UINT uLen = SizeofResource((HMODULE)pbExecutable, hRes);
+                    if (uLen) {
+                        VS_FIXEDFILEINFO* pFileInfo;
+                        UINT uFileInfoLen;
+                        if (VerQueryValueW(lpData, L"\\", (LPVOID*)&pFileInfo, &uFileInfoLen)) {
+                            if (pFileInfo && pFileInfo->dwSignature == 0xfeef04bd) {
+                                spMajor = HIWORD(pFileInfo->dwFileVersionMS);
+                                spMinor = LOWORD(pFileInfo->dwFileVersionMS);
+                                spBuild = HIWORD(pFileInfo->dwFileVersionLS);
+                                spRevision = LOWORD(pFileInfo->dwFileVersionLS);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Wh_Log(L"Spotify version: %d.%d.%d.%d", spMajor, spMinor, spBuild, spRevision);
+
         // Patch the executable in memory to enable transparent rendering, disable forced dark mode, or force enable extensions
         // (Pointless if done after CEF initialization though)
         if (cte_settings.transparentrendering && major >= CR_RT_1ST_VERSION) {
@@ -2574,7 +2637,7 @@ BOOL Wh_ModInit() {
                 Wh_Log(L"Enabled transparent rendering");
             }
         }
-        // Spotify 1.2.68+ (patch is not needed before that)
+        // Spotify 1.1.68+ (patch is not needed before that)
         if (cte_settings.noforceddarkmode && (major > 91 || (major == 91 && minor >= 3))) {
             if (DisableForcedDarkMode(pbExecutable, major)) {
                 Wh_Log(L"Disabled forced dark mode");
@@ -2587,7 +2650,11 @@ BOOL Wh_ModInit() {
         }
 
         #ifdef _WIN64
-        if (major >= 122 && isTestedVersion) {
+        // Spotify 1.2.67+ hard blocked my way of changing the playback speed by calling the internal functions
+        // So disable this for now until a workaround is found
+        if (major >= 122 && major < 138 && isTestedVersion &&
+            spMajor == 1 && spMinor == 2 && spBuild < 67
+        ) {
             HookCreateTrackPlayer(pbExecutable, major >= 127);
             ApplySpeedFromSettings(FALSE);
         }
