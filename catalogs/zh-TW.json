@@ -3382,20 +3382,22 @@
                 "published": 1755892774000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1755892774000,
+                "updated": 1758396728000,
                 "users": 151
             },
             "metadata": {
                 "author": "lorenzoc01",
                 "compilerOptions": "-lgdi32",
-                "description": "Removes “TO EXIT FULLSCREEN PRESS ESC/F11” popup in Chrome/Opera/OperaGX",
+                "description": "Removes “TO EXIT FULLSCREEN PRESS ESC/F11” popup in Chrome/Opera/OperaGX/Edge/Brave",
                 "github": "https://github.com/lorenzoc01",
                 "include": [
                     "opera.exe",
-                    "chrome.exe"
+                    "chrome.exe",
+                    "msedge.exe",
+                    "brave.exe"
                 ],
                 "name": "Remove \"Exit Fullscreen\" popup in Chrome",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "remove-ms-store-open-with": {

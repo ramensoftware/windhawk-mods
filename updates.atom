@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-16T18:18:54.000Z</updated>
+    <updated>2025-09-20T19:32:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove "Exit Fullscreen" popup in Chrome 1.2]]></title>
+        <id>https://windhawk.net/mods/remove-fullscreen-popup-chrome#b77c09aa3af21e4de54f95fed3ad545ffee97448</id>
+        <link href="https://windhawk.net/mods/remove-fullscreen-popup-chrome"/>
+        <updated>2025-09-20T19:32:08.000Z</updated>
+        <content type="html"><![CDATA[<p>Add support for Brave and Edge browsers</p>]]></content>
+        <author>
+            <name>lorenzoc01</name>
+            <uri>https://github.com/lorenzoc01</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old Regedit Tree Icons 1.0.1]]></title>
         <id>https://windhawk.net/mods/old-regedit-tree-icons#ef91bc164a6e483c54e1796c80d328ece473f582</id>
@@ -367,23 +378,6 @@ MUI system).</p>
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tabs Session Saver 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-tabs-session-saver#d68af8498ecee1053d17b0deffc195638d859df2</id>
-        <link href="https://windhawk.net/mods/explorer-tabs-session-saver"/>
-        <updated>2025-08-19T19:08:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertabssessionsaver">Explorer Tabs Session Saver</h1>
-<p>This mod saves open Explorer tabs and automatically restores them when Explorer restarts.</p>
-<p><img src="https://i.imgur.com/5ehPFaL.gif" alt="Demonstration" /></p>
-<p>It works independently of the built-in Windows feature "Restore previous folder windows at logon".</p>
-<p>Tab session save path - C:\Users\"User"\AppData\Roaming\WindhawkModsData\explorer-tabs-session-saver\LastExplorerTabs.txt</p>
-<p><strong>NOTE:</strong> To restore tabs into a single Explorer window, the <a href="https://github.com/w4po/ExplorerTabUtility">Explorer Tab Utility</a> program is required with its "Window Hook" feature enabled (or any similar program with such functionality). Otherwise, each tab will be restored in its own separate window.</p>
-<p><em>Tested on Windows 11 24H2 26100.4946.</em></p>]]></content>
-        <author>
-            <name>noX1st</name>
-            <uri>https://github.com/noX1st</uri>
         </author>
     </entry>
 </feed>
