@@ -1,3 +1,7 @@
+## 1.3 ([Sep 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3973e5f426a7fb4016a8b0d769dbd6ea4f6ad696/mods/firefox-border-fix.wh.cpp))
+
+Previous change broke effect on main window, this seemingly fixes
+
 ## 1.2 ([Sep 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/2da705bb7dbd2d339729b962a9aec9be12440538/mods/firefox-border-fix.wh.cpp))
 
 Improve reliability and avoid glitches
