@@ -23,7 +23,6 @@ BOOL firstwindow=TRUE;
 
 DWORD WINAPI ShowWindowFixThread(LPVOID param) {
     HWND hwnd = (HWND)param;
-    if (!IsWindowVisible(hwnd)) return 0;    // only visible windows
 
     SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
@@ -37,7 +36,11 @@ DWORD WINAPI ShowWindowFixThread(LPVOID param) {
 // Hooked ShowWindow
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     
-    if (firstwindow) {SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL); firstwindow=FALSE;}
+    if (firstwindow) {
+        SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL); 
+        firstwindow=FALSE;
+        return ShowWindow_Orig(hWnd, nCmdShow);   
+    }
 
     BOOL ret = ShowWindow_Orig(hWnd, nCmdShow);
 
