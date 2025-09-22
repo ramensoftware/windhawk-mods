@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-20T19:32:08.000Z</updated>
+    <updated>2025-09-22T05:14:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Firefox border fix for Classic theme 1.2]]></title>
+        <id>https://windhawk.net/mods/firefox-border-fix#2da705bb7dbd2d339729b962a9aec9be12440538</id>
+        <link href="https://windhawk.net/mods/firefox-border-fix"/>
+        <updated>2025-09-22T05:14:04.000Z</updated>
+        <content type="html"><![CDATA[<p>Improve reliability and avoid glitches</p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove "Exit Fullscreen" popup in Chrome 1.2]]></title>
         <id>https://windhawk.net/mods/remove-fullscreen-popup-chrome#b77c09aa3af21e4de54f95fed3ad545ffee97448</id>
@@ -363,21 +374,6 @@ MUI system).</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.6.3]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#796ddb18e418ccf836aff5de138b2e5fdd783320</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2025-08-22T07:09:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed text alpha blending method, which now affects all texts rendered from GDI</li>
-<li>Fixed bug in a symbol signature resulting in a prolonged symbol fetching popup window</li>
-<li>Minor custom theme tweaks</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
         </author>
     </entry>
 </feed>
