@@ -2,7 +2,7 @@
 // @id              firefox-border-fix
 // @name            Firefox border fix for Classic theme 
 // @description     Mitigates Firefox bug 1950145 (glitched window borders in Classic theme)
-// @version         1.2
+// @version         1.3
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         firefox.exe
@@ -19,10 +19,10 @@ It affects Firefox builds `129.0a1` and above.
 
 using ShowWindow_t = decltype(&ShowWindow);
 static ShowWindow_t ShowWindow_Orig = nullptr;
+BOOL firstwindow=TRUE;
 
 DWORD WINAPI ShowWindowFixThread(LPVOID param) {
     HWND hwnd = (HWND)param;
-    if (!IsWindowVisible(hwnd)) return 0;    // only visible windows
 
     SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
@@ -35,7 +35,14 @@ DWORD WINAPI ShowWindowFixThread(LPVOID param) {
 
 // Hooked ShowWindow
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    BOOL ret = ShowWindow_Orig(hWnd, nCmdShow); // call original first
+    
+    if (firstwindow) {
+        SendMessage(hWnd, WM_THEMECHANGED, NULL, NULL); 
+        firstwindow=FALSE;
+        return ShowWindow_Orig(hWnd, nCmdShow);   
+    }
+
+    BOOL ret = ShowWindow_Orig(hWnd, nCmdShow);
 
     WCHAR cls[64] = {0};
     GetClassNameW(hWnd, cls, _countof(cls));
@@ -48,5 +55,6 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 
 BOOL Wh_ModInit(void) {
     Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Orig);
+
     return TRUE;
 }
