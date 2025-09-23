@@ -44,7 +44,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 
     BOOL ret = ShowWindow_Orig(hWnd, nCmdShow);
 
-    if (!IsWindowVisible(hwnd)) return 0;
+    if (!IsWindowVisible(hwnd)) return ret;
     WCHAR cls[64] = {0};
     GetClassNameW(hWnd, cls, _countof(cls));
     if (!wcscmp(cls, L"MozillaWindowClass")) {
