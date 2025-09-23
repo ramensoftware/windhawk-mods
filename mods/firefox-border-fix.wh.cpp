@@ -2,7 +2,7 @@
 // @id              firefox-border-fix
 // @name            Firefox border fix for Classic theme 
 // @description     Mitigates Firefox bug 1950145 (glitched window borders in Classic theme)
-// @version         1.3
+// @version         1.4
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         firefox.exe
@@ -23,6 +23,7 @@ BOOL firstwindow=TRUE;
 
 DWORD WINAPI ShowWindowFixThread(LPVOID param) {
     HWND hwnd = (HWND)param;
+    if (!IsWindowVisible(hwnd)) return 0;
 
     SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
