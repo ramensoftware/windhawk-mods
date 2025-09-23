@@ -45,7 +45,7 @@ static void SelectExtension(HWND editControl) {
     buffer.resize(copied);
 
     size_t dotIndex = buffer.find_last_of(L'.');
-    if (dotIndex > 0 && dotIndex != std::wstring::npos) {
+    if (dotIndex != std::wstring::npos) {
         int start = (int)dotIndex + 1;
         SendMessageW(editControl, EM_SETSEL, start, (WPARAM)buffer.size());
         std::wstring extension = buffer.substr(dotIndex + 1);
@@ -119,15 +119,16 @@ static void RemoveKeyboardHooks() {
     keyboardHooks.clear();
 }
 
-static void HookIfExplorer(HWND windowHandle) {
+static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     if (windowHandle != nullptr && IsWindow(windowHandle)) {
         wchar_t clazz[64];
         if (GetClassNameW(windowHandle, clazz, _countof(clazz))) {
             if (_wcsicmp(clazz, L"CabinetWClass") == 0 ||
                 _wcsicmp(clazz, L"ExploreWClass") == 0) {
-                DWORD threadId =
-                    GetWindowThreadProcessId(windowHandle, nullptr);
-                AddKeyboardHook(threadId);
+                DWORD tId = threadId == 0 ? GetWindowThreadProcessId(
+                                                windowHandle, nullptr)
+                                          : threadId;
+                AddKeyboardHook(tId);
                 Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.",
                        windowHandle, clazz);
             }
@@ -163,19 +164,24 @@ static HWND WINAPI HookedCreateWindowExW(DWORD dwExStyle,
     HWND hwnd = originalCreateWindowExW(dwExStyle, lpClassName, lpWindowName,
                                         dwStyle, X, Y, nWidth, nHeight,
                                         hWndParent, hMenu, hInstance, lpParam);
-    HookIfExplorer(hwnd);
+    HookIfExplorerFileView(hwnd, 0);
     return hwnd;
 }
 
 static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
-    HookIfExplorer(hwnd);
+    DWORD processId = 0;
+    DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
+    bool isExplorer = processId == GetCurrentProcessId();
+
+    if (isExplorer) {
+        HookIfExplorerFileView(hwnd, threadId);
+    }
+
     // continue enumeration
     return true;
 }
 
 void Wh_ModInit() {
-    Wh_Log(L"Double F2 initializing.");
-
     Wh_Log(L"Hooking the desktop (shell) thread.");
     DWORD shellThreadId = GetWindowThreadProcessId(GetShellWindow(), nullptr);
     AddKeyboardHook(shellThreadId);
@@ -189,8 +195,6 @@ void Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Double F2 uninitializing.");
-
     Wh_Log(L"Removing all keyboard hooks.");
     RemoveKeyboardHooks();
 }
