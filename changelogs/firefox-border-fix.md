@@ -1,3 +1,7 @@
+## 1.4 ([Sep 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/68b80910a3c64d0989e1549863941a8c68596aa3/mods/firefox-border-fix.wh.cpp))
+
+Restore the check for window visibility
+
 ## 1.3 ([Sep 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3973e5f426a7fb4016a8b0d769dbd6ea4f6ad696/mods/firefox-border-fix.wh.cpp))
 
 Previous change broke effect on main window, this seemingly fixes
