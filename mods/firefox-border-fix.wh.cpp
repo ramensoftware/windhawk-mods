@@ -23,7 +23,6 @@ BOOL firstwindow=TRUE;
 
 DWORD WINAPI ShowWindowFixThread(LPVOID param) {
     HWND hwnd = (HWND)param;
-    if (!IsWindowVisible(hwnd)) return 0;
 
     SetWindowPos(hwnd, NULL, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
@@ -45,6 +44,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 
     BOOL ret = ShowWindow_Orig(hWnd, nCmdShow);
 
+    if (!IsWindowVisible(hwnd)) return 0;
     WCHAR cls[64] = {0};
     GetClassNameW(hWnd, cls, _countof(cls));
     if (!wcscmp(cls, L"MozillaWindowClass")) {
