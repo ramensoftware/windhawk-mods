@@ -16,7 +16,7 @@ second press selects just the extension. That's handy to e.g. rename a zip file
 to a cbz file. This mod implements that same feature: double-press F2
 in Explorer to rename a file's extension.
 
-This works great together with
+This mod works great together with
 [extension-change-no-warning](https://windhawk.net/mods/extension-change-no-warning).
 */
 // ==/WindhawkModReadme==
@@ -32,7 +32,7 @@ This works great together with
 // ChatGPT and the Windhawk Discord server.
 
 #include <string>
-#include <vector>
+#include <unordered_map>
 
 static void SelectExtension(HWND editControl) {
     // typical max filename length
@@ -47,15 +47,18 @@ static void SelectExtension(HWND editControl) {
     size_t dotIndex = buffer.find_last_of(L'.');
     if (dotIndex != std::wstring::npos) {
         int start = (int)dotIndex + 1;
+
         SendMessageW(editControl, EM_SETSEL, start, (WPARAM)buffer.size());
-        std::wstring extension = buffer.substr(dotIndex + 1);
+        std::wstring extension = buffer.substr(start);
         Wh_Log(L"Selected extension \"%s\".", extension.c_str());
     }
 }
 
 static ULONGLONG lastF2Time = 0;
 static bool lastWasF2 = false;
-static bool CALLBACK DoHandleKeyboard(int nCode, WPARAM wParam, LPARAM lParam) {
+static bool CALLBACK SelectExtensionIfDoubleF2(int nCode,
+                                               WPARAM wParam,
+                                               LPARAM lParam) {
     bool shouldProcess = nCode >= 0;
     bool isKeyUp = lParam & 0x80000000;
     if (!shouldProcess || !isKeyUp) {
@@ -93,27 +96,42 @@ static bool CALLBACK DoHandleKeyboard(int nCode, WPARAM wParam, LPARAM lParam) {
 
     return false;
 }
-static LRESULT CALLBACK HandleKeyboard(int nCode,
+static LRESULT CALLBACK HandleKeyEvent(int nCode,
                                        WPARAM wParam,
                                        LPARAM lParam) {
-    bool handled = DoHandleKeyboard(nCode, wParam, lParam);
+    bool handled = SelectExtensionIfDoubleF2(nCode, wParam, lParam);
     return handled ? 0 : CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static std::vector<HHOOK> keyboardHooks;
-static void AddKeyboardHook(DWORD threadId) {
-    HHOOK hook =
-        SetWindowsHookExW(WH_KEYBOARD, HandleKeyboard, nullptr, threadId);
-    if (hook != nullptr) {
-        keyboardHooks.push_back(hook);
-        Wh_Log(L"Installed keyboard hook %p on thread %u", hook, threadId);
+static std::unordered_map<DWORD, HHOOK> keyboardHooks;
+static bool AddKeyboardHook(DWORD threadId) {
+    if (threadId == 0) {
+        Wh_Log(L"Refusing keyboard hook on bad thread id.");
+        return false;
     }
+
+    if (keyboardHooks.find(threadId) != keyboardHooks.end()) {
+        Wh_Log(L"Thread %u already has a keyboard hook, skipping.", threadId);
+        return false;
+    }
+
+    HHOOK hook =
+        SetWindowsHookExW(WH_KEYBOARD, HandleKeyEvent, nullptr, threadId);
+
+    if (hook == nullptr) {
+        Wh_Log(L"Failed to hook thread %u.", threadId);
+        return false;
+    }
+
+    keyboardHooks[threadId] = hook;
+    Wh_Log(L"Installed keyboard hook %p on thread %u.", hook, threadId);
+    return true;
 }
 static void RemoveKeyboardHooks() {
-    for (HHOOK hook : keyboardHooks) {
+    for (auto& [threadId, hook] : keyboardHooks) {
         if (hook != nullptr) {
             bool ok = UnhookWindowsHookEx(hook);
-            Wh_Log(L"Unhook %p -> %d", hook, ok);
+            Wh_Log(L"Unhook %p -> %d.", hook, ok);
         }
     }
     keyboardHooks.clear();
@@ -123,12 +141,11 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     if (windowHandle != nullptr && IsWindow(windowHandle)) {
         wchar_t clazz[64];
         if (GetClassNameW(windowHandle, clazz, _countof(clazz))) {
+            // legacy explorer, modern explorer, desktop
             if (_wcsicmp(clazz, L"CabinetWClass") == 0 ||
-                _wcsicmp(clazz, L"ExploreWClass") == 0) {
-                DWORD tId = threadId == 0 ? GetWindowThreadProcessId(
-                                                windowHandle, nullptr)
-                                          : threadId;
-                AddKeyboardHook(tId);
+                _wcsicmp(clazz, L"ExploreWClass") == 0 ||
+                _wcsicmp(clazz, L"Progman") == 0) {
+                AddKeyboardHook(threadId);
                 Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.",
                        windowHandle, clazz);
             }
@@ -164,7 +181,8 @@ static HWND WINAPI HookedCreateWindowExW(DWORD dwExStyle,
     HWND hwnd = originalCreateWindowExW(dwExStyle, lpClassName, lpWindowName,
                                         dwStyle, X, Y, nWidth, nHeight,
                                         hWndParent, hMenu, hInstance, lpParam);
-    HookIfExplorerFileView(hwnd, 0);
+    auto threadId = GetCurrentThreadId();
+    HookIfExplorerFileView(hwnd, threadId);
     return hwnd;
 }
 
