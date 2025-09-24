@@ -1676,6 +1676,26 @@
                 "version": "1.0.1"
             }
         },
+        "explorer-double-f2-rename-extension": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1758744845000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1758744845000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Marnes <leaumar@sent.com>",
+                "description": "When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension.",
+                "github": "https://github.com/leaumar",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Select filename extension on double F2",
+                "version": "1"
+            }
+        },
         "explorer-frame-classic": {
             "details": {
                 "defaultSorting": 49990,
