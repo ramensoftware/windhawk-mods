@@ -376,14 +376,6 @@ def validate_symbol_hooks(path: Path):
     return warnings
 
 
-def parse_file(path: Path, expected_author: str):
-    print(f'Checking {path=}')
-
-    warnings = validate_metadata(path, expected_author)
-    warnings += validate_symbol_hooks(path)
-    return warnings
-
-
 def main():
     print('Validating PR...')
 
@@ -410,16 +402,22 @@ def main():
         )
 
     for path in paths:
-        warnings += parse_file(path, pr_author)
+        print(f'Checking {path=}')
 
-        try:
-            mod_symbols = get_mod_symbols(path, [])
-            print('Extracted symbols:\n' + json.dumps(mod_symbols, indent=2))
-        except Exception as e:
-            print(f'Symbol extraction error: {e}')
-            warnings += add_warning(
-                path, 1, 'Failed to extract symbols, manual inspection required'
-            )
+        warnings += validate_metadata(path, pr_author)
+
+        symbol_hooks_warnings = validate_symbol_hooks(path)
+        warnings += symbol_hooks_warnings
+
+        if symbol_hooks_warnings == 0:
+            try:
+                mod_symbols = get_mod_symbols(path, [])
+                print('Extracted symbols:\n' + json.dumps(mod_symbols, indent=2))
+            except Exception as e:
+                print(f'Symbol extraction error: {e}')
+                warnings += add_warning(
+                    path, 1, 'Failed to extract symbols, manual inspection required'
+                )
 
     if warnings > 0:
         sys.exit(f'Got {warnings} warnings, please inspect the PR')
