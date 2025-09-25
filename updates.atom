@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-24T20:14:05.000Z</updated>
+    <updated>2025-09-25T00:05:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aerexplorer 1.8.2]]></title>
+        <id>https://windhawk.net/mods/aerexplorer#3a8449ff632ea8c696a4648a3e77db303edfa501</id>
+        <link href="https://windhawk.net/mods/aerexplorer"/>
+        <updated>2025-09-25T00:05:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Rewrite drive group localization retrieval function</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Select filename extension on double F2 1]]></title>
         <id>https://windhawk.net/mods/explorer-double-f2-rename-extension#a4e2bd7298358892902bf017b51a62de9037121b</id>
@@ -323,18 +336,6 @@ MUI system).</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.2]]></title>
-        <id>https://windhawk.net/mods/win11-accent-border#f251191b1143234f2924240a3cca66f31a0e4947</id>
-        <link href="https://windhawk.net/mods/win11-accent-border"/>
-        <updated>2025-08-24T06:25:42.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixes #2348</p>
-<p>Something appears to be messing with DWM registry keys in WinAppSDK MSIX packaged apps that make them not update in sync. This also affects DWM APIs and messages. Explorer's keys appear to behave correctly and update in sync with everything else and contain the same value so use those instead.</p>]]></content>
-        <author>
-            <name>Guerra24</name>
-            <uri>https://github.com/Guerra24</uri>
         </author>
     </entry>
 </feed>

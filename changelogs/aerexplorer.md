@@ -1,3 +1,7 @@
+## 1.8.2 ([Sep 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3a8449ff632ea8c696a4648a3e77db303edfa501/mods/aerexplorer.wh.cpp))
+
+- Rewrite drive group localization retrieval function
+
 ## 1.8.1 ([Aug 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/35441a23d1531df1b1c756e76b67091a71e3e020/mods/aerexplorer.wh.cpp))
 
 - Hook `ExplorerFrame.dll` symbols *after* checking its version
