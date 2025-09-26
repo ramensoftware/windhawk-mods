@@ -1996,7 +1996,7 @@
                 "published": 1754148634000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1758601201000,
+                "updated": 1758893972000,
                 "users": 44
             },
             "metadata": {
@@ -2007,7 +2007,7 @@
                     "firefox.exe"
                 ],
                 "name": "Firefox border fix for Classic theme",
-                "version": "1.4"
+                "version": "1.5"
             }
         },
         "fix-basic-caption-text": {

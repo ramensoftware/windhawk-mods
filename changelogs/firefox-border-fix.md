@@ -1,3 +1,7 @@
+## 1.5 ([Sep 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/2c6f8bb4ea57eb331bb7fd98c818473e13c0c93c/mods/firefox-border-fix.wh.cpp))
+
+Tested this for a few days, works well. Avoid heavy ThemeChanged message.
+
 ## 1.4 ([Sep 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/68b80910a3c64d0989e1549863941a8c68596aa3/mods/firefox-border-fix.wh.cpp))
 
 Restore the check for window visibility
