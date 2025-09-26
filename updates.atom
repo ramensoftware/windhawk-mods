@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-26T13:39:32.000Z</updated>
+    <updated>2025-09-26T22:11:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No Properties Icon 1.0.2]]></title>
+        <id>https://windhawk.net/mods/no-properties-icon#0463072820d46c7cdb6ef91b5d8c90b0c9ab3877</id>
+        <link href="https://windhawk.net/mods/no-properties-icon"/>
+        <updated>2025-09-26T22:11:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix issue with icon of control panel applets not showing in classic Alt+Tab</li>
+<li>Fix issue with System Properties forcing the window to show on the taskbar</li>
+</ul>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Firefox border fix for Classic theme 1.5]]></title>
         <id>https://windhawk.net/mods/firefox-border-fix#2c6f8bb4ea57eb331bb7fd98c818473e13c0c93c</id>
@@ -318,20 +332,6 @@ MUI system).</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spoof Light/Dark Theme 1.1.0]]></title>
-        <id>https://windhawk.net/mods/spoof-light-dark-theme#199530383fec21b64c31aa1d8ec2a656aa6838b8</id>
-        <link href="https://windhawk.net/mods/spoof-light-dark-theme"/>
-        <updated>2025-08-24T19:36:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hook more registry functions to support more applications</li>
-<li>Expand environment variables when reading spoof paths</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
