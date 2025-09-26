@@ -42,15 +42,16 @@ DWORD WINAPI ShowWindowFixThread(LPVOID param) {
 BOOL WINAPI ShowWindow_Hook(HWND hwnd, int nCmdShow) {
     BOOL ret = ShowWindow_Orig(hwnd, nCmdShow); // call original first
 
-    if (!IsWindowVisible(hwnd)) return 0;    // only visible windows
+    if (IsWindowVisible(hwnd)) {
 
-    WCHAR cls[64] = {0};
-    GetClassNameW(hwnd, cls, _countof(cls));
+        WCHAR cls[64] = {0};
+        GetClassNameW(hwnd, cls, _countof(cls));
 
-    if (!wcscmp(cls, L"MozillaWindowClass")) {
-        CreateThread(NULL, 0, ShowWindowFixThread, (LPVOID)hwnd, 0, NULL);
+        if (!wcscmp(cls, L"MozillaWindowClass")) {
+            CreateThread(NULL, 0, ShowWindowFixThread, (LPVOID)hwnd, 0, NULL);
+        }
+
     }
-
     return ret;
 }
 
