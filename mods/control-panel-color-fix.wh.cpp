@@ -93,7 +93,8 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to load dui70.dll.");
         return FALSE;
     }
-
+    
+    // dui70.dll
     WindhawkUtils::SYMBOL_HOOK hook = {
         {L"public: void " SSTDCALL " DirectUI::Element::PaintBackground(struct HDC__ *,class DirectUI::Value *,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,struct tagRECT const &)"},
         &Element_PaintBg,
