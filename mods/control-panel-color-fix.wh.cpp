@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              control-panel-color-fix
 // @name            Control Panel Color Fix
-// @description     Repaints Control Panel's white header and sidebar with the current theme background color (Windows 11)
+// @description     For custom dark themes, fixes white header and sidebar in Control Panel (Windows 11 only)
 // @version         1.0
 // @author          chip33
 // @github          https://github.com/chip33
@@ -12,9 +12,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Control Panel Color Fix (Windows 11)
+# Control Panel Color Fix
 
-Repaints the hardcoded white header and sidebar with the current theme background color.
+Restores dark styling to the hardcoded white header and sidebar that can appear when applying a custom dark theme.
+
+Only works on Windows 11.
 
 Based on earlier uxtheme-hook versions by rounk-ctrl.
 */
