@@ -4,6 +4,7 @@
 // @description     Repaints Control Panel's white header and sidebar with the current theme background color (Windows 11)
 // @version         1.0
 // @author          chip33
+// @github          https://github.com/chip33
 // @include         explorer.exe
 // @include         systemsettings.exe
 // @compilerOptions -luxtheme -lgdi32
