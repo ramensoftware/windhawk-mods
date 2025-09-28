@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-26T22:11:04.000Z</updated>
+    <updated>2025-09-28T15:12:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Control Panel Color Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/control-panel-color-fix#b78d9f04997ec0b281fd2cdf88224bfbe50fb737</id>
+        <link href="https://windhawk.net/mods/control-panel-color-fix"/>
+        <updated>2025-09-28T15:12:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="controlpanelcolorfix">Control Panel Color Fix</h1>
+<p>Restores dark styling to the hardcoded white header and sidebar that can appear when applying a custom dark theme.</p>
+<p>Only works on Windows 11.</p>
+<p>Based on earlier uxtheme-hook versions by rounk-ctrl.</p>]]></content>
+        <author>
+            <name>chip33</name>
+            <uri>https://github.com/chip33</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No Properties Icon 1.0.2]]></title>
         <id>https://windhawk.net/mods/no-properties-icon#0463072820d46c7cdb6ef91b5d8c90b0c9ab3877</id>
@@ -314,24 +328,6 @@ MUI system).</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.6.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#a1e5471c16c55ce3827e8f85367aafa200d0e69a</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2025-08-26T08:11:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added more settings for system performance metrics:</li>
-<li>Network metrics format: MB/s or MBit/s, with or without KB/s or KBit/s, optionally use a number only.</li>
-<li>Fixed decimal places for network metrics (e.g. always show a single digit after the period).</li>
-<li>Percentage format for CPU/RAM: Custom or no padding for a single digit.</li>
-<li>Use "Processor Utility" metric instead of "Processor Time" for a more accurate CPU usage calculation.</li>
-<li>Fixed compatibility with Windows feature flag 38762814, which makes the clock clickable on all taskbars.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

@@ -1096,6 +1096,28 @@
                 "version": "1.0.0"
             }
         },
+        "control-panel-color-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1759072374000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1759072374000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "chip33",
+                "compilerOptions": "-luxtheme -lgdi32",
+                "description": "For custom dark themes, fixes white header and sidebar in Control Panel (Windows 11 only)",
+                "github": "https://github.com/chip33",
+                "include": [
+                    "explorer.exe",
+                    "systemsettings.exe"
+                ],
+                "name": "Control Panel Color Fix",
+                "version": "1.0"
+            }
+        },
         "custom-desktop-watermark": {
             "details": {
                 "defaultSorting": 2412,
