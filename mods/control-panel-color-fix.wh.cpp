@@ -91,7 +91,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    HMODULE hMod = LoadLibraryW(L"dui70.dll");
+    HMODULE hMod = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hMod) {
         Wh_Log(L"Failed to load dui70.dll.");
         return FALSE;
