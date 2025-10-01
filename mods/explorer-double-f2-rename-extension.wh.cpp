@@ -31,6 +31,7 @@ This mod works great together with
 // This code was cobbled together with a lot trial & error, using input from
 // ChatGPT and the Windhawk Discord server.
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -43,6 +44,16 @@ class Selection {
         : editControl(ctrl), text(buffer) {}
 
    public:
+    // default f2 behavior
+    void SelectBaseName() {
+        size_t dotIndex = text.find_last_of(L'.');
+        if (dotIndex != std::wstring::npos) {
+            SendMessageW(editControl, EM_SETSEL, 0, (int)dotIndex);
+            std::wstring base = text.substr(0, (int)dotIndex);
+            Wh_Log(L"Selected base name \"%s\".", base.c_str());
+        }
+    }
+
     void SelectExtension() {
         size_t dotIndex = text.find_last_of(L'.');
         if (dotIndex != std::wstring::npos) {
@@ -51,6 +62,11 @@ class Selection {
             std::wstring extension = text.substr(start);
             Wh_Log(L"Selected extension \"%s\".", extension.c_str());
         }
+    }
+
+    void SelectWholeName() {
+        SendMessageW(editControl, EM_SETSEL, 0, (WPARAM)text.size());
+        Wh_Log(L"Selected whole name \"%s\".", text.c_str());
     }
 
     static std::optional<Selection> inside(HWND editControl) {
@@ -117,13 +133,27 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
             wchar_t cls[32];
             GetClassNameW(focus, cls, _countof(cls));
             if (_wcsicmp(cls, L"Edit") == 0) {
-                Wh_Log(L"%d times F2 in edit control, selecting extension.",
+                Wh_Log(L"%d times F2 in edit control, applying selection.",
                        f2Count);
                 auto selection = Selection::inside(focus);
                 if (selection.has_value()) {
-                    selection.value().SelectExtension();
+                    auto timesF2 = f2Count % 3;
+                    switch (timesF2) {
+                        // standard explorer f2
+                        case 1:
+                            selection.value().SelectBaseName();
+                            break;
+                        // original feature: double f2 = extension
+                        case 2:
+                            selection.value().SelectExtension();
+                            break;
+                        // new: triple f2 = whole name
+                        case 0:
+                            selection.value().SelectWholeName();
+                            break;
+                    }
+                    return 0;
                 }
-                return 0;
             }
         }
     }
