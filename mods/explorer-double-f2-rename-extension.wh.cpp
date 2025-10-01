@@ -54,53 +54,64 @@ static void SelectExtension(HWND editControl) {
     }
 }
 
-static ULONGLONG lastF2Time = 0;
-static bool lastWasF2 = false;
-static bool CALLBACK SelectExtensionIfDoubleF2(int nCode,
-                                               WPARAM wParam,
-                                               LPARAM lParam) {
-    bool shouldProcess = nCode >= 0;
-    bool isKeyUp = lParam & 0x80000000;
-    if (!shouldProcess || !isKeyUp) {
-        return false;
+class F2Streak {
+   private:
+    ULONGLONG lastF2Time = 0;
+    byte streak = 0;
+
+   public:
+    byte CheckStreak(int nCode, WPARAM wParam, LPARAM lParam) {
+        bool shouldProcess = nCode >= 0;
+        bool isKeyUp = lParam & 0x80000000;
+        if (!shouldProcess || !isKeyUp) {
+            return 0;
+        }
+
+        bool isF2 = wParam == VK_F2;
+        if (!isF2) {
+            return streak = 0;
+        }
+
+        auto doubleF2Time = (DWORD)Wh_GetIntSetting(L"DoubleF2MilliSeconds");
+        ULONGLONG now = GetTickCount64();
+        auto timeSinceLastF2 = now - lastF2Time;
+        lastF2Time = now;
+
+        Wh_Log(L"F2 pressed again after %llums.", timeSinceLastF2);
+
+        bool tooSlow = timeSinceLastF2 > doubleF2Time;
+        if (tooSlow) {
+            return streak = 1;
+        }
+
+        streak += 1;
+
+        Wh_Log(L"F2 streak: %dx.", streak);
+
+        return streak;
     }
+};
 
-    bool isF2 = wParam == VK_F2;
-    if (!isF2) {
-        lastWasF2 = false;
-        return false;
-    }
+static F2Streak f2Streak;
 
-    auto doubleF2Time = (DWORD)Wh_GetIntSetting(L"DoubleF2MilliSeconds");
-    ULONGLONG now = GetTickCount64();
-
-    auto delta = now - lastF2Time;
-    lastF2Time = now;
-    bool isDouble = lastWasF2 && (delta <= doubleF2Time);
-    lastWasF2 = true;
-
-    Wh_Log(L"F2 pressed: isDouble=%d, delta=%llu.", isDouble, delta);
-
-    if (isDouble) {
+static LRESULT CALLBACK HandleKeyEvent(int nCode,
+                                       WPARAM wParam,
+                                       LPARAM lParam) {
+    auto f2Count = f2Streak.CheckStreak(nCode, wParam, lParam);
+    if (f2Count > 1) {
         HWND focus = GetFocus();
         if (focus != nullptr) {
             wchar_t cls[32];
             GetClassNameW(focus, cls, _countof(cls));
             if (_wcsicmp(cls, L"Edit") == 0) {
-                Wh_Log(L"Double F2 in edit control, selecting extension.");
+                Wh_Log(L"%d times F2 in edit control, selecting extension.",
+                       f2Count);
                 SelectExtension(focus);
-                return true;
+                return 0;
             }
         }
     }
-
-    return false;
-}
-static LRESULT CALLBACK HandleKeyEvent(int nCode,
-                                       WPARAM wParam,
-                                       LPARAM lParam) {
-    bool handled = SelectExtensionIfDoubleF2(nCode, wParam, lParam);
-    return handled ? 0 : CallNextHookEx(nullptr, nCode, wParam, lParam);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 class KeyboardHooks {
