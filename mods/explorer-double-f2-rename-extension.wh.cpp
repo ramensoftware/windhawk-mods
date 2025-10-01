@@ -39,24 +39,29 @@ class Selection {
    private:
     HWND editControl;
     std::wstring text;
+    size_t dotIndex;
 
-    Selection(HWND ctrl, std::wstring buffer)
-        : editControl(ctrl), text(buffer) {}
+    Selection(HWND ctrl, std::wstring buffer, size_t dot)
+        : editControl(ctrl), text(buffer), dotIndex(dot) {}
 
    public:
     // default f2 behavior
+    // if it's a dotfile or dotless, explorer selects the whole name
     void SelectBaseName() {
-        size_t dotIndex = text.find_last_of(L'.');
-        if (dotIndex != std::wstring::npos) {
+        if (dotIndex == std::wstring::npos || dotIndex == 0) {
+            SelectWholeName();
+        } else {
             SendMessageW(editControl, EM_SETSEL, 0, (int)dotIndex);
             std::wstring base = text.substr(0, (int)dotIndex);
             Wh_Log(L"Selected base name \"%s\".", base.c_str());
         }
     }
 
+    // files normally can't end in a dot, i.e. have extension ""
     void SelectExtension() {
-        size_t dotIndex = text.find_last_of(L'.');
-        if (dotIndex != std::wstring::npos) {
+        if (dotIndex == std::wstring::npos) {
+            SelectWholeName();
+        } else {
             int start = (int)dotIndex + 1;
             SendMessageW(editControl, EM_SETSEL, start, (WPARAM)text.size());
             std::wstring extension = text.substr(start);
@@ -76,7 +81,8 @@ class Selection {
         if (copied > 0) {
             // trim to actual length
             text.resize(copied);
-            return Selection(editControl, text);
+            size_t dotIndex = text.find_last_of(L'.');
+            return Selection(editControl, text, dotIndex);
         } else {
             return std::nullopt;
         }
