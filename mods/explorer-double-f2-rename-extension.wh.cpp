@@ -103,39 +103,51 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
     return handled ? 0 : CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static std::unordered_map<DWORD, HHOOK> keyboardHooks;
-static bool AddKeyboardHook(DWORD threadId) {
-    if (threadId == 0) {
-        Wh_Log(L"Refusing keyboard hook on bad thread id.");
-        return false;
-    }
+class KeyboardHooks {
+   private:
+    std::unordered_map<DWORD, HHOOK> hooks = {};
+    HOOKPROC CALLBACK callback;
 
-    if (keyboardHooks.find(threadId) != keyboardHooks.end()) {
-        Wh_Log(L"Thread %u already has a keyboard hook, skipping.", threadId);
-        return false;
-    }
+   public:
+    KeyboardHooks(HOOKPROC cb) : callback(cb) {}
 
-    HHOOK hook =
-        SetWindowsHookExW(WH_KEYBOARD, HandleKeyEvent, nullptr, threadId);
-
-    if (hook == nullptr) {
-        Wh_Log(L"Failed to hook thread %u.", threadId);
-        return false;
-    }
-
-    keyboardHooks[threadId] = hook;
-    Wh_Log(L"Installed keyboard hook %p on thread %u.", hook, threadId);
-    return true;
-}
-static void RemoveKeyboardHooks() {
-    for (auto& [threadId, hook] : keyboardHooks) {
-        if (hook != nullptr) {
-            bool ok = UnhookWindowsHookEx(hook);
-            Wh_Log(L"Unhook %p -> %d.", hook, ok);
+    bool Attach(DWORD threadId) {
+        if (threadId == 0) {
+            Wh_Log(L"Refusing keyboard hook on bad thread id.");
+            return false;
         }
+
+        if (hooks.find(threadId) != hooks.end()) {
+            Wh_Log(L"Thread %u already has a keyboard hook, skipping.",
+                   threadId);
+            return false;
+        }
+
+        HHOOK hook =
+            SetWindowsHookExW(WH_KEYBOARD, callback, nullptr, threadId);
+
+        if (hook == nullptr) {
+            Wh_Log(L"Failed to hook thread %u.", threadId);
+            return false;
+        }
+
+        hooks[threadId] = hook;
+        Wh_Log(L"Installed keyboard hook %p on thread %u.", hook, threadId);
+        return true;
     }
-    keyboardHooks.clear();
-}
+
+    void DetachAll() {
+        for (auto& [threadId, hook] : hooks) {
+            if (hook != nullptr) {
+                bool ok = UnhookWindowsHookEx(hook);
+                Wh_Log(L"Unhook %p -> %d.", hook, ok);
+            }
+        }
+        hooks.clear();
+    }
+};
+
+static KeyboardHooks keyboardHooks(HandleKeyEvent);
 
 static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     if (windowHandle != nullptr && IsWindow(windowHandle)) {
@@ -145,7 +157,7 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
             if (_wcsicmp(clazz, L"CabinetWClass") == 0 ||
                 _wcsicmp(clazz, L"ExploreWClass") == 0 ||
                 _wcsicmp(clazz, L"Progman") == 0) {
-                AddKeyboardHook(threadId);
+                keyboardHooks.Attach(threadId);
                 Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.",
                        windowHandle, clazz);
             }
@@ -202,7 +214,7 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
 void Wh_ModInit() {
     Wh_Log(L"Hooking the desktop (shell) thread.");
     DWORD shellThreadId = GetWindowThreadProcessId(GetShellWindow(), nullptr);
-    AddKeyboardHook(shellThreadId);
+    keyboardHooks.Attach(shellThreadId);
 
     Wh_Log(L"Hooking already open Explorer windows.");
     EnumWindows(EnumWindowsProc, 0);
@@ -214,5 +226,5 @@ void Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Removing all keyboard hooks.");
-    RemoveKeyboardHooks();
+    keyboardHooks.DetachAll();
 }
