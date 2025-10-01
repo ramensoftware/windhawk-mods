@@ -34,25 +34,38 @@ This mod works great together with
 #include <string>
 #include <unordered_map>
 
-static void SelectExtension(HWND editControl) {
-    // typical max filename length
-    std::wstring buffer(260, L'\0');
-    int copied = GetWindowTextW(editControl, buffer.data(), (int)buffer.size());
-    if (copied <= 0) {
-        return;
-    }
-    // trim to actual length
-    buffer.resize(copied);
+class Selection {
+   private:
+    HWND editControl;
+    std::wstring text;
 
-    size_t dotIndex = buffer.find_last_of(L'.');
-    if (dotIndex != std::wstring::npos) {
-        int start = (int)dotIndex + 1;
+    Selection(HWND ctrl, std::wstring buffer)
+        : editControl(ctrl), text(buffer) {}
 
-        SendMessageW(editControl, EM_SETSEL, start, (WPARAM)buffer.size());
-        std::wstring extension = buffer.substr(start);
-        Wh_Log(L"Selected extension \"%s\".", extension.c_str());
+   public:
+    void SelectExtension() {
+        size_t dotIndex = text.find_last_of(L'.');
+        if (dotIndex != std::wstring::npos) {
+            int start = (int)dotIndex + 1;
+            SendMessageW(editControl, EM_SETSEL, start, (WPARAM)text.size());
+            std::wstring extension = text.substr(start);
+            Wh_Log(L"Selected extension \"%s\".", extension.c_str());
+        }
     }
-}
+
+    static std::optional<Selection> inside(HWND editControl) {
+        // typical max filename length
+        std::wstring text(260, L'\0');
+        int copied = GetWindowTextW(editControl, text.data(), (int)text.size());
+        if (copied > 0) {
+            // trim to actual length
+            text.resize(copied);
+            return Selection(editControl, text);
+        } else {
+            return std::nullopt;
+        }
+    }
+};
 
 class F2Streak {
    private:
@@ -106,7 +119,10 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
             if (_wcsicmp(cls, L"Edit") == 0) {
                 Wh_Log(L"%d times F2 in edit control, selecting extension.",
                        f2Count);
-                SelectExtension(focus);
+                auto selection = Selection::inside(focus);
+                if (selection.has_value()) {
+                    selection.value().SelectExtension();
+                }
                 return 0;
             }
         }
