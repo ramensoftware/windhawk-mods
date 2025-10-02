@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-double-f2-rename-extension
 // @name            Select filename extension on double F2
-// @description     When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension.
-// @version         1
+// @description     When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension. Triple F2 selects the full name, quadruple F2 selects the base name again, etc.
+// @version         2
 // @author          Marnes <leaumar@sent.com>
 // @github          https://github.com/leaumar
 // @include         explorer.exe
@@ -11,10 +11,14 @@
 // ==WindhawkModReadme==
 /*
 QTTabbar and some other tools provide a feature where double-pressing F2 to
-rename a file first selects the entire name (existing Explorer behavior) but the
+rename a file first selects the base name (existing Explorer behavior) but the
 second press selects just the extension. That's handy to e.g. rename a zip file
 to a cbz file. This mod implements that same feature: double-press F2
 in Explorer to rename a file's extension.
+
+Since version 2, triple-pressing F2 selects the full name. Subsequent (>3)
+presses repeat the cycle by selecting the base name again (Explorer default
+behavior), then the extension, then the full name, etc.
 
 This mod works great together with
 [extension-change-no-warning](https://windhawk.net/mods/extension-change-no-warning).
