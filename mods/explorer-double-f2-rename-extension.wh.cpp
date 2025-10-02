@@ -92,14 +92,14 @@ class Selection {
 class F2Streak {
    private:
     ULONGLONG lastF2Time = 0;
-    byte streak = 0;
+    short streak = 0;
 
    public:
-    byte CheckStreak(int nCode, WPARAM wParam, LPARAM lParam) {
+    short CheckStreak(int nCode, WPARAM wParam, LPARAM lParam) {
         bool shouldProcess = nCode >= 0;
         bool isKeyUp = lParam & 0x80000000;
         if (!shouldProcess || !isKeyUp) {
-            return 0;
+            return -1;
         }
 
         bool isF2 = wParam == VK_F2;
