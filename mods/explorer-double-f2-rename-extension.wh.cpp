@@ -55,6 +55,15 @@ static std::optional<std::wstring> FindExplorerFileViewClass(HWND windowHandle,
     }
     return std::nullopt;
 }
+
+static bool IsEditControl(HWND focus) {
+    if (focus == nullptr) {
+        return false;
+    }
+    wchar_t cls[32];
+    GetClassNameW(focus, cls, _countof(cls));
+    return _wcsicmp(cls, L"Edit") == 0;
+}
 }  // namespace ExplorerUtils
 
 class Selection {
@@ -157,31 +166,27 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
     auto f2Count = f2Streak.CheckStreak(nCode, wParam, lParam);
     if (f2Count > 1) {
         HWND focus = GetFocus();
-        if (focus != nullptr) {
-            wchar_t cls[32];
-            GetClassNameW(focus, cls, _countof(cls));
-            if (_wcsicmp(cls, L"Edit") == 0) {
-                Wh_Log(L"%d times F2 in edit control, applying selection.",
-                       f2Count);
-                auto selection = Selection::inside(focus);
-                if (selection.has_value()) {
-                    auto timesF2 = f2Count % 3;
-                    switch (timesF2) {
-                        // standard explorer f2
-                        case 1:
-                            selection.value().SelectBaseName();
-                            break;
-                        // original feature: double f2 = extension
-                        case 2:
-                            selection.value().SelectExtension();
-                            break;
-                        // new: triple f2 = whole name
-                        case 0:
-                            selection.value().SelectWholeName();
-                            break;
-                    }
-                    return 0;
+        if (ExplorerUtils::IsEditControl(focus)) {
+            Wh_Log(L"%d times F2 in edit control, applying selection.",
+                   f2Count);
+            auto selection = Selection::inside(focus);
+            if (selection.has_value()) {
+                auto timesF2 = f2Count % 3;
+                switch (timesF2) {
+                    // standard explorer f2
+                    case 1:
+                        selection.value().SelectBaseName();
+                        break;
+                    // original feature: double f2 = extension
+                    case 2:
+                        selection.value().SelectExtension();
+                        break;
+                    // new: triple f2 = whole name
+                    case 0:
+                        selection.value().SelectWholeName();
+                        break;
                 }
+                return 0;
             }
         }
     }
