@@ -5,7 +5,7 @@
 // @version 1.0
 // @include Discord.exe
 // @author Xetrill
-// @github https://github.com/Xetrill
+// @github https://github.com/Xetrill/
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
