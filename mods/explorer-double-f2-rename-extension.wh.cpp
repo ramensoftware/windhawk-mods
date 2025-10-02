@@ -232,40 +232,40 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     }
 }
 
-static HWND(WINAPI* originalCreateWindowExW)(DWORD dwExStyle,
-                                             LPCWSTR lpClassName,
-                                             LPCWSTR lpWindowName,
-                                             DWORD dwStyle,
-                                             int X,
-                                             int Y,
-                                             int nWidth,
-                                             int nHeight,
-                                             HWND hWndParent,
-                                             HMENU hMenu,
-                                             HINSTANCE hInstance,
-                                             LPVOID lpParam);
-static HWND WINAPI HookedCreateWindowExW(DWORD dwExStyle,
-                                         LPCWSTR lpClassName,
-                                         LPCWSTR lpWindowName,
-                                         DWORD dwStyle,
-                                         int X,
-                                         int Y,
-                                         int nWidth,
-                                         int nHeight,
-                                         HWND hWndParent,
-                                         HMENU hMenu,
-                                         HINSTANCE hInstance,
-                                         LPVOID lpParam) {
+static HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
+                                                 LPCWSTR lpClassName,
+                                                 LPCWSTR lpWindowName,
+                                                 DWORD dwStyle,
+                                                 int X,
+                                                 int Y,
+                                                 int nWidth,
+                                                 int nHeight,
+                                                 HWND hWndParent,
+                                                 HMENU hMenu,
+                                                 HINSTANCE hInstance,
+                                                 LPVOID lpParam);
+static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
+                                       LPCWSTR lpClassName,
+                                       LPCWSTR lpWindowName,
+                                       DWORD dwStyle,
+                                       int X,
+                                       int Y,
+                                       int nWidth,
+                                       int nHeight,
+                                       HWND hWndParent,
+                                       HMENU hMenu,
+                                       HINSTANCE hInstance,
+                                       LPVOID lpParam) {
     // always call the original first
-    HWND hwnd = originalCreateWindowExW(dwExStyle, lpClassName, lpWindowName,
-                                        dwStyle, X, Y, nWidth, nHeight,
-                                        hWndParent, hMenu, hInstance, lpParam);
+    HWND hwnd = previousHandleWindowCreated(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam);
     auto threadId = GetCurrentThreadId();
     HookIfExplorerFileView(hwnd, threadId);
     return hwnd;
 }
 
-static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
     DWORD processId = 0;
     DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
     bool isExplorer = processId == GetCurrentProcessId();
@@ -284,11 +284,11 @@ void Wh_ModInit() {
     keyboardHooks.Attach(shellThreadId);
 
     Wh_Log(L"Hooking already open Explorer windows.");
-    EnumWindows(EnumWindowsProc, 0);
+    EnumWindows(HandleWindowEnumerated, 0);
 
     Wh_Log(L"Hooking Explorer window creation.");
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)HookedCreateWindowExW,
-                       (void**)&originalCreateWindowExW);
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)HandleWindowCreated,
+                       (void**)&previousHandleWindowCreated);
 }
 
 void Wh_ModUninit() {
