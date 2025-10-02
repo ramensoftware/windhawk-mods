@@ -232,18 +232,26 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     }
 }
 
-static HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
-                                                 LPCWSTR lpClassName,
-                                                 LPCWSTR lpWindowName,
-                                                 DWORD dwStyle,
-                                                 int X,
-                                                 int Y,
-                                                 int nWidth,
-                                                 int nHeight,
-                                                 HWND hWndParent,
-                                                 HMENU hMenu,
-                                                 HINSTANCE hInstance,
-                                                 LPVOID lpParam);
+namespace WindowCreatedHook {
+// window handle, thread id
+using HookCallback = void (*)(HWND, DWORD);
+
+static inline HookCallback callback = nullptr;
+
+static inline HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
+                                                        LPCWSTR lpClassName,
+                                                        LPCWSTR lpWindowName,
+                                                        DWORD dwStyle,
+                                                        int X,
+                                                        int Y,
+                                                        int nWidth,
+                                                        int nHeight,
+                                                        HWND hWndParent,
+                                                        HMENU hMenu,
+                                                        HINSTANCE hInstance,
+                                                        LPVOID lpParam) =
+    nullptr;
+
 static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
                                        LPCWSTR lpClassName,
                                        LPCWSTR lpWindowName,
@@ -261,9 +269,19 @@ static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
         dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
         hWndParent, hMenu, hInstance, lpParam);
     auto threadId = GetCurrentThreadId();
-    HookIfExplorerFileView(hwnd, threadId);
+    callback(hwnd, threadId);
     return hwnd;
 }
+
+inline void Attach(HookCallback cb) {
+    if (callback != nullptr) {
+        return;
+    }
+    callback = cb;
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)HandleWindowCreated,
+                       (void**)&previousHandleWindowCreated);
+}
+}  // namespace WindowCreatedHook
 
 static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
     DWORD processId = 0;
@@ -287,8 +305,7 @@ void Wh_ModInit() {
     EnumWindows(HandleWindowEnumerated, 0);
 
     Wh_Log(L"Hooking Explorer window creation.");
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)HandleWindowCreated,
-                       (void**)&previousHandleWindowCreated);
+    WindowCreatedHook::Attach(HookIfExplorerFileView);
 }
 
 void Wh_ModUninit() {
