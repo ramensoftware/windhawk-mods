@@ -39,6 +39,24 @@ This mod works great together with
 #include <string>
 #include <unordered_map>
 
+namespace ExplorerUtils {
+static std::optional<std::wstring> FindExplorerFileViewClass(HWND windowHandle,
+                                                             DWORD threadId) {
+    if (windowHandle != nullptr && IsWindow(windowHandle)) {
+        wchar_t clazz[64];
+        if (GetClassNameW(windowHandle, clazz, _countof(clazz))) {
+            // legacy explorer, modern explorer, desktop
+            if (_wcsicmp(clazz, L"CabinetWClass") == 0 ||
+                _wcsicmp(clazz, L"ExploreWClass") == 0 ||
+                _wcsicmp(clazz, L"Progman") == 0) {
+                return clazz;
+            }
+        }
+    }
+    return std::nullopt;
+}
+}  // namespace ExplorerUtils
+
 class Selection {
    private:
     HWND editControl;
@@ -217,18 +235,12 @@ class KeyboardHooks {
 static KeyboardHooks keyboardHooks(HandleKeyEvent);
 
 static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
-    if (windowHandle != nullptr && IsWindow(windowHandle)) {
-        wchar_t clazz[64];
-        if (GetClassNameW(windowHandle, clazz, _countof(clazz))) {
-            // legacy explorer, modern explorer, desktop
-            if (_wcsicmp(clazz, L"CabinetWClass") == 0 ||
-                _wcsicmp(clazz, L"ExploreWClass") == 0 ||
-                _wcsicmp(clazz, L"Progman") == 0) {
-                keyboardHooks.Attach(threadId);
-                Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.",
-                       windowHandle, clazz);
-            }
-        }
+    auto clazz =
+        ExplorerUtils::FindExplorerFileViewClass(windowHandle, threadId);
+    if (clazz.has_value()) {
+        keyboardHooks.Attach(threadId);
+        Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.", windowHandle,
+               clazz.value().c_str());
     }
 }
 
