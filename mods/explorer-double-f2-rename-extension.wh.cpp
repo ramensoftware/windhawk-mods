@@ -168,12 +168,9 @@ class F2Streak {
 class KeyboardHooks {
    private:
     std::unordered_map<DWORD, HHOOK> hooks = {};
-    HOOKPROC CALLBACK callback;
 
    public:
-    KeyboardHooks(HOOKPROC cb) : callback(cb) {}
-
-    bool Attach(DWORD threadId) {
+    bool Attach(DWORD threadId, HOOKPROC CALLBACK onKeyEvent) {
         if (threadId == 0) {
             Wh_Log(L"Refusing keyboard hook on bad thread id.");
             return false;
@@ -186,7 +183,7 @@ class KeyboardHooks {
         }
 
         HHOOK hook =
-            SetWindowsHookExW(WH_KEYBOARD, callback, nullptr, threadId);
+            SetWindowsHookExW(WH_KEYBOARD, onKeyEvent, nullptr, threadId);
 
         if (hook == nullptr) {
             Wh_Log(L"Failed to hook thread %u.", threadId);
@@ -295,13 +292,13 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static KeyboardHooks keyboardHooks(HandleKeyEvent);
+static KeyboardHooks keyboardHooks;
 
 static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     auto clazz =
         ExplorerUtils::FindExplorerFileViewClass(windowHandle, threadId);
     if (clazz.has_value()) {
-        keyboardHooks.Attach(threadId);
+        keyboardHooks.Attach(threadId, HandleKeyEvent);
         Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.", windowHandle,
                clazz.value().c_str());
     }
@@ -323,7 +320,7 @@ static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
 void Wh_ModInit() {
     Wh_Log(L"Hooking the desktop (shell) thread.");
     DWORD shellThreadId = GetWindowThreadProcessId(GetShellWindow(), nullptr);
-    keyboardHooks.Attach(shellThreadId);
+    keyboardHooks.Attach(shellThreadId, HandleKeyEvent);
 
     Wh_Log(L"Hooking already open Explorer windows.");
     EnumWindows(HandleWindowEnumerated, 0);
