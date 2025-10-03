@@ -206,9 +206,9 @@ class KeyboardHooks {
 
 namespace WindowCreatedHook {
 // window handle, thread id
-using HookCallback = void (*)(HWND, DWORD);
+using OnWindowCreated = void (*)(HWND, DWORD);
 
-static inline HookCallback callback = nullptr;
+static inline OnWindowCreated callback = nullptr;
 
 static inline HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
                                                         LPCWSTR lpClassName,
@@ -245,7 +245,7 @@ static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
     return hwnd;
 }
 
-inline void Attach(HookCallback cb) {
+inline void Attach(OnWindowCreated cb) {
     if (callback != nullptr) {
         return;
     }
