@@ -160,41 +160,6 @@ class F2Streak {
     }
 };
 
-static F2Streak f2Streak;
-
-static LRESULT CALLBACK HandleKeyEvent(int nCode,
-                                       WPARAM wParam,
-                                       LPARAM lParam) {
-    auto f2Count = f2Streak.CheckStreak(nCode, wParam, lParam);
-    if (f2Count > 1) {
-        HWND focus = GetFocus();
-        if (ExplorerUtils::IsEditControl(focus)) {
-            Wh_Log(L"%d times F2 in edit control, applying selection.",
-                   f2Count);
-            auto selection = Selection::inside(focus);
-            if (selection.has_value()) {
-                auto timesF2 = f2Count % 3;
-                switch (timesF2) {
-                    // standard explorer f2
-                    case 1:
-                        selection.value().SelectBaseName();
-                        break;
-                    // original feature: double f2 = extension
-                    case 2:
-                        selection.value().SelectExtension();
-                        break;
-                    // new: triple f2 = whole name
-                    case 0:
-                        selection.value().SelectWholeName();
-                        break;
-                }
-                return 0;
-            }
-        }
-    }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
-}
-
 class KeyboardHooks {
    private:
     std::unordered_map<DWORD, HHOOK> hooks = {};
@@ -238,18 +203,6 @@ class KeyboardHooks {
         hooks.clear();
     }
 };
-
-static KeyboardHooks keyboardHooks(HandleKeyEvent);
-
-static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
-    auto clazz =
-        ExplorerUtils::FindExplorerFileViewClass(windowHandle, threadId);
-    if (clazz.has_value()) {
-        keyboardHooks.Attach(threadId);
-        Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.", windowHandle,
-               clazz.value().c_str());
-    }
-}
 
 namespace WindowCreatedHook {
 // window handle, thread id
@@ -301,6 +254,53 @@ inline void Attach(HookCallback cb) {
                        (void**)&previousHandleWindowCreated);
 }
 }  // namespace WindowCreatedHook
+
+static F2Streak f2Streak;
+
+static LRESULT CALLBACK HandleKeyEvent(int nCode,
+                                       WPARAM wParam,
+                                       LPARAM lParam) {
+    auto f2Count = f2Streak.CheckStreak(nCode, wParam, lParam);
+    if (f2Count > 1) {
+        HWND focus = GetFocus();
+        if (ExplorerUtils::IsEditControl(focus)) {
+            Wh_Log(L"%d times F2 in edit control, applying selection.",
+                   f2Count);
+            auto selection = Selection::inside(focus);
+            if (selection.has_value()) {
+                auto timesF2 = f2Count % 3;
+                switch (timesF2) {
+                    // standard explorer f2
+                    case 1:
+                        selection.value().SelectBaseName();
+                        break;
+                    // original feature: double f2 = extension
+                    case 2:
+                        selection.value().SelectExtension();
+                        break;
+                    // new: triple f2 = whole name
+                    case 0:
+                        selection.value().SelectWholeName();
+                        break;
+                }
+                return 0;
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+static KeyboardHooks keyboardHooks(HandleKeyEvent);
+
+static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
+    auto clazz =
+        ExplorerUtils::FindExplorerFileViewClass(windowHandle, threadId);
+    if (clazz.has_value()) {
+        keyboardHooks.Attach(threadId);
+        Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.", windowHandle,
+               clazz.value().c_str());
+    }
+}
 
 static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
     DWORD processId = 0;
