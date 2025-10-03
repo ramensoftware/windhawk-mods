@@ -139,6 +139,8 @@ class F2Streak {
         }
 
         auto doubleF2Time = (DWORD)Wh_GetIntSetting(L"DoubleF2MilliSeconds");
+        doubleF2Time =
+            std::max((DWORD)100, std::min(doubleF2Time, (DWORD)10000));
         ULONGLONG now = GetTickCount64();
         auto timeSinceLastF2 = now - lastF2Time;
         lastF2Time = now;
