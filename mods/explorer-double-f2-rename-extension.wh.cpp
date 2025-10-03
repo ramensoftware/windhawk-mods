@@ -66,6 +66,13 @@ static bool IsEditControl(HWND focus) {
 }
 }  // namespace ExplorerUtils
 
+namespace ModSettings {
+static unsigned int GetDoublePressMillis() {
+    auto doubleF2Time = Wh_GetIntSetting(L"DoubleF2MilliSeconds");
+    return std::max(100, std::min(doubleF2Time, 10000));
+}
+}  // namespace ModSettings
+
 class Selection {
    private:
     HWND editControl;
@@ -138,9 +145,7 @@ class F2Streak {
             return streak = 0;
         }
 
-        auto doubleF2Time = (DWORD)Wh_GetIntSetting(L"DoubleF2MilliSeconds");
-        doubleF2Time =
-            std::max((DWORD)100, std::min(doubleF2Time, (DWORD)10000));
+        auto doubleF2Time = ModSettings::GetDoublePressMillis();
         ULONGLONG now = GetTickCount64();
         auto timeSinceLastF2 = now - lastF2Time;
         lastF2Time = now;
