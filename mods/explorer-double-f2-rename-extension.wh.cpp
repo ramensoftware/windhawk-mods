@@ -153,11 +153,7 @@ class KeyStreak {
             return streak = 1;
         }
 
-        streak += 1;
-
-        Wh_Log(L"Keypress streak: %dx.", streak);
-
-        return streak;
+        return ++streak;
     }
 };
 
@@ -181,15 +177,15 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static bool Attach(DWORD threadId) {
+static std::optional<HHOOK> Attach(DWORD threadId) {
     if (threadId == 0) {
         Wh_Log(L"Refusing keyboard hook on bad thread id.");
-        return false;
+        return std::nullopt;
     }
 
     if (hooks.find(threadId) != hooks.end()) {
         Wh_Log(L"Thread %u already has a keyboard hook, skipping.", threadId);
-        return false;
+        return std::nullopt;
     }
 
     HHOOK hook =
@@ -197,12 +193,11 @@ static bool Attach(DWORD threadId) {
 
     if (hook == nullptr) {
         Wh_Log(L"Failed to hook thread %u.", threadId);
-        return false;
+        return std::nullopt;
     }
 
     hooks[threadId] = hook;
-    Wh_Log(L"Installed keyboard hook %p on thread %u.", hook, threadId);
-    return true;
+    return hook;
 }
 
 static void DetachAll() {
@@ -292,10 +287,13 @@ static KeyStreak f2Streak(VK_F2);
 
 static bool HandleKeyUp(WPARAM pressedKey) {
     auto f2Count = f2Streak.CheckStreak(pressedKey);
+    if (f2Count > 0) {
+        Wh_Log(L"F2 streak: %dx.", f2Count);
+    }
     if (f2Count > 1) {
         HWND focus = GetFocus();
         if (ExplorerUtils::IsEditControl(focus)) {
-            Wh_Log(L"%d times F2 in edit control, applying selection.",
+            Wh_Log(L"Applying selection for %d times F2 in an Edit field.",
                    f2Count);
             auto selection = Selection::inside(focus);
             if (selection.has_value()) {
@@ -325,9 +323,11 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     auto clazz =
         ExplorerUtils::FindExplorerFileViewClass(windowHandle, threadId);
     if (clazz.has_value()) {
-        KeyboardHooks::Attach(threadId);
-        Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.", windowHandle,
-               clazz.value().c_str());
+        auto hook = KeyboardHooks::Attach(threadId);
+        if (hook.has_value()) {
+            Wh_Log(L"Hooked %s window: hwnd=0x%p hook=0x%p.",
+                   clazz.value().c_str(), windowHandle, hook.value());
+        }
     }
 }
 
