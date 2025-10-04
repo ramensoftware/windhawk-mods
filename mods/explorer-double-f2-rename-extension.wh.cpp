@@ -254,9 +254,6 @@ static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
 }
 
 void Attach(OnWindowCreated cb) {
-    if (callback != nullptr) {
-        return;
-    }
     callback = cb;
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)HandleWindowCreated,
                        (void**)&previousHandleWindowCreated);
@@ -306,18 +303,29 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     }
 }
 
+namespace WindowEnumeration {
+using ExplorerWindowConsumer = void (*)(HWND windowHandle, DWORD threadId);
+
+static ExplorerWindowConsumer onExplorerWindowFound;
+
 static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
     DWORD processId = 0;
     DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
     bool isExplorer = processId == GetCurrentProcessId();
 
     if (isExplorer) {
-        HookIfExplorerFileView(hwnd, threadId);
+        onExplorerWindowFound(hwnd, threadId);
     }
 
     // continue enumeration
     return true;
 }
+
+static void CheckAllOpenWindows(ExplorerWindowConsumer cb) {
+    onExplorerWindowFound = cb;
+    EnumWindows(HandleWindowEnumerated, 0);
+}
+}  // namespace WindowEnumeration
 
 void Wh_ModInit() {
     KeyboardHooks::onKeyUp = HandleKeyUp;
@@ -327,7 +335,7 @@ void Wh_ModInit() {
     KeyboardHooks::Attach(shellThreadId);
 
     Wh_Log(L"Hooking already open Explorer windows.");
-    EnumWindows(HandleWindowEnumerated, 0);
+    WindowEnumeration::CheckAllOpenWindows(HookIfExplorerFileView);
 
     Wh_Log(L"Hooking Explorer window creation.");
     WindowCreatedHook::Attach(HookIfExplorerFileView);
