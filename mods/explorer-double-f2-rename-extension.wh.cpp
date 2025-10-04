@@ -146,9 +146,11 @@ class KeyStreak {
         auto doublePressTime = ModSettings::GetDoublePressMillis();
         ULONGLONG now = GetTickCount64();
         auto timeSinceLastPress = now - lastPressTime;
-        lastPressTime = now;
 
-        Wh_Log(L"Key pressed again after %llums.", timeSinceLastPress);
+        if (lastPressTime > 0) {
+            Wh_Log(L"Key pressed again after %llums.", timeSinceLastPress);
+        }
+        lastPressTime = now;
 
         bool tooSlow = timeSinceLastPress > doublePressTime;
         if (tooSlow) {
