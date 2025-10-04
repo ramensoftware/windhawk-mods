@@ -133,14 +133,8 @@ class F2Streak {
     short streak = 0;
 
    public:
-    short CheckStreak(int nCode, WPARAM wParam, LPARAM lParam) {
-        bool shouldProcess = nCode >= 0;
-        bool isKeyUp = lParam & 0x80000000;
-        if (!shouldProcess || !isKeyUp) {
-            return -1;
-        }
-
-        bool isF2 = wParam == VK_F2;
+    short CheckStreak(WPARAM pressedKey) {
+        bool isF2 = pressedKey == VK_F2;
         if (!isF2) {
             return streak = 0;
         }
@@ -165,50 +159,63 @@ class F2Streak {
     }
 };
 
-class KeyboardHooks {
-   private:
-    std::unordered_map<DWORD, HHOOK> hooks = {};
+namespace KeyboardHooks {
+using OnKeyUp = bool (*)(WPARAM pressedKey);
 
-   public:
-    bool Attach(DWORD threadId, HOOKPROC CALLBACK onKeyEvent) {
-        if (threadId == 0) {
-            Wh_Log(L"Refusing keyboard hook on bad thread id.");
-            return false;
+static std::unordered_map<DWORD, HHOOK> hooks = {};
+static OnKeyUp onKeyUp;
+
+static LRESULT CALLBACK HandleKeyEvent(int nCode,
+                                       WPARAM wParam,
+                                       LPARAM lParam) {
+    bool shouldProcess = nCode >= 0;
+    bool isKeyUp = lParam & 0x80000000;
+    if (shouldProcess && isKeyUp) {
+        bool handled = onKeyUp(wParam);
+        if (handled) {
+            return 0;
         }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
 
-        if (hooks.find(threadId) != hooks.end()) {
-            Wh_Log(L"Thread %u already has a keyboard hook, skipping.",
-                   threadId);
-            return false;
-        }
-
-        HHOOK hook =
-            SetWindowsHookExW(WH_KEYBOARD, onKeyEvent, nullptr, threadId);
-
-        if (hook == nullptr) {
-            Wh_Log(L"Failed to hook thread %u.", threadId);
-            return false;
-        }
-
-        hooks[threadId] = hook;
-        Wh_Log(L"Installed keyboard hook %p on thread %u.", hook, threadId);
-        return true;
+static bool Attach(DWORD threadId) {
+    if (threadId == 0) {
+        Wh_Log(L"Refusing keyboard hook on bad thread id.");
+        return false;
     }
 
-    void DetachAll() {
-        for (auto& [threadId, hook] : hooks) {
-            if (hook != nullptr) {
-                bool ok = UnhookWindowsHookEx(hook);
-                Wh_Log(L"Unhook %p -> %d.", hook, ok);
-            }
-        }
-        hooks.clear();
+    if (hooks.find(threadId) != hooks.end()) {
+        Wh_Log(L"Thread %u already has a keyboard hook, skipping.", threadId);
+        return false;
     }
-};
+
+    HHOOK hook =
+        SetWindowsHookExW(WH_KEYBOARD, HandleKeyEvent, nullptr, threadId);
+
+    if (hook == nullptr) {
+        Wh_Log(L"Failed to hook thread %u.", threadId);
+        return false;
+    }
+
+    hooks[threadId] = hook;
+    Wh_Log(L"Installed keyboard hook %p on thread %u.", hook, threadId);
+    return true;
+}
+
+static void DetachAll() {
+    for (auto& [threadId, hook] : hooks) {
+        if (hook != nullptr) {
+            bool ok = UnhookWindowsHookEx(hook);
+            Wh_Log(L"Unhook %p -> %d.", hook, ok);
+        }
+    }
+    hooks.clear();
+}
+};  // namespace KeyboardHooks
 
 namespace WindowCreatedHook {
-// window handle, thread id
-using OnWindowCreated = void (*)(HWND, DWORD);
+using OnWindowCreated = void (*)(HWND windowHandle, DWORD threadId);
 
 static inline OnWindowCreated callback = nullptr;
 
@@ -259,10 +266,8 @@ inline void Attach(OnWindowCreated cb) {
 
 static F2Streak f2Streak;
 
-static LRESULT CALLBACK HandleKeyEvent(int nCode,
-                                       WPARAM wParam,
-                                       LPARAM lParam) {
-    auto f2Count = f2Streak.CheckStreak(nCode, wParam, lParam);
+static bool HandleKeyUp(WPARAM pressedKey) {
+    auto f2Count = f2Streak.CheckStreak(pressedKey);
     if (f2Count > 1) {
         HWND focus = GetFocus();
         if (ExplorerUtils::IsEditControl(focus)) {
@@ -285,20 +290,18 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
                         selection.value().SelectWholeName();
                         break;
                 }
-                return 0;
+                return true;
             }
         }
     }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    return false;
 }
-
-static KeyboardHooks keyboardHooks;
 
 static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
     auto clazz =
         ExplorerUtils::FindExplorerFileViewClass(windowHandle, threadId);
     if (clazz.has_value()) {
-        keyboardHooks.Attach(threadId, HandleKeyEvent);
+        KeyboardHooks::Attach(threadId);
         Wh_Log(L"Hooked Explorer window: hwnd=0x%p class=%s.", windowHandle,
                clazz.value().c_str());
     }
@@ -318,9 +321,11 @@ static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
 }
 
 void Wh_ModInit() {
+    KeyboardHooks::onKeyUp = HandleKeyUp;
+
     Wh_Log(L"Hooking the desktop (shell) thread.");
     DWORD shellThreadId = GetWindowThreadProcessId(GetShellWindow(), nullptr);
-    keyboardHooks.Attach(shellThreadId, HandleKeyEvent);
+    KeyboardHooks::Attach(shellThreadId);
 
     Wh_Log(L"Hooking already open Explorer windows.");
     EnumWindows(HandleWindowEnumerated, 0);
@@ -331,5 +336,5 @@ void Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Removing all keyboard hooks.");
-    keyboardHooks.DetachAll();
+    KeyboardHooks::DetachAll();
 }
