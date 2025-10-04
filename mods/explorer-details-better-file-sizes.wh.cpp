@@ -2,7 +2,7 @@
 // @id              explorer-details-better-file-sizes
 // @name            Better file sizes in Explorer details
 // @description     Optional improvements: show folder sizes, use MB/GB for large files (by default, all sizes are shown in KBs), use IEC terms (such as KiB instead of KB)
-// @version         1.4.9
+// @version         1.4.11
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,6 +10,11 @@
 // @include         *
 // @exclude         conhost.exe
 // @exclude         Plex*.exe
+// @exclude         backgroundTaskHost.exe
+// @exclude         LockApp.exe
+// @exclude         SearchHost.exe
+// @exclude         ShellExperienceHost.exe
+// @exclude         StartMenuExperienceHost.exe
 // @compilerOptions -lole32 -loleaut32 -lpropsys
 // ==/WindhawkMod==
 
@@ -1264,7 +1269,16 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
         return ES_QUERY_NO_ES_IPC;
     }
 
-    EVERYTHING3_CLIENT* pClient = Everything3_ConnectW(L"1.5a");
+    EVERYTHING3_CLIENT* pClient = Everything3_ConnectW(nullptr);
+    if (pClient) {
+        Wh_Log(L"Connected to Everything IPC (unnamed instance)");
+    } else {
+        pClient = Everything3_ConnectW(L"1.5a");
+        if (pClient) {
+            Wh_Log(L"Connected to Everything IPC (v1.5a)");
+        }
+    }
+
     if (pClient) {
         *size = Everything3_GetFolderSizeFromFilenameW(pClient, folderPath);
         Everything3_DestroyClient(pClient);
@@ -1281,9 +1295,15 @@ unsigned Everything4Wh_GetFileSize(PCWSTR folderPath, int64_t* size) {
     }
 
     HWND hEverything = FindWindow(EVERYTHING_IPC_WNDCLASSW_15A, nullptr);
-
-    if (!hEverything) {
+    if (hEverything) {
+        Wh_Log(L"Found Everything IPC window (v1.5a) 0x%08X",
+               (DWORD)(DWORD_PTR)hEverything);
+    } else {
         hEverything = FindWindow(EVERYTHING_IPC_WNDCLASSW, nullptr);
+        if (hEverything) {
+            Wh_Log(L"Found Everything IPC window 0x%08X",
+                   (DWORD)(DWORD_PTR)hEverything);
+        }
     }
 
     if (!hEverything) {
@@ -1467,7 +1487,7 @@ DWORD WINAPI Everything4Wh_Thread(void* parameter) {
     g_gsReply.hEvent = hEvent;
     g_gsReceiverWnd = hReceiverWnd;
 
-    Wh_Log(L"hReceiverWnd=%08X", (DWORD)(ULONG_PTR)hReceiverWnd);
+    Wh_Log(L"hReceiverWnd=0x%08X", (DWORD)(DWORD_PTR)hReceiverWnd);
 
     SetEvent(g_everything4Wh_ThreadReadyEvent);
 
@@ -2110,7 +2130,8 @@ int WINAPI LoadStringW_Hook(HINSTANCE hInstance,
 }
 
 bool HookWindowsStorageSymbols() {
-    HMODULE windowsStorageModule = LoadLibrary(L"windows.storage.dll");
+    HMODULE windowsStorageModule = LoadLibraryEx(
+        L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!windowsStorageModule) {
         Wh_Log(L"Failed to load windows.storage.dll");
         return false;

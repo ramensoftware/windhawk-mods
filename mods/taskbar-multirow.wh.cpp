@@ -2,7 +2,7 @@
 // @id              taskbar-multirow
 // @name            Multirow taskbar for Windows 11
 // @description     Span taskbar items across multiple rows, just like it was possible before Windows 11
-// @version         1.1
+// @version         1.1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -32,8 +32,10 @@ Windows 11.
 * The mod doesn't change the taskbar height, it only makes the task list span
   across multiple rows. To change the taskbar height, use the [Taskbar height
   and icon size](https://windhawk.net/mods/taskbar-icon-size) mod.
+* To have multiple rows of tray icons, use the [Taskbar tray icon spacing and
+  grid](https://windhawk.net/mods/taskbar-notification-icon-spacing) mod.
 
-![Screenshot](https://i.imgur.com/ZpzoDXy.png)
+![Screenshot](https://i.imgur.com/xEK7NhR.png)
 */
 // ==/WindhawkModReadme==
 
@@ -60,6 +62,7 @@ Windows 11.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/base.h>
 
@@ -73,6 +76,8 @@ struct {
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 
+thread_local bool g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride;
+
 struct TaskbarState {
     winrt::weak_ref<XamlRoot> xamlRoot;
     std::vector<float> rowOffsetAdjustment;
@@ -80,14 +85,23 @@ struct TaskbarState {
 
 std::unordered_map<void*, TaskbarState> g_taskbarState;
 
-HWND GetTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
 
-    DWORD processId = 0;
-    if (!hTaskbarWnd || !GetWindowThreadProcessId(hTaskbarWnd, &processId) ||
-        processId != GetCurrentProcessId()) {
-        return nullptr;
-    }
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
 }
@@ -230,6 +244,8 @@ void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
 
+void* TaskbarHost_FrameHeight_Original;
+
 using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
                                                            void** result);
 CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
@@ -242,12 +258,29 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         return nullptr;
     }
 
-    // Reference: TaskbarHost::FrameHeight
-    constexpr size_t kTaskbarElementIUnknownOffset = 0x40;
+    size_t taskbarElementIUnknownOffset = 0x48;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    // Just use the default offset which will hopefully work in most cases.
+#else
+#error "Unsupported architecture"
+#endif
 
     auto* taskbarElementIUnknown =
         *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
-                      kTaskbarElementIUnknownOffset);
+                      taskbarElementIUnknownOffset);
 
     FrameworkElement taskbarElement = nullptr;
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
@@ -458,21 +491,21 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
 }
 
 using IUIElement_Arrange_t =
-    HRESULT(WINAPI*)(void* pThis, const winrt::Windows::Foundation::Rect* rect);
+    HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect rect);
 IUIElement_Arrange_t IUIElement_Arrange_Original;
-HRESULT WINAPI
-IUIElement_Arrange_Hook(void* pThis,
-                        const winrt::Windows::Foundation::Rect* rect) {
+HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
+                                       winrt::Windows::Foundation::Rect rect) {
     Wh_Log(L">");
 
     auto original = [=] { return IUIElement_Arrange_Original(pThis, rect); };
 
-    if (g_unloading) {
+    if (!g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride ||
+        g_unloading) {
         return original();
     }
 
     FrameworkElement element = nullptr;
-    (*(IUnknown**)pThis)
+    ((IUnknown*)pThis)
         ->QueryInterface(winrt::guid_of<FrameworkElement>(),
                          winrt::put_abi(element));
     if (!element) {
@@ -529,7 +562,7 @@ IUIElement_Arrange_Hook(void* pThis,
     double widthWithoutExtent =
         taskbarFrameElement.Width() - systemTrayFrameWidth;
 
-    winrt::Windows::Foundation::Rect newRect = *rect;
+    winrt::Windows::Foundation::Rect newRect = rect;
     newRect.Height /= g_settings.rows;
     for (int i = 0; i < g_settings.rows - 1 &&
                     newRect.X + newRect.Width > widthWithoutExtent;
@@ -551,7 +584,44 @@ IUIElement_Arrange_Hook(void* pThis,
                                          widthWithoutExtent);
     }
 
-    return IUIElement_Arrange_Original(pThis, &newRect);
+    return IUIElement_Arrange_Original(pThis, newRect);
+}
+
+using TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_t =
+    HRESULT(WINAPI*)(void* pThis,
+                     void* context,
+                     winrt::Windows::Foundation::Size size,
+                     winrt::Windows::Foundation::Size* resultSize);
+TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_t
+    TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original;
+HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
+    void* pThis,
+    void* context,
+    winrt::Windows::Foundation::Size size,
+    winrt::Windows::Foundation::Size* resultSize) {
+    Wh_Log(L">");
+
+    [[maybe_unused]] static bool hooked = [] {
+        Shapes::Rectangle rectangle;
+        IUIElement element = rectangle;
+
+        void** vtable = *(void***)winrt::get_abi(element);
+        auto arrange = (IUIElement_Arrange_t)vtable[92];
+
+        WindhawkUtils::Wh_SetFunctionHookT(arrange, IUIElement_Arrange_Hook,
+                                           &IUIElement_Arrange_Original);
+        Wh_ApplyHookOperations();
+        return true;
+    }();
+
+    g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride = true;
+
+    HRESULT ret = TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original(
+        pThis, context, size, resultSize);
+
+    g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride = false;
+
+    return ret;
 }
 
 using TaskbarFrame_SystemTrayExtent_t = void(WINAPI*)(void* pThis,
@@ -632,7 +702,8 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
 }
 
 bool HookTaskbarDllSymbols() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -650,6 +721,10 @@ bool HookTaskbarDllSymbols() {
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
             &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
         },
         {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
@@ -678,9 +753,9 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::Windows::UI::Xaml::IUIElement>::Arrange(struct winrt::Windows::Foundation::Rect const &)const )"},
-            &IUIElement_Arrange_Original,
-            IUIElement_Arrange_Hook,
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
+            &TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Original,
+            TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook,
         },
         {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::SystemTrayExtent(double))"},
@@ -786,7 +861,7 @@ void Wh_ModAfterInit() {
         }
     }
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
         ApplySettings(hTaskbarWnd);
     }
@@ -797,7 +872,7 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
         ApplySettings(hTaskbarWnd);
     }
@@ -812,7 +887,7 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    HWND hTaskbarWnd = GetTaskbarWnd();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
         ApplySettings(hTaskbarWnd);
     }

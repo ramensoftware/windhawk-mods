@@ -2,7 +2,7 @@
 // @id              start-menu-all-apps
 // @name            Show all apps by default in start menu
 // @description     When the Windows 11 start menu is opened, show all apps right away
-// @version         1.0.3
+// @version         1.0.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -38,59 +38,78 @@ After (when the start menu is opened):
 
 #include <windhawk_utils.h>
 
-typedef void (WINAPI *ShowAllApps_t)(
-    LPVOID pThis
-);
+bool g_inStartInnerFrameConstructor;
+void* g_IDockedStartControllerOverrides_as_pThis;
 
-typedef void (WINAPI *HideAllApps_t)(
-    LPVOID pThis
-);
+using ShowAllApps_t = void(WINAPI*)(void* pThis);
+ShowAllApps_t ShowAllApps_Original;
 
-typedef LPVOID (WINAPI *StartInnerFrameConstructor_t)(
-    LPVOID pThis,
-    LPVOID, // struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController const &
-    LPVOID // struct winrt::Windows::Foundation::IInspectable const &
-);
-
-ShowAllApps_t pOriginalShowAllApps;
-HideAllApps_t pOriginalHideAllApps;
-StartInnerFrameConstructor_t pOriginalStartInnerFrameConstructor;
-
-void WINAPI HideAllAppsHook(
-    LPVOID pThis
-)
-{
+using HideAllApps_t = void(WINAPI*)(void* pThis);
+HideAllApps_t HideAllApps_Original;
+void WINAPI HideAllApps_Hook(void* pThis) {
     Wh_Log(L">");
 
     // HideAllApps is called when the start menu is closed to reset the state.
     // The call happens in:
     // winrt::StartMenu::implementation::StartInnerFrame::OnWindowVisibilityChanged
     // What we do is calling ShowAllApps instead.
-    pOriginalShowAllApps(pThis);
+    ShowAllApps_Original(pThis);
 }
 
-LPVOID WINAPI StartInnerFrameConstructorHook(
-    LPVOID pThis,
-    LPVOID dockedStartController,
-    LPVOID param2
-)
-{
+using StartInnerFrameConstructor_t = void*(WINAPI*)(void* pThis,
+                                                    void* dockedStartController,
+                                                    void* param2);
+StartInnerFrameConstructor_t StartInnerFrameConstructor_Original;
+void* WINAPI StartInnerFrameConstructor_Hook(void* pThis,
+                                             void* dockedStartController,
+                                             void* param2) {
     Wh_Log(L">");
 
-    LPVOID ret = pOriginalStartInnerFrameConstructor(pThis, dockedStartController, param2);
+    g_inStartInnerFrameConstructor = true;
 
-    // Show all apps on initialization. Prepares the start menu for the first time it's opened.
-    pOriginalShowAllApps(dockedStartController);
+    void* ret = StartInnerFrameConstructor_Original(
+        pThis, dockedStartController, param2);
+
+    g_inStartInnerFrameConstructor = false;
+
+    void* controllerOverrides = g_IDockedStartControllerOverrides_as_pThis;
+    if (!controllerOverrides) {
+        // In older versions, IDockedStartControllerOverrides_as doesn't exist,
+        // and the param is the right variable.
+        controllerOverrides = dockedStartController;
+    }
+
+    // Show all apps on initialization. Prepares the start menu for the first
+    // time it's opened.
+    ShowAllApps_Original(controllerOverrides);
 
     return ret;
 }
 
-BOOL Wh_ModInit(void)
-{
+using IDockedStartControllerOverrides_as_t = void*(WINAPI*)(void* pThis,
+                                                            void* param1);
+IDockedStartControllerOverrides_as_t
+    IDockedStartControllerOverrides_as_Original;
+void* WINAPI IDockedStartControllerOverrides_as_Hook(void* pThis,
+                                                     void* param1) {
+    Wh_Log(L">");
+
+    if (g_inStartInnerFrameConstructor &&
+        !g_IDockedStartControllerOverrides_as_pThis) {
+        g_IDockedStartControllerOverrides_as_pThis = pThis;
+    }
+
+    void* ret = IDockedStartControllerOverrides_as_Original(pThis, param1);
+
+    return ret;
+}
+
+BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     WCHAR szWindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectory(szWindowsDirectory, ARRAYSIZE(szWindowsDirectory))) {
+    if (!GetWindowsDirectory(szWindowsDirectory,
+                             ARRAYSIZE(szWindowsDirectory))) {
         Wh_Log(L"GetWindowsDirectory failed");
         return FALSE;
     }
@@ -100,31 +119,20 @@ BOOL Wh_ModInit(void)
     // Try the path for Windows 11 version 22H2.
     WCHAR szStartmenuDllPath[MAX_PATH];
     wcscpy_s(szStartmenuDllPath, szWindowsDirectory);
-    wcscat_s(szStartmenuDllPath, LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\StartMenu.dll)");
+    wcscat_s(
+        szStartmenuDllPath,
+        LR"(\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\StartMenu.dll)");
     if (GetFileAttributes(szStartmenuDllPath) != INVALID_FILE_ATTRIBUTES) {
-        // Try to load dependency DLLs. At process start, if they're not loaded,
-        // loading the start menu DLL fails.
-        WCHAR szRuntimeDllPath[MAX_PATH];
-
-        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_app.dll)");
-        LoadLibrary(szRuntimeDllPath);
-
-        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\vcruntime140_1_app.dll)");
-        LoadLibrary(szRuntimeDllPath);
-
-        wcscpy_s(szRuntimeDllPath, szWindowsDirectory);
-        wcscat_s(szRuntimeDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\msvcp140_app.dll)");
-        LoadLibrary(szRuntimeDllPath);
-
-        module = LoadLibrary(szStartmenuDllPath);
-    }
-    else {
+        module = LoadLibraryEx(szStartmenuDllPath, nullptr,
+                               LOAD_WITH_ALTERED_SEARCH_PATH);
+    } else {
         // Try the path for Windows 11 before version 22H2.
         wcscpy_s(szStartmenuDllPath, szWindowsDirectory);
-        wcscat_s(szStartmenuDllPath, LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\StartMenu.dll)");
-        module = LoadLibrary(szStartmenuDllPath);
+        wcscat_s(
+            szStartmenuDllPath,
+            LR"(\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\StartMenu.dll)");
+        module = LoadLibraryEx(szStartmenuDllPath, nullptr,
+                               LOAD_WITH_ALTERED_SEARCH_PATH);
     }
 
     if (!module) {
@@ -142,7 +150,7 @@ BOOL Wh_ModInit(void)
                 // Even older symbol.
                 LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::ShowAllApps(void)const )",
             },
-            (void**)&pOriginalShowAllApps,
+            &ShowAllApps_Original,
         },
         {
             {
@@ -153,16 +161,20 @@ BOOL Wh_ModInit(void)
                 // Even older symbol.
                 LR"(public: void __cdecl winrt::impl::consume_WindowsUdk_UI_StartScreen_Implementation_IDockedStartControllerOverrides<struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController>::HideAllApps(void)const )",
             },
-            (void**)&pOriginalHideAllApps,
-            (void*)HideAllAppsHook,
+            &HideAllApps_Original,
+            HideAllApps_Hook,
         },
         {
-            {
-                LR"(public: __cdecl winrt::StartMenu::implementation::StartInnerFrame::StartInnerFrame(struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController const &,struct winrt::Windows::Foundation::IInspectable const &))",
-            },
-            (void**)&pOriginalStartInnerFrameConstructor,
-            (void*)StartInnerFrameConstructorHook,
-        }
+            {LR"(public: __cdecl winrt::StartMenu::implementation::StartInnerFrame::StartInnerFrame(struct winrt::WindowsUdk::UI::StartScreen::Implementation::DockedStartController const &,struct winrt::Windows::Foundation::IInspectable const &))"},
+            &StartInnerFrameConstructor_Original,
+            StartInnerFrameConstructor_Hook,
+        },
+        {
+            {LR"(struct winrt::WindowsUdk::UI::StartScreen::Implementation::IDockedStartControllerOverrides __cdecl winrt::impl::as<struct winrt::WindowsUdk::UI::StartScreen::Implementation::IDockedStartControllerOverrides,struct winrt::impl::abi<struct winrt::Windows::Foundation::IUnknown,void>::type,0>(struct winrt::impl::abi<struct winrt::Windows::Foundation::IUnknown,void>::type *))"},
+            &IDockedStartControllerOverrides_as_Original,
+            IDockedStartControllerOverrides_as_Hook,
+            true,  // Added in KB5055627.
+        },
     };
 
     if (!HookSymbols(module, startMenuDllHooks, ARRAYSIZE(startMenuDllHooks))) {

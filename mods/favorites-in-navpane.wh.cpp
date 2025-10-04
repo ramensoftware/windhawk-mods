@@ -2,7 +2,7 @@
 // @id              favorites-in-navpane
 // @name            Favorites in Navigation Pane
 // @description     Replaces Windows 10 Quick Access with Favorites in Navigation Pane
-// @version         1.0.1
+// @version         1.0.3
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -122,8 +122,11 @@ BOOL IsIShellItemFavorites(IShellItem *pIShellItem)
     {
         LPWSTR pszName;
         pIShellItem->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &pszName);
-        isFavorites = !wcscmp(L"::{323CA680-C24D-4099-B94D-446DD2D7249E}", pszName);
-        CoTaskMemFree(pszName);
+        if (pszName)
+        {
+            isFavorites = !wcscmp(L"::{323CA680-C24D-4099-B94D-446DD2D7249E}", pszName);
+            CoTaskMemFree(pszName);
+        }
     }
 
     return isFavorites;    
@@ -142,7 +145,7 @@ LSTATUS WINAPI RegQueryValueExW_hook(
 )
 {
     LSTATUS lStatus = RegQueryValueExW_orig(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
-    if (ERROR_SUCCESS == lStatus && lpData && 0 == wcsicmp(lpValueName, L"Attributes"))
+    if (ERROR_SUCCESS == lStatus && lpData && lpValueName && 0 == wcsicmp(lpValueName, L"Attributes"))
     {
         ULONG ulSize = 0;
         NTSTATUS status = NtQueryKey(hKey, KeyNameInformation, nullptr, 0, &ulSize);
@@ -180,7 +183,7 @@ using SHCreateItemFromParsingName_t = decltype(&SHCreateItemFromParsingName);
 SHCreateItemFromParsingName_t SHCreateItemFromParsingName_orig;
 HRESULT WINAPI SHCreateItemFromParsingName_hook(PCWSTR pszPath, IBindCtx *pbc, const IID &riid, void **ppv)
 {
-    if (!wcscmp(L"shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}", pszPath) && pbc == NULL && riid == IID_IShellItem)
+    if (pszPath && !wcscmp(L"shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}", pszPath) && pbc == NULL && riid == IID_IShellItem)
     {
         Wh_Log(L"%s", pszPath);
         pszPath = L"shell:::{323CA680-C24D-4099-B94D-446DD2D7249E}";
@@ -284,14 +287,14 @@ HRESULT __fastcall OrderList_SaveToStream_hook(IStream *pStream, HDPA hdpa, IShe
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32) 
     {
         Wh_Log(L"Failed to load shell32.dll");
         return FALSE;
     }
 
-    HMODULE hExplorerFrame = LoadLibraryW(L"ExplorerFrame.dll");
+    HMODULE hExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hExplorerFrame) 
     {
         Wh_Log(L"Failed to load ExplorerFrame.dll");

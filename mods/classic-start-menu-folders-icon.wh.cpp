@@ -2,7 +2,7 @@
 // @id              classic-start-menu-folders-icon
 // @name            Classic Start Menu Folders Icon
 // @description     Change the default icon of Start Menu folders like Windows XP and before
-// @version         1.0
+// @version         1.0.2
 // @author          xalejandro
 // @github          https://github.com/tetawaves
 // @include         *
@@ -25,186 +25,195 @@ screenshot.
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
+#ifdef _WIN64
+#   define THISCALL  __cdecl
+#   define STHISCALL L"__cdecl"
+#   define STDCALL  __cdecl
+#   define SSTDCALL L"__cdecl"
+#else
+#   define THISCALL  __thiscall
+#   define STHISCALL L"__thiscall"
+#   define STDCALL  __stdcall
+#   define SSTDCALL L"__stdcall"
+#endif
+
 #define SIID_PROG 36
 
 #ifdef _WIN64
-#define THISCALL __cdecl
-#define STHISCALL L"__cdecl"
+#   define CFSFolder_CFSFolder(pThis) (CFSFolder*)((char*)pThis - 56)
 #else
-#define THISCALL __stdcall
-#define STHISCALL L"__stdcall"
+#   define CFSFolder_CFSFolder(pThis) (CFSFolder*)((char*)pThis - 28)
 #endif
 
-struct IDFOLDER {};
-struct ICachedPrivateProfile {};
 struct CFSFolder {};
+struct ICachedPrivateProfile {};
+struct IDFOLDER {};
 
-UINT THISCALL (*CFSFolder__GetCSIDL)(void*);
-HRESULT THISCALL (*CFSFolder__GetDesktopIniForItem)(void*,
-                                                    ITEMIDLIST_RELATIVE*,
-                                                    void*);
-IDFOLDER* THISCALL (*CFSFolder__IsValidID)(void*, ITEMIDLIST_RELATIVE*, void*);
+UINT (THISCALL *CFSFolder__GetCSIDL)(CFSFolder *);
+HRESULT (THISCALL *CFSFolder__GetDesktopIniForItem)(CFSFolder *, ITEMIDLIST_RELATIVE *, void *);
+IDFOLDER * (THISCALL *CFSFolder__IsValidID)(CFSFolder *, ITEMIDLIST_RELATIVE *);
+BOOL (STDCALL *CPrivateProfile_GetString)(ICachedPrivateProfile *, PCWSTR, PCWSTR, int, int, LPWSTR *);
 
-UINT THISCALL (*GetFolderString)(void*, LPCWSTR, LPCWSTR, LPWSTR*, int);
-int THISCALL (*IsFileFolder)(IDFOLDER*);
-int THISCALL (*Shell_GetStockImageIndex)(int);
-
-BOOL CheckCSIDL(UINT csidl) {
-    switch (csidl) {
+BOOL CheckCSIDL(UINT csidl) 
+{
+    switch (csidl) 
+    {
         case CSIDL_STARTMENU:
         case CSIDL_COMMON_STARTMENU:
         case CSIDL_PROGRAMS:
         case CSIDL_COMMON_PROGRAMS:
-            return true;
+            return TRUE;
     }
-    return false;
+    return FALSE;
 }
 
-long THISCALL (*CFSFolder__CreateFileFolderDefExtIcon_orig)(CFSFolder*,
-                                                            ITEMID_CHILD*,
-                                                            IDFOLDER*,
-                                                            IBindCtx*,
-                                                            GUID*,
-                                                            void**);
-long THISCALL CFSFolder__CreateFileFolderDefExtIcon_hook(CFSFolder* pThis,
-                                                         ITEMID_CHILD* pItemID,
-                                                         IDFOLDER* pIDFOLDER,
-                                                         IBindCtx* pBind,
-                                                         GUID* guid,
-                                                         void** ppv) {
-    long result = CFSFolder__CreateFileFolderDefExtIcon_orig(
-        pThis, pItemID, pIDFOLDER, pBind, guid, ppv);
+HRESULT (THISCALL *CFSFolder__CreateFileFolderDefExtIcon_orig)(CFSFolder *, ITEMID_CHILD *, IDFOLDER *, IBindCtx *, GUID *, void **);
+HRESULT THISCALL CFSFolder__CreateFileFolderDefExtIcon_hook(CFSFolder *pThis, ITEMID_CHILD *pItemId, IDFOLDER *pIDFOLDER, IBindCtx *pIBindCtx, GUID *guid, void **ppv)
+{
+    HRESULT hr = CFSFolder__CreateFileFolderDefExtIcon_orig(pThis, pItemId, pIDFOLDER, pIBindCtx, guid, ppv);
 
-    ICachedPrivateProfile* pICachedPrivateProfile;
-    LPWSTR folderString[264];
-    UINT csidl = CFSFolder__GetCSIDL(pThis);
-
-    if (!CheckCSIDL(csidl)) {
-        return result;
+    if (!CheckCSIDL(CFSFolder__GetCSIDL(pThis)))
+    {
+        return hr;
     }
 
-    if (CFSFolder__GetDesktopIniForItem(pThis, pItemID,
-                                        &pICachedPrivateProfile) >= 0) {
-        if (GetFolderString(pICachedPrivateProfile, L".ShellClassInfo",
-                            L"IconResource", folderString, MAX_PATH) ||
-            GetFolderString(pICachedPrivateProfile, L".ShellClassInfo",
-                            L"IconFile", folderString, MAX_PATH)) {
-            return result;
+    ICachedPrivateProfile* pICachedPrivateProfile = nullptr;
+    LPWSTR folderString[MAX_PATH + 4];
+    if (SUCCEEDED(CFSFolder__GetDesktopIniForItem(pThis, pItemId, &pICachedPrivateProfile)) && pICachedPrivateProfile)
+    {
+        if (!CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconResource", 0, 2, folderString) ||
+            !CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconFile", 0, 2, folderString))
+        {
+            return hr;
         }
     }
 
-    IDefaultExtractIconInit* pdxi = NULL;
+    IDefaultExtractIconInit* pdxi = nullptr;
     SHCreateDefaultExtractIcon(IID_PPV_ARGS(&pdxi));
-    pdxi->SetNormalIcon(NULL, SIID_PROG);
-    pdxi->SetOpenIcon(NULL, SIID_PROG);
+    if (pdxi)
+    {
+        pdxi->SetNormalIcon(nullptr, SIID_PROG);
+        pdxi->SetOpenIcon(nullptr, SIID_PROG);
 
-    pdxi->QueryInterface((IID)*guid, ppv);
-
-    if (pdxi) {
+        pdxi->QueryInterface((IID)*guid, ppv);       
         pdxi->Release();
     }
 
-    return result;
+    return hr;
 }
 
-long THISCALL (*CFSFolder_GetIconOf_orig)(CFSFolder*,
-                                          ITEMIDLIST_RELATIVE*,
-                                          unsigned int,
-                                          int*);
-long THISCALL CFSFolder_GetIconOf_hook(CFSFolder* pThis,
-                                       ITEMIDLIST_RELATIVE* pItemID,
-                                       unsigned int a3,
-                                       int* a4) {
-    long result = CFSFolder_GetIconOf_orig(pThis, pItemID, a3, a4);
+HRESULT (STDCALL *CFSFolder_GetIconOf_orig)(CFSFolder *, ITEMIDLIST_RELATIVE *, UINT, int *);
+HRESULT STDCALL CFSFolder_GetIconOf_hook(CFSFolder *pThis, ITEMIDLIST_RELATIVE *pItemId, UINT flags, int *pImageIndex)
+{
+    HRESULT hr = CFSFolder_GetIconOf_orig(pThis, pItemId, flags, pImageIndex);
+    
+    CFSFolder* pFSFolder = CFSFolder_CFSFolder(pThis);
+    IDFOLDER* pIdFolder = CFSFolder__IsValidID(pFSFolder, pItemId);
 
-    ICachedPrivateProfile* pICachedPrivateProfile;
-    LPWSTR folderString[264];
-    IShellFolder* cfsFolder = (IShellFolder*)((CFSFolder*)pThis - 56);
-    UINT csidl = CFSFolder__GetCSIDL((CFSFolder*)cfsFolder);
-    IDFOLDER* idFolder =
-        CFSFolder__IsValidID((CFSFolder*)cfsFolder, pItemID, NULL);
-
-    if (!CheckCSIDL(csidl)) {
-        return result;
+    if (!CheckCSIDL(CFSFolder__GetCSIDL(pFSFolder)) || !pIdFolder)
+    {
+        return hr;
     }
 
-    if (!idFolder) {
-        return result;
-    }
+    ICachedPrivateProfile* pICachedPrivateProfile = nullptr;
+    LPWSTR folderString[MAX_PATH + 4];
 
-    if (!IsFileFolder(idFolder)) {
-        return result;
-    }
-
-    if (CFSFolder__GetDesktopIniForItem((void*)cfsFolder, pItemID,
-                                        &pICachedPrivateProfile) <= 0) {
-        if (pICachedPrivateProfile) {
-            if (GetFolderString(pICachedPrivateProfile, L".ShellClassInfo",
-                                L"IconResource", folderString, MAX_PATH) ||
-                GetFolderString(pICachedPrivateProfile, L".ShellClassInfo",
-                                L"IconFile", folderString, MAX_PATH)) {
-                return result;
-            }
-            *a4 = Shell_GetStockImageIndex(SIID_PROG);
+    if (SUCCEEDED(CFSFolder__GetDesktopIniForItem(pFSFolder, pItemId, &pICachedPrivateProfile)) && pICachedPrivateProfile)
+    {
+        if (!CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconResource", 0, 2, folderString) ||
+            !CPrivateProfile_GetString(pICachedPrivateProfile, L".ShellClassInfo", L"IconFile", 0, 2, folderString))
+        {
+            return hr;
         }
+        *pImageIndex = SIID_PROG;
     }
 
-    return result;
+    return hr;
 }
 
-BOOL Wh_ModInit() {
+BOOL Wh_ModInit() 
+{
     Wh_Log(L"Init");
 
     // windows.storage.dll
-    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
-        {{L"protected: long " STHISCALL
-          " CFSFolder::_CreateFileFolderDefExtIcon(struct _ITEMID_CHILD const "
-          "__unaligned *,struct IDFOLDER const __unaligned *,struct IBindCtx "
-          "*,struct _GUID const &,void * *)"},
-         &CFSFolder__CreateFileFolderDefExtIcon_orig,
-         CFSFolder__CreateFileFolderDefExtIcon_hook,
-         false},
-        {{L"public: virtual long " STHISCALL
-          " CFSFolder::GetIconOf(struct _ITEMID_CHILD const __unaligned "
-          "*,unsigned int,int *)"},
-         &CFSFolder_GetIconOf_orig,
-         CFSFolder_GetIconOf_hook,
-         false},
-        {{L"protected: unsigned int " STHISCALL " CFSFolder::_GetCSIDL(void)"},
-         &CFSFolder__GetCSIDL,
-         nullptr,
-         false},
-        {{L"protected: long " STHISCALL
-          " CFSFolder::_GetDesktopIniForItem(struct _ITEMIDLIST_RELATIVE const "
-          "__unaligned *,struct ICachedPrivateProfile * *)"},
-         &CFSFolder__GetDesktopIniForItem,
-         nullptr,
-         false},
-        {{L"protected: struct IDFOLDER const __unaligned * " STHISCALL
-          " CFSFolder::_IsValidID(struct _ITEMIDLIST_RELATIVE const "
-          "__unaligned *)"},
-         &CFSFolder__IsValidID,
-         nullptr,
-         false},
-        {{L"GetFolderString"}, &GetFolderString, nullptr, false},
-        {{L"int " STHISCALL
-          " IsFileFolder(struct IDFOLDER const __unaligned *)"},
-         &IsFileFolder,
-         nullptr,
-         false},
-        {{L"int " STHISCALL " Shell_GetStockImageIndex(enum SHSTOCKICONID)"},
-         &Shell_GetStockImageIndex,
-         nullptr,
-         false}};
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[]
+    {
+        {
+            {
+                #ifdef _WIN64
+                L"protected: long __cdecl CFSFolder::_CreateFileFolderDefExtIcon(struct _ITEMID_CHILD const __unaligned *,struct IDFOLDER const __unaligned *,struct IBindCtx *,struct _GUID const &,void * *)"
+                #else
+                L"protected: long __thiscall CFSFolder::_CreateFileFolderDefExtIcon(struct _ITEMID_CHILD const *,struct IDFOLDER const *,struct IBindCtx *,struct _GUID const &,void * *)"
+                #endif
+            },
+            &CFSFolder__CreateFileFolderDefExtIcon_orig,
+            CFSFolder__CreateFileFolderDefExtIcon_hook,
+            false
+        },
+        {
+            {
+                #ifdef _WIN64
+                L"public: virtual long __cdecl CFSFolder::GetIconOf(struct _ITEMID_CHILD const __unaligned *,unsigned int,int *)"
+                #else
+                L"public: virtual long __stdcall CFSFolder::GetIconOf(struct _ITEMID_CHILD const *,unsigned int,int *)"
+                #endif
+            },
+            &CFSFolder_GetIconOf_orig,
+            CFSFolder_GetIconOf_hook,
+            false
+        },
+        {
+            {
+                L"protected: unsigned int " STHISCALL " CFSFolder::_GetCSIDL(void)"
+            },
+            &CFSFolder__GetCSIDL,
+            nullptr,
+            false
+        },
+        {
+            {
+                #ifdef _WIN64
+                L"protected: long __cdecl CFSFolder::_GetDesktopIniForItem(struct _ITEMIDLIST_RELATIVE const __unaligned *,struct ICachedPrivateProfile * *)"
+                #else
+                L"protected: long __thiscall CFSFolder::_GetDesktopIniForItem(struct _ITEMIDLIST_RELATIVE const *,struct ICachedPrivateProfile * *)"
+                #endif
+            },
+            &CFSFolder__GetDesktopIniForItem,
+            nullptr,
+            false
+        },
+        {
+            {
+                #ifdef _WIN64
+                L"protected: struct IDFOLDER const __unaligned * __cdecl CFSFolder::_IsValidID(struct _ITEMIDLIST_RELATIVE const __unaligned *)"
+                #else
+                L"protected: struct IDFOLDER const * __thiscall CFSFolder::_IsValidID(struct _ITEMIDLIST_RELATIVE const *)"
+                #endif
+            },
+            &CFSFolder__IsValidID,
+            nullptr,
+            false
+        },
+        {
+            {
+                L"public: virtual long " SSTDCALL " CPrivateProfile::GetString(unsigned short const *,unsigned short const *,unsigned short const *,enum CACHEDPRIVATEPROFILEFLAGS,unsigned short * *)"
+            },
+            &CPrivateProfile_GetString,
+            nullptr,
+            false
+        }
+    };
 
-    HMODULE hWindowsStorage = LoadLibraryW(L"windows.storage.dll");
-    if (!hWindowsStorage) {
+    HMODULE hWindowsStorage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!hWindowsStorage) 
+    {
         Wh_Log(L"Failed to load windows.storage.dll");
         return FALSE;
     }
 
     if (!WindhawkUtils::HookSymbols(hWindowsStorage, windowsStorageHooks,
-                                    ARRAYSIZE(windowsStorageHooks))) {
+                                    ARRAYSIZE(windowsStorageHooks))) 
+    {
         Wh_Log(L"Failed to hook windows.storage.dll");
         return FALSE;
     }
