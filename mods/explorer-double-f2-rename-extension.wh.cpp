@@ -59,9 +59,6 @@ static bool IsFileView(std::wstring windowClass) {
 }
 
 static bool IsEditControl(HWND focus) {
-    if (focus == nullptr) {
-        return false;
-    }
     wchar_t cls[32];
     GetClassNameW(focus, cls, _countof(cls));
     return _wcsicmp(cls, L"Edit") == 0;
@@ -208,10 +205,8 @@ static std::optional<HHOOK> AttachToWindow(DWORD threadId) {
 
 static void DetachAll() {
     for (auto& [threadId, hook] : hooks) {
-        if (hook != nullptr) {
-            bool ok = UnhookWindowsHookEx(hook);
-            Wh_Log(L"Unhook %p -> %d.", hook, ok);
-        }
+        bool ok = UnhookWindowsHookEx(hook);
+        Wh_Log(L"Unhook %p -> %d.", hook, ok);
     }
     hooks.clear();
 }
@@ -304,7 +299,7 @@ static bool ApplyMultiF2Selection(WPARAM pressedKey) {
     }
     if (f2Count > 1) {
         HWND focus = GetFocus();
-        if (ExplorerUtils::IsEditControl(focus)) {
+        if (focus != nullptr && ExplorerUtils::IsEditControl(focus)) {
             Wh_Log(L"Applying selection for %d times F2 in an Edit field.",
                    f2Count);
             auto selection = Selection::inside(focus);
