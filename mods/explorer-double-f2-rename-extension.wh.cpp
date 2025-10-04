@@ -330,15 +330,15 @@ static void CheckAllOpenWindows(ExplorerWindowConsumer cb) {
 void Wh_ModInit() {
     KeyboardHooks::onKeyUp = HandleKeyUp;
 
+    Wh_Log(L"Hooking Explorer window creation.");
+    WindowCreatedHook::Attach(HookIfExplorerFileView);
+
     Wh_Log(L"Hooking the desktop (shell) thread.");
     DWORD shellThreadId = GetWindowThreadProcessId(GetShellWindow(), nullptr);
     KeyboardHooks::Attach(shellThreadId);
 
     Wh_Log(L"Hooking already open Explorer windows.");
     WindowEnumeration::CheckAllOpenWindows(HookIfExplorerFileView);
-
-    Wh_Log(L"Hooking Explorer window creation.");
-    WindowCreatedHook::Attach(HookIfExplorerFileView);
 }
 
 void Wh_ModUninit() {
