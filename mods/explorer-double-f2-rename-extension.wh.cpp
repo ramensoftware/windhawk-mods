@@ -40,20 +40,22 @@ This mod works great together with
 #include <unordered_map>
 
 namespace ExplorerUtils {
-static std::optional<std::wstring> FindExplorerFileViewClass(HWND windowHandle,
-                                                             DWORD threadId) {
-    if (windowHandle != nullptr && IsWindow(windowHandle)) {
+static std::optional<std::wstring> FindWindowClassName(HWND windowHandle) {
+    // just in case the window closed in the meantime
+    if (IsWindow(windowHandle)) {
         wchar_t clazz[64];
-        if (GetClassNameW(windowHandle, clazz, _countof(clazz))) {
-            // legacy explorer, modern explorer, desktop
-            if (_wcsicmp(clazz, L"CabinetWClass") == 0 ||
-                _wcsicmp(clazz, L"ExploreWClass") == 0 ||
-                _wcsicmp(clazz, L"Progman") == 0) {
-                return clazz;
-            }
+        if (GetClassNameW(windowHandle, clazz, _countof(clazz)) > 0) {
+            return clazz;
         }
     }
     return std::nullopt;
+}
+
+static bool IsFileView(std::wstring windowClass) {
+    // legacy explorer, modern explorer, desktop
+    return _wcsicmp(windowClass.c_str(), L"CabinetWClass") == 0 ||
+           _wcsicmp(windowClass.c_str(), L"ExploreWClass") == 0 ||
+           _wcsicmp(windowClass.c_str(), L"Progman") == 0;
 }
 
 static bool IsEditControl(HWND focus) {
@@ -320,9 +322,8 @@ static bool HandleKeyUp(WPARAM pressedKey) {
 }
 
 static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
-    auto clazz =
-        ExplorerUtils::FindExplorerFileViewClass(windowHandle, threadId);
-    if (clazz.has_value()) {
+    auto clazz = ExplorerUtils::FindWindowClassName(windowHandle);
+    if (clazz.has_value() && ExplorerUtils::IsFileView(clazz.value())) {
         auto hook = KeyboardHooks::Attach(threadId);
         if (hook.has_value()) {
             Wh_Log(L"Hooked %s window: hwnd=0x%p hook=0x%p.",
