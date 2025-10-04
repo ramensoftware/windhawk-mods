@@ -111,7 +111,7 @@ class Selection {
         Wh_Log(L"Selected whole name \"%s\".", text.c_str());
     }
 
-    static std::optional<Selection> inside(HWND editControl) {
+    static std::optional<Selection> InsideControl(HWND editControl) {
         // typical max filename length
         std::wstring text(260, L'\0');
         int copied = GetWindowTextW(editControl, text.data(), (int)text.size());
@@ -302,7 +302,7 @@ static bool ApplyMultiF2Selection(WPARAM pressedKey) {
         if (focus != nullptr && ExplorerUtils::IsEditControl(focus)) {
             Wh_Log(L"Applying selection for %d times F2 in an Edit field.",
                    f2Count);
-            auto selection = Selection::inside(focus);
+            auto selection = Selection::InsideControl(focus);
             if (selection.has_value()) {
                 auto timesF2 = f2Count % 3;
                 switch (timesF2) {
