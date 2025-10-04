@@ -217,21 +217,20 @@ static void DetachAll() {
 namespace WindowCreatedHook {
 using OnWindowCreated = void (*)(HWND windowHandle, DWORD threadId);
 
-static inline OnWindowCreated callback = nullptr;
+static OnWindowCreated callback = nullptr;
 
-static inline HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
-                                                        LPCWSTR lpClassName,
-                                                        LPCWSTR lpWindowName,
-                                                        DWORD dwStyle,
-                                                        int X,
-                                                        int Y,
-                                                        int nWidth,
-                                                        int nHeight,
-                                                        HWND hWndParent,
-                                                        HMENU hMenu,
-                                                        HINSTANCE hInstance,
-                                                        LPVOID lpParam) =
-    nullptr;
+static HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
+                                                 LPCWSTR lpClassName,
+                                                 LPCWSTR lpWindowName,
+                                                 DWORD dwStyle,
+                                                 int X,
+                                                 int Y,
+                                                 int nWidth,
+                                                 int nHeight,
+                                                 HWND hWndParent,
+                                                 HMENU hMenu,
+                                                 HINSTANCE hInstance,
+                                                 LPVOID lpParam) = nullptr;
 
 static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
                                        LPCWSTR lpClassName,
@@ -254,7 +253,7 @@ static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
     return hwnd;
 }
 
-inline void Attach(OnWindowCreated cb) {
+void Attach(OnWindowCreated cb) {
     if (callback != nullptr) {
         return;
     }
