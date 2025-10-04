@@ -5,10 +5,8 @@
 // @version      1.5
 // @author       David Trapp (CherryDT)
 // @github       https://github.com/CherryDT
-// @twitter      https://x.com/CherryDT
 // @include      C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_*\Notepad\Notepad.exe
 // @architecture x86-64
-// @architecture arm64
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
