@@ -260,6 +260,32 @@ void Attach(OnWindowCreated cb) {
 }
 }  // namespace WindowCreatedHook
 
+namespace WindowEnumeration {
+using ExplorerWindowConsumer = void (*)(HWND windowHandle, DWORD threadId);
+
+static ExplorerWindowConsumer onExplorerWindowFound;
+
+static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
+    DWORD processId = 0;
+    DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
+    bool isExplorer = processId == GetCurrentProcessId();
+
+    if (isExplorer) {
+        onExplorerWindowFound(hwnd, threadId);
+    }
+
+    // continue enumeration
+    return true;
+}
+
+static void CheckAllOpenWindows(ExplorerWindowConsumer cb) {
+    onExplorerWindowFound = cb;
+    EnumWindows(HandleWindowEnumerated, 0);
+}
+}  // namespace WindowEnumeration
+
+// -----------------------------------------------------------------------------
+
 static F2Streak f2Streak;
 
 static bool HandleKeyUp(WPARAM pressedKey) {
@@ -302,30 +328,6 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
                clazz.value().c_str());
     }
 }
-
-namespace WindowEnumeration {
-using ExplorerWindowConsumer = void (*)(HWND windowHandle, DWORD threadId);
-
-static ExplorerWindowConsumer onExplorerWindowFound;
-
-static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
-    DWORD processId = 0;
-    DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
-    bool isExplorer = processId == GetCurrentProcessId();
-
-    if (isExplorer) {
-        onExplorerWindowFound(hwnd, threadId);
-    }
-
-    // continue enumeration
-    return true;
-}
-
-static void CheckAllOpenWindows(ExplorerWindowConsumer cb) {
-    onExplorerWindowFound = cb;
-    EnumWindows(HandleWindowEnumerated, 0);
-}
-}  // namespace WindowEnumeration
 
 void Wh_ModInit() {
     KeyboardHooks::onKeyUp = HandleKeyUp;
