@@ -138,7 +138,7 @@ class KeyStreak {
    public:
     KeyStreak(unsigned int key) : targetKey(key) {}
 
-    short CheckStreak(WPARAM pressedKey) {
+    short Count(WPARAM pressedKey) {
         if (pressedKey != targetKey) {
             return streak = 0;
         }
@@ -160,6 +160,8 @@ class KeyStreak {
 };
 
 namespace KeyboardHooks {
+// this is all static because keyboard hooks must be static
+// any installed keyboard hook must be removed when the mod exits
 using OnKeyUp = bool (*)(WPARAM pressedKey);
 
 static std::unordered_map<DWORD, HHOOK> hooks = {};
@@ -179,7 +181,7 @@ static LRESULT CALLBACK HandleKeyEvent(int nCode,
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static std::optional<HHOOK> Attach(DWORD threadId) {
+static std::optional<HHOOK> AttachToWindow(DWORD threadId) {
     if (threadId == 0) {
         Wh_Log(L"Refusing keyboard hook on bad thread id.");
         return std::nullopt;
@@ -213,10 +215,11 @@ static void DetachAll() {
 }
 };  // namespace KeyboardHooks
 
-namespace WindowCreatedHook {
+namespace ExplorerWindowCreatedHook {
+// this is all static because window creation hooks must be static
 using OnWindowCreated = void (*)(HWND windowHandle, DWORD threadId);
 
-static OnWindowCreated callback = nullptr;
+static OnWindowCreated onExplorerWindowCreated = nullptr;
 
 static HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
                                                  LPCWSTR lpClassName,
@@ -231,40 +234,44 @@ static HWND(WINAPI* previousHandleWindowCreated)(DWORD dwExStyle,
                                                  HINSTANCE hInstance,
                                                  LPVOID lpParam) = nullptr;
 
-static HWND WINAPI HandleWindowCreated(DWORD dwExStyle,
-                                       LPCWSTR lpClassName,
-                                       LPCWSTR lpWindowName,
-                                       DWORD dwStyle,
-                                       int X,
-                                       int Y,
-                                       int nWidth,
-                                       int nHeight,
-                                       HWND hWndParent,
-                                       HMENU hMenu,
-                                       HINSTANCE hInstance,
-                                       LPVOID lpParam) {
+static HWND WINAPI HandleExplorerWindowCreated(DWORD dwExStyle,
+                                               LPCWSTR lpClassName,
+                                               LPCWSTR lpWindowName,
+                                               DWORD dwStyle,
+                                               int X,
+                                               int Y,
+                                               int nWidth,
+                                               int nHeight,
+                                               HWND hWndParent,
+                                               HMENU hMenu,
+                                               HINSTANCE hInstance,
+                                               LPVOID lpParam) {
     // always call the original first
     HWND hwnd = previousHandleWindowCreated(
         dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
         hWndParent, hMenu, hInstance, lpParam);
     auto threadId = GetCurrentThreadId();
-    callback(hwnd, threadId);
+    onExplorerWindowCreated(hwnd, threadId);
     return hwnd;
 }
 
-void Attach(OnWindowCreated cb) {
-    callback = cb;
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)HandleWindowCreated,
+void ExecuteOnNewWindow(OnWindowCreated cb) {
+    onExplorerWindowCreated = cb;
+    // this will only trigger for processes windhawk injects this mod into
+    // i.e. for new _explorer_ windows
+    Wh_SetFunctionHook((void*)CreateWindowExW,
+                       (void*)HandleExplorerWindowCreated,
                        (void**)&previousHandleWindowCreated);
 }
-}  // namespace WindowCreatedHook
+}  // namespace ExplorerWindowCreatedHook
 
 namespace WindowEnumeration {
+// this is all static because window enumeration takes a static callback
 using ExplorerWindowConsumer = void (*)(HWND windowHandle, DWORD threadId);
 
 static ExplorerWindowConsumer onExplorerWindowFound;
 
-static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
+static BOOL CALLBACK HandleGlobalWindowEnumerated(HWND hwnd, LPARAM lParam) {
     DWORD processId = 0;
     DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
     bool isExplorer = processId == GetCurrentProcessId();
@@ -277,9 +284,10 @@ static BOOL CALLBACK HandleWindowEnumerated(HWND hwnd, LPARAM lParam) {
     return true;
 }
 
-static void CheckAllOpenWindows(ExplorerWindowConsumer cb) {
+static void ForEachOpenExplorer(ExplorerWindowConsumer cb) {
     onExplorerWindowFound = cb;
-    EnumWindows(HandleWindowEnumerated, 0);
+    // this loops _all_ open windows, not just explorer's
+    EnumWindows(HandleGlobalWindowEnumerated, 0);
 }
 }  // namespace WindowEnumeration
 
@@ -287,8 +295,8 @@ static void CheckAllOpenWindows(ExplorerWindowConsumer cb) {
 
 static KeyStreak f2Streak(VK_F2);
 
-static bool HandleKeyUp(WPARAM pressedKey) {
-    auto f2Count = f2Streak.CheckStreak(pressedKey);
+static bool ApplyMultiF2Selection(WPARAM pressedKey) {
+    auto f2Count = f2Streak.Count(pressedKey);
     if (f2Count > 0) {
         Wh_Log(L"F2 streak: %dx.", f2Count);
     }
@@ -321,10 +329,10 @@ static bool HandleKeyUp(WPARAM pressedKey) {
     return false;
 }
 
-static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
+static void HookIfFileView(HWND windowHandle, DWORD threadId) {
     auto clazz = ExplorerUtils::FindWindowClassName(windowHandle);
     if (clazz.has_value() && ExplorerUtils::IsFileView(clazz.value())) {
-        auto hook = KeyboardHooks::Attach(threadId);
+        auto hook = KeyboardHooks::AttachToWindow(threadId);
         if (hook.has_value()) {
             Wh_Log(L"Hooked %s window: hwnd=0x%p hook=0x%p.",
                    clazz.value().c_str(), windowHandle, hook.value());
@@ -333,13 +341,13 @@ static void HookIfExplorerFileView(HWND windowHandle, DWORD threadId) {
 }
 
 void Wh_ModInit() {
-    KeyboardHooks::onKeyUp = HandleKeyUp;
+    KeyboardHooks::onKeyUp = ApplyMultiF2Selection;
 
     Wh_Log(L"Hooking Explorer window creation.");
-    WindowCreatedHook::Attach(HookIfExplorerFileView);
+    ExplorerWindowCreatedHook::ExecuteOnNewWindow(HookIfFileView);
 
     Wh_Log(L"Hooking already open Explorer windows.");
-    WindowEnumeration::CheckAllOpenWindows(HookIfExplorerFileView);
+    WindowEnumeration::ForEachOpenExplorer(HookIfFileView);
 }
 
 void Wh_ModUninit() {
