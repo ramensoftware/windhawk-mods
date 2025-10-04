@@ -127,33 +127,35 @@ class Selection {
     }
 };
 
-class F2Streak {
+class KeyStreak {
    private:
-    ULONGLONG lastF2Time = 0;
+    ULONGLONG lastPressTime = 0;
     short streak = 0;
+    unsigned int targetKey;
 
    public:
+    KeyStreak(unsigned int key) : targetKey(key) {}
+
     short CheckStreak(WPARAM pressedKey) {
-        bool isF2 = pressedKey == VK_F2;
-        if (!isF2) {
+        if (pressedKey != targetKey) {
             return streak = 0;
         }
 
-        auto doubleF2Time = ModSettings::GetDoublePressMillis();
+        auto doublePressTime = ModSettings::GetDoublePressMillis();
         ULONGLONG now = GetTickCount64();
-        auto timeSinceLastF2 = now - lastF2Time;
-        lastF2Time = now;
+        auto timeSinceLastPress = now - lastPressTime;
+        lastPressTime = now;
 
-        Wh_Log(L"F2 pressed again after %llums.", timeSinceLastF2);
+        Wh_Log(L"Key pressed again after %llums.", timeSinceLastPress);
 
-        bool tooSlow = timeSinceLastF2 > doubleF2Time;
+        bool tooSlow = timeSinceLastPress > doublePressTime;
         if (tooSlow) {
             return streak = 1;
         }
 
         streak += 1;
 
-        Wh_Log(L"F2 streak: %dx.", streak);
+        Wh_Log(L"Keypress streak: %dx.", streak);
 
         return streak;
     }
@@ -286,7 +288,7 @@ static void CheckAllOpenWindows(ExplorerWindowConsumer cb) {
 
 // -----------------------------------------------------------------------------
 
-static F2Streak f2Streak;
+static KeyStreak f2Streak(VK_F2);
 
 static bool HandleKeyUp(WPARAM pressedKey) {
     auto f2Count = f2Streak.CheckStreak(pressedKey);
