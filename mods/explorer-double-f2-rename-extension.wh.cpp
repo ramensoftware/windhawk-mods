@@ -333,10 +333,6 @@ void Wh_ModInit() {
     Wh_Log(L"Hooking Explorer window creation.");
     WindowCreatedHook::Attach(HookIfExplorerFileView);
 
-    Wh_Log(L"Hooking the desktop (shell) thread.");
-    DWORD shellThreadId = GetWindowThreadProcessId(GetShellWindow(), nullptr);
-    KeyboardHooks::Attach(shellThreadId);
-
     Wh_Log(L"Hooking already open Explorer windows.");
     WindowEnumeration::CheckAllOpenWindows(HookIfExplorerFileView);
 }
