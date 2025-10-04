@@ -5,10 +5,8 @@
 // @version      1.0
 // @author       David Trapp (CherryDT)
 // @github       https://github.com/CherryDT
-// @twitter      https://x.com/CherryDT
 // @include      dropbox.exe
 // @architecture x86-64
-// @architecture arm64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
