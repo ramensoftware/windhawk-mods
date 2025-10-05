@@ -1480,6 +1480,30 @@
                 "version": "1.0.0"
             }
         },
+        "dropbox-reduce-explorer-cpu-usage": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1759652806000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1759652806000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "David Trapp (CherryDT)",
+                "compilerOptions": "-lshell32",
+                "description": "In Dropbox, disable SHChangeNotify calls to avoid Explorer slowdowns and high CPU usage from per-file overlay updates during large syncs.",
+                "github": "https://github.com/CherryDT",
+                "include": [
+                    "dropbox.exe"
+                ],
+                "name": "Dropbox: Reduce Explorer CPU usage on sync",
+                "version": "1.1"
+            }
+        },
         "dwm-ghost-mods": {
             "details": {
                 "defaultSorting": 2400,
