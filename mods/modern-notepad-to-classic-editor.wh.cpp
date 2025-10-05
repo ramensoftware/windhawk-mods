@@ -2,10 +2,10 @@
 // @id           modern-notepad-to-classic-editor
 // @name         Redirect Modern Notepad to Classic Editor
 // @description  Redirects Windows 11's Notepad to a configurable classic editor (defaulting to classic notepad), useful to keep the default "Edit in Notepad" context menu item. Allows auto-elevation using Ctrl+Shift.
-// @version      1.7
+// @version      1.8
 // @author       David Trapp (CherryDT)
 // @github       https://github.com/CherryDT
-// @include      C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_*\Notepad\Notepad.exe
+// @include      %programfiles%\WindowsApps\Microsoft.WindowsNotepad_*\Notepad\Notepad.exe
 // @architecture x86-64
 // ==/WindhawkMod==
 
