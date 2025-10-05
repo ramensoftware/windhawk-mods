@@ -66,7 +66,7 @@ For advanced usage scenarios such as globally overriding `notepad.exe` with a cu
 - **Wait for classic editor**  
   If enabled, the modern Notepad process will wait until the editor closes and mirror its exit code.  
   If disabled, it will exit right after starting the editor.  
-  Default: Enabled.
+  Default: Disabled.
 
 ## Advanced Usage
 
