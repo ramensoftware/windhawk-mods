@@ -80,15 +80,15 @@ struct UndoState {
 // Global variables for managing undo/redo state
 std::vector<UndoState> g_undoStack;  // Stack of previous text states for undo
 std::vector<UndoState> g_redoStack;  // Stack of undone states for redo
-HWND g_editHwnd = nullptr;           // Handle to the edit control
-HWND g_mainHwnd = nullptr;           // Handle to the main Notepad window
+HWND g_editHWnd = nullptr;           // Handle to the edit control
+HWND g_mainHWnd = nullptr;           // Handle to the main Notepad window
 bool g_pendingGroup = false;         // Flag indicating if a group of changes is pending
 bool g_inUndoRedo = false;           // Flag to prevent recursive undo/redo operations
 bool g_redoMenuAdded = false;        // Flag indicating if redo menu item has been added
 size_t g_totalUndoSize = 0;          // Total memory size of undo stack in bytes (approx.)
 
-void InitializeNotepadWindow(HWND hwnd);
-void SubclassEditControl(HWND editHwnd);
+void InitializeNotepadWindow(HWND hWnd);
+void SubclassEditControl(HWND editHWnd);
 
 // Clears all undo and redo history, resetting the state
 void ClearUndoHistory() {
@@ -96,7 +96,7 @@ void ClearUndoHistory() {
   g_redoStack.clear();
   g_totalUndoSize = 0;
   g_pendingGroup = false;
-  if (g_editHwnd) KillTimer(g_editHwnd, GROUP_TIMER);
+  if (g_editHWnd) KillTimer(g_editHWnd, GROUP_TIMER);
 }
 
 // Captures the current text and selection state of the edit control
@@ -130,9 +130,9 @@ void UpdateUndoMenu();
 
 // Saves the current state of the edit control to the undo stack
 void SaveCurrentState() {
-  if (!g_editHwnd || g_inUndoRedo) return;
+  if (!g_editHWnd || g_inUndoRedo) return;
 
-  UndoState state = GetCurrentState(g_editHwnd);
+  UndoState state = GetCurrentState(g_editHWnd);
   size_t newSize = state.text.size() * sizeof(wchar_t);
   g_totalUndoSize += newSize;
   g_undoStack.push_back(state);
@@ -160,8 +160,8 @@ void SaveCurrentState() {
 }
 
 void UpdateUndoMenu() {
-  if (!g_mainHwnd) return;
-  HMENU hMenu = GetMenu(g_mainHwnd);
+  if (!g_mainHWnd) return;
+  HMENU hMenu = GetMenu(g_mainHWnd);
   if (!hMenu) return;
   HMENU editMenu = GetSubMenu(hMenu, 1);
   if (!editMenu) return;
@@ -169,12 +169,12 @@ void UpdateUndoMenu() {
   EnableMenuItem(hMenu, ID_EDIT_UNDO, MF_BYCOMMAND | (enabled ? MF_ENABLED : MF_GRAYED));
   enabled = !g_redoStack.empty();
   EnableMenuItem(hMenu, ID_EDIT_REDO, MF_BYCOMMAND | (enabled ? MF_ENABLED : MF_GRAYED));
-  DrawMenuBar(g_mainHwnd);
+  DrawMenuBar(g_mainHWnd);
 }
 
 // Hook procedure for context menu events to enable/disable undo in context menu
-void CALLBACK CtxMenuHookWinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
-  HMENU hMenu = (HMENU)SendMessage(hwnd, MN_GETHMENU, 0, 0);
+void CALLBACK CtxMenuHookWinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hWnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
+  HMENU hMenu = (HMENU)SendMessage(hWnd, MN_GETHMENU, 0, 0);
   EnableMenuItem(hMenu, WM_UNDO, MF_BYCOMMAND | (!g_undoStack.empty() ? MF_ENABLED : MF_GRAYED));
 }
 
@@ -224,7 +224,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
       (wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000) && (GetKeyState(VK_SHIFT) & 0x8000))) {
       // Ctrl+Y or Ctrl+Shift+Z - Redo
       OutputDebugStringW(L"Redo key pressed\n");
-      PostMessage(g_mainHwnd, WM_COMMAND, MAKEWPARAM(ID_EDIT_REDO, 0), 0);
+      PostMessage(g_mainHWnd, WM_COMMAND, MAKEWPARAM(ID_EDIT_REDO, 0), 0);
       return 0;  // Handled
     }
     break;
@@ -256,7 +256,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
   case WM_UNDO:
     OutputDebugStringW(L"Edit control undo received\n");
     // Forward to main window for our undo logic
-    PostMessage(g_mainHwnd, WM_COMMAND, MAKEWPARAM(ID_EDIT_UNDO, 0), 0);
+    PostMessage(g_mainHWnd, WM_COMMAND, MAKEWPARAM(ID_EDIT_UNDO, 0), 0);
     return 0;
 
   case WM_CONTEXTMENU:
@@ -290,15 +290,15 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
       WCHAR buf[256];
       swprintf(buf, L"Undo command received, stack size %d\n", g_undoStack.size());
       OutputDebugStringW(buf);
-      if (g_editHwnd && !g_undoStack.empty()) {
-        UndoState current = GetCurrentState(g_editHwnd);
+      if (g_editHWnd && !g_undoStack.empty()) {
+        UndoState current = GetCurrentState(g_editHWnd);
         g_redoStack.push_back(current);
 
         UndoState prev = g_undoStack.back();
         g_undoStack.pop_back();
         g_totalUndoSize -= prev.text.size() * sizeof(wchar_t);
         g_inUndoRedo = true;
-        SetCurrentState(g_editHwnd, prev);
+        SetCurrentState(g_editHWnd, prev);
         g_inUndoRedo = false;
         swprintf(buf, L"Undo performed, undo stack size %d, redo stack size %d\n", g_undoStack.size(), g_redoStack.size());
         OutputDebugStringW(buf);
@@ -310,10 +310,10 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     } else if (LOWORD(wParam) == ID_EDIT_DELETE) {
       SaveCurrentState();
     } else if (LOWORD(wParam) == ID_EDIT_REDO) {
-      if (g_editHwnd && !g_redoStack.empty()) {
+      if (g_editHWnd && !g_redoStack.empty()) {
         WCHAR buf[256];
         // Save current state to undo
-        UndoState current = GetCurrentState(g_editHwnd);
+        UndoState current = GetCurrentState(g_editHWnd);
         g_undoStack.push_back(current);
         g_totalUndoSize += current.text.size() * sizeof(wchar_t);
 
@@ -321,7 +321,7 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         UndoState next = g_redoStack.back();
         g_redoStack.pop_back();
         g_inUndoRedo = true;
-        SetCurrentState(g_editHwnd, next);
+        SetCurrentState(g_editHWnd, next);
         g_inUndoRedo = false;
         swprintf(buf, L"Redo performed, undo stack size %d, redo stack size %d\n", g_undoStack.size(), g_redoStack.size());
         OutputDebugStringW(buf);
@@ -333,11 +333,11 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
   case WM_DESTROY:
     ClearUndoHistory();
-    if (g_editHwnd) {
-      WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_editHwnd, EditSubclassProc);
-      g_editHwnd = nullptr;
+    if (g_editHWnd) {
+      WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_editHWnd, EditSubclassProc);
+      g_editHWnd = nullptr;
     }
-    g_mainHwnd = nullptr;
+    g_mainHWnd = nullptr;
     break;
   }
 
@@ -359,11 +359,11 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lp
 }
 
 // Initializes a Notepad window by subclassing it and adding the redo menu item
-void InitializeNotepadWindow(HWND hwnd) {
-  g_mainHwnd = hwnd;
-  WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, MainWindowSubclassProc, 0);
+void InitializeNotepadWindow(HWND hWnd) {
+  g_mainHWnd = hWnd;
+  WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, MainWindowSubclassProc, 0);
   // Add redo menu item
-  HMENU hMenu = GetMenu(hwnd);
+  HMENU hMenu = GetMenu(hWnd);
   if (hMenu) {
     HMENU hEditMenu = GetSubMenu(hMenu, 1);
     if (hEditMenu && !g_redoMenuAdded) {
@@ -391,7 +391,7 @@ void InitializeNotepadWindow(HWND hwnd) {
   OutputDebugStringW(L"Main window subclassed\n");
 
   // Find and subclass edit control
-  EnumChildWindows(hwnd, [](HWND child, LPARAM) -> BOOL {
+  EnumChildWindows(hWnd, [](HWND child, LPARAM) -> BOOL {
     WCHAR className[100];
     if (GetClassNameW(child, className, 100) && wcscmp(className, L"Edit") == 0) {
       SubclassEditControl(child);
@@ -402,9 +402,9 @@ void InitializeNotepadWindow(HWND hwnd) {
 }
 
 // Subclasses the edit control to enable input and context menu interception
-void SubclassEditControl(HWND editHwnd) {
-  g_editHwnd = editHwnd;
-  WindhawkUtils::SetWindowSubclassFromAnyThread(editHwnd, EditSubclassProc, 0);
+void SubclassEditControl(HWND editHWnd) {
+  g_editHWnd = editHWnd;
+  WindhawkUtils::SetWindowSubclassFromAnyThread(editHWnd, EditSubclassProc, 0);
   OutputDebugStringW(L"Edit control found and subclassed\n");
   UpdateUndoMenu();
 }
@@ -432,10 +432,10 @@ BOOL Wh_ModInit() {
   OutputDebugStringW(L"Hook set\n");
 
   // Attach to existing Notepad windows
-  EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
+  EnumWindows([](HWND hWnd, LPARAM) -> BOOL {
     WCHAR className[256];
-    if (GetClassNameW(hwnd, className, 256) && wcscmp(className, L"Notepad") == 0) {
-      InitializeNotepadWindow(hwnd);
+    if (GetClassNameW(hWnd, className, 256) && wcscmp(className, L"Notepad") == 0) {
+      InitializeNotepadWindow(hWnd);
     }
     return TRUE;
   }, 0);
@@ -448,8 +448,8 @@ void Wh_ModUninit() {
   // Cleanup data structures
   ClearUndoHistory();
   // Remove redo menu item
-  if (g_redoMenuAdded && g_mainHwnd) {
-    HMENU hMenu = GetMenu(g_mainHwnd);
+  if (g_redoMenuAdded && g_mainHWnd) {
+    HMENU hMenu = GetMenu(g_mainHWnd);
     if (hMenu) {
       HMENU hEditMenu = GetSubMenu(hMenu, 1);
       if (hEditMenu) {
@@ -458,17 +458,17 @@ void Wh_ModUninit() {
     }
   }
   // Cleanup subclasses
-  if (g_mainHwnd) {
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_mainHwnd, MainWindowSubclassProc);
-    g_mainHwnd = nullptr;
+  if (g_mainHWnd) {
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_mainHWnd, MainWindowSubclassProc);
+    g_mainHWnd = nullptr;
   }
-  if (g_editHwnd) {
+  if (g_editHWnd) {
     if (g_pendingGroup) {
-      KillTimer(g_editHwnd, GROUP_TIMER);
+      KillTimer(g_editHWnd, GROUP_TIMER);
       g_pendingGroup = false;
     }
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_editHwnd, EditSubclassProc);
-    g_editHwnd = nullptr;
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_editHWnd, EditSubclassProc);
+    g_editHWnd = nullptr;
   }
 }
 
