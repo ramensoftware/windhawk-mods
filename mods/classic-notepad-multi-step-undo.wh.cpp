@@ -58,17 +58,16 @@ This mod replaces Notepad's single-step undo (which usually restores some undesi
 #define ID_EDIT_REDO 96 // Custom
 
 #define GROUP_TIMER 1
-// #define UNDO_GROUP_DELAY 2000  // 2 seconds
 
 #define WM_UNDO 0x0304
 #define MN_GETHMENU 0x01E1
 
 // Settings
-int g_snapshotIntervalSeconds = 2;
-int g_maxUndoEntries = 300;
-int g_maxMemoryMiB = 100;
-int g_minUndoEntries = 3;
-std::wstring g_redoMenuText = L"R&edo";
+int g_snapshotIntervalSeconds;
+int g_maxUndoEntries;
+int g_maxMemoryMiB;
+int g_minUndoEntries;
+std::wstring g_redoMenuText;
 
 
 // Structure to represent a snapshot of the edit control's state
