@@ -57,7 +57,7 @@ This mod replaces Notepad's single-step undo (which usually restores some undesi
 #define ID_EDIT_DELETE 771
 #define ID_EDIT_REDO 96 // Custom
 
-#define GROUP_TIMER 1
+#define GROUP_TIMER 99
 
 #define WM_UNDO 0x0304
 #define MN_GETHMENU 0x01E1
