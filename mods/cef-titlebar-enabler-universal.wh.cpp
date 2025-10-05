@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.3
+// @version         1.4
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -31,6 +31,7 @@
 * Enable transparent rendering to make the transparent parts of the web content transparent
 * Disable forced dark mode to prevent Spotify from forcing dark mode on the CEF UI & web contents
 * Force enable Chrome extension support
+* Block automatic updates
 * Use the settings tab on the mod details page to configure the features
 ## Notes
 * Supported CEF versions: 90.4 to 139
@@ -39,7 +40,7 @@
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.71 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.74 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -112,6 +113,11 @@
     Chrome runtime is required for this to work"
   $description:ko-KR: "개발자 도구 상태에 관계 없이 항상 크롬 확장 프로그램 지원을 활성화합니다\n
     이 기능은 Chrome 런타임이 필요합니다"
+- blockupdates: false
+  $name: Block automatic updates*
+  $name:ko-KR: 자동 업데이트 차단*
+  $description: Prevents Spotify from updating itself. This has the same effect as "spicetify spotify-updates block".
+  $description:ko-KR: Spotify가 스스로 업데이트하는 것을 방지합니다. "spicetify spotify-updates block"과 효과가 같습니다.
 - playbackspeed: "1"
   $name: Playback speed
   $name:ko-KR: 재생 속도
@@ -121,7 +127,7 @@
     Spotify 1.2.45+: The change will be applied immediately\n
     This feature is not available while playing on another device"
   $description:ko-KR: "소수 값을 입력하세요. 1.0이 보통 재생 속도입니다\n
-    이 기능은 1.2.36 버전 이상의 x64 Spotify 클라이언트가 필요합니다\n
+    이 기능은 1.2.36과 1.2.66 사이 버전의 x64 Spotify 클라이언트가 필요합니다\n
     Spotify 1.2.36-1.2.44: 변경 사항은 다음 트랙부터 적용됩니다\n
     Spotify 1.2.45+: 변경 사항은 즉시 적용됩니다\n
     다른 기기에서 재생하는 동안에는 사용할 수 없습니다"
@@ -173,7 +179,7 @@
 131: 1.2.53-1.2.61
 134: 1.2.62-1.2.69
 138: 1.2.70
-139: 1.2.71
+139: 1.2.71-1.2.74
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -224,6 +230,7 @@ struct cte_settings {
     BOOL transparentrendering;
     BOOL noforceddarkmode;
     BOOL forceextensions;
+    BOOL blockupdates;
     BOOL allowuntested;
 } cte_settings;
 
@@ -332,6 +339,7 @@ struct cte_queryResponse_t {
     BOOL transparentrendering;
     BOOL noforceddarkmode;
     BOOL forceextensions;
+    BOOL blockupdates;
     BOOL allowuntested;
 } g_queryResponse;
 
@@ -469,6 +477,12 @@ typedef struct _cef_v8value_t {
     int(CEF_CALLBACK* set_value_byindex)(struct _cef_v8value_t* self, int index, struct _cef_v8value_t* value);
     // below here is updated quite recently (CEF 126), so it's avoided
 } cef_v8value_t;
+
+typedef struct _cef_request_t {
+    cef_base_ref_counted_t base;
+    int (CEF_CALLBACK* is_read_only)(struct _cef_request_t* self);
+    cef_string_userfree_t(CEF_CALLBACK* get_url)(struct _cef_request_t* self);
+} cef_request_t;
 #pragma endregion
 
 #pragma region CEF V8 functions + helpers
@@ -598,6 +612,14 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     // Assumed 1 if this mod is loaded after the window is created
     // dwRefData is 2 if the window is created by cef_window_create_top_level and is_frameless is hooked
     switch (uMsg) {
+        case WM_SIZE:
+            // Fix Basic frames being wrongly drawn when entering and exiting fullscreen
+            if (!cte_settings.showframe) {
+                return 0;
+            } else {
+                return DefWindowProc(hWnd, uMsg, wParam, lParam);
+            }
+            break;
         case WM_NCACTIVATE:
             if (hWnd == g_mainHwnd && cte_settings.transparentrendering && !cte_settings.showframe && IsDwmEnabled()) {
                 // Fix MicaForEveryone not working well with frameless windows
@@ -1286,6 +1308,19 @@ _cef_panel_t* CEF_EXPORT cef_panel_create_hook(cef_panel_delegate_t* delegate) {
     }
     return panel;
 }
+
+typedef void* CEF_EXPORT (*cef_urlrequest_create_t)(struct _cef_request_t* request, void* client, void* request_context);
+cef_urlrequest_create_t CEF_EXPORT cef_urlrequest_create_original;
+void* CEF_EXPORT cef_urlrequest_create_hook(struct _cef_request_t* request, void* client, void* request_context) {
+    cef_string_t* url = request->get_url(request);
+    std::wstring urlStr(url->str, url->str + url->length);
+    Wh_Log(L"cef_urlrequest_create_hook: %s", urlStr.c_str());
+    if (cte_settings.blockupdates && urlStr.find(L"https://spclient.wg.spotify.com/desktop-update/v2/update") != std::wstring::npos) {
+        Wh_Log(L"Blocked update check");
+        return NULL;
+    }
+    return cef_urlrequest_create_original(request, client, request_context);
+}
 #pragma endregion
 
 #pragma region Win32 API hooks
@@ -1666,8 +1701,8 @@ void HandleWindhawkComm(LPCWSTR command) {
             return;
         }
         wchar_t queryResponse[256];
-        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
-        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:blockupdates:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
+        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
             cte_settings.showframe,
             cte_settings.showframeonothers,
             cte_settings.showmenu,
@@ -1677,6 +1712,7 @@ void HandleWindhawkComm(LPCWSTR command) {
             cte_settings.ignoreminsize,
             cte_settings.noforceddarkmode,
             cte_settings.forceextensions,
+            cte_settings.blockupdates,
             cte_settings.allowuntested,
             IsZoomed(g_mainHwnd),
             GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST,
@@ -1877,7 +1913,7 @@ int ConnectToNamedPipe() {
                         buffer[bytesRead / sizeof(wchar_t)] = L'\0';
                         Wh_Log(L"Received message: %s", buffer);
                         if (wcsncmp(buffer, L"/WH:QueryResponse:", 18) == 0) {
-                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
                                 &g_queryResponse.showframe,
                                 &g_queryResponse.showframeonothers,
                                 &g_queryResponse.showmenu,
@@ -1887,6 +1923,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.ignoreminsize,
                                 &g_queryResponse.noforceddarkmode,
                                 &g_queryResponse.forceextensions,
+                                &g_queryResponse.blockupdates,
                                 &g_queryResponse.allowuntested,
                                 &g_queryResponse.isMaximized,
                                 &g_queryResponse.isTopMost,
@@ -1900,7 +1937,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.dpi,
                                 &g_queryResponse.speedModSupported,
                                 &g_queryResponse.playbackSpeed,
-                                &g_queryResponse.immediateSpeedChange) == 23
+                                &g_queryResponse.immediateSpeedChange) == 24
                             ) {
                                 g_queryResponse.success = TRUE;
                             }
@@ -2188,6 +2225,7 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
             AddValueToObj(configObj, u"ignoreminsize", cef_v8value_create_bool(g_queryResponse.ignoreminsize));
             AddValueToObj(configObj, u"noforceddarkmode", cef_v8value_create_bool(g_queryResponse.noforceddarkmode));
             AddValueToObj(configObj, u"forceextensions", cef_v8value_create_bool(g_queryResponse.forceextensions));
+            AddValueToObj(configObj, u"blockupdates", cef_v8value_create_bool(g_queryResponse.blockupdates));
             AddValueToObj(configObj, u"allowuntested", cef_v8value_create_bool(g_queryResponse.allowuntested));
             AddValueToObj(retobj, u"options", configObj);
             AddValueToObj(retobj, u"isMaximized", cef_v8value_create_bool(g_queryResponse.isMaximized));
@@ -2263,6 +2301,7 @@ int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) 
         AddValueToObj(initialConfigObj, u"ignoreminsize", cef_v8value_create_bool(cte_settings.ignoreminsize));
         AddValueToObj(initialConfigObj, u"noforceddarkmode", cef_v8value_create_bool(cte_settings.noforceddarkmode));
         AddValueToObj(initialConfigObj, u"forceextensions", cef_v8value_create_bool(cte_settings.forceextensions));
+        AddValueToObj(initialConfigObj, u"blockupdates", cef_v8value_create_bool(cte_settings.blockupdates));
         AddValueToObj(initialConfigObj, u"allowuntested", cef_v8value_create_bool(cte_settings.allowuntested));
         AddValueToObj(retobj, u"initialOptions", initialConfigObj);
         std::wstring stdModVer(WH_MOD_VERSION);
@@ -2405,6 +2444,7 @@ void LoadSettings() {
     cte_settings.transparentrendering = Wh_GetIntSetting(L"transparentrendering");
     cte_settings.noforceddarkmode = Wh_GetIntSetting(L"noforceddarkmode");
     cte_settings.forceextensions = Wh_GetIntSetting(L"forceextensions");
+    cte_settings.blockupdates = Wh_GetIntSetting(L"blockupdates");
     cte_settings.allowuntested = Wh_GetIntSetting(L"allowuntested");
 }
 
@@ -2570,6 +2610,7 @@ BOOL Wh_ModInit() {
 
     cef_window_create_top_level_t cef_window_create_top_level = (cef_window_create_top_level_t)GetProcAddress(g_cefModule, "cef_window_create_top_level");
     cef_panel_create_t cef_panel_create = (cef_panel_create_t)GetProcAddress(g_cefModule, "cef_panel_create");
+    cef_urlrequest_create_t cef_urlrequest_create = (cef_urlrequest_create_t)GetProcAddress(g_cefModule, "cef_urlrequest_create");
 
     Wh_SetFunctionHook((void*)cef_window_create_top_level,
                        (void*)cef_window_create_top_level_hook,
@@ -2579,6 +2620,8 @@ BOOL Wh_ModInit() {
     if (g_isSpotify) {
         Wh_SetFunctionHook((void*)cef_panel_create, (void*)cef_panel_create_hook,
                            (void**)&cef_panel_create_original);
+        Wh_SetFunctionHook((void*)cef_urlrequest_create, (void*)cef_urlrequest_create_hook,
+                           (void**)&cef_urlrequest_create_original);
         Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
                            (void**)&SetWindowThemeAttribute_original);
         Wh_SetFunctionHook((void*)DwmExtendFrameIntoClientArea, (void*)DwmExtendFrameIntoClientArea_hook,
