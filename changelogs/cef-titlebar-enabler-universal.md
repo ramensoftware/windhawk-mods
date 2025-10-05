@@ -1,3 +1,9 @@
+## 1.4 ([Oct 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3e8b6dcf0692df8cdba401d7d6ef4ee54ce5bdbe/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Add support for Spotify 1.2.72 to 1.2.74
+* Add an option to block the Spotify client from updating itself
+* Prevent Basic frames from being wrongly drawn when entering and exiting the full-screen mode
+
 ## 1.3 ([Aug 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bdd9ada4189479dd475c3db41ee033f5ef190a17/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Add support for Spotify 1.2.66-1.2.71

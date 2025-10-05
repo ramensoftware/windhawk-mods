@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-05T08:26:46.000Z</updated>
+    <updated>2025-10-05T11:30:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.4]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#3e8b6dcf0692df8cdba401d7d6ef4ee54ce5bdbe</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-10-05T11:30:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.72 to 1.2.74</li>
+<li>Add an option to block the Spotify client from updating itself</li>
+<li>Prevent Basic frames from being wrongly drawn when entering and exiting the full-screen mode</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dropbox: Reduce Explorer CPU usage on sync 1.1]]></title>
         <id>https://windhawk.net/mods/dropbox-reduce-explorer-cpu-usage#9f8f3cb9fec63cfe3c8922800eb4fa1e4942c9b2</id>
@@ -297,20 +312,6 @@ you have this, provide the path to it in the mod options.</p>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Visual Studio Anti-Rich-Header 1.1]]></title>
-        <id>https://windhawk.net/mods/visual-studio-anti-rich-header#1cb2850923f9f5406dae5a15508f72000798c126</id>
-        <link href="https://windhawk.net/mods/visual-studio-anti-rich-header"/>
-        <updated>2025-08-30T11:31:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved pattern matching to be compatible with more Visual Studio versions, and made it less likely to break in the future.</li>
-<li>Improved performance.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
