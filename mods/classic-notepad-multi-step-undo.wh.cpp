@@ -70,24 +70,28 @@ int g_maxMemoryMiB = 100;
 int g_minUndoEntries = 3;
 std::wstring g_redoMenuText = L"R&edo";
 
+
+// Structure to represent a snapshot of the edit control's state
 struct UndoState {
-  std::wstring text;
-  DWORD selStart;
-  DWORD selEnd;
+  std::wstring text;    // The full text content at this state
+  DWORD selStart;       // Start position of text selection
+  DWORD selEnd;         // End position of text selection
 };
 
-std::vector<UndoState> g_undoStack;
-std::vector<UndoState> g_redoStack;
-HWND g_editHwnd = nullptr;
-HWND g_mainHwnd = nullptr;
-bool g_pendingGroup = false;
-bool g_inUndoRedo = false;
-bool g_redoMenuAdded = false;
-size_t g_totalUndoSize = 0;
+// Global variables for managing undo/redo state
+std::vector<UndoState> g_undoStack;  // Stack of previous text states for undo
+std::vector<UndoState> g_redoStack;  // Stack of undone states for redo
+HWND g_editHwnd = nullptr;           // Handle to the edit control
+HWND g_mainHwnd = nullptr;           // Handle to the main Notepad window
+bool g_pendingGroup = false;         // Flag indicating if a group of changes is pending
+bool g_inUndoRedo = false;           // Flag to prevent recursive undo/redo operations
+bool g_redoMenuAdded = false;        // Flag indicating if redo menu item has been added
+size_t g_totalUndoSize = 0;          // Total memory size of undo stack in bytes (approx.)
 
 void InitializeNotepadWindow(HWND hwnd);
 void SubclassEditControl(HWND editHwnd);
 
+// Clears all undo and redo history, resetting the state
 void ClearUndoHistory() {
   g_undoStack.clear();
   g_redoStack.clear();
@@ -96,6 +100,7 @@ void ClearUndoHistory() {
   if (g_editHwnd) KillTimer(g_editHwnd, GROUP_TIMER);
 }
 
+// Captures the current text and selection state of the edit control
 UndoState GetCurrentState(HWND hWnd) {
   UndoState state;
 
@@ -113,6 +118,7 @@ UndoState GetCurrentState(HWND hWnd) {
   return state;
 }
 
+// Restores the edit control to a specific text and selection state
 void SetCurrentState(HWND hWnd, const UndoState& state) {
   SendMessage(hWnd, WM_SETTEXT, 0, (LPARAM)state.text.c_str());
   SendMessage(hWnd, EM_SETSEL, state.selStart, state.selEnd);
@@ -123,6 +129,7 @@ void SetCurrentState(HWND hWnd, const UndoState& state) {
 
 void UpdateUndoMenu();
 
+// Saves the current state of the edit control to the undo stack
 void SaveCurrentState() {
   if (!g_editHwnd || g_inUndoRedo) return;
 
@@ -166,12 +173,13 @@ void UpdateUndoMenu() {
   DrawMenuBar(g_mainHwnd);
 }
 
-
+// Hook procedure for context menu events to enable/disable undo in context menu
 void CALLBACK CtxMenuHookWinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
   HMENU hMenu = (HMENU)SendMessage(hwnd, MN_GETHMENU, 0, 0);
   EnableMenuItem(hMenu, WM_UNDO, MF_BYCOMMAND | (!g_undoStack.empty() ? MF_ENABLED : MF_GRAYED));
 }
 
+// Subclass procedure for the edit control to intercept input and manage undo/redo
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
   switch (uMsg) {
   case WM_CHAR:
@@ -265,6 +273,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
   return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+// Subclass procedure for the main Notepad window to handle commands and initialization
 LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
   switch (uMsg) {
   case WM_PARENTNOTIFY:
@@ -273,13 +282,12 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
       WCHAR className[100];
       if (GetClassNameW(child, className, 100) && wcscmp(className, L"Edit") == 0) {
         SubclassEditControl(child);
-        // Initial state will be saved on WM_SETTEXT
       }
     }
     break;
 
   case WM_COMMAND:
-    if (LOWORD(wParam) == ID_EDIT_UNDO) {  // ID_EDIT_UNDO in notepad
+    if (LOWORD(wParam) == ID_EDIT_UNDO) {
       WCHAR buf[256];
       swprintf(buf, L"Undo command received, stack size %d\n", g_undoStack.size());
       OutputDebugStringW(buf);
@@ -298,14 +306,11 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         UpdateUndoMenu();
       }
       return 0;
-    }
-    if (LOWORD(wParam) == ID_EDIT_CUT) {
+    } else if (LOWORD(wParam) == ID_EDIT_CUT) {
       SaveCurrentState();
-    }
-    if (LOWORD(wParam) == ID_EDIT_DELETE) {
+    } else if (LOWORD(wParam) == ID_EDIT_DELETE) {
       SaveCurrentState();
-    }
-    if (LOWORD(wParam) == ID_EDIT_REDO) {
+    } else if (LOWORD(wParam) == ID_EDIT_REDO) {
       if (g_editHwnd && !g_redoStack.empty()) {
         WCHAR buf[256];
         // Save current state to undo
@@ -340,7 +345,7 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
   return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Hook CreateWindowExW to catch notepad windows
+// Original CreateWindowExW function pointer for hooking
 HWND (WINAPI *CreateWindowExW_Original)(
   DWORD dwExStyle,
   LPCWSTR lpClassName,
@@ -356,6 +361,7 @@ HWND (WINAPI *CreateWindowExW_Original)(
   LPVOID lpParam
 );
 
+// Hooked CreateWindowExW to detect and initialize Notepad windows
 HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
   HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 
@@ -366,6 +372,7 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lp
   return hWnd;
 }
 
+// Initializes a Notepad window by subclassing it and adding the redo menu item
 void InitializeNotepadWindow(HWND hwnd) {
   g_mainHwnd = hwnd;
   WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, MainWindowSubclassProc, 0);
@@ -408,6 +415,7 @@ void InitializeNotepadWindow(HWND hwnd) {
   }, 0);
 }
 
+// Subclasses the edit control to enable input and context menu interception
 void SubclassEditControl(HWND editHwnd) {
   g_editHwnd = editHwnd;
   WindhawkUtils::SetWindowSubclassFromAnyThread(editHwnd, EditSubclassProc, 0);
@@ -415,6 +423,7 @@ void SubclassEditControl(HWND editHwnd) {
   UpdateUndoMenu();
 }
 
+// Module initialization function - sets up hooks and attaches to existing Notepad windows
 BOOL Wh_ModInit() {
   OutputDebugStringW(L"Mod initialized\n");
   // Check if this is the immersive Notepad (packaged app) vs classic Notepad
@@ -450,6 +459,7 @@ BOOL Wh_ModInit() {
   return TRUE;
 }
 
+// Module cleanup function - removes hooks and subclasses and cleans up resources
 void Wh_ModUninit() {
   // Cleanup data structures
   ClearUndoHistory();
