@@ -36,7 +36,7 @@ There is already a way to do this "half-way" natively by disabling the `notepad.
 
 By default, it launches the old `notepad.exe` from `%SystemRoot%\System32`, but you can configure it to run **any editor of your choice** (e.g. Notepad2, Notepad++, VS Code).
 
-## ⚠️ IMPORTANT: You need to also disable the app execution alias for Notepad in Windows Settings > Apps > App execution aliases, otherwise this mod won't work!
+## ⚠️ IMPORTANT: You need to also disable the app execution alias for Notepad in Windows Settings > Apps > Advanced app settings > App execution aliases, otherwise this mod won't work!
 
 ---
 
@@ -213,14 +213,6 @@ static bool IsCtrlShiftPressed() {
          (GetAsyncKeyState(VK_SHIFT) & 0x8000);
 }
 
-// Identify WindowsApps Notepad executable
-static bool IsModernWindowsAppsNotepadPath(const std::wstring& exePath) {
-  std::wstring h = exePath;
-  for (auto &c : h) c = towlower(c);
-  return h.find(L"\\windowsapps\\") != std::wstring::npos &&
-         h.find(L"microsoft.windowsnotepad_") != std::wstring::npos &&
-         h.find(L"notepad.exe") != std::wstring::npos;
-}
 
 // Check if current process already has a Notepad window
 static bool HasNotepadWindowInCurrentProcess() {
@@ -301,7 +293,12 @@ static HWND WINAPI Hook_CreateWindowExW(
   HINSTANCE hInstance,
   LPVOID lpParam)
 {
-  Sleep(INFINITE); // stall forever
+  if (lpClassName && (ULONG_PTR)lpClassName >= 0x10000 && wcscmp(lpClassName, L"Notepad") == 0) {
+    Sleep(INFINITE); // stall forever
+    return NULL;     // not reached
+  }
+
+  return pCreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 }
 
 // ---------------------------------------------------------------------
@@ -327,6 +324,11 @@ static DWORD WINAPI HandoffThreadProc(LPVOID) {
       return 0;
     }
   }
+
+  // Avoid app-launching cursor (see https://stackoverflow.com/a/3865519/1871033)
+  MSG msg;
+  PostMessage(NULL, WM_NULL, 0, 0);
+  GetMessage(&msg, NULL, 0, 0);
 
   // Elevate with Ctrl+Shift if enabled and not elevated
   if (g_ctrlShiftElevate && IsCtrlShiftPressed() && !IsProcessElevated()) {
@@ -371,8 +373,9 @@ static DWORD WINAPI HandoffThreadProc(LPVOID) {
   PROCESS_INFORMATION pi = { 0 };
 
   if (!CreateProcessW(NULL, buf.get(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+    MessageBoxW(NULL, (std::wstring(L"Failed to launch classic editor, please check path setting!\r\n\r\n") + buf.get()).c_str(), L"Modern Notepad to Classic Editor", MB_ICONERROR);
     InterlockedExchange(&g_handoffFinished, 1);
-    ExitProcess(0);
+    ExitProcess(1);
   }
 
   if (g_waitForClassic) {
@@ -429,7 +432,7 @@ BOOL Wh_ModInit() {
         if (val.find(L"WindowsApps") != std::wstring::npos) {
           if (!isSessionLaunch) {
             // Ask the user to disable app alias for notepad
-            MessageBoxW(NULL, L"The app execution alias for Notepad is enabled, which interferes with this mod. Please disable it in Windows Settings > Apps > App execution aliases.", L"Modern Notepad to Classic Editor", MB_ICONWARNING);
+            MessageBoxW(NULL, L"The app execution alias for Notepad is enabled, which interferes with this mod. Please disable it in Windows Settings > Apps > Advanced app settings > App execution aliases.", L"Modern Notepad to Classic Editor", MB_ICONWARNING);
           }
           return FALSE; // Don't patch
         }
