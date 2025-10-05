@@ -32,7 +32,7 @@
 Windows 11 replaces the classic Notepad with a Microsoft Store app.  
 This mod redirects all launches of the **modern Notepad** (including context menu items like “Edit in Notepad”) to your chosen **classic editor** instead.
 
-There is already a way to do this "half-way" natively by disabling the `notepad.exe` app execution alias in Windows' settings, but this doesnt work for the default "Edit in Notepad" context menu item, default file associations, `ms-notepad:` links and other entry points. This mod handles all of these cases seamlessly.
+There is already a way to do this "half-way" natively by disabling the `notepad.exe` app execution alias in Windows' settings, but this doesnt work for the default "Edit in Notepad" context menu item, default file associations and other entry points. This mod handles all of these cases seamlessly.
 
 By default, it launches the old `notepad.exe` from `%SystemRoot%\System32`, but you can configure it to run **any editor of your choice** (e.g. Notepad2, Notepad++, VS Code).
 
@@ -148,18 +148,6 @@ static bool CiStartsWith(const std::wstring& s, const std::wstring& prefix) {
   return true;
 }
 
-// Strip "ms-notepad:" or "ms-notepad://" prefix from the argument and remove trailing slash
-static std::wstring StripMsNotepadPrefix(const std::wstring& s) {
-  std::wstring a = TrimLeft(s);
-  if (CiStartsWith(a, L"ms-notepad:")) {
-    std::wstring res = a.substr(11);
-    if (CiStartsWith(res, L"//")) res = res.substr(2);
-    while (!res.empty() && (res.back() == L'/' || res.back() == L'\\')) res.pop_back();
-    return res;
-  }
-  return s;
-}
-
 // Return true if any arg after argv[0] starts with "/SESSION" (case-insensitive)
 static bool ArgsContainSession(const std::vector<std::wstring>& argv) {
   for (size_t i = 1; i < argv.size(); ++i) {
@@ -190,8 +178,7 @@ static std::wstring BuildArgsOnly() {
   std::wstring args;
   for (size_t i = 1; i < argv.size(); ++i) {
     if (i > 1) args += L" ";
-    std::wstring arg = StripMsNotepadPrefix(argv[i]);
-    if (arg != L"") args += QuoteArgIfNeeded(StripMsNotepadPrefix(argv[i]));
+    args += QuoteArgIfNeeded(argv[i]);
   }
   return args;
 }
