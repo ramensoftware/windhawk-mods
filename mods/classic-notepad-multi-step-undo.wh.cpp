@@ -439,9 +439,7 @@ BOOL Wh_ModInit() {
   g_maxUndoEntries = Wh_GetIntSetting(L"max_undo_entries");
   g_maxMemoryMiB = Wh_GetIntSetting(L"max_memory_mib");
   g_minUndoEntries = Wh_GetIntSetting(L"min_undo_entries");
-  PCWSTR redoText = Wh_GetStringSetting(L"redo_menu_text");
-  g_redoMenuText = redoText ? redoText : L"R&edo";
-  Wh_FreeStringSetting(redoText);
+  g_redoMenuText = WindhawkUtils::StringSetting::make(L"redo_menu_text");
 
   WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook, &CreateWindowExW_Original);
   OutputDebugStringW(L"Hook set\n");
