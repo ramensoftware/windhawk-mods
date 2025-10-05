@@ -374,9 +374,8 @@ static DWORD WINAPI HandoffThreadProc(LPVOID) {
 BOOL Wh_ModInit() {
   // Load settings
   {
-    std::wstring pathSetting = Wh_GetStringSetting(L"classicPath");
-    if (pathSetting.empty()) pathSetting = L"%SystemRoot%\\System32\\notepad.exe";
-    g_classicPathSetting = pathSetting;
+    g_classicPathSetting = WindhawkUtils::StringSetting::make(L"classicPath");
+    if (g_classicPathSetting.empty()) g_classicPathSetting = L"%SystemRoot%\\System32\\notepad.exe";
 
     g_ctrlShiftElevate = Wh_GetIntSetting(L"ctrlShiftElevate", 1) != 0;
     g_waitForClassic   = Wh_GetIntSetting(L"waitForClassic", 1) != 0;
