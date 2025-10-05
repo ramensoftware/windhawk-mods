@@ -405,8 +405,8 @@ BOOL Wh_ModInit() {
     g_classicPathSetting = WindhawkUtils::StringSetting::make(L"classicPath");
     if (g_classicPathSetting.empty()) g_classicPathSetting = L"%SystemRoot%\\System32\\notepad.exe";
 
-    g_ctrlShiftElevate = Wh_GetIntSetting(L"ctrlShiftElevate", 1) != 0;
-    g_waitForClassic   = Wh_GetIntSetting(L"waitForClassic", 1) != 0;
+    g_ctrlShiftElevate = Wh_GetIntSetting(L"ctrlShiftElevate") != 0;
+    g_waitForClassic   = Wh_GetIntSetting(L"waitForClassic") != 0;
   }
 
   // Check if a Notepad window already exists in this process
