@@ -435,7 +435,7 @@ BOOL Wh_ModInit() {
   // Install hook for the session launch using Windhawk utils, stalling the original process forever
   WindhawkUtils::SetFunctionHook(CreateProcessAsUserW, Hook_CreateProcessAsUserW, &pCreateProcessAsUserW);
 
-  // Install hook for CreateWindowExW to stall window creation until the handoff finishes
+  // Install hook for CreateWindowExW to stall Notepad window creation forever as well
   WindhawkUtils::SetFunctionHook(CreateWindowExW, Hook_CreateWindowExW, &pCreateWindowExW);
 
   // Start the handoff asynchronously and return quickly (avoid Windhawk progress UI)
