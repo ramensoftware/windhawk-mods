@@ -2,7 +2,7 @@
 // @id           modern-notepad-to-classic-editor
 // @name         Redirect Modern Notepad to Classic Editor
 // @description  Redirects Windows 11's Notepad to a configurable classic editor (defaulting to classic notepad), useful to keep the default "Edit in Notepad" context menu item. Allows auto-elevation using Ctrl+Shift.
-// @version      1.6
+// @version      1.7
 // @author       David Trapp (CherryDT)
 // @github       https://github.com/CherryDT
 // @include      C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_*\Notepad\Notepad.exe
@@ -19,9 +19,9 @@
   $name: Ctrl+Shift elevation
   $description: If enabled, holding Ctrl+Shift while launching will run the classic editor elevated (if not already elevated).
 
-- waitForClassic: true
+- waitForClassic: false
   $name: Wait for classic editor
-  $description: If enabled, modern Notepad will wait until the classic editor exits and mirror its exit code. Otherwise, it will exit immediately.
+  $description: If enabled, modern Notepad will wait until the classic editor exits and mirror its exit code. Otherwise, it will exit immediately. This might be helpful for some cases in which the caller expects the process to stay alive until the editor exits.
 */
 // ==/WindhawkModSettings==
 
@@ -94,6 +94,9 @@ static volatile LONG g_handoffFinished = 0;
 
 // Original function pointer for CreateProcessAsUserW
 static decltype(&CreateProcessAsUserW) pCreateProcessAsUserW = nullptr;
+
+// Original function pointer for CreateWindowExW
+static decltype(&CreateWindowExW) pCreateWindowExW = nullptr;
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -242,6 +245,26 @@ static BOOL WINAPI Hook_CreateProcessAsUserW(
 }
 
 // ---------------------------------------------------------------------
+// Hook: CreateWindowExW (stall window creation forever)
+// ---------------------------------------------------------------------
+static HWND WINAPI Hook_CreateWindowExW(
+  DWORD dwExStyle,
+  LPCWSTR lpClassName,
+  LPCWSTR lpWindowName,
+  DWORD dwStyle,
+  int X,
+  int Y,
+  int nWidth,
+  int nHeight,
+  HWND hWndParent,
+  HMENU hMenu,
+  HINSTANCE hInstance,
+  LPVOID lpParam)
+{
+  Sleep(INFINITE); // stall forever
+}
+
+// ---------------------------------------------------------------------
 // Handoff worker: launch classic editor and (optionally) wait
 // ---------------------------------------------------------------------
 static DWORD WINAPI HandoffThreadProc(LPVOID) {
@@ -385,6 +408,9 @@ BOOL Wh_ModInit() {
 
   // Install hook for the session launch using Windhawk utils, stalling the original process forever
   WindhawkUtils::SetFunctionHook(CreateProcessAsUserW, Hook_CreateProcessAsUserW, &pCreateProcessAsUserW);
+
+  // Install hook for CreateWindowExW to stall window creation until the handoff finishes
+  WindhawkUtils::SetFunctionHook(CreateWindowExW, Hook_CreateWindowExW, &pCreateWindowExW);
 
   // Start the handoff asynchronously and return quickly (avoid Windhawk progress UI)
   HANDLE hThread = CreateThread(NULL, 0, HandoffThreadProc, NULL, 0, NULL);
