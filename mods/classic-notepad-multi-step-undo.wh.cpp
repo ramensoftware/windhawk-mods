@@ -139,14 +139,14 @@ void SaveCurrentState() {
   g_redoStack.clear();  // Clear redo on new action
 
   // Enforce limits: max undos or memory, whichever is lower, but no less than min undos
-  while (g_maxUndoEntries > 0 && g_undoStack.size() > (unsigned long long)g_maxUndoEntries) {
+  while (g_maxUndoEntries > 0 && g_undoStack.size() > (size_t)g_maxUndoEntries) {
     size_t removedSize = g_undoStack.front().text.size() * sizeof(wchar_t);
     g_totalUndoSize -= removedSize;
     g_undoStack.erase(g_undoStack.begin());
     OutputDebugStringW(L"Pruned oldest undo state due to count limit\n");
   }
   const size_t maxSize = (size_t)g_maxMemoryMiB * 1024LL * 1024;
-  while (g_totalUndoSize > maxSize && g_undoStack.size() > (unsigned long long)g_minUndoEntries) {
+  while (g_totalUndoSize > maxSize && g_undoStack.size() > (size_t)g_minUndoEntries) {
     size_t removedSize = g_undoStack.front().text.size() * sizeof(wchar_t);
     g_totalUndoSize -= removedSize;
     g_undoStack.erase(g_undoStack.begin());
