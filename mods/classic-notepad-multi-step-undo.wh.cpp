@@ -143,19 +143,17 @@ void SaveCurrentState() {
     size_t removedSize = g_undoStack.front().text.size() * sizeof(wchar_t);
     g_totalUndoSize -= removedSize;
     g_undoStack.erase(g_undoStack.begin());
-    OutputDebugStringW(L"Pruned oldest undo state due to count limit\n");
+    Wh_Log(L"Pruned oldest undo state due to count limit");
   }
   const size_t maxSize = (size_t)g_maxMemoryMiB * 1024LL * 1024;
   while (g_totalUndoSize > maxSize && g_undoStack.size() > (size_t)g_minUndoEntries) {
     size_t removedSize = g_undoStack.front().text.size() * sizeof(wchar_t);
     g_totalUndoSize -= removedSize;
     g_undoStack.erase(g_undoStack.begin());
-    OutputDebugStringW(L"Pruned oldest undo state due to size limit\n");
+    Wh_Log(L"Pruned oldest undo state due to size limit");
   }
 
-  WCHAR buf[256];
-  swprintf(buf, L"State saved, undo stack size %d, total size %zu\n", g_undoStack.size(), g_totalUndoSize);
-  OutputDebugStringW(buf);
+  Wh_Log(L"State saved, undo stack size %d, total size %zu", g_undoStack.size(), g_totalUndoSize);
   UpdateUndoMenu();
 }
 
@@ -223,7 +221,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     if ((wParam == 'Y' && (GetKeyState(VK_CONTROL) & 0x8000)) ||
       (wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000) && (GetKeyState(VK_SHIFT) & 0x8000))) {
       // Ctrl+Y or Ctrl+Shift+Z - Redo
-      OutputDebugStringW(L"Redo key pressed\n");
+      Wh_Log(L"Redo key pressed");
       PostMessage(g_mainHWnd, WM_COMMAND, MAKEWPARAM(ID_EDIT_REDO, 0), 0);
       return 0;  // Handled
     }
@@ -254,7 +252,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     break;
 
   case WM_UNDO:
-    OutputDebugStringW(L"Edit control undo received\n");
+    Wh_Log(L"Edit control undo received");
     // Forward to main window for our undo logic
     PostMessage(g_mainHWnd, WM_COMMAND, MAKEWPARAM(ID_EDIT_UNDO, 0), 0);
     return 0;
@@ -287,9 +285,7 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
   case WM_COMMAND:
     if (LOWORD(wParam) == ID_EDIT_UNDO) {
-      WCHAR buf[256];
-      swprintf(buf, L"Undo command received, stack size %d\n", g_undoStack.size());
-      OutputDebugStringW(buf);
+      Wh_Log(L"Undo command received, stack size %d", g_undoStack.size());
       if (g_editHWnd && !g_undoStack.empty()) {
         UndoState current = GetCurrentState(g_editHWnd);
         g_redoStack.push_back(current);
@@ -300,8 +296,7 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         g_inUndoRedo = true;
         SetCurrentState(g_editHWnd, prev);
         g_inUndoRedo = false;
-        swprintf(buf, L"Undo performed, undo stack size %d, redo stack size %d\n", g_undoStack.size(), g_redoStack.size());
-        OutputDebugStringW(buf);
+        Wh_Log(L"Undo performed, undo stack size %d, redo stack size %d", g_undoStack.size(), g_redoStack.size());
         UpdateUndoMenu();
       }
       return 0;
@@ -311,7 +306,6 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
       SaveCurrentState();
     } else if (LOWORD(wParam) == ID_EDIT_REDO) {
       if (g_editHWnd && !g_redoStack.empty()) {
-        WCHAR buf[256];
         // Save current state to undo
         UndoState current = GetCurrentState(g_editHWnd);
         g_undoStack.push_back(current);
@@ -323,8 +317,7 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         g_inUndoRedo = true;
         SetCurrentState(g_editHWnd, next);
         g_inUndoRedo = false;
-        swprintf(buf, L"Redo performed, undo stack size %d, redo stack size %d\n", g_undoStack.size(), g_redoStack.size());
-        OutputDebugStringW(buf);
+        Wh_Log(L"Redo performed, undo stack size %d, redo stack size %d", g_undoStack.size(), g_redoStack.size());
         UpdateUndoMenu();
       }
       return 0;
@@ -368,27 +361,24 @@ void InitializeNotepadWindow(HWND hWnd) {
     HMENU hEditMenu = GetSubMenu(hMenu, 1);
     if (hEditMenu && !g_redoMenuAdded) {
       // Get undo menu text to extract hotkey
+      std::wstring hotkey = L"Ctrl+Y";
       WCHAR undoText[256];
       if (GetMenuStringW(hEditMenu, ID_EDIT_UNDO, undoText, 256, MF_BYCOMMAND)) {
         std::wstring undoStr = undoText;
         size_t tabPos = undoStr.find(L'\t');
-        std::wstring hotkey = L"Ctrl+Y";
         if (tabPos != std::wstring::npos) {
           std::wstring afterTab = undoStr.substr(tabPos + 1);
           if (afterTab.size() >= 2 && afterTab.substr(afterTab.size() - 2) == L"+Z") {
             hotkey = afterTab.substr(0, afterTab.size() - 1) + L"Y";
           }
         }
-        std::wstring redoText = g_redoMenuText + L"\t" + hotkey;
-        InsertMenu(hEditMenu, 1, MF_BYPOSITION | MF_STRING, ID_EDIT_REDO, redoText.c_str());
-      } else {
-        std::wstring redoText = g_redoMenuText + L"\tCtrl+Y";
-        InsertMenu(hEditMenu, 1, MF_BYPOSITION | MF_STRING, ID_EDIT_REDO, redoText.c_str());
       }
+      std::wstring redoText = g_redoMenuText + L"\t" + hotkey;
+      InsertMenu(hEditMenu, 1, MF_BYPOSITION | MF_STRING, ID_EDIT_REDO, redoText.c_str());
       g_redoMenuAdded = true;
     }
   }
-  OutputDebugStringW(L"Main window subclassed\n");
+  Wh_Log(L"Main window subclassed");
 
   // Find and subclass edit control
   EnumChildWindows(hWnd, [](HWND child, LPARAM) -> BOOL {
@@ -405,13 +395,13 @@ void InitializeNotepadWindow(HWND hWnd) {
 void SubclassEditControl(HWND editHWnd) {
   g_editHWnd = editHWnd;
   WindhawkUtils::SetWindowSubclassFromAnyThread(editHWnd, EditSubclassProc, 0);
-  OutputDebugStringW(L"Edit control found and subclassed\n");
+  Wh_Log(L"Edit control found and subclassed");
   UpdateUndoMenu();
 }
 
 // Module initialization function - sets up hooks and attaches to existing Notepad windows
 BOOL Wh_ModInit() {
-  OutputDebugStringW(L"Mod initialized\n");
+  Wh_Log(L"Mod initialized");
   // Check if this is the immersive Notepad (packaged app) vs classic Notepad
   WCHAR modulePath[MAX_PATH];
   if (GetModuleFileNameW(NULL, modulePath, MAX_PATH) > 0) {
@@ -429,13 +419,20 @@ BOOL Wh_ModInit() {
   g_redoMenuText = WindhawkUtils::StringSetting::make(L"redo_menu_text");
 
   WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook, &CreateWindowExW_Original);
-  OutputDebugStringW(L"Hook set\n");
+  Wh_Log(L"Hook set");
 
   // Attach to existing Notepad windows
   EnumWindows([](HWND hWnd, LPARAM) -> BOOL {
     WCHAR className[256];
     if (GetClassNameW(hWnd, className, 256) && wcscmp(className, L"Notepad") == 0) {
+      // Check PID
+      DWORD pid = 0;
+      GetWindowThreadProcessId(hWnd, &pid);
+      if (pid != GetCurrentProcessId()) return TRUE; // Not our process
+
+      // Found Notepad window
       InitializeNotepadWindow(hWnd);
+      return FALSE; // Stop enumeration
     }
     return TRUE;
   }, 0);
