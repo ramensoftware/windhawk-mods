@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-09-28T15:12:54.000Z</updated>
+    <updated>2025-10-05T05:02:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Winver Custom Text 1.0.1]]></title>
+        <id>https://windhawk.net/mods/winver-custom-text#33693f48afb4a91bd46553f4b0e3adb280585f48</id>
+        <link href="https://windhawk.net/mods/winver-custom-text"/>
+        <updated>2025-10-05T05:02:54.000Z</updated>
+        <content type="html"><![CDATA[<p>Fixed README, and fixed up some other things</p>]]></content>
+        <author>
+            <name>Thomas Shrader</name>
+            <uri>https://github.com/ilikecoding-197</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Control Panel Color Fix 1.0]]></title>
         <id>https://windhawk.net/mods/control-panel-color-fix#b78d9f04997ec0b281fd2cdf88224bfbe50fb737</id>
@@ -308,23 +319,6 @@ additional files to always hide regardless of whether they start with a dot.</p>
         <content type="html"><![CDATA[<ul>
 <li>Revise method to be more universal and less buggy</li>
 </ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-Application UI Language 1.0.0]]></title>
-        <id>https://windhawk.net/mods/per-app-ui-language#87693e168ff23a04cd69cd495fb083a951a99f82</id>
-        <link href="https://windhawk.net/mods/per-app-ui-language"/>
-        <updated>2025-08-26T12:04:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="perapplicationuilanguage">Per-Application UI Language</h1>
-<p>This mod allows you to set the list of preferred UI languages for each application.
-This is mainly useful if you wish to use or test another language for an application
-that does not have a built-in language option (such as applications that use the built-in
-MUI system).</p>
-<p><strong>Example</strong>: Japanese <a href="https://github.com/aubymori/OpenWithEx">OpenWithEx</a> on an English system</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/per-app-ui-language-example.png" alt="Example" /></p>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>

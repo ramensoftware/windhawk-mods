@@ -5659,7 +5659,7 @@
                 "published": 1748866227000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1748866227000,
+                "updated": 1759640574000,
                 "users": 196
             },
             "metadata": {
@@ -5670,7 +5670,7 @@
                     "winver.exe"
                 ],
                 "name": "Winver Custom Text",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "winver-text-customizer": {
