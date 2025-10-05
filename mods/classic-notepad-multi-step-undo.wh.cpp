@@ -487,3 +487,9 @@ void Wh_ModUninit() {
     g_editHwnd = nullptr;
   }
 }
+
+// Called when mod settings are changed - we just want to reload in that case
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+  if (bReload) *bReload = TRUE;
+  return TRUE;
+}
