@@ -345,20 +345,7 @@ LRESULT CALLBACK MainWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 }
 
 // Original CreateWindowExW function pointer for hooking
-HWND (WINAPI *CreateWindowExW_Original)(
-  DWORD dwExStyle,
-  LPCWSTR lpClassName,
-  LPCWSTR lpWindowName,
-  DWORD dwStyle,
-  int X,
-  int Y,
-  int nWidth,
-  int nHeight,
-  HWND hWndParent,
-  HMENU hMenu,
-  HINSTANCE hInstance,
-  LPVOID lpParam
-);
+decltype(CreateWindowExW)* CreateWindowExW_Original;
 
 // Hooked CreateWindowExW to detect and initialize Notepad windows
 HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
