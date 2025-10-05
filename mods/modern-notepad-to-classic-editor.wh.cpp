@@ -1,12 +1,13 @@
 // ==WindhawkMod==
-// @id           modern-notepad-to-classic-editor
-// @name         Redirect Modern Notepad to Classic Editor
-// @description  Redirects Windows 11's Notepad to a configurable classic editor (defaulting to classic notepad), useful to keep the default "Edit in Notepad" context menu item. Allows auto-elevation using Ctrl+Shift.
-// @version      1.9
-// @author       David Trapp (CherryDT)
-// @github       https://github.com/CherryDT
-// @include      %programfiles%\WindowsApps\Microsoft.WindowsNotepad_*\Notepad\Notepad.exe
-// @architecture x86-64
+// @id              modern-notepad-to-classic-editor
+// @name            Redirect Modern Notepad to Classic Editor
+// @description     Redirects Windows 11's Notepad to a configurable classic editor (defaulting to classic notepad), useful to keep the default "Edit in Notepad" context menu item. Allows auto-elevation using Ctrl+Shift.
+// @version         2.0
+// @author          David Trapp (CherryDT)
+// @github          https://github.com/CherryDT
+// @include         %programfiles%\WindowsApps\Microsoft.WindowsNotepad_*\Notepad\Notepad.exe
+// @architecture    x86-64
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -36,7 +37,9 @@ There is already a way to do this "half-way" natively by disabling the `notepad.
 
 By default, it launches the old `notepad.exe` from `%SystemRoot%\System32`, but you can configure it to run **any editor of your choice** (e.g. Notepad2, Notepad++, VS Code).
 
-## ⚠️ IMPORTANT: You need to also disable the app execution alias for Notepad in Windows Settings > Apps > Advanced app settings > App execution aliases, otherwise this mod won't work!
+The basic way to use this mod is to **disable the app execution alias for Notepad** in Windows Settings > Apps > Advanced app settings > App execution aliases and keep the classic editor path setting at its default value. This way, all entry points that would normally launch modern Notepad will launch classic Notepad instead, and direct invocations of `notepad.exe` will go to the classic Notepad as well and even bypass this mod, speeding up launches. If you configure a different editor path, it will only take effect when using the "Edit with Notepad" shell extension or a file association that launches modern Notepad, not when directly launching `notepad.exe`.
+
+For advanced usage scenarios such as globally overriding `notepad.exe` with a custom editor, see below.
 
 ---
 
@@ -48,6 +51,7 @@ By default, it launches the old `notepad.exe` from `%SystemRoot%\System32`, but 
 - **Optional waiting behavior**:  
   - **Wait enabled:** The modern Notepad process stays open until the editor exits, and passes along its exit code.  
   - **Wait disabled (default):** The modern Notepad process exits immediately after starting the editor.
+- **Optional global override of `notepad.exe`**: By leaving the app execution alias enabled and configuring a different editor path, you can make all invocations of `notepad.exe` (including direct launches) go to your chosen editor instead of classic Notepad. This is useful if you want to completely replace Notepad with a different editor of your choice, but please see caveats below.
 
 ## Settings
 
@@ -64,6 +68,14 @@ By default, it launches the old `notepad.exe` from `%SystemRoot%\System32`, but 
   If disabled, it will exit right after starting the editor.  
   Default: Enabled.
 
+## Advanced Usage
+
+If support for the Ctrl+Shift elevation feature even during direct `notepad.exe` invocations or total replacement of Notepad by some other editor is desired (through configuring a different classic editor path), the app execution alias must be left **enabled**. During the first launch of notepad with this mod enabled, you will then be prompted to **confirm disabling the app execution alias locally** within the immersive notepad package.
+
+This will create what's called a "tombstone" in a "layered key" of the registry (such as `\REGISTRY\WC\Silo24fba818-4b95-b33d-ce9e-e481fda525fauser_sid\Software\Microsoft\Windows\CurrentVersion\App Paths\Notepad.exe`).
+
+There are no known adverse effects of this known, because immersive notepad will not try to launch the classic notepad itself anyway, only the mod does that, however this is a **semi-permanent modification** which would require the use of "Settings > Apps > Installed Apps > Notepad (...) > Advanced > Reset" to undo, which also clears any custom immersive notepad settings.
+
 ## Notes
 
 - Works with all entry points that would normally launch modern Notepad, including the **right-click “Edit in Notepad”** menu option.  
@@ -77,6 +89,7 @@ By default, it launches the old `notepad.exe` from `%SystemRoot%\System32`, but 
 #include <windows.h>
 #include <winreg.h>
 #include <shellapi.h>
+#include <commctrl.h>
 #include <string>
 #include <vector>
 #include <memory>
@@ -417,11 +430,48 @@ BOOL Wh_ModInit() {
       if (queryRet == ERROR_SUCCESS && type == REG_SZ) {
         std::wstring val(value);
         if (val.find(L"WindowsApps") != std::wstring::npos) {
-          if (!isSessionLaunch) {
-            // Ask the user to disable app alias for notepad
-            MessageBoxW(NULL, L"The app execution alias for Notepad is enabled, which interferes with this mod. Please disable it in Windows Settings > Apps > Advanced app settings > App execution aliases.", L"Modern Notepad to Classic Editor", MB_ICONWARNING);
+          if (isSessionLaunch) return FALSE;
+
+          // Show task dialog
+          TASKDIALOGCONFIG tdc = { sizeof(TASKDIALOGCONFIG) };
+          tdc.hwndParent = NULL;
+          tdc.hInstance = NULL;
+          tdc.dwFlags = TDF_USE_COMMAND_LINKS | TDF_ALLOW_DIALOG_CANCELLATION;
+          tdc.dwCommonButtons = TDCBF_CANCEL_BUTTON;
+          tdc.pszWindowTitle = L"Modern Notepad to Classic Editor";
+          tdc.pszMainIcon = TD_WARNING_ICON;
+          tdc.pszMainInstruction = L"App execution alias for Notepad is enabled";
+          tdc.pszContent = L"The app execution alias for Notepad is enabled, which interferes with this mod. To make this mod work, you need to either disable the app execution alias globally or install a local bypass.\n\nDisabling the alias globally globally should be fine in most cases, but it doesn't allow overriding notepad with a custom editor when invoked directly. Installing a local bypass can be useful in advanced scenarios and creates a registry entry that overrides the alias for this app only, but this modification persists even after disabling the mod, even though it should not have any effect on normal operations. To undo it, reset the Notepad app in Settings > Apps > Installed apps > Notepad (...) > Advanced > Reset.\n\nChoose an option below:";
+          TASKDIALOG_BUTTON buttons[] = {
+            { 1, L"Open Advanced app settings to disable the alias globally" },
+            { 2, L"Install local app execution alias bypass" }
+          };
+          tdc.pButtons = buttons;
+          tdc.cButtons = 2;
+          int nButton;
+          HRESULT hr = TaskDialogIndirect(&tdc, &nButton, NULL, NULL);
+          if (SUCCEEDED(hr)) {
+            if (nButton == 1) {
+              // Open settings
+              ShellExecuteW(NULL, L"open", L"ms-settings:advanced-apps", NULL, NULL, SW_SHOWNORMAL);
+              return FALSE;
+            } else if (nButton == 2) {
+              // Install bypass
+              // This will not modify the global registry because we run in the app container of immersive notepad.
+              // Instead, it will create a so-called "tombstone" in a "layered key" such as `\REGISTRY\WC\Silo24fba818-4b95-b33d-ce9e-e481fda525fauser_sid\Software\Microsoft\Windows\CurrentVersion\App Paths\Notepad.exe` that overrides the alias for this app only.
+              RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\notepad.exe");
+
+              MessageBoxW(NULL, L"The local app execution alias bypass has been installed successfully.\n\nIf you want to undo this modification later, go to Settings > Apps > Installed apps > Notepad (...) > Advanced > Reset.", L"Modern Notepad to Classic Editor", MB_ICONINFORMATION);
+
+              // Continue with init
+            } else {
+              // Cancel
+              return FALSE;
+            }
+          } else {
+            // Task dialog failed
+            return FALSE;
           }
-          return FALSE; // Don't patch
         }
       }
     }
