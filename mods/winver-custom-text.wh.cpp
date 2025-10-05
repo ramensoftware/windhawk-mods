@@ -2,7 +2,7 @@
 // @id              winver-custom-text
 // @name            Winver Custom Text
 // @description     Allows you to set the text displayed in winver.exe.
-// @version         1.0
+// @version         1.0.1
 // @author          Thomas Shrader
 // @github          https://github.com/ilikecoding-197
 // @include         winver.exe
@@ -13,7 +13,8 @@
 Allows you to set the text displayed in winver.exe.
 
 If you dont know what winver is, its a file built in to Windows that simply displays info about your system:
-![winver.exe](https://i.imgur.com/6XvNlWj.png)<br>
+![winver.exe](https://i.imgur.com/6XvNlWj.png)
+
 This mod allows you to customize that.
 */
 // ==/WindhawkModReadme==
@@ -48,7 +49,7 @@ struct {
 } Settings;
 
 struct {
-    PCWSTR szApp;
+    WCHAR szApp[1024];
 } ShellAboutArgs;
 
 using ShellAboutW_t = decltype(&ShellAboutW);
@@ -69,7 +70,6 @@ void LoadSettings() {
     Settings.firstLine = Wh_GetStringSetting(L"firstline");
     Settings.otherstuff = Wh_GetStringSetting(L"otherstuff");
 
-    ShellAboutArgs.szApp = new wchar_t[1024];
     swprintf((wchar_t *)ShellAboutArgs.szApp, L"%s#%s", Settings.title, Settings.firstLine);
 
     Wh_Log(L"title: %s", Settings.title);
@@ -83,8 +83,7 @@ void FreeSettings() {
 
     Wh_FreeStringSetting(Settings.title);
     Wh_FreeStringSetting(Settings.firstLine);
-
-    delete ShellAboutArgs.szApp;
+    Wh_FreeStringSetting(Settings.otherstuff);
 }
 
 BOOL Wh_ModInit() {
