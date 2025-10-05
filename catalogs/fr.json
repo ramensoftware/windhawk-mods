@@ -2865,6 +2865,30 @@
                 "version": "1.0"
             }
         },
+        "modern-notepad-to-classic-editor": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1759685749000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1759685749000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "David Trapp (CherryDT)",
+                "compilerOptions": "-lcomctl32",
+                "description": "Redirects Windows 11's Notepad to a configurable classic editor (defaulting to classic notepad), useful to keep the default \"Edit in Notepad\" context menu item. Allows auto-elevation using Ctrl+Shift.",
+                "github": "https://github.com/CherryDT",
+                "include": [
+                    "%programfiles%\\WindowsApps\\Microsoft.WindowsNotepad_*\\Notepad\\Notepad.exe"
+                ],
+                "name": "Redirect Modern Notepad to Classic Editor",
+                "version": "2.0"
+            }
+        },
         "modernize-folder-picker-dialog": {
             "details": {
                 "defaultSorting": 208730,
