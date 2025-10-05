@@ -222,6 +222,31 @@ static bool IsModernWindowsAppsNotepadPath(const std::wstring& exePath) {
          h.find(L"notepad.exe") != std::wstring::npos;
 }
 
+// Check if current process already has a Notepad window
+static bool HasNotepadWindowInCurrentProcess() {
+  DWORD currentPid = GetCurrentProcessId();
+  struct EnumData {
+    DWORD pid;
+    bool found;
+  } data = { currentPid, false };
+
+  EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+    EnumData* pData = (EnumData*)lParam;
+    DWORD pid;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == pData->pid) {
+      WCHAR className[256];
+      if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) && wcscmp(className, L"Notepad") == 0) {
+        pData->found = true;
+        return FALSE; // stop enumeration
+      }
+    }
+    return TRUE;
+  }, (LPARAM)&data);
+
+  return data.found;
+}
+
 // ---------------------------------------------------------------------
 // Hook: CreateProcessAsUserW  (black-hole `/SESSION` relaunch attempts)
 // ---------------------------------------------------------------------
@@ -379,6 +404,11 @@ BOOL Wh_ModInit() {
 
     g_ctrlShiftElevate = Wh_GetIntSetting(L"ctrlShiftElevate", 1) != 0;
     g_waitForClassic   = Wh_GetIntSetting(L"waitForClassic", 1) != 0;
+  }
+
+  // Check if a Notepad window already exists in this process
+  if (HasNotepadWindowInCurrentProcess()) {
+    return FALSE; // Exit without patching
   }
 
   // Detect whether our own first real arg starts with /SESSION, exit quietly with 0
