@@ -2,7 +2,7 @@
 // @id           modern-notepad-to-classic-editor
 // @name         Redirect Modern Notepad to Classic Editor
 // @description  Redirects Windows 11's Notepad to a configurable classic editor (defaulting to classic notepad), useful to keep the default "Edit in Notepad" context menu item. Allows auto-elevation using Ctrl+Shift.
-// @version      1.8
+// @version      1.9
 // @author       David Trapp (CherryDT)
 // @github       https://github.com/CherryDT
 // @include      %programfiles%\WindowsApps\Microsoft.WindowsNotepad_*\Notepad\Notepad.exe
@@ -36,7 +36,9 @@ There is already a way to do this "half-way" natively by disabling the `notepad.
 
 By default, it launches the old `notepad.exe` from `%SystemRoot%\System32`, but you can configure it to run **any editor of your choice** (e.g. Notepad2, Notepad++, VS Code).
 
-You need to have the app execution alias for `notepad.exe` disabled in Windows settings for this mod to work. The mod will check for this and prompt you to disable it automatically if it is still enabled.
+## ⚠️ IMPORTANT: You need to also disable the app execution alias for Notepad in Windows Settings > Apps > App execution aliases, otherwise this mod won't work!
+
+---
 
 ## Features
 
@@ -44,8 +46,8 @@ You need to have the app execution alias for `notepad.exe` disabled in Windows s
 - **Configurable editor path**: Pick any executable, with environment variables supported (e.g. `%SystemRoot%\System32\notepad.exe`).
 - **Optional Ctrl+Shift elevation**: If enabled, holding **Ctrl+Shift** while launching opens the editor **as Administrator** (if not already elevated). This allows for easily editing files that require elevation: Just hold Ctrl+Shift while using the “Edit in Notepad” context menu option!
 - **Optional waiting behavior**:  
-  - **Wait enabled (default):** The modern Notepad process stays open until the editor exits, and passes along its exit code.  
-  - **Wait disabled:** The modern Notepad process exits immediately after starting the editor.
+  - **Wait enabled:** The modern Notepad process stays open until the editor exits, and passes along its exit code.  
+  - **Wait disabled (default):** The modern Notepad process exits immediately after starting the editor.
 
 ## Settings
 
@@ -146,6 +148,18 @@ static bool CiStartsWith(const std::wstring& s, const std::wstring& prefix) {
   return true;
 }
 
+// Strip "ms-notepad:" or "ms-notepad://" prefix from the argument and remove trailing slash
+static std::wstring StripMsNotepadPrefix(const std::wstring& s) {
+  std::wstring a = TrimLeft(s);
+  if (CiStartsWith(a, L"ms-notepad:")) {
+    std::wstring res = a.substr(11);
+    if (CiStartsWith(res, L"//")) res = res.substr(2);
+    while (!res.empty() && (res.back() == L'/' || res.back() == L'\\')) res.pop_back();
+    return res;
+  }
+  return s;
+}
+
 // Return true if any arg after argv[0] starts with "/SESSION" (case-insensitive)
 static bool ArgsContainSession(const std::vector<std::wstring>& argv) {
   for (size_t i = 1; i < argv.size(); ++i) {
@@ -176,7 +190,8 @@ static std::wstring BuildArgsOnly() {
   std::wstring args;
   for (size_t i = 1; i < argv.size(); ++i) {
     if (i > 1) args += L" ";
-    args += QuoteArgIfNeeded(argv[i]);
+    std::wstring arg = StripMsNotepadPrefix(argv[i]);
+    if (arg != L"") args += QuoteArgIfNeeded(StripMsNotepadPrefix(argv[i]));
   }
   return args;
 }
@@ -367,12 +382,6 @@ BOOL Wh_ModInit() {
     g_waitForClassic   = Wh_GetIntSetting(L"waitForClassic", 1) != 0;
   }
 
-  // Only act inside the WindowsApps Notepad process
-  std::wstring cur = GetCurrentExePath();
-  if (!IsModernWindowsAppsNotepadPath(cur)) {
-    return FALSE;
-  }
-
   // Detect whether our own first real arg starts with /SESSION, exit quietly with 0
   auto argv = ParseCommandLineW(GetCommandLineW());
   bool isSessionLaunch = ArgsContainSession(argv);
@@ -384,25 +393,23 @@ BOOL Wh_ModInit() {
       WCHAR value[1024] = {};
       DWORD size = sizeof(value);
       DWORD type;
-      if (RegQueryValueExW(hKey, NULL, NULL, &type, (BYTE*)value, &size) == ERROR_SUCCESS && type == REG_SZ) {
+      LONG queryRet = RegQueryValueExW(hKey, NULL, NULL, &type, (BYTE*)value, &size);
+      RegCloseKey(hKey);
+      if (queryRet == ERROR_SUCCESS && type == REG_SZ) {
         std::wstring val(value);
         if (val.find(L"WindowsApps") != std::wstring::npos) {
-          int result = isSessionLaunch ? IDNO : MessageBoxW(NULL, L"It seems like an app execution alias for notepad.exe to the modern Notepad is set in Windows settings and this mod cannot work while the alias is enabled. Do you want to disable this alias?", L"Redirect Modern Notepad to Classic Editor (Windhawk Mod)", MB_YESNO | MB_ICONQUESTION);
-          if (result == IDYES) {
-            RegCloseKey(hKey);
-            RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\notepad.exe");
-          } else {
-            RegCloseKey(hKey);
-            return FALSE; // Don't patch
+          if (!isSessionLaunch) {
+            // Ask the user to disable app alias for notepad
+            MessageBoxW(NULL, L"The app execution alias for Notepad is enabled, which interferes with this mod. Please disable it in Windows Settings > Apps > App execution aliases.", L"Modern Notepad to Classic Editor", MB_ICONWARNING);
           }
+          return FALSE; // Don't patch
         }
       }
-      RegCloseKey(hKey);
     }
   }
 
   // If this is already an "inner" launch with /SESSION, exit quietly
-  if (ArgsContainSession(argv)) {
+  if (isSessionLaunch) {
     ExitProcess(0);
   }
 
