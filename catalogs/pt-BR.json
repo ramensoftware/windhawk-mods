@@ -5693,6 +5693,26 @@
                 "name": "Winver Text Customizer",
                 "version": "1.0.0"
             }
+        },
+        "xs-discord-control-registered-games": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1759641640000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1759641640000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Xetrill",
+                "description": "This mod allows you to control what games Discord can see and are collected for its Registered Games.",
+                "github": "https://github.com/Xetrill",
+                "include": [
+                    "Discord.exe"
+                ],
+                "name": "Control Discord's Registered Games",
+                "version": "1.0"
+            }
         }
     }
 }
