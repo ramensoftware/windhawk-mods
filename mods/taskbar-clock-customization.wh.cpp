@@ -9,7 +9,7 @@
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lpdh -lruntimeobject -lshlwapi -lversion -lwininet
+// @compilerOptions -lole32 -loleaut32 -lpdh -lpowrprof -lruntimeobject -lshlwapi -lversion -lwininet
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -76,8 +76,11 @@ patterns can be used:
 * System performance metrics:
   * `%upload_speed%` - system-wide upload transfer rate.
   * `%download_speed%` - system-wide download transfer rate.
+  * `%total_speed%` - combined upload and download transfer rate.
   * `%cpu%` - CPU usage.
   * `%ram%` - RAM usage.
+  * `%battery%` - battery level percentage.
+  * `%power%` - battery power in watts (negative when discharging, positive when charging).
 * `%weather%` - Weather information, powered by [wttr.in](https://wttr.in/),
   using the location and format configured in settings.
 * `%web<n>%` - the web contents as configured in settings, truncated with
@@ -411,6 +414,7 @@ using namespace std::string_view_literals;
 #include <mshtml.h>
 #include <pdh.h>
 #include <pdhmsg.h>
+#include <powrprof.h>
 #include <psapi.h>
 #include <shlwapi.h>
 #include <wininet.h>
@@ -566,8 +570,11 @@ FormattedString<FORMATTED_BUFFER_SIZE> g_timezoneFormatted;
 
 FormattedString<FORMATTED_BUFFER_SIZE> g_uploadSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_downloadSpeedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_totalSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_cpuFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_ramFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_batteryFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_powerFormatted;
 
 std::vector<std::optional<DYNAMIC_TIME_ZONE_INFORMATION>> g_timeZoneInformation;
 
@@ -1874,6 +1881,12 @@ void DataCollectionSessionInit() {
     metrics[static_cast<int>(MetricType::kCpu)] =
         IsStrInDateTimePatternSettings(L"%cpu%");
 
+    // If total_speed is used, we need both upload and download metrics
+    if (IsStrInDateTimePatternSettings(L"%total_speed%")) {
+        metrics[static_cast<int>(MetricType::kUploadSpeed)] = true;
+        metrics[static_cast<int>(MetricType::kDownloadSpeed)] = true;
+    }
+
     if (!std::any_of(std::begin(metrics), std::end(metrics),
                      [](bool x) { return x; })) {
         return;
@@ -2112,6 +2125,27 @@ PCWSTR GetDownloadSpeedFormatted() {
                               MetricType::kDownloadSpeed);
 }
 
+PCWSTR GetTotalSpeedFormatted() {
+    DataCollectionSampleIfNeeded();
+
+    DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
+    if (g_totalSpeedFormatted.formatIndex != dataCollectionFormatIndex) {
+        if (g_dataCollectionSession) {
+            double uploadSpeed = g_dataCollectionSession->QueryData(MetricType::kUploadSpeed);
+            double downloadSpeed = g_dataCollectionSession->QueryData(MetricType::kDownloadSpeed);
+            double totalSpeed = uploadSpeed + downloadSpeed;
+            FormatTransferSpeed(totalSpeed, g_totalSpeedFormatted.buffer,
+                                ARRAYSIZE(g_totalSpeedFormatted.buffer));
+        } else {
+            wcscpy_s(g_totalSpeedFormatted.buffer, L"");
+        }
+
+        g_totalSpeedFormatted.formatIndex = dataCollectionFormatIndex;
+    }
+
+    return g_totalSpeedFormatted.buffer;
+}
+
 PCWSTR GetCpuFormatted() {
     return GetMetricFormatted(g_cpuFormatted, MetricType::kCpu);
 }
@@ -2133,6 +2167,50 @@ PCWSTR GetRamFormatted() {
     }
 
     return g_ramFormatted.buffer;
+}
+
+PCWSTR GetBatteryFormatted() {
+    DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
+    if (g_batteryFormatted.formatIndex != dataCollectionFormatIndex) {
+        SYSTEM_POWER_STATUS powerStatus;
+        if (GetSystemPowerStatus(&powerStatus)) {
+            FormatPercentValue(powerStatus.BatteryLifePercent,
+                               g_batteryFormatted.buffer,
+                               ARRAYSIZE(g_batteryFormatted.buffer));
+        } else {
+            wcscpy_s(g_batteryFormatted.buffer, L"-");
+        }
+
+        g_batteryFormatted.formatIndex = dataCollectionFormatIndex;
+    }
+
+    return g_batteryFormatted.buffer;
+}
+
+PCWSTR GetPowerFormatted() {
+    DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
+    if (g_powerFormatted.formatIndex != dataCollectionFormatIndex) {
+        SYSTEM_BATTERY_STATE batteryState{};
+
+        NTSTATUS status = CallNtPowerInformation(
+            SystemBatteryState, nullptr, 0,
+            &batteryState, sizeof(batteryState));
+
+        if (status == 0 && batteryState.MaxCapacity > 0 && batteryState.Rate != 0) {
+            // Rate is in mW
+            long powerWatts = static_cast<long>(batteryState.Rate) / 1000;
+
+            swprintf_s(g_powerFormatted.buffer,
+                      ARRAYSIZE(g_powerFormatted.buffer),
+                      L"%+ldW", powerWatts);
+        } else {
+            wcscpy_s(g_powerFormatted.buffer, L"-");
+        }
+
+        g_powerFormatted.formatIndex = dataCollectionFormatIndex;
+    }
+
+    return g_powerFormatted.buffer;
 }
 
 int ResolveFormatTokenWithDigit(std::wstring_view format,
@@ -2179,8 +2257,11 @@ size_t ResolveFormatToken(
         {L"%timezone%"sv, GetTimezoneFormatted},
         {L"%upload_speed%"sv, GetUploadSpeedFormatted},
         {L"%download_speed%"sv, GetDownloadSpeedFormatted},
+        {L"%total_speed%"sv, GetTotalSpeedFormatted},
         {L"%cpu%"sv, GetCpuFormatted},
         {L"%ram%"sv, GetRamFormatted},
+        {L"%battery%"sv, GetBatteryFormatted},
+        {L"%power%"sv, GetPowerFormatted},
         {L"%newline%"sv, []() { return L"\n"; }},
     };
 
