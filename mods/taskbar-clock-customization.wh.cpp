@@ -2137,7 +2137,7 @@ PCWSTR GetTotalSpeedFormatted() {
             FormatTransferSpeed(totalSpeed, g_totalSpeedFormatted.buffer,
                                 ARRAYSIZE(g_totalSpeedFormatted.buffer));
         } else {
-            wcscpy_s(g_totalSpeedFormatted.buffer, L"");
+            wcscpy_s(g_totalSpeedFormatted.buffer, L"-");
         }
 
         g_totalSpeedFormatted.formatIndex = dataCollectionFormatIndex;
@@ -2197,14 +2197,13 @@ PCWSTR GetPowerFormatted() {
             &batteryState, sizeof(batteryState));
 
         if (status == 0 && batteryState.MaxCapacity > 0 && batteryState.Rate != 0) {
-            // Rate is in mW
             long powerWatts = static_cast<long>(batteryState.Rate) / 1000;
 
             swprintf_s(g_powerFormatted.buffer,
                       ARRAYSIZE(g_powerFormatted.buffer),
                       L"%+ldW", powerWatts);
         } else {
-            wcscpy_s(g_powerFormatted.buffer, L"-");
+            wcscpy_s(g_powerFormatted.buffer, L"");
         }
 
         g_powerFormatted.formatIndex = dataCollectionFormatIndex;
