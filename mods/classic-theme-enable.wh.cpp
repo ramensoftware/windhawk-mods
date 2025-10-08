@@ -40,7 +40,13 @@ to prevent the color scheme change after pressing Ctrl+Alt+Del or going to the l
     "UserPreferencesMask"=hex:9E,1E,05,80,12,01,00,00
     ```
 
-4. If you are using the Windows 10 taskbar, install the [OpenShell utility](https://github.com/Open-Shell/Open-Shell-Menu).
+4. Windows Classic theme is not compatible with Windows 11 taskbar. 
+On Windows 11 version 21H2 to 23H2 it is recommended to enable the Windows 10 taskbar with the
+[*Windows 10 taskbar on Windows 11*](https://windhawk.net/mods/win10-taskbar-on-win11) mod while
+on Windows 11 24H2 install the Windows 10 taskbar using the
+[*Win10 taskbar on Win11 24H2*](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) mod.
+
+5. If you are using the Windows 10 taskbar, install the [OpenShell utility](https://github.com/Open-Shell/Open-Shell-Menu).
 After installing the OpenShell, put the patched file [StartMenuDLL for OpenShell 4.4.190](https://github.com/valinet/ExplorerPatcher/files/13359466/StartMenuDLL.zip)
 into the Open Shell folder, replacing the existing one. 
 Alternatively, install the [patched version of OpenShell4.4.191](http://redirect.viglink.com/?key=71fe2139a887ad501313cd8cce3053c5&subId=6513581&u=https%3A//github.com/OrthodoxWindows/Open-Shell-Menu/blob/master/OpenShellSetup_4_4_191-hlvioynt.exe)
@@ -81,21 +87,15 @@ Alternatively, install the [patched version of OpenShell4.4.191](http://redirect
     "StartButtonIcon"="%SystemRoot%\\System32\\slui.exe, 2"
     ```
 
-5. Enabling the mod will make UWP apps to hang. Install the [*Classic UWP Fix*](https://windhawk.net/mods/classic-uwp-fix) mod 
+6. Enabling the mod will make UWP apps to hang. Install the [*Classic UWP Fix*](https://windhawk.net/mods/classic-uwp-fix) mod 
 to mitigate this.
 
-6. Some windows will manifest the unwanted transparency. 
+7. Some windows will manifest the unwanted transparency. 
 To fix this, install the [*Classic theme transparency fix*](https://windhawk.net/mods/classic-theme-transparency-fix) mod.
 
-7. On Windows 11 22H2 and later it is recommended to install the mod 
+8. On Windows 11 22H2 and later it is recommended to install the mod 
 [*Explorerframe fixes for Win11 22H2+*](https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus) 
 and enable all options in its settings.
-
-8. Windows Classic theme is not compatible with Windows 11 taskbar. 
-On Windows 11 version 21H2 to 23H2 it is recommended to enable the Windows 10 taskbar with the
-[*Windows 10 taskbar on Windows 11*](https://windhawk.net/mods/win10-taskbar-on-win11) mod while
-on Windows 11 24H2 to install the Windows 10 taskbar using the
-[*Win10 taskbar on Win11 24H2*](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) mod.
 
 9. The Windows Explorer still needs a compatibility fix, so install the mod
 [*Classic Theme Explorer Lite*](https://windhawk.net/mods/classic-theme-explorer-lite).
