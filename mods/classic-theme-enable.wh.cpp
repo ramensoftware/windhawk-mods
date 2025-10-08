@@ -139,13 +139,13 @@ instead of the both. If confused, you can install all three, they do not conflic
 [*Firefox border fix for Classic theme*](https://windhawk.net/mods/firefox-border-fix).
 
 21. To fix the borders in Edge, Chromium and restore the classic titlebar in other applications, install this mod:
-[*Titlebar For Everyone*](https://windhawk.net/mods/titlebar-for-everyone)
+[*Titlebar For Everyone*](https://windhawk.net/mods/titlebar-for-everyone).
 
 22. If you prefer the 3D buttons on taskbar, like in Windows 7 and before, install this mod:
-[*Classic Taskbar 3D buttons Lite*](https://windhawk.net/mods/classic-taskbar-buttons-lite)
+[*Classic Taskbar 3D buttons Lite*](https://windhawk.net/mods/classic-taskbar-buttons-lite).
 
 23. To restore the classic tray clock flyout, use this mod:
-[*Legacy (Win32) clock flyout (Win11-friendly)*](https://windhawk.net/mods/legacy-clock-flyout)
+[*Legacy (Win32) clock flyout (Win11-friendly)*](https://windhawk.net/mods/legacy-clock-flyout).
 
 24. To have the classic sound volume flyout, install this mod:
 [*Legacy (Win32) sound volume flyout*](https://windhawk.net/mods/legacy-sound-flyout).
