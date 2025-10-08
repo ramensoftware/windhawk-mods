@@ -170,7 +170,12 @@ Despite the deprecation notice, the mod works just as intended.
 [*Disable Taskbar Thumbnails*](https://windhawk.net/mods/taskbar-thumbnails) because taskbar thumbnails
 do not work in classic theme anyway, so to remove the useless popup.
 
-31. If you want the classic, 32px icon size in folders, install this mod:
+31. If you are using a Windows 10 taskbar (either under Windows 10 or Windows 11), 
+you may prefer the classic taskbar button context menus. For this, install the mod
+[*Taskbar classic context menu*](https://windhawk.net/mods/taskbar-classic-menu) mod 
+and enable the support for Windows 10 taskbar in the mod's settings.
+
+32. If you want the classic, 32px icon size in folders, install this mod:
 [*Explorer 32px Icons*](https://windhawk.net/mods/explorer-32px-icons).
 
 
