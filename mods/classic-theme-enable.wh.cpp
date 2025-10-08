@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              classic-theme-enable
-// @name            Enable Classic Theme by handle method - Fork
+// @name            Enable Classic Theme by handle method
 // @description     Disables theming by closing the handle
 // @version         1.0.5
 // @author          Anixx
