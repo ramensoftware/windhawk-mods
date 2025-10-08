@@ -177,7 +177,7 @@ do not work in classic theme anyway, so to remove the useless popup.
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 
 utility, but make sure to install and run it in Windows 2000 or XP compatibility mode (in Windows XP mode
 it will require the UAC authorization). Alternatively you can use the 
-[New Classic Theme Configurator](*https://gitlab.com/ftortoriello/WinClassicThemeConfig*).
+[New Classic Theme Configurator](https://gitlab.com/ftortoriello/WinClassicThemeConfig).
 
 */
 // ==/WindhawkModReadme==
