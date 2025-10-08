@@ -37,7 +37,7 @@ To customize the clock and tray area, launch legacy tray setup dialog:
 
 Known issues:
 
-* Notification toasts may cause Explore crash, it is recommended to disable notifications.
+* Notification toasts may cause Explorer to crash, it is recommended to disable notifications.
 
 * The keyboard layout indicator displays the language name vertically rather than horizontally.
 
