@@ -161,7 +161,7 @@ instead of the both. If confused, you can install all three, they do not conflic
 Despite the deprecation notice, the mod works just as intended.
 
 28. To fix a glitch in the Explorer's toolbar gripper, install this mod:
-[*Explorer Unlocked Toolbars Fix (WINAPI)*](https://windhawk.net/mods/explorer-no-toolbars-bottom-gripper)
+[*Explorer Unlocked Toolbars Fix (WINAPI)*](https://windhawk.net/mods/explorer-no-toolbars-bottom-gripper).
 
 29. To get the classic directory tree view in File Explorer, install this mod:
 [*Classic Explorer Treeview*](https://windhawk.net/mods/classic-explorer-treeview).
