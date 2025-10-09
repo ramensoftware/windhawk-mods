@@ -176,6 +176,23 @@ void CALLBACK CtxMenuHookWinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, 
   EnableMenuItem(hMenu, WM_UNDO, MF_BYCOMMAND | (!g_undoStack.empty() ? MF_ENABLED : MF_GRAYED));
 }
 
+// Handles text modification with selection checking - saves immediately if selection exists, otherwise groups with typing
+void HandleTextModification(HWND hWnd) {
+  DWORD selStart, selEnd;
+  SendMessage(hWnd, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
+  if (selStart != selEnd) {
+    // Selection exists, save immediately (like cut/paste)
+    SaveCurrentState();
+  } else {
+    // No selection, group with typing
+    if (!g_pendingGroup) {
+      SaveCurrentState();
+      g_pendingGroup = true;
+      SetTimer(hWnd, GROUP_TIMER, g_snapshotIntervalSeconds * 1000, nullptr);
+    }
+  }
+}
+
 // Subclass procedure for the edit control to intercept input and manage undo/redo
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
   switch (uMsg) {
@@ -183,11 +200,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     if ((wParam >= 32) || wParam == VK_RETURN || wParam == VK_TAB) {
       // Printable character, enter, tab
       // Backspace handled in WM_KEYDOWN
-      if (!g_pendingGroup) {
-        SaveCurrentState();
-        g_pendingGroup = true;
-        SetTimer(hWnd, GROUP_TIMER, g_snapshotIntervalSeconds * 1000, nullptr);
-      }
+      HandleTextModification(hWnd);
     }
     break;
 
@@ -204,19 +217,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
   case WM_KEYDOWN:
     if (wParam == VK_BACK || wParam == VK_DELETE) {
-      DWORD selStart, selEnd;
-      SendMessage(hWnd, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
-      if (selStart != selEnd) {
-        // Selection exists, save immediately (like cut/paste)
-        SaveCurrentState();
-      } else {
-        // No selection, group with typing
-        if (!g_pendingGroup) {
-          SaveCurrentState();
-          g_pendingGroup = true;
-          SetTimer(hWnd, GROUP_TIMER, g_snapshotIntervalSeconds * 1000, nullptr);
-        }
-      }
+      HandleTextModification(hWnd);
     }
     if ((wParam == 'Y' && (GetKeyState(VK_CONTROL) & 0x8000)) ||
       (wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000) && (GetKeyState(VK_SHIFT) & 0x8000))) {
