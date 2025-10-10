@@ -121,6 +121,7 @@ UndoState GetCurrentState(HWND hWnd) {
 void SetCurrentState(HWND hWnd, const UndoState& state) {
   SendMessage(hWnd, WM_SETTEXT, 0, (LPARAM)state.text.c_str());
   SendMessage(hWnd, EM_SETSEL, state.selStart, state.selEnd);
+  SendMessage(hWnd, EM_SCROLLCARET, 0, 0);
   SendMessage(hWnd, EM_SETMODIFY, TRUE, 0);
   SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hWnd), EN_UPDATE), (LPARAM)hWnd);
   SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hWnd), EN_CHANGE), (LPARAM)hWnd);
