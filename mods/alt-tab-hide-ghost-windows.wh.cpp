@@ -12,11 +12,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Alt+Tab: Hide ghost windows, inactive Groupy 2 tabs and/or minimized windows
+# Alt+Tab: Hide ghost windows
 
-This mod filters out small or titleless windows from the Alt+Tab window switcher, preventing "ghost" windows from appearing in the list (for example, the ThinkPad External Keyboard with Trackpoint Driver is notorious for having two 0x0 windows that show up in Alt+Tab all the time, and this mod will get rid of them).
-
-It can also hide inactive Groupy 2 tabs (which unlike in Groupy 1 do show up in Alt+Tab by default) and/or all minimized windows, depending on settings.
+This mod filters out small or titleless windows from the Alt+Tab window switcher as well as inactive Groupy 2 tabs (which unlike in Groupy 1 do show up in Alt+Tab by default) and/or minimized windows. This can prevent "ghost" windows from appearing in the list (for example, the ThinkPad External Keyboard with Trackpoint Driver is notorious for having two 0x0 windows that show up in Alt+Tab all the time, and this mod will get rid of them).
 
 ## Settings
 
@@ -503,19 +501,16 @@ BOOL Wh_ModInit() {
                 {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &XamlAltTabViewHost_Show_Original,
                 XamlAltTabViewHost_Show_Hook,
-                true,
             },
             {
-                {LR"(public: virtual long __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const )"},
+                {LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const )"},
                 &ITaskGroupWindowInformation_Position_Original,
                 ITaskGroupWindowInformation_Position_Hook,
-                true,
             },
             {
                 {LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"},
                 &XamlAltTabViewHost_CreateInstance_Original,
                 XamlAltTabViewHost_CreateInstance_Hook,
-                true,
             },
             // For the old Win10 (non-XAML) Alt+Tab (can be enabled with
             // ExplorerPatcher):
@@ -532,7 +527,7 @@ BOOL Wh_ModInit() {
                 true,
             },
             {
-                {LR"(long __cdecl CAltTabViewHost_CreateInstance(struct IMultitaskingData *,struct IMultitaskingViewManagerInternal *,struct IApplicationViewSwitcher *,struct IImmersiveAppCrusher *,struct IMultitaskingViewVisibilityServiceInternal *,struct IMultitaskingViewGestureState *,struct IApplicationViewCollection *,struct Windows::Internal::ComposableShell::Tabs::ITabController *,struct ITabViewManager *,struct _GUID const &,void * *))"},
+                {LR"(long __cdecl CAltTabViewHost_CreateInstance(struct IMultitaskingData *,struct IMultitaskingViewManagerInternal *,struct IApplicationViewSwitcher *,struct IImmersiveAppCrusher *,struct IMultitaskingViewVisibilityServiceInternal *,struct IMultitaskingViewGestureState *,struct IApplicationViewCollection *,struct ITouchGestureSettings *,struct _GUID const &,void * *))"},
                 &CAltTabViewHost_CreateInstance_Win11_Original,
                 CAltTabViewHost_CreateInstance_Win11_Hook,
                 true,
