@@ -1188,6 +1188,27 @@
                 "version": "1.0"
             }
         },
+        "custom-cmd-startup-text": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1760288890000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1760288890000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Replace the version and copyright text that shows",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "cmd.exe"
+                ],
+                "name": "Custom Command Prompt Startup Text",
+                "version": "1.0.0"
+            }
+        },
         "custom-desktop-watermark": {
             "details": {
                 "defaultSorting": 1704,
