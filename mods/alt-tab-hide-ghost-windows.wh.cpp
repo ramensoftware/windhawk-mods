@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              alt-tab-hide-ghost-windows
-// @name            Alt+Tab: Hide ghost windows, inactive Groupy 2 tabs and/or minimized windows
+// @name            Alt+Tab: Hide ghost windows
 // @description     Hides windows in Alt+Tab that are too small or have no title, preventing "ghost" windows from cluttering the switcher. Can also hide inactive Groupy 2 tabs and/or minimized windows.
 // @version         1.0
 // @author          David Trapp (CherryDT)
