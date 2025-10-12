@@ -40,6 +40,7 @@ This mod does not currently change the behaviour of `cd` or `dir` commands.
 #include <windhawk_utils.h>
 #include <string>
 #include <algorithm>
+#include <vector>
 
 #define WHINIT_ASSERT(x)                                 \
 {                                                        \
@@ -63,7 +64,7 @@ struct PathRedirection
 bool g_fRedirectTitle = false;
 
 int g_cRedirections = 0;
-PathRedirection *g_rgRedirections = nullptr;
+std::vector<PathRedirection> g_srgRedirections;
 
 /**
  * @return True if replaced, false if unchanged.
@@ -76,7 +77,7 @@ bool ApplyPathReplacementToString(LPWSTR szTarget, DWORD nBufferLength)
         wcscpy_s(szBuffer, szTarget);
 
         Wh_Log(L"Looking at directories, i = %d", i);
-        PathRedirection *pRedir = &g_rgRedirections[i];
+        PathRedirection *pRedir = &g_srgRedirections[i];
 
         Wh_Log(L"Looking at replacement:");
         Wh_Log(L"  - Pattern: %s", pRedir->szFrom);
@@ -137,8 +138,10 @@ bool ApplyPathReplacementToString(LPWSTR szTarget, DWORD nBufferLength)
             wcscpy_s(szTarget, nBufferLength, szBuffer);
             return true;
         }
-        else if (pRedir->szFrom[0] == pRedir->szTo[0] == L'\0'
-            && pRedir->szFrom[1] == pRedir->szTo[1] == L'\0')
+        else if (pRedir->szFrom[0] == L'\0'
+            && pRedir->szTo[0] == L'\0'
+            && pRedir->szFrom[1] == L'\0'
+            && pRedir->szTo[1] == L'\0')
         {
             // End of array.
             break;
@@ -148,8 +151,8 @@ bool ApplyPathReplacementToString(LPWSTR szTarget, DWORD nBufferLength)
     return false;
 }
 
-DWORD ( *GetCurrentDirectoryW_orig)(DWORD nBufferLength, LPWSTR lpBuffer);
-DWORD GetCurrentDirectoryW_hook(DWORD nBufferLength, LPWSTR lpBuffer)
+DWORD (WINAPI *GetCurrentDirectoryW_orig)(DWORD nBufferLength, LPWSTR lpBuffer);
+DWORD WINAPI GetCurrentDirectoryW_hook(DWORD nBufferLength, LPWSTR lpBuffer)
 {
     Wh_Log(L"Entered");
     if (g_fEnableGetCurrentDirectoryHooks)
@@ -160,7 +163,12 @@ DWORD GetCurrentDirectoryW_hook(DWORD nBufferLength, LPWSTR lpBuffer)
         ApplyPathReplacementToString(szBuffer, ARRAYSIZE(szBuffer));
 
         ZeroMemory(lpBuffer, nBufferLength);
-        wcscpy_s(lpBuffer, nBufferLength, szBuffer);
+
+        if (wcscpy_s(lpBuffer, nBufferLength, szBuffer) != 0)
+        {
+            return GetCurrentDirectoryW_orig(nBufferLength, lpBuffer);
+        }
+
         return (DWORD)wcslen(lpBuffer);
     }
 
@@ -306,12 +314,10 @@ void LoadSettings()
         return a.length > b.length;
     });
 
-    g_rgRedirections = (PathRedirection *)malloc(sizeof(PathRedirection) * g_cRedirections);
-
     for (int i = 0; i < g_cRedirections; i++)
     {
         Wh_Log(L"Sorted %d %d %s", rgMap[i].index, rgMap[i].length, pRedirectionsTemp[rgMap[i].index].szFrom);
-        g_rgRedirections[i] = pRedirectionsTemp[rgMap[i].index];
+        g_srgRedirections.push_back(pRedirectionsTemp[rgMap[i].index]);
     }
 
     delete[] rgMap;
