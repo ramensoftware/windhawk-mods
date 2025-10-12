@@ -2,12 +2,12 @@
 // @id              classic-notepad-multi-step-undo
 // @name            Classic Notepad Multi-Step Undo/Redo
 // @description     Adds multi-step undo/redo to classic Notepad instead of the single-step undo
-// @version         1.0
+// @version         1.1
 // @author          David Trapp (CherryDT)
 // @github          https://github.com/CherryDT
 // @include         notepad.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lcomdlg32
+// @compilerOptions -lcomctl32 -lcomdlg32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -24,9 +24,9 @@
 - min_undo_entries: 3
   $name: Min. Undo Entries (regardless of memory usage)
   $description: Minimum number of undo history entries to keep even if they would exceed the specified max. memory usage
-- redo_menu_text: R&edo
-  $name: Redo Menu Item Text
-  $description: Text of the "Redo" menu item, use "&" for access key prefix
+- redo_menu_text: ""
+  $name: "Redo Menu Item Text (default: automatic)"
+  $description: Text of the "Redo" menu item, use "&" for access key prefix. The default is "R&edo" for English and otherwise a string taken from a shell menu which may or may not a have fitting access key. You can use this field to override it.
 */
 // ==/WindhawkModSettings==
 
@@ -121,6 +121,7 @@ UndoState GetCurrentState(HWND hWnd) {
 void SetCurrentState(HWND hWnd, const UndoState& state) {
   SendMessage(hWnd, WM_SETTEXT, 0, (LPARAM)state.text.c_str());
   SendMessage(hWnd, EM_SETSEL, state.selStart, state.selEnd);
+  SendMessage(hWnd, EM_SCROLLCARET, 0, 0);
   SendMessage(hWnd, EM_SETMODIFY, TRUE, 0);
   SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hWnd), EN_UPDATE), (LPARAM)hWnd);
   SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hWnd), EN_CHANGE), (LPARAM)hWnd);
@@ -176,6 +177,23 @@ void CALLBACK CtxMenuHookWinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, 
   EnableMenuItem(hMenu, WM_UNDO, MF_BYCOMMAND | (!g_undoStack.empty() ? MF_ENABLED : MF_GRAYED));
 }
 
+// Handles text modification with selection checking - saves immediately if selection exists, otherwise groups with typing
+void HandleTextModification(HWND hWnd) {
+  DWORD selStart, selEnd;
+  SendMessage(hWnd, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
+  if (selStart != selEnd) {
+    // Selection exists, save immediately (like cut/paste)
+    SaveCurrentState();
+  } else {
+    // No selection, group with typing
+    if (!g_pendingGroup) {
+      SaveCurrentState();
+      g_pendingGroup = true;
+      SetTimer(hWnd, GROUP_TIMER, g_snapshotIntervalSeconds * 1000, nullptr);
+    }
+  }
+}
+
 // Subclass procedure for the edit control to intercept input and manage undo/redo
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
   switch (uMsg) {
@@ -183,11 +201,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     if ((wParam >= 32) || wParam == VK_RETURN || wParam == VK_TAB) {
       // Printable character, enter, tab
       // Backspace handled in WM_KEYDOWN
-      if (!g_pendingGroup) {
-        SaveCurrentState();
-        g_pendingGroup = true;
-        SetTimer(hWnd, GROUP_TIMER, g_snapshotIntervalSeconds * 1000, nullptr);
-      }
+      HandleTextModification(hWnd);
     }
     break;
 
@@ -204,19 +218,7 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
   case WM_KEYDOWN:
     if (wParam == VK_BACK || wParam == VK_DELETE) {
-      DWORD selStart, selEnd;
-      SendMessage(hWnd, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
-      if (selStart != selEnd) {
-        // Selection exists, save immediately (like cut/paste)
-        SaveCurrentState();
-      } else {
-        // No selection, group with typing
-        if (!g_pendingGroup) {
-          SaveCurrentState();
-          g_pendingGroup = true;
-          SetTimer(hWnd, GROUP_TIMER, g_snapshotIntervalSeconds * 1000, nullptr);
-        }
-      }
+      HandleTextModification(hWnd);
     }
     if ((wParam == 'Y' && (GetKeyState(VK_CONTROL) & 0x8000)) ||
       (wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000) && (GetKeyState(VK_SHIFT) & 0x8000))) {
@@ -360,20 +362,36 @@ void InitializeNotepadWindow(HWND hWnd) {
   if (hMenu) {
     HMENU hEditMenu = GetSubMenu(hMenu, 1);
     if (hEditMenu && !g_redoMenuAdded) {
-      // Get undo menu text to extract hotkey
-      std::wstring hotkey = L"Ctrl+Y";
-      WCHAR undoText[256];
-      if (GetMenuStringW(hEditMenu, ID_EDIT_UNDO, undoText, 256, MF_BYCOMMAND)) {
-        std::wstring undoStr = undoText;
-        size_t tabPos = undoStr.find(L'\t');
-        if (tabPos != std::wstring::npos) {
-          std::wstring afterTab = undoStr.substr(tabPos + 1);
-          if (afterTab.size() >= 2 && afterTab.substr(afterTab.size() - 2) == L"+Z") {
-            hotkey = afterTab.substr(0, afterTab.size() - 1) + L"Y";
+      std::wstring redoText = L"R&edo\tCtrl+Y"; // Avoid access key conflict between &Redo and &Replace
+      if (!g_redoMenuText.empty()) {
+        // Get undo menu text to extract hotkey
+        std::wstring hotkey = L"Ctrl+Y";
+        WCHAR undoText[256];
+        if (GetMenuStringW(hEditMenu, ID_EDIT_UNDO, undoText, 256, MF_BYCOMMAND)) {
+          std::wstring undoStr = undoText;
+          size_t tabPos = undoStr.find(L'\t');
+          if (tabPos != std::wstring::npos) {
+            std::wstring afterTab = undoStr.substr(tabPos + 1);
+            if (afterTab.size() >= 2 && afterTab.substr(afterTab.size() - 2) == L"+Z") {
+              hotkey = afterTab.substr(0, afterTab.size() - 1) + L"Y";
+            }
+          }
+        }
+
+        redoText = g_redoMenuText + L"\t" + hotkey;
+      } else {
+        LANGID langid = GetUserDefaultUILanguage();
+        if (PRIMARYLANGID(langid) != LANG_ENGLISH) {
+          // Try to get a localized string from shell32.dll, disregarding access key conflicts
+          HMODULE hShell32 = GetModuleHandle(L"shell32");
+          if (hShell32) {
+            WCHAR buffer[256] = {0};
+            if (LoadStringW(hShell32, 4170, buffer, 256)) {
+              redoText = buffer;
+            }
           }
         }
       }
-      std::wstring redoText = g_redoMenuText + L"\t" + hotkey;
       InsertMenu(hEditMenu, 1, MF_BYPOSITION | MF_STRING, ID_EDIT_REDO, redoText.c_str());
       g_redoMenuAdded = true;
     }
