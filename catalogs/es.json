@@ -785,7 +785,7 @@
                 "published": 1759673922000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1759673922000,
+                "updated": 1760278117000,
                 "users": 43
             },
             "metadata": {
@@ -793,14 +793,14 @@
                     "x86-64"
                 ],
                 "author": "David Trapp (CherryDT)",
-                "compilerOptions": "-lcomctl32 -lcomdlg32",
+                "compilerOptions": "-lcomctl32 -lcomdlg32 -lshell32",
                 "description": "Adds multi-step undo/redo to classic Notepad instead of the single-step undo",
                 "github": "https://github.com/CherryDT",
                 "include": [
                     "notepad.exe"
                 ],
                 "name": "Classic Notepad Multi-Step Undo/Redo",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "classic-progress-bars": {
@@ -1121,6 +1121,28 @@
                 ],
                 "name": "Clientedge Everywhere",
                 "version": "1.4.0"
+            }
+        },
+        "cmd-folder-larp": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1760277979000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1760277979000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Isabella Lulamoon (kawapure)",
+                "description": "Make Command Prompt show different names for folders.",
+                "github": "https://github.com/kawapure",
+                "homepage": "https://kawapure.github.io/",
+                "include": [
+                    "cmd.exe"
+                ],
+                "name": "Command Prompt Folder Larp",
+                "twitter": "https://twitter.com/kawaipure",
+                "version": "1.0"
             }
         },
         "console-error-to-ding": {
