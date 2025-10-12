@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-12T14:08:37.000Z</updated>
+    <updated>2025-10-12T16:33:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Select filename extension on double F2 2]]></title>
+        <id>https://windhawk.net/mods/explorer-double-f2-rename-extension#4f96cfe6b97163c9d9c722d27f25e2cca04666f3</id>
+        <link href="https://windhawk.net/mods/explorer-double-f2-rename-extension"/>
+        <updated>2025-10-12T16:33:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added triple F2 shortcut to select full name.</li>
+<li>Added cycling support to selection logic.</li>
+<li>Removed explicit desktop hooking (now handled via window enumeration).</li>
+<li>Internal refactor: separated API integration from core logic and encapsulated callbacks, timing, and selection for clarity.</li>
+</ul>]]></content>
+        <author>
+            <name>Marnes &lt;leaumar@sent.com&gt;</name>
+            <uri>https://github.com/leaumar</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Notepad Multi-Step Undo/Redo 1.1]]></title>
         <id>https://windhawk.net/mods/classic-notepad-multi-step-undo#83d42b0e878b41c0e26bf582e73b68aaa9fd2657</id>
@@ -341,17 +357,6 @@ in Explorer to rename a file's extension.</p>
         <link href="https://windhawk.net/mods/firefox-border-fix"/>
         <updated>2025-09-22T13:39:09.000Z</updated>
         <content type="html"><![CDATA[<p>Previous change broke effect on main window, this seemingly fixes</p>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Firefox border fix for Classic theme 1.2]]></title>
-        <id>https://windhawk.net/mods/firefox-border-fix#2da705bb7dbd2d339729b962a9aec9be12440538</id>
-        <link href="https://windhawk.net/mods/firefox-border-fix"/>
-        <updated>2025-09-22T05:14:04.000Z</updated>
-        <content type="html"><![CDATA[<p>Improve reliability and avoid glitches</p>]]></content>
         <author>
             <name>anixx</name>
             <uri>https://github.com/Anixx</uri>

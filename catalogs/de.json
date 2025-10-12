@@ -1798,18 +1798,18 @@
                 "published": 1758744845000,
                 "rating": 10,
                 "ratingUsers": 9,
-                "updated": 1758744845000,
+                "updated": 1760286829000,
                 "users": 199
             },
             "metadata": {
                 "author": "Marnes <leaumar@sent.com>",
-                "description": "When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension.",
+                "description": "When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension. Triple F2 selects the full name, quadruple F2 selects the base name again, etc.",
                 "github": "https://github.com/leaumar",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Select filename extension on double F2",
-                "version": "1"
+                "version": "2"
             }
         },
         "explorer-frame-classic": {
