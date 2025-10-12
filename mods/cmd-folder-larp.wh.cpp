@@ -207,7 +207,11 @@ void WINAPI SetConsoleTitleW_hook(LPCWSTR szTitle)
 const WindhawkUtils::SYMBOL_HOOK g_rghookCmd[] = {
     {
         {
+#ifdef _WIN64
             L"void __cdecl PrintPrompt(void)",
+#else
+            L"void __stdcall PrintPrompt(void)",
+#endif
         },
         &PrintPrompt_orig,
         PrintPrompt_hook,
