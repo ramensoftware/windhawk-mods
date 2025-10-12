@@ -6,7 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -lgdi32
+// @compilerOptions -lgdi32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -304,6 +304,24 @@ BOOL WINAPI ShowWindowAsync_hook(HWND hWnd, int nCmdShow)
 
     SendMessageW(g_hwndAnim, g_uMsgMinMax, cmd, (LPARAM)lpmmp);
     return ShowWindowAsync_orig(hWnd, nCmdShow);
+}
+
+/* This hook only applies to Windows 10's explorer.exe. See the massive comment in
+   Wh_ModInit for more details. */
+using SetWindowPos_t = decltype(&SetWindowPos);
+SetWindowPos_t SetWindowPos_orig;
+BOOL WINAPI SetWindowPos_hook(
+    HWND hWnd,
+    HWND hWndInsertAfter,
+    int  X,
+    int  Y,
+    int  cx,
+    int  cy,
+    UINT uFlags
+)
+{
+    Sleep(1);
+    return SetWindowPos_orig(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 
 #pragma endregion // "DWP hooks"
@@ -818,6 +836,39 @@ const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
     },
 };
 
+VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen) 
+{ 
+    void *pFixedFileInfo = nullptr; 
+    UINT uPtrLen = 0; 
+
+    HRSRC hResource = 
+        FindResourceW(hModule, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION); 
+    if (hResource)
+    { 
+        HGLOBAL hGlobal = LoadResource(hModule, hResource); 
+        if (hGlobal)
+        { 
+            void *pData = LockResource(hGlobal); 
+            if (pData)
+            { 
+                if (!VerQueryValueW(pData, L"\\", &pFixedFileInfo, &uPtrLen)
+                || uPtrLen == 0)
+                { 
+                    pFixedFileInfo = nullptr; 
+                    uPtrLen = 0; 
+                } 
+            } 
+        } 
+    } 
+
+    if (puPtrLen)
+    { 
+        *puPtrLen = uPtrLen; 
+    } 
+  
+    return (VS_FIXEDFILEINFO *)pFixedFileInfo; 
+} 
+
 BOOL Wh_ModInit(void)
 {
     HMODULE hmUser = GetModuleHandleW(L"user32.dll");
@@ -866,6 +917,54 @@ BOOL Wh_ModInit(void)
     HOOK_A_W(DefDlgProc)
     HOOK(ShowWindow)
     HOOK(ShowWindowAsync)
+    
+    /**
+      * There is a nasty bug where certain windows will gain the WS_EX_TOPMOST exstyle after
+      * the restore/minimize animations complete. It can be mostly mitigated by making the
+      * animation window non-topmost after we're done displaying the animation, but the console
+      * host is still affected.
+      *
+      * As well, the bug only seems to occur with Windows 10's Explorer. Something is bad in
+      * the Windows 10 shell implementation specifically, because this bug *does* occur with
+      * ep_taskbar, and it does *not* occur with the ExplorerEx DLL build (which runs the Immersive
+      * shell as well as piggybacking off 10's explorer.exe like ep_taskbar, so we can wipe those
+      * out as potential causes).
+      *
+      * A gross hack that seems to combat this bug pretty well is to hook SetWindowPos to wait
+      * for 1 millisecond before calling the original function. Despite how miniscule this delay
+      * is, I don't want to do this system wide, so we check the following before hooking SWP:
+      *  - The current process is `%SystemRoot%\explorer.exe`.
+      *  - The file version is 10.0 with a build number that is NOT 10011 (this is used by the ExplorerEX EXE build).
+      *  - There is no DLL named "ExplorerEx.dll" loaded (bug does not occur on ExplorerEx DLL)
+      */
+
+    // Check EXE path
+    WCHAR szExplorerPath[MAX_PATH], szModulePath[MAX_PATH];
+    ExpandEnvironmentStringsW(L"%SystemRoot%\\explorer.exe", szExplorerPath, ARRAYSIZE(szExplorerPath));
+    GetModuleFileNameW(GetModuleHandleW(NULL), szModulePath, ARRAYSIZE(szModulePath));
+    if (!wcsicmp(szModulePath, szExplorerPath))
+    {   
+        // Check file version
+        VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(GetModuleHandleW(NULL), nullptr);
+        if (pVerInfo)
+        {
+            WORD wMajor = HIWORD(pVerInfo->dwFileVersionMS);
+            WORD wMinor = LOWORD(pVerInfo->dwFileVersionMS);
+            WORD wBuild = HIWORD(pVerInfo->dwFileVersionLS);
+            // 10011 == ExplorerEx EXE version build number
+            if (wMajor == 10 && wMinor == 0 && wBuild != 10011)
+            {
+                // Check for presence of ExplorerEx DLL (bug does not occur with ExplorerEx)
+                HMODULE hmodTemp;
+                if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, L"ExplorerEx.dll", &hmodTemp)
+                || !hmodTemp)
+                {
+                    // Finally, hook SWP
+                    HOOK(SetWindowPos)
+                }
+            }
+        }
+    }
 
     g_hinst = GetCurrentModule();
 
@@ -878,10 +977,5 @@ void Wh_ModUninit(void)
     {
         DestroyWindow(g_hwndAnim);
         UnregisterClassW(c_szAnimClassName, g_hinst);
-    }
-    if (g_hAnimWndThread)
-    {
-        TerminateThread(g_hAnimWndThread, 0);
-        CloseHandle(g_hAnimWndThread);
     }
 }
