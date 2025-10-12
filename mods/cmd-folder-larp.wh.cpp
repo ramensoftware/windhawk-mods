@@ -138,10 +138,7 @@ bool ApplyPathReplacementToString(LPWSTR szTarget, DWORD nBufferLength)
             wcscpy_s(szTarget, nBufferLength, szBuffer);
             return true;
         }
-        else if (pRedir->szFrom[0] == L'\0'
-            && pRedir->szTo[0] == L'\0'
-            && pRedir->szFrom[1] == L'\0'
-            && pRedir->szTo[1] == L'\0')
+        else if (pRedir->szFrom[0] == L'\0' && pRedir->szTo[0] == L'\0')
         {
             // End of array.
             break;
