@@ -87,8 +87,10 @@ void PrintModError(LPCWSTR pszFormat, ...)
     WCHAR szMessage[512];
     vswprintf_s(szMessage, pszFormat, args);
 
+    va_end(args);
+
     CmdPutChars_orig(szMessage, wcslen(szMessage));
-    CmdPutChars_orig(L"\r\n", 2);
+    CmdPutChars_orig(L"\r\n\r\n", 4);
 }
 
 typedef int CRTHANDLE;
