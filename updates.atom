@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-12T13:25:12.000Z</updated>
+    <updated>2025-10-12T13:32:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win10 taskbar on Win11 24H2 0.1.3]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-on-win11-24h2#377bbbf75788fa473fd5621888e5e2da3bf83b77</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2"/>
+        <updated>2025-10-12T13:32:25.000Z</updated>
+        <content type="html"><![CDATA[<p>rename+wording</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.0.5]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#ae58112e761ebb39d2885a8a108f4bbb626b532a</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2025-10-12T13:31:56.000Z</updated>
+        <content type="html"><![CDATA[<p>Improve readme.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab: Hide ghost windows 1.0]]></title>
         <id>https://windhawk.net/mods/alt-tab-hide-ghost-windows#5e86f81ee6f8b8d1424ee2d8bd0de372dd21ee37</id>
@@ -328,40 +350,6 @@ in Explorer to rename a file's extension.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Old Regedit Tree Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/old-regedit-tree-icons#cef63c833694e83e1be21b120e64b507a28c5db7</id>
-        <link href="https://windhawk.net/mods/old-regedit-tree-icons"/>
-        <updated>2025-09-15T18:18:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="oldregedittreeicons">Old Regedit Tree Icons</h1>
-<p>In Windows XP and before, the Registry Editor's tree view had its own icons
-instead of using system icons. This mod reverts that behavior and makes it use
-its own icons again.</p>
-<h2 id="configuration">Configuration</h2>
-<p>You will need a copy of regedit.exe from Windows XP or before for its icons. Once
-you have this, provide the path to it in the mod options.</p>
-<p><strong>Before</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/old-regedit-tree-icons/before.png" alt="Before" /></p>
-<p><strong>After</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/old-regedit-tree-icons/after.png" alt="After" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.8]]></title>
-        <id>https://windhawk.net/mods/explorer-frame-classic#6f51e042633377e716a98ab8daae0c62f03cbbe7</id>
-        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
-        <updated>2025-09-13T00:55:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with a recent Windows 11 update. You may need to restart Explorer after updating the mod to apply the fix.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

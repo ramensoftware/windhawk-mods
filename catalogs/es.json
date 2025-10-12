@@ -955,19 +955,19 @@
                 "published": 1706702888000,
                 "rating": 10,
                 "ratingUsers": 1,
-                "updated": 1731151885000,
+                "updated": 1760275916000,
                 "users": 156
             },
             "metadata": {
                 "author": "Anixx",
                 "compilerOptions": "-lntdll",
-                "description": "Disables theming by closing the handle",
+                "description": "Disables theming (enables Classic theme)",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "winlogon.exe"
                 ],
-                "name": "Enable Classic Theme by handle method",
-                "version": "1.0.4"
+                "name": "Classic Theme",
+                "version": "1.0.5"
             }
         },
         "classic-theme-enable-with-extended-compatibility": {
@@ -5417,7 +5417,7 @@
                 "published": 1725446830000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1754432142000,
+                "updated": 1760275945000,
                 "users": 273
             },
             "metadata": {
@@ -5426,13 +5426,13 @@
                 ],
                 "author": "Anixx",
                 "compilerOptions": "-lurlmon",
-                "description": "Enables Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024",
+                "description": "Installs Windows 10 taskbar on Windows 11 version 24H2, Windows Server 2025 and Windows 11 IoT Enterprise LTSC 2024",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "userinit.exe"
                 ],
-                "name": "Enable Win10 taskbar on Win11 24H2",
-                "version": "0.1.2"
+                "name": "Win10 taskbar on Win11 24H2",
+                "version": "0.1.3"
             }
         },
         "win11-accent-border": {
