@@ -162,14 +162,15 @@ DWORD WINAPI GetCurrentDirectoryW_hook(DWORD nBufferLength, LPWSTR lpBuffer)
 
         ApplyPathReplacementToString(szBuffer, ARRAYSIZE(szBuffer));
 
-        ZeroMemory(lpBuffer, nBufferLength);
+        DWORD nResultLength = wcslen(szBuffer);
 
-        if (wcscpy_s(lpBuffer, nBufferLength, szBuffer) != 0)
+        if (nResultLength + 1 > nBufferLength)
         {
             return GetCurrentDirectoryW_orig(nBufferLength, lpBuffer);
         }
 
-        return (DWORD)wcslen(lpBuffer);
+        wcscpy_s(lpBuffer, nBufferLength, szBuffer);
+        return nResultLength;
     }
 
     return GetCurrentDirectoryW_orig(nBufferLength, lpBuffer);
