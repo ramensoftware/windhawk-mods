@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-05T17:35:49.000Z</updated>
+    <updated>2025-10-12T13:25:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab: Hide ghost windows 1.0]]></title>
+        <id>https://windhawk.net/mods/alt-tab-hide-ghost-windows#5e86f81ee6f8b8d1424ee2d8bd0de372dd21ee37</id>
+        <link href="https://windhawk.net/mods/alt-tab-hide-ghost-windows"/>
+        <updated>2025-10-12T13:25:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alttabhideghostwindows">Alt+Tab: Hide ghost windows</h1>
+<p>This mod filters out small or titleless windows from the Alt+Tab window switcher as well as inactive Groupy 2 tabs (which unlike in Groupy 1 do show up in Alt+Tab by default) and/or minimized windows. This can prevent "ghost" windows from appearing in the list (for example, the ThinkPad External Keyboard with Trackpoint Driver is notorious for having two 0x0 windows that show up in Alt+Tab all the time, and this mod will get rid of them).</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Min. Width</strong>: Minimum width in pixels for a window to be shown (default: 2)</li>
+<li><strong>Min. Height</strong>: Minimum height in pixels for a window to be shown (default: 2)</li>
+<li><strong>Filter Mode</strong>: How to combine size and title checks:</li>
+<li><em>Size only</em>: Hide windows smaller than minimum size, regardless of title</li>
+<li><em>Size or title</em>: Hide windows that are either too small OR have no title</li>
+<li><em>Size and title</em>: Hide windows that are both too small AND have no title</li>
+<li><strong>Hide inactive Groupy 2 tabs</strong>: Hide inactive tabs in Groupy 2 window manager (default: disabled)</li>
+<li><strong>Hide minimized windows</strong>: Hide all minimized windows from Alt+Tab (default: disabled)</li>
+</ul>
+<p>The option "Hide inactive Groupy 2 tabs" is experimental. If it behaves strangely for you and doesn't hide windows when it should or the other way round, please <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?template=bug_report.md">open an issue</a> and include screenshots of your Groupy 2 configuration, including the advanced settings screen, as well as the settings of the affected group (such as whether it should auto-group, etc.)!</p>
+<p><strong>Warning:</strong> If using Groupy 2 and "Hide minimized windows" is enabled but "Hide inactive Groupy 2 tabs" is not, then minimizing a Groupy-2-tabbed window will result in the inactive tabs still being shown and the active tab hidden!</p>]]></content>
+        <author>
+            <name>David Trapp (CherryDT)</name>
+            <uri>https://github.com/CherryDT</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Redirect Modern Notepad to Classic Editor 2.0]]></title>
         <id>https://windhawk.net/mods/modern-notepad-to-classic-editor#03860f1ad9d7896503609c9a0a7198e17f569390</id>
@@ -337,21 +362,6 @@ you have this, provide the path to it in the mod options.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shadowplay anti-disable 1.1]]></title>
-        <id>https://windhawk.net/mods/shadowplay-do-not-disable#fb5aa7b3d86de82a02b608d181be01def5c0afec</id>
-        <link href="https://windhawk.net/mods/shadowplay-do-not-disable"/>
-        <updated>2025-09-03T23:21:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Patch check regarding Widevine L1 Hardware-DRM</li>
-<li>Fixes audio and video playback caused by a Chrome Update</li>
-<li>Fixes ShadowPlay sometimes disabling when opening edge and immediately opening a tab playing DRM video</li>
-</ul>]]></content>
-        <author>
-            <name>Temm</name>
-            <uri>https://github.com/leumasme</uri>
         </author>
     </entry>
 </feed>

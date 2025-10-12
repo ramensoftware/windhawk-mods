@@ -145,6 +145,30 @@
                 "version": "1.2.0"
             }
         },
+        "alt-tab-hide-ghost-windows": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1760275512000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1760275512000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "David Trapp (CherryDT)",
+                "compilerOptions": "-lole32 -loleaut32 -lversion",
+                "description": "Hides windows in Alt+Tab that are too small or have no title, preventing \"ghost\" windows from cluttering the switcher. Can also hide inactive Groupy 2 tabs and/or minimized windows.",
+                "github": "https://github.com/CherryDT",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Alt+Tab: Hide ghost windows",
+                "version": "1.0"
+            }
+        },
         "alt-tab-per-monitor": {
             "details": {
                 "defaultSorting": 63810,
