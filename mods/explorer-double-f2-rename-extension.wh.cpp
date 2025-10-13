@@ -32,7 +32,7 @@ This mod works great together with
 // ==/WindhawkModSettings==
 
 // I am not an experienced C++ programmer and do not know the Windows APIs.
-// This code was cobbled together with a lot trial & error, using input from
+// This code was cobbled together with a lot of trial & error, using input from
 // ChatGPT and the Windhawk Discord server.
 
 #include <optional>
