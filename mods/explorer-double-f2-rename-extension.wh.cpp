@@ -165,15 +165,15 @@ namespace KeyboardHooks {
 using OnKeyUp = bool (*)(WPARAM pressedKey);
 
 static std::unordered_map<DWORD, HHOOK> hooks = {};
-static OnKeyUp onKeyUp;
+static OnKeyUp onKeyDown;
 
 static LRESULT CALLBACK HandleKeyEvent(int nCode,
                                        WPARAM wParam,
                                        LPARAM lParam) {
     bool shouldProcess = nCode >= 0;
-    bool isKeyUp = lParam & 0x80000000;
-    if (shouldProcess && isKeyUp) {
-        bool handled = onKeyUp(wParam);
+    bool isKeyDown = !(lParam & 0x80000000);
+    if (shouldProcess && isKeyDown) {
+        bool handled = onKeyDown(wParam);
         if (handled) {
             return 0;
         }
@@ -340,7 +340,7 @@ static void HookIfFileView(HWND windowHandle, DWORD threadId) {
 
 void Wh_ModInit() {
     ModSettings::DoublePressMillis = ModSettings::GetDoublePressMillis();
-    KeyboardHooks::onKeyUp = ApplyMultiF2Selection;
+    KeyboardHooks::onKeyDown = ApplyMultiF2Selection;
 
     Wh_Log(L"Hooking Explorer window creation.");
     ExplorerWindowCreatedHook::ExecuteOnNewWindow(HookIfFileView);
