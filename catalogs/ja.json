@@ -779,6 +779,27 @@
                 "version": "1.1.0"
             }
         },
+        "classic-min-max-animations": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1760347011000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1760347011000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -lversion",
+                "description": "Restores the classic minimize/maximize animations used without DWM",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Minimize/Maximize Animations",
+                "version": "1.0.0"
+            }
+        },
         "classic-notepad-multi-step-undo": {
             "details": {
                 "defaultSorting": 414,

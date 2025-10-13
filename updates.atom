@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-12T17:08:10.000Z</updated>
+    <updated>2025-10-13T09:16:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-min-max-animations#63dbd5b8633b9a64ede8983e358347d3e0d17478</id>
+        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
+        <updated>2025-10-13T09:16:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicminimizemaximizeanimations">Classic Minimize/Maximize Animations</h1>
+<p>From Windows 95 to XP, and in Vista and above without DWM running, windows had
+a minimize/maximize animation that involved the titlebar moving across the screen.
+This mod makes that animation play with DWM enabled by reimplementing it.</p>
+<h2 id="usagenote">Usage note</h2>
+<p>You must turn off the regular window animations in order for this mod to look correct.
+To do this:</p>
+<ol>
+<li>Run <code>sysdm.cpl</code> either from Start search or the Run dialog (WinKey + R).</li>
+<li>Go to the "Advanced" tab.</li>
+<li>Click "Settings…" under "Performance"</li>
+<li>Uncheck "Animate windows when minimizing and maximizing"</li>
+<li>Click Apply.</li>
+</ol>
+<h2 id="previews">Previews</h2>
+<p><strong>Top-level window</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-min-max-animations/toplevel.gif" alt="Top-level window" /></p>
+<p><strong>MDI child window</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-min-max-animations/mdi.gif" alt="MDI child window" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom Command Prompt Startup Text 1.0.0]]></title>
         <id>https://windhawk.net/mods/custom-cmd-startup-text#c45396c1dde8df6a30a090c8a3940204fb6a400f</id>
@@ -355,19 +384,6 @@ in Explorer to rename a file's extension.</p>
         <author>
             <name>anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Magnifier Headless Mode 0.7.0]]></title>
-        <id>https://windhawk.net/mods/magnifier-headless#4b4007eafe60bd25a02d29acac4dd03eca7aaba5</id>
-        <link href="https://windhawk.net/mods/magnifier-headless"/>
-        <updated>2025-09-22T16:33:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="magnifierheadlessmode">Magnifier Headless Mode</h1>
-<p>This mod blocks the Magnifier window from ever appearing, while keeping the zoom functionality (Win + <code>-</code> and Win + <code>+</code>) available. It also prevents the Magnifier from showing up in the taskbar.</p>
-<p>This is achieved by hooking several Windows API functions (<code>CreateWindowExW</code>, <code>ShowWindow</code>, <code>SetWindowPos</code>, and <code>SetWindowLongPtrW</code>) to intercept any attempts to create, show, or change the style of the Magnifier window.</p>]]></content>
-        <author>
-            <name>BCRTVKCS</name>
-            <uri>https://github.com/bcrtvkcs</uri>
         </author>
     </entry>
 </feed>
