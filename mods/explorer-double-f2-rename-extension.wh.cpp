@@ -2,7 +2,7 @@
 // @id              explorer-double-f2-rename-extension
 // @name            Select filename extension on double F2
 // @description     When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension. Triple F2 selects the full name, quadruple F2 selects the base name again, etc.
-// @version         2
+// @version         2.1
 // @author          Marnes <leaumar@sent.com>
 // @github          https://github.com/leaumar
 // @include         explorer.exe
@@ -70,6 +70,8 @@ static unsigned int GetDoublePressMillis() {
     auto doubleF2Time = Wh_GetIntSetting(L"DoubleF2MilliSeconds");
     return std::max(100, std::min(doubleF2Time, 10000));
 }
+
+static unsigned int DoublePressMillis;
 }  // namespace ModSettings
 
 class Selection {
@@ -140,7 +142,6 @@ class KeyStreak {
             return streak = 0;
         }
 
-        auto doublePressTime = ModSettings::GetDoublePressMillis();
         ULONGLONG now = GetTickCount64();
         auto timeSinceLastPress = now - lastPressTime;
 
@@ -149,7 +150,7 @@ class KeyStreak {
         }
         lastPressTime = now;
 
-        bool tooSlow = timeSinceLastPress > doublePressTime;
+        bool tooSlow = timeSinceLastPress > ModSettings::DoublePressMillis;
         if (tooSlow) {
             return streak = 1;
         }
@@ -338,6 +339,7 @@ static void HookIfFileView(HWND windowHandle, DWORD threadId) {
 }
 
 void Wh_ModInit() {
+    ModSettings::DoublePressMillis = ModSettings::GetDoublePressMillis();
     KeyboardHooks::onKeyUp = ApplyMultiF2Selection;
 
     Wh_Log(L"Hooking Explorer window creation.");
@@ -350,4 +352,9 @@ void Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Removing all keyboard hooks.");
     KeyboardHooks::DetachAll();
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"Updating settings.");
+    ModSettings::DoublePressMillis = ModSettings::GetDoublePressMillis();
 }
