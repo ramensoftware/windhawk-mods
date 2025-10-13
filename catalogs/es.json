@@ -785,7 +785,7 @@
                 "published": 1760347011000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1760347011000,
+                "updated": 1760382256000,
                 "users": 0
             },
             "metadata": {
@@ -797,7 +797,7 @@
                     "*"
                 ],
                 "name": "Classic Minimize/Maximize Animations",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "classic-notepad-multi-step-undo": {

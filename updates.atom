@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-13T09:16:51.000Z</updated>
+    <updated>2025-10-13T19:04:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-min-max-animations#f1f0d4e6ba11a02875e542aacd7cd3b164002b53</id>
+        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
+        <updated>2025-10-13T19:04:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Remove title text from animation window to prevent it from showing up in Task Manager</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-min-max-animations#63dbd5b8633b9a64ede8983e358347d3e0d17478</id>
@@ -373,17 +386,6 @@ in Explorer to rename a file's extension.</p>
         <author>
             <name>Marnes &lt;leaumar@sent.com&gt;</name>
             <uri>https://github.com/leaumar</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Firefox border fix for Classic theme 1.4]]></title>
-        <id>https://windhawk.net/mods/firefox-border-fix#68b80910a3c64d0989e1549863941a8c68596aa3</id>
-        <link href="https://windhawk.net/mods/firefox-border-fix"/>
-        <updated>2025-09-23T04:20:01.000Z</updated>
-        <content type="html"><![CDATA[<p>Restore the check for window visibility</p>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
