@@ -2,7 +2,7 @@
 // @id              classic-min-max-animations
 // @name            Classic Minimize/Maximize Animations
 // @description     Restores the classic minimize/maximize animations used without DWM
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -769,7 +769,7 @@ DWORD CALLBACK AnimWndThreadProc(HANDLE hEvent)
 
     g_hwndAnim = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        c_szAnimClassName,  L"UAH MinMax Animation Window",
+        c_szAnimClassName,  nullptr,
         WS_VISIBLE | WS_POPUP,
         0, 0, 0, 0,
         NULL, NULL, g_hinst, NULL
