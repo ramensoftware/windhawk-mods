@@ -36,6 +36,15 @@ To do this:
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- topmost_bug_mitigation: false
+  $name: Topmost bug mitigation
+  $description: Mitigation for a bug where console windows become topmost randomly. Only use with default Windows 10 Explorer or ep_taskbar.
+    Restart Explorer after toggling.
+*/
+// ==/WindhawkModSettings==
+
 #include <windhawk_utils.h>
 
 /* Defines */
@@ -938,29 +947,32 @@ BOOL Wh_ModInit(void)
       *  - There is no DLL named "ExplorerEx.dll" loaded (bug does not occur on ExplorerEx DLL)
       */
 
-    // Check EXE path
-    WCHAR szExplorerPath[MAX_PATH], szModulePath[MAX_PATH];
-    ExpandEnvironmentStringsW(L"%SystemRoot%\\explorer.exe", szExplorerPath, ARRAYSIZE(szExplorerPath));
-    GetModuleFileNameW(GetModuleHandleW(NULL), szModulePath, ARRAYSIZE(szModulePath));
-    if (!wcsicmp(szModulePath, szExplorerPath))
-    {   
-        // Check file version
-        VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(GetModuleHandleW(NULL), nullptr);
-        if (pVerInfo)
-        {
-            WORD wMajor = HIWORD(pVerInfo->dwFileVersionMS);
-            WORD wMinor = LOWORD(pVerInfo->dwFileVersionMS);
-            WORD wBuild = HIWORD(pVerInfo->dwFileVersionLS);
-            // 10011 == ExplorerEx EXE version build number
-            if (wMajor == 10 && wMinor == 0 && wBuild != 10011)
+    if (Wh_GetIntSetting(L"topmost_bug_mitigation"))
+    {
+        // Check EXE path
+        WCHAR szExplorerPath[MAX_PATH], szModulePath[MAX_PATH];
+        ExpandEnvironmentStringsW(L"%SystemRoot%\\explorer.exe", szExplorerPath, ARRAYSIZE(szExplorerPath));
+        GetModuleFileNameW(GetModuleHandleW(NULL), szModulePath, ARRAYSIZE(szModulePath));
+        if (!wcsicmp(szModulePath, szExplorerPath))
+        {   
+            // Check file version
+            VS_FIXEDFILEINFO *pVerInfo = GetModuleVersionInfo(GetModuleHandleW(NULL), nullptr);
+            if (pVerInfo)
             {
-                // Check for presence of ExplorerEx DLL (bug does not occur with ExplorerEx)
-                HMODULE hmodTemp;
-                if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, L"ExplorerEx.dll", &hmodTemp)
-                || !hmodTemp)
+                WORD wMajor = HIWORD(pVerInfo->dwFileVersionMS);
+                WORD wMinor = LOWORD(pVerInfo->dwFileVersionMS);
+                WORD wBuild = HIWORD(pVerInfo->dwFileVersionLS);
+                // 10011 == ExplorerEx EXE version build number
+                if (wMajor == 10 && wMinor == 0 && wBuild != 10011)
                 {
-                    // Finally, hook SWP
-                    HOOK(SetWindowPos)
+                    // Check for presence of ExplorerEx DLL (bug does not occur with ExplorerEx)
+                    HMODULE hmodTemp;
+                    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, L"ExplorerEx.dll", &hmodTemp)
+                    || !hmodTemp)
+                    {
+                        // Finally, hook SWP
+                        HOOK(SetWindowPos)
+                    }
                 }
             }
         }
