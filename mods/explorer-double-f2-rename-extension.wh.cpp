@@ -28,6 +28,8 @@ This mod works great together with
 // ==WindhawkModSettings==
 /*
 - DoubleF2MilliSeconds: 1000
+  $name: Double F2 timing
+  $description: Time window for double press (milliseconds, 100-10000)
 */
 // ==/WindhawkModSettings==
 
