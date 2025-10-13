@@ -20,6 +20,9 @@ Since version 2, triple-pressing F2 selects the full name. Subsequent (>3)
 presses repeat the cycle by selecting the base name again (Explorer default
 behavior), then the extension, then the full name, etc.
 
+Since version 2.1, you can choose to invert this cycle: select the full name
+with 2 presses, the extension with 3 presses.
+
 This mod works great together with
 [extension-change-no-warning](https://windhawk.net/mods/extension-change-no-warning).
 */
@@ -30,6 +33,10 @@ This mod works great together with
 - DoubleF2MilliSeconds: 1000
   $name: Double F2 timing
   $description: Time window for double press (milliseconds, 100-10000)
+- ReverseCycle: false
+  $name: Swap double/triple F2
+  $description: 'Select the whole name on double F2 and the extension on triple
+F2?'
 */
 // ==/WindhawkModSettings==
 
@@ -74,6 +81,18 @@ static unsigned int GetDoublePressMillis() {
 }
 
 static unsigned int DoublePressMillis;
+
+static bool GetReverseCycle() {
+    auto reverse = Wh_GetIntSetting(L"ReverseCycle");
+    return reverse != 0;
+}
+
+static bool ReverseCycle;
+
+static void Cache() {
+    DoublePressMillis = GetDoublePressMillis();
+    ReverseCycle = GetReverseCycle();
+}
 }  // namespace ModSettings
 
 class Selection {
@@ -303,11 +322,17 @@ static bool ApplyMultiF2Selection(WPARAM pressedKey) {
     if (f2Count > 1) {
         HWND focus = GetFocus();
         if (focus != nullptr && ExplorerUtils::IsEditControl(focus)) {
-            Wh_Log(L"Applying selection for %d times F2 in an Edit field.",
+            Wh_Log(L"Applying %s selection for %d times F2 in an Edit field.",
+                   ModSettings::ReverseCycle
+                       ? L"reverse"
+                       : L"original",  // because I'm worth it :-)
                    f2Count);
             auto selection = Selection::InsideControl(focus);
             if (selection.has_value()) {
                 auto timesF2 = f2Count % 3;
+                if (ModSettings::ReverseCycle) {
+                    timesF2 = 2 - timesF2;
+                }
                 switch (timesF2) {
                     // standard explorer f2
                     case 1:
@@ -341,7 +366,7 @@ static void HookIfFileView(HWND windowHandle, DWORD threadId) {
 }
 
 void Wh_ModInit() {
-    ModSettings::DoublePressMillis = ModSettings::GetDoublePressMillis();
+    ModSettings::Cache();
     KeyboardHooks::onKeyDown = ApplyMultiF2Selection;
 
     Wh_Log(L"Hooking Explorer window creation.");
@@ -358,5 +383,5 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Updating settings.");
-    ModSettings::DoublePressMillis = ModSettings::GetDoublePressMillis();
+    ModSettings::Cache();
 }
