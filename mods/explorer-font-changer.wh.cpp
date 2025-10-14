@@ -6,11 +6,14 @@
 // @author          Gabriela Cristei
 // @github          https://github.com/cristeigabriela
 // @include         explorer.exe
+// @compilerOptions -std=c++23
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Explorer Font Changer
+
+![Preview](https://raw.githubusercontent.com/cristeigabriela/images/refs/heads/main/windhawk-explorer-font-changer.png)
 
 Every single newly created Explorer GDI font will be replaced to your font, through hooking
 the GDI32 "CreateFontIndirectW" function.
@@ -46,50 +49,65 @@ https://bsky.app/profile/cristei.bsky.social/post/3lzmqhdlhc22q
 // If you're new to terms such as code injection and function hooking, the
 // article is great to get started.
 
-using CreateFontIndirectWHook_t = decltype(&CreateFontIndirectW);
-CreateFontIndirectWHook_t pOriginal = nullptr;
-HFONT __stdcall CreateFontIndirectWHook(const LOGFONTW* font) {
-    HWND currWindow = GetActiveWindow();
-    // TODO(gabriela): localize strings or at least check by icon instead.
-    // this will only work for english!
-    char title[300] = {0};
-    if (GetWindowTextA(currWindow, &title[0], sizeof(title)) != 0
-            && strstr(title, "Run") == title) {
-        return pOriginal(font);
-    }
+#include <memory>
+#include <string>
 
-    LPCWSTR str = Wh_GetStringSetting(L"font.name");
-    if (wcsstr(str, L"None") != str) {
-        size_t len = wcslen(str);
-        if (len <= 31) {
-            LOGFONTW* mFont = (LOGFONTW*)font;
-            wcscpy((wchar_t*)mFont->lfFaceName, str);
-            mFont->lfFaceName[len] = 0;
+using namespace std::string_view_literals;
+
+// Manage setting resource using `std::unique_ptr`.
+using string_setting_raii_t = std::unique_ptr<
+    const WCHAR, decltype(&Wh_FreeStringSetting)
+>;
+
+using create_font_indirectw_hook_t = decltype(&CreateFontIndirectW);
+create_font_indirectw_hook_t create_font_indirectw_original = nullptr;
+
+HFONT WINAPI create_font_indirectw_hook(const LOGFONTW* _font) {
+    // Cast the const away for operations. Could be unsafe.
+    auto font = const_cast<LOGFONTW*>(_font);
+
+    auto set_font_name = string_setting_raii_t(
+        Wh_GetStringSetting(L"font.name"),
+        Wh_FreeStringSetting
+    );
+    auto font_name = std::wstring_view(set_font_name.get());
+
+    // Check font configuration.
+    if (font_name != L"None"sv) {
+        if (font_name.size() <= 31) {
+            // `face_name` points to a total of 32 WORDs.
+            auto face_name = static_cast<WCHAR*>(font->lfFaceName);
+
+            std::memset(face_name, 0, ARRAYSIZE(font->lfFaceName));
+            std::memcpy(
+                face_name, font_name.data(),
+                font_name.size() * sizeof(decltype(font_name)::value_type)
+            );
+
+            Wh_Log(L"Succesfully changed font to \"%s\"", face_name);
         } else {
-            Wh_Log(L"Font name too long! (%d characters, max: 31)", len);
+            Wh_Log(L"Trying to change font to \"%s\": size too long (%d)", font_name.data(), font_name.size());
         }
     }
-    Wh_FreeStringSetting(str);
 
-    return pOriginal(font);
+    return create_font_indirectw_original(_font);
 }
 
-// The mod is being initialized, load settings, hook functions, and do other
-// initialization stuff if required.
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init");
+    auto gdi32 = LoadLibraryW(L"gdi32.dll");
+    auto create_font_indirectw = reinterpret_cast<create_font_indirectw_hook_t>(
+        GetProcAddress(gdi32, "CreateFontIndirectW")
+    );
 
-    HMODULE gdi32 = LoadLibrary(L"gdi32.dll");
-    CreateFontIndirectWHook_t CreateFontIndirectW =
-        (CreateFontIndirectWHook_t)GetProcAddress(gdi32, "CreateFontIndirectW");
+    Wh_SetFunctionHook(
+        (void*)create_font_indirectw,
+        (void*)create_font_indirectw_hook,
+        (void**)&create_font_indirectw_original
+    );
 
-    Wh_SetFunctionHook((void*)CreateFontIndirectW,
-                       (void*)CreateFontIndirectWHook,
-                       (void**)&pOriginal);
     return TRUE;
 }
 
-// The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 }
