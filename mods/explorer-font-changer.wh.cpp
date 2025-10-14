@@ -6,7 +6,6 @@
 // @author          Gabriela Cristei
 // @github          https://github.com/cristeigabriela
 // @include         explorer.exe
-// @compilerOptions -std=c++23
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -49,15 +48,11 @@ https://bsky.app/profile/cristei.bsky.social/post/3lzmqhdlhc22q
 // If you're new to terms such as code injection and function hooking, the
 // article is great to get started.
 
-#include <memory>
 #include <string>
+#include <windhawk_utils.h>
 
 using namespace std::string_view_literals;
-
-// Manage setting resource using `std::unique_ptr`.
-using string_setting_raii_t = std::unique_ptr<
-    const WCHAR, decltype(&Wh_FreeStringSetting)
->;
+using namespace WindhawkUtils;
 
 using create_font_indirectw_hook_t = decltype(&CreateFontIndirectW);
 create_font_indirectw_hook_t create_font_indirectw_original = nullptr;
@@ -66,10 +61,7 @@ HFONT WINAPI create_font_indirectw_hook(const LOGFONTW* _font) {
     // Cast the const away for operations. Could be unsafe.
     auto font = const_cast<LOGFONTW*>(_font);
 
-    auto set_font_name = string_setting_raii_t(
-        Wh_GetStringSetting(L"font.name"),
-        Wh_FreeStringSetting
-    );
+    auto set_font_name = StringSetting::make(L"font.name");
     auto font_name = std::wstring_view(set_font_name.get());
 
     // Check font configuration.
