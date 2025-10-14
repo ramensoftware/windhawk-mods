@@ -15,6 +15,8 @@ This mod disables the Voice Access (Win+Ctrl+S) hotkey in Windows.
 */
 // ==/WindhawkModReadme==
 
+#include <windhawk_utils.h>
+
 BOOL WINAPI (*pOriginalRegisterHotKey)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
 BOOL WINAPI RegisterHotKeyHook(HWND  hWnd, int id, UINT fsModifiers, UINT vk)
 {
@@ -32,7 +34,7 @@ BOOL Wh_ModInit() {
     HMODULE hUser32 = GetModuleHandle(L"user32.dll");
 
     void* origFunc = (void*)GetProcAddress(hUser32, "RegisterHotKey");
-    Wh_SetFunctionHook(origFunc, (void*)RegisterHotKeyHook, (void**)&pOriginalRegisterHotKey);
+    WindhawkUtils::SetFunctionHook(origFunc, (void*)RegisterHotKeyHook, (void**)&pOriginalRegisterHotKey);
 
     return TRUE;
 }
