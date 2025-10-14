@@ -1840,7 +1840,7 @@
                 "published": 1758744845000,
                 "rating": 10,
                 "ratingUsers": 10,
-                "updated": 1760286829000,
+                "updated": 1760432652000,
                 "users": 221
             },
             "metadata": {
@@ -1851,7 +1851,7 @@
                     "explorer.exe"
                 ],
                 "name": "Select filename extension on double F2",
-                "version": "2"
+                "version": "2.1"
             }
         },
         "explorer-frame-classic": {
