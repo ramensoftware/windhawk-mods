@@ -29,16 +29,35 @@ https://bsky.app/profile/cristei.bsky.social/post/3lzmqhdlhc22q
 
 // ==WindhawkModSettings==
 /*
+# Here you can define settings, in YAML format, that the mod users will be able
+# to configure. Metadata values such as $name and $description are optional.
+# Check out the documentation for more information:
+# https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod#settings
 - font:
   - name: "None"
   $name: Custom font
-  $description: This font will be used for all future fonts in Explorer processes.
+  $description: This font will be used for all font creation in Windows.
 */
 // ==/WindhawkModSettings==
+
+// The source code of the mod starts here. This sample was inspired by the great
+// article of Kyle Halladay, X64 Function Hooking by Example:
+// http://kylehalladay.com/blog/2020/11/13/Hooking-By-Example.html
+// If you're new to terms such as code injection and function hooking, the
+// article is great to get started.
 
 using CreateFontIndirectWHook_t = decltype(&CreateFontIndirectW);
 CreateFontIndirectWHook_t pOriginal = nullptr;
 HFONT __stdcall CreateFontIndirectWHook(const LOGFONTW* font) {
+    HWND currWindow = GetActiveWindow();
+    // TODO(gabriela): localize strings or at least check by icon instead.
+    // this will only work for english!
+    char title[300] = {0};
+    if (GetWindowTextA(currWindow, &title[0], sizeof(title)) != 0
+            && strstr(title, "Run") == title) {
+        return pOriginal(font);
+    }
+
     LPCWSTR str = Wh_GetStringSetting(L"font.name");
     if (wcsstr(str, L"None") != str) {
         size_t len = wcslen(str);
