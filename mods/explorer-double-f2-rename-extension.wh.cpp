@@ -2,7 +2,7 @@
 // @id              explorer-double-f2-rename-extension
 // @name            Select filename extension on double F2
 // @description     When pressing F2 in Explorer to rename a file, the filename is selected as usual, but double-pressing now selects the extension. Triple F2 selects the full name, quadruple F2 selects the base name again, etc.
-// @version         2
+// @version         2.1
 // @author          Marnes <leaumar@sent.com>
 // @github          https://github.com/leaumar
 // @include         explorer.exe
@@ -20,6 +20,9 @@ Since version 2, triple-pressing F2 selects the full name. Subsequent (>3)
 presses repeat the cycle by selecting the base name again (Explorer default
 behavior), then the extension, then the full name, etc.
 
+Since version 2.1, you can choose to invert this cycle: select the full name
+with 2 presses, the extension with 3 presses.
+
 This mod works great together with
 [extension-change-no-warning](https://windhawk.net/mods/extension-change-no-warning).
 */
@@ -28,11 +31,17 @@ This mod works great together with
 // ==WindhawkModSettings==
 /*
 - DoubleF2MilliSeconds: 1000
+  $name: Double F2 timing
+  $description: Time window for double press (milliseconds, 100-10000)
+- ReverseCycle: false
+  $name: Swap double/triple F2
+  $description: 'Select the whole name on double F2 and the extension on triple
+F2?'
 */
 // ==/WindhawkModSettings==
 
 // I am not an experienced C++ programmer and do not know the Windows APIs.
-// This code was cobbled together with a lot trial & error, using input from
+// This code was cobbled together with a lot of trial & error, using input from
 // ChatGPT and the Windhawk Discord server.
 
 #include <optional>
@@ -69,6 +78,20 @@ namespace ModSettings {
 static unsigned int GetDoublePressMillis() {
     auto doubleF2Time = Wh_GetIntSetting(L"DoubleF2MilliSeconds");
     return std::max(100, std::min(doubleF2Time, 10000));
+}
+
+static unsigned int DoublePressMillis;
+
+static bool GetReverseCycle() {
+    auto reverse = Wh_GetIntSetting(L"ReverseCycle");
+    return reverse != 0;
+}
+
+static bool ReverseCycle;
+
+static void Cache() {
+    DoublePressMillis = GetDoublePressMillis();
+    ReverseCycle = GetReverseCycle();
 }
 }  // namespace ModSettings
 
@@ -140,7 +163,6 @@ class KeyStreak {
             return streak = 0;
         }
 
-        auto doublePressTime = ModSettings::GetDoublePressMillis();
         ULONGLONG now = GetTickCount64();
         auto timeSinceLastPress = now - lastPressTime;
 
@@ -149,7 +171,7 @@ class KeyStreak {
         }
         lastPressTime = now;
 
-        bool tooSlow = timeSinceLastPress > doublePressTime;
+        bool tooSlow = timeSinceLastPress > ModSettings::DoublePressMillis;
         if (tooSlow) {
             return streak = 1;
         }
@@ -164,15 +186,15 @@ namespace KeyboardHooks {
 using OnKeyUp = bool (*)(WPARAM pressedKey);
 
 static std::unordered_map<DWORD, HHOOK> hooks = {};
-static OnKeyUp onKeyUp;
+static OnKeyUp onKeyDown;
 
 static LRESULT CALLBACK HandleKeyEvent(int nCode,
                                        WPARAM wParam,
                                        LPARAM lParam) {
     bool shouldProcess = nCode >= 0;
-    bool isKeyUp = lParam & 0x80000000;
-    if (shouldProcess && isKeyUp) {
-        bool handled = onKeyUp(wParam);
+    bool isKeyDown = !(lParam & 0x80000000);
+    if (shouldProcess && isKeyDown) {
+        bool handled = onKeyDown(wParam);
         if (handled) {
             return 0;
         }
@@ -300,11 +322,17 @@ static bool ApplyMultiF2Selection(WPARAM pressedKey) {
     if (f2Count > 1) {
         HWND focus = GetFocus();
         if (focus != nullptr && ExplorerUtils::IsEditControl(focus)) {
-            Wh_Log(L"Applying selection for %d times F2 in an Edit field.",
+            Wh_Log(L"Applying %s selection for %d times F2 in an Edit field.",
+                   ModSettings::ReverseCycle
+                       ? L"reverse"
+                       : L"original",  // because I'm worth it :-)
                    f2Count);
             auto selection = Selection::InsideControl(focus);
             if (selection.has_value()) {
                 auto timesF2 = f2Count % 3;
+                if (ModSettings::ReverseCycle) {
+                    timesF2 = 2 - timesF2;
+                }
                 switch (timesF2) {
                     // standard explorer f2
                     case 1:
@@ -338,7 +366,8 @@ static void HookIfFileView(HWND windowHandle, DWORD threadId) {
 }
 
 void Wh_ModInit() {
-    KeyboardHooks::onKeyUp = ApplyMultiF2Selection;
+    ModSettings::Cache();
+    KeyboardHooks::onKeyDown = ApplyMultiF2Selection;
 
     Wh_Log(L"Hooking Explorer window creation.");
     ExplorerWindowCreatedHook::ExecuteOnNewWindow(HookIfFileView);
@@ -350,4 +379,9 @@ void Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Removing all keyboard hooks.");
     KeyboardHooks::DetachAll();
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"Updating settings.");
+    ModSettings::Cache();
 }
