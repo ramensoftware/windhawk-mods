@@ -17,8 +17,10 @@ This mod disables the Voice Access (Win+Ctrl+S) hotkey in Windows.
 
 #include <windhawk_utils.h>
 
-BOOL WINAPI (*pOriginalRegisterHotKey)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
-BOOL WINAPI RegisterHotKeyHook(HWND  hWnd, int id, UINT fsModifiers, UINT vk)
+using RegisterHotKey_t = decltype(&RegisterHotKey);
+RegisterHotKey_t RegisterHotKey_Original;
+
+BOOL WINAPI RegisterHotKey_Hook(HWND  hWnd, int id, UINT fsModifiers, UINT vk)
 {
     if (fsModifiers == (MOD_CONTROL | MOD_WIN | MOD_NOREPEAT) && vk == 'S')
     {
@@ -26,14 +28,14 @@ BOOL WINAPI RegisterHotKeyHook(HWND  hWnd, int id, UINT fsModifiers, UINT vk)
         return FALSE;
     }
 
-    return pOriginalRegisterHotKey(hWnd, id, fsModifiers, vk);
+    return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
 }
 
 BOOL Wh_ModInit() {
-    const HMODULE hUser32 = GetModuleHandle(L"user32.dll");
-    const auto origFunc = (decltype(&RegisterHotKey))GetProcAddress(hUser32, "RegisterHotKey");
+    const auto hUser32 = GetModuleHandle(L"user32.dll");
+    const auto targetFunction = (RegisterHotKey_t)GetProcAddress(hUser32, "RegisterHotKey");
 
-    WindhawkUtils::SetFunctionHook(origFunc, RegisterHotKeyHook, &pOriginalRegisterHotKey);
+    WindhawkUtils::SetFunctionHook(targetFunction, RegisterHotKey_Hook, &RegisterHotKey_Original);
 
     return TRUE;
 }
