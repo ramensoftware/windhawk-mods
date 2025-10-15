@@ -29,12 +29,11 @@ BOOL WINAPI RegisterHotKeyHook(HWND  hWnd, int id, UINT fsModifiers, UINT vk)
     return pOriginalRegisterHotKey(hWnd, id, fsModifiers, vk);
 }
 
-
 BOOL Wh_ModInit() {
-    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+    const HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+    const auto origFunc = (decltype(&RegisterHotKey))GetProcAddress(hUser32, "RegisterHotKey");
 
-    void* origFunc = (void*)GetProcAddress(hUser32, "RegisterHotKey");
-    WindhawkUtils::SetFunctionHook(origFunc, (void*)RegisterHotKeyHook, (void**)&pOriginalRegisterHotKey);
+    WindhawkUtils::SetFunctionHook(origFunc, RegisterHotKeyHook, &pOriginalRegisterHotKey);
 
     return TRUE;
 }
