@@ -1549,6 +1549,26 @@
                 "version": "1.1"
             }
         },
+        "disable-voice-access-hotkey": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1760516689000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1760516689000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "clemmyn23",
+                "description": "Disables the Voice Access hotkey in Windows",
+                "github": "https://github.com/clemmyn23",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Disable Voice Access Hotkey",
+                "version": "1.0.0"
+            }
+        },
         "disk-pie-chart": {
             "details": {
                 "defaultSorting": 11020,
