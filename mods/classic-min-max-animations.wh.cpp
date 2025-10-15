@@ -2,11 +2,11 @@
 // @id              classic-min-max-animations
 // @name            Classic Minimize/Maximize Animations
 // @description     Restores the classic minimize/maximize animations used without DWM
-// @version         1.0.1
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
-// @compilerOptions -lgdi32 -lversion
+// @compilerOptions -lgdi32 -lversion -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -40,14 +40,17 @@ To do this:
 /*
 - topmost_bug_mitigation: false
   $name: Topmost bug mitigation
-  $description: Mitigation for a bug where console windows become topmost randomly. Only use with default Windows 10 Explorer or ep_taskbar.
+  $description: Mitigation for a bug where console windows become topmost randomly. Only use with default Windows 10/11 Explorer or ep_taskbar.
     Restart Explorer after toggling.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+#include <shellscalingapi.h>
 
 /* Defines */
+//#define SHIFT_SLOWDOWN // Hold Shift to slow down the animation
+
 #ifdef _WIN64
 #   define FASTCALL_STR L"__cdecl"
 #else
@@ -92,6 +95,13 @@ BOOL (WINAPI *_HasCaptionIcon)(PWND pwnd, int);
 #endif
 
 DWORD CALLBACK AnimWndThreadProc(HANDLE hEvent);
+
+bool IsWindowPerMonitorDpiAware(HWND hwnd)
+{
+    DPI_AWARENESS_CONTEXT context = GetWindowDpiAwarenessContext(hwnd);
+    return (AreDpiAwarenessContextsEqual(context, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE) ||
+            AreDpiAwarenessContextsEqual(context, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+}
 
 #pragma region "DWP hooks"
 
@@ -315,7 +325,7 @@ BOOL WINAPI ShowWindowAsync_hook(HWND hWnd, int nCmdShow)
     return ShowWindowAsync_orig(hWnd, nCmdShow);
 }
 
-/* This hook only applies to Windows 10's explorer.exe. See the massive comment in
+/* This hook only applies to Windows 10/11's explorer.exe. See the massive comment in
    Wh_ModInit for more details. */
 using SetWindowPos_t = decltype(&SetWindowPos);
 SetWindowPos_t SetWindowPos_orig;
@@ -350,18 +360,64 @@ void AdjustRectForWindowBorder(HWND hwnd, LPRECT prc)
     prc->bottom -= 2 * cBorders;
 }
 
+void GetWindowMinimizeRectForWindowDpi(HWND hwnd, LPRECT prcMin)
+{
+    GetWindowMinimizeRect(hwnd, prcMin);
+    if (!IsWindowPerMonitorDpiAware(hwnd))
+    {
+        // Window might be DWM scaled and running in a different DPI than the belonging monitor.
+        // We need to convert the virtualized coordinates to the physical pixels of the screen.
+        MONITORINFO mi = { sizeof(mi) };
+        // Monitor that the destination taskbar is on
+        HMONITOR hmon = MonitorFromRect(prcMin, MONITOR_DEFAULTTOPRIMARY);
+        if (hmon && GetMonitorInfoW(hmon, &mi))
+        {
+            // Convert to physical pixels
+            UINT dpiX = 96, dpiY = 96;
+            if (GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY) == S_OK)
+            {
+                UINT uDpiWnd = GetDpiForWindow(hwnd);
+                prcMin->left   = MulDiv(prcMin->left,    uDpiWnd, dpiX);
+                prcMin->top    = MulDiv(prcMin->top,     uDpiWnd, dpiY);
+                prcMin->right  = MulDiv(prcMin->right,   uDpiWnd, dpiX);
+                prcMin->bottom = MulDiv(prcMin->bottom,  uDpiWnd, dpiY);
+            }
+        }
+    }
+}
+
 LRESULT CALLBACK AnimWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (uMsg == g_uMsgMinMax)
     {
+#ifdef SHIFT_SLOWDOWN
+        bool fShiftPressed = GetAsyncKeyState(VK_SHIFT) < 0;
+        const UINT ANIMATION_DURATION_MS = fShiftPressed ? 1500 : 250;
+#else
         constexpr UINT ANIMATION_DURATION_MS = 250;
+#endif
 
         g_fAnimating = true;
 
         UINT cmd = (UINT)wParam;
         LPMINMAXPARAMS lpmmp = (LPMINMAXPARAMS)lParam;
         HWND hwndTarget = lpmmp->hwnd;
-        UINT dpi = GetDpiForWindow(hwndTarget);
+
+        // Source window DPI
+        UINT uDpiWnd  = GetDpiForWindow(hwndTarget);
+        // DPI of the monitor the window is on
+        // Default to window DPI for per-monitor aware windows
+        UINT uDpiMon  = uDpiWnd;
+
+        if (!IsWindowPerMonitorDpiAware(hwndTarget))
+        {
+            MONITORINFO mi = { sizeof(mi) };
+            HMONITOR hmon = MonitorFromWindow(hwndTarget, MONITOR_DEFAULTTOPRIMARY);
+            GetMonitorInfo(hmon, &mi);
+            UINT dpiX = 96, dpiY = 96;
+            if (GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY) == S_OK)
+                uDpiMon = dpiX;
+        }
 
         bool fAnimate = false;
         DWORD dwStyle = GetWindowLongW(hwndTarget, GWL_STYLE);
@@ -429,9 +485,9 @@ LRESULT CALLBACK AnimWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         GetWindowRect(hwndTarget, &rcFrom);
         // Window is minimized, get the minimize rect instead of the regular
         // window rect
-        if (rcFrom.left == -32000)
+        if (MulDiv(rcFrom.left, uDpiWnd, uDpiMon) == -32000)
         {
-            GetWindowMinimizeRect(hwndTarget, &rcFrom);
+            GetWindowMinimizeRectForWindowDpi(hwndTarget, &rcFrom);
         }
         AdjustRectForWindowBorder(hwndTarget, &rcFrom);
 
@@ -439,12 +495,30 @@ LRESULT CALLBACK AnimWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         switch (cmd)
         {
             case SC_MINIMIZE:
-                GetWindowMinimizeRect(hwndTarget, &rcTo);
+                GetWindowMinimizeRectForWindowDpi(hwndTarget, &rcTo);
                 break;
             case SC_MAXIMIZE:
             {
 GetMaximizeRect:
                 CopyRect(&rcTo, &lpmmp->rcMax);
+                if (!IsWindowPerMonitorDpiAware(hwndTarget))
+                {
+                    MONITORINFO mi = { sizeof(mi) };
+                    HMONITOR hmon = MonitorFromWindow(hwndTarget, MONITOR_DEFAULTTOPRIMARY);
+                    if (hmon && GetMonitorInfoW(hmon, &mi))
+                    {
+                        UINT dpiX = 96, dpiY = 96;
+                        GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+                        UINT uDpiWnd = GetDpiForWindow(hwndTarget);
+
+                        UINT uWidth  = MulDiv(RECTWIDTH(rcTo), dpiX, uDpiWnd);
+                        UINT uHeight = MulDiv(RECTHEIGHT(rcTo), dpiY, uDpiWnd);
+                        rcTo.left   = MulDiv(rcTo.left, dpiX, uDpiWnd);
+                        rcTo.top    = MulDiv(rcTo.top,  dpiY, uDpiWnd);
+                        rcTo.right  = rcTo.left + uWidth;
+                        rcTo.bottom = rcTo.top + uHeight;
+                    }
+                }
                 AdjustRectForWindowBorder(hwndTarget, &rcTo);
                 break;
             }
@@ -485,11 +559,48 @@ GetMaximizeRect:
         // Adjust child coords to screen coords (MDI)
         // For some reason only the destination rect is in child coords
         HWND hwndParent;
+        HRGN hrgnClip = NULL;
+        // For MDI windows, get the parent client rect for clipping
+        RECT rcClip = { 0, 0, cxVirtualScreen, cyVirtualScreen }; // Default to full screen
         if ((dwStyle & WS_CHILD) && (hwndParent = GetParent(hwndTarget)))
         {
             MapWindowPoints(hwndParent, HWND_DESKTOP, (LPPOINT)&rcTo, 2);
+
+            GetClientRect(hwndParent, &rcClip);
+            MapWindowPoints(hwndParent, HWND_DESKTOP, (LPPOINT)&rcClip, 2);
+
+            // Convert to animation window coordinates
+            OffsetRect(&rcClip, -xVirtualScreen, -yVirtualScreen);
+
+            // Create clipping region
+            hrgnClip = CreateRectRgnIndirect(&rcClip);
+
+            // Find windows above the MDI parent that intersect with it
+            HWND hwndAbove = GetAncestor(hwndParent, GA_ROOT);
+            while ((hwndAbove = GetWindow(hwndAbove, GW_HWNDPREV)) != NULL)
+            {
+                if (IsWindowVisible(hwndAbove) && hwndAbove != g_hwndAnim)
+                {
+                    RECT rcAbove;
+                    if (GetWindowRect(hwndAbove, &rcAbove))
+                    {
+                        RECT rcIntersect;
+                        if (IntersectRect(&rcIntersect, &rcAbove, &rcClip))
+                        {
+                            // This window overlaps, subtract it from clipping region
+                            // Well this doesn't look great with Win10/11 fake window borders,
+                            // Windows Aero transparent borders, and window shadows.
+                            // But the classic min/max animations were not designed with these in mind...
+                            OffsetRect(&rcAbove, -xVirtualScreen, -yVirtualScreen);
+                            HRGN hrgnAbove = CreateRectRgnIndirect(&rcAbove);
+                            CombineRgn(hrgnClip, hrgnClip, hrgnAbove, RGN_DIFF);
+                            DeleteObject(hrgnAbove);
+                        }
+                    }
+                }
+            }
         }
-        
+
         // Convert from screen coordinates to window coordinates
         OffsetRect(&rcFrom, -xVirtualScreen, -yVirtualScreen);
         OffsetRect(&rcTo,   -xVirtualScreen, -yVirtualScreen);
@@ -523,9 +634,9 @@ GetMaximizeRect:
         CopyRect(&rcCurrent, &rcFrom);
 
         // Icon metrics:
-        int cxIcon    = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
-        int cyIcon    = GetSystemMetricsForDpi(SM_CYSMICON, dpi);
-        int cyCaption = GetSystemMetricsForDpi(SM_CYCAPTION, dpi) - 1;
+        int cxIcon    = GetSystemMetricsForDpi(SM_CXSMICON, uDpiMon);
+        int cyIcon    = GetSystemMetricsForDpi(SM_CYSMICON, uDpiMon);
+        int cyCaption = GetSystemMetricsForDpi(SM_CYCAPTION, uDpiMon) - 1;
 
         // Offsets from the top left (or right) to the icon.
         int dxIcon = (cyCaption - cxIcon) / 2;
@@ -554,7 +665,7 @@ GetMaximizeRect:
 
         // Caption text font
         NONCLIENTMETRICSW ncm = { sizeof(ncm) };
-        SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE, dpi);
+        SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE, uDpiMon);
         HFONT hfontCaption = CreateFontIndirectW(&ncm.lfCaptionFont);
 
         // Actual animation loop
@@ -589,7 +700,10 @@ GetMaximizeRect:
                 rcDirty.left, rcDirty.top,
                 SRCCOPY
             );
-            
+
+            // Apply clipping region
+            SelectClipRgn(hdcMem, hrgnClip);
+
             // Draw background
             if (fGradient)
             {
@@ -705,6 +819,9 @@ GetMaximizeRect:
                 SetBkMode(hdcMem, iBkOld);
             }
 
+            // Remove clipping region
+            SelectClipRgn(hdcMem, NULL);
+
             // Then blit it all to the main DC.
             BitBlt(
                 hdc,
@@ -717,6 +834,7 @@ GetMaximizeRect:
         }
 
         /* Clean up and hide animation window */
+        DeleteObject(hrgnClip);
         DeleteDC(hdcDesk);
         DeleteDC(hdcMem);
         DeleteObject(hbmMem);
@@ -752,6 +870,14 @@ GetMaximizeRect:
         // Make click-thru
         case WM_NCHITTEST:
             return HTNOWHERE;
+        // So that we can destroy the window from another thread.
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+        // Ensure the animation thread stops after mod uninitialization.
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
         default:
             return DefWindowProcW_orig(hwnd, uMsg, wParam, lParam);
     }
@@ -761,6 +887,8 @@ static LPCWSTR c_szAnimClassName = L"Windhawk_UAH_MinMax";
 
 DWORD CALLBACK AnimWndThreadProc(HANDLE hEvent)
 {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     WNDCLASSW wc = { 0 };
     wc.lpfnWndProc = AnimWndProc;
     wc.hInstance = g_hinst;
@@ -933,10 +1061,10 @@ BOOL Wh_ModInit(void)
       * animation window non-topmost after we're done displaying the animation, but the console
       * host is still affected.
       *
-      * As well, the bug only seems to occur with Windows 10's Explorer. Something is bad in
-      * the Windows 10 shell implementation specifically, because this bug *does* occur with
+      * As well, the bug only seems to occur with Windows 10/11's Explorer. Something is bad in
+      * the Windows 10/11 shell implementation specifically, because this bug *does* occur with
       * ep_taskbar, and it does *not* occur with the ExplorerEx DLL build (which runs the Immersive
-      * shell as well as piggybacking off 10's explorer.exe like ep_taskbar, so we can wipe those
+      * shell as well as piggybacking off 10/11's explorer.exe like ep_taskbar, so we can wipe those
       * out as potential causes).
       *
       * A gross hack that seems to combat this bug pretty well is to hook SetWindowPos to wait
@@ -987,7 +1115,7 @@ void Wh_ModUninit(void)
 {
     if (g_hwndAnim && IsWindow(g_hwndAnim))
     {
-        DestroyWindow(g_hwndAnim);
+        SendMessageW(g_hwndAnim, WM_CLOSE, 0, 0);
         UnregisterClassW(c_szAnimClassName, g_hinst);
     }
 }
