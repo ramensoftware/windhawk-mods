@@ -785,19 +785,19 @@
                 "published": 1760347011000,
                 "rating": 10,
                 "ratingUsers": 3,
-                "updated": 1760382256000,
+                "updated": 1760518015000,
                 "users": 28
             },
             "metadata": {
                 "author": "aubymori",
-                "compilerOptions": "-lgdi32 -lversion",
+                "compilerOptions": "-lgdi32 -lversion -lshcore",
                 "description": "Restores the classic minimize/maximize animations used without DWM",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
                 "name": "Classic Minimize/Maximize Animations",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "classic-notepad-multi-step-undo": {

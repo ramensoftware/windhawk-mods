@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-15T08:24:49.000Z</updated>
+    <updated>2025-10-15T08:46:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.2]]></title>
+        <id>https://windhawk.net/mods/classic-min-max-animations#00c4f631eeebf04af95a6033d39d05a071fd67fc</id>
+        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
+        <updated>2025-10-15T08:46:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix issues with per-monitor DPI-scaled windows (thanks @Ingan121)</li>
+<li>Properly clip animation for MDI windows (thanks @Ingan121)</li>
+<li>Properly destroy animation window and thread on mod uninitialization</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Voice Access Hotkey 1.0.0]]></title>
         <id>https://windhawk.net/mods/disable-voice-access-hotkey#9de3e710e268dcda20002309239f39dc4078c459</id>
@@ -379,20 +394,6 @@ I've never used Discord’s Registered Games other than to disable things on the
         <author>
             <name>chip33</name>
             <uri>https://github.com/chip33</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No Properties Icon 1.0.2]]></title>
-        <id>https://windhawk.net/mods/no-properties-icon#0463072820d46c7cdb6ef91b5d8c90b0c9ab3877</id>
-        <link href="https://windhawk.net/mods/no-properties-icon"/>
-        <updated>2025-09-26T22:11:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix issue with icon of control panel applets not showing in classic Alt+Tab</li>
-<li>Fix issue with System Properties forcing the window to show on the taskbar</li>
-</ul>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
