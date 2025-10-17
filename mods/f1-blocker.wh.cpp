@@ -16,7 +16,7 @@ Can be applied to other programs (e.g., `notepad.exe`) by including them in `Det
 using TranslateAcceleratorW_t = decltype( &TranslateAcceleratorW );
 TranslateAcceleratorW_t TranslateAcceleratorW_Original;
 
-BOOL TranslateAcceleratorW_Hook( HWND hWnd, HACCEL hAccTable, LPMSG lpMsg ) {
+BOOL WINAPI TranslateAcceleratorW_Hook( HWND hWnd, HACCEL hAccTable, LPMSG lpMsg ) {
   return lpMsg->message == WM_KEYDOWN && lpMsg->wParam == VK_F1 ?
     TRUE : TranslateAcceleratorW_Original( hWnd, hAccTable, lpMsg );
 }
