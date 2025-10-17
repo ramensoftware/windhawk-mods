@@ -17,8 +17,17 @@ using TranslateAcceleratorW_t = decltype( &TranslateAcceleratorW );
 TranslateAcceleratorW_t TranslateAcceleratorW_Original;
 
 BOOL WINAPI TranslateAcceleratorW_Hook( HWND hWnd, HACCEL hAccTable, LPMSG lpMsg ) {
-  return lpMsg->message == WM_KEYDOWN && lpMsg->wParam == VK_F1 ?
-    TRUE : TranslateAcceleratorW_Original( hWnd, hAccTable, lpMsg );
+  if (
+    lpMsg->message == WM_KEYDOWN &&
+    lpMsg->wParam == VK_F1 &&
+    // Don't block when pressed with combination keys
+    !( GetKeyState( VK_CONTROL ) & 0x8000 ) &&
+    !( GetKeyState( VK_SHIFT ) & 0x8000 ) &&
+    !( GetKeyState( VK_MENU ) & 0x8000)
+  ) {
+    return TRUE;
+  }
+  return TranslateAcceleratorW_Original( hWnd, hAccTable, lpMsg );
 }
 
 BOOL Wh_ModInit() {
