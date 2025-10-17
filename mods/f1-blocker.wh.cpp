@@ -13,7 +13,9 @@
 Can be applied to other programs (e.g., `notepad.exe`) by including them in `Details` -> `Advanced` -> `Custom process inclusion list`.*/
 // ==/WindhawkModReadme==
 
-BOOL( *TranslateAcceleratorW_Original )( HWND hWnd, HACCEL hAccTable, LPMSG lpMsg );
+using TranslateAcceleratorW_t = decltype( &TranslateAcceleratorW );
+TranslateAcceleratorW_t TranslateAcceleratorW_Original;
+
 BOOL TranslateAcceleratorW_Hook( HWND hWnd, HACCEL hAccTable, LPMSG lpMsg ) {
   return lpMsg->message == WM_KEYDOWN && lpMsg->wParam == VK_F1 ?
     TRUE : TranslateAcceleratorW_Original( hWnd, hAccTable, lpMsg );
