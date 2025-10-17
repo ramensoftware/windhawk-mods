@@ -23,7 +23,11 @@ BOOL Wh_ModInit() {
   HMODULE hUser32 = GetModuleHandle( L"user32.dll" );
 
   void* TranslateAcceleratorW = ( void* ) GetProcAddress( hUser32, "TranslateAcceleratorW" );
-  Wh_SetFunctionHook( TranslateAcceleratorW, ( void* ) TranslateAcceleratorW_Hook, ( void** ) &TranslateAcceleratorW_Original );
+  if ( TranslateAcceleratorW == nullptr ) {
+    Wh_Log( L"Failed to find user32.TranslateAcceleratorW: 0x%x", GetLastError() );
+    return FALSE;
+  }
 
+  Wh_SetFunctionHook( TranslateAcceleratorW, ( void* ) TranslateAcceleratorW_Hook, ( void** ) &TranslateAcceleratorW_Original );
   return TRUE;
 }
