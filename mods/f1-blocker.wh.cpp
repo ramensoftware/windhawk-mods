@@ -2,7 +2,7 @@
 // @id              f1-blocker
 // @name            F1 Blocker
 // @description     Prevent F1 from opening the help page in File Explorer and/or other selected applications
-// @version         0.0.1
+// @version         0.0.2
 // @author          d0gkiller87
 // @github          https://github.com/d0gkiller87
 // @include         explorer.exe
