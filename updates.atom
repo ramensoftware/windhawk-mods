@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-15T08:46:55.000Z</updated>
+    <updated>2025-10-17T09:01:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[F1 Blocker 0.0.2]]></title>
+        <id>https://windhawk.net/mods/f1-blocker#68dc19da298b22c016ad7d0613b05eef66239956</id>
+        <link href="https://windhawk.net/mods/f1-blocker"/>
+        <updated>2025-10-17T09:01:02.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod prevents F1 from opening the help page in File Explorer by hooking <code>TranslateAcceleratorW</code>.<br />
+Can be applied to other programs (e.g., <code>notepad.exe</code>) by including them in <code>Details</code> -&gt; <code>Advanced</code> -&gt; <code>Custom process inclusion list</code>.</p>]]></content>
+        <author>
+            <name>d0gkiller87</name>
+            <uri>https://github.com/d0gkiller87</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.2]]></title>
         <id>https://windhawk.net/mods/classic-min-max-animations#00c4f631eeebf04af95a6033d39d05a071fd67fc</id>
@@ -380,20 +392,6 @@ I've never used Discord’s Registered Games other than to disable things on the
         <author>
             <name>Thomas Shrader</name>
             <uri>https://github.com/ilikecoding-197</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Control Panel Color Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/control-panel-color-fix#b78d9f04997ec0b281fd2cdf88224bfbe50fb737</id>
-        <link href="https://windhawk.net/mods/control-panel-color-fix"/>
-        <updated>2025-09-28T15:12:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="controlpanelcolorfix">Control Panel Color Fix</h1>
-<p>Restores dark styling to the hardcoded white header and sidebar that can appear when applying a custom dark theme.</p>
-<p>Only works on Windows 11.</p>
-<p>Based on earlier uxtheme-hook versions by rounk-ctrl.</p>]]></content>
-        <author>
-            <name>chip33</name>
-            <uri>https://github.com/chip33</uri>
         </author>
     </entry>
 </feed>

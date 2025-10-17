@@ -2100,6 +2100,26 @@
                 "version": "1.0.1"
             }
         },
+        "f1-blocker": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1760691662000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1760691662000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "d0gkiller87",
+                "description": "Prevent F1 from opening the help page in File Explorer and/or other selected applications",
+                "github": "https://github.com/d0gkiller87",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "F1 Blocker",
+                "version": "0.0.2"
+            }
+        },
         "fake-explorer-path": {
             "details": {
                 "defaultSorting": 2870,
