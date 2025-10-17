@@ -9,7 +9,8 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*This mod prevents F1 from opening the help page in File Explorer by hooking `TranslateAcceleratorW`.
+Can be applied to other programs (e.g., `notepad.exe`) by including them in `Details` -> `Advanced` -> `Custom process inclusion list`.*/
 // ==/WindhawkModReadme==
 
 BOOL( *TranslateAcceleratorW_Original )( HWND hWnd, HACCEL hAccTable, LPMSG lpMsg );
