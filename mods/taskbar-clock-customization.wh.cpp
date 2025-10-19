@@ -78,6 +78,7 @@ patterns can be used:
   * `%download_speed%` - system-wide download transfer rate.
   * `%cpu%` - CPU usage.
   * `%ram%` - RAM usage.
+  * `%gpu%` - GPU usage.
 * `%weather%` - Weather information, powered by [wttr.in](https://wttr.in/),
   using the location and format configured in settings.
 * `%web<n>%` - the web contents as configured in settings, truncated with
@@ -402,6 +403,9 @@ using WindhawkUtils::StringSetting;
 #include <string>
 #include <string_view>
 #include <vector>
+// For GPU grouping helper
+#include <map>
+#include <cwctype>
 
 using namespace std::string_view_literals;
 
@@ -568,6 +572,7 @@ FormattedString<FORMATTED_BUFFER_SIZE> g_uploadSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_downloadSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_cpuFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_ramFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_gpuFormatted;
 
 std::vector<std::optional<DYNAMIC_TIME_ZONE_INFORMATION>> g_timeZoneInformation;
 
@@ -1693,6 +1698,148 @@ enum class MetricType {
     kCount,
 };
 
+// ---------------- GPU PDH sampler (Task Manager style) ----------------
+// We use the "GPU Engine(*)\\Utilization Percentage" counter and compute
+// dominant engine per adapter (by LUID when available) then take the max
+// across adapters. This approximates Task Manager's single GPU %.
+
+// Extract an adapter key from the PDH instance name.
+// Prefer any "luid_" token if present. Fallback to pid_#### if found.
+// Otherwise return "adapter:default".
+static std::wstring GpuExtractAdapterKey(const std::wstring& instName) {
+    std::wstring key = L"adapter:default";
+    size_t pos = instName.find(L"luid_");
+    if (pos != std::wstring::npos) {
+        size_t i = pos;
+        std::wstring buf;
+        while (i < instName.size()) {
+            wchar_t c = instName[i];
+            if (c == L'_' || c == L'x' || (c >= L'0' && c <= L'9') ||
+                (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F')) {
+                buf.push_back(c);
+                ++i;
+            } else {
+                break;
+            }
+        }
+        if (!buf.empty()) key = L"luid_" + buf;
+    } else {
+        pos = instName.find(L"pid_");
+        if (pos != std::wstring::npos) {
+            size_t i = pos;
+            std::wstring buf;
+            while (i < instName.size() && (std::iswalnum(instName[i]) || instName[i] == L'_')) {
+                buf.push_back(instName[i]);
+                ++i;
+            }
+            if (!buf.empty()) key = buf;
+        }
+    }
+    return key;
+}
+
+struct GpuPdhSampler {
+    PDH_HQUERY query = nullptr;
+    PDH_HCOUNTER counter = nullptr;
+    bool available = false;
+    double lastUsage = 0.0; // 0..100
+
+    void Init() {
+        available = false;
+        lastUsage = 0.0;
+
+        if (PdhOpenQueryW(nullptr, 0, &query) != ERROR_SUCCESS) {
+            query = nullptr;
+            return;
+        }
+
+        // Prefer English path API to avoid localization issues.
+        using PdhAddEnglishCounterW_t = PDH_STATUS (WINAPI*)(PDH_HQUERY, LPCWSTR, DWORD_PTR, PDH_HCOUNTER*);
+        HMODULE hPdh = GetModuleHandleW(L"pdh.dll");
+        auto pPdhAddEnglishCounterW = reinterpret_cast<PdhAddEnglishCounterW_t>(
+            hPdh ? GetProcAddress(hPdh, "PdhAddEnglishCounterW") : nullptr);
+
+        LPCWSTR counterPath = L"\\GPU Engine(*)\\Utilization Percentage";
+        PDH_STATUS st = pPdhAddEnglishCounterW
+            ? pPdhAddEnglishCounterW(query, counterPath, 0, &counter)
+            : PdhAddCounterW(query, counterPath, 0, &counter);
+
+        if (st != ERROR_SUCCESS) {
+            // Leave unavailable; show 0% and don't crash.
+            PdhCloseQuery(query);
+            query = nullptr;
+            counter = nullptr;
+            return;
+        }
+
+        // Warm up once.
+        PdhCollectQueryData(query);
+        available = true;
+    }
+
+    void Uninit() {
+        if (query) {
+            PdhCloseQuery(query);
+            query = nullptr;
+            counter = nullptr;
+        }
+        available = false;
+        lastUsage = 0.0;
+    }
+
+    void Sample() {
+        if (!available || !query || !counter) {
+            lastUsage = 0.0;
+            return;
+        }
+
+        if (PdhCollectQueryData(query) != ERROR_SUCCESS) {
+            return; // keep previous value
+        }
+
+        PDH_FMT_COUNTERVALUE_ITEM_W* items = nullptr;
+        DWORD bufferSize = 0;
+        DWORD itemCount = 0;
+        PDH_STATUS st = PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE,
+                                                     &bufferSize, &itemCount, items);
+        if (st == PDH_MORE_DATA) {
+            items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM_W*>(
+                HeapAlloc(GetProcessHeap(), 0, bufferSize));
+            if (!items) return;
+            st = PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE,
+                                              &bufferSize, &itemCount, items);
+        }
+
+        if (st == ERROR_SUCCESS && items && itemCount > 0) {
+            std::map<std::wstring, double> perAdapterMax;
+            for (DWORD i = 0; i < itemCount; ++i) {
+                const std::wstring inst = items[i].szName ? items[i].szName : L"";
+                double val = items[i].FmtValue.doubleValue;
+                if (val < 0.0) val = 0.0;
+                if (val > 1000.0) val = 1000.0; // guard outliers
+
+                auto key = GpuExtractAdapterKey(inst);
+                auto it = perAdapterMax.find(key);
+                if (it == perAdapterMax.end() || val > it->second) {
+                    perAdapterMax[key] = val;
+                }
+            }
+
+            double overall = 0.0;
+            for (auto& kv : perAdapterMax) {
+                double v = kv.second;
+                if (v > 100.0) v = 100.0;
+                if (v > overall) overall = v;
+            }
+            lastUsage = overall;
+        }
+
+        if (items) HeapFree(GetProcessHeap(), 0, items);
+    }
+};
+
+static GpuPdhSampler g_gpuSampler;
+
 class QueryDataCollectionSession {
    public:
     QueryDataCollectionSession() {
@@ -1874,8 +2021,18 @@ void DataCollectionSessionInit() {
     metrics[static_cast<int>(MetricType::kCpu)] =
         IsStrInDateTimePatternSettings(L"%cpu%");
 
-    if (!std::any_of(std::begin(metrics), std::end(metrics),
-                     [](bool x) { return x; })) {
+    bool needAny = std::any_of(std::begin(metrics), std::end(metrics),
+                               [](bool x) { return x; });
+
+    // Start GPU sampler if requested anywhere
+    bool needGpu = IsStrInDateTimePatternSettings(L"%gpu%");
+    if (needGpu) {
+        g_gpuSampler.Init();
+    } else {
+        g_gpuSampler.Uninit();
+    }
+
+    if (!needAny) {
         return;
     }
 
@@ -1898,6 +2055,7 @@ void DataCollectionSessionInit() {
 void DataCollectionSessionUninit() {
     g_dataCollectionSession.reset();
     g_dataCollectionLastFormatIndex = 0;
+    g_gpuSampler.Uninit();
 }
 
 DWORD GetDataCollectionFormatIndex() {
@@ -1920,6 +2078,9 @@ void DataCollectionSampleIfNeeded() {
         if (g_dataCollectionSession) {
             g_dataCollectionSession->SampleData();
         }
+
+        // Update GPU on same cadence
+        g_gpuSampler.Sample();
 
         g_dataCollectionLastFormatIndex = dataCollectionFormatIndex;
     }
@@ -2135,6 +2296,23 @@ PCWSTR GetRamFormatted() {
     return g_ramFormatted.buffer;
 }
 
+PCWSTR GetGpuFormatted() {
+    // Ensure we stay in sync with the data collection cadence for padding
+    DataCollectionSampleIfNeeded();
+
+    DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
+    if (g_gpuFormatted.formatIndex != dataCollectionFormatIndex) {
+        // Sample happens in DataCollectionSampleIfNeeded hook below as part of the tick
+        int gpuPercent = static_cast<int>(g_gpuSampler.lastUsage + 0.5);
+        if (gpuPercent < 0) gpuPercent = 0;
+        if (gpuPercent > 100) gpuPercent = 100;
+        FormatPercentValue(gpuPercent, g_gpuFormatted.buffer,
+                           ARRAYSIZE(g_gpuFormatted.buffer));
+        g_gpuFormatted.formatIndex = dataCollectionFormatIndex;
+    }
+    return g_gpuFormatted.buffer;
+}
+
 int ResolveFormatTokenWithDigit(std::wstring_view format,
                                 std::wstring_view formatTokenPrefix,
                                 std::wstring_view formatTokenSuffix) {
@@ -2181,6 +2359,7 @@ size_t ResolveFormatToken(
         {L"%download_speed%"sv, GetDownloadSpeedFormatted},
         {L"%cpu%"sv, GetCpuFormatted},
         {L"%ram%"sv, GetRamFormatted},
+        {L"%gpu%"sv, GetGpuFormatted},
         {L"%newline%"sv, []() { return L"\n"; }},
     };
 
