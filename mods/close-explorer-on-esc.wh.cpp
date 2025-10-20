@@ -19,7 +19,6 @@
 Press **Esc** in File Explorer to close the current window.
 The mod avoids accidental closure when:
 - You are renaming a file/folder
-- Focus is in the address bar, search box, or any text field
 - The foreground window is not the current Explorer
 
 Optional:
@@ -36,7 +35,6 @@ If the focused control is safe (not text editing, not renaming), it sends `WM_CL
 在资源管理器中按下 **Esc** 可关闭当前窗口。
 模块会避免误关以下场景：
 - 正在**重命名**
-- 焦点在**地址栏**、**搜索框**或**任何文本输入框**
 - 当前前台窗口不是该资源管理器实例
 
 可选项：
@@ -164,6 +162,11 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
     g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
     if (g_hookReadyEvent) SetEvent(g_hookReadyEvent);
 
+    if (!g_hook) {
+        g_hookThreadId = 0;
+        return 0;
+    }
+
     // Message loop required by WH_KEYBOARD_LL delivery.
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -175,6 +178,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
         UnhookWindowsHookEx(g_hook);
         g_hook = nullptr;
     }
+    g_hookThreadId = 0;
     return 0;
 }
 
@@ -201,7 +205,17 @@ BOOL Wh_ModInit() {
     CloseHandle(g_hookReadyEvent);
     g_hookReadyEvent = nullptr;
 
-    return g_hook != nullptr;
+    if (!g_hook) {
+        if (g_hookThread) {
+            WaitForSingleObject(g_hookThread, INFINITE);
+            CloseHandle(g_hookThread);
+            g_hookThread = nullptr;
+        }
+        g_hookThreadId = 0;
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 void Wh_ModUninit() {
