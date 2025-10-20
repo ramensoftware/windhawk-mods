@@ -33,6 +33,7 @@ VERIFIED_TWITTER_ACCOUNTS = {
     'https://github.com/Ingan121': 'Ingan121',
     'https://github.com/Amrsatrio': 'amrsatrio',
     'https://github.com/bcrtvkcs': 'bcrtvkcs',
+    'https://github.com/ItsTauTvyDas': 'ItsTauTvyDas',
 }
 
 MOD_METADATA_PARAMS = {
