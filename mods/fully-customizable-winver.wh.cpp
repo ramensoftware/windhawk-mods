@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              fully-customizable-winver
+// @id              fully-custom-winver
 // @name            Customizable WinVer
 // @description     Fully customize your winver.exe by even "replacing" the logo!
 // @version         1.0.0
@@ -17,12 +17,22 @@
 
 Features:
 * Modify any text
-* Custom logo (it just creates a custom child window in the logo area)
+* Custom logo (it just creates a custom child window in the logo area, transparency is supported!)
 * Change the title
 * Change window parameters (make it always top, custom size, open location)
 * Change background colors
 
 All control internal (user) IDs were identified using **winspy** application.
+
+Supported logo image formats:
+* BMP
+* JPEG (.jpg, .jpeg, .jpe, .jfif)
+* PNG
+* GIF (supports animation and transparent background too\*)
+* TIFF (.tif, .tiff)
+* ICO
+* WMF / EMF
+* WEBP, HEIC, ACIF and other ones can also be supported if codec is installed.
 
 Available palceholders:
 * `{default.<id>}` - Inserts the default control text. Replace `<id>` with the control ID (capitalize each word and remove spaces).
@@ -34,9 +44,19 @@ Examples with `{default...}` placeholders.
 
 To restore the **license info** link, use <A> and </A> tags (similar to HTML): - `Click <A>here</A> to view license information`.
 
+# Screenshots
+
+![Running cat](https://i.imgur.com/uGKh0wE.gif)
+
+![winver too cute](https://i.imgur.com/HjpaLTc.png)
+
+![all dark](https://i.imgur.com/ZEgkLqK.gif)
+
 # Note
 
-Information about previous label texts are not retained. To restore the original content, simply restart *winver.exe*.
+* Information about previous label texts are not retained. To restore the original content, simply restart *winver.exe*.
+* Gifs with transparent background are mostly stable, the issue is that sometimes background could be black. Also note that gifs do not support controls being in front (if you change z-indexing), the gif will be always *drawn* on top!
+
 */
 // ==/WindhawkModReadme==
 
@@ -56,10 +76,12 @@ Information about previous label texts are not retained. To restore the original
     $description: "Set to 0 for full image's width"
   - height: -1
     $name: "Height"
-    $description: "Set to -1 for max height needed (72 pixels)"
+    $description: "Set to -1 for max height needed (72 pixels), set to 0 for default size"
   - path: "C:/Windows/System32/DisplaySystemToastIcon.png"
     $name: "Path to the logo"
-    $description: "Can be .png, .jpg or .bmp"
+    $description: "Check mod's description for supported image formats"
+  - clearBackground: TRUE
+    $name: "Clear logo's background for transparent animated gifs"
   $name: "Custom logo"
 - startPosition:
   - enabled: TRUE
@@ -91,6 +113,8 @@ Information about previous label texts are not retained. To restore the original
     $name: "Vertically realign OK button"
     $description: "Calculates Y offset"
   $name: "Window size"
+- removeFirstFocus: FALSE
+  $name: "Remove focus on start up"
 - alwaysOnTop: FALSE
   $name: "Make window always on top"
 - customIcon: "shell32.dll;23"
@@ -104,14 +128,17 @@ Information about previous label texts are not retained. To restore the original
 - windowColors:
   - title: ""
     $name: "Title text color"
-  - border: "152, 141, 242"
+  - border: ""
     $name: "Border's color"
-  - bar: "152, 141, 242"
+  - bar: "241, 243, 249"
     $name: "Title bar color"
-  - background: "152, 141, 242"
+  - background: "240, 240, 240"
     $name: "Background color"
-  - separator: "131, 119, 230"
+    $description: "Be aware that this remove the original Windows logo if custom logo is not enabled!"
+  - separator: ""
     $name: "Separator color"
+  - textColor: "0, 0, 0"
+    $name: "Default text color"
   $name: "Change window colors"
   $description: "Can be left empty for default. Specify color in RGB (e.g., 255, 16, 74)"
 - titleText: ""
@@ -148,7 +175,6 @@ Information about previous label texts are not retained. To restore the original
       - Default: "Default"
       - Bottom: "Bottom"
       - Top: "Top"
-      - LogoBackground: "Logo Background"
       - LogoImage: "Logo Image"
       - LeftIcon: "Left icon"
       - Separator: "Separator"
@@ -164,6 +190,8 @@ Information about previous label texts are not retained. To restore the original
       - OkButton: "Ok button"
       $name: "Insert on top of"
       $description: "Set to Default for default Z index ordering (might need a restart of winver.exe because original z index order does not get saved!)"
+    - textColor: ""
+      $name: "Text color"
   $name: Modify controls
 */
 // ==/WindhawkModSettings==
@@ -183,6 +211,9 @@ Information about previous label texts are not retained. To restore the original
 #define MAX_LOGO_HEIGHT 72
 #define DEFAULT_BAR_BACKGROUND RGB(241, 243, 249)
 #define DEFAULT_BACKGROUND RGB(240, 240, 240)
+#define DEFAULT_TEXT_COLOR RGB(0, 0, 0)
+
+#define WM_CAPTURE_LOGO_BACKGROUND WM_USER + 1
 
 #ifndef WH_EDITING
 #define PrintRect(name, rect) Wh_Log(L"%ls RECT -> [%d, %d, %d, %d], calucated width and height -> [%d, %d]", name, rect.left, rect.top, rect.right, rect.bottom, rect.right - rect.left, rect.bottom - rect.top)
@@ -201,7 +232,8 @@ struct WindowAttributes {
 
 struct DefinedWindowAttributes : WindowAttributes {
     std::wstring position, insertAfter;
-    BOOL relativePosition;
+    BOOL relativePosition, hasTextColor;
+    COLORREF textColor;
     void pos();
 };
 
@@ -225,17 +257,30 @@ struct MonitorInfoEx {
     MONITORINFOEX info;
 };
 
+struct GifAnimation {
+    std::unique_ptr<Gdiplus::Image> img;
+    GUID dim = Gdiplus::FrameDimensionTime;
+    std::vector<UINT> delays10ms;
+    UINT frame = 0, count = 0, timerId = 1;
+    INT width, height;
+    BOOL valid() const {
+        return img && count > 1;
+    }
+};
+
 LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
 std::unordered_map<std::wstring, WindowAttributes> g_defaultWindowAttributes;
 std::unordered_map<std::wstring, DefinedWindowAttributes> g_definedWindowAttributes;
 std::vector<std::wstring> g_errorMessages;
 HWINEVENTHOOK g_hHook = nullptr;
-HWND g_mainWindow = nullptr, g_logoBackground = nullptr, g_logoImage = nullptr;
-std::unique_ptr<Gdiplus::Bitmap> g_logoImageBitmap; 
+HWND g_mainWindow = nullptr, g_logoImage = nullptr;
+std::unique_ptr<Gdiplus::Bitmap> g_logoImageBitmap;
+RECT g_logoImageRect; 
+GifAnimation g_gif;
 
-COLORREF g_windowBackgroundColor = DEFAULT_BACKGROUND, g_separatorColor = NULL;
-BOOL g_hasSeparatorColor = FALSE;
+COLORREF g_windowBackgroundColor = DEFAULT_BACKGROUND, g_windowDefaultTextColor = DEFAULT_TEXT_COLOR, g_separatorColor = NULL;
+BOOL g_hasSeparatorColor = FALSE, g_colorizeBackground = FALSE, g_clearLogoBackground = FALSE, g_canAnimatedDrawLogo = FALSE, g_hasDefaultTextColor = FALSE, g_removeFirstFocus = FALSE;
 
 INT DefaultPosition(INT i, const std::wstring& id) {
     auto dwa = g_defaultWindowAttributes[id];
@@ -344,14 +389,18 @@ BOOL LoadColor(const std::wstring& settingsName, COLORREF& color) {
     return FALSE;
 }
 
-void LoadColor(const std::wstring& settingsName, COLORREF& color, COLORREF defaultColor) {
+BOOL LoadColor(const std::wstring& settingsName, COLORREF& color, COLORREF defaultColor) {
     if (!LoadColor(settingsName, color)) {
         color = defaultColor;
+        return FALSE;
     }
+    return TRUE;
 }
 
 void LoadSettings() {
     g_definedWindowAttributes.clear();
+    g_hasDefaultTextColor = LoadColor(L"windowColors.textColor", g_windowDefaultTextColor, DEFAULT_TEXT_COLOR);
+    g_removeFirstFocus = Wh_GetIntSetting(L"removeFirstFocus");
 
     for (INT i = 0;; i++) {
         auto option = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"modifyWindows[%d].id", i));
@@ -369,11 +418,12 @@ void LoadSettings() {
         attrs.position = *position ? position.get() : L"";
         attrs.relativePosition = Wh_GetIntSetting(L"modifyWindows[%d].relativePosition", i);
         attrs.hidden = Wh_GetIntSetting(L"modifyWindows[%d].hidden", i);
+        attrs.hasTextColor = LoadColor(std::format(L"modifyWindows[{}].textColor", i).c_str(), attrs.textColor , g_windowDefaultTextColor);
         attrs.insertAfter = *zIndex ? zIndex.get() : L"Default";
         g_definedWindowAttributes[option.get()] = attrs;
     }
 
-    LoadColor(L"windowColors.background", g_windowBackgroundColor, DEFAULT_BACKGROUND);
+    g_colorizeBackground = LoadColor(L"windowColors.background", g_windowBackgroundColor, DEFAULT_BACKGROUND);
     g_hasSeparatorColor = LoadColor(L"windowColors.separator", g_separatorColor);
 }
 
@@ -434,20 +484,38 @@ void ApplyPlaceholder(std::wstring& str) {
     }
 }
 
-std::unique_ptr<Gdiplus::Bitmap> LoadImageFile(const std::wstring& path, INT width, INT height, RECT* rect) {
-    static ULONG_PTR gdiToken = 0;
-    if (gdiToken == 0) {
-        Gdiplus::GdiplusStartupInput input;
-        if (Gdiplus::GdiplusStartup(&gdiToken, &input, nullptr) != Gdiplus::Ok) {
-            return nullptr;
-        }
+void KillGifTimer() {
+    if (g_logoImage && g_gif.timerId) {
+        KillTimer(g_logoImage, g_gif.timerId);
+        g_gif.timerId = 0;
     }
+}
 
-    std::unique_ptr<Gdiplus::Image> img(Gdiplus::Image::FromFile(path.c_str(), FALSE));
-    if (!img || img->GetLastStatus() != Gdiplus::Ok) {
-        return nullptr;
+UINT ClampDelayMs(UINT d10) {
+    UINT ms = d10 ? d10 * 10U : 100U;
+    return ms < 10 ? 10 : ms;
+}
+
+BOOL LoadGifAnimationData(Gdiplus::Image* img, GifAnimation& ga) {
+    UINT sz = img->GetPropertyItemSize(PropertyTagFrameDelay);
+    if (sz == 0) {
+        return FALSE;
     }
+    auto buf = std::unique_ptr<BYTE[]>(new BYTE[sz]);
+    auto pi = reinterpret_cast<Gdiplus::PropertyItem*>(buf.get());
+    if (img->GetPropertyItem(PropertyTagFrameDelay, sz, pi) != Gdiplus::Ok) {
+        return FALSE;
+    }
+    ga.count = img->GetFrameCount(&ga.dim);
+    ga.delays10ms.resize(ga.count);
+    auto d = reinterpret_cast<UINT*>(pi->value);
+    for (UINT i = 0; i < ga.count; ++i) {
+        ga.delays10ms[i] = d[i];
+    }
+    return ga.count > 1;
+}
 
+void CalculateImageSize(Gdiplus::Image* img, INT& width, INT& height, RECT* rect) {
     if (height == -1) {
         height = MAX_LOGO_HEIGHT;
     }
@@ -468,21 +536,63 @@ std::unique_ptr<Gdiplus::Bitmap> LoadImageFile(const std::wstring& path, INT wid
         rect->right = width;
         rect->bottom = height;
     }
+}
 
-    // Gdiplus::Bitmap bitmap(width, height, PixelFormat32bppPARGB);
-    // Gdiplus::Graphics g(&bitmap);
-    // g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-    // g.DrawImage(img.get(), Gdiplus::Rect(0, 0, width, height), 0, 0, img->GetWidth(), img->GetHeight(), Gdiplus::UnitPixel);
-    // HBITMAP hbmp = nullptr;
-    // Gdiplus::Color bg(GetRValue(background), GetGValue(background), GetBValue(background));
-    // if (bitmap.GetHBITMAP(bg, &hbmp) == Gdiplus::Ok) {
-    //     return hbmp;
-    // }
+std::unique_ptr<Gdiplus::Bitmap> LoadStaticImageFile(const std::wstring& path, INT width, INT height, RECT* rect) {
+    static ULONG_PTR gdiToken = 0;
+    if (gdiToken == 0) {
+        Gdiplus::GdiplusStartupInput input;
+        if (Gdiplus::GdiplusStartup(&gdiToken, &input, nullptr) != Gdiplus::Ok) {
+            return nullptr;
+        }
+    }
+
+    std::unique_ptr<Gdiplus::Image> img(Gdiplus::Image::FromFile(path.c_str(), FALSE));
+    if (!img || img->GetLastStatus() != Gdiplus::Ok) {
+        return nullptr;
+    }
+
+    CalculateImageSize(img.get(), width, height, rect);
+
     auto bitmap = std::make_unique<Gdiplus::Bitmap>(width, height, PixelFormat32bppPARGB);
     Gdiplus::Graphics g(bitmap.get());
     g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
     g.DrawImage(img.get(), Gdiplus::Rect(0, 0, width, height), 0, 0, img->GetWidth(), img->GetHeight(), Gdiplus::UnitPixel);
     return bitmap;
+}
+
+BOOL LoadAnimatedImageFile(const std::wstring& path, INT& width, INT& height, RECT* rect) {
+    static ULONG_PTR gdiToken = 0;
+    if (gdiToken == 0) {
+        Gdiplus::GdiplusStartupInput in;
+        if (Gdiplus::GdiplusStartup(&gdiToken, &in, nullptr) != Gdiplus::Ok) {
+            return FALSE;
+        }
+    }
+
+    std::unique_ptr<Gdiplus::Image> img(Gdiplus::Image::FromFile(path.c_str(), FALSE));
+    if (!img || img->GetLastStatus() != Gdiplus::Ok) {
+        return FALSE;
+    }
+
+    GUID dim = Gdiplus::FrameDimensionTime;
+    UINT frameCount = img->GetFrameCount(&dim);
+    if (frameCount <= 1) {
+        return FALSE;
+    }
+
+    GifAnimation ga;
+    if (!LoadGifAnimationData(img.get(), ga)) {
+        return FALSE;
+    }
+
+    CalculateImageSize(img.get(), width, height, rect);
+
+    ga.img = std::move(img);
+    ga.width = width;
+    ga.height = height;
+    g_gif = std::move(ga);
+    return TRUE;
 }
 
 BOOL CALLBACK EnumMonitorsProc(HMONITOR handle, HDC, LPRECT, LPARAM monitorsParam) {
@@ -497,18 +607,16 @@ BOOL CALLBACK EnumMonitorsProc(HMONITOR handle, HDC, LPRECT, LPARAM monitorsPara
 
 BOOL FileExists(PCWSTR path) {
     if (!path || !*path) {
-        return false;
+        return FALSE;
     }
     DWORD attrs = GetFileAttributesW(path);
     return (attrs != INVALID_FILE_ATTRIBUTES) && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
 void DeleteLogoImage() {
-    // HBITMAP oldImage = (HBITMAP)SendMessageW(g_logoImage, STM_SETIMAGE, (WPARAM)IMAGE_BITMAP, (LPARAM)NULL);
-    // if (oldImage) {
-    //     DeleteObject(oldImage);
-    // }
     g_logoImageBitmap.reset();
+    KillGifTimer();
+    g_gif = {};
 }
 
 void CenterWindow(HWND hWnd, RECT& rect, INT& x, INT& y) {
@@ -607,29 +715,19 @@ void UpdateLogo(HWND hWnd) {
         ShowWindow(g_logoImage, SW_HIDE);
     }
 
+    g_canAnimatedDrawLogo = FALSE;
+    PostMessageW(hWnd, WM_CAPTURE_LOGO_BACKGROUND, 0, 0);
+
+    g_clearLogoBackground = Wh_GetIntSetting(L"logo.clearBackground");
+    Wh_Log(L"Clear background on every gif frame -> %d", g_clearLogoBackground);
+
     RECT clientRect;
     GetClientRect(hWnd, &clientRect);
-
-    if (!g_logoBackground) {
-        g_logoBackground = CreateWindowExW(
-            WS_EX_NOPARENTNOTIFY,
-            L"Static",
-            L"",
-            WS_CHILD | WS_VISIBLE,
-            0, 0, clientRect.right, MAX_LOGO_HEIGHT,
-            hWnd,
-            (HMENU)1,
-            GetModuleHandleW(nullptr),
-            nullptr
-        );
-        SetWindowSubclass(g_logoBackground, WndSubclassProc, 1, LOGO_BACKGROUND_ID);
-        Wh_Log(L"Logo's background handle -> %p", g_logoBackground);
-    }
 
     if (!g_logoImage) {
         g_logoImage = CreateWindowExW(
             0,
-            L"Static",
+            WC_STATICW,
             L"",
             WS_CHILD | WS_VISIBLE,
             0, 0, 0, 0,
@@ -643,7 +741,7 @@ void UpdateLogo(HWND hWnd) {
     }
 
     if (!Wh_GetIntSetting(L"logo.enabled")) {
-        ShowWindow(g_logoBackground, SW_HIDE);
+        ShowWindow(g_logoImage, SW_HIDE);
         return;
     }
 
@@ -652,7 +750,7 @@ void UpdateLogo(HWND hWnd) {
         Wh_Log(L"Invalid logo file!");
         g_errorMessages.push_back(std::format(L"Path to custom logo is invalid or the file doesn't exist!\n\n{}", path));
         Wh_FreeStringSetting(path);
-        ShowWindow(g_logoBackground, SW_HIDE);
+        ShowWindow(g_logoImage, SW_HIDE);
         return;
     }
 
@@ -663,20 +761,41 @@ void UpdateLogo(HWND hWnd) {
     LoadColor(L"windowColors.background", background);
 
     Wh_Log(L"Loading %ls", path);
-    g_logoImageBitmap = LoadImageFile(path, rect.right, rect.bottom, &rect);
-    if (g_logoImageBitmap) {
-        Wh_Log(L"Logo image loaded");
+
+    // Try loading animated image
+    INT width = rect.right, height = rect.bottom;
+    if (LoadAnimatedImageFile(path, width, height, &rect)) {
+        Wh_FreeStringSetting(path);
+        g_logoImageBitmap = nullptr;
+        Wh_Log(L"Animated logo image loaded");
         if (Wh_GetIntSetting(L"logo.center")) {
             PrintRect(L"Logo position before centering", rect);
             rect.left = (clientRect.right - clientRect.left) / 2 - rect.right / 2;
+            PrintRect(L"Logo position after centering", rect);
         }
         MoveWindow(g_logoImage, rect.left, rect.top, rect.right, rect.bottom, TRUE);
-        PrintRect(L"Logo position", rect);
+        g_gif.frame = 0;
+        g_gif.img->SelectActiveFrame(&g_gif.dim, g_gif.frame);
+        SetTimer(g_logoImage, g_gif.timerId, ClampDelayMs(g_gif.delays10ms[g_gif.frame % g_gif.count]), nullptr);
     } else {
-        Wh_Log(L"Failed to load logo: %ls", GetLastError());
+        g_gif = {};
+        g_logoImageBitmap = LoadStaticImageFile(path, rect.right, rect.bottom, &rect);
+        Wh_FreeStringSetting(path);
+        if (g_logoImageBitmap) {
+            Wh_Log(L"Logo image loaded");
+            if (Wh_GetIntSetting(L"logo.center")) {
+                PrintRect(L"Logo position before centering", rect);
+                rect.left = (clientRect.right - clientRect.left) / 2 - rect.right / 2;
+            }
+            MoveWindow(g_logoImage, rect.left, rect.top, rect.right, rect.bottom, TRUE);
+            PrintRect(L"Logo position", rect);
+        } else {
+            Wh_Log(L"Failed to load logo: %ls", GetLastError());
+        }
     }
-    Wh_FreeStringSetting(path);
-    ShowWindow(g_logoBackground, SW_SHOW);
+    g_logoImageRect = rect;
+    g_logoImageRect.right += g_logoImageRect.left;
+    g_logoImageRect.bottom += g_logoImageRect.top;
     ShowWindow(g_logoImage, SW_SHOW);
 }
 
@@ -687,8 +806,6 @@ void UpdateZIndex(HWND hWnd, HWND item, std::wstring& insertAfterStr) {
             insertAfter = HWND_TOP;
         } else if (insertAfterStr == L"Bottom") {
             insertAfter = HWND_BOTTOM;
-        } else if (insertAfterStr == L"LogoBackground") {
-            insertAfter = g_logoBackground;
         } else if (insertAfterStr == L"LogoImage") {
             insertAfter = g_logoImage;
         } else {
@@ -727,6 +844,8 @@ void UpdateControls(HWND hWnd) {
             if (!item) {
                 continue;
             }
+
+            entry.second.hWnd = item;
 
             Wh_Log(L"Found child window %ls (%d)", id->first.c_str(), id->second);
 
@@ -823,14 +942,14 @@ void Update(HWND hWnd) {
     SetCustomIcon(hWnd);
     Wh_Log(L"UPDATING POSITION");
     UpdatePosition(hWnd);
-    Wh_Log(L"UPDATING LOGO");
-    UpdateLogo(hWnd);
     Wh_Log(L"UPDATING CONTROLS");
     UpdateControls(hWnd);
     Wh_Log(L"UPDATING TITLE");
     UpdateTitle(hWnd);
     Wh_Log(L"UPDATING WINDOW COLORS");
     UpdateWindowColors(hWnd);
+    Wh_Log(L"UPDATING LOGO");
+    UpdateLogo(hWnd);
     Wh_Log(L"DONE");
 }
 
@@ -841,11 +960,85 @@ void ShowErrorsIfAny(HWND hWnd) {
     g_errorMessages.clear();
 }
 
+HBITMAP CapturePixelsToBitmap(const RECT& rect)
+{
+    RECT clientRect{};
+    GetClientRect(g_mainWindow, &clientRect);
+    const INT W = clientRect.right;
+    const INT H = clientRect.bottom;
+
+    HDC hdc = GetDC(g_mainWindow);
+    if (!hdc) {
+        return nullptr;
+    }
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = W;
+    bmi.bmiHeader.biHeight = -H;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* fullBits = nullptr;
+    HBITMAP fullBmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &fullBits, nullptr, 0);
+    if (!fullBmp) {
+        ReleaseDC(g_mainWindow, hdc);
+        return nullptr;
+    }
+
+    HDC fullDC = CreateCompatibleDC(hdc);
+    HGDIOBJ oldFull = SelectObject(fullDC, fullBmp);
+
+    BOOL ok = FALSE;
+#if defined(PW_RENDERFULLCONTENT)
+    ok = PrintWindow(g_mainWindow, fullDC, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
+#else
+    ok = PrintWindow(g_mainWindow, fullDC, PW_CLIENTONLY);
+#endif
+
+    if (!ok) {
+        BitBlt(fullDC, 0, 0, W, H, hdc, 0, 0, SRCCOPY);
+    }
+
+    const INT width  = rect.right  - rect.left;
+    const INT height = rect.bottom - rect.top;
+
+    BITMAPINFO bmiCut = bmi;
+    bmiCut.bmiHeader.biWidth  = width;
+    bmiCut.bmiHeader.biHeight = -height;
+
+    void* cutBits = nullptr;
+    HBITMAP cutBmp = CreateDIBSection(hdc, &bmiCut, DIB_RGB_COLORS, &cutBits, nullptr, 0);
+    if (!cutBmp) {
+        SelectObject(fullDC, oldFull);
+        DeleteObject(fullBmp);
+        DeleteDC(fullDC);
+        ReleaseDC(g_mainWindow, hdc);
+        return nullptr;
+    }
+
+    HDC cutDC = CreateCompatibleDC(hdc);
+    HGDIOBJ oldCut = SelectObject(cutDC, cutBmp);
+
+    BitBlt(cutDC, 0, 0, width, height, fullDC, rect.left, rect.top, SRCCOPY);
+
+    SelectObject(fullDC, oldFull);
+    SelectObject(cutDC, oldCut);
+    DeleteDC(fullDC);
+    DeleteDC(cutDC);
+    DeleteObject(fullBmp);
+    ReleaseDC(g_mainWindow, hdc);
+
+    return cutBmp;
+}
+
 // Window processing for both main window and its children (dwRefData = 0 is main window, anything else - child)
 LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR dwRefData) {
     static COLORREF c_windowBackgroundColor, c_separatorColor;
     static HBRUSH c_windowBackgroundBrush, c_separatorBrush;
     static const INT separatorId = g_controlIds.find(L"Separator")->second;
+    static HBITMAP behindLogoImage = nullptr;
 
     if (c_windowBackgroundColor != g_windowBackgroundColor) {
         c_windowBackgroundBrush = CreateSolidBrush(g_windowBackgroundColor);
@@ -858,30 +1051,76 @@ LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
     }
 
     if ((uMsg == WM_CTLCOLORSTATIC || uMsg == WM_CTLCOLORBTN) && dwRefData == 0) { // Set background color for controls
-        SetBkMode((HDC)wParam, TRANSPARENT);
+        HDC hdc = (HDC)wParam;
+        HWND hCtrl = (HWND)lParam;
+        SetBkMode(hdc, TRANSPARENT);
+        for (auto& control : g_defaultWindowAttributes) {
+            if (control.second.hWnd == hCtrl) {
+                auto found = g_definedWindowAttributes.find(control.first);
+                if (found != g_definedWindowAttributes.end() && found->second.hasTextColor) {
+                    SetTextColor(hdc, found->second.textColor);
+                } else if (g_hasDefaultTextColor) {
+                    SetTextColor(hdc, g_windowDefaultTextColor);
+                }
+            }
+        }
         return reinterpret_cast<LRESULT>(c_windowBackgroundBrush);
+    } else if (uMsg == WM_ERASEBKGND && dwRefData == LOGO_IMAGE_ID) {
+        return FALSE;
     } else if (uMsg == WM_PAINT) {
         if (dwRefData == 0) { // Set background color for window itself
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hWnd, &ps);
-            FillRect(hdc, &ps.rcPaint, c_windowBackgroundBrush);
-            EndPaint(hWnd, &ps);
-            return 0;
-        } else if (dwRefData == LOGO_IMAGE_ID && g_logoImageBitmap) { // Draw custom logo
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hWnd, &ps);
-            // HDC hdcMem = CreateCompatibleDC(hdc);
-            // HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, custom_logo);
-            // BITMAP bmp;
-            // GetObjectW(custom_logo, sizeof(bmp), &bmp);
-            // BitBlt(hdc, 0, 0, bmp.bmWidth, bmp.bmHeight, hdcMem, 0, 0, SRCCOPY);
-            // SelectObject(hdcMem, hbmOld);
-            // DeleteDC(hdcMem);
-            Gdiplus::Graphics graphics(hdc);
-            graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-            graphics.DrawImage(g_logoImageBitmap.get(), 0, 0, g_logoImageBitmap->GetWidth(), g_logoImageBitmap->GetHeight());
-            EndPaint(hWnd, &ps);
-            return 0;
+            if (g_colorizeBackground) {
+                PAINTSTRUCT ps;
+                HDC hdc = BeginPaint(hWnd, &ps);
+                FillRect(hdc, &ps.rcPaint, c_windowBackgroundBrush);
+                EndPaint(hWnd, &ps);
+                return FALSE;
+            }
+        } else if (dwRefData == LOGO_IMAGE_ID && (g_logoImageBitmap || g_gif.valid())) { // Draw custom logo
+            if (g_gif.valid()) {
+                if (!g_canAnimatedDrawLogo || !behindLogoImage) {
+                    return FALSE;
+                }
+                PAINTSTRUCT ps;
+                HDC hdc = BeginPaint(hWnd, &ps);
+
+                RECT rc;
+                GetClientRect(hWnd, &rc);
+                INT width = rc.right;
+                INT height = rc.bottom;
+
+                HDC memDC = CreateCompatibleDC(hdc);
+                HBITMAP memBmp = CreateCompatibleBitmap(hdc, width, height);
+                HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
+
+                { // Paint background
+                    HDC srcDC = CreateCompatibleDC(hdc);
+                    HBITMAP oldSrc = (HBITMAP)SelectObject(srcDC, behindLogoImage);
+                    BITMAP bm;
+                    GetObjectW(behindLogoImage, sizeof(bm), &bm);
+                    BitBlt(memDC, 0, 0, bm.bmWidth, bm.bmHeight, srcDC, 0, 0, SRCCOPY);
+                    SelectObject(srcDC, oldSrc);
+                    DeleteDC(srcDC);
+                }
+
+                Gdiplus::Graphics g(memDC);
+                g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                g.DrawImage(g_gif.img.get(), 0, 0, g_gif.width, g_gif.height);
+
+                BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
+                SelectObject(memDC, oldBmp);
+                DeleteObject(memBmp);
+                DeleteDC(memDC);
+                EndPaint(hWnd, &ps);
+            } else {
+                PAINTSTRUCT ps;
+                HDC hdc = BeginPaint(hWnd, &ps);
+                Gdiplus::Graphics g(hdc);
+                g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                g.DrawImage(g_logoImageBitmap.get(), 0, 0, g_logoImageBitmap->GetWidth(), g_logoImageBitmap->GetHeight());
+                EndPaint(hWnd, &ps);
+            }
+            return FALSE;
         } else if (static_cast<INT>(dwRefData) == separatorId && g_hasSeparatorColor) { // Recolor separator
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
@@ -892,13 +1131,40 @@ LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
             mRect.right += 1;
             FrameRect(hdc, &mRect, c_separatorBrush);
             EndPaint(hWnd, &ps);
-            return 0;
+            return FALSE;
         }
     } else if (uMsg == WM_DESTROY && dwRefData == 0) {
         DeleteObject(c_windowBackgroundBrush);
         DeleteObject(c_separatorBrush);
         c_windowBackgroundBrush = nullptr;
         c_separatorBrush = nullptr;
+        behindLogoImage = nullptr;
+    } else if (uMsg == WM_CAPTURE_LOGO_BACKGROUND && dwRefData == 0) {
+        if (!g_canAnimatedDrawLogo && g_gif.valid()) {
+            RECT rect;
+            GetClientRect(hWnd, &rect);
+            MapWindowPoints(g_logoImage, g_mainWindow, reinterpret_cast<POINT*>(&rect), 2);
+            ShowWindow(g_mainWindow, SW_SHOW);
+            behindLogoImage = CapturePixelsToBitmap(rect);
+            if (!behindLogoImage) {
+                Wh_Log(L"Failed to capture background for animated logo");
+            }
+            g_canAnimatedDrawLogo = TRUE;
+            RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE);
+        }
+    } else if (uMsg == WM_TIMER) {
+        if (g_gif.valid() && wParam == g_gif.timerId && dwRefData == LOGO_IMAGE_ID) {
+            if (!g_canAnimatedDrawLogo) {
+                return FALSE;
+            }
+            g_gif.frame = (g_gif.frame + 1) % g_gif.count;
+            g_gif.img->SelectActiveFrame(&g_gif.dim, g_gif.frame);
+            SetTimer(hWnd, g_gif.timerId, ClampDelayMs(g_gif.delays10ms[g_gif.frame]), nullptr);
+            RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE);
+            return FALSE;
+        }
+    } else if (uMsg == WM_DESTROY && dwRefData == LOGO_IMAGE_ID) {
+        KillGifTimer();
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -933,6 +1199,9 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd, LONG idObject,
         UnhookWinEvent(g_hHook); // No more needed
         g_hHook = nullptr;
         ShowErrorsIfAny(hWnd);
+        if (g_removeFirstFocus) {
+            SetFocus(nullptr);
+        }
     }
 }
 
@@ -964,10 +1233,6 @@ void Wh_ModUninit() {
         RemoveWindowSubclass(g_logoImage, WndSubclassProc, 1);
         DeleteLogoImage();
         PostMessageW(g_logoImage, WM_CLOSE, 0, 0);
-    }
-    if (IsWindow(g_logoBackground)) {
-        RemoveWindowSubclass(g_logoBackground, WndSubclassProc, 1);
-        PostMessageW(g_logoBackground, WM_CLOSE, 0, 0);
     }
     if (IsWindow(g_mainWindow)) {
         EnumWindows(EnumMessageBoxProc, 0);
