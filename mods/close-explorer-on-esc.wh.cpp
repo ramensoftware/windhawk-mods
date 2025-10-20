@@ -1,11 +1,10 @@
 // ==WindhawkMod==
 // @id              close-explorer-on-esc
-// @name            Close Explorer on Esc (Safe)
+// @name            Close Explorer on Esc
 // @description     Press Esc in File Explorer to close the window; ignores rename and input fields.
 // @version         1.1
 // @author          lieyanbang
 // @github          https://github.com/lieyanbang
-// @twitter         https://twitter.com/lieyanbang1
 // @homepage        https://lieyanbang.com/
 // @include         explorer.exe
 // @compilerOptions -lcomdlg32
@@ -13,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Close Explorer on Esc (Safe)
+# Close Explorer on Esc
 
 **ENGLISH**
 
@@ -168,3 +167,4 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
 }
+
