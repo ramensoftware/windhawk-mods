@@ -2,7 +2,7 @@
 // @id              close-explorer-on-esc
 // @name            Close Explorer on Esc
 // @description     Press Esc in File Explorer to close the window; ignores rename and input fields.
-// @version         1.1
+// @version         1.2
 // @author          lieyanbang
 // @github          https://github.com/lieyanbang
 // @homepage        https://lieyanbang.com/
@@ -62,11 +62,16 @@ If the focused control is safe (not text editing, not renaming), it sends `WM_CL
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 
-static HHOOK g_hook = nullptr;
-static bool  g_allowImeCandidate = false;
+// ---------- settings ----------
+static bool g_allowImeCandidate = false;
 
-// --- Helper functions ---
+// ---------- hook thread state ----------
+static HHOOK  g_hook           = nullptr;
+static HANDLE g_hookThread     = nullptr;
+static DWORD  g_hookThreadId   = 0;
+static HANDLE g_hookReadyEvent = nullptr; // signaled after SetWindowsHookEx
 
+// ---------- helpers ----------
 static bool IsClass(HWND h, LPCWSTR cls) {
     if (!h) return false;
     WCHAR buf[64] = {};
@@ -114,13 +119,16 @@ static bool IsImeCandidate(HWND hFocus, HWND explorerTop) {
 }
 
 static bool SafeToClose(HWND explorerTop) {
+    if (!explorerTop) return false;
+
     GUITHREADINFO gi = { sizeof(gi) };
     DWORD tid = GetWindowThreadProcessId(explorerTop, nullptr);
     if (!GetGUIThreadInfo(tid, &gi)) return false;
-    HWND hFocus = gi.hwndFocus;
 
+    HWND hFocus = gi.hwndFocus;
     if (!IsDescendant(explorerTop, hFocus)) return false;
     if (IsInlineRename(hFocus)) return false;
+
     if (IsTextInput(hFocus)) {
         if (!(g_allowImeCandidate && IsImeCandidate(hFocus, explorerTop)))
             return false;
@@ -128,8 +136,7 @@ static bool SafeToClose(HWND explorerTop) {
     return true;
 }
 
-// --- Keyboard hook ---
-
+// ---------- keyboard hook ----------
 static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION) {
         const KBDLLHOOKSTRUCT* ks = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
@@ -145,26 +152,69 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lPa
     return CallNextHookEx(g_hook, code, wParam, lParam);
 }
 
-// --- Windhawk entry points ---
+// ---------- hook thread ----------
+static DWORD WINAPI HookThreadProc(LPVOID) {
+    // Obtain the HMODULE of this DLL for SetWindowsHookEx.
+    HMODULE hMod = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&LowLevelKeyboardProc),
+        &hMod);
 
+    g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
+    if (g_hookReadyEvent) SetEvent(g_hookReadyEvent);
+
+    // Message loop required by WH_KEYBOARD_LL delivery.
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (g_hook) {
+        UnhookWindowsHookEx(g_hook);
+        g_hook = nullptr;
+    }
+    return 0;
+}
+
+// ---------- windhawk entry points ----------
 static void LoadSettings() {
     g_allowImeCandidate = Wh_GetIntSetting(L"allowWhenImeCandidate") != 0;
 }
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandleW(nullptr), 0);
+
+    g_hookReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hookReadyEvent) return FALSE;
+
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookThreadId);
+    if (!g_hookThread) {
+        CloseHandle(g_hookReadyEvent);
+        g_hookReadyEvent = nullptr;
+        return FALSE;
+    }
+
+    // Wait for the hook attempt to complete (install success or fail).
+    WaitForSingleObject(g_hookReadyEvent, 5000);
+    CloseHandle(g_hookReadyEvent);
+    g_hookReadyEvent = nullptr;
+
     return g_hook != nullptr;
 }
 
 void Wh_ModUninit() {
-    if (g_hook) {
-        UnhookWindowsHookEx(g_hook);
-        g_hook = nullptr;
+    if (g_hookThreadId) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_hookThread) {
+        WaitForSingleObject(g_hookThread, 3000);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
     }
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
 }
-
