@@ -283,7 +283,7 @@ cte_offset_t get_window_handle_offsets[] = {
     {124, ANY_MINOR, 0x18c, 0x318},
     {130, ANY_MINOR, 0x18c, 0x318},
     {131, ANY_MINOR, 0x194, 0x328},
-    {140, ANY_MINOR, 0x194, 0x328}
+    {LAST_TESTED_CEF_VERSION, ANY_MINOR, 0x194, 0x328}
 };
 
 cte_offset_t set_background_color_offsets[] = {
