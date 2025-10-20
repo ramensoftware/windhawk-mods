@@ -1144,6 +1144,28 @@
                 "version": "1.4.0"
             }
         },
+        "close-explorer-on-esc": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1760967406000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1760967406000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "lieyanbang",
+                "compilerOptions": "-lcomdlg32",
+                "description": "Press Esc in File Explorer to close the window; ignores rename and input fields.",
+                "github": "https://github.com/lieyanbang",
+                "homepage": "https://lieyanbang.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Close Explorer on Esc",
+                "version": "1.2"
+            }
+        },
         "cmd-folder-larp": {
             "details": {
                 "defaultSorting": 126,
