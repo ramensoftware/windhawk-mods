@@ -30,7 +30,7 @@ Supported logo image formats:
 * BMP
 * JPEG (.jpg, .jpeg, .jpe, .jfif)
 * PNG
-* GIF (supports animation and transparent background too\*)
+* GIF (supports animation and transparent background too)
 * TIFF (.tif, .tiff)
 * ICO
 * WMF / EMF
