@@ -42,8 +42,6 @@ Available palceholders:
 Examples with `{default...}` placeholders.
 * `{default.Copyright::0/1} Yoursoft {default.Copyright::12}` - take the copyright sign (get text from 0th to 1th place), show your text and add back the remaining text. This basically replaces "Microsoft" word.
 
-To restore the **license info** link, use <A> and </A> tags (similar to HTML): - `Click <A>here</A> to view license information`.
-
 # Screenshots
 
 ![Running cat](https://i.imgur.com/uGKh0wE.gif)
@@ -52,10 +50,12 @@ To restore the **license info** link, use <A> and </A> tags (similar to HTML): -
 
 ![all dark](https://i.imgur.com/ZEgkLqK.gif)
 
-# Note
+# Notes
 
 * Information about previous label texts are not retained. To restore the original content, simply restart *winver.exe*.
 * Gifs with transparent background are mostly stable, the issue is that sometimes background could be black. Also note that gifs do not support controls being in front (if you change z-indexing), the gif will be always *drawn* on top!
+* To restore the **license info** link, use <A> and </A> tags (similar to HTML): - `Click <A>here</A> to view license information`.
+* If you want to hide the current logo, set background color to the same color (240, 240, 240) and the logo will get overdrawn.
 
 */
 // ==/WindhawkModReadme==
@@ -205,7 +205,7 @@ To restore the **license info** link, use <A> and </A> tags (similar to HTML): -
 #include <vector>
 #include <dwmapi.h>
 
-#define MOD_TITLE L"WindHawk: Customozimable WinVer"
+#define MOD_TITLE L"WindHawk: Customizable WinVer"
 #define LOGO_BACKGROUND_ID 100
 #define LOGO_IMAGE_ID 101
 #define MAX_LOGO_HEIGHT 72
