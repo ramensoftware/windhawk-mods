@@ -84,8 +84,6 @@ Examples with `{default...}` placeholders.
   - path: "C:/Windows/System32/DisplaySystemToastIcon.png"
     $name: "Path to the logo"
     $description: "Check mod's description for supported image formats"
-  - clearBackground: TRUE
-    $name: "Clear logo's background for transparent animated gifs"
   $name: "Custom logo"
 - startPosition:
   - enabled: TRUE
