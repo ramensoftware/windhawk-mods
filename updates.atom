@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-17T09:01:02.000Z</updated>
+    <updated>2025-10-20T06:03:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.5]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#c09f0f7e253100a65cff60ea5399a8d5074623c9</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-10-20T06:03:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.75</li>
+<li>Fix Basic/Classic frames being invisible on Spotify 1.2.71+ / CEF 139+</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[F1 Blocker 0.0.2]]></title>
         <id>https://windhawk.net/mods/f1-blocker#68dc19da298b22c016ad7d0613b05eef66239956</id>
@@ -381,17 +395,6 @@ I've never used Discord’s Registered Games other than to disable things on the
         <author>
             <name>Xetrill</name>
             <uri>https://github.com/Xetrill</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Winver Custom Text 1.0.1]]></title>
-        <id>https://windhawk.net/mods/winver-custom-text#33693f48afb4a91bd46553f4b0e3adb280585f48</id>
-        <link href="https://windhawk.net/mods/winver-custom-text"/>
-        <updated>2025-10-05T05:02:54.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixed README, and fixed up some other things</p>]]></content>
-        <author>
-            <name>Thomas Shrader</name>
-            <uri>https://github.com/ilikecoding-197</uri>
         </author>
     </entry>
 </feed>

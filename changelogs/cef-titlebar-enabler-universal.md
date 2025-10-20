@@ -1,3 +1,8 @@
+## 1.5 ([Oct 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c09f0f7e253100a65cff60ea5399a8d5074623c9/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Add support for Spotify 1.2.75
+* Fix Basic/Classic frames being invisible on Spotify 1.2.71+ / CEF 139+
+
 ## 1.4 ([Oct 5, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3e8b6dcf0692df8cdba401d7d6ef4ee54ce5bdbe/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Add support for Spotify 1.2.72 to 1.2.74
