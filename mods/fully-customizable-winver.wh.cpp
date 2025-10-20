@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              fully-customizable-winver
+// @id              fully-custom-winver
 // @name            Fully Customizable WinVer
 // @description     Fully customize your winver.exe by even "replacing" the logo!
 // @version         1.0.0
@@ -16,11 +16,13 @@
 # Customizable winver.exe
 
 Features:
-* Modify any text
+* Modify all controls (text, color, location, size, visibility)
 * Custom logo (it just creates a custom child window in the logo area, transparency is supported!)
 * Change the title
 * Change window parameters (make it always top, custom size, open location)
-* Change background colors
+* Change background color
+
+**!! Please check notes below to not get confused about some things !!**
 
 All control internal (user) IDs were identified using **winspy** application.
 
@@ -52,10 +54,12 @@ Examples with `{default...}` placeholders.
 
 # Notes
 
+* Tested only on Windows 11!
 * Information about previous label texts are not retained. To restore the original content, simply restart *winver.exe*.
-* Gifs with transparent background are mostly stable, the issue is that sometimes background could be black. Also note that gifs do not support controls being in front (if you change z-indexing), the gif will be always *drawn* on top!
+* Gifs do not support controls being in front (if you change z-indexing), the gif will be always *drawn* on top!
 * To restore the **license info** link, use <A> and </A> tags (similar to HTML): - `Click <A>here</A> to view license information`.
 * If you want to hide the current logo, set background color to the same color (240, 240, 240) and the logo will get overdrawn.
+* **Settings might not apply correctly (via "Save settings" button) if you have winver.exe opened! Better to restart it.**
 
 */
 // ==/WindhawkModReadme==
@@ -215,13 +219,8 @@ Examples with `{default...}` placeholders.
 
 #define WM_CAPTURE_LOGO_BACKGROUND WM_USER + 1
 
-#ifndef WH_EDITING
 #define PrintRect(name, rect) Wh_Log(L"%ls RECT -> [%d, %d, %d, %d], calucated width and height -> [%d, %d]", name, rect.left, rect.top, rect.right, rect.bottom, rect.right - rect.left, rect.bottom - rect.top)
-#define PrintRect2(name, rect) Wh_Log(L"%ls RECT -> [%d, %d, %d, %d]", name, rect.left, rect.top, rect.right, rect.bottom)
-#else
-#define PrintRect(name, rect) ((void)0)
-#define PrintRect2(name, rect) ((void)0)
-#endif
+#define PrintRect2(name, rect) Wh_Log(L"%ls RECT* -> [%d, %d, %d, %d], calucated width and height -> [%d, %d]", name, rect.left, rect.top, rect.right + rect.left, rect.bottom + rect.top, rect.right, rect.bottom)
 
 struct WindowAttributes {
     std::wstring id, label;
@@ -268,19 +267,18 @@ struct GifAnimation {
     }
 };
 
-LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
 
 std::unordered_map<std::wstring, WindowAttributes> g_defaultWindowAttributes;
 std::unordered_map<std::wstring, DefinedWindowAttributes> g_definedWindowAttributes;
 std::vector<std::wstring> g_errorMessages;
-HWINEVENTHOOK g_hHook = nullptr;
-HWND g_mainWindow = nullptr, g_logoImage = nullptr;
+HWINEVENTHOOK g_hHook;
+HWND g_mainWindow, g_logoImage;
 std::unique_ptr<Gdiplus::Bitmap> g_logoImageBitmap;
-RECT g_logoImageRect; 
 GifAnimation g_gif;
-
-COLORREF g_windowBackgroundColor = DEFAULT_BACKGROUND, g_windowDefaultTextColor = DEFAULT_TEXT_COLOR, g_separatorColor = NULL;
-BOOL g_hasSeparatorColor = FALSE, g_colorizeBackground = FALSE, g_clearLogoBackground = FALSE, g_canAnimatedDrawLogo = FALSE, g_hasDefaultTextColor = FALSE, g_removeFirstFocus = FALSE;
+ULONG_PTR g_gdiToken;
+COLORREF g_windowBackgroundColor = DEFAULT_BACKGROUND, g_windowDefaultTextColor = DEFAULT_TEXT_COLOR, g_separatorColor;
+BOOL g_hasSeparatorColor, g_colorizeBackground, g_canAnimatedDrawLogo, g_hasDefaultTextColor, g_removeFirstFocus;
 
 INT DefaultPosition(INT i, const std::wstring& id) {
     auto dwa = g_defaultWindowAttributes[id];
@@ -355,7 +353,7 @@ WindowAttributes GetWindowAttributes(HWND hWnd, const std::wstring& id) {
         attr.height = rect.bottom - rect.top;
     }
 
-    wchar_t buffer[256];
+    WCHAR buffer[256];
     INT len = GetWindowTextW(hWnd, buffer, 256);
     if (len > 0) {
         attr.label.assign(buffer, len);
@@ -428,7 +426,7 @@ void LoadSettings() {
 }
 
 RECT LoadPosition(const std::wstring& settingsPrefix, LONG minWidth, LONG minHeight) {
-    RECT rect{};
+    RECT rect;
     rect.left = Wh_GetIntSetting((settingsPrefix + L".x").c_str());
     rect.top = Wh_GetIntSetting((settingsPrefix + L".y").c_str());
     rect.right = Wh_GetIntSetting((settingsPrefix + L".width").c_str());
@@ -538,13 +536,17 @@ void CalculateImageSize(Gdiplus::Image* img, INT& width, INT& height, RECT* rect
     }
 }
 
-std::unique_ptr<Gdiplus::Bitmap> LoadStaticImageFile(const std::wstring& path, INT width, INT height, RECT* rect) {
-    static ULONG_PTR gdiToken = 0;
-    if (gdiToken == 0) {
+BOOL InitGdi() {
+    if (g_gdiToken == 0) {
         Gdiplus::GdiplusStartupInput input;
-        if (Gdiplus::GdiplusStartup(&gdiToken, &input, nullptr) != Gdiplus::Ok) {
-            return nullptr;
-        }
+        return Gdiplus::GdiplusStartup(&g_gdiToken, &input, nullptr) == Gdiplus::Ok;
+    }
+    return TRUE;
+}
+
+std::unique_ptr<Gdiplus::Bitmap> LoadStaticImageFile(const std::wstring& path, INT width, INT height, RECT* rect) {
+    if (!InitGdi()) {
+        return nullptr;
     }
 
     std::unique_ptr<Gdiplus::Image> img(Gdiplus::Image::FromFile(path.c_str(), FALSE));
@@ -562,12 +564,8 @@ std::unique_ptr<Gdiplus::Bitmap> LoadStaticImageFile(const std::wstring& path, I
 }
 
 BOOL LoadAnimatedImageFile(const std::wstring& path, INT& width, INT& height, RECT* rect) {
-    static ULONG_PTR gdiToken = 0;
-    if (gdiToken == 0) {
-        Gdiplus::GdiplusStartupInput in;
-        if (Gdiplus::GdiplusStartup(&gdiToken, &in, nullptr) != Gdiplus::Ok) {
-            return FALSE;
-        }
+    if (!InitGdi()) {
+        return FALSE;
     }
 
     std::unique_ptr<Gdiplus::Image> img(Gdiplus::Image::FromFile(path.c_str(), FALSE));
@@ -643,14 +641,11 @@ void CenterWindow(HWND hWnd, RECT& rect, INT& x, INT& y) {
     y = monitorRect->top  + ((monitorRect->bottom - monitorRect->top) - (rect.bottom - rect.top)) / 2;
 }
 
-void FullyRedrawWindow(HWND hWnd) {
-    RedrawWindow(hWnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_ERASENOW);
-}
-
 void UpdatePosition(HWND hWnd) {
     RECT rectWindow;
-    GetWindowRect(hWnd, &rectWindow);
+
     if (Wh_GetIntSetting(L"windowSize.enabled")) {
+        GetWindowRect(hWnd, &rectWindow);
         INT width = Wh_GetIntSetting(L"windowSize.width"), height = Wh_GetIntSetting(L"windowSize.height");
         UINT flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOREPOSITION;
         if (width <= 0 && height <= 0) {
@@ -667,6 +662,7 @@ void UpdatePosition(HWND hWnd) {
             SetWindowPos(hWnd, nullptr, 0, 0, width, height, flags);
         }
     }
+
     if (Wh_GetIntSetting(L"startPosition.enabled")) {
         GetWindowRect(hWnd, &rectWindow);
         RECT rectOffset = LoadPosition(
@@ -686,7 +682,7 @@ void UpdatePosition(HWND hWnd) {
 }
 
 void UpdateWindowColors(HWND hWnd) {
-    COLORREF color;
+    COLORREF color; // Reuable variable
     LoadColor(L"windowColors.title", color, GetSysColor(COLOR_CAPTIONTEXT));
     DwmSetWindowAttribute(hWnd, DWMWA_TEXT_COLOR, &color, sizeof(color));
     LoadColor(L"windowColors.bar", color, DEFAULT_BAR_BACKGROUND);
@@ -709,34 +705,28 @@ void UpdateTitle(HWND hWnd) {
     Wh_FreeStringSetting(titleText);
 }
 
-void UpdateLogo(HWND hWnd) {
+void PostGifBackgroundRedrawMessage(HWND hWnd) {
+    g_canAnimatedDrawLogo = FALSE;
+    PostMessageW(hWnd, WM_CAPTURE_LOGO_BACKGROUND, 0, 0);
+}
+
+void UpdateLogo(HWND hWnd, BOOL processBackground) {
     if (g_logoImage) {
         DeleteLogoImage();
         ShowWindow(g_logoImage, SW_HIDE);
     }
 
-    g_canAnimatedDrawLogo = FALSE;
-    PostMessageW(hWnd, WM_CAPTURE_LOGO_BACKGROUND, 0, 0);
-
-    g_clearLogoBackground = Wh_GetIntSetting(L"logo.clearBackground");
-    Wh_Log(L"Clear background on every gif frame -> %d", g_clearLogoBackground);
+    if (processBackground) {
+        KillGifTimer();
+        PostGifBackgroundRedrawMessage(hWnd);
+    }
 
     RECT clientRect;
     GetClientRect(hWnd, &clientRect);
 
     if (!g_logoImage) {
-        g_logoImage = CreateWindowExW(
-            0,
-            WC_STATICW,
-            L"",
-            WS_CHILD | WS_VISIBLE,
-            0, 0, 0, 0,
-            hWnd,
-            (HMENU)1,
-            GetModuleHandleW(nullptr),
-            nullptr
-        );
-        SetWindowSubclass(g_logoImage, WndSubclassProc, 1, LOGO_IMAGE_ID);
+        g_logoImage = CreateWindowExW(0, WC_STATICW, L"", WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, hWnd, (HMENU)1, GetModuleHandleW(nullptr), nullptr);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(g_logoImage, WndSubclassProc, LOGO_IMAGE_ID);
         Wh_Log(L"Logo's image handle -> %p", g_logoImage);
     }
 
@@ -757,71 +747,71 @@ void UpdateLogo(HWND hWnd) {
     RECT rect = LoadPosition(L"logo", 0L, -1L);
     PrintRect2(L"Logo position from settings", rect);
 
-    COLORREF background = DEFAULT_BACKGROUND;
-    LoadColor(L"windowColors.background", background);
-
     Wh_Log(L"Loading %ls", path);
 
     // Try loading animated image
     INT width = rect.right, height = rect.bottom;
     if (LoadAnimatedImageFile(path, width, height, &rect)) {
+        Wh_Log(L"Image type -> animated");
         Wh_FreeStringSetting(path);
         g_logoImageBitmap = nullptr;
         Wh_Log(L"Animated logo image loaded");
         if (Wh_GetIntSetting(L"logo.center")) {
-            PrintRect(L"Logo position before centering", rect);
+            PrintRect2(L"Logo position before centering", rect);
             rect.left = (clientRect.right - clientRect.left) / 2 - rect.right / 2;
-            PrintRect(L"Logo position after centering", rect);
+            PrintRect2(L"Logo position after centering", rect);
         }
         MoveWindow(g_logoImage, rect.left, rect.top, rect.right, rect.bottom, TRUE);
         g_gif.frame = 0;
         g_gif.img->SelectActiveFrame(&g_gif.dim, g_gif.frame);
         SetTimer(g_logoImage, g_gif.timerId, ClampDelayMs(g_gif.delays10ms[g_gif.frame % g_gif.count]), nullptr);
+        PrintRect2(L"Logo position", rect);
     } else {
+        Wh_Log(L"Image type -> static");
         g_gif = {};
         g_logoImageBitmap = LoadStaticImageFile(path, rect.right, rect.bottom, &rect);
         Wh_FreeStringSetting(path);
         if (g_logoImageBitmap) {
             Wh_Log(L"Logo image loaded");
             if (Wh_GetIntSetting(L"logo.center")) {
-                PrintRect(L"Logo position before centering", rect);
+                PrintRect2(L"Logo position before centering", rect);
                 rect.left = (clientRect.right - clientRect.left) / 2 - rect.right / 2;
+                PrintRect2(L"Logo position after centering", rect);
             }
             MoveWindow(g_logoImage, rect.left, rect.top, rect.right, rect.bottom, TRUE);
-            PrintRect(L"Logo position", rect);
+            PrintRect2(L"Logo position", rect);
         } else {
             Wh_Log(L"Failed to load logo: %ls", GetLastError());
         }
     }
-    g_logoImageRect = rect;
-    g_logoImageRect.right += g_logoImageRect.left;
-    g_logoImageRect.bottom += g_logoImageRect.top;
     ShowWindow(g_logoImage, SW_SHOW);
 }
 
 void UpdateZIndex(HWND hWnd, HWND item, std::wstring& insertAfterStr) {
-    HWND insertAfter;
     if (insertAfterStr != L"Default") {
-        if (insertAfterStr == L"Top") {
-            insertAfter = HWND_TOP;
-        } else if (insertAfterStr == L"Bottom") {
-            insertAfter = HWND_BOTTOM;
-        } else if (insertAfterStr == L"LogoImage") {
-            insertAfter = g_logoImage;
-        } else {
-            auto _window = g_controlIds.find(insertAfterStr);
-            if (_window == g_controlIds.end()) {
-                return;
-            }
-            insertAfter = GetDlgItem(hWnd, _window->second);
-            if (!insertAfter) {
-                return;
-            }
-        }
-
-        Wh_Log(L"Z-INDEX: %p %ls", insertAfter, insertAfterStr.c_str());
-        SetWindowPos(item, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        return;
     }
+
+    HWND insertAfter;
+    if (insertAfterStr == L"Top") {
+        insertAfter = HWND_TOP;
+    } else if (insertAfterStr == L"Bottom") {
+        insertAfter = HWND_BOTTOM;
+    } else if (insertAfterStr == L"LogoImage") {
+        insertAfter = g_logoImage;
+    } else {
+        auto _window = g_controlIds.find(insertAfterStr);
+        if (_window == g_controlIds.end()) {
+            return;
+        }
+        insertAfter = GetDlgItem(hWnd, _window->second);
+        if (!insertAfter) {
+            return;
+        }
+    }
+
+    Wh_Log(L"Z-INDEX: %p %ls", insertAfter, insertAfterStr.c_str());
+    SetWindowPos(item, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
 void UpdateControls(HWND hWnd) {
@@ -846,7 +836,6 @@ void UpdateControls(HWND hWnd) {
             }
 
             entry.second.hWnd = item;
-
             Wh_Log(L"Found child window %ls (%d)", id->first.c_str(), id->second);
 
             // Modify caption
@@ -869,11 +858,10 @@ void UpdateControls(HWND hWnd) {
             // Modify Z index
             UpdateZIndex(hWnd, item, entry.second.insertAfter);
 
-            #ifndef WH_EDITING
             RECT rect;
-            GetClientRect(item, &rect);
-            PrintRect(L"Window position", rect);
-            #endif
+            GetWindowRect(item, &rect);
+            MapWindowPoints(nullptr, hWnd, reinterpret_cast<POINT*>(&rect), 2);
+            PrintRect(L"Window (new) position", rect);
         }
     }
 }
@@ -914,15 +902,14 @@ void ExpandControls(HWND hWnd, RECT originalWindowRect) {
         GetWindowRect(hWnd, &windowRect);
         INT diffX = (windowRect.right - windowRect.left) - (originalWindowRect.right - originalWindowRect.left);
         INT diffY = (windowRect.bottom - windowRect.top) - (originalWindowRect.bottom - originalWindowRect.top);
-        Wh_Log(L"Difference between old and new size: x -> %d, y -> %d", diffX, diffY);
+        Wh_Log(L"Difference between old and new item sizes: x -> %d, y -> %d", diffX, diffY);
         for (auto& control : g_defaultWindowAttributes) {
             if (control.first == L"LeftIcon") {
                 continue;
             }
-            HWND controlHWND = control.second.hWnd;
-            if (IsWindow(controlHWND)) {
+            if (IsWindow(control.second.hWnd)) {
                 RECT rect;
-                GetWindowRect(controlHWND, &rect);
+                GetWindowRect(control.second.hWnd, &rect);
                 MapWindowPoints(nullptr, hWnd, reinterpret_cast<POINT*>(&rect), 2);
                 if (control.first == L"OkButton") {
                     rect.left += diffX;
@@ -931,17 +918,19 @@ void ExpandControls(HWND hWnd, RECT originalWindowRect) {
                         rect.top += diffY;
                     }
                 }
-                MoveWindow(controlHWND, rect.left, rect.top, rect.right - rect.left + diffX, rect.bottom - rect.top, TRUE);
+                MoveWindow(control.second.hWnd, rect.left, rect.top, rect.right - rect.left + diffX, rect.bottom - rect.top, TRUE);
             }
         }
     }
 }
 
-void Update(HWND hWnd) {
+void Update(HWND hWnd, BOOL processLogobackground, BOOL repositionWindow) {
     Wh_Log(L"UPDATING CUSTOM ICON");
     SetCustomIcon(hWnd);
-    Wh_Log(L"UPDATING POSITION");
-    UpdatePosition(hWnd);
+    if (repositionWindow) {
+        Wh_Log(L"UPDATING POSITION");
+        UpdatePosition(hWnd);
+    }
     Wh_Log(L"UPDATING CONTROLS");
     UpdateControls(hWnd);
     Wh_Log(L"UPDATING TITLE");
@@ -949,7 +938,7 @@ void Update(HWND hWnd) {
     Wh_Log(L"UPDATING WINDOW COLORS");
     UpdateWindowColors(hWnd);
     Wh_Log(L"UPDATING LOGO");
-    UpdateLogo(hWnd);
+    UpdateLogo(hWnd, processLogobackground);
     Wh_Log(L"DONE");
 }
 
@@ -960,9 +949,8 @@ void ShowErrorsIfAny(HWND hWnd) {
     g_errorMessages.clear();
 }
 
-HBITMAP CapturePixelsToBitmap(const RECT& rect)
-{
-    RECT clientRect{};
+HBITMAP CapturePixelsToBitmap(const RECT& rect) {
+    RECT clientRect;
     GetClientRect(g_mainWindow, &clientRect);
     const INT W = clientRect.right;
     const INT H = clientRect.bottom;
@@ -972,7 +960,7 @@ HBITMAP CapturePixelsToBitmap(const RECT& rect)
         return nullptr;
     }
 
-    BITMAPINFO bmi{};
+    BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = W;
     bmi.bmiHeader.biHeight = -H;
@@ -990,14 +978,7 @@ HBITMAP CapturePixelsToBitmap(const RECT& rect)
     HDC fullDC = CreateCompatibleDC(hdc);
     HGDIOBJ oldFull = SelectObject(fullDC, fullBmp);
 
-    BOOL ok = FALSE;
-#if defined(PW_RENDERFULLCONTENT)
-    ok = PrintWindow(g_mainWindow, fullDC, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
-#else
-    ok = PrintWindow(g_mainWindow, fullDC, PW_CLIENTONLY);
-#endif
-
-    if (!ok) {
+    if (!PrintWindow(g_mainWindow, fullDC, PW_CLIENTONLY | PW_RENDERFULLCONTENT)) {
         BitBlt(fullDC, 0, 0, W, H, hdc, 0, 0, SRCCOPY);
     }
 
@@ -1034,11 +1015,11 @@ HBITMAP CapturePixelsToBitmap(const RECT& rect)
 }
 
 // Window processing for both main window and its children (dwRefData = 0 is main window, anything else - child)
-LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR, DWORD_PTR dwRefData) {
+LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     static COLORREF c_windowBackgroundColor, c_separatorColor;
     static HBRUSH c_windowBackgroundBrush, c_separatorBrush;
     static const INT separatorId = g_controlIds.find(L"Separator")->second;
-    static HBITMAP behindLogoImage = nullptr;
+    static HBITMAP behindLogoImage;
 
     if (c_windowBackgroundColor != g_windowBackgroundColor) {
         c_windowBackgroundBrush = CreateSolidBrush(g_windowBackgroundColor);
@@ -1052,10 +1033,9 @@ LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
     if ((uMsg == WM_CTLCOLORSTATIC || uMsg == WM_CTLCOLORBTN) && dwRefData == 0) { // Set background color for controls
         HDC hdc = (HDC)wParam;
-        HWND hCtrl = (HWND)lParam;
         SetBkMode(hdc, TRANSPARENT);
         for (auto& control : g_defaultWindowAttributes) {
-            if (control.second.hWnd == hCtrl) {
+            if (control.second.hWnd == (HWND)lParam) {
                 auto found = g_definedWindowAttributes.find(control.first);
                 if (found != g_definedWindowAttributes.end() && found->second.hasTextColor) {
                     SetTextColor(hdc, found->second.textColor);
@@ -1078,7 +1058,7 @@ LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
             }
         } else if (dwRefData == LOGO_IMAGE_ID && (g_logoImageBitmap || g_gif.valid())) { // Draw custom logo
             if (g_gif.valid()) {
-                if (!g_canAnimatedDrawLogo || !behindLogoImage) {
+                if (!g_canAnimatedDrawLogo) {
                     return FALSE;
                 }
                 PAINTSTRUCT ps;
@@ -1093,7 +1073,7 @@ LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
                 HBITMAP memBmp = CreateCompatibleBitmap(hdc, width, height);
                 HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
 
-                { // Paint background
+                if (behindLogoImage) { // Paint background
                     HDC srcDC = CreateCompatibleDC(hdc);
                     HBITMAP oldSrc = (HBITMAP)SelectObject(srcDC, behindLogoImage);
                     BITMAP bm;
@@ -1144,7 +1124,9 @@ LRESULT CALLBACK WndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
             RECT rect;
             GetClientRect(hWnd, &rect);
             MapWindowPoints(g_logoImage, g_mainWindow, reinterpret_cast<POINT*>(&rect), 2);
-            ShowWindow(g_mainWindow, SW_SHOW);
+            // The combination of two lines below fixes animated logo's background (it would randomly be black sometimes)
+            ShowWindow(g_mainWindow, SW_SHOW); // Force window to be shown just in case
+            Sleep(10); // Sleeping seems to help
             behindLogoImage = CapturePixelsToBitmap(rect);
             if (!behindLogoImage) {
                 Wh_Log(L"Failed to capture background for animated logo");
@@ -1179,18 +1161,18 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd, LONG idObject,
         if (!GetWindow(hWnd, GW_OWNER)) {
             g_mainWindow = hWnd;
             Wh_Log(L"Window created");
-            SetWindowSubclass(hWnd, WndSubclassProc, 1, 0);
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, WndSubclassProc, 0);
             for (auto& entry : g_controlIds) {
                 HWND item = GetDlgItem(hWnd, entry.second);
                 if (!item) {
                     Wh_Log(L"Failed to find window child (%p)", entry.second);
                     continue;
                 }
-                SetWindowSubclass(item, WndSubclassProc, 1, entry.second);
+                WindhawkUtils::SetWindowSubclassFromAnyThread(item, WndSubclassProc, entry.second);
             }
             RECT originalWindowRect;
             GetWindowRect(hWnd, &originalWindowRect);
-            Update(hWnd);
+            Update(hWnd, FALSE, TRUE);
             ExpandControls(hWnd, originalWindowRect);
         }
     } else if (g_mainWindow == hWnd) {
@@ -1202,12 +1184,13 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd, LONG idObject,
         if (g_removeFirstFocus) {
             SetFocus(nullptr);
         }
+        PostMessageW(hWnd, WM_CAPTURE_LOGO_BACKGROUND, 0, 0);
     }
 }
 
 BOOL CALLBACK EnumMessageBoxProc(HWND hwnd, LPARAM) {
     if (GetWindow(hwnd, GW_OWNER) == g_mainWindow) {
-        wchar_t cls[64];
+        WCHAR cls[64];
         GetClassNameW(hwnd, cls, _countof(cls));
         if (wcscmp(cls, L"#32770") == 0) {
             PostMessageW(hwnd, WM_CLOSE, 0, 0);
@@ -1230,21 +1213,21 @@ void Wh_ModUninit() {
     }
     // Partially reset some stuff
     if (IsWindow(g_logoImage)) {
-        RemoveWindowSubclass(g_logoImage, WndSubclassProc, 1);
         DeleteLogoImage();
         PostMessageW(g_logoImage, WM_CLOSE, 0, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_logoImage, WndSubclassProc);
     }
     if (IsWindow(g_mainWindow)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_mainWindow, WndSubclassProc);
         EnumWindows(EnumMessageBoxProc, 0);
-        RemoveWindowSubclass(g_mainWindow, WndSubclassProc, 1);
         for (auto& entry : g_controlIds) {
             HWND item = GetDlgItem(g_mainWindow, entry.second);
             if (!item) {
                 continue;
             }
-            RemoveWindowSubclass(item, WndSubclassProc, 1);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(item, WndSubclassProc);
         }
-        FullyRedrawWindow(g_mainWindow);
+        RedrawWindow(g_mainWindow, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_ERASENOW);
     }
 }
 
@@ -1252,8 +1235,8 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     LoadSettings();
     if (IsWindow(g_mainWindow)) {
-        Update(g_mainWindow);
-        FullyRedrawWindow(g_mainWindow);
+        Update(g_mainWindow, TRUE, FALSE);
+        RedrawWindow(g_mainWindow, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_ERASENOW);
         ToggleCloseButton(g_mainWindow);
         ShowErrorsIfAny(g_mainWindow);
     }
