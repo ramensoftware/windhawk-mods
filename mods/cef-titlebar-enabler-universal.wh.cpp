@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.4
+// @version         1.5
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -34,13 +34,13 @@
 * Block automatic updates
 * Use the settings tab on the mod details page to configure the features
 ## Notes
-* Supported CEF versions: 90.4 to 139
+* Supported CEF versions: 90.4 to 140
     * This mod won't work with versions before 90.4
     * Versions after 132 may work, but are not tested
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.74 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.75 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -180,6 +180,7 @@
 134: 1.2.62-1.2.69
 138: 1.2.70
 139: 1.2.71-1.2.74
+140: 1.2.75
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -209,7 +210,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 139
+#define LAST_TESTED_CEF_VERSION 140
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
@@ -219,6 +220,10 @@ using namespace std::string_view_literals;
 #define DWMSBT_MAINWINDOW 2
 #define DWMSBT_TRANSIENTWINDOW 3
 #define DWMSBT_TABBEDWINDOW 4
+
+#ifndef WS_EX_NOREDIRECTIONBITMAP // WH 1.4
+#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
+#endif
 
 struct cte_settings {
     BOOL showframe;
@@ -278,7 +283,7 @@ cte_offset_t get_window_handle_offsets[] = {
     {124, ANY_MINOR, 0x18c, 0x318},
     {130, ANY_MINOR, 0x18c, 0x318},
     {131, ANY_MINOR, 0x194, 0x328},
-    {139, ANY_MINOR, 0x194, 0x328}
+    {LAST_TESTED_CEF_VERSION, ANY_MINOR, 0x194, 0x328}
 };
 
 cte_offset_t set_background_color_offsets[] = {
@@ -1328,6 +1333,11 @@ using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_original;
 HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     Wh_Log(L"CreateWindowExW_hook");
+    // Flag added in CEF 139 / Spotify 1.2.71
+    if ((dwExStyle & WS_EX_NOREDIRECTIONBITMAP) != 0) { // This makes the GDI surface invisible
+        dwExStyle &= ~WS_EX_NOREDIRECTIONBITMAP;        // Just purge this cuz it's bad for Basic/Classic users anyway
+    }                                                   // It must be set in CreateWindowExW. Not changeable with SetWindowLongW
+
     HWND hWnd = CreateWindowExW_original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hWnd != NULL) {
         wchar_t className[256];
