@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              fully-custom-winver
+// @id              fully-customizable-winver
 // @name            Fully Customizable WinVer
 // @description     Fully customize your winver.exe by even "replacing" the logo!
 // @version         1.0.0
