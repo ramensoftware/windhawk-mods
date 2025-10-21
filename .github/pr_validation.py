@@ -186,7 +186,9 @@ def validate_metadata(path: Path, expected_author: str):
         expected = path.name.removesuffix('.cpp').removesuffix('.wh')
         if value != expected:
             warnings += add_warning(
-                path, line_number, f'Expected @{key[0]} to be "{expected}"'
+                path,
+                line_number,
+                f'Expected @{key[0]} ({value}) to match the file name ({expected}")',
             )
 
         if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', value):
