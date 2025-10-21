@@ -2425,6 +2425,29 @@
                 "version": "2"
             }
         },
+        "fully-customizable-winver": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1761044372000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1761044372000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "ItsTauTvyDas",
+                "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lole32 -luuid -ldwmapi -lcomctl32",
+                "description": "Fully customize your winver.exe by even \"replacing\" the logo!",
+                "github": "https://github.com/ItsTauTvyDas",
+                "homepage": "https://itstautvydas.me",
+                "include": [
+                    "winver.exe"
+                ],
+                "name": "Fully Customizable WinVer",
+                "twitter": "https://x.com/ItsTauTvyDas",
+                "version": "1.0.0"
+            }
+        },
         "hide-action-center-icon": {
             "details": {
                 "defaultSorting": 940,

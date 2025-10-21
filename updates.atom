@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-20T13:36:46.000Z</updated>
+    <updated>2025-10-21T10:59:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fully Customizable WinVer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/fully-customizable-winver#1388698a218ad7c8e9c9697615c6c34d759ff8c1</id>
+        <link href="https://windhawk.net/mods/fully-customizable-winver"/>
+        <updated>2025-10-21T10:59:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="customizablewinverexe">Customizable winver.exe</h1>
+<p>Features:</p>
+<ul>
+<li>Modify all controls (text, color, location, size, visibility)</li>
+<li>Custom logo (it just creates a custom child window in the logo area, transparency is supported!)</li>
+<li>Change the title</li>
+<li>Change window parameters (make it always top, custom size, open location)</li>
+<li>Change background color</li>
+</ul>
+<p><strong>!! Please check notes below to not get confused about some things !!</strong></p>
+<p>All control internal (user) IDs were identified using <strong>winspy</strong> application.</p>
+<p>Supported logo image formats:</p>
+<ul>
+<li>BMP</li>
+<li>JPEG (.jpg, .jpeg, .jpe, .jfif)</li>
+<li>PNG</li>
+<li>GIF (supports animation and transparent background too)</li>
+<li>TIFF (.tif, .tiff)</li>
+<li>ICO</li>
+<li>WMF / EMF</li>
+<li>WEBP, HEIC, ACIF and other ones can also be supported if codec is installed.</li>
+</ul>
+<p>Available palceholders:</p>
+<ul>
+<li><code>{default.&lt;id&gt;}</code> - Inserts the default control text. Replace <code>&lt;id&gt;</code> with the control ID (capitalize each word and remove spaces).</li>
+<li><code>{default.&lt;id&gt;::5}</code> - Removes first 5 characters from control's text.</li>
+<li><code>{default.&lt;id&gt;::5/9}</code> - Substrings control's text, skips the first 5 characters and only returns next 9 characters.</li>
+</ul>
+<p>Examples with <code>{default...}</code> placeholders.</p>
+<ul>
+<li><code>{default.Copyright::0/1} Yoursoft {default.Copyright::12}</code> - take the copyright sign (get text from 0th to 1th place), show your text and add back the remaining text. This basically replaces "Microsoft" word.</li>
+</ul>
+<h1 id="screenshots">Screenshots</h1>
+<p><img src="https://i.imgur.com/uGKh0wE.gif" alt="Running cat" /></p>
+<p><img src="https://i.imgur.com/HjpaLTc.png" alt="winver too cute" /></p>
+<p><img src="https://i.imgur.com/ZEgkLqK.gif" alt="all dark" /></p>
+<h1 id="notes">Notes</h1>
+<ul>
+<li>Tested only on Windows 11!</li>
+<li>Information about previous label texts are not retained. To restore the original content, simply restart <em>winver.exe</em>.</li>
+<li>Gifs do not support controls being in front (if you change z-indexing), the gif will be always <em>drawn</em> on top!</li>
+<li>To restore the <strong>license info</strong> link, use <A> and </A> tags (similar to HTML): - <code>Click &lt;A&gt;here&lt;/A&gt; to view license information</code>.</li>
+<li>If you want to hide the current logo, set background color to the same color (240, 240, 240) and the logo will get overdrawn.</li>
+<li><strong>Settings might not apply correctly (via "Save settings" button) if you have winver.exe opened! Better to restart it.</strong></li>
+</ul>]]></content>
+        <author>
+            <name>ItsTauTvyDas</name>
+            <uri>https://github.com/ItsTauTvyDas</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Close Explorer on Esc 1.2]]></title>
         <id>https://windhawk.net/mods/close-explorer-on-esc#37fb637fdcbe438556a16b5be762e79169cc81c6</id>
@@ -372,25 +427,6 @@ Default: Disabled.</p></li>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dropbox: Reduce Explorer CPU usage on sync 1.1]]></title>
-        <id>https://windhawk.net/mods/dropbox-reduce-explorer-cpu-usage#9f8f3cb9fec63cfe3c8922800eb4fa1e4942c9b2</id>
-        <link href="https://windhawk.net/mods/dropbox-reduce-explorer-cpu-usage"/>
-        <updated>2025-10-05T08:26:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dropboxreduceexplorercpuusageonsync">Dropbox: Reduce Explorer CPU usage on sync</h1>
-<p>Dropbox can spam Explorer with <code>SHChangeNotify</code> while syncing many files, which may cause UI lag and high CPU usage by Explorer from constant overlay/icon updates.</p>
-<p>This mod hooks <code>SHChangeNotify</code> <strong>inside Dropbox.exe only</strong> and turns it into a no-op.</p>
-<p><strong>Trade-off:</strong> Explorer won’t receive live overlay updates from Dropbox; press <strong>F5</strong> (Refresh) in a folder view to see updated sync icons.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Only affects Dropbox’s own calls to <code>SHChangeNotify</code>. Syncing and file I/O are unaffected, but updating the sync state indication in Explorer requires a manual refresh.</li>
-<li>Disable or uninstall the mod to restore normal behavior.</li>
-</ul>]]></content>
-        <author>
-            <name>David Trapp (CherryDT)</name>
-            <uri>https://github.com/CherryDT</uri>
         </author>
     </entry>
 </feed>
