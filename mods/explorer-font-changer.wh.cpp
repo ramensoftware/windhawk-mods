@@ -37,7 +37,11 @@ The blue value of the glow text color (0-255).
 - Glow: Alpha (0-255):
 The alpha value of the glow text color (0-255).
 
+- Glow: Intensity (1-..)
+The intensity value of the glow that surrounds the text.
+
 ## System stability:
+
 Explorer Font Changer is heavily tested against GDI handle leaks and there are none (known!) at the time of writing this.
 
 This can be checked by others by going to System Informer, looking for `explorer.exe`, right-clicking the entry, going to "Miscellaneous", and then "GDI handles". Then, you can look at the font handles. Normally, you should see no handles present with your chosen font there!
@@ -63,6 +67,8 @@ This can be checked by others by going to System Informer, looking for `explorer
     $name: "Glow: Blue (0-255)"
   - a: 255
     $name: "Glow: Alpha (0-255)"
+  - intensity: 4
+    $name: "Glow: Intensity (1-..)"
   $name: Custom font
   $description: This font will be used for all font creation in Windows.
 */
@@ -71,213 +77,262 @@ This can be checked by others by going to System Informer, looking for `explorer
 #include <string>
 #include <windhawk_utils.h>
 #include <uxtheme.h>
-#include <map>
 
 using namespace std::string_view_literals;
 using namespace WindhawkUtils;
 
-// Loosely reversed, initially referenced from Translucent Windows font, thanks!
-using draw_text_with_glow_t = HRESULT(WINAPI*)(
-    HDC target_hdc,
-    LPCWSTR text,
-    UINT text_len,
-    const RECT* rect,
-    DWORD flags,
-    COLORREF text_color,
-    COLORREF glow_color,
-    UINT glow_intensity,
-    UINT unk1,
-    BOOL unk2,
-    // This one is useful in the scenario of painting within a hook,
-    // as letting it fall back on, for example, `DrawTextW`, while
-    // using this inside said function, would cause recursion.
-    DTT_CALLBACK_PROC fallback_draw_text,
-    LPARAM lparam
-);
+namespace util {
+    // Class to declare transparent RAII types.
+    template <class T, auto Fn>
+    class raii {
+    public:
+        raii() = delete;
+        raii(T handle) : m_handle(handle) {}
+        ~raii() {
+            Fn(m_handle);
+        }
 
-// Function is not exported by name, but it is found in the resource table.
-static auto draw_text_with_glow_fn = reinterpret_cast<draw_text_with_glow_t>(
-    GetProcAddress(
-        GetModuleHandleW(L"uxtheme.dll"),
-        MAKEINTRESOURCEA(126)
-    )
-);
+        // we don't need operator= or raii(raii&&) yet...
 
-// credit: "Translucent Windows" mod
-auto draw_text_with_glow(
-    HDC target_hdc,
-    const RECT* target_rect,
-    const std::wstring_view text,
-    DWORD format,
-    COLORREF text_color,
-    COLORREF glow_color,
-    UINT glow_intensity,
-    DTT_CALLBACK_PROC callback = nullptr,
-    LPARAM lparam = 0
-) {
-    auto hr = S_FALSE;
+        auto& get() {
+            return m_handle;
+        }
+        
+        auto get() const {
+            return m_handle;
+        }
 
-    auto blend_fun = BLENDFUNCTION { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-    auto bp_params = BP_PAINTPARAMS {
-        .cbSize = sizeof(BP_PAINTPARAMS),
-        .dwFlags = BPPF_ERASE,
-        .prcExclude = nullptr,
-        .pBlendFunction = &blend_fun
+    private:
+        T m_handle;
     };
 
-    HDC buf_hdc = nullptr;
-    auto buf_ptr = BeginBufferedPaint(
-        target_hdc, target_rect, BPBF_TOPDOWNDIB, &bp_params, &buf_hdc);
-    if (buf_ptr && buf_hdc) {
-        SelectObject(buf_hdc, GetCurrentObject(target_hdc, OBJ_FONT));
-        SetBkMode(buf_hdc, GetBkMode(target_hdc));
-        SetBkColor(buf_hdc, GetBkColor(target_hdc));
-        SetTextAlign(buf_hdc, GetTextAlign(target_hdc));
-        SetTextCharacterExtra(buf_hdc, GetTextCharacterExtra(target_hdc));
+    // RAII `HFONT`.
+    using unique_hfont_t = raii<HFONT, DeleteObject>;
 
-        hr = draw_text_with_glow_fn(
-            buf_hdc, text.data(), text.size(),
-            target_rect, format, text_color, glow_color, glow_intensity,
-            100, 100, callback, lparam
+    // Alters search path to look in `System32` folder.
+    HMODULE load_os_library(
+        const std::wstring_view library
+    ) {
+        return LoadLibraryExW(
+            library.data(),
+            nullptr,
+            LOAD_LIBRARY_SEARCH_SYSTEM32
         );
-
-        EndBufferedPaint(buf_ptr, TRUE);
     }
 
-    return hr;
-}
+    // Loosely reversed, initially referenced from Translucent Windows font, thanks!
+    using draw_text_with_glow_t = HRESULT(WINAPI*)(
+        HDC target_hdc,
+        LPCWSTR text,
+        UINT text_len,
+        const RECT* rect,
+        DWORD flags,
+        COLORREF text_color,
+        COLORREF glow_color,
+        UINT glow_intensity,
+        UINT unk1,
+        BOOL unk2,
+        // This one is useful in the scenario of painting within a hook,
+        // as letting it fall back on, for example, `DrawTextW`, while
+        // using this inside said function, would cause recursion.
+        DTT_CALLBACK_PROC fallback_draw_text,
+        LPARAM lparam
+    );
 
-void change_font_in_struct(
-    LOGFONTW* font
-) {
-    auto set_font_name = StringSetting::make(L"font.name");
-    auto font_name = std::wstring_view(set_font_name.get());
+    // Function is not exported by name, but it is found in the resource table.
+    auto draw_text_with_glow_fn = reinterpret_cast<draw_text_with_glow_t>(
+        GetProcAddress(
+            load_os_library(L"uxtheme.dll"),
+            MAKEINTRESOURCEA(126)
+        )
+    );
 
-    // Check font configuration.
-    if (font_name != L"None"sv) {
-        if (font_name.size() <= 31) {
-            // `face_name` points to a total of 32 WORDs.
-            auto face_name = static_cast<WCHAR*>(font->lfFaceName);
+    // credit: "Translucent Windows" mod
+    auto draw_text_with_glow(
+        HDC target_hdc,
+        const RECT* target_rect,
+        const std::wstring_view text,
+        DWORD format,
+        COLORREF text_color,
+        COLORREF glow_color,
+        UINT glow_intensity,
+        DTT_CALLBACK_PROC callback = nullptr,
+        LPARAM lparam = 0
+    ) {
+        auto hr = S_FALSE;
 
-            std::memset(face_name, 0, ARRAYSIZE(font->lfFaceName));
-            std::memcpy(
-                face_name, font_name.data(),
-                font_name.size() * sizeof(decltype(font_name)::value_type)
+        auto blend_fun = BLENDFUNCTION { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+        auto bp_params = BP_PAINTPARAMS {
+            .cbSize = sizeof(BP_PAINTPARAMS),
+            .dwFlags = BPPF_ERASE,
+            .prcExclude = nullptr,
+            .pBlendFunction = &blend_fun
+        };
+
+        HDC buf_hdc = nullptr;
+        auto buf_ptr = BeginBufferedPaint(
+            target_hdc, target_rect, BPBF_TOPDOWNDIB, &bp_params, &buf_hdc);
+        if (buf_ptr && buf_hdc) {
+            SelectObject(buf_hdc, GetCurrentObject(target_hdc, OBJ_FONT));
+            SetBkMode(buf_hdc, GetBkMode(target_hdc));
+            SetBkColor(buf_hdc, GetBkColor(target_hdc));
+            SetTextAlign(buf_hdc, GetTextAlign(target_hdc));
+            SetTextCharacterExtra(buf_hdc, GetTextCharacterExtra(target_hdc));
+
+            hr = draw_text_with_glow_fn(
+                buf_hdc, text.data(), text.size(),
+                target_rect, format, text_color, glow_color, glow_intensity,
+                100, 100, callback, lparam
             );
 
-            Wh_Log(L"Succesfully changed font to \"%s\"", face_name);
-        } else {
-            Wh_Log(L"Trying to change font to \"%s\": size too long (%d)", font_name.data(), font_name.size());
+            EndBufferedPaint(buf_ptr, TRUE);
+        }
+
+        return hr;
+    }
+
+    void change_font_in_struct(
+        LOGFONTW* font
+    ) {
+        auto set_font_name = StringSetting::make(L"font.name");
+        auto font_name = std::wstring_view(set_font_name.get());
+
+        // Check font configuration.
+        if (font_name != L"None"sv) {
+            if (font_name.size() <= 31) {
+                // `face_name` points to a total of 32 WORDs.
+                auto face_name = static_cast<WCHAR*>(font->lfFaceName);
+
+                std::memset(face_name, 0, ARRAYSIZE(font->lfFaceName));
+                std::memcpy(
+                    face_name, font_name.data(),
+                    font_name.size() * sizeof(decltype(font_name)::value_type)
+                );
+            } else {
+                Wh_Log(L"Trying to change font to \"%s\": size too long (%d)", font_name.data(), font_name.size());
+            }
         }
     }
-}
 
-HFONT hdc_update_font(
-    HDC hdc
-) {
-    // Get current selected font.
-    auto h_font = GetCurrentObject(hdc, OBJ_FONT);
+    // NOTE: upon destruction of `unique_hfont_t`, the handle will be sent to
+    // `DestroyObject`.
+    unique_hfont_t hdc_update_font(
+        HDC hdc
+    ) {
+        // Get current selected font.
+        auto h_font = GetCurrentObject(hdc, OBJ_FONT);
 
-    // Create struct for font.
-    auto font = LOGFONTW { 0 };
+        // Create struct for font.
+        auto font = LOGFONTW { 0 };
 
-    // Get `LOGFONTW` from font handle.
-    GetObjectW(
-        static_cast<HANDLE>(h_font),
-        sizeof(font),
-        static_cast<LPVOID>(&font)
-    );
+        // Get `LOGFONTW` from font handle.
+        GetObjectW(
+            static_cast<HANDLE>(h_font),
+            sizeof(font),
+            static_cast<LPVOID>(&font)
+        );
 
-    // Change font to the font specified in settings.
-    change_font_in_struct(&font);
+        // Change font to the font specified in settings.
+        change_font_in_struct(&font);
 
-    // Create new font.
-    auto h_new_font = CreateFontIndirectW(&font);
+        // Create new font.
+        auto h_new_font = CreateFontIndirectW(&font);
 
-    // Select font.
-    SelectObject(hdc, h_new_font);
+        // Select font.
+        SelectObject(hdc, h_new_font);
 
-    return h_new_font;
-}
+        return h_new_font;
+    }
 
-bool is_glow_enabled() {
-    return Wh_GetIntSetting(L"font.glow") == 1;
-}
+    bool is_glow_enabled() {
+        return Wh_GetIntSetting(L"font.glow") == 1;
+    }
 
-COLORREF get_glow_abgr() {
-    // 1. Get the colors
-    auto r = static_cast<COLORREF>(
-        Wh_GetIntSetting(L"font.r", 255) & 0xff
-    );
+    COLORREF get_glow_abgr() {
+        // 1. Get the colors
+        auto r = static_cast<uint8_t>(
+            Wh_GetIntSetting(L"font.r", 255) & 0xff
+        );
 
-    auto g = static_cast<COLORREF>(
-        Wh_GetIntSetting(L"font.g", 255) & 0xff
-    );
-    
-    auto b = static_cast<COLORREF>(
-        Wh_GetIntSetting(L"font.b", 255) & 0xff
-    );
+        auto g = static_cast<uint8_t>(
+            Wh_GetIntSetting(L"font.g", 255) & 0xff
+        );
+        
+        auto b = static_cast<uint8_t>(
+            Wh_GetIntSetting(L"font.b", 255) & 0xff
+        );
 
-    auto a = static_cast<COLORREF>(
-        Wh_GetIntSetting(L"font.a", 255) & 0xff
-    );
+        auto a = static_cast<uint8_t>(
+            Wh_GetIntSetting(L"font.a", 255) & 0xff
+        );
 
-    // 2. Generate ABGR
-    auto result = (a << 24) | (b << 16) | (g << 8) | r;
+        // 2. Generate ABGR
+        auto result = static_cast<COLORREF>(
+            (a << 24) | (b << 16) | (g << 8) | r
+        );
 
-    return result;
+        return result;
+    }
+
+    int get_glow_intensity() {
+        return Wh_GetIntSetting(L"font.intensity");
+    }
 }
 
 using draw_textw_hook_t = decltype(&DrawTextW);
 static draw_textw_hook_t draw_textw_original = nullptr;
-
-INT WINAPI draw_textw_hook(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, UINT format) {
+INT WINAPI draw_textw_hook(
+    HDC hdc,
+    LPCWSTR lpchText,
+    INT cchText,
+    LPRECT lprc,
+    UINT format
+) {
     // Update font on HDC to settings font, from current HFONT.
-    auto h_new_font = hdc_update_font(hdc);
+    auto h_new_font = util::hdc_update_font(hdc);
 
     if (format & DT_CALCRECT) {
-        const auto res = draw_textw_original(hdc, lpchText, cchText, lprc, format);
-        DeleteObject(h_new_font);
-        return res;
+        return draw_textw_original(hdc, lpchText, cchText, lprc, format);;
     }
 
-    if (is_glow_enabled()) {
+    if (util::is_glow_enabled()) {
         auto text = std::wstring_view{ lpchText, static_cast<size_t>(cchText) };
-        auto hr = draw_text_with_glow(
-            hdc, lprc, text, format, GetTextColor(hdc), get_glow_abgr(), 12,
+        auto hr = util::draw_text_with_glow(
+            hdc, lprc, text, format, GetTextColor(hdc), util::get_glow_abgr(), util::get_glow_intensity(),
             [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI {
                 return draw_textw_original(hdc, lpchText, cchText, lprc, format);
             }
         );
 
         if (SUCCEEDED(hr)) {
-            DeleteObject(h_new_font);
             return TRUE;
         }
     }
 
-    const auto res = draw_textw_original(hdc, lpchText, cchText, lprc, format);
-    DeleteObject(h_new_font);
-    return res;
+    return draw_textw_original(hdc, lpchText, cchText, lprc, format);
 }
 
 using draw_text_exw_hook_t = decltype(&DrawTextExW);
 static draw_text_exw_hook_t draw_text_exw_original = nullptr;
-
-INT WINAPI draw_text_exw_hook(HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp) {
+INT WINAPI draw_text_exw_hook(
+    HDC hdc,
+    LPWSTR lpchText,
+    INT cchText,
+    LPRECT lprc,
+    UINT format,
+    LPDRAWTEXTPARAMS lpdtp
+) {
     // Update font on HDC to settings font, from current HFONT.
-    auto h_new_font = hdc_update_font(hdc);
+    auto h_new_font = util::hdc_update_font(hdc);
 
     if (format & DT_CALCRECT) {
-        const auto res = draw_text_exw_original(hdc, lpchText, cchText, lprc, format, lpdtp);
-        DeleteObject(h_new_font);
-        return res;
+        return draw_text_exw_original(hdc, lpchText, cchText, lprc, format, lpdtp);
     }
 
-    if (is_glow_enabled()) {
+    if (util::is_glow_enabled()) {
         auto text = std::wstring_view{ lpchText, static_cast<size_t>(cchText) };
-        auto hr = draw_text_with_glow(
-            hdc, lprc, text, format, GetTextColor(hdc), get_glow_abgr(), 4,
+        auto hr = util::draw_text_with_glow(
+            hdc, lprc, text, format, GetTextColor(hdc), util::get_glow_abgr(), util::get_glow_intensity(),
             [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI {
                 // NOTE(gabriela): intentionally using `DrawTextW` over `DrawTextExW`
                 // here.
@@ -286,31 +341,28 @@ INT WINAPI draw_text_exw_hook(HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc
         );
 
         if (SUCCEEDED(hr)) {
-            DeleteObject(h_new_font);
             return TRUE;
         }
     }
 
-    const auto res = draw_text_exw_original(hdc, lpchText, cchText, lprc, format, lpdtp);
-    DeleteObject(h_new_font);
-    return res;
+    return draw_text_exw_original(hdc, lpchText, cchText, lprc, format, lpdtp);
 }
 
 BOOL Wh_ModInit() {
-    auto user32 = LoadLibraryW(L"user32.dll");
+    auto user32 = util::load_os_library(L"user32.dll");
+    
     auto draw_textw = reinterpret_cast<draw_textw_hook_t>(
         GetProcAddress(user32, "DrawTextW")
     );
-    auto draw_text_exw = reinterpret_cast<draw_text_exw_hook_t>(
-        GetProcAddress(user32, "DrawTextExW")
-    );
-
     Wh_SetFunctionHook(
         reinterpret_cast<void*>(draw_textw),
         reinterpret_cast<void*>(draw_textw_hook),
         reinterpret_cast<void**>(&draw_textw_original)
     );
 
+    auto draw_text_exw = reinterpret_cast<draw_text_exw_hook_t>(
+        GetProcAddress(user32, "DrawTextExW")
+    );
     Wh_SetFunctionHook(
         reinterpret_cast<void*>(draw_text_exw),
         reinterpret_cast<void*>(draw_text_exw_hook),
