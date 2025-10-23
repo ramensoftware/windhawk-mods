@@ -74,6 +74,7 @@ This can be checked by others by going to System Informer, looking for `explorer
 */
 // ==/WindhawkModSettings==
 
+
 #include <string>
 #include <windhawk_utils.h>
 #include <uxtheme.h>
@@ -82,6 +83,14 @@ using namespace std::string_view_literals;
 using namespace WindhawkUtils;
 
 namespace util {
+    StringSetting s_font_name;
+    bool s_glow = false;
+    int s_glow_r = 255;
+    int s_glow_g = 255;
+    int s_glow_b = 255;
+    int s_glow_a = 255;
+    int s_glow_intensity = 0;
+
     // Class to declare transparent RAII types.
     template <class T, auto Fn>
     class raii {
@@ -111,10 +120,10 @@ namespace util {
 
     // Alters search path to look in `System32` folder.
     HMODULE load_os_library(
-        const std::wstring_view library
+        LPCWSTR library
     ) {
         return LoadLibraryExW(
-            library.data(),
+            library,
             nullptr,
             LOAD_LIBRARY_SEARCH_SYSTEM32
         );
@@ -194,8 +203,7 @@ namespace util {
     void change_font_in_struct(
         LOGFONTW* font
     ) {
-        auto set_font_name = StringSetting::make(L"font.name");
-        auto font_name = std::wstring_view(set_font_name.get());
+        auto font_name = std::wstring_view(s_font_name.get());
 
         // Check font configuration.
         if (font_name != L"None"sv) {
@@ -214,9 +222,7 @@ namespace util {
         }
     }
 
-    // NOTE: upon destruction of `unique_hfont_t`, the handle will be sent to
-    // `DestroyObject`.
-    unique_hfont_t hdc_update_font(
+    std::pair<unique_hfont_t, LOGFONTW> hdc_update_font(
         HDC hdc
     ) {
         // Get current selected font.
@@ -241,29 +247,39 @@ namespace util {
         // Select font.
         SelectObject(hdc, h_new_font);
 
-        return h_new_font;
+        return { h_new_font, font };
+    }
+
+    void update_settings() {
+        s_font_name      = StringSetting::make(L"font.name");
+        s_glow           = Wh_GetIntSetting(L"font.glow") == 1;
+        s_glow_r         = Wh_GetIntSetting(L"font.r");
+        s_glow_g         = Wh_GetIntSetting(L"font.g");
+        s_glow_b         = Wh_GetIntSetting(L"font.b");
+        s_glow_a         = Wh_GetIntSetting(L"font.a");
+        s_glow_intensity = Wh_GetIntSetting(L"font.intensity");
     }
 
     bool is_glow_enabled() {
-        return Wh_GetIntSetting(L"font.glow") == 1;
+        return s_glow;
     }
 
     COLORREF get_glow_abgr() {
         // 1. Get the colors
         auto r = static_cast<uint8_t>(
-            Wh_GetIntSetting(L"font.r", 255) & 0xff
+            s_glow_r & 0xff
         );
 
         auto g = static_cast<uint8_t>(
-            Wh_GetIntSetting(L"font.g", 255) & 0xff
+            s_glow_g & 0xff
         );
         
         auto b = static_cast<uint8_t>(
-            Wh_GetIntSetting(L"font.b", 255) & 0xff
+            s_glow_b & 0xff
         );
 
         auto a = static_cast<uint8_t>(
-            Wh_GetIntSetting(L"font.a", 255) & 0xff
+            s_glow_a & 0xff
         );
 
         // 2. Generate ABGR
@@ -275,12 +291,29 @@ namespace util {
     }
 
     int get_glow_intensity() {
-        return Wh_GetIntSetting(L"font.intensity");
+        return s_glow_intensity;
     }
 }
 
 using draw_textw_hook_t = decltype(&DrawTextW);
 static draw_textw_hook_t draw_textw_original = nullptr;
+
+using draw_text_exw_hook_t = decltype(&DrawTextExW);
+static draw_text_exw_hook_t draw_text_exw_original = nullptr;
+
+// NOTE(gabriela): intentionally used for `DrawTextExW` as well, as the glow DrawText
+// equivalent expects this to be a call to `DrawTextW`. 
+INT WINAPI dtt_callback(
+    HDC hdc,
+    LPWSTR lpchText,
+    INT cchText,
+    LPRECT lprc,
+    UINT format,
+    LPARAM lParam
+) {
+    return draw_textw_original(hdc, lpchText, cchText, lprc, format);
+}
+
 INT WINAPI draw_textw_hook(
     HDC hdc,
     LPCWSTR lpchText,
@@ -289,31 +322,29 @@ INT WINAPI draw_textw_hook(
     UINT format
 ) {
     // Update font on HDC to settings font, from current HFONT.
-    auto h_new_font = util::hdc_update_font(hdc);
+    auto [h_new_font, _] = util::hdc_update_font(hdc);
 
     if (format & DT_CALCRECT) {
         return draw_textw_original(hdc, lpchText, cchText, lprc, format);;
     }
 
     if (util::is_glow_enabled()) {
-        auto text = std::wstring_view{ lpchText, static_cast<size_t>(cchText) };
+        auto text = std::wstring_view{ lpchText, wcslen(lpchText) };
         auto hr = util::draw_text_with_glow(
-            hdc, lprc, text, format, GetTextColor(hdc), util::get_glow_abgr(), util::get_glow_intensity(),
-            [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI {
-                return draw_textw_original(hdc, lpchText, cchText, lprc, format);
-            }
+            hdc, lprc, text, format,
+            GetTextColor(hdc), util::get_glow_abgr(), util::get_glow_intensity(),
+            dtt_callback
         );
 
         if (SUCCEEDED(hr)) {
-            return TRUE;
+            // Call with DT_CALCRECT to get height of text in logical units.
+            return draw_textw_original(hdc, lpchText, cchText, lprc, format | DT_CALCRECT);
         }
     }
 
     return draw_textw_original(hdc, lpchText, cchText, lprc, format);
 }
 
-using draw_text_exw_hook_t = decltype(&DrawTextExW);
-static draw_text_exw_hook_t draw_text_exw_original = nullptr;
 INT WINAPI draw_text_exw_hook(
     HDC hdc,
     LPWSTR lpchText,
@@ -323,25 +354,23 @@ INT WINAPI draw_text_exw_hook(
     LPDRAWTEXTPARAMS lpdtp
 ) {
     // Update font on HDC to settings font, from current HFONT.
-    auto h_new_font = util::hdc_update_font(hdc);
+    auto [h_new_font, _] = util::hdc_update_font(hdc);
 
     if (format & DT_CALCRECT) {
         return draw_text_exw_original(hdc, lpchText, cchText, lprc, format, lpdtp);
     }
 
     if (util::is_glow_enabled()) {
-        auto text = std::wstring_view{ lpchText, static_cast<size_t>(cchText) };
+        auto text = std::wstring_view{ lpchText, wcslen(lpchText) };
         auto hr = util::draw_text_with_glow(
-            hdc, lprc, text, format, GetTextColor(hdc), util::get_glow_abgr(), util::get_glow_intensity(),
-            [](HDC hdc, LPWSTR lpchText, INT cchText, LPRECT lprc, UINT format, LPARAM lParam) WINAPI {
-                // NOTE(gabriela): intentionally using `DrawTextW` over `DrawTextExW`
-                // here.
-                return draw_textw_original(hdc, lpchText, cchText, lprc, format);
-            }
+            hdc, lprc, text, format,
+            GetTextColor(hdc), util::get_glow_abgr(), util::get_glow_intensity(),
+            dtt_callback
         );
 
         if (SUCCEEDED(hr)) {
-            return TRUE;
+            // Call with DT_CALCRECT to get height of text in logical units.
+            return draw_text_exw_original(hdc, lpchText, cchText, lprc, format | DT_CALCRECT, lpdtp);
         }
     }
 
@@ -349,6 +378,9 @@ INT WINAPI draw_text_exw_hook(
 }
 
 BOOL Wh_ModInit() {
+    // Get settings before applying hooks.
+    util::update_settings();
+
     auto user32 = util::load_os_library(L"user32.dll");
     
     auto draw_textw = reinterpret_cast<draw_textw_hook_t>(
@@ -370,6 +402,10 @@ BOOL Wh_ModInit() {
     );
 
     return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    util::update_settings();
 }
 
 void Wh_ModUninit() {
