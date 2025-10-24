@@ -3,7 +3,7 @@
 // @name            Classic Expand Buttons
 // @description     Draws classic +/- expand buttons in Explorer
 // @github          https://github.com/n1d3v
-// @version         0.2
+// @version         0.1
 // @author          bricktapper!
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32
@@ -159,3 +159,4 @@ void Wh_ModUninit() {
     g_hTree = NULL;
     g_hNtc = NULL;
 }
+
