@@ -596,6 +596,30 @@
                 "version": "1.4.4"
             }
         },
+        "classic-expand-buttons": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1761326006000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1761326006000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "bricktapper!",
+                "compilerOptions": "-lcomctl32 -lgdi32",
+                "description": "Draws classic +/- expand buttons in Explorer",
+                "github": "https://github.com/n1d3v",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Classic Expand Buttons",
+                "version": "0.1"
+            }
+        },
         "classic-explorer-dragdrop": {
             "details": {
                 "defaultSorting": 1089,
