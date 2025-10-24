@@ -3,7 +3,7 @@
 // @name            Classic Expand Buttons
 // @description     Draws classic +/- expand buttons in Explorer
 // @github          https://github.com/n1d3v
-// @version         0.1
+// @version         0.2
 // @author          bricktapper!
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32
@@ -27,6 +27,8 @@ In Windows 7, if you hovered on the treeview it showed all of the buttons, this 
 #include <windhawk_utils.h>
 
 static bool g_hoveringTree = false;
+static HWND g_hTree = NULL;
+static HWND g_hNtc = NULL;
 
 void DrawExpandoButton(HWND hTree, HDC hdc, HTREEITEM hItem) {
     RECT rect;
@@ -36,9 +38,6 @@ void DrawExpandoButton(HWND hTree, HDC hdc, HTREEITEM hItem) {
     DWORD windowColor = GetSysColor(COLOR_WINDOW);
     DWORD shadowColor = GetSysColor(COLOR_3DSHADOW);
 
-    // change the values 6 and 8 if you want to move it down or up
-    // if you want to move it up, subtract so for 2px up change it from 6 -> 4 and 8 -> 6
-    // if you want to move it down, add so for 2px down change it from 6 -> 8 and 8 -> 10
     UINT itemHeight = TreeView_GetItemHeight(hTree);
     switch (itemHeight) {
     default:
@@ -53,7 +52,6 @@ void DrawExpandoButton(HWND hTree, HDC hdc, HTREEITEM hItem) {
         return;
 
     UINT state = TreeView_GetItemState(hTree, hItem, TVIS_EXPANDED);
-
     RECT buttonRect{ rect.left, rect.top, rect.left + 9, rect.top + 9 };
 
     HBRUSH brush = CreateSolidBrush(windowColor);
@@ -126,10 +124,13 @@ NSCCreateTreeview_t NSCCreateTreeviewOriginal;
 HWND __cdecl NSCCreateTreeviewHook(void* pThis, HWND hWnd) {
     HWND treeview = NSCCreateTreeviewOriginal(pThis, hWnd);
 
+    g_hNtc = hWnd;
     WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, NTCSubclassProc, 0);
-    HWND hTree = FindWindowExW(hWnd, NULL, L"SysTreeView32", NULL);
-    if (hTree)
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hTree, TVSubclassProc, 0);
+
+    g_hTree = FindWindowExW(hWnd, NULL, L"SysTreeView32", NULL);
+    if (g_hTree)
+        WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTree, TVSubclassProc, 0);
+
     return treeview;
 }
 
@@ -138,7 +139,7 @@ BOOL Wh_ModInit() {
     if (!hExplorerFrame)
         return FALSE;
 
-    WindhawkUtils::SYMBOL_HOOK explorer_exe_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
             { L"private: struct HWND__ * __cdecl CNscTree::_CreateTreeview(struct HWND__ *)" },
             (void**)&NSCCreateTreeviewOriginal,
@@ -146,7 +147,15 @@ BOOL Wh_ModInit() {
             FALSE
         }
     };
-    return WindhawkUtils::HookSymbols(hExplorerFrame, explorer_exe_hooks, 1);
+    return WindhawkUtils::HookSymbols(hExplorerFrame, explorerframe_dll_hooks, 1);
 }
 
-void Wh_ModUninit() {}
+void Wh_ModUninit() {
+    if (g_hTree)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTree, TVSubclassProc);
+    if (g_hNtc)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hNtc, NTCSubclassProc);
+
+    g_hTree = NULL;
+    g_hNtc = NULL;
+}
