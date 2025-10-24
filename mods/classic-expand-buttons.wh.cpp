@@ -138,7 +138,7 @@ BOOL Wh_ModInit() {
     if (!hExplorerFrame)
         return FALSE;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorer_exe_hooks[] = {
         {
             { L"private: struct HWND__ * __cdecl CNscTree::_CreateTreeview(struct HWND__ *)" },
             (void**)&NSCCreateTreeviewOriginal,
@@ -146,8 +146,7 @@ BOOL Wh_ModInit() {
             FALSE
         }
     };
-    return WindhawkUtils::HookSymbols(hExplorerFrame, hooks, 1);
+    return WindhawkUtils::HookSymbols(hExplorerFrame, explorer_exe_hooks, 1);
 }
-
 
 void Wh_ModUninit() {}
