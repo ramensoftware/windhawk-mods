@@ -1,3 +1,9 @@
+## 1.2.2 ([Oct 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/d4f524e3e969acf4f18a77650a5afdb093961008/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Added themes: Matter, WindowGlass.
+* Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.
+* WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.
+
 ## 1.2.1 ([Aug 4, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9bf555a229d798630345d558c6f1c30ffbc500ce/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Added the Translucent Explorer11 theme.

@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-24T17:13:26.000Z</updated>
+    <updated>2025-10-24T17:40:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.2.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#d4f524e3e969acf4f18a77650a5afdb093961008</id>
+        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
+        <updated>2025-10-24T17:40:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added themes: Matter, WindowGlass.</li>
+<li>Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.</li>
+<li>WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Expand Buttons 0.1]]></title>
         <id>https://windhawk.net/mods/classic-expand-buttons#594dc5ab636039bf5beda825ba7c667d50413e4f</id>
@@ -370,57 +385,6 @@ the "Users" folder was known as "Documents and Settings".</p>
 </ul>
 <p>The option "Hide inactive Groupy 2 tabs" is experimental. If it behaves strangely for you and doesn't hide windows when it should or the other way round, please <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?template=bug_report.md">open an issue</a> and include screenshots of your Groupy 2 configuration, including the advanced settings screen, as well as the settings of the affected group (such as whether it should auto-group, etc.)!</p>
 <p><strong>Warning:</strong> If using Groupy 2 and "Hide minimized windows" is enabled but "Hide inactive Groupy 2 tabs" is not, then minimizing a Groupy-2-tabbed window will result in the inactive tabs still being shown and the active tab hidden!</p>]]></content>
-        <author>
-            <name>David Trapp (CherryDT)</name>
-            <uri>https://github.com/CherryDT</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Redirect Modern Notepad to Classic Editor 2.0]]></title>
-        <id>https://windhawk.net/mods/modern-notepad-to-classic-editor#03860f1ad9d7896503609c9a0a7198e17f569390</id>
-        <link href="https://windhawk.net/mods/modern-notepad-to-classic-editor"/>
-        <updated>2025-10-05T17:35:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="redirectmodernnotepadtoclassiceditor">Redirect Modern Notepad to Classic Editor</h1>
-<p>Windows 11 replaces the classic Notepad with a Microsoft Store app.<br />
-This mod redirects all launches of the <strong>modern Notepad</strong> (including context menu items like “Edit in Notepad”) to your chosen <strong>classic editor</strong> instead.</p>
-<p>There is already a way to do this "half-way" natively by disabling the <code>notepad.exe</code> app execution alias in Windows' settings, but this doesnt work for the default "Edit in Notepad" context menu item, default file associations and other entry points. This mod handles all of these cases seamlessly.</p>
-<p>By default, it launches the old <code>notepad.exe</code> from <code>%SystemRoot%\System32</code>, but you can configure it to run <strong>any editor of your choice</strong> (e.g. Notepad2, Notepad++, VS Code).</p>
-<p>The basic way to use this mod is to <strong>disable the app execution alias for Notepad</strong> in Windows Settings &gt; Apps &gt; Advanced app settings &gt; App execution aliases and keep the classic editor path setting at its default value. This way, all entry points that would normally launch modern Notepad will launch classic Notepad instead, and direct invocations of <code>notepad.exe</code> will go to the classic Notepad as well and even bypass this mod, speeding up launches. If you configure a different editor path, it will only take effect when using the "Edit with Notepad" shell extension or a file association that launches modern Notepad, not when directly launching <code>notepad.exe</code>.</p>
-<p>For advanced usage scenarios such as globally overriding <code>notepad.exe</code> with a custom editor, see below.</p>
-<hr />
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Seamless redirection</strong>: Any time Windows tries to open the modern Notepad, your chosen editor is launched instead.</li>
-<li><strong>Configurable editor path</strong>: Pick any executable, with environment variables supported (e.g. <code>%SystemRoot%\System32\notepad.exe</code>).</li>
-<li><strong>Optional Ctrl+Shift elevation</strong>: If enabled, holding <strong>Ctrl+Shift</strong> while launching opens the editor <strong>as Administrator</strong> (if not already elevated). This allows for easily editing files that require elevation: Just hold Ctrl+Shift while using the “Edit in Notepad” context menu option!</li>
-<li><strong>Optional waiting behavior</strong>:  </li>
-<li><strong>Wait enabled:</strong> The modern Notepad process stays open until the editor exits, and passes along its exit code.  </li>
-<li><strong>Wait disabled (default):</strong> The modern Notepad process exits immediately after starting the editor.</li>
-<li><strong>Optional global override of <code>notepad.exe</code></strong>: By leaving the app execution alias enabled and configuring a different editor path, you can make all invocations of <code>notepad.exe</code> (including direct launches) go to your chosen editor instead of classic Notepad. This is useful if you want to completely replace Notepad with a different editor of your choice, but please see caveats below.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><p><strong>Classic editor path</strong><br />
-Path to the editor executable you want to run instead of modern Notepad.<br />
-Defaults to <code>%SystemRoot%\System32\notepad.exe</code>.</p></li>
-<li><p><strong>Ctrl+Shift elevation</strong><br />
-If enabled, holding Ctrl+Shift while opening Notepad will launch the editor elevated.<br />
-Default: Enabled.</p></li>
-<li><p><strong>Wait for classic editor</strong><br />
-If enabled, the modern Notepad process will wait until the editor closes and mirror its exit code.<br />
-If disabled, it will exit right after starting the editor.<br />
-Default: Disabled.</p></li>
-</ul>
-<h2 id="advancedusage">Advanced Usage</h2>
-<p>If support for the Ctrl+Shift elevation feature even during direct <code>notepad.exe</code> invocations or total replacement of Notepad by some other editor is desired (through configuring a different classic editor path), the app execution alias must be left <strong>enabled</strong>. During the first launch of notepad with this mod enabled, you will then be prompted to <strong>confirm disabling the app execution alias locally</strong> within the immersive notepad package.</p>
-<p>This will create what's called a "tombstone" in a "layered key" of the registry (such as <code>\REGISTRY\WC\Silo24fba818-4b95-b33d-ce9e-e481fda525fauser_sid\Software\Microsoft\Windows\CurrentVersion\App Paths\Notepad.exe</code>).</p>
-<p>There are no known adverse effects of this known, because immersive notepad will not try to launch the classic notepad itself anyway, only the mod does that, however this is a <strong>semi-permanent modification</strong> which would require the use of "Settings &gt; Apps &gt; Installed Apps &gt; Notepad (…) &gt; Advanced &gt; Reset" to undo, which also clears any custom immersive notepad settings.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Works with all entry points that would normally launch modern Notepad, including the <strong>right-click “Edit in Notepad”</strong> menu option.  </li>
-<li>If the mod is disabled while redirected Notepad is running, the modern Notepad process simply exits to avoid instability.  </li>
-<li>Designed for <strong>Windows 11</strong> where modern Notepad is installed from the Microsoft Store.</li>
-</ul>]]></content>
         <author>
             <name>David Trapp (CherryDT)</name>
             <uri>https://github.com/CherryDT</uri>
