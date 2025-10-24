@@ -1,3 +1,7 @@
+## 1.3.3 ([Oct 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5c85ef0b642d596f595e2135430dd345ae896bfb/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Fixed the NoRecommendedSection theme for [the redesigned Start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/).
+
 ## 1.3.2 ([Oct 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1f6c3b0396e9f2e89a01266c7207fc847c6679ff/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Updated most themes for greater compatibility with [the redesigned Start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/). The excellent adaptation work was done by [bbmaster123](https://github.com/bbmaster123).
