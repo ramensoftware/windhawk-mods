@@ -2,6 +2,7 @@
 // @id              classic-expand-buttons
 // @name            Classic Expand Buttons
 // @description     Draws classic +/- expand buttons in Explorer
+// @github          https://github.com/n1d3v
 // @version         0.1
 // @author          bricktapper!
 // @include         explorer.exe
@@ -147,5 +148,6 @@ BOOL Wh_ModInit() {
     };
     return WindhawkUtils::HookSymbols(hExplorerFrame, hooks, 1);
 }
+
 
 void Wh_ModUninit() {}
