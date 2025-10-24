@@ -1,3 +1,10 @@
+## 1.3.2 ([Oct 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1f6c3b0396e9f2e89a01266c7207fc847c6679ff/mods/windows-11-start-menu-styler.wh.cpp))
+
+* Updated most themes for greater compatibility with [the redesigned Start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/). The excellent adaptation work was done by [bbmaster123](https://github.com/bbmaster123).
+* Added themes: WindowGlass, WindowGlass (Minimal), Fluid, Oversimplified&Accentuated.
+* Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.
+* WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.
+
 ## 1.3.1 ([Jul 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/51c2fd314812aaa6a4596b58dc12c6aa09d4165e/mods/windows-11-start-menu-styler.wh.cpp))
 
 * Updated themes: Windows10 (Minimal), TranslucentStartMenu, Fluent2Inspired.
