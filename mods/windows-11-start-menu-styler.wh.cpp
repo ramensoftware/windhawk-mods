@@ -2,7 +2,7 @@
 // @id              windows-11-start-menu-styler
 // @name            Windows 11 Start Menu Styler
 // @description     Customize the start menu with themes contributed by others or create your own
-// @version         1.3.2
+// @version         1.3.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -520,14 +520,24 @@ const Theme g_themeNoRecommendedSection = {{
         L"Visibility=Collapsed"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#NoTopLevelSuggestionsText", {
         L"Height=0"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#TopLevelSuggestionsContainer", {
-        L"Height=0"}},
     ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions", {
-        L"RenderTransform:=<TranslateTransform Y=\"-572\" X=\"-55\" />"}},
-    ThemeTargetStyles{L"StartMenu.PinnedList", {
-        L"Height=504"}},
-    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Grid#ShowMoreSuggestions > Windows.UI.Xaml.Controls.Button > Windows.UI.Xaml.Controls.ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.TextBlock", {
+        L"RenderTransform:=<TranslateTransform Y=\"8\"/>"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.Button#ShowMoreSuggestionsButton > Grid > Windows.UI.Xaml.Controls.ContentPresenter > Windows.UI.Xaml.Controls.StackPanel > Windows.UI.Xaml.Controls.TextBlock", {
         L"Text=Recommended"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot > Grid[2] ", {
+        L"MinHeight=0"}},
+    ThemeTargetStyles{L"Grid#TopLevelSuggestionsRoot", {
+        L"Grid.Row=0"}},
+    ThemeTargetStyles{L"Windows.UI.Xaml.Controls.GridView#RecommendedList", {
+        L"Visibility=Collapsed"}},
+    ThemeTargetStyles{L"TextBlock#PinnedListHeaderText", {
+        L"RenderTransform:=<TranslateTransform Y=\"8\"/>"}},
+    ThemeTargetStyles{L"GridView", {
+        L"Margin=0,-8,0,0"}},
+    ThemeTargetStyles{L"Microsoft.UI.Xaml.Controls.DropDownButton", {
+        L"RenderTransform:=<TranslateTransform Y=\"-5\" />"}},
+    ThemeTargetStyles{L"Grid#TopLevelHeader > Grid[2] > Button", {
+        L"RenderTransform:=<TranslateTransform X=\"-135\" />"}},
 }};
 
 const Theme g_themeNoRecommendedSection_variant_ClassicStartMenu = {{
