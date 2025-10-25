@@ -1,3 +1,13 @@
+## 1.3.6 ([Oct 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/150cfc38691f0f7f36e548fd8bc6e41e5c74dcf0/mods/taskbar-vertical.wh.cpp))
+
+* Reworked Start menu positioning:
+  * The [redesigned Windows 11 Start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/) is now supported.
+  * The "Start menu width" option has been removed, as it's no longer necessary.
+  * The Start menu now animates from the taskbar side using a technique discovered by [SandTechStuff](https://github.com/SandTechStuff) (not available for the redesigned Start menu).
+  * The account card at the bottom of the Start menu is no longer truncated.
+* Improved support for the new battery percentage option.
+* Settings now apply to tray elements automatically. Previously, the mod had to be reloaded in some cases.
+
 ## 1.3.5 ([Jul 16, 2025](https://github.com/ramensoftware/windhawk-mods/blob/97c72fa2c85a13393590bdf73464db7c6d19e8ae/mods/taskbar-vertical.wh.cpp))
 
 * Fixed misplaced thumbnail previews after a recent Windows 11 update.

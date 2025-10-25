@@ -4975,7 +4975,7 @@
                 "published": 1718190574000,
                 "rating": 10,
                 "ratingUsers": 307,
-                "updated": 1752707801000,
+                "updated": 1761401178000,
                 "users": 13437
             },
             "metadata": {
@@ -4989,12 +4989,13 @@
                 "homepage": "https://m417z.com/",
                 "include": [
                     "explorer.exe",
+                    "StartMenuExperienceHost.exe",
                     "ShellExperienceHost.exe",
                     "ShellHost.exe"
                 ],
                 "name": "Vertical Taskbar for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.3.5"
+                "version": "1.3.6"
             }
         },
         "taskbar-volume-control": {
