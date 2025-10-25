@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
-// @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.1.0
-// @author          L3r0y
+// @description     Shows windows on current monitor with the cursor for Alt+Tab, but shows all windows on all monitors when using Win+Alt+Tab. Configure where Win+Alt+Tab UI appears in settings.
+// @version         1.1.1
+// @author          L3r0y, SpacEagle17, howdoiusekeyboard
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
 // @architecture    x86-64
@@ -19,9 +19,24 @@ primary display, showing all open windows across all monitors. This mod
 customizes the behavior to display the switcher on the monitor where the cursor
 is currently located, showing only the windows present on that specific monitor.
 
+Additionally, the previous known Windows behaviour can still be achieved by pressing
+Win+Alt+Tab, which will show all windows across all monitors. You can configure
+where the Win+Alt+Tab UI appears in the mod settings.
+
 ![Gif](https://i.imgur.com/Hpg8TKh.gif)
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- winAltTabDisplay: primary
+  $name: Win+Alt+Tab display location
+  $description: Choose where the Alt+Tab switcher appears when using Win+Alt+Tab (which shows all windows from all monitors)
+  $options:
+  - primary: Primary monitor (default Windows behavior)
+  - cursor: Monitor where cursor is located
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
@@ -40,6 +55,16 @@ std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
 ULONGLONG g_CreateInstance_TickCount;
 constexpr ULONGLONG kDeltaThreshold = 200;
+
+struct {
+    std::wstring winAltTabDisplay;
+} g_settings;
+
+void LoadSettings() {
+    PCWSTR winAltTabDisplay = Wh_GetStringSetting(L"winAltTabDisplay");
+    g_settings.winAltTabDisplay = winAltTabDisplay;
+    Wh_FreeStringSetting(winAltTabDisplay);
+}
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     void* pFixedFileInfo = nullptr;
@@ -94,7 +119,37 @@ WinVersion GetWindowsVersion() {
     return WinVersion::Unsupported;
 }
 
+bool IsWinKeyPressed() {
+    return (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
+}
+
 bool HandleAltTabWindow(RECT* rect) {
+    // Win+Alt+Tab: Check user setting for display location
+    if (IsWinKeyPressed()) {
+        if (g_settings.winAltTabDisplay == L"cursor") {
+            // Show on cursor monitor (same logic as Alt+Tab)
+            POINT pt;
+            if (!GetCursorPos(&pt)) {
+                return false;  // Fallback to default
+            }
+
+            auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
+            MONITORINFO monInfo;
+            monInfo.cbSize = sizeof(MONITORINFO);
+            if (!GetMonitorInfo(hMon, &monInfo)) {
+                return false;  // Fallback to default
+            }
+
+            *rect = monInfo.rcWork;
+            return true;  // Use our custom rect
+        } else {
+            // "primary" or unrecognized: use default behavior (primary monitor)
+            return false;
+        }
+    }
+
+    // Alt+Tab: Show on cursor monitor (unchanged)
     POINT pt;
     if (!GetCursorPos(&pt)) {
         return false;
@@ -143,6 +198,11 @@ HRESULT GetWindowHandleFromApplicationView(void* applicationView,
 }
 
 bool IsWindowOnCursorMonitor(HWND windowHandle) {
+    // If Win key is pressed, always return true to show all windows
+    if (IsWinKeyPressed()) {
+        return true;
+    }
+
     POINT pt;
     if (!GetCursorPos(&pt)) {
         return false;
@@ -377,6 +437,8 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    LoadSettings();
+
     g_winVersion = GetWindowsVersion();
 
     HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
@@ -503,4 +565,9 @@ BOOL Wh_ModInit() {
     }
 
     return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"Settings changed, reloading...");
+    LoadSettings();
 }
