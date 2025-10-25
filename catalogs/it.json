@@ -4482,6 +4482,27 @@
                 "version": "1.3.10"
             }
         },
+        "taskbar-hide-running-indicator-w10": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1761396608000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1761396608000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "giedriuslt",
+                "compilerOptions": "-lgdi32",
+                "description": "Hides taskbar running indicator for Windows 10",
+                "github": "https://github.com/giedriuslt",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Hide running indicator for Windows 10",
+                "version": "1.0.0"
+            }
+        },
         "taskbar-hung-rearrangement-fix": {
             "details": {
                 "defaultSorting": 2010,
