@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.3.6
+// @version         1.3.7
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -73,10 +73,10 @@ With labels:
 - TaskbarWidth: 80
   $name: Taskbar width
   $description: >-
-    The width, in pixels, of the taskbar
+    The width, in pixels, of the taskbar.
 
     Note: If the clock is too wide for the taskbar width you prefer, you can use
-    the "Taskbar Clock Customization" mod to customize the taskbar clock format
+    the "Taskbar Clock Customization" mod to customize the taskbar clock format.
 - taskbarLocationSecondary: sameAsPrimary
   $name: Taskbar location on secondary monitors
   $options:
@@ -86,7 +86,7 @@ With labels:
 - jumpListAlignment: top
   $name: Jump list vertical alignment
   $description: >-
-    The vertical alignment of jump lists when right-clicking on taskbar items
+    The vertical alignment of jump lists when right-clicking on taskbar items.
   $options:
   - top: Top
   - center: Center
@@ -97,11 +97,19 @@ With labels:
   - top: Top
   - center: Center
   - bottom: Bottom
+- startMenuAnimationAdjust: false
+  $name: Adjust Start menu animation
+  $description: >-
+    Adjust the start menu opening animation to match the vertical taskbar
+    position, e.g. sliding in from the left when the taskbar is on the left side
+    of the screen. This option doesn't work with the redesigned Start menu, and
+    might not work with the Phone Link sidebar and with some Start Menu Styler
+    themes.
 - clockContainerHeight: 0
   $name: Clock container height
   $description: >-
     Set to zero to use the default height value, setting a custom height can be
-    useful for a customized clock with a non-standard size
+    useful for a customized clock with a non-standard size.
 */
 // ==/WindhawkModSettings==
 
@@ -159,6 +167,7 @@ struct {
     int taskbarWidth;
     JumpListAlignment jumpListAlignment;
     StartMenuAlignment startMenuAlignment;
+    bool startMenuAnimationAdjust;
     int clockContainerHeight;
 } g_settings;
 
@@ -3482,6 +3491,7 @@ namespace StartMenuUI {
 
 bool g_applyStylePending;
 bool g_inApplyStyle;
+bool g_startMenuAnimationAdjusted;
 std::optional<double> g_previousCanvasTop;
 std::optional<double> g_previousCanvasLeft;
 winrt::weak_ref<DependencyObject> g_startSizingFrameWeakRef;
@@ -3537,73 +3547,80 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
         return;
     }
 
-    // Adjust Start menu animation.
-    FrameworkElement child = startSizingFrame;
-    if ((child = FindChildByClassName(child,
-                                      L"StartDocked.StartSizingFramePanel")) &&
-        (child = FindChildByClassName(
-             child, L"Windows.UI.Xaml.Controls.ContentPresenter")) &&
-        (child =
-             FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Frame")) &&
-        (child = FindChildByClassName(
-             child, L"Windows.UI.Xaml.Controls.ContentPresenter")) &&
-        (child = FindChildByClassName(child, L"StartDocked.LauncherFrame"))) {
-        auto launcherFrame = child;
+    if (g_settings.startMenuAnimationAdjust || g_startMenuAnimationAdjusted) {
+        g_startMenuAnimationAdjusted = true;
 
-        FrameworkElement rootGridContent = nullptr;
-        if ((child = FindChildByName(launcherFrame, L"RootPanel")) &&
-            (child = FindChildByName(child, L"RootGrid")) &&
-            (child = FindChildByName(child, L"RootContent"))) {
-            rootGridContent = child;
-        } else if ((child = FindChildByName(launcherFrame, L"RootGrid")) &&
-                   (child = FindChildByName(child, L"RootContent"))) {
-            rootGridContent = child;
-        }
+        bool adjustAnimation =
+            !g_unloading && g_settings.startMenuAnimationAdjust;
 
-        if (rootGridContent) {
-            FrameworkElement rootGridShadow = nullptr;
+        FrameworkElement child = startSizingFrame;
+        if ((child = FindChildByClassName(
+                 child, L"StartDocked.StartSizingFramePanel")) &&
+            (child = FindChildByClassName(
+                 child, L"Windows.UI.Xaml.Controls.ContentPresenter")) &&
+            (child = FindChildByClassName(child,
+                                          L"Windows.UI.Xaml.Controls.Frame")) &&
+            (child = FindChildByClassName(
+                 child, L"Windows.UI.Xaml.Controls.ContentPresenter")) &&
+            (child =
+                 FindChildByClassName(child, L"StartDocked.LauncherFrame"))) {
+            auto launcherFrame = child;
+
+            FrameworkElement rootGridContent = nullptr;
             if ((child = FindChildByName(launcherFrame, L"RootPanel")) &&
-                (child = FindChildByName(child, L"RootGridDropShadow"))) {
-                rootGridShadow = child;
-            } else if ((child = FindChildByClassName(
-                            startSizingFrame,
-                            L"StartDocked.StartSizingFramePanel")) &&
-                       (child = FindChildByName(child, L"DropShadow"))) {
-                rootGridShadow = child;
+                (child = FindChildByName(child, L"RootGrid")) &&
+                (child = FindChildByName(child, L"RootContent"))) {
+                rootGridContent = child;
+            } else if ((child = FindChildByName(launcherFrame, L"RootGrid")) &&
+                       (child = FindChildByName(child, L"RootContent"))) {
+                rootGridContent = child;
             }
 
-            double angle = 0;
-            if (!g_unloading) {
-                switch (taskbarLocation) {
-                    case TaskbarLocation::left:
-                        angle = 90;
-                        break;
-
-                    case TaskbarLocation::right:
-                        angle = -90;
-                        break;
+            if (rootGridContent) {
+                FrameworkElement rootGridShadow = nullptr;
+                if ((child = FindChildByName(launcherFrame, L"RootPanel")) &&
+                    (child = FindChildByName(child, L"RootGridDropShadow"))) {
+                    rootGridShadow = child;
+                } else if ((child = FindChildByClassName(
+                                startSizingFrame,
+                                L"StartDocked.StartSizingFramePanel")) &&
+                           (child = FindChildByName(child, L"DropShadow"))) {
+                    rootGridShadow = child;
                 }
-            }
 
-            Media::RotateTransform transform;
-            transform.Angle(angle);
-            startSizingFrame.RenderTransform(transform);
-            Media::RotateTransform transform2;
-            transform2.Angle(-angle);
-            rootGridContent.RenderTransform(transform2);
-            if (rootGridShadow) {
-                Media::RotateTransform transform3;
-                transform3.Angle(-angle);
-                rootGridShadow.RenderTransform(transform3);
-            }
+                double angle = 0;
+                if (adjustAnimation) {
+                    switch (taskbarLocation) {
+                        case TaskbarLocation::left:
+                            angle = 90;
+                            break;
 
-            auto origin = g_unloading
-                              ? winrt::Windows::Foundation::Point{}
-                              : winrt::Windows::Foundation::Point{0.5, 0.5};
-            startSizingFrame.RenderTransformOrigin(origin);
-            rootGridContent.RenderTransformOrigin(origin);
-            if (rootGridShadow) {
-                rootGridShadow.RenderTransformOrigin(origin);
+                        case TaskbarLocation::right:
+                            angle = -90;
+                            break;
+                    }
+                }
+
+                Media::RotateTransform transform;
+                transform.Angle(angle);
+                startSizingFrame.RenderTransform(transform);
+                Media::RotateTransform transform2;
+                transform2.Angle(-angle);
+                rootGridContent.RenderTransform(transform2);
+                if (rootGridShadow) {
+                    Media::RotateTransform transform3;
+                    transform3.Angle(-angle);
+                    rootGridShadow.RenderTransform(transform3);
+                }
+
+                auto origin = adjustAnimation
+                                  ? winrt::Windows::Foundation::Point{0.5, 0.5}
+                                  : winrt::Windows::Foundation::Point{};
+                startSizingFrame.RenderTransformOrigin(origin);
+                rootGridContent.RenderTransformOrigin(origin);
+                if (rootGridShadow) {
+                    rootGridShadow.RenderTransformOrigin(origin);
+                }
             }
         }
     }
@@ -3622,10 +3639,18 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
         }
     } else {
         if (!g_previousCanvasTop.has_value()) {
-            g_previousCanvasTop = Controls::Canvas::GetTop(startSizingFrame);
+            double canvasTop = Controls::Canvas::GetTop(startSizingFrame);
+            // The value might be zero when not yet initialized.
+            if (canvasTop) {
+                g_previousCanvasTop = canvasTop;
+            }
         }
         if (!g_previousCanvasLeft.has_value()) {
-            g_previousCanvasLeft = Controls::Canvas::GetLeft(startSizingFrame);
+            double canvasLeft = Controls::Canvas::GetLeft(startSizingFrame);
+            // The value might be zero when not yet initialized.
+            if (canvasLeft) {
+                g_previousCanvasLeft = canvasLeft;
+            }
         }
 
         MONITORINFO monitorInfo{
@@ -4147,6 +4172,9 @@ void LoadSettings() {
         g_settings.startMenuAlignment = StartMenuAlignment::bottom;
     }
     Wh_FreeStringSetting(startMenuAlignment);
+
+    g_settings.startMenuAnimationAdjust =
+        Wh_GetIntSetting(L"startMenuAnimationAdjust");
 
     g_settings.clockContainerHeight = Wh_GetIntSetting(L"clockContainerHeight");
 }
