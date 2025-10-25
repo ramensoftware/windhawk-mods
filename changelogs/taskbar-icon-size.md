@@ -1,3 +1,8 @@
+## 1.3.6 ([Oct 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c4d4cec71ba7af4f3ff2b5ccdbb3ec9a4e4ed0dc/mods/taskbar-icon-size.wh.cpp))
+
+* The mod is now compatible with the Vertical Taskbar for Windows 11 mod.
+* Fixed the weather widget disappearing in some cases.
+
 ## 1.3.5 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/41660d0eb32800704d23663f91959e543fe6fb5f/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed the weather widget not being affected by the mod for Windows 11 builds with the dynamic icon sizes option.
