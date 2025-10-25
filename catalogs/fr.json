@@ -1926,18 +1926,19 @@
                 "published": 1760452909000,
                 "rating": 10,
                 "ratingUsers": 2,
-                "updated": 1760452909000,
+                "updated": 1761384780000,
                 "users": 146
             },
             "metadata": {
                 "author": "Gabriela Cristei",
-                "description": "Comic Sans anybody? Every new GDI font in the Explorer context will be changed to your font of choice.",
+                "compilerOptions": "-luxtheme -lgdi32",
+                "description": "Comic Sans anybody? Change your GDI fonts at will! Also, gloooowy!",
                 "github": "https://github.com/cristeigabriela",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Explorer Font Changer",
-                "version": "0.1"
+                "version": "0.2"
             }
         },
         "explorer-frame-classic": {
