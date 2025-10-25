@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-25T16:18:43.000Z</updated>
+    <updated>2025-10-25T19:35:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Control Panel Color Fix 1.0.1]]></title>
+        <id>https://windhawk.net/mods/control-panel-color-fix#c5cb94e7793bcd705becbec2c5092e45103da11e</id>
+        <link href="https://windhawk.net/mods/control-panel-color-fix"/>
+        <updated>2025-10-25T19:35:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed incompatibility with StartAllBack causing white header/sidebar.</li>
+<li>Added optional ± contrast offset between Control Panel body and header/sidebar.</li>
+<li>Added manual override of header/sidebar color.</li>
+<li>Ensured support for all themes that repaint Control Panel (not just dark ones).</li>
+<li>Removed Windows 11 only restriction.</li>
+<li>Added before and after images to readme.</li>
+</ul>]]></content>
+        <author>
+            <name>chip33</name>
+            <uri>https://github.com/chip33</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#7f2f2a00bede1e5e55dc49331996d18ed88547cd</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2025-10-25T19:33:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Made the start menu animation adjustment optional and off by default, since it's incompatible with the Phone Link sidebar and with some Start Menu Styler themes.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.2.4]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#862ba36c9284acfd3cd617faffe37aea501db928</id>
@@ -352,54 +383,6 @@ the GDI32 "CreateFontIndirectW" function.</p>
         <updated>2025-10-13T19:04:16.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Remove title text from animation window to prevent it from showing up in Task Manager</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-min-max-animations#63dbd5b8633b9a64ede8983e358347d3e0d17478</id>
-        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
-        <updated>2025-10-13T09:16:51.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicminimizemaximizeanimations">Classic Minimize/Maximize Animations</h1>
-<p>From Windows 95 to XP, and in Vista and above without DWM running, windows had
-a minimize/maximize animation that involved the titlebar moving across the screen.
-This mod makes that animation play with DWM enabled by reimplementing it.</p>
-<h2 id="usagenote">Usage note</h2>
-<p>You must turn off the regular window animations in order for this mod to look correct.
-To do this:</p>
-<ol>
-<li>Run <code>sysdm.cpl</code> either from Start search or the Run dialog (WinKey + R).</li>
-<li>Go to the "Advanced" tab.</li>
-<li>Click "Settings…" under "Performance"</li>
-<li>Uncheck "Animate windows when minimizing and maximizing"</li>
-<li>Click Apply.</li>
-</ol>
-<h2 id="previews">Previews</h2>
-<p><strong>Top-level window</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-min-max-animations/toplevel.gif" alt="Top-level window" /></p>
-<p><strong>MDI child window</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/classic-min-max-animations/mdi.gif" alt="MDI child window" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom Command Prompt Startup Text 1.0.0]]></title>
-        <id>https://windhawk.net/mods/custom-cmd-startup-text#c45396c1dde8df6a30a090c8a3940204fb6a400f</id>
-        <link href="https://windhawk.net/mods/custom-cmd-startup-text"/>
-        <updated>2025-10-12T17:08:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="customcommandpromptstartuptext">Custom Command Prompt Startup Text</h1>
-<p>This mod allows you to change the version and copyright text displayed at the startup of
-Command Prompt without messing up scripts that use the <code>ver</code> command to read OS version,
-and without modifying the <code>cmd.exe</code> binary on disk.</p>
-<h2 id="supportedescapesequences">Supported escape sequences</h2>
-<ul>
-<li><code>\n</code> - new line</li>
-<li><code>\\</code> - backslash</li>
 </ul>]]></content>
         <author>
             <name>aubymori</name>

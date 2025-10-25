@@ -1,3 +1,7 @@
+## 1.3.7 ([Oct 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7f2f2a00bede1e5e55dc49331996d18ed88547cd/mods/taskbar-vertical.wh.cpp))
+
+* Made the start menu animation adjustment optional and off by default, since it's incompatible with the Phone Link sidebar and with some Start Menu Styler themes.
+
 ## 1.3.6 ([Oct 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/150cfc38691f0f7f36e548fd8bc6e41e5c74dcf0/mods/taskbar-vertical.wh.cpp))
 
 * Reworked Start menu positioning:
