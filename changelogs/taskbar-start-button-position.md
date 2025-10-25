@@ -1,3 +1,11 @@
+## 1.2.4 ([Oct 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/862ba36c9284acfd3cd617faffe37aea501db928/mods/taskbar-start-button-position.wh.cpp))
+
+* Reworked Start menu positioning:
+  * The [redesigned Windows 11 Start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/) is now supported.
+  * The "Start menu width" option has been removed, as it's no longer necessary.
+* Fixed missing Start button padding on the left in some cases. For details, see [this comment](https://github.com/ramensoftware/windhawk-mods/issues/1818#issuecomment-3446863789).
+* Fixed the mod not working on some Windows 11 builds which have one of the hooked functions inlined.
+
 ## 1.2.3 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5c7369abff574388214084b4d8ac46fa78e11279/mods/taskbar-start-button-position.wh.cpp))
 
 * Fixed the mod options not applying unless explorer is restarted in Windows 11 build 26100.4770 or newer.

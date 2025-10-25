@@ -4844,7 +4844,7 @@
                 "published": 1724520144000,
                 "rating": 10,
                 "ratingUsers": 81,
-                "updated": 1753303784000,
+                "updated": 1761409123000,
                 "users": 6843
             },
             "metadata": {
@@ -4857,11 +4857,12 @@
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
+                    "StartMenuExperienceHost.exe",
                     "explorer.exe"
                 ],
                 "name": "Start button always on the left",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.3"
+                "version": "1.2.4"
             }
         },
         "taskbar-thumbnail-reorder": {
