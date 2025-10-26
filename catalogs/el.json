@@ -4739,7 +4739,7 @@
                 "published": 1728056002000,
                 "rating": 10,
                 "ratingUsers": 237,
-                "updated": 1752724827000,
+                "updated": 1761504367000,
                 "users": 15032
             },
             "metadata": {
@@ -4752,11 +4752,12 @@
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
-                    "explorer.exe"
+                    "explorer.exe",
+                    "StartMenuExperienceHost.exe"
                 ],
                 "name": "Taskbar on top for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.4"
+                "version": "1.1.5"
             }
         },
         "taskbar-primary-on-secondary-monitor": {

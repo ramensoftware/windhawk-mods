@@ -1,3 +1,12 @@
+## 1.1.5 ([Oct 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6a179f7c2bc4de25e0d72167534b5583c43db03e/mods/taskbar-on-top.wh.cpp))
+
+* Reworked Start menu positioning:
+  * The [redesigned Windows 11 Start menu](https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/) is now supported.
+  * Added an option for the Start menu to animate from the top using a technique discovered by [SandTechStuff](https://github.com/SandTechStuff) (not available for the redesigned Start menu).
+  * The account card at the bottom of the Start menu is no longer truncated.
+* Added a workaround for the edges of the taskbar being non-clickable in some cases.
+* Added a workaround for compatibility with ExplorerPatcher. Previously, if the mod was used together with ExplorerPatcher, the Start menu could be misplaced at the edge of the screen.
+
 ## 1.1.4 ([Jul 17, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c094b860efa76d6d481a26237c089695d6f78406/mods/taskbar-on-top.wh.cpp))
 
 * Fixed a crash when hovering over taskbar items in recent Windows 11 builds.

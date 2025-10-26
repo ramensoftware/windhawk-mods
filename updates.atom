@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-25T19:35:55.000Z</updated>
+    <updated>2025-10-26T18:46:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#6a179f7c2bc4de25e0d72167534b5583c43db03e</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2025-10-26T18:46:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Reworked Start menu positioning:</li>
+<li>The <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">redesigned Windows 11 Start menu</a> is now supported.</li>
+<li>Added an option for the Start menu to animate from the top using a technique discovered by <a href="https://github.com/SandTechStuff">SandTechStuff</a> (not available for the redesigned Start menu).</li>
+<li>The account card at the bottom of the Start menu is no longer truncated.</li>
+<li>Added a workaround for the edges of the taskbar being non-clickable in some cases.</li>
+<li>Added a workaround for compatibility with ExplorerPatcher. Previously, if the mod was used together with ExplorerPatcher, the Start menu could be misplaced at the edge of the screen.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Control Panel Color Fix 1.0.1]]></title>
         <id>https://windhawk.net/mods/control-panel-color-fix#c5cb94e7793bcd705becbec2c5092e45103da11e</id>
@@ -374,19 +392,6 @@ the GDI32 "CreateFontIndirectW" function.</p>
         <author>
             <name>Marnes &lt;leaumar@sent.com&gt;</name>
             <uri>https://github.com/leaumar</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.1]]></title>
-        <id>https://windhawk.net/mods/classic-min-max-animations#f1f0d4e6ba11a02875e542aacd7cd3b164002b53</id>
-        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
-        <updated>2025-10-13T19:04:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Remove title text from animation window to prevent it from showing up in Task Manager</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
