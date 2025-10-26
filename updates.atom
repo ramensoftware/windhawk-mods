@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-26T18:46:07.000Z</updated>
+    <updated>2025-10-26T20:18:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Show all apps by default in start menu 1.0.5]]></title>
+        <id>https://windhawk.net/mods/start-menu-all-apps#62eac3202cd59cc5f83b71e2e7dc3a9022fdff33</id>
+        <link href="https://windhawk.net/mods/start-menu-all-apps"/>
+        <updated>2025-10-26T20:18:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an incompatibility with preview Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#6a179f7c2bc4de25e0d72167534b5583c43db03e</id>
@@ -376,22 +389,6 @@ the GDI32 "CreateFontIndirectW" function.</p>
         <author>
             <name>Gabriela Cristei</name>
             <uri>https://github.com/cristeigabriela</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Select filename extension on double F2 2.1]]></title>
-        <id>https://windhawk.net/mods/explorer-double-f2-rename-extension#9f806706ffd5af8ef7970ba315b4999c42682c35</id>
-        <link href="https://windhawk.net/mods/explorer-double-f2-rename-extension"/>
-        <updated>2025-10-14T09:04:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>allow swapping double/triple F2 behavior (extension and full name)</li>
-<li>added descriptors to settings</li>
-<li>now caching settings in memory</li>
-<li>now hooking keydown instead of keyup for faster and more consistent (with Explorer) response</li>
-</ul>]]></content>
-        <author>
-            <name>Marnes &lt;leaumar@sent.com&gt;</name>
-            <uri>https://github.com/leaumar</uri>
         </author>
     </entry>
 </feed>
