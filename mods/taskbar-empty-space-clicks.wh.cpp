@@ -992,8 +992,8 @@ static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition
 
 // =====================================================================
 
-#define ENABLE_LOG_INFO // info messages will be enabled
-#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+#define ENABLE_LOG_INFO  // info messages will be enabled
+// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
@@ -1161,41 +1161,125 @@ static struct
     std::vector<TriggerAction> triggerActions;
 } g_settings;
 
-// wrapper to always call COM de-initialization
-class COMInitializer
+// wrapper around COM API initialization and usage to enable lazy init and safe resource management
+class COMAPI
 {
 public:
-    COMInitializer() : initialized(false) {}
+    COMAPI() : m_isInitialized(false), m_isCOMInitialized(false), m_isUIAInitialized(false), m_isDEInitialized(false),
+                       m_pUIAutomation(nullptr), m_pDeviceEnumerator(nullptr) {}
 
+    // init COM for UIAutomation and Volume control
     bool Init()
     {
-        if (!initialized)
+        if (!m_isCOMInitialized)
         {
-            initialized = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
+            if (SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)))
+            {
+                m_isCOMInitialized = true;
+                LOG_INFO(L"COM initilized");
+            }
+            else
+            {
+                m_isCOMInitialized = false;
+                LOG_ERROR(L"COM initialization failed, ModInit failed");
+            }
         }
-        return initialized;
+        if (!m_isUIAInitialized && m_isCOMInitialized)
+        {
+            // init COM interface for UIAutomation
+            if (FAILED(CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
+                                        m_pUIAutomation.put_void())) ||
+                !m_pUIAutomation)
+            {
+                m_isUIAInitialized = false;
+                LOG_ERROR(L"Failed to create UIAutomation COM instance, ModInit failed");
+            }
+            else
+            {
+                m_isUIAInitialized = true;
+                LOG_INFO(L"UIAutomation COM initilized");
+            }
+        }
+        if (!m_isDEInitialized && m_isCOMInitialized)
+        {
+            // init COM interface for Volume control
+            const GUID XIID_IMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
+            const GUID XIID_MMDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
+            if (FAILED(CoCreateInstance(XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, XIID_IMMDeviceEnumerator,
+                                        m_pDeviceEnumerator.put_void())) ||
+                !m_pDeviceEnumerator)
+            {
+                m_isDEInitialized = false;
+                LOG_ERROR(L"Failed to create DeviceEnumerator COM instance. Volume mute feature will not be available!");
+            }
+            else
+            {
+                m_isDEInitialized = true;
+                LOG_INFO(L"DeviceEnumerator COM initilized");
+            }
+        }
+        m_isInitialized = m_isCOMInitialized && m_isUIAInitialized; // m_isDEInitialized is not mandatory
+        return m_isInitialized;
     }
 
     void Uninit()
     {
-        if (initialized)
+        if (m_isDEInitialized)
+        {
+            m_pDeviceEnumerator = com_ptr<IMMDeviceEnumerator>(nullptr);   // force underlying ptr to get released
+            m_isDEInitialized = false;
+            LOG(L"DeviceEnumerator COM de-initialized");
+        }
+        if (m_isUIAInitialized)
+        {
+            m_pUIAutomation = com_ptr<IUIAutomation>(nullptr);       // force underlying ptr to get released
+            m_isUIAInitialized = false;
+            LOG(L"UIAutomation COM de-initialized");
+        }
+        if (m_isCOMInitialized)
         {
             CoUninitialize();
-            initialized = false;
+            m_isCOMInitialized = false;
             LOG(L"COM de-initialized");
         }
     }
 
-    ~COMInitializer()
+    ~COMAPI()
     {
         Uninit();
     }
 
-    bool IsInitialized() { return initialized; }
+    bool IsInitialized() { return m_isInitialized; }
+
+    const com_ptr<IUIAutomation> GetUIAutomation() 
+    { 
+        // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+        if (!IsInitialized())       
+        {
+            Init();
+        }
+        return m_pUIAutomation; 
+    }
+
+    const com_ptr<IMMDeviceEnumerator> GetDeviceEnumerator() 
+    { 
+        // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+        if (!IsInitialized())
+        {
+            Init();
+        }
+        return m_pDeviceEnumerator; 
+    }
 
 protected:
-    bool initialized;
-} g_comInitializer;
+    bool m_isInitialized;
+    bool m_isCOMInitialized;
+    bool m_isUIAInitialized;
+    bool m_isDEInitialized;
+
+    com_ptr<IUIAutomation> m_pUIAutomation;
+    com_ptr<IMMDeviceEnumerator> m_pDeviceEnumerator;
+} g_comAPI;
 
 // few helpers to ease up working with strings
 namespace stringtools
@@ -1230,14 +1314,11 @@ bool GetBit(const uint32_t &value, uint32_t bit);
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
 static DWORD g_dwTaskbarThreadId;
-static bool g_initialized = false;
+static bool g_isWhInitialized = false;
 static bool g_inputSiteProcHooked = false;
 
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
-
-static com_ptr<IUIAutomation> g_pUIAutomation;
-static com_ptr<IMMDeviceEnumerator> g_pDeviceEnumerator;
 
 // object to store information about the mouse click, its position, button, timestamp and whether it was on empty space
 struct MouseClick
@@ -1269,12 +1350,19 @@ struct MouseClick
             return; // without position there is no point to going further, other members are initialized so it's safe to return
         }
 
+        auto pUIAutomation = g_comAPI.GetUIAutomation();
+        if (!pUIAutomation)
+        {
+            LOG_ERROR(L"UIAutomation COM interface is not initialized, cannot determine if click was on empty space");
+            return; // other members are initialized so it's safe to return
+        }
+        
         // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
         // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
         // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
         // opened window, icon, start menu, etc.
         com_ptr<IUIAutomationElement> pWindowElement = NULL;
-        if (FAILED(g_pUIAutomation->ElementFromPoint(position, pWindowElement.put())) || !pWindowElement)
+        if (FAILED(pUIAutomation->ElementFromPoint(position, pWindowElement.put())) || !pWindowElement)
         {
             LOG_ERROR(L"Failed to retrieve UI element from mouse click");
             return; // without element info we cannot determine its type, other members are initialized so it's safe to return
@@ -1621,10 +1709,10 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         MouseClick::Type type = MouseClick::GetPointerType(wParam, lParam);
         OnMouseClick(MouseClick(wParam, lParam, type, button, hWnd));
     }
-    
-    else if(VK_RMENU == uMsg)   // avoid opening right click menu when performing a right click action
+
+    else if (VK_RMENU == uMsg) // avoid opening right click menu when performing a right click action
     {
-        const auto& lastClick = g_mouseClickQueue[-1];
+        const auto &lastClick = g_mouseClickQueue[-1];
         if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
         {
             for (const auto &triggerAction : g_settings.triggerActions)
@@ -1635,25 +1723,25 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
                     if (modifiersPressed)
                     {
                         LOG_INFO("Suppressing VK_RMENU");
-                        return 0;       // suppress the right click menu (otherwise a double click would be impossible)
+                        return 0; // suppress the right click menu (otherwise a double click would be impossible)
                     }
                 }
             }
         }
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);   // show the right click menu
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam); // show the right click menu
     }
-    
+
     else if (WM_NCDESTROY == uMsg)
     {
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam); 
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         if (hWnd != g_hTaskbarWnd)
         {
             g_secondaryTaskbarWindows.erase(hWnd);
         }
     }
-    else 
+    else
     {
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam); 
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
     return result;
@@ -1736,7 +1824,7 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd)
     void *wndProc = (void *)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
     Wh_SetFunctionHook(wndProc, (void *)InputSiteWindowProc_Hook, (void **)&InputSiteWindowProc_Original);
 
-    if (g_initialized)
+    if (g_isWhInitialized)
     {
         LOG_DEBUG("Calling Wh_ApplyHookOperations");
         Wh_ApplyHookOperations(); // from docs: Can't be called before Wh_ModInit returns or after Wh_ModBeforeUninit returns
@@ -2463,9 +2551,16 @@ bool ClickStartMenu()
         return false;
     }
 
+    auto pUIAutomation = g_comAPI.GetUIAutomation();
+    if (!pUIAutomation)
+    {
+        LOG_ERROR(L"Failed to get UIAutomation instance");
+        return false;
+    }
+
     // Get the taskbar element from the last mouse click position
     com_ptr<IUIAutomationElement> pWindowElement = NULL;
-    if (FAILED(g_pUIAutomation->ElementFromPoint(lastClick.position, pWindowElement.put())) || !pWindowElement)
+    if (FAILED(pUIAutomation->ElementFromPoint(lastClick.position, pWindowElement.put())) || !pWindowElement)
     {
         LOG_ERROR(L"Failed to taskbar UI element from mouse click");
         return false;
@@ -2480,7 +2575,7 @@ bool ClickStartMenu()
 
         // Create Condition 1: ControlType == Button
         com_ptr<IUIAutomationCondition> pControlTypeCondition = NULL;
-        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId,
+        if (FAILED(pUIAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId,
                                                             _variant_t(static_cast<int>(UIA_ButtonControlTypeId)),
                                                             pControlTypeCondition.put())) ||
             !pControlTypeCondition)
@@ -2491,7 +2586,7 @@ bool ClickStartMenu()
 
         // Create Condition 2: ClassName == "Start"
         com_ptr<IUIAutomationCondition> pClassNameCondition = NULL;
-        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId,
+        if (FAILED(pUIAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId,
                                                             _variant_t(L"Start"),
                                                             pClassNameCondition.put())) ||
             !pClassNameCondition)
@@ -2502,7 +2597,7 @@ bool ClickStartMenu()
 
         // Combine both conditions using AndCondition
         com_ptr<IUIAutomationCondition> pAndCondition = NULL;
-        if (FAILED(g_pUIAutomation->CreateAndCondition(pControlTypeCondition.get(),
+        if (FAILED(pUIAutomation->CreateAndCondition(pControlTypeCondition.get(),
                                                        pClassNameCondition.get(),
                                                        pAndCondition.put())) ||
             !pAndCondition)
@@ -2524,7 +2619,7 @@ bool ClickStartMenu()
 
         // Create a condition to find the Start button by AutomationId
         com_ptr<IUIAutomationCondition> pCondition = NULL;
-        if (FAILED(g_pUIAutomation->CreatePropertyCondition(UIA_AutomationIdPropertyId,
+        if (FAILED(pUIAutomation->CreatePropertyCondition(UIA_AutomationIdPropertyId,
                                                             _variant_t(L"StartButton"),
                                                             pCondition.put())) ||
             !pCondition)
@@ -2625,7 +2720,8 @@ void ToggleVolMuted()
 {
     LOG_TRACE();
 
-    if (!g_pDeviceEnumerator)
+    auto pDeviceEnumerator = g_comAPI.GetDeviceEnumerator();
+    if (!pDeviceEnumerator)
     {
         LOG_ERROR(L"Failed to toggle volume mute - device enumerator not initialized!");
         return;
@@ -2633,7 +2729,7 @@ void ToggleVolMuted()
     LOG_INFO(L"Toggling volume mute");
 
     com_ptr<IMMDevice> defaultAudioDevice;
-    if (SUCCEEDED(g_pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
+    if (SUCCEEDED(pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
     {
         // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
         const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
@@ -3136,45 +3232,6 @@ BOOL Wh_ModInit()
     }
     LOG_INFO(L"Using taskbar version: %s", TaskBarVersionNames[g_taskbarVersion]);
 
-    // init COM for UIAutomation and Volume control
-    if (!g_comInitializer.Init())
-    {
-        LOG_ERROR(L"COM initialization failed, ModInit failed");
-        return FALSE;
-    }
-    else
-    {
-        LOG_INFO(L"COM initilized");
-    }
-
-    // init COM interface for UIAutomation
-    if (FAILED(CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
-                                g_pUIAutomation.put_void())) ||
-        !g_pUIAutomation)
-    {
-        LOG_ERROR(L"Failed to create UIAutomation COM instance, ModInit failed");
-        return FALSE; // UIAutomation is mandatory to find where the mouse clicked
-    }
-    else
-    {
-        LOG_INFO(L"UIAutomation COM initilized");
-    }
-
-    // init COM interface for Volume control
-    const GUID XIID_IMMDeviceEnumerator = {0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
-    const GUID XIID_MMDeviceEnumerator = {0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-    if (FAILED(CoCreateInstance(XIID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, XIID_IMMDeviceEnumerator,
-                                g_pDeviceEnumerator.put_void())) ||
-        !g_pDeviceEnumerator)
-    {
-        // this is not mandatory, if failed the volume mute feature will not be available
-        LOG_ERROR(L"Failed to create DeviceEnumerator COM instance. Volume mute feature will not be available!");
-    }
-    else
-    {
-        LOG_INFO(L"DeviceEnumerator COM initilized");
-    }
-
     // hook CreateWindowExW to be able to identify taskbar windows on re-creation
     if (!Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original))
     {
@@ -3214,7 +3271,7 @@ BOOL Wh_ModInit()
         LOG_ERROR(L"Failed to find Shell_TrayWnd class. Something changed under the hood! Taskbar might not get hooked properly!");
     }
 
-    g_initialized = true; // if not set the hook operations will not be applied after Windows startup
+    g_isWhInitialized = true; // if not set the hook operations will not be applied after Windows startup
 
     return TRUE;
 }
@@ -3242,5 +3299,5 @@ void Wh_ModUninit()
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
-    g_comInitializer.Uninit();
+    g_comAPI.Uninit();
 }
