@@ -992,7 +992,7 @@ static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition
 
 // =====================================================================
 
-#define ENABLE_LOG_INFO  // info messages will be enabled
+#define ENABLE_LOG_INFO // info messages will be enabled
 // #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
@@ -1166,7 +1166,7 @@ class COMAPI
 {
 public:
     COMAPI() : m_isInitialized(false), m_isCOMInitialized(false), m_isUIAInitialized(false), m_isDEInitialized(false),
-                       m_pUIAutomation(nullptr), m_pDeviceEnumerator(nullptr) {}
+               m_pUIAutomation(nullptr), m_pDeviceEnumerator(nullptr) {}
 
     // init COM for UIAutomation and Volume control
     bool Init()
@@ -1226,13 +1226,13 @@ public:
     {
         if (m_isDEInitialized)
         {
-            m_pDeviceEnumerator = com_ptr<IMMDeviceEnumerator>(nullptr);   // force underlying ptr to get released
+            m_pDeviceEnumerator = com_ptr<IMMDeviceEnumerator>(nullptr); // force underlying ptr to get released
             m_isDEInitialized = false;
             LOG(L"DeviceEnumerator COM de-initialized");
         }
         if (m_isUIAInitialized)
         {
-            m_pUIAutomation = com_ptr<IUIAutomation>(nullptr);       // force underlying ptr to get released
+            m_pUIAutomation = com_ptr<IUIAutomation>(nullptr); // force underlying ptr to get released
             m_isUIAInitialized = false;
             LOG(L"UIAutomation COM de-initialized");
         }
@@ -1251,24 +1251,24 @@ public:
 
     bool IsInitialized() { return m_isInitialized; }
 
-    const com_ptr<IUIAutomation> GetUIAutomation() 
-    { 
-        // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-        if (!IsInitialized())       
-        {
-            Init();
-        }
-        return m_pUIAutomation; 
-    }
-
-    const com_ptr<IMMDeviceEnumerator> GetDeviceEnumerator() 
-    { 
+    const com_ptr<IUIAutomation> GetUIAutomation()
+    {
         // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
         if (!IsInitialized())
         {
             Init();
         }
-        return m_pDeviceEnumerator; 
+        return m_pUIAutomation;
+    }
+
+    const com_ptr<IMMDeviceEnumerator> GetDeviceEnumerator()
+    {
+        // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+        if (!IsInitialized())
+        {
+            Init();
+        }
+        return m_pDeviceEnumerator;
     }
 
 protected:
@@ -1279,7 +1279,8 @@ protected:
 
     com_ptr<IUIAutomation> m_pUIAutomation;
     com_ptr<IMMDeviceEnumerator> m_pDeviceEnumerator;
-} g_comAPI;
+};
+static COMAPI g_comAPI;
 
 // few helpers to ease up working with strings
 namespace stringtools
@@ -1356,7 +1357,7 @@ struct MouseClick
             LOG_ERROR(L"UIAutomation COM interface is not initialized, cannot determine if click was on empty space");
             return; // other members are initialized so it's safe to return
         }
-        
+
         // Note: The reason why UIAutomation interface is used is that it reliably returns a className of the element clicked.
         // If standard Windows API is used, the className returned is always Shell_TrayWnd which is a parrent window wrapping the taskbar.
         // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
@@ -2576,8 +2577,8 @@ bool ClickStartMenu()
         // Create Condition 1: ControlType == Button
         com_ptr<IUIAutomationCondition> pControlTypeCondition = NULL;
         if (FAILED(pUIAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId,
-                                                            _variant_t(static_cast<int>(UIA_ButtonControlTypeId)),
-                                                            pControlTypeCondition.put())) ||
+                                                          _variant_t(static_cast<int>(UIA_ButtonControlTypeId)),
+                                                          pControlTypeCondition.put())) ||
             !pControlTypeCondition)
         {
             LOG_ERROR(L"Failed to create ControlType condition for Start button search.");
@@ -2587,8 +2588,8 @@ bool ClickStartMenu()
         // Create Condition 2: ClassName == "Start"
         com_ptr<IUIAutomationCondition> pClassNameCondition = NULL;
         if (FAILED(pUIAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId,
-                                                            _variant_t(L"Start"),
-                                                            pClassNameCondition.put())) ||
+                                                          _variant_t(L"Start"),
+                                                          pClassNameCondition.put())) ||
             !pClassNameCondition)
         {
             LOG_ERROR(L"Failed to create ClassName condition for Start button search.");
@@ -2598,8 +2599,8 @@ bool ClickStartMenu()
         // Combine both conditions using AndCondition
         com_ptr<IUIAutomationCondition> pAndCondition = NULL;
         if (FAILED(pUIAutomation->CreateAndCondition(pControlTypeCondition.get(),
-                                                       pClassNameCondition.get(),
-                                                       pAndCondition.put())) ||
+                                                     pClassNameCondition.get(),
+                                                     pAndCondition.put())) ||
             !pAndCondition)
         {
             LOG_ERROR(L"Failed to create ControlType&&ClassName condition for Start button search.");
@@ -2620,8 +2621,8 @@ bool ClickStartMenu()
         // Create a condition to find the Start button by AutomationId
         com_ptr<IUIAutomationCondition> pCondition = NULL;
         if (FAILED(pUIAutomation->CreatePropertyCondition(UIA_AutomationIdPropertyId,
-                                                            _variant_t(L"StartButton"),
-                                                            pCondition.put())) ||
+                                                          _variant_t(L"StartButton"),
+                                                          pCondition.put())) ||
             !pCondition)
         {
             LOG_ERROR(L"Failed to create property condition for locating the Start button.");
