@@ -582,6 +582,159 @@ protected:
 };
 static COMAPI g_comAPI;
 
+class WindowFocusTracker
+{
+private:
+    HWINEVENTHOOK m_hEventHook;
+    HANDLE m_hThread;
+    DWORD m_dwThreadId;
+    volatile bool m_bRunning;
+
+    static void CALLBACK WinEventProc(
+        HWINEVENTHOOK hWinEventHook,
+        DWORD event,
+        HWND hwnd,
+        LONG idObject,
+        LONG idChild,
+        DWORD dwEventThread,
+        DWORD dwmsEventTime)
+    {
+        if (event == EVENT_SYSTEM_FOREGROUND && idObject == OBJID_WINDOW)
+        {
+            if (hwnd && IsWindow(hwnd) && (hwnd != g_hwndLastActive))
+            {
+                // Check if it's not the taskbar
+                WCHAR className[256];
+                GetClassName(hwnd, className, 256);
+
+                if ((wcscmp(className, L"Shell_TrayWnd") != 0) &&
+                    (wcscmp(className, L"Shell_SecondaryTrayWnd") != 0) &&
+                    (wcscmp(className, L"Windows.UI.Input.InputSite.WindowClass") != 0) &&
+                    (wcscmp(className, L"Taskbar.TaskbarFrameAutomationPeer") != 0) &&
+                    (wcscmp(className, L"Windows.UI.Core.CoreWindow") != 0) &&
+                    (wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") != 0))
+                {
+#ifdef ENABLE_LOG_DEBUG
+                    // Retrieve and log the full window title and process id for debugging
+                    DWORD dwProcessId = 0;
+                    GetWindowThreadProcessId(hwnd, &dwProcessId);
+
+                    // Get window text length (in characters) and read the title
+                    int textLen = GetWindowTextLengthW(hwnd);
+                    std::wstring windowTitle;
+                    if (textLen > 0)
+                    {
+                        windowTitle.resize(textLen + 1);
+                        if (GetWindowTextW(hwnd, &windowTitle[0], textLen + 1) > 0)
+                        {
+                            windowTitle.resize(std::wcslen(windowTitle.c_str()));
+                        }
+                        else
+                        {
+                            windowTitle.clear();
+                        }
+                    }
+
+                    LOG_DEBUG(L"Foreground window changed: CurrentThread: %u HWND=%p PID=%u ClassName=%s Title=%s",
+                              GetCurrentThreadId(), hwnd, dwProcessId, className, windowTitle.c_str());
+#endif
+                    g_hwndLastActive = hwnd;
+                }
+            }
+        }
+    }
+
+    static DWORD WINAPI ThreadProc(LPVOID lpParam)
+    {
+        WindowFocusTracker *pThis = (WindowFocusTracker *)lpParam;
+
+        pThis->m_hEventHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+            NULL, WinEventProc, 0, 0,
+            WINEVENT_OUTOFCONTEXT);
+
+        if (!pThis->m_hEventHook)
+        {
+            LOG_ERROR(L"SetWinEventHook failed");
+            return 1;
+        }
+
+        LOG_INFO(L"WindowFocusTracker thread started with hook %p");
+
+        MSG msg;
+        while (pThis->m_bRunning && GetMessage(&msg, NULL, 0, 0))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        if (pThis->m_hEventHook)
+        {
+            UnhookWinEvent(pThis->m_hEventHook);
+            pThis->m_hEventHook = NULL;
+        }
+
+        LOG_INFO(L"WindowFocusTracker thread terminated");
+        return 0;
+    }
+
+public:
+    static HWND g_hwndLastActive;
+
+    WindowFocusTracker() : m_hEventHook(NULL), m_hThread(NULL), m_dwThreadId(0), m_bRunning(false) {}
+
+    void Start()
+    {
+        if (m_hThread)
+        {
+            LOG_ERROR(L"WindowFocusTracker already started");
+            return;
+        }
+
+        m_bRunning = true;
+        m_hThread = CreateThread(NULL, 0, ThreadProc, this, 0, &m_dwThreadId);
+        if (!m_hThread)
+        {
+            LOG_ERROR(L"Failed to create WindowFocusTracker thread");
+            m_bRunning = false;
+        }
+        else
+        {
+            LOG_INFO(L"WindowFocusTracker thread created with ID %u ", m_dwThreadId);
+        }
+    }
+
+    void Stop()
+    {
+        if (m_hThread)
+        {
+            LOG_INFO(L"Stopping WindowFocusTracker...");
+            m_bRunning = false;
+
+            // Post a quit message to the thread's message queue
+            PostThreadMessage(m_dwThreadId, WM_QUIT, 0, 0);
+
+            // Wait for thread to finish
+            WaitForSingleObject(m_hThread, 5000);
+            CloseHandle(m_hThread);
+            m_hThread = NULL;
+        }
+    }
+
+    HWND GetLastActiveWindow()
+    {
+        return g_hwndLastActive;
+    }
+
+    ~WindowFocusTracker()
+    {
+        Stop();
+    }
+};
+HWND WindowFocusTracker::g_hwndLastActive = NULL;
+
+static WindowFocusTracker g_windowFocusTracker;
+
 // few helpers to ease up working with strings
 namespace stringtools
 {
@@ -1950,6 +2103,14 @@ void SendKeypress(std::vector<int> keys)
     LOG_DEBUG(L"Sending %d keypresses", NUM_KEYS);
     std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
 
+    // bring the target window to foreground to ensure it receives the keypresses
+    HWND hwndTarget = WindowFocusTracker::g_hwndLastActive;
+    if (hwndTarget && IsWindow(hwndTarget))
+    {
+        SetForegroundWindow(hwndTarget);
+        Sleep(100);
+    }
+
     for (int i = 0; i < NUM_KEYS; i++)
     {
         input[i].type = INPUT_KEYBOARD;
@@ -2915,6 +3076,8 @@ BOOL Wh_ModInit()
     {
         LOG_ERROR(L"Failed to find Shell_TrayWnd class. Something changed under the hood! Taskbar might not get hooked properly!");
     }
+
+    g_windowFocusTracker.Start();
 
     g_isWhInitialized = true; // if not set the hook operations will not be applied after Windows startup
 
