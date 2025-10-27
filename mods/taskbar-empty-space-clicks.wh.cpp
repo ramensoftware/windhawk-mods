@@ -116,9 +116,9 @@ If you have request for new functions, suggestions or you are experiencing some 
 // ==WindhawkModSettings==
 /*
 - TriggerActionOptions:
-  - - KeyboardTriggers: [none, lctrl, lshift, lalt, win, rctrl, rshift, ralt ]
+  - - KeyboardTriggers: [none, lctrl, lshift, lalt, win, rctrl, rshift, ralt]
       $name: Keyboard
-      $description: Select keyboard keypress modifiers. If None is selected or added, this trigger gets ignored.
+      $description: Select keyboard key press modifiers. If None is selected or added, the modifier is ignored.
       $options:
       - none: None
       - lctrl: Left Ctrl
@@ -130,24 +130,24 @@ If you have request for new functions, suggestions or you are experiencing some 
       - ralt: Right Alt
     - MouseTrigger: none
       $name: Mouse
-      $description: Select mouse click trigger. If None is selected, this trigger gets ignored.
+      $description: Select the mouse click trigger. If None is selected, this trigger is ignored.
       $options:
       - none: None
       - left: Mouse left button click
-      - leftDouble: Mouse left button double click
-      - leftTriple: Mouse left button triple click
+      - leftDouble: Mouse left button double-click
+      - leftTriple: Mouse left button triple-click
       - middle: Mouse middle button click
-      - middleDouble: Mouse middle button double click
-      - middleTriple: Mouse middle button triple click
+      - middleDouble: Mouse middle button double-click
+      - middleTriple: Mouse middle button triple-click
       - right: Mouse right button click
-      - rightDouble: Mouse right button double click
-      - rightTriple: Mouse right button triple click
-      - tap: Touchscreen single tap
+      - rightDouble: Mouse right button double-click
+      - rightTriple: Mouse right button triple-click
+      - tapSingle: Touchscreen single tap
       - tapDouble: Touchscreen double tap
       - tapTriple: Touchscreen triple tap
     - Action: ACTION_NOTHING
       $name: Action
-      $description: Action invoked on trigger
+      $description: Action to invoke on trigger.
       $options:
       - ACTION_NOTHING: Nothing (default)
       - ACTION_SHOW_DESKTOP: Show desktop
@@ -163,15 +163,21 @@ If you have request for new functions, suggestions or you are experiencing some 
       - ACTION_START_PROCESS: Start application
     - AdditionalArgs: arg1;arg2
       $name: Additional Args
-      $description: Additional arguments for selected action separated by semicolon. See mod's Details tab for more info about supported arguments for each action.
+      $description: Additional arguments for the selected action, separated by semicolons. See the mod's Details tab for more information about the supported arguments for each action.
   $name: Taskbar empty space actions
-  $description: "Using Keyboard and Mouse combo boxes select a trigger for certain Action. For example combination 'Left Ctrl + Double click + Task Manager' will open Windows Task Manager when user double clicks empty space on Taskbar while holding left Ctrl key pressed down. More actions can be setup with Add new item button."
+  $description: "Using the Keyboard and Mouse combo boxes, select a trigger for a specific action. For example, the combination 'Left Ctrl + Double-click + Task Manager' will open the Windows Task Manager when the user double-clicks empty space on the taskbar while holding the Left Ctrl key. More actions can be set up with the Add new item button."
+- suppressContextMenu: false
+  $name: Suppress taskbar context menu
+  $description: >-
+    Force suppression of the taskbar (right-click) context menu. If disabled, the context menu is suppressed only when right-click triggers are selected
+    together with any keyboard modifier. If enabled, the context menu is always suppressed, which enables you to use right-click triggers without any
+    keyboard modifiers.
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
-    ExplorerPatcher or a similar tool). Note: For Windhawk versions older
-    than 1.3, you have to disable and re-enable the mod to apply this option.
+    ExplorerPatcher or a similar tool). Note: For Windhawk versions earlier
+    than 1.3, you must disable and re-enable the mod to apply this option.
 */
 // ==/WindhawkModSettings==
 
@@ -1151,12 +1157,13 @@ struct TriggerAction
 {
     std::wstring mouseTriggerName;            // Mouse trigger parsed from settings - represents what kind of button click should be detected
     std::wstring actionName;                  // Name of the action parsed from settings
-    uint32_t extepctedKeyModifiersState;      // expected state (bitmask) of the key modifiers that should be checked
+    uint32_t expectedKeyModifiersState;      // expected state (bitmask) of the key modifiers that should be checked
     std::function<void(HWND)> actionExecutor; // function that executes the action
 };
 
 static struct
 {
+    bool suppressContextMenu;
     bool oldTaskbarOnWin11;
     std::vector<TriggerAction> triggerActions;
 } g_settings;
@@ -1720,8 +1727,9 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
             {
                 if (triggerAction.mouseTriggerName.find(L"right", 0) == 0) // Check if mouseTriggerName starts with "right"
                 {
-                    bool modifiersPressed = (lastClick.keyModifiersState == triggerAction.extepctedKeyModifiersState);
-                    if (modifiersPressed)
+                    bool modifiersPressed = (triggerAction.expectedKeyModifiersState != 0) && 
+                                            (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState);
+                    if (g_settings.suppressContextMenu || modifiersPressed)
                     {
                         LOG_INFO("Suppressing VK_RMENU");
                         return 0; // suppress the right click menu (otherwise a double click would be impossible)
@@ -2353,7 +2361,7 @@ void LoadSettings()
 
         // parse trigger->action settings
         TriggerAction triggerAction{};
-        triggerAction.extepctedKeyModifiersState = 0U;
+        triggerAction.expectedKeyModifiersState = 0U;
         for (const auto &keyboardTrigger : keyboardTriggers)
         {
             if (keyboardTrigger == L"none")
@@ -2362,7 +2370,7 @@ void LoadSettings()
             KeyModifier keyModifier = GetKeyModifierFromName(keyboardTrigger);
             if (keyModifier != KEY_MODIFIER_INVALID)
             {
-                SetBit(triggerAction.extepctedKeyModifiersState, keyModifier);
+                SetBit(triggerAction.expectedKeyModifiersState, keyModifier);
             }
         }
         triggerAction.mouseTriggerName = mouseTriggerStr;
@@ -2371,6 +2379,7 @@ void LoadSettings()
         g_settings.triggerActions.push_back(triggerAction);
     }
 
+    g_settings.suppressContextMenu = Wh_GetIntSetting(L"suppressContextMenu");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
@@ -3142,7 +3151,7 @@ void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
             bool allModifiersPressed = true;
             for (int i = 1; i <= numClicks; i++)
             {
-                allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.extepctedKeyModifiersState);
+                allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
                 LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u",
                           i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.extepctedKeyModifiersState);
             }
