@@ -3153,7 +3153,7 @@ void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
             {
                 allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
                 LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u",
-                          i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.extepctedKeyModifiersState);
+                          i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.expectedKeyModifiersState);
             }
             if (allModifiersPressed)
             {
