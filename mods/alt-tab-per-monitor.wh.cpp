@@ -556,3 +556,12 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
+
+    return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    LoadSettings();
+}
