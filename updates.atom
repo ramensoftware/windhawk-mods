@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-26T20:18:37.000Z</updated>
+    <updated>2025-10-28T22:10:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Alt+Tab per monitor 1.1.1]]></title>
+        <id>https://windhawk.net/mods/alt-tab-per-monitor#2d1ff5b6c4891f684f71b5a8bffff9e2f8c68ef6</id>
+        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
+        <updated>2025-10-28T22:10:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The Windows behavior can now be achieved by pressing Win+Alt+Tab, which will show all windows across all monitors. You can configure where the Win+Alt+Tab UI appears in the mod settings.</li>
+</ul>]]></content>
+        <author>
+            <name>L3r0y</name>
+            <uri>https://github.com/L3r0yThingz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Show all apps by default in start menu 1.0.5]]></title>
         <id>https://windhawk.net/mods/start-menu-all-apps#62eac3202cd59cc5f83b71e2e7dc3a9022fdff33</id>
@@ -369,26 +382,6 @@ Can be applied to other programs (e.g., <code>notepad.exe</code>) by including t
         <author>
             <name>clemmyn23</name>
             <uri>https://github.com/clemmyn23</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Font Changer 0.1]]></title>
-        <id>https://windhawk.net/mods/explorer-font-changer#1a36bc8c17174f3930c1999973759fb639e03320</id>
-        <link href="https://windhawk.net/mods/explorer-font-changer"/>
-        <updated>2025-10-14T14:41:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerfontchanger">Explorer Font Changer</h1>
-<p><img src="https://raw.githubusercontent.com/cristeigabriela/images/refs/heads/main/windhawk-explorer-font-changer.png" alt="Preview" /></p>
-<p>Every single newly created Explorer GDI font will be replaced to your font, through hooking
-the GDI32 "CreateFontIndirectW" function.</p>
-<p>This will only apply to newly created GDI handles, as this mod does not support existing ones.</p>
-<p>Basically, restart your Explorer first for this to take effect.</p>
-<h1 id="disablingexplorerfontchanger">Disabling Explorer Font Changer</h1>
-<p>Simply change the font name to "None", or turn off the plugin.</p>
-<h3 id="formerlydidthiswithwindbgforajokebutlikedit">Formerly did this with WinDbg for a joke, but liked it</h3>
-<p>https://bsky.app/profile/cristei.bsky.social/post/3lzmqhdlhc22q</p>]]></content>
-        <author>
-            <name>Gabriela Cristei</name>
-            <uri>https://github.com/cristeigabriela</uri>
         </author>
     </entry>
 </feed>
