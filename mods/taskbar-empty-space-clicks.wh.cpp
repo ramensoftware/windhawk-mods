@@ -998,7 +998,7 @@ static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition
 
 // =====================================================================
 
-#define ENABLE_LOG_INFO // info messages will be enabled
+#define ENABLE_LOG_INFO  // info messages will be enabled
 // #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
@@ -1157,7 +1157,7 @@ struct TriggerAction
 {
     std::wstring mouseTriggerName;            // Mouse trigger parsed from settings - represents what kind of button click should be detected
     std::wstring actionName;                  // Name of the action parsed from settings
-    uint32_t expectedKeyModifiersState;      // expected state (bitmask) of the key modifiers that should be checked
+    uint32_t expectedKeyModifiersState;       // expected state (bitmask) of the key modifiers that should be checked
     std::function<void(HWND)> actionExecutor; // function that executes the action
 };
 
@@ -1524,7 +1524,7 @@ public:
     void push_back(const MouseClick &click)
     {
         clicks[currentIndex] = click;
-        currentIndex = (currentIndex + 1) % 3;
+        currentIndex = (currentIndex + 1) % size();
     }
 
     const MouseClick &operator[](int i) const
@@ -1534,7 +1534,7 @@ public:
         {
             if (idx < size())
             {
-                idx = (currentIndex + i) % 3; // oldest item always first
+                idx = (currentIndex + i) % size(); // oldest item always first
             }
             else
             {
@@ -1545,7 +1545,7 @@ public:
         {
             if (idx >= -size())
             {
-                idx = (currentIndex + i + 3) % 3; // -1 is the newest (last) item
+                idx = (currentIndex + i + size()) % size(); // -1 is the newest (last) item
             }
             else
             {
@@ -1558,9 +1558,10 @@ public:
     void clear()
     {
         currentIndex = 0;
-        clicks[0] = MouseClick();
-        clicks[1] = MouseClick();
-        clicks[2] = MouseClick();
+        for (auto &click : clicks)
+        {
+            click = MouseClick();
+        }
     }
 
     int size() const
@@ -1569,7 +1570,8 @@ public:
     }
 
 private:
-    static const int MAX_CLICKS = 3;
+    static const int MAX_CLICKS = 4; // 4 to be able to detect continous clicks beyond triple click
+
     MouseClick clicks[MAX_CLICKS];
     int currentIndex;
 
@@ -1727,7 +1729,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
             {
                 if (triggerAction.mouseTriggerName.find(L"right", 0) == 0) // Check if mouseTriggerName starts with "right"
                 {
-                    bool modifiersPressed = (triggerAction.expectedKeyModifiersState != 0) && 
+                    bool modifiersPressed = (triggerAction.expectedKeyModifiersState != 0) &&
                                             (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState);
                     if (g_settings.suppressContextMenu || modifiersPressed)
                     {
@@ -3005,15 +3007,22 @@ bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousCl
 bool IsDoubleClick(const MouseClick::Button button)
 {
     LOG_TRACE();
-    const MouseClick &previousClick = g_mouseClickQueue[-2];
-    const MouseClick &currentClick = g_mouseClickQueue[-1];
-    return IsDoubleClick(button, previousClick, currentClick);
+    return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]);
 }
 
 bool IsTripleClick(const MouseClick::Button button)
 {
     LOG_TRACE();
-    return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleClick(button, g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
+    return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]) &&
+           IsDoubleClick(button, g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
+}
+
+bool IsMultiClick(const MouseClick::Button button)
+{
+    LOG_TRACE();
+    return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]) &&
+           IsDoubleClick(button, g_mouseClickQueue[-3], g_mouseClickQueue[-2]) &&
+           IsDoubleClick(button, g_mouseClickQueue[-4], g_mouseClickQueue[-3]);
 }
 
 bool IsSingleTap()
@@ -3066,6 +3075,14 @@ bool IsTripleTap()
     return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
 }
 
+bool IsMultiTap()
+{
+    LOG_TRACE();
+    return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) &&
+           IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]) &&
+           IsDoubleTap(g_mouseClickQueue[-4], g_mouseClickQueue[-3]);
+}
+
 bool IsKeyPressed(int vkCode)
 {
     return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
@@ -3080,7 +3097,11 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     gMouseClickTimer = 0;
 
     // mouse left button clicks
-    if (IsTripleClick(MouseClick::Button::LEFT)) // should never happen
+    if (IsMultiClick(MouseClick::Button::LEFT))
+    {
+        // ignore quadruple and more clicks
+    }
+    else if (IsTripleClick(MouseClick::Button::LEFT))
     {
         ExecuteTaskbarAction(L"leftTriple", 3);
     }
@@ -3094,7 +3115,11 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
 
     // mouse right button clicks
-    else if (IsTripleClick(MouseClick::Button::RIGHT)) // should never happen
+    else if (IsMultiClick(MouseClick::Button::RIGHT))
+    {
+        // ignore quadruple and more clicks
+    }
+    else if (IsTripleClick(MouseClick::Button::RIGHT))
     {
         ExecuteTaskbarAction(L"rightTriple", 3);
     }
@@ -3108,7 +3133,11 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
 
     // mouse middle button clicks
-    else if (IsTripleClick(MouseClick::Button::MIDDLE)) // should never happen
+    else if (IsMultiClick(MouseClick::Button::MIDDLE))
+    {
+        // ignore quadruple and more clicks
+    }
+    else if (IsTripleClick(MouseClick::Button::MIDDLE))
     {
         ExecuteTaskbarAction(L"middleTriple", 3);
     }
@@ -3122,7 +3151,11 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
 
     // touchscreen tap
-    else if (IsTripleTap()) // should never happen
+    else if (IsMultiTap())
+    {
+        // ignore quadruple and more taps
+    }
+    else if (IsTripleTap())
     {
         ExecuteTaskbarAction(L"tapTriple", 3);
     }
@@ -3197,27 +3230,7 @@ bool OnMouseClick(MouseClick click)
     }
 
     g_mouseClickQueue.push_back(click);
-    if (IsTripleClick(MouseClick::Button::LEFT))
-    {
-        ExecuteTaskbarAction(L"leftTriple", 3);
-    }
-    else if (IsTripleClick(MouseClick::Button::RIGHT))
-    {
-        ExecuteTaskbarAction(L"rightTriple", 3);
-    }
-    else if (IsTripleClick(MouseClick::Button::MIDDLE))
-    {
-        ExecuteTaskbarAction(L"middleTriple", 3);
-    }
-    else if (IsTripleTap())
-    {
-        ExecuteTaskbarAction(L"tapTriple", 3);
-    }
-    else
-    {
-        // single or double click -> chance to become double/triple click
-        gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessDelayedMouseClick);
-    }
+    gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessDelayedMouseClick);
 
     return true;
 }
