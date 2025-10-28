@@ -1326,6 +1326,9 @@ static bool g_inputSiteProcHooked = false;
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 
+static constexpr DWORD kInjectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
+static bool g_isContextMenuSuppressed = false;
+
 // object to store information about the mouse click, its position, button, timestamp and whether it was on empty space
 struct MouseClick
 {
@@ -1572,10 +1575,10 @@ private:
 
     MouseClick clicks[MAX_CLICKS];
     int currentIndex;
+};
+static MouseClickQueue g_mouseClickQueue;
 
-} g_mouseClickQueue;
-
-UINT_PTR gMouseClickTimer = (UINT_PTR)0;
+static UINT_PTR gMouseClickTimer = (UINT_PTR)NULL;
 
 // =====================================================================
 // Forward declarations
@@ -1586,12 +1589,15 @@ bool IsSingleClick(const MouseClick::Button button);
 bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousClick, const MouseClick &currentClick);
 bool IsDoubleClick(const MouseClick::Button button);
 bool IsTripleClick(const MouseClick::Button button);
+bool IsMultiClick(const MouseClick::Button button);
 bool IsSingleTap();
 bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick);
 bool IsDoubleTap();
 bool IsTripleTap();
+bool IsMultiTap();
 bool IsKeyPressed(int vkCode);
-void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks);
+bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks);
+void SynthesizeTaskbarRightClick(POINT ptScreen);
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
 bool OnMouseClick(MouseClick click);
 bool GetTaskbarAutohideState();
@@ -1762,6 +1768,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 {
     // LOG_DEBUG(L"Message: 0x%x", uMsg);
 
+    bool suppressMsg = false;
     switch (uMsg)
     {
     case WM_POINTERDOWN:
@@ -1786,12 +1793,45 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                 break;
             }
 
-            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd));
+            // check whether we need to suppress the context menu for right clicks
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd);
+            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+            {
+                LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+                if (extraInfo == kInjectedClickID)
+                {
+                    LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
+                    break;
+                }
+                // do we have any trigger action for right click ? if yes, suppress the context menu
+                for (const auto &triggerAction : g_settings.triggerActions)
+                {
+                    if (triggerAction.mouseTriggerName.find(L"right", 0) == 0)
+                    {
+                        // we want to suppress only if user "is going for the trigger"
+                        if (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState)
+                        {
+                            LOG_DEBUG("Suppressing right click to suppress context menu");
+                            g_isContextMenuSuppressed = true;
+                            suppressMsg = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            OnMouseClick(lastClick);
         }
         break;
     }
 
-    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
+    if (suppressMsg)
+    {
+        return 0; // suppress the message
+    }
+    else
+    {
+        return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
+    }
 }
 
 BOOL SubclassTaskbarWindow(HWND hWnd)
@@ -3086,6 +3126,28 @@ bool IsKeyPressed(int vkCode)
     return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
 }
 
+void SynthesizeTaskbarRightClick(POINT ptScreen)
+{
+    LOG_DEBUG(L"Synthesizing right-click at %ld,%ld", ptScreen.x, ptScreen.y);
+
+    SetCursorPos(ptScreen.x, ptScreen.y); // likely not necessary, but just to be sure
+
+    INPUT input[2] = {};
+    input[0].type = INPUT_MOUSE;
+    input[0].mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
+    input[0].mi.dwExtraInfo = kInjectedClickID; // to identify our synthesized click
+
+    input[1].type = INPUT_MOUSE;
+    input[1].mi.dwFlags = MOUSEEVENTF_RIGHTUP;
+    input[1].mi.dwExtraInfo = kInjectedClickID;
+
+    g_isContextMenuSuppressed = false;
+    if (SendInput(2, input, sizeof(INPUT)) != 2)
+    {
+        LOG_ERROR(L"SendInput failed when synthesizing right click");
+    }
+}
+
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
 {
     if (!KillTimer(NULL, gMouseClickTimer))
@@ -3094,6 +3156,9 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
     gMouseClickTimer = 0;
 
+    bool wasActionExecuted = false;
+    const POINT lastMousePos = g_mouseClickQueue[-1].position; // store since the queue will be cleared
+
     // mouse left button clicks
     if (IsMultiClick(MouseClick::Button::LEFT))
     {
@@ -3101,15 +3166,15 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
     else if (IsTripleClick(MouseClick::Button::LEFT))
     {
-        ExecuteTaskbarAction(L"leftTriple", 3);
+        (void)ExecuteTaskbarAction(L"leftTriple", 3);
     }
     else if (IsDoubleClick(MouseClick::Button::LEFT))
     {
-        ExecuteTaskbarAction(L"leftDouble", 2);
+        (void)ExecuteTaskbarAction(L"leftDouble", 2);
     }
     else if (IsSingleClick(MouseClick::Button::LEFT))
     {
-        ExecuteTaskbarAction(L"left", 1);
+        (void)ExecuteTaskbarAction(L"left", 1);
     }
 
     // mouse right button clicks
@@ -3119,15 +3184,15 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
     else if (IsTripleClick(MouseClick::Button::RIGHT))
     {
-        ExecuteTaskbarAction(L"rightTriple", 3);
+        wasActionExecuted = ExecuteTaskbarAction(L"rightTriple", 3);
     }
     else if (IsDoubleClick(MouseClick::Button::RIGHT))
     {
-        ExecuteTaskbarAction(L"rightDouble", 2);
+        wasActionExecuted = ExecuteTaskbarAction(L"rightDouble", 2);
     }
     else if (IsSingleClick(MouseClick::Button::RIGHT))
     {
-        ExecuteTaskbarAction(L"right", 1);
+        wasActionExecuted = ExecuteTaskbarAction(L"right", 1);
     }
 
     // mouse middle button clicks
@@ -3137,15 +3202,15 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
     else if (IsTripleClick(MouseClick::Button::MIDDLE))
     {
-        ExecuteTaskbarAction(L"middleTriple", 3);
+        (void)ExecuteTaskbarAction(L"middleTriple", 3);
     }
     else if (IsDoubleClick(MouseClick::Button::MIDDLE))
     {
-        ExecuteTaskbarAction(L"middleDouble", 2);
+        (void)ExecuteTaskbarAction(L"middleDouble", 2);
     }
     else if (IsSingleClick(MouseClick::Button::MIDDLE))
     {
-        ExecuteTaskbarAction(L"middle", 1);
+        (void)ExecuteTaskbarAction(L"middle", 1);
     }
 
     // touchscreen tap
@@ -3155,22 +3220,28 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
     else if (IsTripleTap())
     {
-        ExecuteTaskbarAction(L"tapTriple", 3);
+        (void)ExecuteTaskbarAction(L"tapTriple", 3);
     }
     else if (IsDoubleTap())
     {
-        ExecuteTaskbarAction(L"tapDouble", 2);
+        (void)ExecuteTaskbarAction(L"tapDouble", 2);
     }
     else if (IsSingleTap())
     {
-        ExecuteTaskbarAction(L"tapSingle", 1);
+        (void)ExecuteTaskbarAction(L"tapSingle", 1);
+    }
+
+    if (g_isContextMenuSuppressed && !wasActionExecuted)
+    {
+        SynthesizeTaskbarRightClick(lastMousePos);
     }
 }
 
-void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks)
+bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks)
 {
     LOG_TRACE();
 
+    bool wasActionExecuted = false;
     HWND hWnd = g_mouseClickQueue[-1].hWnd;
 
     LOG_DEBUG(L"Searching for action for trigger: %s", mouseTriggerName.c_str());
@@ -3192,6 +3263,7 @@ void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
                 {
                     LOG_INFO(L"Executing action: %s", triggerAction.actionName.c_str());
                     triggerAction.actionExecutor(hWnd);
+                    wasActionExecuted = true;
                 }
                 else
                 {
@@ -3205,6 +3277,7 @@ void ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
         }
     }
     g_mouseClickQueue.clear();
+    return wasActionExecuted;
 }
 
 // main body of the mod called every time a taskbar is clicked
