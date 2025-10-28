@@ -998,7 +998,7 @@ static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition
 
 // =====================================================================
 
-#define ENABLE_LOG_INFO  // info messages will be enabled
+#define ENABLE_LOG_INFO // info messages will be enabled
 // #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
@@ -1050,19 +1050,17 @@ public:
     {
         if (m_file.is_open())
         {
+            const size_t max_size = 255U;
+            std::unique_ptr<wchar_t[]> buf(new wchar_t[max_size]);
+
             va_list args;
             va_start(args, format);
-            size_t size = std::vswprintf(nullptr, 0, format, args) + 1; // +1 for '\0'
-            va_end(args);
-
-            std::unique_ptr<wchar_t[]> buf(new wchar_t[size]);
-
-            va_start(args, format);
-            std::vswprintf(buf.get(), size, format, args);
+            const size_t size = std::vswprintf(buf.get(), max_size, format, args) + 1; // +1 for '\0'
             va_end(args);
 
             auto str = std::wstring(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
             m_file << str << '\n';
+
             m_file.flush();
         }
     }
