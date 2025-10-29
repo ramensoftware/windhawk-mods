@@ -180,8 +180,8 @@ LRESULT CALLBACK HexInputSubclassProc(
                             if (!IsGoodCharacter(*psz))
                             {
                                 MessageBeep(MB_OK);
-                                CloseClipboard();
                                 GlobalUnlock(hData);
+                                CloseClipboard();
                                 return 0;
                             }
                         }
