@@ -181,10 +181,12 @@ LRESULT CALLBACK HexInputSubclassProc(
                             {
                                 MessageBeep(MB_OK);
                                 CloseClipboard();
+                                GlobalUnlock(hData);
                                 return 0;
                             }
                         }
                     }
+                    GlobalUnlock(hData);
                 }
                 CloseClipboard();
             }
@@ -520,29 +522,25 @@ BOOL Wh_ModInit(void)
 {
     HMODULE hGdi32, hComDlg32;
 
-    BOOL fSucceeded = TRUE;
     hGdi32 = LoadLibraryExW(L"gdi32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hGdi32)
     {
         Wh_Log(L"Failed to load gdi32.dll");
-        fSucceeded = FALSE;
-        goto Exit;
+        goto Fail;
     }
 
     *(void **)&GdiGetCharDimensions = (void *)GetProcAddress(hGdi32, "GdiGetCharDimensions");
     if (!GdiGetCharDimensions)
     {
         Wh_Log(L"Failed to get address of GdiGetCharDimensions");
-        fSucceeded = FALSE;
-        goto Exit;
+        goto Fail;
     }
 
     hComDlg32 = LoadLibraryExW(L"comdlg32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hComDlg32)
     {
         Wh_Log(L"Failed to load comdlg32.dll");
-        fSucceeded = FALSE;
-        goto Exit;
+        goto Fail;
     }
 
     if (!WindhawkUtils::HookSymbols(
@@ -552,12 +550,13 @@ BOOL Wh_ModInit(void)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in comdlg32.dll");
-        fSucceeded = FALSE;
-        goto Exit;
+        goto Fail;
     }
 
-Exit:
+    return TRUE;
+
+Fail:
     if (hGdi32)
         FreeLibrary(hGdi32);
-    return fSucceeded;
+    return FALSE;
 }
