@@ -441,7 +441,7 @@ LRESULT CALLBACK ColorDlgProc_hook(
     return ColorDlgProc_orig(hwnd, uMsg, wParam, lParam);
 }
 
-const WindhawkUtils::SYMBOL_HOOK comdlg32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK comdlg32DllHooks[] = {
     {
         {
 #ifdef _WIN64
@@ -547,8 +547,8 @@ BOOL Wh_ModInit(void)
 
     if (!WindhawkUtils::HookSymbols(
         hComDlg32,
-        comdlg32Hooks,
-        ARRAYSIZE(comdlg32Hooks)
+        comdlg32DllHooks,
+        ARRAYSIZE(comdlg32DllHooks)
     ))
     {
         Wh_Log(L"Failed to hook one or more symbol functions in comdlg32.dll");
