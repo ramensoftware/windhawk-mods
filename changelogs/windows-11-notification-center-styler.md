@@ -1,3 +1,10 @@
+## 1.3.3 ([Oct 29, 2025](https://github.com/ramensoftware/windhawk-mods/blob/eb68fe5aaceca7a2835888d536a43ebed0b86085/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Updated themes: Unified, 10JumpLists.
+* Added themes: WindowGlass, WindowGlass (Alternative), Oversimplified&Accentuated.
+* Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.
+* WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.
+
 ## 1.3.2 ([Jul 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5e1b574b5bdd18af997aaebe764784b9dc6093ef/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Updated TranslucentShell.

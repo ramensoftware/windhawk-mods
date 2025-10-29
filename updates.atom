@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-29T12:38:27.000Z</updated>
+    <updated>2025-10-29T18:41:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.3.3]]></title>
+        <id>https://windhawk.net/mods/windows-11-notification-center-styler#eb68fe5aaceca7a2835888d536a43ebed0b86085</id>
+        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
+        <updated>2025-10-29T18:41:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated themes: Unified, 10JumpLists.</li>
+<li>Added themes: WindowGlass, WindowGlass (Alternative), Oversimplified&amp;Accentuated.</li>
+<li>Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.</li>
+<li>WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Color Picker Dialog Hex Input 1.0.0]]></title>
         <id>https://windhawk.net/mods/color-picker-dialog-hex-input#456940d04d87d6aa0aa029352611e1aa3d24b48b</id>
@@ -371,21 +387,6 @@ Can be applied to other programs (e.g., <code>notepad.exe</code>) by including t
         <author>
             <name>d0gkiller87</name>
             <uri>https://github.com/d0gkiller87</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Minimize/Maximize Animations 1.0.2]]></title>
-        <id>https://windhawk.net/mods/classic-min-max-animations#00c4f631eeebf04af95a6033d39d05a071fd67fc</id>
-        <link href="https://windhawk.net/mods/classic-min-max-animations"/>
-        <updated>2025-10-15T08:46:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix issues with per-monitor DPI-scaled windows (thanks @Ingan121)</li>
-<li>Properly clip animation for MDI windows (thanks @Ingan121)</li>
-<li>Properly destroy animation window and thread on mod uninitialization</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
