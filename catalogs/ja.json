@@ -1212,6 +1212,27 @@
                 "version": "1.0"
             }
         },
+        "color-picker-dialog-hex-input": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1761741507000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1761741507000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lgdi32 -lcomctl32",
+                "description": "Provides a hex input in the standard color picker dialog",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "*"
+                ],
+                "name": "Color Picker Dialog Hex Input",
+                "version": "1.0.0"
+            }
+        },
         "console-error-to-ding": {
             "details": {
                 "defaultSorting": 830,
