@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-29T18:41:23.000Z</updated>
+    <updated>2025-10-31T14:16:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Custom Title Bar Colours 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win11-custom-title-bar-colours#7e716cdfee0843c0b95153a8251ff767388d87e4</id>
+        <link href="https://windhawk.net/mods/win11-custom-title-bar-colours"/>
+        <updated>2025-10-31T14:16:39.000Z</updated>
+        <content type="html"><![CDATA[<p>My first attempt at a Windhawk mod, the goal is to make window title bars have consistent colours, especially when using a dark theme.</p>
+<p>Based on <code>win11-accent-border</code> by Guerra24.</p>
+<p><strong>Consider disabling <em>Show accent color on title bars and window borders</em> as it likely conflicts with this mod!</strong></p>
+<h1 id="colours">Colours</h1>
+<p>The active and inactive colours can be specified in the mod's settings.</p>]]></content>
+        <author>
+            <name>Th3Fanbus</name>
+            <uri>https://github.com/Th3Fanbus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.3.3]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#eb68fe5aaceca7a2835888d536a43ebed0b86085</id>
@@ -375,18 +390,6 @@ If the focused control is safe (not text editing, not renaming), it sends <code>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[F1 Blocker 0.0.2]]></title>
-        <id>https://windhawk.net/mods/f1-blocker#68dc19da298b22c016ad7d0613b05eef66239956</id>
-        <link href="https://windhawk.net/mods/f1-blocker"/>
-        <updated>2025-10-17T09:01:02.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod prevents F1 from opening the help page in File Explorer by hooking <code>TranslateAcceleratorW</code>.<br />
-Can be applied to other programs (e.g., <code>notepad.exe</code>) by including them in <code>Details</code> -&gt; <code>Advanced</code> -&gt; <code>Custom process inclusion list</code>.</p>]]></content>
-        <author>
-            <name>d0gkiller87</name>
-            <uri>https://github.com/d0gkiller87</uri>
         </author>
     </entry>
 </feed>

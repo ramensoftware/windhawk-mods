@@ -5698,6 +5698,30 @@
                 "version": "1.0.2"
             }
         },
+        "win11-custom-title-bar-colours": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1761920199000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1761920199000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Th3Fanbus",
+                "compilerOptions": "-ldwmapi -luser32",
+                "description": "Allows changing the colour of active/inactive title bars, as well as enabling/disabling Immersive Dark Mode.",
+                "exclude": [
+                    "devenv.exe"
+                ],
+                "github": "https://github.com/Th3Fanbus",
+                "include": [
+                    "*"
+                ],
+                "name": "Windows 11 Custom Title Bar Colours",
+                "version": "1.0.0"
+            }
+        },
         "win11-old-taskmgr": {
             "details": {
                 "defaultSorting": 5230,
