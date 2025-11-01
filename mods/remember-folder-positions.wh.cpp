@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              remember-folder-positions
 // @name            Remember folder positions
-// @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
+// @description     Remembers the folder windows' positions the way it was pre-Vista (Win95-WinXP)
 // @version         1.0
 // @author          anixx
 // @github          https://github.com/Anixx
