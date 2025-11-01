@@ -1,3 +1,9 @@
+## 2.1.1 ([Nov 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/12618343e98bf08a6af6465008bd9eda2cdd1c5a/mods/win7-alttab-loader.wh.cpp))
+
+- Use `LoadLibraryExW` with `LOAD_LIBRARY_SEARCH_SYSTEM32` flag
+  - This prevents C:\Windows\AltTab.dll from ancient configurations
+    being erroneously loaded
+
 ## 2.1.0 ([Apr 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c3ac7043865e3f5ae95949ebe5d1b3ce81db8cde/mods/win7-alttab-loader.wh.cpp))
 
 - Remove the `LoadStringW` hook hack. Users must now supply an MUI file.

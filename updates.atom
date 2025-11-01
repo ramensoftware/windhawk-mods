@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-01T17:17:19.000Z</updated>
+    <updated>2025-11-01T19:25:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide running indicator for Windows 10 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-hide-running-indicator-w10#33cf21483f9a72886f706b51752e661e0f4d28c9</id>
+        <link href="https://windhawk.net/mods/taskbar-hide-running-indicator-w10"/>
+        <updated>2025-11-01T19:25:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix to make focus/hover indicator rectangle take full button space</li>
+</ul>]]></content>
+        <author>
+            <name>giedriuslt</name>
+            <uri>https://github.com/giedriuslt</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.x Alt+Tab Loader 2.1.1]]></title>
+        <id>https://windhawk.net/mods/win7-alttab-loader#12618343e98bf08a6af6465008bd9eda2cdd1c5a</id>
+        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
+        <updated>2025-11-01T19:23:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Use <code>LoadLibraryExW</code> with <code>LOAD_LIBRARY_SEARCH_SYSTEM32</code> flag</li>
+<li>This prevents C:\Windows\AltTab.dll from ancient configurations
+being erroneously loaded</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[No icon MessageBox Sound Restore 1.0.1]]></title>
+        <id>https://windhawk.net/mods/no-icon-messagebox-sound#ccd78b3d3d094a182b60841f34daa4bb3a214f3b</id>
+        <link href="https://windhawk.net/mods/no-icon-messagebox-sound"/>
+        <updated>2025-11-01T19:20:59.000Z</updated>
+        <content type="html"><![CDATA[<p>Update Readme to further note about Message Box Fix</p>]]></content>
+        <author>
+            <name>Jevil7452</name>
+            <uri>https://github.com/Jevil7452</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No icon MessageBox Sound Restore 1.0]]></title>
         <id>https://windhawk.net/mods/no-icon-messagebox-sound#5401972bce638083d128c6917a5930f245ee9d57</id>
@@ -280,91 +319,6 @@ The intensity value of the glow that surrounds the text.</p></li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Expand Buttons 0.1]]></title>
-        <id>https://windhawk.net/mods/classic-expand-buttons#594dc5ab636039bf5beda825ba7c667d50413e4f</id>
-        <link href="https://windhawk.net/mods/classic-expand-buttons"/>
-        <updated>2025-10-24T17:13:26.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicexpandbuttons">Classic Expand Buttons</h1>
-<p>This mod adds the +/- expand buttons found in Windows 7 when Classic Theme is enabled.</p>
-<p>In Windows 7, if you hovered on the treeview it showed all of the buttons, this mod replicates that functionality.</p>
-<p><em>Forked off of <a href="https://windhawk.net/mods/classic-explorer-treeview">Classic Explorer Treeview</a></em></p>]]></content>
-        <author>
-            <name>bricktapper!</name>
-            <uri>https://github.com/n1d3v</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.3.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#1f6c3b0396e9f2e89a01266c7207fc847c6679ff</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2025-10-24T15:37:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated most themes for greater compatibility with <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned Start menu</a>. The excellent adaptation work was done by <a href="https://github.com/bbmaster123">bbmaster123</a>.</li>
-<li>Added themes: WindowGlass, WindowGlass (Minimal), Fluid, Oversimplified&amp;Accentuated.</li>
-<li>Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.</li>
-<li>WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fully Customizable WinVer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/fully-customizable-winver#1388698a218ad7c8e9c9697615c6c34d759ff8c1</id>
-        <link href="https://windhawk.net/mods/fully-customizable-winver"/>
-        <updated>2025-10-21T10:59:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="customizablewinverexe">Customizable winver.exe</h1>
-<p>Features:</p>
-<ul>
-<li>Modify all controls (text, color, location, size, visibility)</li>
-<li>Custom logo (it just creates a custom child window in the logo area, transparency is supported!)</li>
-<li>Change the title</li>
-<li>Change window parameters (make it always top, custom size, open location)</li>
-<li>Change background color</li>
-</ul>
-<p><strong>!! Please check notes below to not get confused about some things !!</strong></p>
-<p>All control internal (user) IDs were identified using <strong>winspy</strong> application.</p>
-<p>Supported logo image formats:</p>
-<ul>
-<li>BMP</li>
-<li>JPEG (.jpg, .jpeg, .jpe, .jfif)</li>
-<li>PNG</li>
-<li>GIF (supports animation and transparent background too)</li>
-<li>TIFF (.tif, .tiff)</li>
-<li>ICO</li>
-<li>WMF / EMF</li>
-<li>WEBP, HEIC, ACIF and other ones can also be supported if codec is installed.</li>
-</ul>
-<p>Available palceholders:</p>
-<ul>
-<li><code>{default.&lt;id&gt;}</code> - Inserts the default control text. Replace <code>&lt;id&gt;</code> with the control ID (capitalize each word and remove spaces).</li>
-<li><code>{default.&lt;id&gt;::5}</code> - Removes first 5 characters from control's text.</li>
-<li><code>{default.&lt;id&gt;::5/9}</code> - Substrings control's text, skips the first 5 characters and only returns next 9 characters.</li>
-</ul>
-<p>Examples with <code>{default...}</code> placeholders.</p>
-<ul>
-<li><code>{default.Copyright::0/1} Yoursoft {default.Copyright::12}</code> - take the copyright sign (get text from 0th to 1th place), show your text and add back the remaining text. This basically replaces "Microsoft" word.</li>
-</ul>
-<h1 id="screenshots">Screenshots</h1>
-<p><img src="https://i.imgur.com/uGKh0wE.gif" alt="Running cat" /></p>
-<p><img src="https://i.imgur.com/HjpaLTc.png" alt="winver too cute" /></p>
-<p><img src="https://i.imgur.com/ZEgkLqK.gif" alt="all dark" /></p>
-<h1 id="notes">Notes</h1>
-<ul>
-<li>Tested only on Windows 11!</li>
-<li>Information about previous label texts are not retained. To restore the original content, simply restart <em>winver.exe</em>.</li>
-<li>Gifs do not support controls being in front (if you change z-indexing), the gif will be always <em>drawn</em> on top!</li>
-<li>To restore the <strong>license info</strong> link, use <A> and </A> tags (similar to HTML): - <code>Click &lt;A&gt;here&lt;/A&gt; to view license information</code>.</li>
-<li>If you want to hide the current logo, set background color to the same color (240, 240, 240) and the logo will get overdrawn.</li>
-<li><strong>Settings might not apply correctly (via "Save settings" button) if you have winver.exe opened! Better to restart it.</strong></li>
-</ul>]]></content>
-        <author>
-            <name>ItsTauTvyDas</name>
-            <uri>https://github.com/ItsTauTvyDas</uri>
         </author>
     </entry>
 </feed>

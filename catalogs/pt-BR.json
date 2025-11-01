@@ -3284,7 +3284,7 @@
                 "published": 1762017439000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1762017439000,
+                "updated": 1762024859000,
                 "users": 0
             },
             "metadata": {
@@ -3295,7 +3295,7 @@
                     "*"
                 ],
                 "name": "No icon MessageBox Sound Restore",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "no-properties-icon": {
@@ -4529,7 +4529,7 @@
                 "published": 1761396608000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1761396608000,
+                "updated": 1762025109000,
                 "users": 30
             },
             "metadata": {
@@ -4541,7 +4541,7 @@
                     "explorer.exe"
                 ],
                 "name": "Hide running indicator for Windows 10",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "taskbar-hung-rearrangement-fix": {
@@ -5795,7 +5795,7 @@
                 "published": 1690590362000,
                 "rating": 9,
                 "ratingUsers": 4,
-                "updated": 1744702712000,
+                "updated": 1762024983000,
                 "users": 452
             },
             "metadata": {
@@ -5810,7 +5810,7 @@
                     "explorer.exe"
                 ],
                 "name": "Windows 7/8.x Alt+Tab Loader",
-                "version": "2.1.0"
+                "version": "2.1.1"
             }
         },
         "win7-command-bar": {
