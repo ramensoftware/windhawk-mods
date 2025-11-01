@@ -2,7 +2,7 @@
 // @id              taskbar-hide-running-indicator-w10
 // @name            Hide running indicator for Windows 10
 // @description     Hides taskbar running indicator for Windows 10
-// @version         1.0.0
+// @version         1.0.1
 // @author          giedriuslt
 // @github          https://github.com/giedriuslt
 // @include         explorer.exe
@@ -22,11 +22,9 @@ Before:
 
 After:
 
-![After](https://i.imgur.com/jBNOYMn.png)
+![After](https://i.imgur.com/ZbuRRXu.png)
 
-![After](https://i.imgur.com/DxKL5Od.png)
-
-There is a minor imperfection in that the focus rectangle is not covering the full size.
+![After](https://i.imgur.com/NSpjnHc.png)
 
 */
 // ==/WindhawkModReadme==
@@ -41,25 +39,62 @@ There is a minor imperfection in that the focus rectangle is not covering the fu
 #define SCALCON L"__thiscall"
 #endif
 
-typedef struct tagBUTTONRENDERINFOSTATES {
-    char data[12];
-} BUTTONRENDERINFOSTATES, *PBUTTONRENDERINFOSTATES;
-
 typedef struct tagBUTTONRENDERINFO {
-    char data[60];
+    unsigned char data[0x94]; // Unknown data
+    RECT r1; // Size of the main running indicator rectangle 
+    RECT r2; // Size of the additional running indicators
+    RECT r3;
 } BUTTONRENDERINFO, *PBUTTONRENDERINFO;
 
-/* Draw taskbar item */
-typedef void (* CTaskBtnGroup__DrawBar_t)(void *, HDC, void *, void *);
-CTaskBtnGroup__DrawBar_t CTaskBtnGroup__DrawBar_orig;
-void CALCON CTaskBtnGroup__DrawBar_hook(
+/* Compute sizes of running indicator rectangles */
+typedef void (* CALCON CTaskBtnGroup__ComputeRenderPropsBar_t)(void *,  void *);
+CTaskBtnGroup__ComputeRenderPropsBar_t CTaskBtnGroup__ComputeRenderPropsBar_orig;
+void CALCON CTaskBtnGroup__ComputeRenderPropsBar_hook(
     void *pThis,
-    HDC hDC,
-    PBUTTONRENDERINFO pRenderInfo,
-    PBUTTONRENDERINFOSTATES pRenderStates
+    PBUTTONRENDERINFO pRenderInfo
 )
 {
-    //do not draw indicator bar
+    PBUTTONRENDERINFO p = pRenderInfo;
+    CTaskBtnGroup__ComputeRenderPropsBar_orig(pThis,  pRenderInfo);
+
+    // Set rectanges to be zero width/height as appropriate.
+    // Empty rectangles do not work, because then focus indicator is not drawn
+
+    // Deduce where taskbar is based on indicator size ratio,
+    // If it's longer than taller that means it's on top or botton, else it's on the side
+    if ( (p->r1.bottom - p->r1.top) < (p->r1.right - p->r1.left) ) //top or bottom
+    {
+        if (p->r1.top == 0)
+        {
+            // Taskbar on the top
+            p->r1.bottom = p->r1.top;
+            p->r2.bottom = p->r2.top;
+            p->r3.bottom = p->r3.top;
+        }
+        else {
+            // Taskbar on the bottom
+            p->r1.top = p->r1.bottom;
+            p->r2.top = p->r2.bottom;
+            p->r3.top = p->r3.bottom;
+        }
+    }
+    else //side
+    {
+        if (p->r1.left == 0)
+        {
+            // Taskbar on the left
+            p->r1.right = p->r1.left;
+            p->r2.right = p->r2.left;
+            p->r3.right = p->r3.left;
+        }
+        else {
+            // Taskbar on the right
+            p->r1.left = p->r1.right;
+            p->r2.left = p->r2.right;
+            p->r3.left = p->r3.right;
+        }
+
+    }
     return;
 }
 
@@ -72,10 +107,10 @@ BOOL Wh_ModInit(void)
             {
                 L"private: void " 
                 SCALCON 
-                L" CTaskBtnGroup::_DrawBar(struct HDC__ *,struct BUTTONRENDERINFO const &,struct BUTTONRENDERINFOSTATES const &)"
+                L" CTaskBtnGroup::_ComputeRenderPropsBar(struct BUTTONRENDERINFO &)"
             },
-            (void **)&CTaskBtnGroup__DrawBar_orig,
-            (void *)CTaskBtnGroup__DrawBar_hook,
+            (void **)&CTaskBtnGroup__ComputeRenderPropsBar_orig,
+            (void *)CTaskBtnGroup__ComputeRenderPropsBar_hook,
             FALSE
         }
     };
