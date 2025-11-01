@@ -3177,19 +3177,19 @@
                 "published": 1693642476000,
                 "rating": 10,
                 "ratingUsers": 13,
-                "updated": 1740621373000,
+                "updated": 1762017268000,
                 "users": 1436
             },
             "metadata": {
                 "author": "aubymori",
                 "compilerOptions": "-luser32 -lgdi32 -lcomctl32 -DWINVER=0x0A00",
-                "description": "Fixes the MessageBox font size and optionally make them like Windows XP",
+                "description": "Reverts message boxes to their behavior from before Windows 10 1709",
                 "github": "https://github.com/aubymori",
                 "include": [
                     "*"
                 ],
                 "name": "Message Box Fix",
-                "version": "2.1.1"
+                "version": "2.2.0"
             }
         },
         "mspaint-dark": {
@@ -3276,6 +3276,26 @@
                 "github": "https://github.com/ItsProfessional",
                 "name": "No Hidden Cursor",
                 "version": "1.0.0"
+            }
+        },
+        "no-icon-messagebox-sound": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1762017439000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1762017439000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Jevil7452",
+                "description": "This mod restores the sound effect that plays when a MessageBox without an icon pops up.",
+                "github": "https://github.com/Jevil7452",
+                "include": [
+                    "*"
+                ],
+                "name": "No icon MessageBox Sound Restore",
+                "version": "1.0"
             }
         },
         "no-properties-icon": {

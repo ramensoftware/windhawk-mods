@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-10-31T14:16:39.000Z</updated>
+    <updated>2025-11-01T17:17:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No icon MessageBox Sound Restore 1.0]]></title>
+        <id>https://windhawk.net/mods/no-icon-messagebox-sound#5401972bce638083d128c6917a5930f245ee9d57</id>
+        <link href="https://windhawk.net/mods/no-icon-messagebox-sound"/>
+        <updated>2025-11-01T17:17:19.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod restores the sound that plays whenever a MessageBox that does not have an icon set pops up.</p>
+<p>This replicates behavior from Windows Vista and below.</p>
+<p>NOTE: If you use "Message Box Fix" mod with XP and below style, this is not needed as the mod will cause the sound to play in this scenario.</p>]]></content>
+        <author>
+            <name>Jevil7452</name>
+            <uri>https://github.com/Jevil7452</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Message Box Fix 2.2.0]]></title>
+        <id>https://windhawk.net/mods/msg-box-font-fix#97fcfb04c1e490b16df1bef76c33bc440d777fe3</id>
+        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
+        <updated>2025-11-01T17:14:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Clean up README and mod description</li>
+<li>Split "Windows Vista-10 1703" style into "Windows Vista" and "Windows 7-10 1703"</li>
+<li>"Windows Vista" style is the same as "Windows 10-1703", but will play the "Default Beep" sound for message boxes with no icon</li>
+<li>If you were using "Windows Vista-10 1703" before this update and want to continue using it, you will need to change the style back from "Windows Vista"</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Custom Title Bar Colours 1.0.0]]></title>
         <id>https://windhawk.net/mods/win11-custom-title-bar-colours#7e716cdfee0843c0b95153a8251ff767388d87e4</id>
@@ -336,60 +365,6 @@ The intensity value of the glow that surrounds the text.</p></li>
         <author>
             <name>ItsTauTvyDas</name>
             <uri>https://github.com/ItsTauTvyDas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Close Explorer on Esc 1.2]]></title>
-        <id>https://windhawk.net/mods/close-explorer-on-esc#37fb637fdcbe438556a16b5be762e79169cc81c6</id>
-        <link href="https://windhawk.net/mods/close-explorer-on-esc"/>
-        <updated>2025-10-20T13:36:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="closeexploreronesc">Close Explorer on Esc</h1>
-<p><strong>ENGLISH</strong></p>
-<p>Press <strong>Esc</strong> in File Explorer to close the current window.
-The mod avoids accidental closure when:</p>
-<ul>
-<li>You are renaming a file/folder</li>
-<li>The foreground window is not the current Explorer</li>
-</ul>
-<p>Optional:</p>
-<ul>
-<li><em>Allow closing when IME candidate window exists</em> (for certain input methods that create temporary Edit focus)</li>
-</ul>
-<p><strong>How it works</strong>
-A low-level keyboard hook detects <code>VK_ESCAPE</code> within explorer.exe.
-If the focused control is safe (not text editing, not renaming), it sends <code>WM_CLOSE</code> to the current Explorer window.</p>
-<hr />
-<p><strong>中文说明</strong></p>
-<p>在资源管理器中按下 <strong>Esc</strong> 可关闭当前窗口。
-模块会避免误关以下场景：</p>
-<ul>
-<li>正在<strong>重命名</strong></li>
-<li>当前前台窗口不是该资源管理器实例</li>
-</ul>
-<p>可选项：</p>
-<ul>
-<li><em>当存在输入法候选窗口时仍允许关闭</em>（适用于部分输入法造成的临时 Edit 焦点）</li>
-</ul>
-<p><strong>实现原理</strong>
-在 explorer.exe 内部安装低级键盘钩子，监听 Esc。
-若判断当前焦点处于安全状态，则向窗口发送 <code>WM_CLOSE</code>。</p>]]></content>
-        <author>
-            <name>lieyanbang</name>
-            <uri>https://github.com/lieyanbang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.5]]></title>
-        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#c09f0f7e253100a65cff60ea5399a8d5074623c9</id>
-        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
-        <updated>2025-10-20T06:03:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for Spotify 1.2.75</li>
-<li>Fix Basic/Classic frames being invisible on Spotify 1.2.71+ / CEF 139+</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

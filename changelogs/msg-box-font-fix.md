@@ -1,3 +1,10 @@
+## 2.2.0 ([Nov 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/97fcfb04c1e490b16df1bef76c33bc440d777fe3/mods/msg-box-font-fix.wh.cpp))
+
+- Clean up README and mod description
+- Split "Windows Vista-10 1703" style into "Windows Vista" and "Windows 7-10 1703"
+  - "Windows Vista" style is the same as "Windows 10-1703", but will play the "Default Beep" sound for message boxes with no icon
+  - If you were using "Windows Vista-10 1703" before this update and want to continue using it, you will need to change the style back from "Windows Vista"
+
 ## 2.1.1 ([Feb 27, 2025](https://github.com/ramensoftware/windhawk-mods/blob/090064e365f4d31312c1b2fac07ec3116825699a/mods/msg-box-font-fix.wh.cpp))
 
 Message Box Fix 2.1.1: Fix crashes on Windows 11 24H2
