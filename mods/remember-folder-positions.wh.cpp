@@ -144,13 +144,8 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
 BOOL Wh_ModInit(void) {
     Wh_Log(L"Init");
 
-    HMODULE hKernelBase = LoadLibraryW(L"kernelbase.dll");
-    HMODULE hUser32 = LoadLibraryW(L"user32.dll");
-
-    Wh_SetFunctionHook((void*)GetProcAddress(hKernelBase, "RegQueryValueExW"), 
-                       (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
-    Wh_SetFunctionHook((void*)GetProcAddress(hUser32, "CreateWindowExW"), 
-                       (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
+    Wh_SetFunctionHook((void*)RegQueryValueExW, (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
 
     return TRUE;
 }
