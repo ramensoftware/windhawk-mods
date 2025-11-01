@@ -2,7 +2,7 @@
 // @id              win7-alttab-loader
 // @name            Windows 7/8.x Alt+Tab Loader
 // @description     Loads Windows 7/8.x Alt+Tab on Windows 10.
-// @version         2.1.0
+// @version         2.1.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -244,7 +244,7 @@ const WindhawkUtils::SYMBOL_HOOK altTabDllHooks[] = {
 
 BOOL Wh_ModInit(void)
 {
-    g_hAltTab = LoadLibraryW(L"AltTab.dll");
+    g_hAltTab = LoadLibraryExW(L"AltTab.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_hAltTab)
     {
         MessageBoxW(
@@ -284,7 +284,7 @@ BOOL Wh_ModInit(void)
         (void **)&PostMessageW_orig
     );
 
-    HMODULE hDwmapi = LoadLibraryW(L"dwmapi.dll");
+    HMODULE hDwmapi = LoadLibraryExW(L"dwmapi.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hDwmapi)
     {
         Wh_Log(L"Failed to load dwmapi.dll");
