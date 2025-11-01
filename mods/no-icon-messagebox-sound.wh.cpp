@@ -2,7 +2,7 @@
 // @id              no-icon-messagebox-sound
 // @name            No icon MessageBox Sound Restore
 // @description     This mod restores the sound effect that plays when a MessageBox without an icon pops up.
-// @version         1.0
+// @version         1.0.1
 // @author          Jevil7452
 // @github          https://github.com/Jevil7452
 // @include         *
@@ -13,7 +13,9 @@ This mod restores the sound that plays whenever a MessageBox that does not have 
 
 This replicates behavior from Windows Vista and below.
 
-NOTE: If you use "Message Box Fix" mod with XP and below style, this is not needed as the mod will cause the sound to play in this scenario.
+NOTE: If you use "Message Box Fix" mod with Vista and below style, this is not needed as the mod will cause the sound to play in this scenario.
+
+This mod is for users of older Windows versions (like Windows 7), where the Message Box Fix mod does not work, or for users who just want to restore the sound without changing anything else.
 */
 // ==/WindhawkModReadme==
 
@@ -50,4 +52,5 @@ BOOL Wh_ModInit()
     Wh_SetFunctionHook((void*)MessageBoxW, (void*)MessageBoxW_Hook, (void**)&pMessageBoxW);
     Wh_SetFunctionHook((void*)MessageBoxA, (void*)MessageBoxA_Hook, (void**)&pMessageBoxA);
     return TRUE;
+
 }
