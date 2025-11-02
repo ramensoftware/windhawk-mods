@@ -192,7 +192,7 @@ def validate_metadata(path: Path, expected_author: str):
             warnings += add_warning(
                 path,
                 line_number,
-                f'Expected {at}{key[0]} ({value}) to match the file name ({expected}")',
+                f'Expected {at}{key[0]} ({value}) to match the file name ({expected})',
             )
 
         if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', value):
@@ -278,7 +278,7 @@ def validate_metadata(path: Path, expected_author: str):
                 )
 
     # Validate that this file has the required extensions
-    if ''.join(path.suffixes) != '.wh.cpp':
+    if not path.name.endswith('.wh.cpp'):
         warnings += add_warning(path, 1, 'Filename should end with .wh.cpp')
 
     # Validate file path
