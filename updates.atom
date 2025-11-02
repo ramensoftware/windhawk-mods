@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-01T19:25:09.000Z</updated>
+    <updated>2025-11-02T09:36:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide running indicator for Windows 10 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-hide-running-indicator-w10#2fa3f9d36ac4675401b727c12e57af2415aef2b7</id>
+        <link href="https://windhawk.net/mods/taskbar-hide-running-indicator-w10"/>
+        <updated>2025-11-02T09:36:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for ExplorerPatcher's reimplemented taskbar (developed by @Amrsatrio, supports Windows 10 15063~Windows 11 27975 and beyond)<ul>
+<li>Tested on 23H2, ep_taskbar.2.dll variant</li></ul></li>
+<li>Invalidate the taskbar task list window on mod enabling/disabling</li>
+</ul>]]></content>
+        <author>
+            <name>giedriuslt</name>
+            <uri>https://github.com/giedriuslt</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide running indicator for Windows 10 1.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-hide-running-indicator-w10#33cf21483f9a72886f706b51752e661e0f4d28c9</id>
@@ -300,21 +315,6 @@ The intensity value of the glow that surrounds the text.</p></li>
         <updated>2025-10-24T17:53:45.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the NoRecommendedSection theme for <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned Start menu</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.2.2]]></title>
-        <id>https://windhawk.net/mods/windows-11-file-explorer-styler#d4f524e3e969acf4f18a77650a5afdb093961008</id>
-        <link href="https://windhawk.net/mods/windows-11-file-explorer-styler"/>
-        <updated>2025-10-24T17:40:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added themes: Matter, WindowGlass.</li>
-<li>Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.</li>
-<li>WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

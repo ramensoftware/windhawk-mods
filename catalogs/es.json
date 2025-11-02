@@ -4529,19 +4529,19 @@
                 "published": 1761396608000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1762025109000,
+                "updated": 1762076176000,
                 "users": 36
             },
             "metadata": {
                 "author": "giedriuslt",
-                "compilerOptions": "-lgdi32",
+                "compilerOptions": "-lgdi32 -lversion",
                 "description": "Hides taskbar running indicator for Windows 10",
                 "github": "https://github.com/giedriuslt",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Hide running indicator for Windows 10",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-hung-rearrangement-fix": {
