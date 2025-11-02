@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              remember-folder-positions-fork
+// @id              remember-folder-positions
 // @name            Remember the folder windows' positions - Fork
 // @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
 // @version         1.1
