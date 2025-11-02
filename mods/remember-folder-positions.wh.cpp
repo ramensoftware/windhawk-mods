@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              remember-folder-positions
-// @name            Remembers the folder windows' positions
+// @name            Remember the folder windows' positions
 // @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
-// @version         1.0
+// @version         1.1
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         explorer.exe
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-This mode re-implements the functionality, removed from Windows Explorer after Windows XP, namely,
+This mod re-implements the functionality, removed from Windows Explorer after Windows XP, that is,
 the remembering of the positions of the folder windows.
 
 This mod makes the utility ShellFolderFix unnecessary.
@@ -89,6 +89,10 @@ void SaveWinPos(HWND hWnd, int bagNum) {
     WINDOWPLACEMENT wp = {sizeof(WINDOWPLACEMENT)};
     if (!GetWindowPlacement(hWnd, &wp)) return;
     
+    // Force normal state - clear ALL maximize-related flags
+    wp.showCmd = SW_SHOWNORMAL;
+    wp.flags = 0; // Clear WPF_RESTORETOMAXIMIZED and other flags
+    
     WCHAR regPath[256];
     wsprintfW(regPath, L"Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\%d\\Shell", bagNum);
     
@@ -132,6 +136,20 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lp
 }
 
 LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {   
+    
+    if (lpValueName && !lstrcmpiW(lpValueName, L"ShowCmd"))
+        
+    { 
+            if (lpType)
+                *lpType = REG_DWORD;
+            if (lpData && lpcbData && *lpcbData >= sizeof(DWORD))
+            {
+                *(DWORD*)lpData = SW_SHOWNORMAL;
+                *lpcbData = sizeof(DWORD);
+            }
+            return ERROR_SUCCESS;
+    }
+
     int bagNum = ExtractBagNumber(hKey);
     
     if (bagNum > 0 && g_lastCreatedWindow && IsWindow(g_lastCreatedWindow)) {
