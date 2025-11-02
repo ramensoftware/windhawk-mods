@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-02T14:29:15.000Z</updated>
+    <updated>2025-11-02T18:07:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remember the folder windows' positions 1.1]]></title>
+        <id>https://windhawk.net/mods/remember-folder-positions#7a1038bcfbef380982bca37f121a345d192d4727</id>
+        <link href="https://windhawk.net/mods/remember-folder-positions"/>
+        <updated>2025-11-02T18:07:22.000Z</updated>
+        <content type="html"><![CDATA[<p>Restore and remember all windows in normal (non-maximized) state</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remembers the folder windows' positions 1.0]]></title>
         <id>https://windhawk.net/mods/remember-folder-positions#81c1adc075f9038e4ac13ae77646e6de6c9e32d7</id>
@@ -293,32 +304,6 @@ This mod adds an input that allows you to type hex colors in both the standard
         <author>
             <name>giedriuslt</name>
             <uri>https://github.com/giedriuslt</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Font Changer 0.2]]></title>
-        <id>https://windhawk.net/mods/explorer-font-changer#962cbdb6b5d7944f668aa12a44af0d45f68f4d38</id>
-        <link href="https://windhawk.net/mods/explorer-font-changer"/>
-        <updated>2025-10-25T09:33:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Live font changes:
-Through hooking into <code>DrawText[Ex]W</code>, we can now change fonts at the time of rendering, instead of depending on intercepting font creation!</p></li>
-<li><p>Glow text:
-This toggles on the "Glow text" functionality, proxying calls to <code>user32!DrawTextW</code> and <code>user32!DrawTextExW</code> to <code>uxtheme.dll</code>'s "DrawGlowText" function. Thanks to the mod "Translucent Windows" for bringing this function to my attention!</p></li>
-<li><p>Glow: Red (0-255):
-The red value of the glow text color (0-255).</p></li>
-<li><p>Glow: Green (0-255):
-The green value of the glow text color (0-255).</p></li>
-<li><p>Glow: Blue (0-255):
-The blue value of the glow text color (0-255).</p></li>
-<li><p>Glow: Alpha (0-255):
-The alpha value of the glow text color (0-255).</p></li>
-<li><p>Glow: Intensity (1-..):
-The intensity value of the glow that surrounds the text.</p></li>
-</ul>]]></content>
-        <author>
-            <name>Gabriela Cristei</name>
-            <uri>https://github.com/cristeigabriela</uri>
         </author>
     </entry>
 </feed>

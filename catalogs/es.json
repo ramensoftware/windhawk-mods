@@ -3754,7 +3754,7 @@
                 "published": 1762093755000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1762093755000,
+                "updated": 1762106842000,
                 "users": 0
             },
             "metadata": {
@@ -3765,8 +3765,8 @@
                 "include": [
                     "explorer.exe"
                 ],
-                "name": "Remembers the folder windows' positions",
-                "version": "1.0"
+                "name": "Remember the folder windows' positions",
+                "version": "1.1"
             }
         },
         "remove-command-bar": {
