@@ -417,7 +417,7 @@ def main():
         path_warnings += validate_symbol_hooks(path)
         warnings += path_warnings
 
-        if path_warnings > 0:
+        if path_warnings == 0:
             try:
                 mod_symbols = get_mod_symbols(path, [])
                 print('Extracted symbols:\n' + json.dumps(mod_symbols, indent=2))
