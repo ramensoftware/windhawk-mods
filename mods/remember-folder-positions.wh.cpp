@@ -1,17 +1,16 @@
 // ==WindhawkMod==
 // @id              remember-folder-positions
-// @name            Remember folder positions
-// @description     Remembers the folder windows' positions the way it was pre-Vista (Win95-WinXP)
+// @name            Remembers the folder windows' positions
+// @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
 // @version         1.0
-// @author          anixx
-// @github          https://github.com/Anixx
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32
+
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-This mod re-implements the functionality removed from Windows Explorer after Windows XP, that is,
+This mode re-implements the functionality, removed from Windows Explorer after Windows XP, namely,
 the remembering of the positions of the folder windows.
 
 This mod makes the utility ShellFolderFix unnecessary.
@@ -20,9 +19,11 @@ This mod makes the utility ShellFolderFix unnecessary.
 
 #include <windows.h>
 #include <unordered_map>
-#include <commctrl.h>
+#include <unordered_set>
+#include <windhawk_utils.h>
 
 std::unordered_map<HWND, int> g_windowToBag;
+std::unordered_set<HWND> g_subclassedWindows;
 HWND g_lastCreatedWindow = NULL;
 
 typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
@@ -74,7 +75,7 @@ void ApplyWinPos(HWND hWnd, int bagNum) {
     WINDOWPLACEMENT wp = {sizeof(WINDOWPLACEMENT)};
     DWORD dataSize = sizeof(wp);
     
-    if (RegQueryValueExW(hKey, valueName, NULL, NULL, (BYTE*)&wp, &dataSize) == ERROR_SUCCESS && dataSize == sizeof(wp)) {
+    if (pOriginalRegQueryValueExW(hKey, valueName, NULL, NULL, (BYTE*)&wp, &dataSize) == ERROR_SUCCESS && dataSize == sizeof(wp)) {
         wp.length = sizeof(WINDOWPLACEMENT);
         SetWindowPlacement(hWnd, &wp);
     }
@@ -99,14 +100,15 @@ void SaveWinPos(HWND hWnd, int bagNum) {
     }
 }
 
-LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == WM_DESTROY) {
         auto it = g_windowToBag.find(hWnd);
         if (it != g_windowToBag.end() && it->second > 0) {
             SaveWinPos(hWnd, it->second);
             g_windowToBag.erase(it);
         }
-        RemoveWindowSubclass(hWnd, SubclassProc, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+        g_subclassedWindows.erase(hWnd);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -117,10 +119,11 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lp
     HWND hWnd = pOriginalCreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, 
                                           X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     
-    if (hWnd && lpClassName && HIWORD(lpClassName) != 0 && wcscmp(lpClassName, L"CabinetWClass") == 0) {
+    if (hWnd && lpClassName && (((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && wcscmp(lpClassName, L"CabinetWClass") == 0) {
         g_lastCreatedWindow = hWnd;
         g_windowToBag[hWnd] = -1;
-        SetWindowSubclass(hWnd, SubclassProc, 0, 0);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0);
+        g_subclassedWindows.insert(hWnd);
     }
     
     return hWnd;
@@ -142,12 +145,16 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
 }
 
 BOOL Wh_ModInit(void) {
-    Wh_Log(L"Init");
-
-    Wh_SetFunctionHook((void*)GetProcAddress(LoadLibrary(L"kernelbase.dll"), "RegQueryValueExW"), 
-                    (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
+    Wh_SetFunctionHook((void*)GetProcAddress(LoadLibraryW(L"kernelbase.dll"), "RegQueryValueExW"), 
+                       (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
     Wh_SetFunctionHook((void*)CreateWindowExW, 
-                    (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
+                       (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
 
     return TRUE;
+}
+
+void Wh_ModUninit(void) {
+    for (HWND hWnd : g_subclassedWindows) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+    }
 }
