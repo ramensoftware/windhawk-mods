@@ -3748,6 +3748,27 @@
                 "version": "1.0.0"
             }
         },
+        "remember-folder-positions": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1762093755000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1762093755000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "compilerOptions": "-lcomctl32 -lgdi32",
+                "description": "Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Remembers the folder windows' positions",
+                "version": "1.0"
+            }
+        },
         "remove-command-bar": {
             "details": {
                 "defaultSorting": 2730,

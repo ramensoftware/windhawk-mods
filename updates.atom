@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-02T09:36:16.000Z</updated>
+    <updated>2025-11-02T14:29:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remembers the folder windows' positions 1.0]]></title>
+        <id>https://windhawk.net/mods/remember-folder-positions#81c1adc075f9038e4ac13ae77646e6de6c9e32d7</id>
+        <link href="https://windhawk.net/mods/remember-folder-positions"/>
+        <updated>2025-11-02T14:29:15.000Z</updated>
+        <content type="html"><![CDATA[<p>This mode re-implements the functionality, removed from Windows Explorer after Windows XP, namely,
+the remembering of the positions of the folder windows.</p>
+<p>This mod makes the utility ShellFolderFix unnecessary.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide running indicator for Windows 10 1.0.2]]></title>
         <id>https://windhawk.net/mods/taskbar-hide-running-indicator-w10#2fa3f9d36ac4675401b727c12e57af2415aef2b7</id>
@@ -306,19 +319,6 @@ The intensity value of the glow that surrounds the text.</p></li>
         <author>
             <name>Gabriela Cristei</name>
             <uri>https://github.com/cristeigabriela</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Menu Styler 1.3.3]]></title>
-        <id>https://windhawk.net/mods/windows-11-start-menu-styler#5c85ef0b642d596f595e2135430dd345ae896bfb</id>
-        <link href="https://windhawk.net/mods/windows-11-start-menu-styler"/>
-        <updated>2025-10-24T17:53:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the NoRecommendedSection theme for <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">the redesigned Start menu</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
