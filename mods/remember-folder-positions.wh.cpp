@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-This mode re-implements the functionality, removed from Windows Explorer after Windows XP, that is,
+This mod re-implements the functionality, removed from Windows Explorer after Windows XP, that is,
 the remembering of the positions of the folder windows.
 
 This mod makes the utility ShellFolderFix unnecessary.
