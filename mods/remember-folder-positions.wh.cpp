@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              remember-folder-positions
-// @name            Remembers the folder windows' positions
+// @name            Remember the folder windows' positions
 // @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
-// @version         1.0
+// @version         1.0.1
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         explorer.exe
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-This mode re-implements the functionality, removed from Windows Explorer after Windows XP, namely,
+This mode re-implements the functionality, removed from Windows Explorer after Windows XP, that is,
 the remembering of the positions of the folder windows.
 
 This mod makes the utility ShellFolderFix unnecessary.
