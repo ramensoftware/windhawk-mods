@@ -1,160 +1,104 @@
 // ==WindhawkMod==
-// @id              remember-folder-positions
-// @name            Remembers the folder windows' positions
-// @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
-// @version         1.0
-// @include         explorer.exe
-// @compilerOptions -lcomctl32 -lgdi32
-
+// @id              remove-ms-store-open-with
+// @name            Open With - Remove Microsoft Store Menu Item
+// @description     Removes the "Search with Microsoft Store" menu item from the "Open with" submenu
+// @version         1.0.0
+// @author          aubymori
+// @github          https://github.com/aubymori
+// @include         *
+// @compilerOptions -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-This mode re-implements the functionality, removed from Windows Explorer after Windows XP, namely,
-the remembering of the positions of the folder windows.
+# Open With - Remove Microsoft Store Menu Item
 
-This mod makes the utility ShellFolderFix unnecessary.
+This mod removes the "Search with Microsoft Store" item from the "Open with"
+submenu in File Explorer. The item is unremovable by normal means (MUI/registry
+editing).
+
+**Before**:
+
+![Before](https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-before.png)
+
+**After**:
+
+![After](https://raw.githubusercontent.com/aubymori/images/main/remove-ms-store-open-with-after.png)
 */
 // ==/WindhawkModReadme==
 
-#include <windows.h>
-#include <unordered_map>
-#include <unordered_set>
-#include <windhawk_utils.h>
+#include <processthreadsapi.h>
+#include <psapi.h>
 
-std::unordered_map<HWND, int> g_windowToBag;
-std::unordered_set<HWND> g_subclassedWindows;
-HWND g_lastCreatedWindow = NULL;
+HMODULE   g_hShell32 = nullptr;
+ULONGLONG g_shell32Size = 0;
+// Same buffer size as in shell32
+WCHAR     g_szMsStore[80] = { 0 };
 
-typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-typedef HWND (WINAPI *CREATEWINDOWEXW)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-
-REGQUERYVALUEEXW pOriginalRegQueryValueExW;
-CREATEWINDOWEXW pOriginalCreateWindowExW;
-
-void GetWinPosValueName(WCHAR* valueName, size_t size) {
-    HDC hdc = GetDC(NULL);
-    int width = GetDeviceCaps(hdc, HORZRES);
-    int height = GetDeviceCaps(hdc, VERTRES);
-    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-    ReleaseDC(NULL, hdc);
-    
-    wsprintfW(valueName, L"WinPos%dx%dx%d", width, height, dpi);
-}
-
-int ExtractBagNumber(HKEY hKey) {
-    typedef LONG (WINAPI *NTQUERYKEY)(HANDLE, int, PVOID, ULONG, PULONG);
-    static NTQUERYKEY pNtQueryKey = (NTQUERYKEY)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey");
-    
-    if (!pNtQueryKey) return -1;
-    
-    BYTE buffer[1024];
-    ULONG resultLength;
-    if (pNtQueryKey(hKey, 3, buffer, sizeof(buffer), &resultLength) != 0) return -1;
-    
-    WCHAR* keyPath = (WCHAR*)(buffer + sizeof(ULONG));
-    const WCHAR* bags = wcsstr(keyPath, L"\\Bags\\");
-    if (!bags) return -1;
-    
-    bags += 6;
-    if (wcsstr(bags, L"AllFolders") == bags) return -1;
-    
-    return _wtoi(bags);
-}
-
-void ApplyWinPos(HWND hWnd, int bagNum) {
-    WCHAR regPath[256];
-    wsprintfW(regPath, L"Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\%d\\Shell", bagNum);
-    
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, regPath, 0, KEY_READ, &hKey) != ERROR_SUCCESS) return;
-    
-    WCHAR valueName[64];
-    GetWinPosValueName(valueName, 64);
-    
-    WINDOWPLACEMENT wp = {sizeof(WINDOWPLACEMENT)};
-    DWORD dataSize = sizeof(wp);
-    
-    if (pOriginalRegQueryValueExW(hKey, valueName, NULL, NULL, (BYTE*)&wp, &dataSize) == ERROR_SUCCESS && dataSize == sizeof(wp)) {
-        wp.length = sizeof(WINDOWPLACEMENT);
-        SetWindowPlacement(hWnd, &wp);
-    }
-    
-    RegCloseKey(hKey);
-}
-
-void SaveWinPos(HWND hWnd, int bagNum) {
-    WINDOWPLACEMENT wp = {sizeof(WINDOWPLACEMENT)};
-    if (!GetWindowPlacement(hWnd, &wp)) return;
-    
-    WCHAR regPath[256];
-    wsprintfW(regPath, L"Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\%d\\Shell", bagNum);
-    
-    HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, regPath, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
-        WCHAR valueName[64];
-        GetWinPosValueName(valueName, 64);
-        
-        RegSetValueExW(hKey, valueName, 0, REG_BINARY, (BYTE*)&wp, sizeof(wp));
-        RegCloseKey(hKey);
-    }
-}
-
-LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_DESTROY) {
-        auto it = g_windowToBag.find(hWnd);
-        if (it != g_windowToBag.end() && it->second > 0) {
-            SaveWinPos(hWnd, it->second);
-            g_windowToBag.erase(it);
-        }
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-        g_subclassedWindows.erase(hWnd);
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, 
-                                 DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-                                 HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hWnd = pOriginalCreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, 
-                                          X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    
-    if (hWnd && lpClassName && (((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && wcscmp(lpClassName, L"CabinetWClass") == 0) {
-        g_lastCreatedWindow = hWnd;
-        g_windowToBag[hWnd] = -1;
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0);
-        g_subclassedWindows.insert(hWnd);
-    }
-    
-    return hWnd;
-}
-
-LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {   
-    int bagNum = ExtractBagNumber(hKey);
-    
-    if (bagNum > 0 && g_lastCreatedWindow && IsWindow(g_lastCreatedWindow)) {
-        auto it = g_windowToBag.find(g_lastCreatedWindow);
-        if (it != g_windowToBag.end() && it->second == -1) {
-            it->second = bagNum;
-            ApplyWinPos(g_lastCreatedWindow, bagNum);
-            g_lastCreatedWindow = NULL;
+using InsertMenuItemW_t = decltype(&InsertMenuItemW);
+InsertMenuItemW_t InsertMenuItemW_orig = nullptr;
+BOOL WINAPI InsertMenuItemW_hook(
+    HMENU            hmenu,
+    UINT             item,
+    BOOL             fByPosition,
+    LPCMENUITEMINFOW lpmi
+)
+{
+    // Ensure that we're only modifying menu items added from shell32
+    void *retaddr = __builtin_return_address(0);
+    if (((ULONGLONG)retaddr >= (ULONGLONG)g_hShell32) && ((ULONGLONG)retaddr < ((ULONGLONG)g_hShell32 + g_shell32Size)))
+    {
+        if (lpmi->fMask & MIIM_STRING && lpmi->dwTypeData && 0 == wcscmp(lpmi->dwTypeData, g_szMsStore))
+        {
+            return TRUE;
         }
     }
-
-    return pOriginalRegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+    return InsertMenuItemW_orig(
+        hmenu,
+        item,
+        fByPosition,
+        lpmi
+    );
 }
 
-BOOL Wh_ModInit(void) {
-    Wh_SetFunctionHook((void*)GetProcAddress(LoadLibraryW(L"kernelbase.dll"), "RegQueryValueExW"), 
-                       (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
-    Wh_SetFunctionHook((void*)CreateWindowExW, 
-                       (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
+BOOL Wh_ModInit(void)
+{
+    g_hShell32 = LoadLibraryW(L"shell32.dll");
+    if (!g_hShell32)
+    {
+        Wh_Log(L"Failed to load shell32.dll");
+        return FALSE;
+    }
+
+    MODULEINFO miShell32 = { 0 };
+    if (!GetModuleInformation(
+        GetCurrentProcess(),
+        g_hShell32,
+        &miShell32,
+        sizeof(MODULEINFO)
+    ))
+    {
+        Wh_Log(L"Failed to get size of shell32.dll");
+        return FALSE;
+    }
+    g_shell32Size = miShell32.SizeOfImage;
+
+    LoadStringW(g_hShell32, 0x1506, g_szMsStore, 80);
+    if (!*g_szMsStore)
+    {
+        Wh_Log(L"Failed to load Microsoft Store string");
+        return FALSE;
+    }
+
+    if (!Wh_SetFunctionHook(
+        (void *)InsertMenuItemW,
+        (void *)InsertMenuItemW_hook,
+        (void **)&InsertMenuItemW_orig
+    ))
+    {
+        Wh_Log(L"Failed to hook InsertMenuItemW");
+        return FALSE;
+    }
 
     return TRUE;
-}
-
-void Wh_ModUninit(void) {
-    for (HWND hWnd : g_subclassedWindows) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-    }
 }
