@@ -3,6 +3,8 @@
 // @name            Remembers the folder windows' positions
 // @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
 // @version         1.0
+// @author          Anixx
+// @github 			https://github.com/Anixx
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32
 
