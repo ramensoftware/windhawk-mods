@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-02T18:07:22.000Z</updated>
+    <updated>2025-11-03T09:40:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remember the folder windows' positions 1.2]]></title>
+        <id>https://windhawk.net/mods/remember-folder-positions#08fc3fd684176a81ad98c922c9da30f1b64ddc1f</id>
+        <link href="https://windhawk.net/mods/remember-folder-positions"/>
+        <updated>2025-11-03T09:40:30.000Z</updated>
+        <content type="html"><![CDATA[<p>Get rid of subclassing</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remember the folder windows' positions 1.1]]></title>
         <id>https://windhawk.net/mods/remember-folder-positions#7a1038bcfbef380982bca37f121a345d192d4727</id>
@@ -285,25 +296,6 @@ This mod adds an input that allows you to type hex colors in both the standard
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide running indicator for Windows 10 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-hide-running-indicator-w10#a4050d4b78805110470e0d88fb943ea16a0d70e2</id>
-        <link href="https://windhawk.net/mods/taskbar-hide-running-indicator-w10"/>
-        <updated>2025-10-25T12:50:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidetaskbarrunningindicatorforwindows10">Hide taskbar running indicator for Windows 10</h1>
-<p>Lightweight mod which hides the running indicator on taskbar buttons. For Windows 11, use taskbar styler to achieve same effect.</p>
-<p>Before:</p>
-<p><img src="https://i.imgur.com/bbUWHuX.png" alt="Before" /></p>
-<p><img src="https://i.imgur.com/gT1rgVv.png" alt="Before" /></p>
-<p>After:</p>
-<p><img src="https://i.imgur.com/jBNOYMn.png" alt="After" /></p>
-<p><img src="https://i.imgur.com/DxKL5Od.png" alt="After" /></p>
-<p>There is a minor imperfection in that the focus rectangle is not covering the full size.</p>]]></content>
-        <author>
-            <name>giedriuslt</name>
-            <uri>https://github.com/giedriuslt</uri>
         </author>
     </entry>
 </feed>
