@@ -341,7 +341,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             TaskbarFrame_MeasureOverride_Hook,
         },
     };
-    if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"DockAnimation: HookSymbols failed.");
         return false;
     }
@@ -432,4 +432,5 @@ void Wh_ModSettingsChanged() {
         }
     } catch (...) {}
 }
+
 
