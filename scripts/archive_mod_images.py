@@ -49,7 +49,7 @@ def process_code_files(code_folder: Path, images_folder: Path):
     stale_images = [p for p in images_folder.rglob("*") if p.is_file()]
 
     image_urls: set[str] = set()
-    for file_path in code_folder.glob("*.wh.cpp"):
+    for file_path in code_folder.rglob("*.wh.cpp"):
         image_urls.update(find_image_urls(file_path))
 
     for url in image_urls:
