@@ -331,7 +331,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+     // Taskbar.View.dll
+     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {
                 LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"
@@ -431,3 +432,4 @@ void Wh_ModSettingsChanged() {
         }
     } catch (...) {}
 }
+
