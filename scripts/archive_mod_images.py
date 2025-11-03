@@ -3,13 +3,19 @@ import requests
 from pathlib import Path
 from typing import List
 
-url_pattern = r"!\[[^\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
-script_dir = Path(__file__).parent
-code_folder_path = script_dir.parent / "mods"
-images_folder_path = script_dir.parent / "images"
+URL_PATTERN = r"!\[[^\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
+SCRIPT_DIR = Path(__file__).parent
+CODE_FOLDER_PATH = SCRIPT_DIR.parent / "mods"
+IMAGES_FOLDER_PATH = SCRIPT_DIR.parent / "images"
+
+EXCLUDED_IMAGE_URLS = {
+    # No longer available.
+    "https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/Before.png",
+    "https://raw.githubusercontent.com/u3l6/force-chinese-ime/refs/heads/main/After.png",
+}
 
 session = requests.Session()
-session.headers.update({"User-Agent": 'Mozilla/5.0'})
+session.headers.update({"User-Agent": "Mozilla/5.0"})
 
 
 def find_image_urls(file_path: Path) -> List[str]:
@@ -22,7 +28,7 @@ def find_image_urls(file_path: Path) -> List[str]:
     if match := re.search(readme_pattern, content, re.MULTILINE):
         readme = match.group(1)
 
-    return re.findall(url_pattern, readme)
+    return re.findall(URL_PATTERN, readme)
 
 
 def image_url_to_path(url: str):
@@ -52,6 +58,8 @@ def process_code_files(code_folder: Path, images_folder: Path):
     for file_path in code_folder.rglob("*.wh.cpp"):
         image_urls.update(find_image_urls(file_path))
 
+    image_urls -= EXCLUDED_IMAGE_URLS
+
     for url in image_urls:
         image_path = images_folder / image_url_to_path(url)
         if not image_path.exists():
@@ -68,4 +76,4 @@ def process_code_files(code_folder: Path, images_folder: Path):
 
 
 if __name__ == "__main__":
-    process_code_files(code_folder_path, images_folder_path)
+    process_code_files(CODE_FOLDER_PATH, IMAGES_FOLDER_PATH)
