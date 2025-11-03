@@ -2,7 +2,7 @@
 // @id              remember-folder-positions
 // @name            Remember the folder windows' positions
 // @description     Remembers the folder windows positions the way it was pre-Vista (Win95-WinXP)
-// @version         1.1
+// @version         1.2
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         explorer.exe
@@ -21,18 +21,17 @@ This mod makes the utility ShellFolderFix unnecessary.
 
 #include <windows.h>
 #include <unordered_map>
-#include <unordered_set>
-#include <windhawk_utils.h>
 
 std::unordered_map<HWND, int> g_windowToBag;
-std::unordered_set<HWND> g_subclassedWindows;
 HWND g_lastCreatedWindow = NULL;
 
 typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
 typedef HWND (WINAPI *CREATEWINDOWEXW)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+typedef BOOL (WINAPI *DESTROYWINDOW)(HWND);
 
 REGQUERYVALUEEXW pOriginalRegQueryValueExW;
 CREATEWINDOWEXW pOriginalCreateWindowExW;
+DESTROYWINDOW pOriginalDestroyWindow;
 
 void GetWinPosValueName(WCHAR* valueName, size_t size) {
     HDC hdc = GetDC(NULL);
@@ -106,19 +105,6 @@ void SaveWinPos(HWND hWnd, int bagNum) {
     }
 }
 
-LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_DESTROY) {
-        auto it = g_windowToBag.find(hWnd);
-        if (it != g_windowToBag.end() && it->second > 0) {
-            SaveWinPos(hWnd, it->second);
-            g_windowToBag.erase(it);
-        }
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-        g_subclassedWindows.erase(hWnd);
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
 HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, 
                                  DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
                                  HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
@@ -128,11 +114,19 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lp
     if (hWnd && lpClassName && (((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && wcscmp(lpClassName, L"CabinetWClass") == 0) {
         g_lastCreatedWindow = hWnd;
         g_windowToBag[hWnd] = -1;
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0);
-        g_subclassedWindows.insert(hWnd);
     }
     
     return hWnd;
+}
+
+BOOL WINAPI DestroyWindowHook(HWND hWnd)
+{
+    auto it = g_windowToBag.find(hWnd);
+    if (it != g_windowToBag.end() && it->second > 0) {
+        SaveWinPos(hWnd, it->second);
+        g_windowToBag.erase(it);
+    }
+    return pOriginalDestroyWindow(hWnd);
 }
 
 LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData) {   
@@ -169,12 +163,8 @@ BOOL Wh_ModInit(void) {
                        (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
     Wh_SetFunctionHook((void*)CreateWindowExW, 
                        (void*)CreateWindowExWHook, (void**)&pOriginalCreateWindowExW);
-
+    Wh_SetFunctionHook((void*)DestroyWindow, 
+                       (void*)DestroyWindowHook, (void**)&pOriginalDestroyWindow);
     return TRUE;
 }
 
-void Wh_ModUninit(void) {
-    for (HWND hWnd : g_subclassedWindows) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-    }
-}
