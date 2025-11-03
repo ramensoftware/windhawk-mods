@@ -331,7 +331,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    // explorer.exe, Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {
                 LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"
@@ -340,7 +341,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             TaskbarFrame_MeasureOverride_Hook,
         },
     };
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
         Wh_Log(L"DockAnimation: HookSymbols failed.");
         return false;
     }
