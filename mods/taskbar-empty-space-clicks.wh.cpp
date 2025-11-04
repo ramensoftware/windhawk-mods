@@ -78,21 +78,37 @@ Some actions support or require additional arguments. You can set them in the Se
 5. Taskbar auto-hide - no additional arguments supported
 6. Win+Tab - no additional arguments supported
 7. Hide desktop icons - no additional arguments supported
-7. Combine Taskbar buttons - `primaryTaskBarButtonsState1;primaryTaskBarButtonsState2;secondaryTaskBarButtonsState1;secondaryTaskBarButtonsState2`
-    - primaryTaskBarButtonsState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
-    - primaryTaskBarButtonsState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
-    - secondaryTaskBarButtonsState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
-    - secondaryTaskBarButtonsState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+7. Combine Taskbar buttons - `priTaskBarBtnState1;priTaskBarBtnState2;secTaskBarBtnState1;secTaskBarBtnState2`
+    - priTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+    - priTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+    - secTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
+    - secTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - Example: `COMBINE_ALWAYS;COMBINE_WHEN_FULL;COMBINE_ALWAYS;COMBINE_NEVER`
 7. Open Start menu - no additional arguments supported
 8. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
     - Example: `0x5B;0x45`
     - Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in [win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
-9. Start application - `applicationPath`
+9. Start application - `applicationPath arg1 arg2 ... argN`
     - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt`
     - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
     - Example: `cmd.exe /c echo Hello & pause`
-    - Takes and executes the whole applicationPath string. No semicolons are parsed! Only leading and trailing white characters are removed. You can use full path to the application or just the executable name if it is in PATH. In case you want to execute shell command, use cmd.exe with corresponding flag.
+    - Takes and executes the whole `applicationPath` string as a new process. No semicolons are parsed! Only leading and trailing white characters are removed. You can use full path to the application or just the executable name if it is in PATH. In case you want to execute shell command, use cmd.exe with corresponding flag.
+
+## Caveats and limitations:
+
+### Right-click behavior:
+When you configure any right-click trigger (single, double, or triple), the mod needs to temporarily delay the taskbar's context menu to detect your intended action.
+
+#### Here's how it works:
+
+- When you right-click the taskbar, the mod checks if you're using the keyboard modifier associated with your configured trigger
+- If the keyboard modifier matches your trigger setup, the context menu is blocked and your custom action runs instead
+- If the keyboard modifier doesn't match (or you don't complete the trigger), the context menu appears normally
+
+#### What this means for you:
+If you set up a right-click trigger without keyboard modifiers (for example, a right double-click), you'll notice a brief delay before the context menu appears after a single right-click. This happens because the mod waits to see if you're going to complete a double or triple click. The delay is short but noticeable—it's the trade-off for having custom right-click actions.
+
+Tip: To avoid this delay, consider using keyboard modifiers with your right-click triggers (like Ctrl + right double-click). This way, the mod can instantly show the context menu when you right-click without holding the modifier key. 
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
@@ -108,7 +124,7 @@ In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or 
 
 ## Suggestions and new features
 
-If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues). Please, be as specific as possible and provide as much information as you can.
+If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues). Please, be as specific as possible and provide as much information as you can. Please consider using AI chatbot if you are struggling with putting all together in English.
 
 */
 // ==/WindhawkModReadme==
