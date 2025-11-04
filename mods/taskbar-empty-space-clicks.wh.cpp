@@ -182,12 +182,6 @@ If you have request for new functions, suggestions or you are experiencing some 
       $description: Additional arguments for the selected action, separated by semicolons. See the mod's Details tab for more information about the supported arguments for each action.
   $name: Taskbar empty space actions
   $description: "Using the Keyboard and Mouse combo boxes, select a trigger for a specific action. For example, the combination 'Left Ctrl + Double-click + Task Manager' will open the Windows Task Manager when the user double-clicks empty space on the taskbar while holding the Left Ctrl key. More actions can be set up with the Add new item button."
-- suppressContextMenu: false
-  $name: Suppress taskbar context menu
-  $description: >-
-    Force suppression of the taskbar (right-click) context menu. If disabled, the context menu is suppressed only when right-click triggers are selected
-    together with any keyboard modifier. If enabled, the context menu is always suppressed, which enables you to use right-click triggers without any
-    keyboard modifiers.
 - oldTaskbarOnWin11: false
   $name: Use the old taskbar on Windows 11
   $description: >-
@@ -1177,7 +1171,6 @@ struct TriggerAction
 
 static struct
 {
-    bool suppressContextMenu;
     bool oldTaskbarOnWin11;
     std::vector<TriggerAction> triggerActions;
 } g_settings;
@@ -2423,7 +2416,6 @@ void LoadSettings()
         g_settings.triggerActions.push_back(triggerAction);
     }
 
-    g_settings.suppressContextMenu = Wh_GetIntSetting(L"suppressContextMenu");
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 }
 
