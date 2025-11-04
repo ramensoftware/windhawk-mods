@@ -1585,6 +1585,7 @@ static UINT_PTR gMouseClickTimer = (UINT_PTR)NULL;
 
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName);
 bool IsTaskbarWindow(HWND hWnd);
+bool ShallSuppressContextMenu(const MouseClick &lastClick);
 bool IsSingleClick(const MouseClick::Button button);
 bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousClick, const MouseClick &currentClick);
 bool IsDoubleClick(const MouseClick::Button button);
@@ -1697,14 +1698,21 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 
     LRESULT result = 0;
 
+    LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
     const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN);
     const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN);
     const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN);
     const bool isLeftDoubleClick = (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
     const bool isRightDoubleClick = (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
     const bool isMiddleDoubleClick = (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
-    if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-        (isLeftButton || isRightButton || isMiddleButton || isLeftDoubleClick || isRightDoubleClick || isMiddleDoubleClick))
+    const bool isSyntheticRightClick = (extraInfo == kInjectedClickID) && ((uMsg == WM_RBUTTONUP) || (uMsg == WM_RBUTTONDOWN));
+    if (isSyntheticRightClick)
+    {
+        LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
+        return 0;
+    }
+    else if ((g_taskbarVersion == WIN_10_TASKBAR) &&
+             (isLeftButton || isRightButton || isMiddleButton || isLeftDoubleClick || isRightDoubleClick || isMiddleDoubleClick))
     {
         MouseClick::Button button;
         if (isLeftButton || isLeftDoubleClick)
@@ -1723,29 +1731,19 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         MouseClick::Type type = MouseClick::GetPointerType(wParam, lParam);
         OnMouseClick(MouseClick(wParam, lParam, type, button, hWnd));
     }
-
     else if (VK_RMENU == uMsg) // avoid opening right click menu when performing a right click action
     {
         const auto &lastClick = g_mouseClickQueue[-1];
-        if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+        if ((extraInfo != kInjectedClickID) && lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
         {
-            for (const auto &triggerAction : g_settings.triggerActions)
+            if (ShallSuppressContextMenu(lastClick))
             {
-                if (triggerAction.mouseTriggerName.find(L"right", 0) == 0) // Check if mouseTriggerName starts with "right"
-                {
-                    bool modifiersPressed = (triggerAction.expectedKeyModifiersState != 0) &&
-                                            (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState);
-                    if (g_settings.suppressContextMenu || modifiersPressed)
-                    {
-                        LOG_INFO("Suppressing VK_RMENU");
-                        return 0; // suppress the right click menu (otherwise a double click would be impossible)
-                    }
-                }
+                g_isContextMenuSuppressed = true;
+                return 0; // suppress the right click menu (otherwise a double click would be impossible)
             }
         }
         result = DefSubclassProc(hWnd, uMsg, wParam, lParam); // show the right click menu
     }
-
     else if (WM_NCDESTROY == uMsg)
     {
         result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -1803,20 +1801,10 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
                     LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
                     break;
                 }
-                // do we have any trigger action for right click ? if yes, suppress the context menu
-                for (const auto &triggerAction : g_settings.triggerActions)
+                if (ShallSuppressContextMenu(lastClick))
                 {
-                    if (triggerAction.mouseTriggerName.find(L"right", 0) == 0)
-                    {
-                        // we want to suppress only if user "is going for the trigger"
-                        if (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState)
-                        {
-                            LOG_DEBUG("Suppressing right click to suppress context menu");
-                            g_isContextMenuSuppressed = true;
-                            suppressMsg = true;
-                            break;
-                        }
-                    }
+                    g_isContextMenuSuppressed = true;
+                    suppressMsg = true; // suppress the right click menu (otherwise a double click would be impossible)
                 }
             }
             OnMouseClick(lastClick);
@@ -3007,6 +2995,23 @@ void SetBit(uint32_t &value, uint32_t bit)
 bool GetBit(const uint32_t &value, uint32_t bit)
 {
     return (value & (1U << bit)) != 0;
+}
+
+bool ShallSuppressContextMenu(const MouseClick &lastClick)
+{
+    for (const auto &triggerAction : g_settings.triggerActions)
+    {
+        if (triggerAction.mouseTriggerName.find(L"right", 0) == 0)
+        {
+            // we want to suppress only if user "is going for the trigger"
+            if (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState)
+            {
+                LOG_DEBUG("Suppressing right click to suppress context menu");
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool IsSingleClick(const MouseClick::Button button)
