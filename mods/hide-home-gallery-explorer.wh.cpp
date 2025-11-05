@@ -105,20 +105,39 @@ static HWND FindChildByClass(HWND parent, const wchar_t* cls) {
     return NULL;
 }
 
-// Enumerate all top-level Explorer windows (CabinetWClass)
+// Enumerate top-level Explorer windows (CabinetWClass) belonging to THIS process
 static std::vector<HWND> GetExplorerWindows() {
+    struct EnumCtx {
+        std::vector<HWND>* windows;
+        DWORD pid;
+    } ctx{};
+
     std::vector<HWND> result;
+    ctx.windows = &result;
+    ctx.pid = GetCurrentProcessId();
+
     EnumWindows([](HWND hwnd, LPARAM lParam)->BOOL {
+        auto* ctx = reinterpret_cast<EnumCtx*>(lParam);
+
+        // Only consider visible CabinetWClass windows
         wchar_t cls[256] = {};
         GetClassNameW(hwnd, cls, 255);
-        if (wcscmp(cls, L"CabinetWClass") == 0 && IsWindowVisible(hwnd)) {
-            auto vec = reinterpret_cast<std::vector<HWND>*>(lParam);
-            vec->push_back(hwnd);
+        if (wcscmp(cls, L"CabinetWClass") != 0 || !IsWindowVisible(hwnd)) {
+            return TRUE;
+        }
+
+        // Filter by process ID to avoid touching other explorer.exe instances
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == ctx->pid) {
+            ctx->windows->push_back(hwnd);
         }
         return TRUE;
-    }, reinterpret_cast<LPARAM>(&result));
+    }, reinterpret_cast<LPARAM>(&ctx));
+
     return result;
 }
+
 
 // Get the navigation pane TreeView (SysTreeView32) inside a CabinetWClass window
 static HWND GetExplorerNavTree(HWND explorerHwnd) {
