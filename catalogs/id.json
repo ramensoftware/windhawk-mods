@@ -2535,6 +2535,30 @@
                 "version": "1.0.1"
             }
         },
+        "hide-home-gallery-explorer": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1762330715000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1762330715000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "rinosaur681",
+                "compilerOptions": "-lcomctl32",
+                "description": "Hides the \"Home\" and \"Gallery\" items from File Explorer's navigation pane on Windows 11",
+                "github": "https://github.com/rinosaur681",
+                "include": [
+                    "%SystemRoot%\\explorer.exe"
+                ],
+                "name": "Hide Home & Gallery in Explorer",
+                "version": "0.2"
+            }
+        },
         "hide-search-bar": {
             "details": {
                 "defaultSorting": 4980,
