@@ -85,6 +85,7 @@ struct {
 
 // Global flags
 std::atomic<bool> g_taskbarViewDllLoaded = false;
+std::atomic<bool> g_fastPathHooksApplied = false;
 
 // Animation Loop Globals
 winrt::event_token g_renderingToken;
@@ -607,8 +608,9 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"DockAnimation: Wh_ModAfterInit");
-    if (g_taskbarViewDllLoaded) {
+    if (g_taskbarViewDllLoaded && !g_fastPathHooksApplied) {
         Wh_ApplyHookOperations();
+        g_fastPathHooksApplied = true;
     }
 }
 
@@ -714,3 +716,4 @@ void Wh_ModSettingsChanged() {
     } catch (...) {
     }
 }
+
