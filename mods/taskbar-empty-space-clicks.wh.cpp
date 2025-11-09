@@ -2386,7 +2386,11 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
     {
-        auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
+        TaskBarButtonsState primaryState1;      // use tie for Windhawk 1.4.1 compiler compatibility
+        TaskBarButtonsState primaryState2;
+        TaskBarButtonsState secondaryState1;
+        TaskBarButtonsState secondaryState2;
+        std::tie(primaryState1, primaryState2, secondaryState1, secondaryState2) = ParseTaskBarButtonsState(args);
         return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
         { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
     }
