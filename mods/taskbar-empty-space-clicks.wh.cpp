@@ -108,7 +108,7 @@ When you configure any right-click trigger (single, double, or triple), the mod 
 #### What this means for you:
 If you set up a right-click trigger without keyboard modifiers (for example, a right double-click), you'll notice a brief delay before the context menu appears after a single right-click. This happens because the mod waits to see if you're going to complete a double or triple click. The delay is short but noticeable—it's the trade-off for having custom right-click actions.
 
-Tip: To avoid this delay, consider using keyboard modifiers with your right-click triggers (like Ctrl + right double-click). This way, the mod can instantly show the context menu when you right-click without holding the modifier key. 
+Tip: To avoid this delay, consider using keyboard modifiers with your right-click triggers (like Ctrl + right double-click). This way, the mod can instantly show the context menu when you right-click without holding the modifier key.
 
 ## Supported Windows versions are:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
@@ -1337,6 +1337,7 @@ static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 
 static constexpr DWORD kInjectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static bool g_isContextMenuSuppressed = false;
+static UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 
 // object to store information about the mouse click, its position, button, timestamp and whether it was on empty space
 struct MouseClick
@@ -1694,7 +1695,84 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
     return param.result;
 }
 
-// proc handler for older Windows (nonXAML taskbar) versions
+#ifdef ENABLE_LOG_DEBUG
+void printMessage(UINT uMsg)
+{
+    if ((uMsg != WM_NCMOUSEMOVE) &&
+        (uMsg != WM_NOTIFY) &&
+        (uMsg != 0x84) && // ? SPI_GETMOUSEDRAGOUTTHRESHOLD
+        (uMsg != 0x20) &&
+        (uMsg != WM_WINDOWPOSCHANGING) &&
+        (uMsg != WM_WINDOWPOSCHANGED) &&
+        (uMsg != WM_ACTIVATEAPP) &&
+        (uMsg != WM_NCACTIVATE) &&
+        (uMsg != WM_ACTIVATE) &&
+        (uMsg != 0x281) &&
+        (uMsg != 0x282) &&
+        (uMsg != 0x003D) &&
+        (uMsg != WM_SETFOCUS) &&
+        (uMsg != WM_KILLFOCUS) &&
+        (uMsg != WM_SYSCOMMAND) &&
+        (uMsg != WM_CAPTURECHANGED) &&
+        (uMsg != 0x0014) &&
+        (uMsg != WM_PRINTCLIENT) &&
+        (uMsg != WM_CHANGEUISTATE) &&
+        (uMsg != CB_GETCOMBOBOXINFO) &&
+        (uMsg != WM_ENTERIDLE) &&
+        (uMsg != 0x2b) &&
+        (uMsg != 0x2c) &&
+        (uMsg != 0x113) &&
+        (uMsg != 0x200) &&
+        (uMsg != 0x24a) &&
+        (uMsg != 0x245))
+    {
+        switch (uMsg)
+        {
+        case WM_CONTEXTMENU:
+            LOG_DEBUG(L"Message: WM_CONTEXTMENU");
+            break;
+        case WM_NCLBUTTONDOWN:
+            LOG_DEBUG(L"Message: WM_NCLBUTTONDOWN");
+            break;
+        case WM_NCLBUTTONUP:
+            LOG_DEBUG(L"Message: WM_NCLBUTTONUP");
+            break;
+        case WM_NCLBUTTONDBLCLK:
+            LOG_DEBUG(L"Message: WM_NCLBUTTONDBLCLK");
+            break;
+        case WM_NCRBUTTONDOWN:
+            LOG_DEBUG(L"Message: WM_NCRBUTTONDOWN");
+            break;
+        case WM_NCRBUTTONUP:
+            LOG_DEBUG(L"Message: WM_NCRBUTTONUP");
+            break;
+        case WM_NCRBUTTONDBLCLK:
+            LOG_DEBUG(L"Message: WM_NCRBUTTONDBLCLK");
+            break;
+        case WM_NCMBUTTONDOWN:
+            LOG_DEBUG(L"Message: WM_NCMBUTTONDOWN");
+            break;
+        case WM_NCMBUTTONUP:
+            LOG_DEBUG(L"Message: WM_NCMBUTTONUP");
+            break;
+        case WM_NCMBUTTONDBLCLK:
+            LOG_DEBUG(L"Message: WM_NCMBUTTONDBLCLK");
+            break;
+        case WM_POINTERDOWN:
+            LOG_DEBUG(L"Message: WM_POINTERDOWN");
+            break;
+        case WM_POINTERUP:
+            LOG_DEBUG(L"Message: WM_POINTERUP");
+            break;
+        default:
+            LOG_DEBUG(L"Message: 0x%x", uMsg);
+            break;
+        }
+    }
+}
+#endif
+
+// proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
 LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
                                            _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
 {
@@ -1702,78 +1780,67 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     {
         RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
     }
-
-    // LOG_DEBUG(L"Message: 0x%x", uMsg);
-
-    LRESULT result = 0;
-
-    LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN);
-    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN);
-    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN);
-    const bool isLeftDoubleClick = (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
-    const bool isRightDoubleClick = (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
-    const bool isMiddleDoubleClick = (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
-    const bool isSyntheticRightClick = (extraInfo == kInjectedClickID) && ((uMsg == WM_RBUTTONUP) || (uMsg == WM_RBUTTONDOWN));
-    if (isSyntheticRightClick)
+    if (WM_NCDESTROY == uMsg)
     {
-        LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
-        return 0;
-    }
-    else if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-             (isLeftButton || isRightButton || isMiddleButton || isLeftDoubleClick || isRightDoubleClick || isMiddleDoubleClick))
-    {
-        MouseClick::Button button;
-        if (isLeftButton || isLeftDoubleClick)
-        {
-            button = MouseClick::Button::LEFT;
-        }
-        else if (isRightButton || isRightDoubleClick)
-        {
-            button = MouseClick::Button::RIGHT;
-        }
-        else
-        {
-            button = MouseClick::Button::MIDDLE;
-        }
-
-        MouseClick::Type type = MouseClick::GetPointerType(wParam, lParam);
-        OnMouseClick(MouseClick(wParam, lParam, type, button, hWnd));
-    }
-    else if (VK_RMENU == uMsg) // avoid opening right click menu when performing a right click action
-    {
-        const auto &lastClick = g_mouseClickQueue[-1];
-        if ((extraInfo != kInjectedClickID) && lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
-        {
-            if (ShallSuppressContextMenu(lastClick))
-            {
-                g_isContextMenuSuppressed = true;
-                return 0; // suppress the right click menu (otherwise a double click would be impossible)
-            }
-        }
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam); // show the right click menu
-    }
-    else if (WM_NCDESTROY == uMsg)
-    {
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         if (hWnd != g_hTaskbarWnd)
         {
             g_secondaryTaskbarWindows.erase(hWnd);
         }
+        return result;
     }
-    else
+
+    // printMessage(uMsg);
+
+    bool suppress = false;
+    // button up messages seems really unreliable, so only process down and dblclk messages
+    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
+    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
+    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
+    if ((g_taskbarVersion == WIN_10_TASKBAR) &&
+        (isLeftButton || isRightButton || isMiddleButton))
+    {
+        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+        if (extraInfo != kInjectedClickID)
+        {
+            MouseClick::Button button = isLeftButton ? MouseClick::Button::LEFT : (isRightButton ? MouseClick::Button::RIGHT : MouseClick::Button::MIDDLE);
+            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd));
+        }
+        else
+        {
+            LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping, 0x%x", uMsg);
+        }
+    }
+
+    else if ((VK_RMENU == uMsg) ||                      // VK_RMENU for Win10
+             (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
+             (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
+    {
+        const auto &lastClick = g_mouseClickQueue[-1];
+        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+        if ((extraInfo != kInjectedClickID) && lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+        {
+            if (ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
+            {
+                g_isContextMenuSuppressed = true;
+                suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
+            }
+        }
+    }
+
+    LRESULT result = 0;
+    if (!suppress)
     {
         result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
-
     return result;
 }
 
-// proc handler for newer Windows versions (Windows 11 21H2 and newer)
+// proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
 WNDPROC InputSiteWindowProc_Original;
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    // LOG_DEBUG(L"Message: 0x%x", uMsg);
+    // printMessage(uMsg);
 
     bool suppressMsg = false;
     switch (uMsg)
@@ -3154,7 +3221,6 @@ void SynthesizeTaskbarRightClick(POINT ptScreen)
     input[1].mi.dwFlags = MOUSEEVENTF_RIGHTUP;
     input[1].mi.dwExtraInfo = kInjectedClickID;
 
-    g_isContextMenuSuppressed = false;
     if (SendInput(2, input, sizeof(INPUT)) != 2)
     {
         LOG_ERROR(L"SendInput failed when synthesizing right click");
@@ -3244,9 +3310,13 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
         (void)ExecuteTaskbarAction(L"tapSingle", 1);
     }
 
-    if (g_isContextMenuSuppressed && !wasActionExecuted)
+    if (g_isContextMenuSuppressed)
     {
-        SynthesizeTaskbarRightClick(lastMousePos);
+        if (!wasActionExecuted)
+        {
+            SynthesizeTaskbarRightClick(lastMousePos);
+        }
+        g_isContextMenuSuppressed = false;
     }
 }
 
