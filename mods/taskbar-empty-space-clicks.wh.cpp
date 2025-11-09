@@ -1117,14 +1117,14 @@ private:
 };
 #endif
 
-#define LOG_ERROR(format, ...) LOG(L"ERROR: " format, __VA_ARGS__)
+#define LOG_ERROR(format, ...) LOG(L"ERROR: " format __VA_OPT__(, ) __VA_ARGS__)
 #ifdef ENABLE_LOG_INFO
-#define LOG_INFO(format, ...) LOG(L"INFO: " format, __VA_ARGS__)
+#define LOG_INFO(format, ...) LOG(L"INFO: " format __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define LOG_INFO(format, ...)
 #endif
 #ifdef ENABLE_LOG_DEBUG
-#define LOG_DEBUG(format, ...) LOG(L"DEBUG: " format, __VA_ARGS__)
+#define LOG_DEBUG(format, ...) LOG(L"DEBUG: " format __VA_OPT__(, ) __VA_ARGS__)
 #else
 #define LOG_DEBUG(format, ...)
 #endif
@@ -1306,8 +1306,11 @@ namespace stringtools
     std::wstring ltrim(const std::wstring &s)
     {
         std::wstring result = s;
-        result.erase(result.begin(), std::find_if(result.begin(), result.end(), [](wchar_t ch)
-                                                  { return !std::iswspace(ch); }));
+        if (!result.empty())
+        {
+            result.erase(result.begin(), std::find_if(result.begin(), result.end(), [](wchar_t ch)
+                                                      { return !std::iswspace(ch); }));
+        }
         return result;
     }
 
@@ -1536,6 +1539,8 @@ struct MouseClick
 class MouseClickQueue
 {
 public:
+    MouseClickQueue() : currentIndex(0) { clear(); }
+
     void push_back(const MouseClick &click)
     {
         clicks[currentIndex] = click;
@@ -1547,7 +1552,7 @@ public:
         int idx = 0;
         if (i > 0)
         {
-            if (idx < size())
+            if (i < size())
             {
                 idx = (currentIndex + i) % size(); // oldest item always first
             }
@@ -1558,7 +1563,7 @@ public:
         }
         else
         {
-            if (idx >= -size())
+            if (i >= -size())
             {
                 idx = (currentIndex + i + size()) % size(); // -1 is the newest (last) item
             }
@@ -1585,7 +1590,7 @@ public:
     }
 
 private:
-    static const int MAX_CLICKS = 4; // 4 to be able to detect continous clicks beyond triple click
+    static const int MAX_CLICKS = 4; // 4 to be able to detect continuous clicks beyond triple click
 
     MouseClick clicks[MAX_CLICKS];
     int currentIndex;
@@ -1816,7 +1821,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         }
     }
 
-    else if ((VK_RMENU == uMsg) ||                      // VK_RMENU for Win10
+    else if ((WM_NCRBUTTONUP == uMsg) ||                // WM_NCRBUTTONUP for Win10
              (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
              (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
     {
@@ -2386,7 +2391,7 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
     {
-        TaskBarButtonsState primaryState1;      // use tie for Windhawk 1.4.1 compiler compatibility
+        TaskBarButtonsState primaryState1; // use tie for Windhawk 1.4.1 compiler compatibility
         TaskBarButtonsState primaryState2;
         TaskBarButtonsState secondaryState1;
         TaskBarButtonsState secondaryState2;
