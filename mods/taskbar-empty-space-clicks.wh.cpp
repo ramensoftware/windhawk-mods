@@ -39,7 +39,11 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Single, 
 
 ### Example
 
-Following animation shows **Taskbar auto-hide** feature. Feature gets toggled whenever user double-clicks the empty space on a taskbar.
+Following animation shows how to setup **taskbar auto-hide** feature toggle on midle mouse button click and **toggle volume mute** on Ctrl + double-click.
+
+![How to set "Click on empty taskbar space" Windhawk mod](https://i.imgur.com/b6rBLfF.gif)
+
+Once set, simple middle-click on empty taskbar space will toggle auto-hide feature:
 
 ![Demonstration of Toggle taskbar autohide mod for Windhawk](https://i.imgur.com/BRQrVnX.gif)
 
@@ -120,7 +124,7 @@ I will not supporting Insider preview or other minor versions of Windows. Howeve
 
 ## Classic taskbar on Windows 11
 
-In case you are using old Windows taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 24H2).
+In case you are using old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 24H2).
 
 ## Suggestions and new features
 
