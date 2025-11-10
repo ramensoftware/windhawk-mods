@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              taskbar-dock-animation
-// @name            Taskbar Dock Animation
-// @description     Animates taskbar icons on mouse hover like in macOS
+// @name              Taskbar Dock Animation
+// @description      Animates taskbar icons on mouse hover like in macOS
 // @description:uk-UA Анімація іконок панелі завдань, як в macOS, при наведенні
-// @version         0.9
-// @author          Ph0en1x-dev
-// @github          https://github.com/Ph0en1x-dev
-// @include         explorer.exe
-// @architecture    x86-64
+// @version           1.0
+// @author            Ph0en1x-dev
+// @github            https://github.com/Ph0en1x-dev
+// @include           explorer.exe
+// @architecture      x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luser32
 // ==/WindhawkMod==
 
@@ -67,7 +67,6 @@ You can experiment with the **radius** value to achieve the best result for your
 #include <atomic>
 #include <functional>
 #include <cmath>
-#include <string_view>
 #include <map>
 #include <algorithm>
 #include <chrono>
@@ -85,7 +84,8 @@ struct {
 
 // Global flags
 std::atomic<bool> g_taskbarViewDllLoaded = false;
-std::atomic<bool> g_fastPathHooksApplied = false;
+// Зауваження 1 і 2: Замінено g_fastPathHooksApplied на єдиний прапорець g_hooksApplied
+std::atomic<bool> g_hooksApplied = false;
 
 // Animation Loop Globals
 winrt::event_token g_renderingToken;
@@ -127,7 +127,7 @@ void OnTaskbarPointerExited(void* pThis_key);
 void ResetAllIconScales(std::vector<TaskbarIconInfo>& icons);
 void RefreshIconPositions(DockAnimationContext& ctx);
 void OnCompositionTargetRendering(winrt::Windows::Foundation::IInspectable const&,
-                                  winrt::Windows::Foundation::IInspectable const&);
+                                    winrt::Windows::Foundation::IInspectable const&);
 
 HMODULE GetTaskbarViewModuleHandle();
 bool HookTaskbarViewDllSymbols(HMODULE module);
@@ -148,6 +148,14 @@ FrameworkElement EnumChildElements(
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
     return EnumChildElements(element, [name](FrameworkElement child) {
         return child.Name() == name;
+    });
+}
+
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                        PCWSTR className) {
+    if (!element) return nullptr;
+    return EnumChildElements(element, [className](FrameworkElement child) {
+        return winrt::get_class_name(child) == className;
     });
 }
 
@@ -177,8 +185,8 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx) {
 
         double distance = std::abs(mouseX - ctx.icons[i].originalCenterX);
         scales[i] = CalculateScale(distance,
-                                   g_settings.effectRadius,
-                                   g_settings.maxScale);
+                                    g_settings.effectRadius,
+                                    g_settings.maxScale);
 
         extraWidths[i] = (scales[i] - 1.0) * element.ActualWidth() * spacingFactor;
         totalExpansion += extraWidths[i];
@@ -195,8 +203,8 @@ void ApplyAnimation(double mouseX, DockAnimationContext& ctx) {
     if (g_isBouncing && closestIconIndex != (size_t)-1 &&
         minDistance < (g_settings.effectRadius / 2.0)) {
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              std::chrono::steady_clock::now() - g_bounceStartTime)
-                              .count();
+                            std::chrono::steady_clock::now() - g_bounceStartTime)
+                            .count();
         double t = std::fmod(elapsed_ms, BOUNCE_PERIOD_MS) / BOUNCE_PERIOD_MS;
         double normalizedWave = std::sin(t * 3.14159);
 
@@ -299,6 +307,13 @@ void OnTaskbarPointerMoved(void* pThis_key, Input::PointerRoutedEventArgs const&
             g_lastSignificantMoveTime = std::chrono::steady_clock::now();
         }
         g_lastMouseX = mouseX;
+
+        if (!g_isRenderingHooked.exchange(true)) {
+            g_renderingToken = Media::CompositionTarget::Rendering(OnCompositionTargetRendering);
+            g_lastSignificantMoveTime = std::chrono::steady_clock::now();
+            Wh_Log(L"DockAnimation: Started render loop.");
+        }
+
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"DockAnimation: HRESULT Error in OnTaskbarPointerMoved: %s", e.message().c_str());
     }
@@ -317,18 +332,33 @@ void OnTaskbarPointerExited(void* pThis_key) {
             g_activeContextKey = nullptr;
             g_lastMouseX = -1.0;
             g_isBouncing = false;
+
+            if (g_isRenderingHooked.exchange(false)) {
+                Media::CompositionTarget::Rendering(g_renderingToken);
+                Wh_Log(L"DockAnimation: Stopped render loop.");
+            }
         }
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"DockAnimation: HRESULT Error in OnTaskbarPointerExited: %s", e.message().c_str());
     }
 }
 
+FrameworkElement FindChildByClassNamePartial(FrameworkElement element, PCWSTR partialName) {
+    if (!element) return nullptr;
+    return EnumChildElements(element, [partialName](FrameworkElement child) {
+        auto className = winrt::get_class_name(child);
+        return std::wstring_view(className).find(partialName) != std::wstring_view::npos;
+    });
+}
+
+// Builds or refreshes the icon list and sets up transforms for animation (scale + translate).
 void RefreshIconPositions(DockAnimationContext& ctx) {
     ctx.icons.clear();
 
     auto taskbarFrame = ctx.taskbarFrame.get();
     if (!taskbarFrame) return;
 
+    // Initializes a 4-part transform chain for each icon: wave scale/translate + bounce scale/translate.
     auto processButtonElement = [&](FrameworkElement const& element) {
         try {
             auto tg = element.RenderTransform().try_as<TransformGroup>();
@@ -343,6 +373,7 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
                 }
             }
 
+            // Create transform chain if missing or incomplete
             if (needsRebuild) {
                 tg = TransformGroup();
                 tg.Children().Append(ScaleTransform());
@@ -352,10 +383,12 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
                 element.RenderTransform(tg);
             }
 
-            element.RenderTransformOrigin({ 0.5, 1.0 });
+            // Center anchor point for consistent scaling
+            element.RenderTransformOrigin({0.5, 1.0});
 
+            // Calculate center position for distance-based scaling
             auto transform = element.TransformToVisual(taskbarFrame);
-            auto point = transform.TransformPoint({ 0, 0 });
+            auto point = transform.TransformPoint({0, 0});
 
             TaskbarIconInfo info;
             info.element = element;
@@ -367,42 +400,39 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
     };
 
     try {
-        // Try to use TaskbarFrameRepeater children (faster path)
-        FrameworkElement repeater = EnumChildElements(
-            taskbarFrame,
-            [](FrameworkElement child) {
-                auto className = winrt::get_class_name(child);
-                return std::wstring_view(className).find(L"TaskbarFrameRepeater") != std::wstring_view::npos;
-            });
+        // Multiple fallback names are used because container names differ between Windows 11 builds.
+        FrameworkElement repeater = FindChildByClassNamePartial(taskbarFrame, L"TaskbarFrameRepeater");
+        if (!repeater) repeater = FindChildByClassName(taskbarFrame, L"TaskbarFrameRepeater");
+        if (!repeater) repeater = FindChildByClassName(taskbarFrame, L"TaskbarItemHost");
 
         if (repeater) {
+            // Standard path: iterate through known repeater container
             int count = VisualTreeHelper::GetChildrenCount(repeater);
             for (int i = 0; i < count; i++) {
                 auto child = VisualTreeHelper::GetChild(repeater, i).try_as<FrameworkElement>();
-                if (!child) continue;
-                processButtonElement(child);
+                if (child) processButtonElement(child);
             }
         } else {
-            // Fallback: recursive search for TaskListButton
+
+            // Fallback: recursively search for "TaskListButton" to ensure icon detection on newer Windows 11 builds (21H2–24H2).
+            // Triggered only if standard repeater containers are missing.
             std::function<void(FrameworkElement)> recurse =
                 [&](FrameworkElement element) {
                     if (!element) return;
-
                     auto className = winrt::get_class_name(element);
                     if (std::wstring_view(className).find(L"TaskListButton") != std::wstring_view::npos) {
                         processButtonElement(element);
                     }
-
-                    int childrenCount = VisualTreeHelper::GetChildrenCount(element);
-                    for (int i = 0; i < childrenCount; i++) {
+                    int count = VisualTreeHelper::GetChildrenCount(element);
+                    for (int i = 0; i < count; i++) {
                         auto child = VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
                         if (child) recurse(child);
                     }
                 };
-
             recurse(taskbarFrame);
         }
 
+        // Sort all icons from left to right to ensure spatial order
         std::sort(ctx.icons.begin(), ctx.icons.end(),
                   [](const TaskbarIconInfo& a, const TaskbarIconInfo& b) {
                       return a.originalCenterX < b.originalCenterX;
@@ -410,7 +440,7 @@ void RefreshIconPositions(DockAnimationContext& ctx) {
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"DockAnimation: HRESULT error during icon search: %s", e.message().c_str());
     }
-
+    // Log final icon count for debugging
     Wh_Log(L"DockAnimation: Found and sorted %d icons.", (int)ctx.icons.size());
 }
 
@@ -431,12 +461,6 @@ void InitializeAnimationHooks(void* pThis, FrameworkElement const& taskbarFrame)
 
         g_contexts[pThis] = std::move(ctx);
 
-        if (!g_isRenderingHooked.exchange(true)) {
-            g_renderingToken = Media::CompositionTarget::Rendering(OnCompositionTargetRendering);
-            g_lastSignificantMoveTime = std::chrono::steady_clock::now();
-            Wh_Log(L"DockAnimation: Hooked CompositionTarget::Rendering.");
-        }
-
         Wh_Log(L"DockAnimation: Monitor %p registered.", pThis);
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"DockAnimation: Failed to attach mouse events for %p: %s", pThis, e.message().c_str());
@@ -445,7 +469,7 @@ void InitializeAnimationHooks(void* pThis, FrameworkElement const& taskbarFrame)
 
 // Main animation loop (pulse)
 void OnCompositionTargetRendering(winrt::Windows::Foundation::IInspectable const&,
-                                  winrt::Windows::Foundation::IInspectable const&) {
+                                    winrt::Windows::Foundation::IInspectable const&) {
     try {
         void* pThis_key = g_activeContextKey.load();
         if (pThis_key == nullptr) {
@@ -498,6 +522,7 @@ int WINAPI TaskbarFrame_MeasureOverride_Hook(
     void* pThis,
     winrt::Windows::Foundation::Size size,
     winrt::Windows::Foundation::Size* resultSize) {
+    
     bool isNewContext = (g_contexts.find(pThis) == g_contexts.end());
 
     if (isNewContext && pThis) {
@@ -578,8 +603,10 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
         if (!g_taskbarViewDllLoaded.exchange(true)) {
             Wh_Log(L"DockAnimation: Taskbar.View.dll loaded, hooking symbols...");
             if (HookTaskbarViewDllSymbols(module)) {
-                Wh_ApplyHookOperations();
-                Wh_Log(L"DockAnimation: Hooks applied.");
+                if (!g_hooksApplied.exchange(true)) {
+                    Wh_ApplyHookOperations();
+                    Wh_Log(L"DockAnimation: Hooks applied (slow path).");
+                }
             }
         }
     }
@@ -608,17 +635,19 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"DockAnimation: Wh_ModAfterInit");
-    if (g_taskbarViewDllLoaded && !g_fastPathHooksApplied) {
-        Wh_ApplyHookOperations();
-        g_fastPathHooksApplied = true;
+    if (g_taskbarViewDllLoaded) {
+        if (!g_hooksApplied.exchange(true)) {
+            Wh_ApplyHookOperations();
+            Wh_Log(L"DockAnimation: Hooks applied (fast path).");
+        }
     }
 }
 
 typedef void (*RunFromWindowThreadProc_t)(PVOID);
 
 bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         PVOID procParam) {
+                            RunFromWindowThreadProc_t proc,
+                            PVOID procParam) {
     static const UINT runFromWindowThreadRegisteredMsg =
         RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -669,17 +698,24 @@ bool RunFromWindowThread(HWND hWnd,
 void Wh_ModBeforeUninit() {
     Wh_Log(L"DockAnimation: Wh_ModBeforeUninit (safe cleanup)");
 
+    g_activeContextKey = nullptr;
+    g_isBouncing = false;
+
     try {
         if (g_isRenderingHooked.exchange(false)) {
             Media::CompositionTarget::Rendering(g_renderingToken);
             Wh_Log(L"DockAnimation: Unhooked CompositionTarget::Rendering.");
         }
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"DockAnimation: HRESULT error unhooking rendering: %s", e.message().c_str());
+    }
 
-        HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
-        if (hTaskbar) {
-            RunFromWindowThread(
-                hTaskbar,
-                [](PVOID) {
+    HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
+    if (hTaskbar) {
+        RunFromWindowThread(
+            hTaskbar,
+            [](PVOID) {
+                try {
                     for (auto& pair : g_contexts) {
                         auto& ctx = pair.second;
                         auto frame = ctx.taskbarFrame.get();
@@ -690,18 +726,21 @@ void Wh_ModBeforeUninit() {
                         }
                     }
                     g_contexts.clear();
-                },
-                nullptr);
-        }
-
-        g_taskbarViewDllLoaded = false;
-        g_isBouncing = false;
-        g_activeContextKey = nullptr;
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: HRESULT error during cleanup: %s", e.message().c_str());
+                    Wh_Log(L"DockAnimation: UI contexts cleaned up.");
+                } catch (winrt::hresult_error const& e) {
+                     Wh_Log(L"DockAnimation: HRESULT error during UI thread cleanup: %s", e.message().c_str());
+                }
+            },
+            nullptr);
+    } else {
+         try {
+            g_contexts.clear();
+         } catch (...) {}
     }
-}
 
+    g_taskbarViewDllLoaded = false;
+    g_hooksApplied = false;
+}
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"DockAnimation: Settings changed.");
@@ -716,4 +755,3 @@ void Wh_ModSettingsChanged() {
     } catch (...) {
     }
 }
-
