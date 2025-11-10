@@ -1196,7 +1196,7 @@
                 "published": 1760277979000,
                 "rating": 0,
                 "ratingUsers": 0,
-                "updated": 1760277979000,
+                "updated": 1762805256000,
                 "users": 19
             },
             "metadata": {
@@ -1209,7 +1209,7 @@
                 ],
                 "name": "Command Prompt Folder Larp",
                 "twitter": "https://twitter.com/kawaipure",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "color-picker-dialog-hex-input": {
