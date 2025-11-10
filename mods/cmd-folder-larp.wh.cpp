@@ -208,7 +208,7 @@ HRESULT __cdecl StringCchPrintfW_hook(LPWSTR szBuffer, size_t size, LPCWSTR szTe
         LPCWSTR szFirstStringArgument = va_arg(vaMut, LPCWSTR);
 
         if (
-            !IsBadStringPtrW(szFirstStringArgument, MAX_PATH) &&
+            (szTemplate[0] == L'%' && szTemplate[1] == L's') &&
             wcscmp(szFirstStringArgument, g_pszCurrentDirectory) == 0
         )
         {
