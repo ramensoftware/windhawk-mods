@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-10T20:07:36.000Z</updated>
+    <updated>2025-11-11T08:43:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Home, Gallery & OneDrive in Explorer 0.3]]></title>
+        <id>https://windhawk.net/mods/hide-home-gallery-explorer#0a7de6ee91db437ff121aeef0208b77c8d2df4dc</id>
+        <link href="https://windhawk.net/mods/hide-home-gallery-explorer"/>
+        <updated>2025-11-11T08:43:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Eliminates flashing: periodic scans do a dry-run first and only freeze/redraw when deletions are needed.</li>
+<li>Optional OneDrive toggle with configurable label.</li>
+<li>Custom items hiding: type one or more labels, choose match mode, and case sensitivity.</li>
+</ul>]]></content>
+        <author>
+            <name>rinosaur681</name>
+            <uri>https://github.com/rinosaur681</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Command Prompt Folder Larp 1.1]]></title>
         <id>https://windhawk.net/mods/cmd-folder-larp#056cead7a22636a34b5a531af18f11613d9468cb</id>
@@ -278,23 +293,6 @@ This mod adds an input that allows you to type hex colors in both the standard
         <updated>2025-10-25T19:33:26.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Made the start menu animation adjustment optional and off by default, since it's incompatible with the Phone Link sidebar and with some Start Menu Styler themes.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.2.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#862ba36c9284acfd3cd617faffe37aea501db928</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2025-10-25T16:18:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Reworked Start menu positioning:</li>
-<li>The <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">redesigned Windows 11 Start menu</a> is now supported.</li>
-<li>The "Start menu width" option has been removed, as it's no longer necessary.</li>
-<li>Fixed missing Start button padding on the left in some cases. For details, see <a href="https://github.com/ramensoftware/windhawk-mods/issues/1818#issuecomment-3446863789">this comment</a>.</li>
-<li>Fixed the mod not working on some Windows 11 builds which have one of the hooked functions inlined.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

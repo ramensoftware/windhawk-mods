@@ -2541,7 +2541,7 @@
                 "published": 1762330715000,
                 "rating": 10,
                 "ratingUsers": 5,
-                "updated": 1762330715000,
+                "updated": 1762850623000,
                 "users": 140
             },
             "metadata": {
@@ -2550,13 +2550,13 @@
                 ],
                 "author": "rinosaur681",
                 "compilerOptions": "-lcomctl32",
-                "description": "Hides the \"Home\" and \"Gallery\" items from File Explorer's navigation pane on Windows 11",
+                "description": "Hides the \"Home\", \"Gallery\", and \"OneDrive\" items from File Explorer's navigation pane on Windows 11. Also supports hiding user-specified custom labels.",
                 "github": "https://github.com/rinosaur681",
                 "include": [
                     "%SystemRoot%\\explorer.exe"
                 ],
-                "name": "Hide Home & Gallery in Explorer",
-                "version": "0.2"
+                "name": "Hide Home, Gallery & OneDrive in Explorer",
+                "version": "0.3"
             }
         },
         "hide-search-bar": {
