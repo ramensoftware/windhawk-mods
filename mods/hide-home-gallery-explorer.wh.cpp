@@ -460,7 +460,6 @@ static DWORD WINAPI WorkerProc(LPVOID) {
                 // FIRST SIGHT: pin top, prune, pin top again — prevents scroll-to-bottom at open
                 ScrollNavToTop(tree);
 
-                // Only freeze/redraw during the initial prune
                 SendMessageW(tree, WM_SETREDRAW, FALSE, 0);
                 HTREEITEM root = (HTREEITEM)SendMessageW(tree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
                 if (root) (void)PruneItemsCount(tree, root, true);
