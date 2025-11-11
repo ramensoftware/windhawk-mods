@@ -3,7 +3,7 @@
 // @name              Taskbar Dock Animation
 // @description      Animates taskbar icons on mouse hover like in macOS
 // @description:uk-UA Анімація іконок панелі завдань, як в macOS, при наведенні
-// @version           1.0
+// @version           1.1
 // @author            Ph0en1x-dev
 // @github            https://github.com/Ph0en1x-dev
 // @include           explorer.exe
@@ -20,7 +20,6 @@ The current version is **experimental** and not yet fully stable.
 A few issues are still being worked on:
 - Icons are sometimes clipped by the taskbar.
 - Upscaled icons may appear slightly blurry.
-- You may need to restart Explorer and wait about 30 seconds for the effects to apply.
 
 At this stage, since the mod is still in active testing, it’s recommended to **keep the maximum scale around 130%** to avoid visual glitches.
 You can experiment with the **radius** value to achieve the best result for your setup until proper fixes for the issues above are found.
@@ -512,6 +511,67 @@ void OnCompositionTargetRendering(winrt::Windows::Foundation::IInspectable const
 }
 
 // Hooking
+// --- Pointer event hooks (new approach: activates mod immediately) ---
+using TaskbarFrame_OnPointerMoved_t = int(WINAPI*)(void* pThis, void* pArgs);
+TaskbarFrame_OnPointerMoved_t TaskbarFrame_OnPointerMoved_Original;
+
+int WINAPI TaskbarFrame_OnPointerMoved_Hook(void* pThis, void* pArgs) {
+    auto original = [=]() {
+        return TaskbarFrame_OnPointerMoved_Original(pThis, pArgs);
+    };
+
+    FrameworkElement element = nullptr;
+    ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(element));
+    if (!element)
+        return original();
+
+    auto className = winrt::get_class_name(element);
+    if (className != L"Taskbar.TaskbarFrame")
+        return original();
+
+    Input::PointerRoutedEventArgs args = nullptr;
+    ((IUnknown*)pArgs)->QueryInterface(winrt::guid_of<Input::PointerRoutedEventArgs>(), winrt::put_abi(args));
+    if (!args)
+        return original();
+
+    // Initialize animation hooks only once
+    if (g_contexts.find(pThis) == g_contexts.end()) {
+        InitializeAnimationHooks(pThis, element);
+        Wh_Log(L"DockAnimation: Initialized via OnPointerMoved (%s)", className.c_str());
+    }
+
+    // Forward event to existing logic
+    OnTaskbarPointerMoved(pThis, args);
+    return original();
+}
+
+using TaskbarFrame_OnPointerExited_t = int(WINAPI*)(void* pThis, void* pArgs);
+TaskbarFrame_OnPointerExited_t TaskbarFrame_OnPointerExited_Original;
+
+int WINAPI TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
+    auto original = [=]() {
+        return TaskbarFrame_OnPointerExited_Original(pThis, pArgs);
+    };
+
+    FrameworkElement element = nullptr;
+    ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(element));
+    if (!element)
+        return original();
+
+    auto className = winrt::get_class_name(element);
+    if (className != L"Taskbar.TaskbarFrame")
+        return original();
+
+    OnTaskbarPointerExited(pThis);
+    return original();
+}
+
+// -----------------------------------------------------------------------------
+// Legacy fallback: TaskbarFrame_MeasureOverride_Hook
+// This hook was previously the only way to initialize the mod.
+// It remains as a fallback for older Windows 11 builds where
+// OnPointerMoved / OnPointerExited are not triggered automatically.
+// -----------------------------------------------------------------------------
 using TaskbarFrame_MeasureOverride_t = int(WINAPI*)(
     void* pThis,
     winrt::Windows::Foundation::Size size,
@@ -530,7 +590,8 @@ int WINAPI TaskbarFrame_MeasureOverride_Hook(
             FrameworkElement taskbarFrame{ nullptr };
             winrt::copy_from_abi(taskbarFrame, pThis);
             if (taskbarFrame) {
-                InitializeAnimationHooks(pThis, taskbarFrame);
+                // Old init path — left only for fallback compatibility
+                // InitializeAnimationHooks(pThis, taskbarFrame);
             }
         } catch (winrt::hresult_error const& e) {
             Wh_Log(L"DockAnimation: HRESULT error in MeasureOverride init: %s", e.message().c_str());
@@ -575,6 +636,7 @@ HMODULE GetTaskbarViewModuleHandle() {
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+        // Fallback hook (kept for compatibility)
         {
             {
                 LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"
@@ -582,14 +644,31 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &TaskbarFrame_MeasureOverride_Original,
             TaskbarFrame_MeasureOverride_Hook,
         },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"
+            },
+            &TaskbarFrame_OnPointerMoved_Original,
+            TaskbarFrame_OnPointerMoved_Hook,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerExited(void *))"
+            },
+            &TaskbarFrame_OnPointerExited_Original,
+            TaskbarFrame_OnPointerExited_Hook,
+        },
     };
+
     if (!HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"DockAnimation: HookSymbols failed.");
         return false;
     }
-    Wh_Log(L"DockAnimation: HookSymbols succeeded for TaskbarFrame_MeasureOverride.");
+
+    Wh_Log(L"DockAnimation: HookSymbols succeeded (MeasureOverride + Pointer events).");
     return true;
 }
+
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
@@ -635,11 +714,10 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"DockAnimation: Wh_ModAfterInit");
+
     if (g_taskbarViewDllLoaded) {
-        if (!g_hooksApplied.exchange(true)) {
-            Wh_ApplyHookOperations();
-            Wh_Log(L"DockAnimation: Hooks applied (fast path).");
-        }
+        g_hooksApplied = true;
+        Wh_Log(L"DockAnimation: Hooks already applied by Windhawk (fast path).");
     }
 }
 
