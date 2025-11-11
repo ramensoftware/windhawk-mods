@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              hide-home-gallery-explorer
-// @name            Hide Home & Gallery in Explorer
-// @description     Hides the "Home" and "Gallery" items from File Explorer's navigation pane on Windows 11
-// @version         0.2
+// @name            Hide Home, Gallery & OneDrive in Explorer
+// @description     Hides the "Home", "Gallery", and "OneDrive" items from File Explorer's navigation pane on Windows 11. Also supports hiding user-specified custom labels.
+// @version         0.3
 // @author          rinosaur681
 // @github          https://github.com/rinosaur681
 // @include         %SystemRoot%\explorer.exe
@@ -13,19 +13,24 @@
 
 // ==WindhawkModReadme==
 /*
-# Hide Home & Gallery in Explorer
+# Hide Home, Gallery & OneDrive in Explorer
 
-This mod removes the "Home" and "Gallery" items from the File Explorer navigation pane in Windows 11
-by finding the TreeView control and deleting those entries. It scans periodically in case Explorer
-re-inserts them during refresh/reload.
+This mod removes the "Home", "Gallery", and optionally "OneDrive" items from the File Explorer navigation pane in Windows 11
+by finding the TreeView control and deleting those entries. It scans periodically in case Explorer re-inserts them during
+refresh/reload. You can also specify custom labels (single or list) to hide, with match options (exact/contains/startsWith)
+and case sensitivity.
+
+What’s new in v0.3:
+- Eliminates flashing: periodic scans do a dry-run first and only freeze/redraw when deletions are needed.
+- Optional OneDrive toggle with configurable label.
+- Custom items hiding: type one or more labels, choose match mode, and case sensitivity.
 
 What’s new in v0.2:
 - Prevents the nav pane from jumping to the bottom at first open.
 - Adds timing.initialDelayMs and timing.scanIntervalMs settings.
 
 Notes:
-- Locale: matching is text-based ("Home", "Gallery"). Adjust the strings in the settings if your OS
-  is not English (UK/US).
+- Locale: matching is text-based ("Home", "Gallery", "OneDrive"). Adjust the strings in the settings if your OS is not English (UK/US).
 - No registry changes are made. Unload the mod to restore the items immediately.
 */
 // ==/WindhawkModReadme==
@@ -35,10 +40,17 @@ Notes:
 - hide:
   - home: true
   - gallery: true
+  - onedrive: true
   - homeText: Home
   - galleryText: Gallery
+  - onedriveText: OneDrive
+  - customEnabled: false
+  - customText: ""
+  - customList: ""          # comma/semicolon/newline-separated list (e.g., "Network; This PC")
+  - matchMode: exact        # exact | contains | startsWith
+  - caseSensitive: false
   $name: Items to hide
-  $description: Toggle specific items and adjust their labels for non-English systems.
+  $description: Toggle specific items and adjust their labels for non-English systems. To hide custom items, enable 'customEnabled', type one item in 'customText' or multiple in 'customList' (separated by comma/semicolon or newline), and choose match mode.
 
 - timing:
   - scanIntervalMs: 300
@@ -56,14 +68,23 @@ Notes:
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+#include <cwctype>
 
 #pragma comment(lib, "comctl32.lib")
 
 struct {
     bool hideHome;
     bool hideGallery;
+    bool hideOneDrive;
     std::wstring homeText;
     std::wstring galleryText;
+    std::wstring onedriveText;
+
+    bool customEnabled;
+    bool customCaseSensitive;
+    int customMatchMode; // 0=exact, 1=contains, 2=startsWith
+    std::vector<std::wstring> customTexts;
+
     int scanIntervalMs;   // how often to scan (ms)
     int initialDelayMs;   // per-window first-time delay before pruning (ms)
 } g_settings;
@@ -78,7 +99,7 @@ static std::unordered_map<HWND, ULONGLONG> g_firstSeenTick;
 
 // ---------------- Utilities ----------------
 
-// Case-insensitive wide string compare
+// Case-insensitive wide string compare (exact)
 static bool iequals(const std::wstring& a, const std::wstring& b) {
     if (a.size() != b.size())
         return false;
@@ -88,6 +109,70 @@ static bool iequals(const std::wstring& a, const std::wstring& b) {
         if (ca != cb) return false;
     }
     return true;
+}
+
+static std::wstring trim(const std::wstring& s) {
+    size_t i = 0, j = s.size();
+    while (i < j && iswspace(s[i])) ++i;
+    while (j > i && iswspace(s[j - 1])) --j;
+    return s.substr(i, j - i);
+}
+
+static std::vector<std::wstring> split_multi(const std::wstring& s) {
+    std::vector<std::wstring> out;
+    std::wstring token;
+    for (wchar_t ch : s) {
+        if (ch == L',' || ch == L';' || ch == L'\n' || ch == L'\r') {
+            std::wstring t = trim(token);
+            if (!t.empty()) out.push_back(t);
+            token.clear();
+        } else {
+            token.push_back(ch);
+        }
+    }
+    std::wstring t = trim(token);
+    if (!t.empty()) out.push_back(t);
+    return out;
+}
+
+static bool equals_cs(const std::wstring& a, const std::wstring& b) {
+    return a == b;
+}
+
+static bool contains_ci(const std::wstring& hay, const std::wstring& needle) {
+    if (needle.empty()) return false;
+    std::wstring h(hay), n(needle);
+    for (auto& c : h) c = towlower(c);
+    for (auto& c : n) c = towlower(c);
+    return h.find(n) != std::wstring::npos;
+}
+
+static bool startswith_ci(const std::wstring& hay, const std::wstring& needle) {
+    if (needle.empty()) return false;
+    if (hay.size() < needle.size()) return false;
+    for (size_t i = 0; i < needle.size(); ++i) {
+        if (towlower(hay[i]) != towlower(needle[i])) return false;
+    }
+    return true;
+}
+
+static bool match_string(const std::wstring& text, const std::wstring& pattern, bool caseSensitive, int mode) {
+    if (pattern.empty()) return false;
+    if (caseSensitive) {
+        switch (mode) {
+        case 0: return equals_cs(text, pattern);
+        case 1: return text.find(pattern) != std::wstring::npos;
+        case 2: return text.rfind(pattern, 0) == 0; // startsWith
+        default: return equals_cs(text, pattern);
+        }
+    } else {
+        switch (mode) {
+        case 0: return iequals(text, pattern);
+        case 1: return contains_ci(text, pattern);
+        case 2: return startswith_ci(text, pattern);
+        default: return iequals(text, pattern);
+        }
+    }
 }
 
 // Recursively find a child window by class name
@@ -173,11 +258,11 @@ static void ScrollNavToTop(HWND hTree) {
     SendMessageW(hTree, WM_VSCROLL, SB_TOP, 0);
 }
 
-// Recursively delete matching items, return count deleted
-static int PruneItemsCount(HWND hTree, HTREEITEM hItem) {
+// Recursively delete or count matching items, return count affected
+static int PruneItemsCount(HWND hTree, HTREEITEM hItem, bool deleteItems) {
     if (!hItem) return 0;
 
-    int deletions = 0;
+    int affected = 0;
 
     // Store siblings first (because deleting current affects sibling pointers)
     std::vector<HTREEITEM> siblings;
@@ -189,35 +274,57 @@ static int PruneItemsCount(HWND hTree, HTREEITEM hItem) {
         // Recurse into children first
         HTREEITEM child = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)s);
         if (child) {
-            deletions += PruneItemsCount(hTree, child);
+            affected += PruneItemsCount(hTree, child, deleteItems);
         }
 
         // Check this item's text
         std::wstring text = GetTreeItemText(hTree, s);
-        bool matchHome = g_settings.hideHome && iequals(text, g_settings.homeText);
-        bool matchGallery = g_settings.hideGallery && iequals(text, g_settings.galleryText);
 
-        if (matchHome || matchGallery) {
-            // Delete the item
-            SendMessageW(hTree, TVM_DELETEITEM, 0, (LPARAM)s);
-            ++deletions;
+        // Built-ins: exact for Home/Gallery, contains for OneDrive (to catch “OneDrive – Personal” etc.)
+        bool matchHome     = g_settings.hideHome     && match_string(text, g_settings.homeText,     false, 0);
+        bool matchGallery  = g_settings.hideGallery  && match_string(text, g_settings.galleryText,  false, 0);
+        bool matchOneDrive = g_settings.hideOneDrive && match_string(text, g_settings.onedriveText, false, 1);
+
+        // Custom list: user-configurable match mode + case sensitivity
+        bool matchCustom = false;
+        if (g_settings.customEnabled && !g_settings.customTexts.empty()) {
+            for (const auto& pat : g_settings.customTexts) {
+                if (match_string(text, pat, g_settings.customCaseSensitive, g_settings.customMatchMode)) {
+                    matchCustom = true;
+                    break;
+                }
+            }
+        }
+
+        if (matchHome || matchGallery || matchOneDrive || matchCustom) {
+            if (deleteItems) {
+                SendMessageW(hTree, TVM_DELETEITEM, 0, (LPARAM)s);
+            }
+            ++affected;
             // (No need to process its children further; deletion removes the subtree)
         }
     }
 
-    return deletions;
+    return affected;
 }
 
-// Remove "Home" and "Gallery" from a given TreeView, return true if anything changed
+// Remove items from a given TreeView, return true if anything changed
 static bool RemoveHomeAndGallery(HWND hTree) {
     if (!hTree) return false;
 
     HTREEITEM root = (HTREEITEM)SendMessageW(hTree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
     if (!root) return false;
 
+    // First do a dry-run to check if anything would be removed.
+    int wouldDelete = PruneItemsCount(hTree, root, false);
+    if (wouldDelete <= 0) {
+        // Nothing to do; avoid touching redraw or scroll = no flash
+        return false;
+    }
+
     // Freeze redraw to avoid flicker and unwanted auto-scroll during deletions
     SendMessageW(hTree, WM_SETREDRAW, FALSE, 0);
-    int deleted = PruneItemsCount(hTree, root);
+    int deleted = PruneItemsCount(hTree, root, true);
     SendMessageW(hTree, WM_SETREDRAW, TRUE, 0);
 
     if (deleted > 0) {
@@ -236,8 +343,9 @@ static bool RemoveHomeAndGallery(HWND hTree) {
 
 static void LoadSettings() {
     // Items
-    g_settings.hideHome = !!Wh_GetIntSetting(L"hide.home");
-    g_settings.hideGallery = !!Wh_GetIntSetting(L"hide.gallery");
+    g_settings.hideHome     = !!Wh_GetIntSetting(L"hide.home");
+    g_settings.hideGallery  = !!Wh_GetIntSetting(L"hide.gallery");
+    g_settings.hideOneDrive = !!Wh_GetIntSetting(L"hide.onedrive");
 
     {
         PCWSTR s = Wh_GetStringSetting(L"hide.homeText");
@@ -248,6 +356,38 @@ static void LoadSettings() {
         PCWSTR s = Wh_GetStringSetting(L"hide.galleryText");
         g_settings.galleryText = s && *s ? s : L"Gallery";
         Wh_FreeStringSetting(s);
+    }
+    {
+        PCWSTR s = Wh_GetStringSetting(L"hide.onedriveText");
+        g_settings.onedriveText = s && *s ? s : L"OneDrive";
+        Wh_FreeStringSetting(s);
+    }
+
+    // Custom options
+    g_settings.customEnabled = !!Wh_GetIntSetting(L"hide.customEnabled");
+    g_settings.customCaseSensitive = !!Wh_GetIntSetting(L"hide.caseSensitive");
+
+    // matchMode: exact|contains|startsWith
+    g_settings.customMatchMode = 0; // default exact
+    if (PCWSTR s = Wh_GetStringSetting(L"hide.matchMode")) {
+        if (s && *s) {
+            if (wcscmp(s, L"contains") == 0) g_settings.customMatchMode = 1;
+            else if (wcscmp(s, L"startsWith") == 0) g_settings.customMatchMode = 2;
+        }
+        Wh_FreeStringSetting(s);
+    }
+
+    g_settings.customTexts.clear();
+    if (PCWSTR s1 = Wh_GetStringSetting(L"hide.customText")) {
+        std::wstring t = trim(s1 ? s1 : L"");
+        if (!t.empty()) g_settings.customTexts.push_back(t);
+        Wh_FreeStringSetting(s1);
+    }
+    if (PCWSTR s2 = Wh_GetStringSetting(L"hide.customList")) {
+        std::wstring lst = s2 ? s2 : L"";
+        auto items = split_multi(lst);
+        for (auto& it : items) g_settings.customTexts.push_back(it);
+        Wh_FreeStringSetting(s2);
     }
 
     // Timing
@@ -266,9 +406,10 @@ static void LoadSettings() {
     if (initDelay > 5000) initDelay = 5000;
     g_settings.initialDelayMs = initDelay;
 
-    Wh_Log(L"[HideHG] Settings: hideHome=%d hideGallery=%d home='%s' gallery='%s' scanInterval=%dms initialDelay=%dms",
-        g_settings.hideHome, g_settings.hideGallery,
-        g_settings.homeText.c_str(), g_settings.galleryText.c_str(),
+    Wh_Log(L"[HideHG] Settings: hideHome=%d hideGallery=%d hideOneDrive=%d customEnabled=%d customCount=%d matchMode=%d caseSensitive=%d scanInterval=%dms initialDelay=%dms",
+        g_settings.hideHome, g_settings.hideGallery, g_settings.hideOneDrive,
+        g_settings.customEnabled, (int)g_settings.customTexts.size(),
+        g_settings.customMatchMode, g_settings.customCaseSensitive,
         g_settings.scanIntervalMs, g_settings.initialDelayMs);
 }
 
@@ -319,9 +460,10 @@ static DWORD WINAPI WorkerProc(LPVOID) {
                 // FIRST SIGHT: pin top, prune, pin top again — prevents scroll-to-bottom at open
                 ScrollNavToTop(tree);
 
+                // Only freeze/redraw during the initial prune
                 SendMessageW(tree, WM_SETREDRAW, FALSE, 0);
                 HTREEITEM root = (HTREEITEM)SendMessageW(tree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
-                if (root) (void)PruneItemsCount(tree, root);
+                if (root) (void)PruneItemsCount(tree, root, true);
                 SendMessageW(tree, WM_SETREDRAW, TRUE, 0);
 
                 ScrollNavToTop(tree);
