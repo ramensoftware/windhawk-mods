@@ -566,53 +566,6 @@ int WINAPI TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
     return original();
 }
 
-// -----------------------------------------------------------------------------
-// Legacy fallback: TaskbarFrame_MeasureOverride_Hook
-// This hook was previously the only way to initialize the mod.
-// It remains as a fallback for older Windows 11 builds where
-// OnPointerMoved / OnPointerExited are not triggered automatically.
-// -----------------------------------------------------------------------------
-using TaskbarFrame_MeasureOverride_t = int(WINAPI*)(
-    void* pThis,
-    winrt::Windows::Foundation::Size size,
-    winrt::Windows::Foundation::Size* resultSize);
-TaskbarFrame_MeasureOverride_t TaskbarFrame_MeasureOverride_Original;
-
-int WINAPI TaskbarFrame_MeasureOverride_Hook(
-    void* pThis,
-    winrt::Windows::Foundation::Size size,
-    winrt::Windows::Foundation::Size* resultSize) {
-    
-    bool isNewContext = (g_contexts.find(pThis) == g_contexts.end());
-
-    if (isNewContext && pThis) {
-        try {
-            FrameworkElement taskbarFrame{ nullptr };
-            winrt::copy_from_abi(taskbarFrame, pThis);
-            if (taskbarFrame) {
-                // Old init path — left only for fallback compatibility
-                // InitializeAnimationHooks(pThis, taskbarFrame);
-            }
-        } catch (winrt::hresult_error const& e) {
-            Wh_Log(L"DockAnimation: HRESULT error in MeasureOverride init: %s", e.message().c_str());
-        }
-    } else if (!isNewContext) {
-        try {
-            auto it = g_contexts.find(pThis);
-            if (it != g_contexts.end()) {
-                if (it->second.isInitialized) {
-                    it->second.isInitialized = false;
-                    it->second.icons.clear();
-                }
-            }
-        } catch (...) {
-            Wh_Log(L"DockAnimation: Failed to invalidate cache in MeasureOverride");
-        }
-    }
-
-    return TaskbarFrame_MeasureOverride_Original(pThis, size, resultSize);
-}
-
 void LoadSettings() {
     g_settings.maxScale = (double)Wh_GetIntSetting(L"MaxScale") / 100.0;
     if (g_settings.maxScale < 1.0) g_settings.maxScale = 1.6;
@@ -636,14 +589,6 @@ HMODULE GetTaskbarViewModuleHandle() {
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
-        // Fallback hook (kept for compatibility)
-        {
-            {
-                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"
-            },
-            &TaskbarFrame_MeasureOverride_Original,
-            TaskbarFrame_MeasureOverride_Hook,
-        },
         {
             {
                 LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"
@@ -665,7 +610,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         return false;
     }
 
-    Wh_Log(L"DockAnimation: HookSymbols succeeded (MeasureOverride + Pointer events).");
+    Wh_Log(L"DockAnimation: HookSymbols succeeded (Pointer events only).");
     return true;
 }
 
