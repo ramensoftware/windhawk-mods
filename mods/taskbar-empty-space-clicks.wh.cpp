@@ -1183,7 +1183,7 @@ static struct
 class COMAPI
 {
 public:
-    COMAPI() : m_isInitialized(false), m_isCOMInitialized(false), m_isUIAInitialized(false), m_isDEInitialized(false),
+    COMAPI() : m_isInitialized(false), m_isCOMInitialized(false), m_needsCOMUninit(false), m_isUIAInitialized(false), m_isDEInitialized(false),
                m_pUIAutomation(nullptr), m_pDeviceEnumerator(nullptr) {}
 
     // init COM for UIAutomation and Volume control
@@ -1191,10 +1191,20 @@ public:
     {
         if (!m_isCOMInitialized)
         {
-            if (SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)))
+            const auto hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+            if (SUCCEEDED(hr))
             {
                 m_isCOMInitialized = true;
-                LOG_INFO(L"COM initilized");
+                if (hr == S_OK) // COM was most likely already initialized in the GUI thread, in case not, we will need to uninitialize it later
+                {
+                    LOG_INFO(L"COM initilized");
+                    m_needsCOMUninit = true;
+                }
+                else
+                {
+                    LOG_INFO(L"COM already initialized");
+                    m_needsCOMUninit = false;
+                }
             }
             else
             {
@@ -1256,42 +1266,32 @@ public:
         }
         if (m_isCOMInitialized)
         {
-            CoUninitialize();
+            if (m_needsCOMUninit)
+            {
+                CoUninitialize();
+                m_needsCOMUninit = false;
+                LOG(L"COM de-initialized");
+            }
             m_isCOMInitialized = false;
-            LOG(L"COM de-initialized");
         }
-    }
-
-    ~COMAPI()
-    {
-        Uninit();
     }
 
     bool IsInitialized() { return m_isInitialized; }
 
     const com_ptr<IUIAutomation> GetUIAutomation()
     {
-        // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-        if (!IsInitialized())
-        {
-            Init();
-        }
         return m_pUIAutomation;
     }
 
     const com_ptr<IMMDeviceEnumerator> GetDeviceEnumerator()
     {
-        // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-        if (!IsInitialized())
-        {
-            Init();
-        }
         return m_pDeviceEnumerator;
     }
 
 protected:
     bool m_isInitialized;
     bool m_isCOMInitialized;
+    bool m_needsCOMUninit;
     bool m_isUIAInitialized;
     bool m_isDEInitialized;
 
@@ -1344,7 +1344,8 @@ static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 
 static constexpr DWORD kInjectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static bool g_isContextMenuSuppressed = false;
-static UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
+static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
+static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
 
 // object to store information about the mouse click, its position, button, timestamp and whether it was on empty space
 struct MouseClick
@@ -1798,6 +1799,12 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         }
         return result;
     }
+    if (uMsg == g_uninitCOMAPIMsg)
+    {
+        LOG_INFO("Received uninit COM API message, uninitializing COM API");
+        g_comAPI.Uninit();
+        return 0;
+    }
 
     // printMessage(uMsg);
 
@@ -1812,6 +1819,12 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
         if (extraInfo != kInjectedClickID)
         {
+            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+            if (!g_comAPI.IsInitialized())
+            {
+                g_comAPI.Init(); // make sure it gets initialied from GUI thread
+            }
+
             MouseClick::Button button = isLeftButton ? MouseClick::Button::LEFT : (isRightButton ? MouseClick::Button::RIGHT : MouseClick::Button::MIDDLE);
             OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd));
         }
@@ -1849,6 +1862,13 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 WNDPROC InputSiteWindowProc_Original;
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    if (uMsg == g_uninitCOMAPIMsg)
+    {
+        LOG_INFO("Received uninit COM API message, uninitializing COM API");
+        g_comAPI.Uninit();
+        return 0;
+    }
+
     // printMessage(uMsg);
 
     bool suppressMsg = false;
@@ -1874,6 +1894,12 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             else
             {
                 break;
+            }
+
+            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+            if (!g_comAPI.IsInitialized())
+            {
+                g_comAPI.Init(); // make sure it gets initialied from GUI thread
             }
 
             // check whether we need to suppress the context menu for right clicks
@@ -3479,15 +3505,14 @@ BOOL Wh_ModSettingsChanged(BOOL *bReload)
 void Wh_ModUninit()
 {
     LOG_TRACE();
-
     if (g_hTaskbarWnd)
     {
+        SendMessage(g_hTaskbarWnd, g_uninitCOMAPIMsg, FALSE, 0); // uninitialize COM API from gui thread
+        
         UnsubclassTaskbarWindow(g_hTaskbarWnd);
-
         for (HWND hSecondaryWnd : g_secondaryTaskbarWindows)
         {
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
-    g_comAPI.Uninit();
 }
