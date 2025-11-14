@@ -205,6 +205,7 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
 
 std::list<FrameworkElementLoadedEventRevoker> g_notifyIconAutoRevokerList;
+std::list<FrameworkElementLoadedEventRevoker> g_taskListButtonAutoRevokerList;
 
 int g_copilotPosTimerCounter;
 UINT_PTR g_copilotPosTimer;
@@ -2279,6 +2280,73 @@ void UpdateTaskListButton(FrameworkElement taskListButtonElement) {
     }
 }
 
+using TaskListButton_OnApplyTemplate_t = void(WINAPI*)(LPVOID pThis);
+TaskListButton_OnApplyTemplate_t TaskListButton_OnApplyTemplate_Original;
+void WINAPI TaskListButton_OnApplyTemplate_Hook(LPVOID pThis) {
+    Wh_Log(L">");
+
+    TaskListButton_OnApplyTemplate_Original(pThis);
+
+    IUnknown* taskListButtonElementIUnknownPtr = *((IUnknown**)pThis + 1);
+    if (!taskListButtonElementIUnknownPtr) {
+        return;
+    }
+
+    FrameworkElement taskListButtonElement = nullptr;
+    taskListButtonElementIUnknownPtr->QueryInterface(
+        winrt::guid_of<FrameworkElement>(),
+        winrt::put_abi(taskListButtonElement));
+    if (!taskListButtonElement) {
+        return;
+    }
+
+    g_taskListButtonAutoRevokerList.emplace_back();
+    auto autoRevokerIt = g_taskListButtonAutoRevokerList.end();
+    --autoRevokerIt;
+
+    *autoRevokerIt = taskListButtonElement.Loaded(
+        winrt::auto_revoke_t{},
+        [autoRevokerIt](winrt::Windows::Foundation::IInspectable const& sender,
+                        RoutedEventArgs const& e) {
+            Wh_Log(L">");
+
+            g_taskListButtonAutoRevokerList.erase(autoRevokerIt);
+
+            auto taskListButtonElement = sender.try_as<FrameworkElement>();
+            if (!taskListButtonElement) {
+                return;
+            }
+
+            try {
+                UpdateTaskListButton(taskListButtonElement);
+            } catch (...) {
+                HRESULT hr = winrt::to_hresult();
+                Wh_Log(L"Error %08X", hr);
+            }
+        });
+}
+
+using TaskListButton_UpdateBadge_t = void(WINAPI*)(void* pThis);
+TaskListButton_UpdateBadge_t TaskListButton_UpdateBadge_Original;
+void WINAPI TaskListButton_UpdateBadge_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    TaskListButton_UpdateBadge_Original(pThis);
+
+    void* taskListButtonIUnknownPtr = (void**)pThis + 3;
+    winrt::Windows::Foundation::IUnknown taskListButtonIUnknown;
+    winrt::copy_from_abi(taskListButtonIUnknown, taskListButtonIUnknownPtr);
+
+    auto taskListButtonElement = taskListButtonIUnknown.as<FrameworkElement>();
+
+    try {
+        UpdateTaskListButton(taskListButtonElement);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
+}
+
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
@@ -4339,6 +4407,16 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
                 &IconView_IconView_Original,
                 IconView_IconView_Hook,
+            },
+            {
+                {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnApplyTemplate(void))"},
+                &TaskListButton_OnApplyTemplate_Original,
+                TaskListButton_OnApplyTemplate_Hook,
+            },
+            {
+                {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateBadge(void))"},
+                &TaskListButton_UpdateBadge_Original,
+                TaskListButton_UpdateBadge_Hook,
             },
             {
                 {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
