@@ -1200,9 +1200,14 @@ public:
                     LOG_INFO(L"COM initilized");
                     m_needsCOMUninit = true;
                 }
+                else if (hr == S_FALSE)
+                {
+                    LOG_INFO(L"COM already initialized on this thread");
+                    m_needsCOMUninit = true; // each successful CoInitializeEx must be balanced with CoUninitialize including S_FALSE
+                }
                 else
                 {
-                    LOG_INFO(L"COM already initialized");
+                    LOG_INFO(L"COM already initialized in incompatible concurrency model");
                     m_needsCOMUninit = false;
                 }
             }
@@ -3508,7 +3513,7 @@ void Wh_ModUninit()
     if (g_hTaskbarWnd)
     {
         SendMessage(g_hTaskbarWnd, g_uninitCOMAPIMsg, FALSE, 0); // uninitialize COM API from gui thread
-        
+
         UnsubclassTaskbarWindow(g_hTaskbarWnd);
         for (HWND hSecondaryWnd : g_secondaryTaskbarWindows)
         {
