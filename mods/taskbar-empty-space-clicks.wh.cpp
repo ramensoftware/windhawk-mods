@@ -1183,7 +1183,7 @@ static struct
 class COMAPI
 {
 public:
-    COMAPI() : m_isInitialized(false), m_isCOMInitialized(false), m_needsCOMUninit(false), m_isUIAInitialized(false), m_isDEInitialized(false),
+    COMAPI() : m_isInitialized(false), m_isCOMInitialized(false), m_isUIAInitialized(false), m_isDEInitialized(false),
                m_pUIAutomation(nullptr), m_pDeviceEnumerator(nullptr) {}
 
     // init COM for UIAutomation and Volume control
@@ -1191,25 +1191,10 @@ public:
     {
         if (!m_isCOMInitialized)
         {
-            const auto hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-            if (SUCCEEDED(hr))
+            if (SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) // COM was most likely already initialized in the GUI thread, but just to be sure
             {
                 m_isCOMInitialized = true;
-                if (hr == S_OK) // COM was most likely already initialized in the GUI thread, in case not, we will need to uninitialize it later
-                {
-                    LOG_INFO(L"COM initilized");
-                    m_needsCOMUninit = true;
-                }
-                else if (hr == S_FALSE)
-                {
-                    LOG_INFO(L"COM already initialized on this thread");
-                    m_needsCOMUninit = true; // each successful CoInitializeEx must be balanced with CoUninitialize including S_FALSE
-                }
-                else
-                {
-                    LOG_INFO(L"COM already initialized in incompatible concurrency model");
-                    m_needsCOMUninit = false;
-                }
+                LOG_INFO(L"COM initilized");
             }
             else
             {
@@ -1271,12 +1256,8 @@ public:
         }
         if (m_isCOMInitialized)
         {
-            if (m_needsCOMUninit)
-            {
-                CoUninitialize();
-                m_needsCOMUninit = false;
-                LOG(L"COM de-initialized");
-            }
+            CoUninitialize();
+            LOG(L"COM de-initialized");
             m_isCOMInitialized = false;
         }
     }
@@ -1296,7 +1277,6 @@ public:
 protected:
     bool m_isInitialized;
     bool m_isCOMInitialized;
-    bool m_needsCOMUninit;
     bool m_isUIAInitialized;
     bool m_isDEInitialized;
 
