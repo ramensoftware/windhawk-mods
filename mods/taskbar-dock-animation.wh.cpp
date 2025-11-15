@@ -111,9 +111,8 @@ struct DockAnimationContext {
     bool isInitialized = false;
     winrt::weak_ref<FrameworkElement> taskbarFrame;
     std::vector<TaskbarIconInfo> icons;
-    winrt::event_token pointerMovedToken;
-    winrt::event_token pointerExitedToken;
 };
+
 
 // One context per monitor (keyed by XAML instance pointer)
 std::map<void*, DockAnimationContext> g_contexts;
@@ -449,20 +448,13 @@ void InitializeAnimationHooks(void* pThis, FrameworkElement const& taskbarFrame)
         ctx.taskbarFrame = taskbarFrame;
         ctx.isInitialized = false;
 
-        ctx.pointerMovedToken = taskbarFrame.PointerMoved(
-            [pThis](auto const&, Input::PointerRoutedEventArgs const& args) {
-                OnTaskbarPointerMoved(pThis, args);
-            });
-        ctx.pointerExitedToken = taskbarFrame.PointerExited(
-            [pThis](auto const&, Input::PointerRoutedEventArgs const&) {
-                OnTaskbarPointerExited(pThis);
-            });
-
         g_contexts[pThis] = std::move(ctx);
 
-        Wh_Log(L"DockAnimation: Monitor %p registered.", pThis);
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: Failed to attach mouse events for %p: %s", pThis, e.message().c_str());
+        Wh_Log(L"DockAnimation: Monitor %p registered (hook-based).", pThis);
+    }
+    catch (winrt::hresult_error const& e) {
+        Wh_Log(L"DockAnimation: Failed to initialize context for %p: %s",
+               pThis, e.message().c_str());
     }
 }
 
@@ -729,8 +721,10 @@ void Wh_ModBeforeUninit() {
             Media::CompositionTarget::Rendering(g_renderingToken);
             Wh_Log(L"DockAnimation: Unhooked CompositionTarget::Rendering.");
         }
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"DockAnimation: HRESULT error unhooking rendering: %s", e.message().c_str());
+    }
+    catch (winrt::hresult_error const& e) {
+        Wh_Log(L"DockAnimation: HRESULT error unhooking rendering: %s",
+               e.message().c_str());
     }
 
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
@@ -741,29 +735,23 @@ void Wh_ModBeforeUninit() {
                 try {
                     for (auto& pair : g_contexts) {
                         auto& ctx = pair.second;
-                        auto frame = ctx.taskbarFrame.get();
-                        if (frame) {
-                            frame.PointerMoved(ctx.pointerMovedToken);
-                            frame.PointerExited(ctx.pointerExitedToken);
-                            ResetAllIconScales(ctx.icons);
-                        }
+                        ResetAllIconScales(ctx.icons);
                     }
                     g_contexts.clear();
                     Wh_Log(L"DockAnimation: UI contexts cleaned up.");
-                } catch (winrt::hresult_error const& e) {
-                     Wh_Log(L"DockAnimation: HRESULT error during UI thread cleanup: %s", e.message().c_str());
                 }
+                catch (...) {}
             },
             nullptr);
-    } else {
-         try {
-            g_contexts.clear();
-         } catch (...) {}
+    }
+    else {
+        g_contexts.clear();
     }
 
     g_taskbarViewDllLoaded = false;
     g_hooksApplied = false;
 }
+
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"DockAnimation: Settings changed.");
