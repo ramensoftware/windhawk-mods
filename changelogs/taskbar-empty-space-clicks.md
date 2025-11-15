@@ -1,3 +1,12 @@
+## 2.0 ([Nov 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/532a7d6e3c03d67efbd5d889b367b8185caf7fc1/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- concept of triggers completely reworked (incompatible with v1.x settings)
+- user can add up to 50 triggers
+- added keyboard modifiers for each trigger - resolves https://github.com/m1lhaus/windhawk-mods/issues/22 and resolves https://github.com/m1lhaus/windhawk-mods/issues/1
+- added single left/right button click triggers - resolves https://github.com/m1lhaus/windhawk-mods/issues/27 and resolves https://github.com/m1lhaus/windhawk-mods/issues/24
+- smart handling of taskbar context menu on right-click triggers
+- media keys not working bug fixed - fixes https://github.com/m1lhaus/windhawk-mods/issues/30
+
 ## 1.9 ([Dec 15, 2024](https://github.com/ramensoftware/windhawk-mods/blob/c18f329132507d6ed1a7517e5c1906d194e2bb34/mods/taskbar-empty-space-clicks.wh.cpp))
 
 Fixed explorer.exe freeze on Windows 24H2 when the combine taskbar buttons option changed - https://github.com/m1lhaus/windhawk-mods/issues/23.
