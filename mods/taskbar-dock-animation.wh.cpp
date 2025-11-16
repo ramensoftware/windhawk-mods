@@ -27,7 +27,7 @@ You can experiment with the **radius** value to achieve the best result for your
 ---
 
 ## 🖼️ Preview
-![Taskbar Dock Animation Preview](https://raw.githubusercontent.com/Ph0en1x-dev/edu_db_labs/master/Записування%20з%20екрана%202025-11-06%20155028.gif)
+![Taskbar Dock Animation Preview](https://raw.githubusercontent.com/Ph0en1x-dev/edu_db_labs/master/Taskbardockaniamtionpreview.gif)
 */
 // ==/WindhawkModReadme==
 
@@ -766,3 +766,4 @@ void Wh_ModSettingsChanged() {
     } catch (...) {
     }
 }
+
