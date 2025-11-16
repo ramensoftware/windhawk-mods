@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-15T12:47:04.000Z</updated>
+    <updated>2025-11-16T00:29:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Dock Animation 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-dock-animation#cbcbcc57ce2db3350ff804cf7bbdbee5d9c729d3</id>
+        <link href="https://windhawk.net/mods/taskbar-dock-animation"/>
+        <updated>2025-11-16T00:29:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbardockanimation">Taskbar Dock Animation</h1>
+<p>This mod adds a macOS-like taskbar animation.
+The current version is <strong>experimental</strong> and not yet fully stable.
+A few issues are still being worked on:</p>
+<ul>
+<li>Icons are sometimes clipped by the taskbar.</li>
+<li>Upscaled icons may appear slightly blurry.</li>
+</ul>
+<p>At this stage, since the mod is still in active testing, it’s recommended to <strong>keep the maximum scale around 130%</strong> to avoid visual glitches.
+You can experiment with the <strong>radius</strong> value to achieve the best result for your setup until proper fixes for the issues above are found.</p>
+<hr />
+<h2 id="preview">🖼️ Preview</h2>
+<p><img src="https://raw.githubusercontent.com/Ph0en1x-dev/edu_db_labs/master/Записування%20з%20екрана%202025-11-06%20155028.gif" alt="Taskbar Dock Animation Preview" /></p>]]></content>
+        <author>
+            <name>Ph0en1x-dev</name>
+            <uri>https://github.com/Ph0en1x-dev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 2.0]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#532a7d6e3c03d67efbd5d889b367b8185caf7fc1</id>
@@ -284,24 +307,6 @@ This mod adds an input that allows you to type hex colors in both the standard
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Control Panel Color Fix 1.0.1]]></title>
-        <id>https://windhawk.net/mods/control-panel-color-fix#c5cb94e7793bcd705becbec2c5092e45103da11e</id>
-        <link href="https://windhawk.net/mods/control-panel-color-fix"/>
-        <updated>2025-10-25T19:35:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed incompatibility with StartAllBack causing white header/sidebar.</li>
-<li>Added optional ± contrast offset between Control Panel body and header/sidebar.</li>
-<li>Added manual override of header/sidebar color.</li>
-<li>Ensured support for all themes that repaint Control Panel (not just dark ones).</li>
-<li>Removed Windows 11 only restriction.</li>
-<li>Added before and after images to readme.</li>
-</ul>]]></content>
-        <author>
-            <name>chip33</name>
-            <uri>https://github.com/chip33</uri>
         </author>
     </entry>
 </feed>
