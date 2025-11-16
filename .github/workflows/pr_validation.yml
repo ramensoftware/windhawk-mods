@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+env:
+  PYTHONUTF8: '1'
+
 jobs:
   run:
     runs-on: ubuntu-latest
