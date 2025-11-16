@@ -16,6 +16,9 @@ concurrency:
   group: deploy-static-content
   cancel-in-progress: true
 
+env:
+  PYTHONUTF8: '1'
+
 jobs:
   run:
     runs-on: windows-latest
