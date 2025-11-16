@@ -40,7 +40,11 @@ def image_url_to_path(url: str):
     path = url[len("https://") :]
     path = unquote(path)
 
-    if re.search(r"(^|/|\\)\.\.", path):
+    if (
+        path.startswith("/")
+        or path.startswith("\\")
+        or re.search(r"(^|/|\\)\.\.", path)
+    ):
         raise RuntimeError(f"Unsafe URL path: {path}")
 
     return path
@@ -70,6 +74,11 @@ def process_code_files(code_folder: Path, images_folder: Path):
 
     for url in image_urls:
         image_path = images_folder / image_url_to_path(url)
+        if not image_path.resolve().is_relative_to(images_folder.resolve()):
+            raise RuntimeError(
+                f"Image path {image_path} is outside of images folder {images_folder}"
+            )
+
         if not image_path.exists():
             download_image(url, image_path)
 
