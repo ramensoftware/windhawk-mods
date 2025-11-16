@@ -35,7 +35,9 @@ def image_url_to_path(url: str):
     if not url.startswith("https://"):
         raise ValueError(f"Unsupported URL: {url}")
 
-    return url[len("https://") :]
+    path = url[len("https://") :]
+    path = path.replace("%20", " ")
+    return path
 
 
 def download_image(url: str, save_path: Path):
