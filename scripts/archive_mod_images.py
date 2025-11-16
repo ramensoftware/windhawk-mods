@@ -1,7 +1,9 @@
 import re
-import requests
 from pathlib import Path
 from typing import List
+from urllib.parse import unquote
+
+import requests
 
 URL_PATTERN = r"!\[[^\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
 SCRIPT_DIR = Path(__file__).parent
@@ -36,7 +38,11 @@ def image_url_to_path(url: str):
         raise ValueError(f"Unsupported URL: {url}")
 
     path = url[len("https://") :]
-    path = path.replace("%20", " ")
+    path = unquote(path)
+
+    if re.search(r"(^|/|\\)\.\.", path):
+        raise RuntimeError(f"Unsafe URL path: {path}")
+
     return path
 
 
