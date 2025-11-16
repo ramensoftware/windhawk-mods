@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-16T00:29:16.000Z</updated>
+    <updated>2025-11-16T09:29:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.0.6]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#99d558b204a080b3f1974b47289ae94c205571e9</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2025-11-16T09:29:57.000Z</updated>
+        <content type="html"><![CDATA[<p>Update the tutotial.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Dock Animation 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-dock-animation#cbcbcc57ce2db3350ff804cf7bbdbee5d9c729d3</id>
@@ -285,24 +296,6 @@ This mod adds an input that allows you to type hex colors in both the standard
         <updated>2025-10-26T20:18:37.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed an incompatibility with preview Windows 11 builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#6a179f7c2bc4de25e0d72167534b5583c43db03e</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2025-10-26T18:46:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Reworked Start menu positioning:</li>
-<li>The <a href="https://microsoft.design/articles/start-fresh-redesigning-windows-start-menu/">redesigned Windows 11 Start menu</a> is now supported.</li>
-<li>Added an option for the Start menu to animate from the top using a technique discovered by <a href="https://github.com/SandTechStuff">SandTechStuff</a> (not available for the redesigned Start menu).</li>
-<li>The account card at the bottom of the Start menu is no longer truncated.</li>
-<li>Added a workaround for the edges of the taskbar being non-clickable in some cases.</li>
-<li>Added a workaround for compatibility with ExplorerPatcher. Previously, if the mod was used together with ExplorerPatcher, the Start menu could be misplaced at the edge of the screen.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
