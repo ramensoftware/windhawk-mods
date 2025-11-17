@@ -263,7 +263,7 @@ using bstr_ptr = _bstr_t;
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
-#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
@@ -580,7 +580,7 @@ static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 static bool g_isContextMenuSuppressed = false;
 static DWORD g_lastActionExecutionTimestamp = 0;
 
-static const int g_mouseClickTimeoutMs = 200; // time to wait since the last time an action was executed
+static const int g_mouseClickTimeoutMs = 200;       // time to wait since the last time an action was executed
 static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
@@ -2526,7 +2526,7 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
         actionExecutor(); // execute taskbar action
     }
 
-    if (g_isContextMenuSuppressed)  // action not executed, so we need to synthesize right-click to show context menu
+    if (g_isContextMenuSuppressed) // action not executed, so we need to synthesize right-click to show context menu
     {
         SynthesizeTaskbarRightClick(lastMousePos);
         g_isContextMenuSuppressed = false;
@@ -2659,7 +2659,7 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
 
     // mouse clicks
     const MouseClick::Button mouseButtons[] = {MouseClick::Button::LEFT, MouseClick::Button::RIGHT, MouseClick::Button::MIDDLE};
-    const std::function<bool(MouseClick::Button)> mouseChecks[] = {IsTripleClick, static_cast<bool(*)(MouseClick::Button)>(IsDoubleClick), IsSingleClick};
+    const std::function<bool(MouseClick::Button)> mouseChecks[] = {IsTripleClick, static_cast<bool (*)(MouseClick::Button)>(IsDoubleClick), IsSingleClick};
     for (const auto &button : mouseButtons)
     {
         if (IsMultiClick(button))
@@ -2691,7 +2691,7 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
         return nullptr; // ignore quadruple and more taps
     }
     int clickCount = 3;
-    const std::function<bool()> touchChecks[] = {IsTripleTap, static_cast<bool(*)()>(IsDoubleTap), IsSingleTap};
+    const std::function<bool()> touchChecks[] = {IsTripleTap, static_cast<bool (*)()>(IsDoubleTap), IsSingleTap};
     for (const auto &checkFunc : touchChecks)
     {
         clickCount--;
