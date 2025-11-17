@@ -858,6 +858,9 @@ bool IsKeyPressed(int vkCode);
 bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks);
 void SynthesizeTaskbarRightClick(POINT ptScreen);
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
+std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks);
+bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks);
+std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button = MouseClick::Button::INVALID);
 bool OnMouseClick(MouseClick click);
 bool GetTaskbarAutohideState();
 void SetTaskbarAutohide(bool enabled);
@@ -2515,92 +2518,22 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
     gMouseClickTimer = 0;
 
-    bool wasActionExecuted = false;
     const POINT lastMousePos = g_mouseClickQueue[-1].position; // store since the queue will be cleared
 
-    // mouse left button clicks
-    if (IsMultiClick(MouseClick::Button::LEFT))
+    const auto actionExecutor = GetTaskbarActionExecutor(false /* do not check for existing higher-click-count triggers */);
+    if (actionExecutor)
     {
-        // ignore quadruple and more clicks
-    }
-    else if (IsTripleClick(MouseClick::Button::LEFT))
-    {
-        (void)ExecuteTaskbarAction(L"leftTriple", 3);
-    }
-    else if (IsDoubleClick(MouseClick::Button::LEFT))
-    {
-        (void)ExecuteTaskbarAction(L"leftDouble", 2);
-    }
-    else if (IsSingleClick(MouseClick::Button::LEFT))
-    {
-        (void)ExecuteTaskbarAction(L"left", 1);
+        actionExecutor(); // execute taskbar action
     }
 
-    // mouse right button clicks
-    else if (IsMultiClick(MouseClick::Button::RIGHT))
+    if (g_isContextMenuSuppressed)  // action not executed, so we need to synthesize right-click to show context menu
     {
-        // ignore quadruple and more clicks
-    }
-    else if (IsTripleClick(MouseClick::Button::RIGHT))
-    {
-        wasActionExecuted = ExecuteTaskbarAction(L"rightTriple", 3);
-    }
-    else if (IsDoubleClick(MouseClick::Button::RIGHT))
-    {
-        wasActionExecuted = ExecuteTaskbarAction(L"rightDouble", 2);
-    }
-    else if (IsSingleClick(MouseClick::Button::RIGHT))
-    {
-        wasActionExecuted = ExecuteTaskbarAction(L"right", 1);
-    }
-
-    // mouse middle button clicks
-    else if (IsMultiClick(MouseClick::Button::MIDDLE))
-    {
-        // ignore quadruple and more clicks
-    }
-    else if (IsTripleClick(MouseClick::Button::MIDDLE))
-    {
-        (void)ExecuteTaskbarAction(L"middleTriple", 3);
-    }
-    else if (IsDoubleClick(MouseClick::Button::MIDDLE))
-    {
-        (void)ExecuteTaskbarAction(L"middleDouble", 2);
-    }
-    else if (IsSingleClick(MouseClick::Button::MIDDLE))
-    {
-        (void)ExecuteTaskbarAction(L"middle", 1);
-    }
-
-    // touchscreen tap
-    else if (IsMultiTap())
-    {
-        // ignore quadruple and more taps
-    }
-    else if (IsTripleTap())
-    {
-        (void)ExecuteTaskbarAction(L"tapTriple", 3);
-    }
-    else if (IsDoubleTap())
-    {
-        (void)ExecuteTaskbarAction(L"tapDouble", 2);
-    }
-    else if (IsSingleTap())
-    {
-        (void)ExecuteTaskbarAction(L"tapSingle", 1);
-    }
-
-    if (g_isContextMenuSuppressed)
-    {
-        if (!wasActionExecuted)
-        {
-            SynthesizeTaskbarRightClick(lastMousePos);
-        }
+        SynthesizeTaskbarRightClick(lastMousePos);
         g_isContextMenuSuppressed = false;
     }
 }
 
-std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button = MouseClick::Button::INVALID)
+std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button)
 {
     std::wstring mouseTriggerName;
     if (clickType == MouseClick::Type::MOUSE)
