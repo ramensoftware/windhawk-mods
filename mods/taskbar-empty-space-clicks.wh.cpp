@@ -100,6 +100,28 @@ Some actions support or require additional arguments. You can set them in the Se
 
 ## Caveats and limitations:
 
+### Click/tap gesture evaluation
+
+By default, after every click or tap on the taskbar, the mod waits for the Windows double-click time ([GetDoubleClickTime](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdoubleclicktime), usually 500 ms) before running any action.
+
+This short delay is needed so the mod can correctly decide whether you did a:
+- single click/tap
+- double click/tap
+- triple click/tap
+
+This is what allows you, for example, to double-click the taskbar without triggering the single-click action first.
+
+If you don’t like this delay, you can turn on the **Eager trigger evaluation** option in the mod’s settings.
+
+With **Eager trigger evaluation** enabled:
+
+The action runs immediately when a matching trigger is detected (no waiting).
+However, double or triple clicks/taps can still trigger the single-click/tap action, as long as you haven’t configured a separate double or triple click/tap action for that same trigger.
+In other words, this option is a trade-off:
+
+- Off – slight delay, but more accurate recognition of single vs. double vs. triple gestures
+- On – no delay, but less precise gesture detection
+
 ### Right-click behavior:
 When you configure any right-click trigger (single, double, or triple), the mod needs to temporarily delay the taskbar's context menu to detect your intended action.
 
@@ -192,10 +214,14 @@ If you have request for new functions, suggestions or you are experiencing some 
     Enable this option to customize the old taskbar on Windows 11 (if using
     ExplorerPatcher or a similar tool). Note: For Windhawk versions earlier
     than 1.3, you must disable and re-enable the mod to apply this option.
-- eagerTriggerEvaluation: true
-  $name: eagerTriggerEvaluation
+- eagerTriggerEvaluation: false
+  $name: Eager trigger evaluation
   $description: >-
-    TBD.
+    Run actions immediately when a matching click or tap is detected, instead of
+    waiting a short time to see if it becomes a double or triple click/tap.
+    This makes the mod feel more responsive, but limits how precisely different
+    gestures can be distinguished. See the "Caveats and limitations" section on
+    the mod description page for more details.
 */
 // ==/WindhawkModSettings==
 
@@ -237,7 +263,7 @@ using bstr_ptr = _bstr_t;
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
-// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
@@ -551,9 +577,11 @@ static bool g_inputSiteProcHooked = false;
 
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
-
-static constexpr DWORD kInjectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static bool g_isContextMenuSuppressed = false;
+static DWORD g_lastActionExecutionTimestamp = 0;
+
+static const int g_mouseClickTimeoutMs = 200; // time to wait since the last time an action was executed
+static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
 
@@ -1027,7 +1055,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         (isLeftButton || isRightButton || isMiddleButton))
     {
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if (extraInfo != kInjectedClickID)
+        if (extraInfo != g_injectedClickID)
         {
             // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
             if (!g_comAPI.IsInitialized())
@@ -1050,7 +1078,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     {
         const auto &lastClick = g_mouseClickQueue[-1];
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if ((extraInfo != kInjectedClickID) && lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+        if ((extraInfo != g_injectedClickID) && lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
         {
             if (ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
             {
@@ -1117,7 +1145,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
             {
                 LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-                if (extraInfo == kInjectedClickID)
+                if (extraInfo == g_injectedClickID)
                 {
                     LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
                     break;
@@ -2467,11 +2495,11 @@ void SynthesizeTaskbarRightClick(POINT ptScreen)
     INPUT input[2] = {};
     input[0].type = INPUT_MOUSE;
     input[0].mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
-    input[0].mi.dwExtraInfo = kInjectedClickID; // to identify our synthesized click
+    input[0].mi.dwExtraInfo = g_injectedClickID; // to identify our synthesized click
 
     input[1].type = INPUT_MOUSE;
     input[1].mi.dwFlags = MOUSEEVENTF_RIGHTUP;
-    input[1].mi.dwExtraInfo = kInjectedClickID;
+    input[1].mi.dwExtraInfo = g_injectedClickID;
 
     if (SendInput(2, input, sizeof(INPUT)) != 2)
     {
@@ -2660,6 +2688,9 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
                 {
                     LOG_INFO(L"Executing action: %s", triggerAction.actionName.c_str());
                     triggerAction.actionExecutor(hWnd);
+                    g_lastActionExecutionTimestamp = GetTickCount();
+                    g_mouseClickQueue.clear();
+                    g_isContextMenuSuppressed = false;
                     wasActionExecuted = true;
                 }
                 else
@@ -2673,8 +2704,6 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
             }
         }
     }
-    // FIXME: this currently breaks key modifiers in eager mode
-    g_mouseClickQueue.clear();
     return wasActionExecuted;
 }
 
@@ -2758,6 +2787,12 @@ bool OnMouseClick(MouseClick click)
         return false;
     }
 
+    if ((GetTickCount() - g_lastActionExecutionTimestamp) < g_mouseClickTimeoutMs)
+    {
+        LOG_DEBUG(L"In cooldown period, ignoring click");
+        return false;
+    }
+
     // if there is already a timer running, kill it (one click becomes double click, etc.)
     if (gMouseClickTimer != NULL)
     {
@@ -2771,14 +2806,11 @@ bool OnMouseClick(MouseClick click)
     g_mouseClickQueue.push_back(click);
     if (g_settings.eagerTriggerEvaluation)
     {
-        const auto executor = GetTaskbarActionExecutor(true /* check for existing higher-click-count triggers */);
-        if (executor)
+        const auto actionExecutor = GetTaskbarActionExecutor(true /* check for existing higher-click-count triggers */);
+        if (actionExecutor)
         {
             LOG_DEBUG(L"Eagerly executing taskbar action for current click sequence");
-            executor(); // execute taskbar action
-            g_mouseClickQueue.clear();
-            g_isContextMenuSuppressed = false;
-            // TODO: implement cooldown to avoid immediate re-triggering
+            actionExecutor(); // execute taskbar action
         }
         else
         {
