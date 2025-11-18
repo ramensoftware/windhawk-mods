@@ -1,3 +1,7 @@
+## 1.0.3 ([Nov 18, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a5f2753114108d8032a62ddb858864a7aa39e27a/mods/win11-accent-border.wh.cpp))
+
+- Prevent apps from overwriting the border color.
+
 ## 1.0.2 ([Aug 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f251191b1143234f2924240a3cca66f31a0e4947/mods/win11-accent-border.wh.cpp))
 
 Fixes #2348

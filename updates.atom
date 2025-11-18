@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-16T09:29:57.000Z</updated>
+    <updated>2025-11-18T22:24:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.3]]></title>
+        <id>https://windhawk.net/mods/win11-accent-border#a5f2753114108d8032a62ddb858864a7aa39e27a</id>
+        <link href="https://windhawk.net/mods/win11-accent-border"/>
+        <updated>2025-11-18T22:24:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Prevent apps from overwriting the border color.</li>
+</ul>]]></content>
+        <author>
+            <name>Guerra24</name>
+            <uri>https://github.com/Guerra24</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme 1.0.6]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#99d558b204a080b3f1974b47289ae94c205571e9</id>
@@ -287,19 +300,6 @@ This mod adds an input that allows you to type hex colors in both the standard
         <author>
             <name>L3r0y</name>
             <uri>https://github.com/L3r0yThingz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Show all apps by default in start menu 1.0.5]]></title>
-        <id>https://windhawk.net/mods/start-menu-all-apps#62eac3202cd59cc5f83b71e2e7dc3a9022fdff33</id>
-        <link href="https://windhawk.net/mods/start-menu-all-apps"/>
-        <updated>2025-10-26T20:18:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed an incompatibility with preview Windows 11 builds.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
