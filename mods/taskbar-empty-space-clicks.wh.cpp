@@ -511,6 +511,7 @@ public:
             LOG(L"COM de-initialized");
             m_isCOMInitialized = false;
         }
+        m_isInitialized = false;
     }
 
     bool IsInitialized() { return m_isInitialized; }
@@ -578,7 +579,7 @@ static bool g_inputSiteProcHooked = false;
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 static bool g_isContextMenuSuppressed = false;
-static DWORD g_lastActionExecutionTimestamp = 0;
+static DWORD g_contextMenuSuppressionTimestamp = 0;
 
 static const int g_mouseClickTimeoutMs = 200;       // time to wait since the last time an action was executed
 static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
@@ -1067,7 +1068,14 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
             }
 
             MouseClick::Button button = isLeftButton ? MouseClick::Button::LEFT : (isRightButton ? MouseClick::Button::RIGHT : MouseClick::Button::MIDDLE);
-            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd));
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
+            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
+                ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
+            {
+                g_isContextMenuSuppressed = true;
+            }
+
+            OnMouseClick(lastClick);
         }
         else
         {
@@ -1079,15 +1087,17 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
              (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
              (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
     {
-        const auto &lastClick = g_mouseClickQueue[-1];
+        const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if ((extraInfo != g_injectedClickID) && lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000;  // reset context menu suppression after 1 second
+        if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
+            (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
         {
-            if (ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
-            {
-                g_isContextMenuSuppressed = true;
-                suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
-            }
+            suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
+        }
+        else
+        {
+            g_isContextMenuSuppressed = false;
         }
     }
 
@@ -2365,6 +2375,7 @@ bool ShallSuppressContextMenu(const MouseClick &lastClick)
             if (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState)
             {
                 LOG_DEBUG("Suppressing right click to suppress context menu");
+                g_contextMenuSuppressionTimestamp = GetTickCount();
                 return true;
             }
         }
@@ -2520,17 +2531,18 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
 
     const POINT lastMousePos = g_mouseClickQueue[-1].position; // store since the queue will be cleared
 
+    bool wasActionExecuted = false;
     const auto actionExecutor = GetTaskbarActionExecutor(false /* do not check for existing higher-click-count triggers */);
     if (actionExecutor)
     {
-        actionExecutor(); // execute taskbar action
+        wasActionExecuted = actionExecutor(); // execute taskbar action
     }
 
-    if (g_isContextMenuSuppressed) // action not executed, so we need to synthesize right-click to show context menu
+    if (g_isContextMenuSuppressed && !wasActionExecuted) // action not executed, so we need to synthesize right-click to show context menu
     {
         SynthesizeTaskbarRightClick(lastMousePos);
-        g_isContextMenuSuppressed = false;
     }
+    g_isContextMenuSuppressed = false;
 }
 
 std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button)
@@ -2621,9 +2633,7 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
                 {
                     LOG_INFO(L"Executing action: %s", triggerAction.actionName.c_str());
                     triggerAction.actionExecutor(hWnd);
-                    g_lastActionExecutionTimestamp = GetTickCount();
                     g_mouseClickQueue.clear();
-                    g_isContextMenuSuppressed = false;
                     wasActionExecuted = true;
                 }
                 else
@@ -2640,7 +2650,6 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
     return wasActionExecuted;
 }
 
-// Returns a lambda function that checks if the given trigger matches and returns true if executed
 std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks)
 {
     const auto isHigherOrderClickDefined = [&](const MouseClick::Type clickType, const int currentCount, const MouseClick::Button button)
@@ -2717,12 +2726,6 @@ bool OnMouseClick(MouseClick click)
 
     if ((GetCapture() != NULL) || !click.onEmptySpace)
     {
-        return false;
-    }
-
-    if ((GetTickCount() - g_lastActionExecutionTimestamp) < g_mouseClickTimeoutMs)
-    {
-        LOG_DEBUG(L"In cooldown period, ignoring click");
         return false;
     }
 
