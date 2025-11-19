@@ -2122,6 +2122,39 @@ void OpenTaskManager(HWND taskbarhWnd)
     }
 }
 
+BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator)
+{
+    LOG_TRACE();
+
+    // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
+    const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+
+    BOOL isMuted = FALSE;
+    com_ptr<IMMDevice> defaultAudioDevice;
+    if (SUCCEEDED(pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
+    {
+        // get handle to the default audio endpoint volume control
+        com_ptr<IAudioEndpointVolume> endpointVolume;
+        if (SUCCEEDED(defaultAudioDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
+        {
+            if (FAILED(endpointVolume->GetMute(&isMuted)))
+            {
+                LOG_ERROR(L"Failed to volume mute status!");
+            }
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to get default audio endpoint volume handle!");
+        }
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to get default audio endpoint!");
+    }
+
+    return isMuted;
+}
+
 void ToggleVolMuted()
 {
     LOG_TRACE();
@@ -2134,30 +2167,50 @@ void ToggleVolMuted()
     }
     LOG_INFO(L"Toggling volume mute");
 
-    com_ptr<IMMDevice> defaultAudioDevice;
-    if (SUCCEEDED(pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
-    {
-        // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
-        const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+    // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
+    const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
-        // get handle to the audio endpoint volume control
-        com_ptr<IAudioEndpointVolume> endpointVolume;
-        if (SUCCEEDED(defaultAudioDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
+    const BOOL isMuted = IsAudioMuted(pDeviceEnumerator);
+
+    // Get all audio render (playback) devices
+    com_ptr<IMMDeviceCollection> pDeviceCollection;
+    if (FAILED(pDeviceEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, pDeviceCollection.put())))
+    {
+        LOG_ERROR(L"Failed to enumerate audio endpoints!");
+        return;
+    }
+
+    UINT deviceCount = 0;
+    if (FAILED(pDeviceCollection->GetCount(&deviceCount)))
+    {
+        LOG_ERROR(L"Failed to get device count!");
+        return;
+    }
+    LOG_DEBUG(L"Found %u active audio device(s)", deviceCount);
+
+    // Apply the target mute state to all devices
+    for (UINT i = 0; i < deviceCount; i++)
+    {
+        com_ptr<IMMDevice> pDevice;
+        if (SUCCEEDED(pDeviceCollection->Item(i, pDevice.put())))
         {
-            BOOL isMuted = FALSE;
-            if (FAILED(endpointVolume->GetMute(&isMuted)) || FAILED(endpointVolume->SetMute(!isMuted, NULL)))
+            com_ptr<IAudioEndpointVolume> endpointVolume;
+            if (SUCCEEDED(pDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
             {
-                LOG_ERROR(L"Failed to toggle volume mute - failed to get and set mute state!");
+                if (FAILED(endpointVolume->SetMute(!isMuted, NULL)))
+                {
+                    LOG_ERROR(L"Failed to set mute state for device %u!", i);
+                }
+            }
+            else
+            {
+                LOG_ERROR(L"Failed to get audio endpoint volume handle for device %u!", i);
             }
         }
         else
         {
-            LOG_ERROR(L"Failed to toggle volume mute - failed to get audio endpoint volume handle!");
+            LOG_ERROR(L"Failed to get device %u from collection!", i);
         }
-    }
-    else
-    {
-        LOG_ERROR(L"Failed to toggle volume mute - failed to get default audio endpoint!");
     }
 }
 
