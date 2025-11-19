@@ -873,6 +873,7 @@ void SendWinTabKeypress();
 bool ClickStartMenu();
 void OpenStartMenu();
 void OpenTaskManager(HWND taskbarhWnd);
+BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator);
 void ToggleVolMuted();
 void HideIcons();
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
@@ -1775,8 +1776,6 @@ void LoadSettings()
 
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
     g_settings.eagerTriggerEvaluation = Wh_GetIntSetting(L"eagerTriggerEvaluation");
-    LOG_INFO(L"Settings loaded: oldTaskbarOnWin11=%d, eagerTriggerEvaluation=%d, number of trigger actions=%d",
-             g_settings.oldTaskbarOnWin11, g_settings.eagerTriggerEvaluation, (int)g_settings.triggerActions.size());
 }
 
 /**
@@ -2124,8 +2123,6 @@ void OpenTaskManager(HWND taskbarhWnd)
 
 BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator)
 {
-    LOG_TRACE();
-
     // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
     const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
@@ -2756,7 +2753,6 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
     const std::function<bool()> touchChecks[] = {IsTripleTap, static_cast<bool (*)()>(IsDoubleTap), IsSingleTap};
     for (const auto &checkFunc : touchChecks)
     {
-        clickCount--;
         if (checkFunc())
         {
             if (checkForHigherOrderClicks && isHigherOrderClickDefined(MouseClick::Type::TOUCH, clickCount, MouseClick::Button::INVALID))
@@ -2768,6 +2764,7 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
                 return ExecuteTaskbarAction(GetActionName(MouseClick::Type::TOUCH, clickCount), clickCount);
             };
         }
+        clickCount--;
     }
     return nullptr;
 }
