@@ -1,3 +1,8 @@
+## 2.1 ([Nov 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/077c9d5ae5e80ce1c341354c4dc628516f2b5201/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- implemented "Eager trigger evaluation" option - resolves https://github.com/m1lhaus/windhawk-mods/issues/40
+- Toggle Volume Mute feature now mutes all devices, not just the default one - resolves https://github.com/m1lhaus/windhawk-mods/issues/33
+
 ## 2.0 ([Nov 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/532a7d6e3c03d67efbd5d889b367b8185caf7fc1/mods/taskbar-empty-space-clicks.wh.cpp))
 
 - concept of triggers completely reworked (incompatible with v1.x settings)

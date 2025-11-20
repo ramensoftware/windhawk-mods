@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-18T22:24:59.000Z</updated>
+    <updated>2025-11-20T19:38:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#077c9d5ae5e80ce1c341354c4dc628516f2b5201</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2025-11-20T19:38:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>implemented "Eager trigger evaluation" option - resolves https://github.com/m1lhaus/windhawk-mods/issues/40</li>
+<li>Toggle Volume Mute feature now mutes all devices, not just the default one - resolves https://github.com/m1lhaus/windhawk-mods/issues/33</li>
+</ul>]]></content>
+        <author>
+            <name>m1lhaus</name>
+            <uri>https://github.com/m1lhaus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.3]]></title>
         <id>https://windhawk.net/mods/win11-accent-border#a5f2753114108d8032a62ddb858864a7aa39e27a</id>
@@ -287,19 +301,6 @@ This mod adds an input that allows you to type hex colors in both the standard
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab per monitor 1.1.1]]></title>
-        <id>https://windhawk.net/mods/alt-tab-per-monitor#2d1ff5b6c4891f684f71b5a8bffff9e2f8c68ef6</id>
-        <link href="https://windhawk.net/mods/alt-tab-per-monitor"/>
-        <updated>2025-10-28T22:10:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The Windows behavior can now be achieved by pressing Win+Alt+Tab, which will show all windows across all monitors. You can configure where the Win+Alt+Tab UI appears in the mod settings.</li>
-</ul>]]></content>
-        <author>
-            <name>L3r0y</name>
-            <uri>https://github.com/L3r0yThingz</uri>
         </author>
     </entry>
 </feed>
