@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
-// @version         2.0
+// @version         2.1
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -100,6 +100,28 @@ Some actions support or require additional arguments. You can set them in the Se
 
 ## Caveats and limitations:
 
+### Click/tap gesture evaluation
+
+By default, after every click or tap on the taskbar, the mod waits for the Windows double-click time ([GetDoubleClickTime](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdoubleclicktime), usually 500 ms) before running any action.
+
+This short delay is needed so the mod can correctly decide whether you did a:
+- single click/tap
+- double click/tap
+- triple click/tap
+
+This is what allows you, for example, to double-click the taskbar without triggering the single-click action first.
+
+If you don’t like this delay, you can turn on the **Eager trigger evaluation** option in the mod’s settings.
+
+With **Eager trigger evaluation** enabled:
+
+The action runs immediately when a matching trigger is detected (no waiting).
+However, double or triple clicks/taps can still trigger the single-click/tap action, as long as you haven’t configured a separate double or triple click/tap action for that same trigger.
+In other words, this option is a trade-off:
+
+- Off – slight delay, but more accurate recognition of single vs. double vs. triple gestures
+- On – no delay, but less precise gesture detection
+
 ### Right-click behavior:
 When you configure any right-click trigger (single, double, or triple), the mod needs to temporarily delay the taskbar's context menu to detect your intended action.
 
@@ -192,6 +214,14 @@ If you have request for new functions, suggestions or you are experiencing some 
     Enable this option to customize the old taskbar on Windows 11 (if using
     ExplorerPatcher or a similar tool). Note: For Windhawk versions earlier
     than 1.3, you must disable and re-enable the mod to apply this option.
+- eagerTriggerEvaluation: false
+  $name: Eager trigger evaluation
+  $description: >-
+    Run actions immediately when a matching click or tap is detected, instead of
+    waiting a short time to see if it becomes a double or triple click/tap.
+    This makes the mod feel more responsive, but limits how precisely different
+    gestures can be distinguished. See the "Caveats and limitations" section on
+    the mod description page for more details.
 */
 // ==/WindhawkModSettings==
 
@@ -229,786 +259,6 @@ If you have request for new functions, suggestions or you are experiencing some 
 // get the naming of smart ptrs somehow consistent since winapi naming is wild
 using winrt::com_ptr;
 using bstr_ptr = _bstr_t;
-
-// =====================================================================
-
-// following block is to keep compatibility with pre Windhawk 1.5 versions
-#ifndef __IUIAutomationElement_INTERFACE_DEFINED__
-
-// following include are taken from Qt project since builtin compiler is missing those definitions
-#pragma region uiautomation_includes
-
-// Pasted below and commented duplicate definitions:
-// https://github.com/qt/qtbase/blob/dev/src/gui/accessible/windows/apisupport/uiatypes_p.h
-// https://github.com/qt/qtbase/blob/dev/src/gui/accessible/windows/apisupport/uiaclientinterfaces_p.h
-
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR
-// GPL-2.0-only OR GPL-3.0-only
-
-#ifndef UIATYPES_H
-#define UIATYPES_H
-
-//
-//  W A R N I N G
-//  -------------
-//
-// This file is not part of the Qt API. It exists purely as an
-// implementation detail. This header file may change from version to
-// version without notice, or even be removed.
-//
-// We mean it.
-//
-
-typedef int PROPERTYID;
-typedef int PATTERNID;
-typedef int EVENTID;
-typedef int TEXTATTRIBUTEID;
-typedef int CONTROLTYPEID;
-typedef int LANDMARKTYPEID;
-typedef int METADATAID;
-
-typedef void *UIA_HWND;
-
-// enum NavigateDirection {
-//     NavigateDirection_Parent           = 0,
-//     NavigateDirection_NextSibling      = 1,
-//     NavigateDirection_PreviousSibling  = 2,
-//     NavigateDirection_FirstChild       = 3,
-//     NavigateDirection_LastChild        = 4
-// };
-
-// enum ProviderOptions {
-//     ProviderOptions_ClientSideProvider      = 0x1,
-//     ProviderOptions_ServerSideProvider      = 0x2,
-//     ProviderOptions_NonClientAreaProvider   = 0x4,
-//     ProviderOptions_OverrideProvider        = 0x8,
-//     ProviderOptions_ProviderOwnsSetFocus    = 0x10,
-//     ProviderOptions_UseComThreading         = 0x20,
-//     ProviderOptions_RefuseNonClientSupport  = 0x40,
-//     ProviderOptions_HasNativeIAccessible    = 0x80,
-//     ProviderOptions_UseClientCoordinates    = 0x100
-// };
-
-enum SupportedTextSelection
-{
-    SupportedTextSelection_None = 0,
-    SupportedTextSelection_Single = 1,
-    SupportedTextSelection_Multiple = 2
-};
-
-enum TextUnit
-{
-    TextUnit_Character = 0,
-    TextUnit_Format = 1,
-    TextUnit_Word = 2,
-    TextUnit_Line = 3,
-    TextUnit_Paragraph = 4,
-    TextUnit_Page = 5,
-    TextUnit_Document = 6
-};
-
-enum TextPatternRangeEndpoint
-{
-    TextPatternRangeEndpoint_Start = 0,
-    TextPatternRangeEndpoint_End = 1
-};
-
-enum TextDecorationLineStyle
-{
-    TextDecorationLineStyle_None = 0,
-    TextDecorationLineStyle_Single = 1,
-    TextDecorationLineStyle_WordsOnly = 2,
-    TextDecorationLineStyle_Double = 3,
-    TextDecorationLineStyle_Dot = 4,
-    TextDecorationLineStyle_Dash = 5,
-    TextDecorationLineStyle_DashDot = 6,
-    TextDecorationLineStyle_DashDotDot = 7,
-    TextDecorationLineStyle_Wavy = 8,
-    TextDecorationLineStyle_ThickSingle = 9,
-    TextDecorationLineStyle_DoubleWavy = 11,
-    TextDecorationLineStyle_ThickWavy = 12,
-    TextDecorationLineStyle_LongDash = 13,
-    TextDecorationLineStyle_ThickDash = 14,
-    TextDecorationLineStyle_ThickDashDot = 15,
-    TextDecorationLineStyle_ThickDashDotDot = 16,
-    TextDecorationLineStyle_ThickDot = 17,
-    TextDecorationLineStyle_ThickLongDash = 18,
-    TextDecorationLineStyle_Other = -1
-};
-
-enum CaretPosition
-{
-    CaretPosition_Unknown = 0,
-    CaretPosition_EndOfLine = 1,
-    CaretPosition_BeginningOfLine = 2
-};
-
-enum ToggleState
-{
-    ToggleState_Off = 0,
-    ToggleState_On = 1,
-    ToggleState_Indeterminate = 2
-};
-
-enum RowOrColumnMajor
-{
-    RowOrColumnMajor_RowMajor = 0,
-    RowOrColumnMajor_ColumnMajor = 1,
-    RowOrColumnMajor_Indeterminate = 2
-};
-
-enum TreeScope
-{
-    TreeScope_None = 0,
-    TreeScope_Element = 0x1,
-    TreeScope_Children = 0x2,
-    TreeScope_Descendants = 0x4,
-    TreeScope_Parent = 0x8,
-    TreeScope_Ancestors = 0x10,
-    TreeScope_Subtree = TreeScope_Element | TreeScope_Children | TreeScope_Descendants
-};
-
-enum OrientationType
-{
-    OrientationType_None = 0,
-    OrientationType_Horizontal = 1,
-    OrientationType_Vertical = 2
-};
-
-enum PropertyConditionFlags
-{
-    PropertyConditionFlags_None = 0,
-    PropertyConditionFlags_IgnoreCase = 1
-};
-
-enum WindowVisualState
-{
-    WindowVisualState_Normal = 0,
-    WindowVisualState_Maximized = 1,
-    WindowVisualState_Minimized = 2
-};
-
-enum WindowInteractionState
-{
-    WindowInteractionState_Running = 0,
-    WindowInteractionState_Closing = 1,
-    WindowInteractionState_ReadyForUserInteraction = 2,
-    WindowInteractionState_BlockedByModalWindow = 3,
-    WindowInteractionState_NotResponding = 4
-};
-
-enum ExpandCollapseState
-{
-    ExpandCollapseState_Collapsed = 0,
-    ExpandCollapseState_Expanded = 1,
-    ExpandCollapseState_PartiallyExpanded = 2,
-    ExpandCollapseState_LeafNode = 3
-};
-
-// struct UiaRect {
-//     double left;
-//     double top;
-//     double width;
-//     double height;
-// };
-
-struct UiaPoint
-{
-    double x;
-    double y;
-};
-
-#endif
-
-// Copyright (C) 2017 The Qt Company Ltd.
-// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR
-// GPL-2.0-only OR GPL-3.0-only
-
-#ifndef UIACLIENTINTERFACES_H
-#define UIACLIENTINTERFACES_H
-
-//
-//  W A R N I N G
-//  -------------
-//
-// This file is not part of the Qt API. It exists purely as an
-// implementation detail. This header file may change from version to
-// version without notice, or even be removed.
-//
-// We mean it.
-//
-
-#include <unknwn.h>
-
-#ifndef __IUIAutomationElement_INTERFACE_DEFINED__
-
-struct IUIAutomationCondition;
-struct IUIAutomationCacheRequest;
-struct IUIAutomationElementArray;
-struct IUIAutomationTreeWalker;
-struct IUIAutomationEventHandler;
-struct IUIAutomationPropertyChangedEventHandler;
-struct IUIAutomationStructureChangedEventHandler;
-struct IUIAutomationFocusChangedEventHandler;
-struct IUIAutomationProxyFactory;
-struct IUIAutomationProxyFactoryEntry;
-struct IUIAutomationProxyFactoryMapping;
-#ifndef __IAccessible_FWD_DEFINED__
-#define __IAccessible_FWD_DEFINED__
-struct IAccessible;
-#endif /* __IAccessible_FWD_DEFINED__ */
-
-#define __IUIAutomationElement_INTERFACE_DEFINED__
-DEFINE_GUID(IID_IUIAutomationElement, 0xd22108aa, 0x8ac5, 0x49a5, 0x83, 0x7b, 0x37, 0xbb, 0xb3, 0xd7, 0x59, 0x1e);
-MIDL_INTERFACE("d22108aa-8ac5-49a5-837b-37bbb3d7591e")
-IUIAutomationElement : public IUnknown
-{
-public:
-    virtual HRESULT STDMETHODCALLTYPE SetFocus() = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetRuntimeId(__RPC__deref_out_opt SAFEARRAY * *runtimeId) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindFirst(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition * condition,
-                                                __RPC__deref_out_opt IUIAutomationElement * *found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindAll(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition * condition,
-                                              __RPC__deref_out_opt IUIAutomationElementArray * *found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindFirstBuildCache(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition * condition,
-                                                          __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                          __RPC__deref_out_opt IUIAutomationElement * *found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE FindAllBuildCache(enum TreeScope scope, __RPC__in_opt IUIAutomationCondition * condition,
-                                                        __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                        __RPC__deref_out_opt IUIAutomationElementArray * *found) = 0;
-    virtual HRESULT STDMETHODCALLTYPE BuildUpdatedCache(__RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                        __RPC__deref_out_opt IUIAutomationElement * *updatedElement) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPropertyValue(PROPERTYID propertyId, __RPC__out VARIANT * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPropertyValueEx(PROPERTYID propertyId, BOOL ignoreDefaultValue, __RPC__out VARIANT * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPropertyValue(PROPERTYID propertyId, __RPC__out VARIANT * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPropertyValueEx(PROPERTYID propertyId, BOOL ignoreDefaultValue, __RPC__out VARIANT * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPatternAs(PATTERNID patternId, __RPC__in REFIID riid, __RPC__deref_out_opt void **patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPatternAs(PATTERNID patternId, __RPC__in REFIID riid, __RPC__deref_out_opt void **patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCurrentPattern(PATTERNID patternId, __RPC__deref_out_opt IUnknown * *patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedPattern(PATTERNID patternId, __RPC__deref_out_opt IUnknown * *patternObject) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedParent(__RPC__deref_out_opt IUIAutomationElement * *parent) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetCachedChildren(__RPC__deref_out_opt IUIAutomationElementArray * *children) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentProcessId(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentControlType(__RPC__out CONTROLTYPEID * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentLocalizedControlType(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentName(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAcceleratorKey(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAccessKey(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentHasKeyboardFocus(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsKeyboardFocusable(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsEnabled(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAutomationId(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentClassName(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentHelpText(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentCulture(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsControlElement(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsContentElement(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsPassword(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentNativeWindowHandle(__RPC__deref_out_opt UIA_HWND * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentItemType(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsOffscreen(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentOrientation(__RPC__out enum OrientationType * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentFrameworkId(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsRequiredForForm(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentItemStatus(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentBoundingRectangle(__RPC__out RECT * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentLabeledBy(__RPC__deref_out_opt IUIAutomationElement * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAriaRole(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentAriaProperties(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentIsDataValidForForm(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentControllerFor(__RPC__deref_out_opt IUIAutomationElementArray * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentDescribedBy(__RPC__deref_out_opt IUIAutomationElementArray * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentFlowsTo(__RPC__deref_out_opt IUIAutomationElementArray * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentProviderDescription(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedProcessId(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedControlType(__RPC__out CONTROLTYPEID * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedLocalizedControlType(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedName(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAcceleratorKey(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAccessKey(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedHasKeyboardFocus(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsKeyboardFocusable(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsEnabled(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAutomationId(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedClassName(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedHelpText(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedCulture(__RPC__out int *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsControlElement(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsContentElement(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsPassword(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedNativeWindowHandle(__RPC__deref_out_opt UIA_HWND * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedItemType(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsOffscreen(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedOrientation(__RPC__out enum OrientationType * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedFrameworkId(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsRequiredForForm(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedItemStatus(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedBoundingRectangle(__RPC__out RECT * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedLabeledBy(__RPC__deref_out_opt IUIAutomationElement * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAriaRole(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedAriaProperties(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedIsDataValidForForm(__RPC__out BOOL * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedControllerFor(__RPC__deref_out_opt IUIAutomationElementArray * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedDescribedBy(__RPC__deref_out_opt IUIAutomationElementArray * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedFlowsTo(__RPC__deref_out_opt IUIAutomationElementArray * *retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_CachedProviderDescription(__RPC__deref_out_opt BSTR * retVal) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetClickablePoint(__RPC__out POINT * clickable, __RPC__out BOOL * gotClickable) = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomationElement, 0xd22108aa, 0x8ac5, 0x49a5, 0x83, 0x7b, 0x37, 0xbb, 0xb3, 0xd7, 0x59, 0x1e)
-#endif
-#endif
-
-#ifndef __IUIAutomation_INTERFACE_DEFINED__
-#define __IUIAutomation_INTERFACE_DEFINED__
-DEFINE_GUID(IID_IUIAutomation, 0x30cbe57d, 0xd9d0, 0x452a, 0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee);
-MIDL_INTERFACE("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee")
-IUIAutomation : public IUnknown
-{
-public:
-    virtual HRESULT STDMETHODCALLTYPE CompareElements(__RPC__in_opt IUIAutomationElement * el1, __RPC__in_opt IUIAutomationElement * el2,
-                                                      __RPC__out BOOL * areSame) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CompareRuntimeIds(__RPC__in SAFEARRAY * runtimeId1, __RPC__in SAFEARRAY * runtimeId2,
-                                                        __RPC__out BOOL * areSame) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetRootElement(__RPC__deref_out_opt IUIAutomationElement * *root) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromHandle(__RPC__in UIA_HWND hwnd, __RPC__deref_out_opt IUIAutomationElement * *element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromPoint(POINT pt, __RPC__deref_out_opt IUIAutomationElement * *element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFocusedElement(__RPC__deref_out_opt IUIAutomationElement * *element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetRootElementBuildCache(__RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                               __RPC__deref_out_opt IUIAutomationElement * *root) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromHandleBuildCache(__RPC__in UIA_HWND hwnd, __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                  __RPC__deref_out_opt IUIAutomationElement * *element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromPointBuildCache(POINT pt, __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                 __RPC__deref_out_opt IUIAutomationElement * *element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFocusedElementBuildCache(__RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                  __RPC__deref_out_opt IUIAutomationElement * *element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateTreeWalker(__RPC__in_opt IUIAutomationCondition * pCondition,
-                                                       __RPC__deref_out_opt IUIAutomationTreeWalker * *walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ControlViewWalker(__RPC__deref_out_opt IUIAutomationTreeWalker * *walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ContentViewWalker(__RPC__deref_out_opt IUIAutomationTreeWalker * *walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_RawViewWalker(__RPC__deref_out_opt IUIAutomationTreeWalker * *walker) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_RawViewCondition(__RPC__deref_out_opt IUIAutomationCondition * *condition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ControlViewCondition(__RPC__deref_out_opt IUIAutomationCondition * *condition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ContentViewCondition(__RPC__deref_out_opt IUIAutomationCondition * *condition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateCacheRequest(__RPC__deref_out_opt IUIAutomationCacheRequest * *cacheRequest) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateTrueCondition(__RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateFalseCondition(__RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreatePropertyCondition(PROPERTYID propertyId, VARIANT value,
-                                                              __RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreatePropertyConditionEx(PROPERTYID propertyId, VARIANT value, enum PropertyConditionFlags flags,
-                                                                __RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateAndCondition(__RPC__in_opt IUIAutomationCondition * condition1,
-                                                         __RPC__in_opt IUIAutomationCondition * condition2,
-                                                         __RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateAndConditionFromArray(__RPC__in_opt SAFEARRAY * conditions,
-                                                                  __RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateAndConditionFromNativeArray(__RPC__in_ecount_full(conditionCount) IUIAutomationCondition * *conditions,
-                                                                        int conditionCount,
-                                                                        __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateOrCondition(__RPC__in_opt IUIAutomationCondition * condition1,
-                                                        __RPC__in_opt IUIAutomationCondition * condition2,
-                                                        __RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateOrConditionFromArray(__RPC__in_opt SAFEARRAY * conditions,
-                                                                 __RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateOrConditionFromNativeArray(__RPC__in_ecount_full(conditionCount) IUIAutomationCondition * *conditions,
-                                                                       int conditionCount,
-                                                                       __RPC__deref_out_opt IUIAutomationCondition **newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateNotCondition(__RPC__in_opt IUIAutomationCondition * condition,
-                                                         __RPC__deref_out_opt IUIAutomationCondition * *newCondition) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddAutomationEventHandler(EVENTID eventId, __RPC__in_opt IUIAutomationElement * element, enum TreeScope scope,
-                                                                __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                __RPC__in_opt IUIAutomationEventHandler * handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveAutomationEventHandler(EVENTID eventId, __RPC__in_opt IUIAutomationElement * element,
-                                                                   __RPC__in_opt IUIAutomationEventHandler * handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddPropertyChangedEventHandlerNativeArray(
-        __RPC__in_opt IUIAutomationElement * element, enum TreeScope scope, __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-        __RPC__in_opt IUIAutomationPropertyChangedEventHandler * handler, __RPC__in_ecount_full(propertyCount) PROPERTYID * propertyArray,
-        int propertyCount) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddPropertyChangedEventHandler(
-        __RPC__in_opt IUIAutomationElement * element, enum TreeScope scope, __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-        __RPC__in_opt IUIAutomationPropertyChangedEventHandler * handler, __RPC__in SAFEARRAY * propertyArray) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemovePropertyChangedEventHandler(__RPC__in_opt IUIAutomationElement * element,
-                                                                        __RPC__in_opt IUIAutomationPropertyChangedEventHandler * handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddStructureChangedEventHandler(__RPC__in_opt IUIAutomationElement * element, enum TreeScope scope,
-                                                                      __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                      __RPC__in_opt IUIAutomationStructureChangedEventHandler * handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveStructureChangedEventHandler(__RPC__in_opt IUIAutomationElement * element,
-                                                                         __RPC__in_opt IUIAutomationStructureChangedEventHandler * handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE AddFocusChangedEventHandler(__RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                  __RPC__in_opt IUIAutomationFocusChangedEventHandler * handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveFocusChangedEventHandler(__RPC__in_opt IUIAutomationFocusChangedEventHandler * handler) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RemoveAllEventHandlers() = 0;
-    virtual HRESULT STDMETHODCALLTYPE IntNativeArrayToSafeArray(__RPC__in_ecount_full(arrayCount) int *array, int arrayCount,
-                                                                __RPC__deref_out_opt SAFEARRAY **safeArray) = 0;
-    virtual HRESULT STDMETHODCALLTYPE IntSafeArrayToNativeArray(
-        __RPC__in SAFEARRAY * intArray, __RPC__deref_out_ecount_full_opt(*arrayCount) int **array, __RPC__out int *arrayCount) = 0;
-    virtual HRESULT STDMETHODCALLTYPE RectToVariant(RECT rc, __RPC__out VARIANT * var) = 0;
-    virtual HRESULT STDMETHODCALLTYPE VariantToRect(VARIANT var, __RPC__out RECT * rc) = 0;
-    virtual HRESULT STDMETHODCALLTYPE SafeArrayToRectNativeArray(
-        __RPC__in SAFEARRAY * rects, __RPC__deref_out_ecount_full_opt(*rectArrayCount) RECT * *rectArray, __RPC__out int *rectArrayCount) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CreateProxyFactoryEntry(__RPC__in_opt IUIAutomationProxyFactory * factory,
-                                                              __RPC__deref_out_opt IUIAutomationProxyFactoryEntry * *factoryEntry) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ProxyFactoryMapping(__RPC__deref_out_opt IUIAutomationProxyFactoryMapping * *factoryMapping) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPropertyProgrammaticName(PROPERTYID property, __RPC__deref_out_opt BSTR * name) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPatternProgrammaticName(PATTERNID pattern, __RPC__deref_out_opt BSTR * name) = 0;
-    virtual HRESULT STDMETHODCALLTYPE PollForPotentialSupportedPatterns(__RPC__in_opt IUIAutomationElement * pElement,
-                                                                        __RPC__deref_out_opt SAFEARRAY * *patternIds,
-                                                                        __RPC__deref_out_opt SAFEARRAY * *patternNames) = 0;
-    virtual HRESULT STDMETHODCALLTYPE PollForPotentialSupportedProperties(__RPC__in_opt IUIAutomationElement * pElement,
-                                                                          __RPC__deref_out_opt SAFEARRAY * *propertyIds,
-                                                                          __RPC__deref_out_opt SAFEARRAY * *propertyNames) = 0;
-    virtual HRESULT STDMETHODCALLTYPE CheckNotSupported(VARIANT value, __RPC__out BOOL * isNotSupported) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ReservedNotSupportedValue(__RPC__deref_out_opt IUnknown * *notSupportedValue) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ReservedMixedAttributeValue(__RPC__deref_out_opt IUnknown * *mixedAttributeValue) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromIAccessible(__RPC__in_opt IAccessible * accessible, int childId,
-                                                             __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-    virtual HRESULT STDMETHODCALLTYPE ElementFromIAccessibleBuildCache(__RPC__in_opt IAccessible * accessible, int childId,
-                                                                       __RPC__in_opt IUIAutomationCacheRequest *cacheRequest,
-                                                                       __RPC__deref_out_opt IUIAutomationElement **element) = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomation, 0x30cbe57d, 0xd9d0, 0x452a, 0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee)
-#endif
-#endif
-
-#ifndef __IUIAutomationTreeWalker_INTERFACE_DEFINED__
-#define __IUIAutomationTreeWalker_INTERFACE_DEFINED__
-DEFINE_GUID(IID_IUIAutomationTreeWalker, 0x4042c624, 0x389c, 0x4afc, 0xa6, 0x30, 0x9d, 0xf8, 0x54, 0xa5, 0x41, 0xfc);
-MIDL_INTERFACE("4042c624-389c-4afc-a630-9df854a541fc")
-IUIAutomationTreeWalker : public IUnknown
-{
-public:
-    virtual HRESULT STDMETHODCALLTYPE GetParentElement(__RPC__in_opt IUIAutomationElement * element,
-                                                       __RPC__deref_out_opt IUIAutomationElement * *parent) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFirstChildElement(__RPC__in_opt IUIAutomationElement * element,
-                                                           __RPC__deref_out_opt IUIAutomationElement * *first) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetLastChildElement(__RPC__in_opt IUIAutomationElement * element,
-                                                          __RPC__deref_out_opt IUIAutomationElement * *last) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetNextSiblingElement(__RPC__in_opt IUIAutomationElement * element,
-                                                            __RPC__deref_out_opt IUIAutomationElement * *next) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPreviousSiblingElement(__RPC__in_opt IUIAutomationElement * element,
-                                                                __RPC__deref_out_opt IUIAutomationElement * *previous) = 0;
-    virtual HRESULT STDMETHODCALLTYPE NormalizeElement(__RPC__in_opt IUIAutomationElement * element,
-                                                       __RPC__deref_out_opt IUIAutomationElement * *normalized) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetParentElementBuildCache(__RPC__in_opt IUIAutomationElement * element,
-                                                                 __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                 __RPC__deref_out_opt IUIAutomationElement * *parent) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetFirstChildElementBuildCache(__RPC__in_opt IUIAutomationElement * element,
-                                                                     __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                     __RPC__deref_out_opt IUIAutomationElement * *first) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetLastChildElementBuildCache(__RPC__in_opt IUIAutomationElement * element,
-                                                                    __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                    __RPC__deref_out_opt IUIAutomationElement * *last) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetNextSiblingElementBuildCache(__RPC__in_opt IUIAutomationElement * element,
-                                                                      __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                      __RPC__deref_out_opt IUIAutomationElement * *next) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPreviousSiblingElementBuildCache(__RPC__in_opt IUIAutomationElement * element,
-                                                                          __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                          __RPC__deref_out_opt IUIAutomationElement * *previous) = 0;
-    virtual HRESULT STDMETHODCALLTYPE NormalizeElementBuildCache(__RPC__in_opt IUIAutomationElement * element,
-                                                                 __RPC__in_opt IUIAutomationCacheRequest * cacheRequest,
-                                                                 __RPC__deref_out_opt IUIAutomationElement * *normalized) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_Condition(__RPC__deref_out_opt IUIAutomationCondition * *condition) = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomationTreeWalker, 0x4042c624, 0x389c, 0x4afc, 0xa6, 0x30, 0x9d, 0xf8, 0x54, 0xa5, 0x41, 0xfc)
-#endif
-#endif
-
-DEFINE_GUID(CLSID_CUIAutomation, 0xff48dba4, 0x60ef, 0x4201, 0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e);
-
-#endif
-
-typedef class CUIAutomation CUIAutomation;
-
-#ifndef __IUIAutomationInvokePattern_FWD_DEFINED__
-#define __IUIAutomationInvokePattern_FWD_DEFINED__
-typedef interface IUIAutomationInvokePattern IUIAutomationInvokePattern;
-#ifdef __cplusplus
-interface IUIAutomationInvokePattern;
-#endif /* __cplusplus */
-#endif
-
-#ifndef __IUIAutomationTogglePattern_FWD_DEFINED__
-#define __IUIAutomationTogglePattern_FWD_DEFINED__
-typedef interface IUIAutomationTogglePattern IUIAutomationTogglePattern;
-#ifdef __cplusplus
-interface IUIAutomationTogglePattern;
-#endif /* __cplusplus */
-#endif
-
-#ifndef __IUIAutomationCondition_FWD_DEFINED__
-#define __IUIAutomationCondition_FWD_DEFINED__
-typedef interface IUIAutomationCondition IUIAutomationCondition;
-#ifdef __cplusplus
-interface IUIAutomationCondition;
-#endif /* __cplusplus */
-#endif
-
-/*****************************************************************************
- * IUIAutomationInvokePattern interface
- */
-#ifndef __IUIAutomationInvokePattern_INTERFACE_DEFINED__
-#define __IUIAutomationInvokePattern_INTERFACE_DEFINED__
-
-DEFINE_GUID(IID_IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59);
-#if defined(__cplusplus) && !defined(CINTERFACE)
-MIDL_INTERFACE("fb377fbe-8ea6-46d5-9c73-6499642d3059")
-IUIAutomationInvokePattern : public IUnknown
-{
-    virtual HRESULT STDMETHODCALLTYPE Invoke() = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomationInvokePattern, 0xfb377fbe, 0x8ea6, 0x46d5, 0x9c, 0x73, 0x64, 0x99, 0x64, 0x2d, 0x30, 0x59)
-#endif
-#else
-typedef struct IUIAutomationInvokePatternVtbl
-{
-    BEGIN_INTERFACE
-
-    /*** IUnknown methods ***/
-    HRESULT(STDMETHODCALLTYPE *QueryInterface)
-    (
-        IUIAutomationInvokePattern *This,
-        REFIID riid,
-        void **ppvObject);
-
-    ULONG(STDMETHODCALLTYPE *AddRef)
-    (
-        IUIAutomationInvokePattern *This);
-
-    ULONG(STDMETHODCALLTYPE *Release)
-    (
-        IUIAutomationInvokePattern *This);
-
-    /*** IUIAutomationInvokePattern methods ***/
-    HRESULT(STDMETHODCALLTYPE *Invoke)
-    (
-        IUIAutomationInvokePattern *This);
-
-    END_INTERFACE
-} IUIAutomationInvokePatternVtbl;
-
-interface IUIAutomationInvokePattern
-{
-    CONST_VTBL IUIAutomationInvokePatternVtbl *lpVtbl;
-};
-
-#ifdef COBJMACROS
-#ifndef WIDL_C_INLINE_WRAPPERS
-/*** IUnknown methods ***/
-#define IUIAutomationInvokePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
-#define IUIAutomationInvokePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
-#define IUIAutomationInvokePattern_Release(This) (This)->lpVtbl->Release(This)
-/*** IUIAutomationInvokePattern methods ***/
-#define IUIAutomationInvokePattern_Invoke(This) (This)->lpVtbl->Invoke(This)
-#else
-/*** IUnknown methods ***/
-static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_QueryInterface(IUIAutomationInvokePattern *This, REFIID riid, void **ppvObject)
-{
-    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
-}
-static __WIDL_INLINE ULONG IUIAutomationInvokePattern_AddRef(IUIAutomationInvokePattern *This)
-{
-    return This->lpVtbl->AddRef(This);
-}
-static __WIDL_INLINE ULONG IUIAutomationInvokePattern_Release(IUIAutomationInvokePattern *This)
-{
-    return This->lpVtbl->Release(This);
-}
-/*** IUIAutomationInvokePattern methods ***/
-static __WIDL_INLINE HRESULT IUIAutomationInvokePattern_Invoke(IUIAutomationInvokePattern *This)
-{
-    return This->lpVtbl->Invoke(This);
-}
-#endif
-#endif
-
-#endif
-
-#endif /* __IUIAutomationInvokePattern_INTERFACE_DEFINED__ */
-
-/*****************************************************************************
- * IUIAutomationTogglePattern interface
- */
-#ifndef __IUIAutomationTogglePattern_INTERFACE_DEFINED__
-#define __IUIAutomationTogglePattern_INTERFACE_DEFINED__
-
-DEFINE_GUID(IID_IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70);
-#if defined(__cplusplus) && !defined(CINTERFACE)
-MIDL_INTERFACE("94cf8058-9b8d-4ab9-8bfd-4cd0a33c8c70")
-IUIAutomationTogglePattern : public IUnknown
-{
-    virtual HRESULT STDMETHODCALLTYPE Toggle() = 0;
-
-    virtual HRESULT STDMETHODCALLTYPE get_CurrentToggleState(
-        enum ToggleState * retVal) = 0;
-
-    virtual HRESULT STDMETHODCALLTYPE get_CachedToggleState(
-        enum ToggleState * retVal) = 0;
-};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomationTogglePattern, 0x94cf8058, 0x9b8d, 0x4ab9, 0x8b, 0xfd, 0x4c, 0xd0, 0xa3, 0x3c, 0x8c, 0x70)
-#endif
-#else
-typedef struct IUIAutomationTogglePatternVtbl
-{
-    BEGIN_INTERFACE
-
-    /*** IUnknown methods ***/
-    HRESULT(STDMETHODCALLTYPE *QueryInterface)
-    (
-        IUIAutomationTogglePattern *This,
-        REFIID riid,
-        void **ppvObject);
-
-    ULONG(STDMETHODCALLTYPE *AddRef)
-    (
-        IUIAutomationTogglePattern *This);
-
-    ULONG(STDMETHODCALLTYPE *Release)
-    (
-        IUIAutomationTogglePattern *This);
-
-    /*** IUIAutomationTogglePattern methods ***/
-    HRESULT(STDMETHODCALLTYPE *Toggle)
-    (
-        IUIAutomationTogglePattern *This);
-
-    HRESULT(STDMETHODCALLTYPE *get_CurrentToggleState)
-    (
-        IUIAutomationTogglePattern *This,
-        enum ToggleState *retVal);
-
-    HRESULT(STDMETHODCALLTYPE *get_CachedToggleState)
-    (
-        IUIAutomationTogglePattern *This,
-        enum ToggleState *retVal);
-
-    END_INTERFACE
-} IUIAutomationTogglePatternVtbl;
-
-interface IUIAutomationTogglePattern
-{
-    CONST_VTBL IUIAutomationTogglePatternVtbl *lpVtbl;
-};
-
-#ifdef COBJMACROS
-#ifndef WIDL_C_INLINE_WRAPPERS
-/*** IUnknown methods ***/
-#define IUIAutomationTogglePattern_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
-#define IUIAutomationTogglePattern_AddRef(This) (This)->lpVtbl->AddRef(This)
-#define IUIAutomationTogglePattern_Release(This) (This)->lpVtbl->Release(This)
-/*** IUIAutomationTogglePattern methods ***/
-#define IUIAutomationTogglePattern_Toggle(This) (This)->lpVtbl->Toggle(This)
-#define IUIAutomationTogglePattern_get_CurrentToggleState(This, retVal) (This)->lpVtbl->get_CurrentToggleState(This, retVal)
-#define IUIAutomationTogglePattern_get_CachedToggleState(This, retVal) (This)->lpVtbl->get_CachedToggleState(This, retVal)
-#else
-/*** IUnknown methods ***/
-static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_QueryInterface(IUIAutomationTogglePattern *This, REFIID riid, void **ppvObject)
-{
-    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
-}
-static __WIDL_INLINE ULONG IUIAutomationTogglePattern_AddRef(IUIAutomationTogglePattern *This)
-{
-    return This->lpVtbl->AddRef(This);
-}
-static __WIDL_INLINE ULONG IUIAutomationTogglePattern_Release(IUIAutomationTogglePattern *This)
-{
-    return This->lpVtbl->Release(This);
-}
-/*** IUIAutomationTogglePattern methods ***/
-static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_Toggle(IUIAutomationTogglePattern *This)
-{
-    return This->lpVtbl->Toggle(This);
-}
-static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CurrentToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
-{
-    return This->lpVtbl->get_CurrentToggleState(This, retVal);
-}
-static __WIDL_INLINE HRESULT IUIAutomationTogglePattern_get_CachedToggleState(IUIAutomationTogglePattern *This, enum ToggleState *retVal)
-{
-    return This->lpVtbl->get_CachedToggleState(This, retVal);
-}
-#endif
-#endif
-
-#endif
-
-#endif /* __IUIAutomationTogglePattern_INTERFACE_DEFINED__ */
-
-/*****************************************************************************
- * IUIAutomationCondition interface
- */
-#ifndef __IUIAutomationCondition_INTERFACE_DEFINED__
-#define __IUIAutomationCondition_INTERFACE_DEFINED__
-
-DEFINE_GUID(IID_IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9);
-#if defined(__cplusplus) && !defined(CINTERFACE)
-MIDL_INTERFACE("352ffba8-0973-437c-a61f-f64cafd81df9")
-IUIAutomationCondition : public IUnknown{};
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(IUIAutomationCondition, 0x352ffba8, 0x0973, 0x437c, 0xa6, 0x1f, 0xf6, 0x4c, 0xaf, 0xd8, 0x1d, 0xf9)
-#endif
-#else
-typedef struct IUIAutomationConditionVtbl
-{
-    BEGIN_INTERFACE
-
-    /*** IUnknown methods ***/
-    HRESULT(STDMETHODCALLTYPE *QueryInterface)
-    (
-        IUIAutomationCondition *This,
-        REFIID riid,
-        void **ppvObject);
-
-    ULONG(STDMETHODCALLTYPE *AddRef)
-    (
-        IUIAutomationCondition *This);
-
-    ULONG(STDMETHODCALLTYPE *Release)
-    (
-        IUIAutomationCondition *This);
-
-    END_INTERFACE
-} IUIAutomationConditionVtbl;
-
-interface IUIAutomationCondition
-{
-    CONST_VTBL IUIAutomationConditionVtbl *lpVtbl;
-};
-
-#ifdef COBJMACROS
-#ifndef WIDL_C_INLINE_WRAPPERS
-/*** IUnknown methods ***/
-#define IUIAutomationCondition_QueryInterface(This, riid, ppvObject) (This)->lpVtbl->QueryInterface(This, riid, ppvObject)
-#define IUIAutomationCondition_AddRef(This) (This)->lpVtbl->AddRef(This)
-#define IUIAutomationCondition_Release(This) (This)->lpVtbl->Release(This)
-#else
-/*** IUnknown methods ***/
-static __WIDL_INLINE HRESULT IUIAutomationCondition_QueryInterface(IUIAutomationCondition *This, REFIID riid, void **ppvObject)
-{
-    return This->lpVtbl->QueryInterface(This, riid, ppvObject);
-}
-static __WIDL_INLINE ULONG IUIAutomationCondition_AddRef(IUIAutomationCondition *This)
-{
-    return This->lpVtbl->AddRef(This);
-}
-static __WIDL_INLINE ULONG IUIAutomationCondition_Release(IUIAutomationCondition *This)
-{
-    return This->lpVtbl->Release(This);
-}
-#endif
-#endif
-
-#endif
-
-#endif /* __IUIAutomationCondition_INTERFACE_DEFINED__ */
-
-#pragma endregion
-
-#endif
 
 // =====================================================================
 
@@ -1176,6 +426,7 @@ struct TriggerAction
 static struct
 {
     bool oldTaskbarOnWin11;
+    bool eagerTriggerEvaluation;
     std::vector<TriggerAction> triggerActions;
 } g_settings;
 
@@ -1260,6 +511,7 @@ public:
             LOG(L"COM de-initialized");
             m_isCOMInitialized = false;
         }
+        m_isInitialized = false;
     }
 
     bool IsInitialized() { return m_isInitialized; }
@@ -1326,9 +578,11 @@ static bool g_inputSiteProcHooked = false;
 
 static HWND g_hTaskbarWnd;
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
-
-static constexpr DWORD kInjectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static bool g_isContextMenuSuppressed = false;
+static DWORD g_contextMenuSuppressionTimestamp = 0;
+
+static const int g_mouseClickTimeoutMs = 200;       // time to wait since the last time an action was executed
+static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
 
@@ -1605,6 +859,9 @@ bool IsKeyPressed(int vkCode);
 bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks);
 void SynthesizeTaskbarRightClick(POINT ptScreen);
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
+std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks);
+bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks);
+std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button = MouseClick::Button::INVALID);
 bool OnMouseClick(MouseClick click);
 bool GetTaskbarAutohideState();
 void SetTaskbarAutohide(bool enabled);
@@ -1616,6 +873,7 @@ void SendWinTabKeypress();
 bool ClickStartMenu();
 void OpenStartMenu();
 void OpenTaskManager(HWND taskbarhWnd);
+BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator);
 void ToggleVolMuted();
 void HideIcons();
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
@@ -1802,7 +1060,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         (isLeftButton || isRightButton || isMiddleButton))
     {
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if (extraInfo != kInjectedClickID)
+        if (extraInfo != g_injectedClickID)
         {
             // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
             if (!g_comAPI.IsInitialized())
@@ -1811,7 +1069,14 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
             }
 
             MouseClick::Button button = isLeftButton ? MouseClick::Button::LEFT : (isRightButton ? MouseClick::Button::RIGHT : MouseClick::Button::MIDDLE);
-            OnMouseClick(MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd));
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
+            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
+                ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
+            {
+                g_isContextMenuSuppressed = true;
+            }
+
+            OnMouseClick(lastClick);
         }
         else
         {
@@ -1823,15 +1088,17 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
              (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
              (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
     {
-        const auto &lastClick = g_mouseClickQueue[-1];
+        const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if ((extraInfo != kInjectedClickID) && lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000;  // reset context menu suppression after 1 second
+        if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
+            (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
         {
-            if (ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
-            {
-                g_isContextMenuSuppressed = true;
-                suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
-            }
+            suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
+        }
+        else
+        {
+            g_isContextMenuSuppressed = false;
         }
     }
 
@@ -1892,7 +1159,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
             {
                 LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-                if (extraInfo == kInjectedClickID)
+                if (extraInfo == g_injectedClickID)
                 {
                     LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
                     break;
@@ -2508,6 +1775,7 @@ void LoadSettings()
     }
 
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+    g_settings.eagerTriggerEvaluation = Wh_GetIntSetting(L"eagerTriggerEvaluation");
 }
 
 /**
@@ -2853,6 +2121,37 @@ void OpenTaskManager(HWND taskbarhWnd)
     }
 }
 
+BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator)
+{
+    // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
+    const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+
+    BOOL isMuted = FALSE;
+    com_ptr<IMMDevice> defaultAudioDevice;
+    if (SUCCEEDED(pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
+    {
+        // get handle to the default audio endpoint volume control
+        com_ptr<IAudioEndpointVolume> endpointVolume;
+        if (SUCCEEDED(defaultAudioDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
+        {
+            if (FAILED(endpointVolume->GetMute(&isMuted)))
+            {
+                LOG_ERROR(L"Failed to volume mute status!");
+            }
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to get default audio endpoint volume handle!");
+        }
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to get default audio endpoint!");
+    }
+
+    return isMuted;
+}
+
 void ToggleVolMuted()
 {
     LOG_TRACE();
@@ -2865,30 +2164,50 @@ void ToggleVolMuted()
     }
     LOG_INFO(L"Toggling volume mute");
 
-    com_ptr<IMMDevice> defaultAudioDevice;
-    if (SUCCEEDED(pDeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, defaultAudioDevice.put())))
-    {
-        // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
-        const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+    // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
+    const GUID XIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
-        // get handle to the audio endpoint volume control
-        com_ptr<IAudioEndpointVolume> endpointVolume;
-        if (SUCCEEDED(defaultAudioDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
+    const BOOL isMuted = IsAudioMuted(pDeviceEnumerator);
+
+    // Get all audio render (playback) devices
+    com_ptr<IMMDeviceCollection> pDeviceCollection;
+    if (FAILED(pDeviceEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, pDeviceCollection.put())))
+    {
+        LOG_ERROR(L"Failed to enumerate audio endpoints!");
+        return;
+    }
+
+    UINT deviceCount = 0;
+    if (FAILED(pDeviceCollection->GetCount(&deviceCount)))
+    {
+        LOG_ERROR(L"Failed to get device count!");
+        return;
+    }
+    LOG_DEBUG(L"Found %u active audio device(s)", deviceCount);
+
+    // Apply the target mute state to all devices
+    for (UINT i = 0; i < deviceCount; i++)
+    {
+        com_ptr<IMMDevice> pDevice;
+        if (SUCCEEDED(pDeviceCollection->Item(i, pDevice.put())))
         {
-            BOOL isMuted = FALSE;
-            if (FAILED(endpointVolume->GetMute(&isMuted)) || FAILED(endpointVolume->SetMute(!isMuted, NULL)))
+            com_ptr<IAudioEndpointVolume> endpointVolume;
+            if (SUCCEEDED(pDevice->Activate(XIID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, endpointVolume.put_void())))
             {
-                LOG_ERROR(L"Failed to toggle volume mute - failed to get and set mute state!");
+                if (FAILED(endpointVolume->SetMute(!isMuted, NULL)))
+                {
+                    LOG_ERROR(L"Failed to set mute state for device %u!", i);
+                }
+            }
+            else
+            {
+                LOG_ERROR(L"Failed to get audio endpoint volume handle for device %u!", i);
             }
         }
         else
         {
-            LOG_ERROR(L"Failed to toggle volume mute - failed to get audio endpoint volume handle!");
+            LOG_ERROR(L"Failed to get device %u from collection!", i);
         }
-    }
-    else
-    {
-        LOG_ERROR(L"Failed to toggle volume mute - failed to get default audio endpoint!");
     }
 }
 
@@ -3106,6 +2425,7 @@ bool ShallSuppressContextMenu(const MouseClick &lastClick)
             if (lastClick.keyModifiersState == triggerAction.expectedKeyModifiersState)
             {
                 LOG_DEBUG("Suppressing right click to suppress context menu");
+                g_contextMenuSuppressionTimestamp = GetTickCount();
                 return true;
             }
         }
@@ -3239,11 +2559,11 @@ void SynthesizeTaskbarRightClick(POINT ptScreen)
     INPUT input[2] = {};
     input[0].type = INPUT_MOUSE;
     input[0].mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
-    input[0].mi.dwExtraInfo = kInjectedClickID; // to identify our synthesized click
+    input[0].mi.dwExtraInfo = g_injectedClickID; // to identify our synthesized click
 
     input[1].type = INPUT_MOUSE;
     input[1].mi.dwFlags = MOUSEEVENTF_RIGHTUP;
-    input[1].mi.dwExtraInfo = kInjectedClickID;
+    input[1].mi.dwExtraInfo = g_injectedClickID;
 
     if (SendInput(2, input, sizeof(INPUT)) != 2)
     {
@@ -3259,89 +2579,82 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     }
     gMouseClickTimer = 0;
 
-    bool wasActionExecuted = false;
     const POINT lastMousePos = g_mouseClickQueue[-1].position; // store since the queue will be cleared
 
-    // mouse left button clicks
-    if (IsMultiClick(MouseClick::Button::LEFT))
+    bool wasActionExecuted = false;
+    const auto actionExecutor = GetTaskbarActionExecutor(false /* do not check for existing higher-click-count triggers */);
+    if (actionExecutor)
     {
-        // ignore quadruple and more clicks
-    }
-    else if (IsTripleClick(MouseClick::Button::LEFT))
-    {
-        (void)ExecuteTaskbarAction(L"leftTriple", 3);
-    }
-    else if (IsDoubleClick(MouseClick::Button::LEFT))
-    {
-        (void)ExecuteTaskbarAction(L"leftDouble", 2);
-    }
-    else if (IsSingleClick(MouseClick::Button::LEFT))
-    {
-        (void)ExecuteTaskbarAction(L"left", 1);
+        wasActionExecuted = actionExecutor(); // execute taskbar action
     }
 
-    // mouse right button clicks
-    else if (IsMultiClick(MouseClick::Button::RIGHT))
+    if (g_isContextMenuSuppressed && !wasActionExecuted) // action not executed, so we need to synthesize right-click to show context menu
     {
-        // ignore quadruple and more clicks
+        SynthesizeTaskbarRightClick(lastMousePos);
     }
-    else if (IsTripleClick(MouseClick::Button::RIGHT))
-    {
-        wasActionExecuted = ExecuteTaskbarAction(L"rightTriple", 3);
-    }
-    else if (IsDoubleClick(MouseClick::Button::RIGHT))
-    {
-        wasActionExecuted = ExecuteTaskbarAction(L"rightDouble", 2);
-    }
-    else if (IsSingleClick(MouseClick::Button::RIGHT))
-    {
-        wasActionExecuted = ExecuteTaskbarAction(L"right", 1);
-    }
+    g_isContextMenuSuppressed = false;
+}
 
-    // mouse middle button clicks
-    else if (IsMultiClick(MouseClick::Button::MIDDLE))
+std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button)
+{
+    std::wstring mouseTriggerName;
+    if (clickType == MouseClick::Type::MOUSE)
     {
-        // ignore quadruple and more clicks
-    }
-    else if (IsTripleClick(MouseClick::Button::MIDDLE))
-    {
-        (void)ExecuteTaskbarAction(L"middleTriple", 3);
-    }
-    else if (IsDoubleClick(MouseClick::Button::MIDDLE))
-    {
-        (void)ExecuteTaskbarAction(L"middleDouble", 2);
-    }
-    else if (IsSingleClick(MouseClick::Button::MIDDLE))
-    {
-        (void)ExecuteTaskbarAction(L"middle", 1);
-    }
-
-    // touchscreen tap
-    else if (IsMultiTap())
-    {
-        // ignore quadruple and more taps
-    }
-    else if (IsTripleTap())
-    {
-        (void)ExecuteTaskbarAction(L"tapTriple", 3);
-    }
-    else if (IsDoubleTap())
-    {
-        (void)ExecuteTaskbarAction(L"tapDouble", 2);
-    }
-    else if (IsSingleTap())
-    {
-        (void)ExecuteTaskbarAction(L"tapSingle", 1);
-    }
-
-    if (g_isContextMenuSuppressed)
-    {
-        if (!wasActionExecuted)
+        if (button == MouseClick::Button::LEFT)
         {
-            SynthesizeTaskbarRightClick(lastMousePos);
+            mouseTriggerName = L"left";
         }
-        g_isContextMenuSuppressed = false;
+        else if (button == MouseClick::Button::RIGHT)
+        {
+            mouseTriggerName = L"right";
+        }
+        else if (button == MouseClick::Button::MIDDLE)
+        {
+            mouseTriggerName = L"middle";
+        }
+        if (numClicks == 3)
+        {
+            mouseTriggerName += L"Triple";
+        }
+        else if (numClicks == 2)
+        {
+            mouseTriggerName += L"Double";
+        }
     }
+    else if (clickType == MouseClick::Type::TOUCH)
+    {
+        mouseTriggerName = L"tap";
+        if (numClicks == 3)
+        {
+            mouseTriggerName += L"Triple";
+        }
+        else if (numClicks == 2)
+        {
+            mouseTriggerName += L"Double";
+        }
+        else if (numClicks == 1)
+        {
+            mouseTriggerName += L"Single";
+        }
+    }
+    return mouseTriggerName;
+}
+
+bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks)
+{
+    for (const auto &triggerAction : g_settings.triggerActions)
+    {
+        if ((triggerAction.mouseTriggerName == mouseTriggerName) && triggerAction.actionExecutor)
+        {
+            bool allModifiersPressed = true;
+            for (int i = 1; i <= numClicks; i++)
+            {
+                allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
+            }
+            return allModifiersPressed;
+        }
+    }
+    return false;
 }
 
 bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks)
@@ -3370,6 +2683,7 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
                 {
                     LOG_INFO(L"Executing action: %s", triggerAction.actionName.c_str());
                     triggerAction.actionExecutor(hWnd);
+                    g_mouseClickQueue.clear();
                     wasActionExecuted = true;
                 }
                 else
@@ -3383,8 +2697,76 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
             }
         }
     }
-    g_mouseClickQueue.clear();
     return wasActionExecuted;
+}
+
+std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks)
+{
+    const auto isHigherOrderClickDefined = [&](const MouseClick::Type clickType, const int currentCount, const MouseClick::Button button)
+    {
+        for (int higherCount = currentCount + 1; higherCount <= 3; higherCount++)
+        {
+            if (isTriggerDefined(GetActionName(clickType, higherCount, button), higherCount))
+            {
+                LOG_DEBUG(L"Higher order click action defined for %s, skipping lower order click",
+                          GetActionName(MouseClick::Type::MOUSE, higherCount, button).c_str());
+                return true; // higher order click action defined, skip this one
+            }
+        }
+        return false;
+    };
+
+    // mouse clicks
+    const MouseClick::Button mouseButtons[] = {MouseClick::Button::LEFT, MouseClick::Button::RIGHT, MouseClick::Button::MIDDLE};
+    const std::function<bool(MouseClick::Button)> mouseChecks[] = {IsTripleClick, static_cast<bool (*)(MouseClick::Button)>(IsDoubleClick), IsSingleClick};
+    for (const auto &button : mouseButtons)
+    {
+        if (IsMultiClick(button))
+        {
+            return nullptr; // ignore quadruple and more clicks
+        }
+
+        int clickCount = 3;
+        for (const auto &checkFunc : mouseChecks)
+        {
+            if (checkFunc(button)) // is there a trigger matching the click pattern ?
+            {
+                if (checkForHigherOrderClicks && isHigherOrderClickDefined(MouseClick::Type::MOUSE, clickCount, button))
+                {
+                    return nullptr; // current click count match a trigger, but trigger with the higher click count is defined so skip this one
+                }
+                return [button, clickCount]()
+                {
+                    return ExecuteTaskbarAction(GetActionName(MouseClick::Type::MOUSE, clickCount, button), clickCount);
+                };
+            }
+            clickCount--;
+        }
+    }
+
+    // touch taps
+    if (IsMultiTap())
+    {
+        return nullptr; // ignore quadruple and more taps
+    }
+    int clickCount = 3;
+    const std::function<bool()> touchChecks[] = {IsTripleTap, static_cast<bool (*)()>(IsDoubleTap), IsSingleTap};
+    for (const auto &checkFunc : touchChecks)
+    {
+        if (checkFunc())
+        {
+            if (checkForHigherOrderClicks && isHigherOrderClickDefined(MouseClick::Type::TOUCH, clickCount, MouseClick::Button::INVALID))
+            {
+                return nullptr; // current click count match a trigger, but trigger with the higher click count is defined so skip this one
+            }
+            return [clickCount]()
+            {
+                return ExecuteTaskbarAction(GetActionName(MouseClick::Type::TOUCH, clickCount), clickCount);
+            };
+        }
+        clickCount--;
+    }
+    return nullptr;
 }
 
 // main body of the mod called every time a taskbar is clicked
@@ -3408,8 +2790,25 @@ bool OnMouseClick(MouseClick click)
     }
 
     g_mouseClickQueue.push_back(click);
-    gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessDelayedMouseClick);
-
+    if (g_settings.eagerTriggerEvaluation)
+    {
+        const auto actionExecutor = GetTaskbarActionExecutor(true /* check for existing higher-click-count triggers */);
+        if (actionExecutor)
+        {
+            LOG_DEBUG(L"Eagerly executing taskbar action for current click sequence");
+            actionExecutor(); // execute taskbar action
+        }
+        else
+        {
+            // start timer to wait for possible next click
+            gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessDelayedMouseClick);
+        }
+    }
+    else
+    {
+        // start timer to wait for possible next click
+        gMouseClickTimer = SetTimer(NULL, 0, GetDoubleClickTime(), ProcessDelayedMouseClick);
+    }
     return true;
 }
 
