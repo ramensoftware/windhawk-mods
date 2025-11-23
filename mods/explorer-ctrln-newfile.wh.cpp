@@ -87,15 +87,21 @@ static bool IsExplorerTopLevel(HWND hwnd) {
     return wcscmp(cls, L"CabinetWClass") == 0 || wcscmp(cls, L"ExploreWClass") == 0;
 }
 
+static bool IsCurrentProcessWindow(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    return pid == GetCurrentProcessId();
+}
+
 static HWND HitTestExplorerByCursor() {
     POINT pt;
     GetCursorPos(&pt);
     HWND h = WindowFromPoint(pt);
     if (!h) return nullptr;
     HWND root = GetAncestor(h, GA_ROOT);
-    if (IsExplorerTopLevel(root)) return root;
+    if (IsExplorerTopLevel(root) && IsCurrentProcessWindow(root)) return root;
     for (HWND cur = h; cur; cur = GetParent(cur)) {
-        if (IsExplorerTopLevel(cur)) return cur;
+        if (IsExplorerTopLevel(cur) && IsCurrentProcessWindow(cur)) return cur;
     }
     return nullptr;
 }
@@ -103,8 +109,9 @@ static HWND HitTestExplorerByCursor() {
 static HWND GetTargetExplorerHWND() {
     if (HWND h = HitTestExplorerByCursor()) return h;
     HWND fg = GetForegroundWindow();
-    if (IsExplorerTopLevel(fg)) return fg;
-    if (HWND shell = GetShellWindow()) return shell;  // desktop fallback
+    if (IsExplorerTopLevel(fg) && IsCurrentProcessWindow(fg)) return fg;
+    HWND shell = GetShellWindow();
+    if (shell && IsCurrentProcessWindow(shell)) return shell;  // desktop fallback
     return nullptr;
 }
 
@@ -295,10 +302,20 @@ static void PerformNewFileAction() {
         return;
     }
 
+    const bool isShellWindow = target == GetShellWindow();
+
     std::wstring dir;
-    if (!GetExplorerPathFromHWND(target, dir) || dir.empty()) dir = GetDesktopDir();
+    if (!GetExplorerPathFromHWND(target, dir) || dir.empty()) {
+        if (isShellWindow) dir = GetDesktopDir();
+    }
     if (dir.empty()) {
         Wh_Log(L"[Ctrln] Failed to resolve folder path.");
+        return;
+    }
+
+    DWORD dirAttrs = GetFileAttributesW(dir.c_str());
+    if (dirAttrs == INVALID_FILE_ATTRIBUTES || !(dirAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        Wh_Log(L"[Ctrln] Unsupported target path: %ls", dir.c_str());
         return;
     }
     while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/')) dir.pop_back();
@@ -408,7 +425,10 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode, WPARAM wParam, LPARAM lPara
             const bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
             if (ctrl && !shift) {
                 HWND fg = GetForegroundWindow();
-                if (IsExplorerTopLevel(fg) || fg == GetShellWindow()) {
+                DWORD fgPid = 0;
+                if (fg) GetWindowThreadProcessId(fg, &fgPid);
+                if (fg && (IsExplorerTopLevel(fg) || fg == GetShellWindow()) &&
+                    fgPid == GetCurrentProcessId()) {
                     g_nKeyDown = true;
                     PostThreadMessageW(g_hookThreadId, WM_APP + 1, 0, 0);
                     return 1;  // swallow Ctrl+N
