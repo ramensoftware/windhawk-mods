@@ -14,6 +14,8 @@ from functools import cache
 from pathlib import Path
 from typing import Optional, TextIO, Tuple
 
+from extract_mod_symbols import get_mod_symbols
+
 DISALLOWED_AUTHORS = [
     # https://github.com/ramensoftware/windhawk-mods/pull/676
     'arukateru',
@@ -29,6 +31,9 @@ VERIFIED_TWITTER_ACCOUNTS = {
     'https://github.com/TorutheRedFox': 'TorutheRedFox',
     'https://github.com/u3l6': 'u_3l6',
     'https://github.com/Ingan121': 'Ingan121',
+    'https://github.com/Amrsatrio': 'amrsatrio',
+    'https://github.com/bcrtvkcs': 'bcrtvkcs',
+    'https://github.com/ItsTauTvyDas': 'ItsTauTvyDas',
 }
 
 MOD_METADATA_PARAMS = {
@@ -151,6 +156,10 @@ def validate_metadata(path: Path, expected_author: str):
     with path.open(encoding='utf-8') as file:
         properties, warnings = get_mod_file_metadata(path, file)
 
+    # Print properties with Zero Width Non-Joiner (ZWNJ) to prevent GitHub from
+    # tagging users.
+    at = '@\u200c'
+
     github = None
 
     key = ('github', None)
@@ -159,11 +168,11 @@ def validate_metadata(path: Path, expected_author: str):
         github = value
         expected = f'https://github.com/{expected_author}'
         if value != expected and value.lower() == expected.lower():
-            warning_msg = f'Expected {key[0]} to be "{expected}" (case-sensitive)'
+            warning_msg = f'Expected {at}{key[0]} to be "{expected}" (case-sensitive)'
             warnings += add_warning(path, line_number, warning_msg)
         elif value != expected:
             warning_msg = (
-                f'Expected {key[0]} to be "{expected}".\n'
+                f'Expected {at}{key[0]} to be "{expected}".\n'
                 'Note that only the original author of the mod is allowed to submit'
                 ' updates.\n'
                 'If you are not the original author, you might want to contact them to'
@@ -173,7 +182,7 @@ def validate_metadata(path: Path, expected_author: str):
             )
             warnings += add_warning(path, line_number, warning_msg)
     else:
-        warnings += add_warning(path, 1, f'Missing {key[0]}')
+        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
     key = ('id', None)
     if key in properties:
@@ -181,22 +190,24 @@ def validate_metadata(path: Path, expected_author: str):
         expected = path.name.removesuffix('.cpp').removesuffix('.wh')
         if value != expected:
             warnings += add_warning(
-                path, line_number, f'Expected {key[0]} to be "{expected}"'
+                path,
+                line_number,
+                f'Expected {at}{key[0]} ({value}) to match the file name ({expected})',
             )
 
         if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', value):
             warnings += add_warning(
                 path,
                 line_number,
-                f'{key[0]} must contain only letters, numbers and dashes',
+                f'{at}{key[0]} must contain only letters, numbers and dashes',
             )
 
         if len(value) < 8 or len(value) > 50:
             warnings += add_warning(
-                path, line_number, f'{key[0]} must be between 8 and 50 characters'
+                path, line_number, f'{at}{key[0]} must be between 8 and 50 characters'
             )
     else:
-        warnings += add_warning(path, 1, f'Missing {key[0]}')
+        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
     key = ('version', None)
     if key in properties:
@@ -205,11 +216,11 @@ def validate_metadata(path: Path, expected_author: str):
             warnings += add_warning(
                 path,
                 line_number,
-                f'{key[0]} must contain only numbers and dots, and optionally a'
+                f'{at}{key[0]} must contain only numbers and dots, and optionally a'
                 ' prerelease suffix (e.g. 1.2.3-beta)',
             )
     else:
-        warnings += add_warning(path, 1, f'Missing {key[0]}')
+        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
     key = ('twitter', None)
     if key in properties:
@@ -219,7 +230,7 @@ def validate_metadata(path: Path, expected_author: str):
             r'https://(twitter|x)\.com/' + re.escape(expected), value
         ):
             warnings += add_warning(
-                path, line_number, f'{key[0]} requires manual verification'
+                path, line_number, f'{at}{key[0]} requires manual verification'
             )
 
     key = ('homepage', None)
@@ -227,7 +238,9 @@ def validate_metadata(path: Path, expected_author: str):
         value, line_number = properties[key]
         if not re.match(r'https?://', value):
             warnings += add_warning(
-                path, line_number, f'{key[0]} must start with "http://" or "https://"'
+                path,
+                line_number,
+                f'{at}{key[0]} must start with "http://" or "https://"',
             )
 
     key = ('compilerOptions', None)
@@ -235,16 +248,16 @@ def validate_metadata(path: Path, expected_author: str):
         value, line_number = properties[key]
         if not re.fullmatch(r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', value + ' '):
             warnings += add_warning(
-                path, line_number, f'{key[0]} require manual verification'
+                path, line_number, f'{at}{key[0]} require manual verification'
             )
 
     key = ('name', None)
     if key not in properties:
-        warnings += add_warning(path, 1, f'Missing {key[0]}')
+        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
     key = ('author', None)
     if key not in properties:
-        warnings += add_warning(path, 1, f'Missing {key[0]}')
+        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
     key = ('architecture', None)
     if key in properties:
@@ -265,7 +278,7 @@ def validate_metadata(path: Path, expected_author: str):
                 )
 
     # Validate that this file has the required extensions
-    if ''.join(path.suffixes) != '.wh.cpp':
+    if not path.name.endswith('.wh.cpp'):
         warnings += add_warning(path, 1, 'Filename should end with .wh.cpp')
 
     # Validate file path
@@ -372,14 +385,6 @@ def validate_symbol_hooks(path: Path):
     return warnings
 
 
-def parse_file(path: Path, expected_author: str):
-    print(f'Checking {path=}')
-
-    warnings = validate_metadata(path, expected_author)
-    warnings += validate_symbol_hooks(path)
-    return warnings
-
-
 def main():
     print('Validating PR...')
 
@@ -406,7 +411,21 @@ def main():
         )
 
     for path in paths:
-        warnings += parse_file(path, pr_author)
+        print(f'Checking {path=}')
+
+        path_warnings = validate_metadata(path, pr_author)
+        path_warnings += validate_symbol_hooks(path)
+        warnings += path_warnings
+
+        if path_warnings == 0:
+            try:
+                mod_symbols = get_mod_symbols(path, [])
+                print('Extracted symbols:\n' + json.dumps(mod_symbols, indent=2))
+            except Exception as e:
+                print(f'Symbol extraction error: {e}')
+                warnings += add_warning(
+                    path, 1, 'Failed to extract symbols, manual inspection required'
+                )
 
     if warnings > 0:
         sys.exit(f'Got {warnings} warnings, please inspect the PR')

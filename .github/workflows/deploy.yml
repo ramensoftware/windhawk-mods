@@ -16,18 +16,24 @@ concurrency:
   group: deploy-static-content
   cancel-in-progress: true
 
+env:
+  PYTHONUTF8: '1'
+
 jobs:
   run:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+          cache-dependency-path: '.github/requirements.txt'
+      - name: Install Python dependencies
+        run: python -m pip install -r .github/requirements.txt
       - name: Clone last deployed content
         run: |
           git clone --branch pages --single-branch --depth 1 https://github.com/ramensoftware/windhawk-mods.git "${{ runner.temp }}/last_deploy"
@@ -56,6 +62,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WINDHAWK_MODS_LAST_DEPLOY_PATH: ${{ runner.temp }}\last_deploy
           WINDHAWK_PATH: ${{ runner.temp }}\windhawk
+      - name: Archive mod images
+        run: |
+          # Copy last deployed images.
+          cp -R "${{ runner.temp }}/last_deploy/images" images
+          # Archive new images.
+          python scripts/archive_mod_images.py
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         with:

@@ -2,14 +2,14 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.2
+// @version         1.5
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
-// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32
+// @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32 -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,6 +20,7 @@
 * Only works on apps using native CEF top-level windows
     * Steam uses SDL for its top-level windows (except DevTools), so this mod doesn't work with Steam
 * Electron apps are NOT supported! Just patch asar to override `frame: false` to true in BrowserWindow creation
+* Try my [Titlebar for Everyone](https://windhawk.net/mods/titlebar-for-everyone) mod for other apps
 ## Features for Spotify
 * Enable native frames and title bars on the main window
 * Enable native frames and title bars on other windows, including Miniplayer, DevTools, etc.
@@ -30,15 +31,16 @@
 * Enable transparent rendering to make the transparent parts of the web content transparent
 * Disable forced dark mode to prevent Spotify from forcing dark mode on the CEF UI & web contents
 * Force enable Chrome extension support
+* Block automatic updates
 * Use the settings tab on the mod details page to configure the features
 ## Notes
-* Supported CEF versions: 90.4 to 134
+* Supported CEF versions: 90.4 to 140
     * This mod won't work with versions before 90.4
     * Versions after 132 may work, but are not tested
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.65 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.75 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -111,16 +113,21 @@
     Chrome runtime is required for this to work"
   $description:ko-KR: "개발자 도구 상태에 관계 없이 항상 크롬 확장 프로그램 지원을 활성화합니다\n
     이 기능은 Chrome 런타임이 필요합니다"
+- blockupdates: false
+  $name: Block automatic updates*
+  $name:ko-KR: 자동 업데이트 차단*
+  $description: Prevents Spotify from updating itself. This has the same effect as "spicetify spotify-updates block".
+  $description:ko-KR: Spotify가 스스로 업데이트하는 것을 방지합니다. "spicetify spotify-updates block"과 효과가 같습니다.
 - playbackspeed: "1"
   $name: Playback speed
   $name:ko-KR: 재생 속도
   $description: "Enter a decimal number. Value 1.0 represents a normal speed\n
-    Requires an x64 version of the Spotify client newer than 1.2.36\n
+    Requires an x64 version of the Spotify client between 1.2.36 and 1.2.66\n
     Spotify 1.2.36-1.2.44: The change will take effect from the next track\n
     Spotify 1.2.45+: The change will be applied immediately\n
     This feature is not available while playing on another device"
   $description:ko-KR: "소수 값을 입력하세요. 1.0이 보통 재생 속도입니다\n
-    이 기능은 1.2.36 버전 이상의 x64 Spotify 클라이언트가 필요합니다\n
+    이 기능은 1.2.36과 1.2.66 사이 버전의 x64 Spotify 클라이언트가 필요합니다\n
     Spotify 1.2.36-1.2.44: 변경 사항은 다음 트랙부터 적용됩니다\n
     Spotify 1.2.45+: 변경 사항은 즉시 적용됩니다\n
     다른 기기에서 재생하는 동안에는 사용할 수 없습니다"
@@ -169,8 +176,12 @@
 128: 1.2.47-1.2.48
 129: 1.2.49-1.2.50
 130: 1.2.51-1.2.52
-131: 1.2.53, 1.2.55-1.2.61
-134: 1.2.62-1.2.65
+131: 1.2.53-1.2.61
+134: 1.2.62-1.2.69
+138: 1.2.70
+139: 1.2.71-1.2.74
+140: 1.2.75
+See https://www.spotify.com/opensource/ for more
 */
 
 #include <libloaderapi.h>
@@ -199,7 +210,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 134
+#define LAST_TESTED_CEF_VERSION 140
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
@@ -209,6 +220,10 @@ using namespace std::string_view_literals;
 #define DWMSBT_MAINWINDOW 2
 #define DWMSBT_TRANSIENTWINDOW 3
 #define DWMSBT_TABBEDWINDOW 4
+
+#ifndef WS_EX_NOREDIRECTIONBITMAP // WH 1.4
+#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
+#endif
 
 struct cte_settings {
     BOOL showframe;
@@ -220,6 +235,7 @@ struct cte_settings {
     BOOL transparentrendering;
     BOOL noforceddarkmode;
     BOOL forceextensions;
+    BOOL blockupdates;
     BOOL allowuntested;
 } cte_settings;
 
@@ -267,7 +283,7 @@ cte_offset_t get_window_handle_offsets[] = {
     {124, ANY_MINOR, 0x18c, 0x318},
     {130, ANY_MINOR, 0x18c, 0x318},
     {131, ANY_MINOR, 0x194, 0x328},
-    {136, ANY_MINOR, 0x194, 0x328}
+    {LAST_TESTED_CEF_VERSION, ANY_MINOR, 0x194, 0x328}
 };
 
 cte_offset_t set_background_color_offsets[] = {
@@ -328,6 +344,7 @@ struct cte_queryResponse_t {
     BOOL transparentrendering;
     BOOL noforceddarkmode;
     BOOL forceextensions;
+    BOOL blockupdates;
     BOOL allowuntested;
 } g_queryResponse;
 
@@ -465,6 +482,12 @@ typedef struct _cef_v8value_t {
     int(CEF_CALLBACK* set_value_byindex)(struct _cef_v8value_t* self, int index, struct _cef_v8value_t* value);
     // below here is updated quite recently (CEF 126), so it's avoided
 } cef_v8value_t;
+
+typedef struct _cef_request_t {
+    cef_base_ref_counted_t base;
+    int (CEF_CALLBACK* is_read_only)(struct _cef_request_t* self);
+    cef_string_userfree_t(CEF_CALLBACK* get_url)(struct _cef_request_t* self);
+} cef_request_t;
 #pragma endregion
 
 #pragma region CEF V8 functions + helpers
@@ -594,6 +617,14 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     // Assumed 1 if this mod is loaded after the window is created
     // dwRefData is 2 if the window is created by cef_window_create_top_level and is_frameless is hooked
     switch (uMsg) {
+        case WM_SIZE:
+            // Fix Basic frames being wrongly drawn when entering and exiting fullscreen
+            if (!cte_settings.showframe) {
+                return 0;
+            } else {
+                return DefWindowProc(hWnd, uMsg, wParam, lParam);
+            }
+            break;
         case WM_NCACTIVATE:
             if (hWnd == g_mainHwnd && cte_settings.transparentrendering && !cte_settings.showframe && IsDwmEnabled()) {
                 // Fix MicaForEveryone not working well with frameless windows
@@ -602,7 +633,15 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             break;
         case WM_NCPAINT:
             if (hWnd == g_mainHwnd && FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL && cte_settings.transparentrendering && !cte_settings.showframe && !IsDwmEnabled()) {
-                // Do not draw anything
+                // Paint black background in non-client area
+                HDC hdc = GetWindowDC(hWnd);
+                if (hdc) {
+                    RECT rect;
+                    GetWindowRect(hWnd, &rect);
+                    OffsetRect(&rect, -rect.left, -rect.top); // Convert to client-relative coords
+                    FillRect(hdc, &rect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+                    ReleaseDC(hWnd, hdc);
+                }
                 return 0;
             }
         case WM_NCHITTEST:
@@ -715,7 +754,14 @@ std::string ReplaceAll(std::string str, const std::string& from, const std::stri
 }
 
 // Pass an empty targetPatch to use it as a regex search
-int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::string& targetRegex, const std::vector<uint8_t>& targetPatch, int expectedSection = -1, int maxMatch = -1) {
+// identifier: String to identify the match, used for caching
+// pbExecutable: Base address to search, pass EXE or DLL address
+// targetRegex: Target regex string to search
+// targetPatch: Bytes to replace the matched memory, pass an empty vector to use it as a simple regex search
+// expectedSection: Section number to search, pass -1 to search all
+// maxMatch: Max numbers of matches, pass -1 to search the whole memory region for all matches (not recommended for performance reasons)
+// verifyRegex: Regex string to use for verifying the cache match
+int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::string& targetRegex, const std::vector<uint8_t>& targetPatch, int expectedSection = -1, int maxMatch = -1, const std::string& verifyRegex = "") {
     IMAGE_DOS_HEADER* pDosHeader = (IMAGE_DOS_HEADER*)pbExecutable;
     IMAGE_NT_HEADERS* pNtHeader = (IMAGE_NT_HEADERS*)((char*)pDosHeader + pDosHeader->e_lfanew);
     IMAGE_SECTION_HEADER* pSectionHeader = (IMAGE_SECTION_HEADER*)((char*)&pNtHeader->OptionalHeader + pNtHeader->FileHeader.SizeOfOptionalHeader);
@@ -745,6 +791,9 @@ int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::stri
                     Wh_Log(L"Cache offset out of bounds; invalidating...");
                     Wh_DeleteValue(key.c_str());
                 } else {
+                    if (!verifyRegex.empty()) {
+                        regex = std::regex(verifyRegex, std::regex::optimize);
+                    }
                     std::string_view candidate(pbExecutable + cachedOffset, targetRegex.size());
                     if (std::regex_search(candidate.begin(), candidate.end(), regex)) {
                         char* addr = pbExecutable + cachedOffset;
@@ -772,6 +821,9 @@ int64_t PatchMemory(std::wstring identifier, char* pbExecutable, const std::stri
                             continue;
                         }
                         std::string_view candidate(pbExecutable + cachedOffset, targetPatch.size());
+                        if (!verifyRegex.empty()) {
+                            regex = std::regex(verifyRegex, std::regex::optimize);
+                        }
                         if (std::regex_search(candidate.begin(), candidate.end(), regex)) {
                             char* addr = pbExecutable + cachedOffset;
                             DWORD oldProtect;
@@ -1261,6 +1313,19 @@ _cef_panel_t* CEF_EXPORT cef_panel_create_hook(cef_panel_delegate_t* delegate) {
     }
     return panel;
 }
+
+typedef void* CEF_EXPORT (*cef_urlrequest_create_t)(struct _cef_request_t* request, void* client, void* request_context);
+cef_urlrequest_create_t CEF_EXPORT cef_urlrequest_create_original;
+void* CEF_EXPORT cef_urlrequest_create_hook(struct _cef_request_t* request, void* client, void* request_context) {
+    cef_string_t* url = request->get_url(request);
+    std::wstring urlStr(url->str, url->str + url->length);
+    Wh_Log(L"cef_urlrequest_create_hook: %s", urlStr.c_str());
+    if (cte_settings.blockupdates && urlStr.find(L"https://spclient.wg.spotify.com/desktop-update/v2/update") != std::wstring::npos) {
+        Wh_Log(L"Blocked update check");
+        return NULL;
+    }
+    return cef_urlrequest_create_original(request, client, request_context);
+}
 #pragma endregion
 
 #pragma region Win32 API hooks
@@ -1268,6 +1333,11 @@ using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_original;
 HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
     Wh_Log(L"CreateWindowExW_hook");
+    // Flag added in CEF 139 / Spotify 1.2.71
+    if ((dwExStyle & WS_EX_NOREDIRECTIONBITMAP) != 0) { // This makes the GDI surface invisible
+        dwExStyle &= ~WS_EX_NOREDIRECTIONBITMAP;        // Just purge this cuz it's bad for Basic/Classic users anyway
+    }                                                   // It must be set in CreateWindowExW. Not changeable with SetWindowLongW
+
     HWND hWnd = CreateWindowExW_original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (hWnd != NULL) {
         wchar_t className[256];
@@ -1641,8 +1711,8 @@ void HandleWindhawkComm(LPCWSTR command) {
             return;
         }
         wchar_t queryResponse[256];
-        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
-        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:blockupdates:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
+        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
             cte_settings.showframe,
             cte_settings.showframeonothers,
             cte_settings.showmenu,
@@ -1652,6 +1722,7 @@ void HandleWindhawkComm(LPCWSTR command) {
             cte_settings.ignoreminsize,
             cte_settings.noforceddarkmode,
             cte_settings.forceextensions,
+            cte_settings.blockupdates,
             cte_settings.allowuntested,
             IsZoomed(g_mainHwnd),
             GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST,
@@ -1852,7 +1923,7 @@ int ConnectToNamedPipe() {
                         buffer[bytesRead / sizeof(wchar_t)] = L'\0';
                         Wh_Log(L"Received message: %s", buffer);
                         if (wcsncmp(buffer, L"/WH:QueryResponse:", 18) == 0) {
-                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
                                 &g_queryResponse.showframe,
                                 &g_queryResponse.showframeonothers,
                                 &g_queryResponse.showmenu,
@@ -1862,6 +1933,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.ignoreminsize,
                                 &g_queryResponse.noforceddarkmode,
                                 &g_queryResponse.forceextensions,
+                                &g_queryResponse.blockupdates,
                                 &g_queryResponse.allowuntested,
                                 &g_queryResponse.isMaximized,
                                 &g_queryResponse.isTopMost,
@@ -1875,7 +1947,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.dpi,
                                 &g_queryResponse.speedModSupported,
                                 &g_queryResponse.playbackSpeed,
-                                &g_queryResponse.immediateSpeedChange) == 23
+                                &g_queryResponse.immediateSpeedChange) == 24
                             ) {
                                 g_queryResponse.success = TRUE;
                             }
@@ -2163,6 +2235,7 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
             AddValueToObj(configObj, u"ignoreminsize", cef_v8value_create_bool(g_queryResponse.ignoreminsize));
             AddValueToObj(configObj, u"noforceddarkmode", cef_v8value_create_bool(g_queryResponse.noforceddarkmode));
             AddValueToObj(configObj, u"forceextensions", cef_v8value_create_bool(g_queryResponse.forceextensions));
+            AddValueToObj(configObj, u"blockupdates", cef_v8value_create_bool(g_queryResponse.blockupdates));
             AddValueToObj(configObj, u"allowuntested", cef_v8value_create_bool(g_queryResponse.allowuntested));
             AddValueToObj(retobj, u"options", configObj);
             AddValueToObj(retobj, u"isMaximized", cef_v8value_create_bool(g_queryResponse.isMaximized));
@@ -2238,6 +2311,7 @@ int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) 
         AddValueToObj(initialConfigObj, u"ignoreminsize", cef_v8value_create_bool(cte_settings.ignoreminsize));
         AddValueToObj(initialConfigObj, u"noforceddarkmode", cef_v8value_create_bool(cte_settings.noforceddarkmode));
         AddValueToObj(initialConfigObj, u"forceextensions", cef_v8value_create_bool(cte_settings.forceextensions));
+        AddValueToObj(initialConfigObj, u"blockupdates", cef_v8value_create_bool(cte_settings.blockupdates));
         AddValueToObj(initialConfigObj, u"allowuntested", cef_v8value_create_bool(cte_settings.allowuntested));
         AddValueToObj(retobj, u"initialOptions", initialConfigObj);
         std::wstring stdModVer(WH_MOD_VERSION);
@@ -2380,6 +2454,7 @@ void LoadSettings() {
     cte_settings.transparentrendering = Wh_GetIntSetting(L"transparentrendering");
     cte_settings.noforceddarkmode = Wh_GetIntSetting(L"noforceddarkmode");
     cte_settings.forceextensions = Wh_GetIntSetting(L"forceextensions");
+    cte_settings.blockupdates = Wh_GetIntSetting(L"blockupdates");
     cte_settings.allowuntested = Wh_GetIntSetting(L"allowuntested");
 }
 
@@ -2473,8 +2548,6 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    char* pbExecutable = (char*)GetModuleHandle(NULL);
-
     #ifdef _WIN64
         const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
     #else
@@ -2547,6 +2620,7 @@ BOOL Wh_ModInit() {
 
     cef_window_create_top_level_t cef_window_create_top_level = (cef_window_create_top_level_t)GetProcAddress(g_cefModule, "cef_window_create_top_level");
     cef_panel_create_t cef_panel_create = (cef_panel_create_t)GetProcAddress(g_cefModule, "cef_panel_create");
+    cef_urlrequest_create_t cef_urlrequest_create = (cef_urlrequest_create_t)GetProcAddress(g_cefModule, "cef_urlrequest_create");
 
     Wh_SetFunctionHook((void*)cef_window_create_top_level,
                        (void*)cef_window_create_top_level_hook,
@@ -2556,6 +2630,8 @@ BOOL Wh_ModInit() {
     if (g_isSpotify) {
         Wh_SetFunctionHook((void*)cef_panel_create, (void*)cef_panel_create_hook,
                            (void**)&cef_panel_create_original);
+        Wh_SetFunctionHook((void*)cef_urlrequest_create, (void*)cef_urlrequest_create_hook,
+                           (void**)&cef_urlrequest_create_original);
         Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
                            (void**)&SetWindowThemeAttribute_original);
         Wh_SetFunctionHook((void*)DwmExtendFrameIntoClientArea, (void*)DwmExtendFrameIntoClientArea_hook,
@@ -2567,6 +2643,46 @@ BOOL Wh_ModInit() {
         Wh_SetFunctionHook((void*)CreateProcessAsUserW, (void*)CreateProcessAsUserW_hook,
                            (void**)&CreateProcessAsUserW_original);
 
+        char* pbExecutable = NULL;
+        // Spotify 1.2.70 (CEF 138) introduced a separate Spotify.dll which contains the core logic
+        // All the existing patch matches exist in this DLL
+        // Limit the Spotify.dll use only to 1.2.70 and above, as downgrading to older versions
+        //   from 1.2.70 does not remove the redundant Spotify.dll in the installation directory
+        if (major >= 138) {
+            pbExecutable = (char*)LoadLibrary(L"Spotify.dll");
+        }
+        if (pbExecutable == NULL) {
+            pbExecutable = (char*)GetModuleHandle(NULL);
+        }
+
+        int spMajor = 0;
+        int spMinor = 0;
+        int spBuild = 0;
+        int spRevision = 0;
+        HRSRC hRes = FindResourceW((HMODULE)pbExecutable, MAKEINTRESOURCE(1), RT_VERSION);
+        if (hRes) {
+            HGLOBAL hGlobal = LoadResource((HMODULE)pbExecutable, hRes);
+            if (hGlobal) {
+                LPVOID lpData = LockResource(hGlobal);
+                if (lpData) {
+                    UINT uLen = SizeofResource((HMODULE)pbExecutable, hRes);
+                    if (uLen) {
+                        VS_FIXEDFILEINFO* pFileInfo;
+                        UINT uFileInfoLen;
+                        if (VerQueryValueW(lpData, L"\\", (LPVOID*)&pFileInfo, &uFileInfoLen)) {
+                            if (pFileInfo && pFileInfo->dwSignature == 0xfeef04bd) {
+                                spMajor = HIWORD(pFileInfo->dwFileVersionMS);
+                                spMinor = LOWORD(pFileInfo->dwFileVersionMS);
+                                spBuild = HIWORD(pFileInfo->dwFileVersionLS);
+                                spRevision = LOWORD(pFileInfo->dwFileVersionLS);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Wh_Log(L"Spotify version: %d.%d.%d.%d", spMajor, spMinor, spBuild, spRevision);
+
         // Patch the executable in memory to enable transparent rendering, disable forced dark mode, or force enable extensions
         // (Pointless if done after CEF initialization though)
         if (cte_settings.transparentrendering && major >= CR_RT_1ST_VERSION) {
@@ -2574,7 +2690,7 @@ BOOL Wh_ModInit() {
                 Wh_Log(L"Enabled transparent rendering");
             }
         }
-        // Spotify 1.2.68+ (patch is not needed before that)
+        // Spotify 1.1.68+ (patch is not needed before that)
         if (cte_settings.noforceddarkmode && (major > 91 || (major == 91 && minor >= 3))) {
             if (DisableForcedDarkMode(pbExecutable, major)) {
                 Wh_Log(L"Disabled forced dark mode");
@@ -2587,7 +2703,11 @@ BOOL Wh_ModInit() {
         }
 
         #ifdef _WIN64
-        if (major >= 122 && isTestedVersion) {
+        // Spotify 1.2.67+ hard blocked my way of changing the playback speed by calling the internal functions
+        // So disable this for now until a workaround is found
+        if (major >= 122 && major < 138 && isTestedVersion &&
+            spMajor == 1 && spMinor == 2 && spBuild < 67
+        ) {
             HookCreateTrackPlayer(pbExecutable, major >= 127);
             ApplySpeedFromSettings(FALSE);
         }

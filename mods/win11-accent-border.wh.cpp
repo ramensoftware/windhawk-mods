@@ -2,7 +2,7 @@
 // @id              win11-accent-border
 // @name            Windows 11 Accent Window Border
 // @description     Show the accent color on the border but not on the titlebar
-// @version         1.0.1
+// @version         1.0.3
 // @author          Guerra24
 // @github          https://github.com/Guerra24
 // @include         *
@@ -42,7 +42,7 @@ const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
 void LoadColors() {
     DWORD color;
     DWORD colorSize = sizeof(color);
-    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", RRF_RT_REG_DWORD, NULL, &color, &colorSize);
+    RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent", L"AccentColorMenu", RRF_RT_REG_DWORD, NULL, &color, &colorSize);
 
     BorderActive = (color & 0xFF0000) | (color & 0xFF00) | (color & 0xFF);
 
@@ -51,26 +51,40 @@ void LoadColors() {
     }
 }
 
-void SetBorderColor(HWND hWnd, BOOL activate)
-{
+BOOL IsValidWindow(HWND hWnd) {
     DWORD dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
     //Better exclude context menus
-    if ((dwStyle & WS_THICKFRAME) != WS_THICKFRAME && (dwStyle & WS_CAPTION) != WS_CAPTION)
-    {
-        return;
+    return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME || (dwStyle & WS_CAPTION) == WS_CAPTION;
+}
+
+using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
+DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
+HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute) {
+    if (dwAttribute == DWMWA_BORDER_COLOR && IsValidWindow(hwnd)) {
+        Wh_Log(L"DWMWA_BORDER_COLOR %08x", pvAttribute);
+        return S_OK;
     }
+
+    return DwmSetWindowAttribute_orig(hwnd, dwAttribute, pvAttribute, cbAttribute);
+}
+
+void SetBorderColor(HWND hWnd, BOOL activate)
+{
+    if (!IsValidWindow(hWnd))
+        return;
+
     Wh_Log(L"Activate: %d", activate);
     if (activate)
     {
-        DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &BorderActive, sizeof(BorderActive));
+        DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &BorderActive, sizeof(BorderActive));
     }
     else
     {
-        DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &BorderInactive, sizeof(BorderInactive));
+        DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &BorderInactive, sizeof(BorderInactive));
     }
 }
 
-typedef LRESULT (WINAPI *DefWindowProcA_t)(HWND, UINT, WPARAM, LPARAM);
+using DefWindowProcA_t = decltype(&DefWindowProcA);
 DefWindowProcA_t DefWindowProcA_orig;
 LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -90,7 +104,7 @@ LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     return result;
 }
 
-typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND, UINT, WPARAM, LPARAM);
+using DefWindowProcW_t = decltype(&DefWindowProcW);
 DefWindowProcW_t DefWindowProcW_orig;
 LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -110,7 +124,7 @@ LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     return result;
 }
 
-typedef LRESULT (WINAPI *DefDlgProcA_t)(HWND, UINT, WPARAM, LPARAM);
+using DefDlgProcA_t = decltype(&DefDlgProcA);
 DefDlgProcA_t DefDlgProcA_orig;
 LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -125,7 +139,7 @@ LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     return result;
 }
 
-typedef LRESULT (WINAPI *DefDlgProcW_t)(HWND, UINT, WPARAM, LPARAM);
+using DefDlgProcW_t = decltype(&DefDlgProcW);
 DefDlgProcW_t DefDlgProcW_orig;
 LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -155,18 +169,11 @@ BOOL CALLBACK EnableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
 
 BOOL CALLBACK DisableEnumWindowsCallback(HWND hWnd, LPARAM lParam) {
     DWORD pid = lParam;
-
     DWORD wPid = 0;
     GetWindowThreadProcessId(hWnd, &wPid);
 
-    if (pid == wPid) {
-        DWORD dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
-        //Better exclude context menus
-        if ((dwStyle & WS_THICKFRAME) == WS_THICKFRAME || (dwStyle & WS_CAPTION) == WS_CAPTION)
-        {
-            DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &ColorDefault, sizeof(ColorDefault));
-        }
-    }
+    if (pid == wPid && IsValidWindow(hWnd))
+        DwmSetWindowAttribute_orig(hWnd, DWMWA_BORDER_COLOR, &ColorDefault, sizeof(ColorDefault));
 
     return TRUE;
 }
@@ -178,48 +185,43 @@ BOOL Wh_ModInit() {
 
     LoadColors();
 
-    EnumWindows(EnableEnumWindowsCallback, GetCurrentProcessId());
-    
-    HMODULE user32 = LoadLibraryW(L"user32.dll");
-
-    FARPROC pDefWindowProcW = GetProcAddress(user32, "DefWindowProcW");
+    Wh_SetFunctionHook(
+        (void *)DwmSetWindowAttribute,
+        (void *)DwmSetWindowAttribute_hook,
+        (void **)&DwmSetWindowAttribute_orig);
 
     Wh_SetFunctionHook(
-        (void *)pDefWindowProcW,
+        (void *)DefWindowProcW,
         (void *)DefWindowProcW_hook,
         (void **)&DefWindowProcW_orig
     );
 
-    FARPROC pDefWindowProcA = GetProcAddress(user32, "DefWindowProcA");
-
     Wh_SetFunctionHook(
-        (void *)pDefWindowProcA,
+        (void *)DefWindowProcA,
         (void *)DefWindowProcA_hook,
         (void **)&DefWindowProcA_orig
     );
 
-    FARPROC pDefDlgProcW = GetProcAddress(user32, "DefDlgProcW");
-
     Wh_SetFunctionHook(
-        (void *)pDefDlgProcW,
+        (void *)DefDlgProcW,
         (void *)DefDlgProcW_hook,
         (void **)&DefDlgProcW_orig
     );
 
-    FARPROC pDefDlgProcA = GetProcAddress(user32, "DefDlgProcA");
-
     Wh_SetFunctionHook(
-        (void *)pDefDlgProcA,
+        (void *)DefDlgProcA,
         (void *)DefDlgProcA_hook,
         (void **)&DefDlgProcA_orig
     );
-
     return TRUE;
 }
 
-// The mod is being unloaded, free all allocated resources.
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
+void Wh_ModAfterInit() {
+    Wh_Log(L"AfterInit");
+    EnumWindows(EnableEnumWindowsCallback, GetCurrentProcessId());
+}
 
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"BeforeUninit");
     EnumWindows(DisableEnumWindowsCallback, GetCurrentProcessId());
 }

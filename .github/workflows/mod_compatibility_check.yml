@@ -10,6 +10,9 @@ on:
     branches:
       - main
 
+env:
+  PYTHONUTF8: '1'
+
 jobs:
   run:
     runs-on: windows-latest
@@ -28,7 +31,7 @@ jobs:
           - version: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'm417z') && '1.4.1' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Python
         uses: actions/setup-python@v5
         with:

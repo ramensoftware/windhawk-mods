@@ -2,7 +2,7 @@
 // @id              custom-shutdown-dialog
 // @name            Custom Shutdown Dialog
 // @description     Override the classic shutdown dialog in Explorer with your own
-// @version         1.1.1
+// @version         1.2.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -26,118 +26,111 @@ the user out.
 - exe: C:\Classic\ClassicShutdown\ClassicShutdown.exe
   $name: Shutdown executable
   $description: Path to executable to open instead of shutdown dialog.
-- args: /style classic
+- args: ""
   $name: Shutdown arguments
   $description: Arguments to pass to the shutdown executable, if any.
 - logoffexe: C:\Classic\ClassicShutdown\ClassicShutdown.exe
   $name: Logoff executable
   $description: Path to executable to open instead of logoff dialog.
-- logoffargs: /logoff /style classic
+- logoffargs: /logoff
   $name: Logoff arguments
   $description: Arguments to pass to the logoff executable, if any.
+- disconnectexe: C:\Classic\ClassicShutdown\ClassicShutdown.exe
+  $name: Disconnect executable
+  $description: Path to executable to open instead of disconnect dialog.
+- disconnectargs: /disconnect
+  $name: Disconnect arguments
+  $description: Arguments to pass to the disconnect executable, if any.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
-WindhawkUtils::StringSetting g_szShutdownExe, g_szShutdownArgs;
-WindhawkUtils::StringSetting g_szLogoffExe, g_szLogoffArgs;
+WindhawkUtils::StringSetting g_spszShutdownExe,   g_spszShutdownArgs;
+WindhawkUtils::StringSetting g_spszLogoffExe,     g_spszLogoffArgs;
+WindhawkUtils::StringSetting g_spszDisconnectExe, g_spszDisconnectArgs;
 
-__int64 (*_ShutdownDialogEx_orig)(HWND, int, int, UINT);
-__int64 _ShutdownDialogEx_hook(
-    HWND hWndParent,
-    int  i1,
-    int  i2,
-    UINT i3
-)
+void (*ExitWindowsDialog_orig)(HWND);
+void ExitWindowsDialog_hook(HWND hwndParent)
 {
     ShellExecuteW(
-        hWndParent,
+        hwndParent,
         L"open",
-        g_szShutdownExe,
-        g_szShutdownArgs,
+        g_spszShutdownExe,
+        g_spszShutdownArgs,
         NULL,
         SW_NORMAL
     );
-    return 0;
 }
 
 void (*LogoffWindowsDialog_orig)(HWND);
-void LogoffWindowsDialog_hook(HWND hWndParent)
+void LogoffWindowsDialog_hook(HWND hwndParent)
 {
     ShellExecuteW(
-        hWndParent,
+        hwndParent,
         L"open",
-        g_szLogoffExe,
-        g_szLogoffArgs,
+        g_spszLogoffExe,
+        g_spszLogoffArgs,
         NULL,
         SW_NORMAL
     );
 }
 
-WindhawkUtils::SYMBOL_HOOK shutdownuxDllHooks[] = {
-    {
-        {
-            L"static  _ShutdownDialogEx()"
-        },
-        &_ShutdownDialogEx_orig,
-        _ShutdownDialogEx_hook,
-        false
-    }
-};
+void (*DisconnectWindowsDialog_orig)(HWND);
+void DisconnectWindowsDialog_hook(HWND hwndParent)
+{
+    ShellExecuteW(
+        hwndParent,
+        L"open",
+        g_spszDisconnectExe,
+        g_spszDisconnectArgs,
+        NULL,
+        SW_NORMAL
+    );
+}
 
 void LoadSettings(void)
 {
-    g_szShutdownExe = WindhawkUtils::StringSetting::make(L"exe");
-    g_szShutdownArgs = WindhawkUtils::StringSetting::make(L"args");
-    g_szLogoffExe = WindhawkUtils::StringSetting::make(L"logoffexe");
-    g_szLogoffArgs = WindhawkUtils::StringSetting::make(L"logoffargs");
+    g_spszShutdownExe    = WindhawkUtils::StringSetting::make(L"exe");
+    g_spszShutdownArgs   = WindhawkUtils::StringSetting::make(L"args");
+    g_spszLogoffExe      = WindhawkUtils::StringSetting::make(L"logoffexe");
+    g_spszLogoffArgs     = WindhawkUtils::StringSetting::make(L"logoffargs");
+    g_spszDisconnectExe  = WindhawkUtils::StringSetting::make(L"disconnectexe");
+    g_spszDisconnectArgs = WindhawkUtils::StringSetting::make(L"disconnectargs");
 }
+
+#define HOOK(NAME, ORDINAL)                                   \
+    FARPROC NAME = GetProcAddress(hShell32, (LPCSTR)ORDINAL); \
+    if (!NAME)                                                \
+    {                                                         \
+        Wh_Log(L"Failed to get address of %s", L ## #NAME);   \
+        return FALSE;                                         \
+    }                                                         \
+                                                              \
+    if (!Wh_SetFunctionHook(                                  \
+        (void *)NAME,                                         \
+        (void *)NAME ## _hook,                                \
+        (void **)&NAME ## _orig                               \
+    ))                                                        \
+    {                                                         \
+        Wh_Log(L"Failed to hook %s", L ## #NAME);             \
+        return FALSE;                                         \
+    }
 
 BOOL Wh_ModInit(void)
 {
     LoadSettings();
 
-    HMODULE hShutdownUx = LoadLibraryW(L"shutdownux.dll");
-    if (!hShutdownUx)
-    {
-        Wh_Log(L"Failed to load shutdownux.dll");
-        return FALSE;
-    }
-
-    if (!WindhawkUtils::HookSymbols(
-        hShutdownUx,
-        shutdownuxDllHooks,
-        ARRAYSIZE(shutdownuxDllHooks)
-    ))
-    {
-        Wh_Log(L"Failed to hook _ShutdownDialogEx");
-        return FALSE;
-    }
-
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+    HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32)
     {
         Wh_Log(L"Failed to load shell32.dll");
         return FALSE;
     }
 
-    FARPROC LogoffWindowsDialog = GetProcAddress(hShell32, (LPCSTR)54);
-    if (!LogoffWindowsDialog)
-    {
-        Wh_Log(L"Failed to get address of LogoffWindowsDialog");
-        return FALSE;
-    }
-
-    if (!Wh_SetFunctionHook(
-        (void *)LogoffWindowsDialog,
-        (void *)LogoffWindowsDialog_hook,
-        (void **)&LogoffWindowsDialog_orig
-    ))
-    {
-        Wh_Log(L"Failed to hook LogoffWindowsDialog");
-        return FALSE;
-    }
+    HOOK(ExitWindowsDialog,        60);
+    HOOK(LogoffWindowsDialog,      54);
+    HOOK(DisconnectWindowsDialog, 254);
 
     return TRUE;
 }
