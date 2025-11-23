@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-20T19:38:35.000Z</updated>
+    <updated>2025-11-23T12:18:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Ctrl+N to New File 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-ctrln-newfile#b39425a15084dc10756c51355b79623d8d59b596</id>
+        <link href="https://windhawk.net/mods/explorer-ctrln-newfile"/>
+        <updated>2025-11-23T12:18:26.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>English</strong></p>
+<p>Intercepts Explorer’s <strong>Ctrl+N</strong> (open new window) and replaces it with creating an empty file in the current directory, then entering rename mode.</p>
+<p><strong>How it works</strong></p>
+<p>Uses Windhawk to inject a <code>WH_KEYBOARD_LL</code> low-level keyboard hook into explorer.exe to intercept Ctrl+N.
+Since the desktop cannot navigate folders, files are created directly in the desktop path.</p>
+<hr />
+<p><strong>中文说明</strong></p>
+<p>拦截资源管理器的 <strong>Ctrl+N</strong>（新建窗口操作），改为在当前目录创建空文件并重命名。</p>
+<p><strong>实现原理</strong></p>
+<p>通过 Windhawk 在 explorer.exe 注入 <code>WH_KEYBOARD_LL</code> 低级键盘钩子拦截ctrl+n。
+在桌面无法导航，因此直接在桌面路径生成文件。</p>]]></content>
+        <author>
+            <name>lieyanbang</name>
+            <uri>https://github.com/lieyanbang</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#077c9d5ae5e80ce1c341354c4dc628516f2b5201</id>
@@ -285,22 +306,6 @@ being erroneously loaded</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Color Picker Dialog Hex Input 1.0.0]]></title>
-        <id>https://windhawk.net/mods/color-picker-dialog-hex-input#456940d04d87d6aa0aa029352611e1aa3d24b48b</id>
-        <link href="https://windhawk.net/mods/color-picker-dialog-hex-input"/>
-        <updated>2025-10-29T12:38:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="colorpickerdialoghexinput">Color Picker Dialog Hex Input</h1>
-<p>Windows' native color picker dialog does not come with a way to input hex codes.
-This mod adds an input that allows you to type hex colors in both the standard
-6-digit format and the CSS 3-digit format (for example, <code>ABC</code> would result in <code>AABBCC</code>).</p>
-<p><strong>Preview</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/color-picker-dialog-hex-input.png" alt="Preview" /></p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
