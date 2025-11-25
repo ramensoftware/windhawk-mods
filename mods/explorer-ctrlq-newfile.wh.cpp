@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              explorer-ctrlq-newfile
-// @name            Explorer Ctrl+Q to New File
+// @id              explorer-ctrlq-newfolder
+// @name            Explorer Ctrl+Q to New Folder
 // @name:zh-CN      Create new file with Ctrl+Q
 // @description     Press Ctrl+Q in Explorer and create a new folder in current path, including desktop.
 // @version         1.2
