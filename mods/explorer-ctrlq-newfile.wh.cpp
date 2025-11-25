@@ -282,7 +282,6 @@ static void SelectAndRenameInWindow(HWND hwndExplorer, const std::wstring& fullP
     IShellFolder* pParent = nullptr;
     PCUITEMID_CHILD pChild = nullptr;
     if (BindParentAndChildPIDL(fullPath, &pParent, &pChild)) {
-        // This is where it was crashing - added safety
         psv->SelectItem(pChild, SVSI_SELECT | SVSI_ENSUREVISIBLE | SVSI_DESELECTOTHERS | SVSI_EDIT);
         pParent->Release();
     }
