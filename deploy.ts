@@ -291,6 +291,7 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
                 rating: 0,
                 users: 0,
                 ratingUsers: 0,
+                ratingBreakdown: [0, 0, 0, 0, 0],
                 ...enrichment.mods[id]?.details,
             },
         };

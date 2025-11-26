@@ -2472,6 +2472,13 @@
                 "defaultSorting": 0,
                 "published": 1764178821000,
                 "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
                 "ratingUsers": 0,
                 "updated": 1764178821000,
                 "users": 0
