@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-23T12:18:26.000Z</updated>
+    <updated>2025-11-26T17:40:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Ctrl+Q to New Folder 1.2]]></title>
+        <id>https://windhawk.net/mods/explorer-ctrlq-new-folder#a858cdb9669e736d6693d50acc2b534d8b3978f5</id>
+        <link href="https://windhawk.net/mods/explorer-ctrlq-new-folder"/>
+        <updated>2025-11-26T17:40:21.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerctrlqtonewfolder">Explorer Ctrl+Q to New Folder</h1>
+<p>This mod enhances Windows Explorer by mapping <strong>Ctrl+Q</strong> to create a new folder instantly.</p>
+<h3 id="purposeforkdetails">Purpose &amp; Fork Details</h3>
+<p>This is a fork of "Explorer Ctrl+N to New File". The original mod bound the action to <strong>Ctrl+N</strong>, which conflicted with the native "New Window" shortcut, and generated blank, extension-less files which were not useful for most users.</p>
+<p>This version improves the workflow by:</p>
+<ol>
+<li><strong>Remapping to Ctrl+Q</strong>: Eliminates conflicts with standard Windows shortcuts.</li>
+<li><strong>Creating Directories</strong>: Generates standard file system folders instead of empty files.</li>
+<li><strong>Stability Fixes</strong>: Implements <code>SHChangeNotify</code> and thread synchronization to prevent the "Race Condition" crash where Explorer would attempt to rename the folder before the UI had finished creating it.</li>
+</ol>
+<h3 id="howitworks">How it works</h3>
+<p>The mod utilizes Windhawk to inject a <code>WH_KEYBOARD_LL</code> (low-level keyboard hook) directly into the <code>explorer.exe</code> process. Upon triggering:</p>
+<ol>
+<li>It resolves the current directory path (supporting Windowed Explorer windows only not Desktop).</li>
+<li>It creates a unique directory name (e.g., "New folder (2)").</li>
+<li>It forces a Shell Update to register the change immediately.</li>
+<li>It programmatically selects the new folder and initiates the rename command.</li>
+</ol>]]></content>
+        <author>
+            <name>TheShadyRainbow4</name>
+            <uri>https://github.com/TheShadyRainbow4</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Ctrl+N to New File 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-ctrln-newfile#b39425a15084dc10756c51355b79623d8d59b596</id>
@@ -290,22 +318,6 @@ being erroneously loaded</li>
         <author>
             <name>Th3Fanbus</name>
             <uri>https://github.com/Th3Fanbus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.3.3]]></title>
-        <id>https://windhawk.net/mods/windows-11-notification-center-styler#eb68fe5aaceca7a2835888d536a43ebed0b86085</id>
-        <link href="https://windhawk.net/mods/windows-11-notification-center-styler"/>
-        <updated>2025-10-29T18:41:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated themes: Unified, 10JumpLists.</li>
-<li>Added themes: WindowGlass, WindowGlass (Alternative), Oversimplified&amp;Accentuated.</li>
-<li>Images from online sources are now fetched once internet becomes available. Previously, if images didn't load successfully, disabling and re-enabling the mod was required.</li>
-<li>WindhawkBlur brushes that use ThemeResource colors are now updated automatically on theme change. Previously, disabling and re-enabling the mod was required to apply the new colors.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

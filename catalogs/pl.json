@@ -2467,6 +2467,27 @@
                 "version": "1.0"
             }
         },
+        "explorer-ctrlq-new-folder": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1764178821000,
+                "rating": 0,
+                "ratingUsers": 0,
+                "updated": 1764178821000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "TheShadyRainbow4",
+                "compilerOptions": "-lole32 -loleaut32 -lshlwapi -lshell32 -luuid -luser32",
+                "description": "Press Ctrl+Q in Explorer and create a new folder in current path, including desktop.",
+                "github": "https://github.com/TheShadyRainbow4",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Explorer Ctrl+Q to New Folder",
+                "version": "1.2"
+            }
+        },
         "explorer-details-better-file-sizes": {
             "details": {
                 "defaultSorting": 938640,
