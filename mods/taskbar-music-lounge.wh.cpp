@@ -2,7 +2,7 @@
 // @id              taskbar-music-lounge
 // @name            Taskbar Music Lounge
 // @description     A "Pill-shaped" scrolling music ticker with media controls.
-// @version         2.0
+// @version         2.1
 // @author          Hashah2311
 // @github          https://github.com/Hashah2311
 // @include         windhawk.exe
@@ -11,12 +11,12 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar Music Lounge (Refined Glass)
+# Taskbar Music Lounge
 
 A sleek, pill-shaped music ticker for your Windows 11 taskbar.
 
 ## 🎵 Features
-* **Refined Visuals:** Improved text rendering (smoother edges) and tighter window shaping to reduce artifacts.
+* **Glass Look:** Uses shaped window regions to create a true rounded acrylic pill.
 * **Auto-Theming:** Automatically adapts to Windows Light/Dark mode.
 * **Marquee Text:** Automatically scrolls long song titles.
 * **Controls:** Dedicated **Prev / Play / Next** buttons.
@@ -36,6 +36,8 @@ Go to the **Settings** tab in Windhawk to adjust:
 * **Offsets:** Fine-tune X/Y offsets.
 * **Manual Colors:** You can disable "Auto Theme" to enforce specific colors.
 
+## 🐛 Troubleshooting
+* **"Zombie" Process:** If the mod looks stuck, open Task Manager, go to "Details", and end any `windhawk.exe` process that isn't the main one. Then restart Windhawk.
 */
 // ==/WindhawkModReadme==
 
@@ -215,7 +217,6 @@ wstring GetNowPlayingText() {
 // --- Color Logic ---
 DWORD GetCurrentBgColor() {
     if (g_Settings.autoTheme) {
-        // Use very low opacity (0x05 = 5) for nearly-clear glassy look
         if (IsSystemLightMode()) return 0x05FFFFFF; 
         else return 0x05000000; 
     }
@@ -242,10 +243,11 @@ void UpdateAcrylic(HWND hwnd) {
     }
 }
 
-// --- Region Clipping ---
+// --- Region Clipping (Tightened for v9.0) ---
 void UpdateWindowShape(HWND hwnd, int width, int height) {
-    // Create region with slightly inset to avoid white border artifacts on some systems
-    HRGN hRgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, height, height);
+    // Exact dimensions (removed +1). 
+    // This should fix the "weird rectangle" halo effect.
+    HRGN hRgn = CreateRoundRectRgn(0, 0, width, height, height, height);
     SetWindowRgn(hwnd, hRgn, TRUE);
 }
 
@@ -253,14 +255,14 @@ void UpdateWindowShape(HWND hwnd, int width, int height) {
 void DrawMediaPanel(HDC hdc, int width, int height) {
     Graphics graphics(hdc);
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
-    // FIX: Use AntiAlias for text instead of ClearType.
-    // ClearType (GridFit) often produces ugly fringes on transparent/layered windows.
     graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
     graphics.Clear(Color(0, 0, 0, 0)); 
 
-    Rect rect(0, 0, width - 1, height - 1);
+    // Draw Slightly Smaller Pill (1px inset) to ensure it fits INSIDE the clipped region
+    // This prevents aliased pixels from touching the rough edges of the region
+    Rect rect(1, 1, width - 3, height - 3);
     GraphicsPath path;
-    int arcSize = height; 
+    int arcSize = height - 2; 
     path.AddArc(rect.X, rect.Y, arcSize, arcSize, 180, 90);
     path.AddArc(rect.X + rect.Width - arcSize, rect.Y, arcSize, arcSize, 270, 90);
     path.AddArc(rect.X + rect.Width - arcSize, rect.Y + rect.Height - arcSize, arcSize, arcSize, 0, 90);
@@ -271,7 +273,6 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
     graphics.FillPath(&bgBrush, &path);
     
     Color mainColor((GetCurrentTextColor()));
-    // Thinner, more subtle border
     Pen borderPen(Color(25, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()), 1);
     graphics.DrawPath(&borderPen, &path);
 
@@ -281,20 +282,17 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
 
     int centerY = height / 2;
 
-    // Prev
     if (g_HoverState == 1) graphics.FillEllipse(&activeBg, 12, centerY - 12, 24, 24);
     SolidBrush* pBrush = (g_HoverState == 1) ? &hoverBrush : &iconBrush;
     Point prevPts[3] = { Point(28, centerY - 6), Point(28, centerY + 6), Point(18, centerY) };
     graphics.FillPolygon(pBrush, prevPts, 3);
     graphics.FillRectangle(pBrush, 16, centerY - 6, 2, 12); 
 
-    // Play
     if (g_HoverState == 2) graphics.FillEllipse(&activeBg, 38, centerY - 12, 24, 24);
     SolidBrush* plBrush = (g_HoverState == 2) ? &hoverBrush : &iconBrush;
     Point playPts[3] = { Point(46, centerY - 8), Point(46, centerY + 8), Point(58, centerY) };
     graphics.FillPolygon(plBrush, playPts, 3);
 
-    // Next
     if (g_HoverState == 3) graphics.FillEllipse(&activeBg, 64, centerY - 12, 24, 24);
     SolidBrush* nBrush = (g_HoverState == 3) ? &hoverBrush : &iconBrush;
     Point nextPts[3] = { Point(72, centerY - 6), Point(72, centerY + 6), Point(82, centerY) };
@@ -561,12 +559,16 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
-// --- Windhawk Tool Mod Launcher Code ---
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod launcher code
+// DO NOT MODIFY
+////////////////////////////////////////////////////////////////////////////////
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-    Wh_Log(L"[MusicLounge] EntryPoint Hook - Thread exiting to prevent UI");
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -638,7 +640,6 @@ BOOL Wh_ModInit() {
     }
 
     g_isToolModProcessLauncher = true;
-    Wh_Log(L"[MusicLounge] Launcher Init");
     return TRUE;
 }
 
@@ -648,23 +649,57 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    if (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath)) == 0) {
-        Wh_Log(L"GetModuleFileName failed");
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    WCHAR commandLine[MAX_PATH * 2];
-    _snwprintf(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
-
-    STARTUPINFO si = { sizeof(STARTUPINFO) };
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
-    
-    if (!CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
-        Wh_Log(L"CreateProcess failed, error: %d", GetLastError());
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
-    Wh_Log(L"[MusicLounge] Launched Tool Process ID: %d", pi.dwProcessId);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
