@@ -28,7 +28,7 @@ HRESULT WINAPI windowsudkshellcommon_SLGetWindowsInformationDWORDHook(PCWSTR pws
 {
     HRESULT hr = SLGetWindowsInformationDWORDFunc(pwszValueName, pdwValue);
 
-    if (SUCCEEDED(hr) &&(!wcsncmp(pwszValueName, L"Shell-Windowing-LimitSnappedWindows", 35)))
+    if (SUCCEEDED(hr) && !wcscmp(pwszValueName, L"Shell-Windowing-LimitSnappedWindows"))
         *pdwValue = 1;
 
     return hr;
