@@ -2,7 +2,7 @@
 // @id              syslistview32-enabler
 // @name            Enable SyslistView32
 // @description     Enables SysListView32 folder layout in Explorer
-// @version         1.0.2
+// @version         2.0.0
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -25,50 +25,45 @@ After:
 */
 // ==/WindhawkModReadme==
 
-#include <windhawk_utils.h>
+typedef LONG (WINAPI *REGOPENKEYEXW)(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);
 
-#ifdef _WIN64
-#define CALCON __cdecl
-#define SCALCON L"__cdecl"
-#else
-#define CALCON __thiscall
-#define SCALCON L"__thiscall"
-#endif
+REGOPENKEYEXW pOriginalRegOpenKeyExW;
 
-/* SysListView32 */
-typedef BOOL (* CALCON CDefView__UseItemsView_t)(void *);
-CDefView__UseItemsView_t CDefView__UseItemsView_orig;
-BOOL CALCON CDefView__UseItemsView_hook(void *pThis)
-{return FALSE;}
+const WCHAR* g_targetCLSID = L"{1eeb5b5a-06fb-4732-96b3-975c0194eb39}";
 
+LONG WINAPI RegOpenKeyExWHook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult)
+{
+    if (lpSubKey)
+    {
+        WCHAR lowerSubKey[512];
+        WCHAR lowerCLSID[64];
+        
+        wcsncpy(lowerSubKey, lpSubKey, 511);
+        lowerSubKey[511] = L'\0';
+        wcscpy(lowerCLSID, g_targetCLSID);
+        
+        _wcslwr(lowerSubKey);
+        _wcslwr(lowerCLSID);
+        
+        if (wcsstr(lowerSubKey, lowerCLSID) != NULL)
+        {
+            Wh_Log(L"Blocking RegOpenKeyExW: %s", lpSubKey);
+            return ERROR_FILE_NOT_FOUND;
+        }
+    }
+
+    return pOriginalRegOpenKeyExW(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+}
 
 BOOL Wh_ModInit(void)
-{   
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
-    if (!hShell32)
-    {
-        Wh_Log(L"Failed to load shell32.dll");
-        return FALSE;
-    }
+{
+    Wh_Log(L"Init - blocking CLSID %s", g_targetCLSID);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    Wh_SetFunctionHook(
+        (void*)GetProcAddress(LoadLibrary(L"kernelbase.dll"), "RegOpenKeyExW"),
+        (void*)RegOpenKeyExWHook,
+        (void**)&pOriginalRegOpenKeyExW
+    );
 
-        {
-            {
-                L"private: int "
-                SCALCON
-                L" CDefView::_UseItemsView(void)"
-            },
-            &CDefView__UseItemsView_orig,
-            CDefView__UseItemsView_hook,
-            false
-        }
-    };
-
-    if (!HookSymbols(hShell32, hooks, ARRAYSIZE(hooks)))
-    {
-        Wh_Log(L"Failed to hook one or more symbol functions");
-        return FALSE;
-    }
     return TRUE;
 }
