@@ -5637,7 +5637,7 @@
                     4
                 ],
                 "ratingUsers": 4,
-                "updated": 1707130904000,
+                "updated": 1764372727000,
                 "users": 288
             },
             "metadata": {
@@ -5648,7 +5648,7 @@
                     "explorer.exe"
                 ],
                 "name": "Enable SyslistView32",
-                "version": "1.0.2"
+                "version": "2.0.0"
             }
         },
         "taskbar-auto-hide-keyboard-only": {

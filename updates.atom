@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-28T19:42:49.000Z</updated>
+    <updated>2025-11-28T23:32:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Enable SyslistView32 2.0.0]]></title>
+        <id>https://windhawk.net/mods/syslistview32-enabler#70689aad8bf800ef9ae22bb52a4f35632489f51d</id>
+        <link href="https://windhawk.net/mods/syslistview32-enabler"/>
+        <updated>2025-11-28T23:32:07.000Z</updated>
+        <content type="html"><![CDATA[<p>Use another method, so to hook only a WINAPI function. This should make it compatible with ARM and not require the symbol download.</p>]]></content>
+        <author>
+            <name>anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Two-sided snapping in Win11 1.0.0]]></title>
         <id>https://windhawk.net/mods/two-sided-snapping#2b7ee110564110eeef7aa6fc8b1f53e64dc804f0</id>
@@ -302,22 +313,6 @@ being erroneously loaded</li>
         <author>
             <name>Jevil7452</name>
             <uri>https://github.com/Jevil7452</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Message Box Fix 2.2.0]]></title>
-        <id>https://windhawk.net/mods/msg-box-font-fix#97fcfb04c1e490b16df1bef76c33bc440d777fe3</id>
-        <link href="https://windhawk.net/mods/msg-box-font-fix"/>
-        <updated>2025-11-01T17:14:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Clean up README and mod description</li>
-<li>Split "Windows Vista-10 1703" style into "Windows Vista" and "Windows 7-10 1703"</li>
-<li>"Windows Vista" style is the same as "Windows 10-1703", but will play the "Default Beep" sound for message boxes with no icon</li>
-<li>If you were using "Windows Vista-10 1703" before this update and want to continue using it, you will need to change the style back from "Windows Vista"</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>

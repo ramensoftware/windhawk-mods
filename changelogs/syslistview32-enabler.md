@@ -1,3 +1,7 @@
+## 2.0.0 ([Nov 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/70689aad8bf800ef9ae22bb52a4f35632489f51d/mods/syslistview32-enabler.wh.cpp))
+
+Use another method, so to hook only a WINAPI function. This should make it compatible with ARM and not require the symbol download.
+
 ## 1.0.2 ([Feb 5, 2024](https://github.com/ramensoftware/windhawk-mods/blob/44f281f64356e6439c23a39e04a7e70d174e2288/mods/syslistview32-enabler.wh.cpp))
 
 descriptions should be on separate lines
