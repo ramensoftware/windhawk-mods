@@ -14,7 +14,7 @@
 # Disable Aero Snap Quadrants
 
 This mod disables the corner snapping and enables the two-sided snapping in Windows 11, thus
-restoring the behavior of Windows 10. Restart File Explorer after enabling.
+restoring the behavior before Windows 10. Restart File Explorer after enabling.
 
 This mod is ported from Explorer Patcher.
 
