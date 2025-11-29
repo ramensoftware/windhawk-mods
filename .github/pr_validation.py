@@ -44,6 +44,8 @@ MOD_METADATA_PARAMS = {
         'twitter',
         'homepage',
         'compilerOptions',
+        'license',
+        'donateUrl',
     },
     'singleValueLocalizable': {
         'name',
@@ -152,6 +154,18 @@ def get_mod_file_metadata(path: Path, file: TextIO):
     return properties, warnings
 
 
+@cache
+def get_valid_license_identifiers_lowercase():
+    url = 'https://spdx.org/licenses/licenses.json'
+    response = urllib.request.urlopen(url).read()
+    data = json.loads(response)
+    return {license['licenseId'].lower() for license in data['licenses']}
+
+
+def is_valid_license_identifier(license_id: str):
+    return license_id.lower() in get_valid_license_identifiers_lowercase()
+
+
 def validate_metadata(path: Path, expected_author: str):
     with path.open(encoding='utf-8') as file:
         properties, warnings = get_mod_file_metadata(path, file)
@@ -233,15 +247,16 @@ def validate_metadata(path: Path, expected_author: str):
                 path, line_number, f'{at}{key[0]} requires manual verification'
             )
 
-    key = ('homepage', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if not re.match(r'https?://', value):
-            warnings += add_warning(
-                path,
-                line_number,
-                f'{at}{key[0]} must start with "http://" or "https://"',
-            )
+    for key_id in ['homepage', 'donateUrl']:
+        key = (key_id, None)
+        if key in properties:
+            value, line_number = properties[key]
+            if not re.match(r'https?://', value):
+                warnings += add_warning(
+                    path,
+                    line_number,
+                    f'{at}{key[0]} must start with "http://" or "https://"',
+                )
 
     key = ('compilerOptions', None)
     if key in properties:
@@ -250,6 +265,16 @@ def validate_metadata(path: Path, expected_author: str):
             warnings += add_warning(
                 path, line_number, f'{at}{key[0]} require manual verification'
             )
+
+    key = ('license', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if not is_valid_license_identifier(value):
+            warning_msg = (
+                f'Unknown license identifier "{value}". The license must be'
+                ' a valid SPDX identifier from https://spdx.org/licenses/.'
+            )
+            warnings += add_warning(path, line_number, warning_msg)
 
     key = ('name', None)
     if key not in properties:
