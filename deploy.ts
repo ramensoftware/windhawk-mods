@@ -160,7 +160,19 @@ function validateAndUpdateAuthorData(
     }
 
     if (metadata.author !== entry.author) {
-        inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
+        // Allow specific known author name variations
+        const allowedPairs = [
+            new Set(['CatmanFan / Mr._Lechkar', 'CatmanFan']),
+            new Set(['annix', 'Annix']),
+        ];
+
+        const isAllowedVariation = allowedPairs.some(pairSet =>
+            pairSet.has(metadata.author) && pairSet.has(entry.author)
+        );
+
+        if (!isAllowedVariation) {
+            inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
+        }
     }
 
     if (metadata.homepage !== undefined && metadata.homepage !== entry.homepage) {
