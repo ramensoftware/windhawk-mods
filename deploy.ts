@@ -165,6 +165,7 @@ function validateAndUpdateAuthorData(
         const allowedPairs = [
             ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
             ['Anixx', 'anixx'],
+            ['Isabella Lulamoon (kawapure)', 'kawapure'],
         ];
 
         const matchedPair = allowedPairs.find(pair =>
