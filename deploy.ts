@@ -153,13 +153,29 @@ function validateAndUpdateAuthorData(
         entry.twitter = metadata.twitter;
     }
 
-    if (
-        metadata.github !== entry.github ||
-        metadata.author !== entry.author ||
-        (metadata.homepage !== undefined && metadata.homepage !== entry.homepage) ||
-        (metadata.twitter !== undefined && metadata.twitter !== entry.twitter)
-    ) {
-        throw new Error(`Mod ${modId} has inconsistent author data in commit ${commit}`);
+    const inconsistencies: string[] = [];
+
+    if (metadata.github !== entry.github) {
+        inconsistencies.push(`github: expected '${entry.github}', got '${metadata.github}'`);
+    }
+
+    if (metadata.author !== entry.author) {
+        inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
+    }
+
+    if (metadata.homepage !== undefined && metadata.homepage !== entry.homepage) {
+        inconsistencies.push(`homepage: expected '${entry.homepage}', got '${metadata.homepage}'`);
+    }
+
+    if (metadata.twitter !== undefined && metadata.twitter !== entry.twitter) {
+        inconsistencies.push(`twitter: expected '${entry.twitter}', got '${metadata.twitter}'`);
+    }
+
+    if (inconsistencies.length > 0) {
+        throw new Error(
+            `Mod ${modId} has inconsistent author data in commit ${commit}:\n` +
+            inconsistencies.map(msg => `  - ${msg}`).join('\n')
+        );
     }
 }
 
