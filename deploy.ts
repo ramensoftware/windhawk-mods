@@ -10,7 +10,7 @@ import showdown from 'showdown';
 type ModAuthorData = {
     github: string;
     author: string;
-    homepage?: string;
+    homepages: Set<string>,
     twitter?: string;
 };
 
@@ -140,13 +140,14 @@ function validateAndUpdateAuthorData(
         modAuthorData[authorKey] = {
             github: metadata.github,
             author: metadata.author,
+            homepages: new Set<string>(),
         };
     }
 
     const entry = modAuthorData[authorKey];
 
-    if (entry.homepage === undefined && metadata.homepage !== undefined) {
-        entry.homepage = metadata.homepage;
+    if (metadata.homepage !== undefined) {
+        entry.homepages.add(metadata.homepage);
     }
 
     if (entry.twitter === undefined && metadata.twitter !== undefined) {
@@ -176,10 +177,6 @@ function validateAndUpdateAuthorData(
         } else {
             inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
         }
-    }
-
-    if (metadata.homepage !== undefined && metadata.homepage !== entry.homepage) {
-        inconsistencies.push(`homepage: expected '${entry.homepage}', got '${metadata.homepage}'`);
     }
 
     if (metadata.twitter !== undefined && metadata.twitter !== entry.twitter) {
@@ -368,10 +365,10 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
         }
         seenAuthor.set(authorLower, authorKey);
 
-        if (data.homepage) {
-            const homepageLower = data.homepage.toLowerCase();
+        for (const homepage of data.homepages) {
+            const homepageLower = homepage.toLowerCase();
             if (seenHomepage.has(homepageLower) && seenHomepage.get(homepageLower) !== authorKey) {
-                throw new Error(`Duplicate homepage '${data.homepage}' found for authors '${authorKey}' and '${seenHomepage.get(homepageLower)}'`);
+                throw new Error(`Duplicate homepage '${homepage}' found for authors '${authorKey}' and '${seenHomepage.get(homepageLower)}'`);
             }
             seenHomepage.set(homepageLower, authorKey);
         }
