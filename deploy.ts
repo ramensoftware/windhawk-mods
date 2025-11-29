@@ -10,7 +10,7 @@ import showdown from 'showdown';
 type ModAuthorData = {
     github: string;
     author: string;
-    homepages: Set<string>,
+    homepages: string[],
     twitter?: string;
 };
 
@@ -140,14 +140,16 @@ function validateAndUpdateAuthorData(
         modAuthorData[authorKey] = {
             github: metadata.github,
             author: metadata.author,
-            homepages: new Set<string>(),
+            homepages: [],
         };
     }
 
     const entry = modAuthorData[authorKey];
 
     if (metadata.homepage !== undefined) {
-        entry.homepages.add(metadata.homepage);
+        if (!entry.homepages.includes(metadata.homepage)) {
+            entry.homepages.push(metadata.homepage);
+        }
     }
 
     if (entry.twitter === undefined && metadata.twitter !== undefined) {
