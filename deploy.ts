@@ -162,15 +162,18 @@ function validateAndUpdateAuthorData(
     if (metadata.author !== entry.author) {
         // Allow specific known author name variations
         const allowedPairs = [
-            new Set(['CatmanFan / Mr._Lechkar', 'CatmanFan']),
-            new Set(['annix', 'Annix']),
+            ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
+            ['Anixx', 'anixx'],
         ];
 
-        const isAllowedVariation = allowedPairs.some(pairSet =>
-            pairSet.has(metadata.author) && pairSet.has(entry.author)
+        const matchedPair = allowedPairs.find(pair =>
+            pair.includes(metadata.author) && pair.includes(entry.author)
         );
 
-        if (!isAllowedVariation) {
+        if (matchedPair) {
+            // Normalize to the first item in the pair
+            entry.author = matchedPair[0];
+        } else {
             inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
         }
     }
