@@ -21,20 +21,6 @@ DISALLOWED_AUTHORS = [
     'arukateru',
 ]
 
-VERIFIED_TWITTER_ACCOUNTS = {
-    'https://github.com/m417z': 'm417z',
-    'https://github.com/ahmed605': 'AhmedWalid605',
-    'https://github.com/learn-more': 'learn_more',
-    'https://github.com/realgam3': 'realgam3',
-    'https://github.com/teknixstuff': 'teknixstuff',
-    'https://github.com/kawapure': 'kawaipure',
-    'https://github.com/TorutheRedFox': 'TorutheRedFox',
-    'https://github.com/u3l6': 'u_3l6',
-    'https://github.com/Ingan121': 'Ingan121',
-    'https://github.com/Amrsatrio': 'amrsatrio',
-    'https://github.com/bcrtvkcs': 'bcrtvkcs',
-    'https://github.com/ItsTauTvyDas': 'ItsTauTvyDas',
-}
 
 MOD_METADATA_PARAMS = {
     'singleValue': {
@@ -155,6 +141,13 @@ def get_mod_file_metadata(path: Path, file: TextIO):
 
 
 @cache
+def get_mod_author_data():
+    url = 'https://mods.windhawk.net/mod_author_data.json'
+    response = urllib.request.urlopen(url).read()
+    return json.loads(response)
+
+
+@cache
 def get_valid_license_identifiers_lowercase():
     url = 'https://spdx.org/licenses/licenses.json'
     response = urllib.request.urlopen(url).read()
@@ -236,27 +229,98 @@ def validate_metadata(path: Path, expected_author: str):
     else:
         warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
+    # Validate author data against existing records
+    mod_author_data = get_mod_author_data()
+    author_data = github and mod_author_data.get(github.lower())
+
+    key = ('author', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if author_data:
+            # Existing author - must match exactly
+            if value != author_data['author']:
+                warning_msg = (
+                    f'Expected {at}{key[0]} to be "{author_data["author"]}" based on'
+                    f' previous submissions for {github}'
+                )
+                warnings += add_warning(path, line_number, warning_msg)
+        else:
+            # New author - make sure this author name isn't used by someone else
+            for other_github, other_data in mod_author_data.items():
+                if other_data['author'].lower() == value.lower():
+                    warning_msg = (
+                        f'Author name "{value}" is already used by {other_github}. '
+                        'Please use a different author name.'
+                    )
+                    warnings += add_warning(path, line_number, warning_msg)
+                    break
+    else:
+        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
+
     key = ('twitter', None)
     if key in properties:
         value, line_number = properties[key]
-        expected = github and VERIFIED_TWITTER_ACCOUNTS.get(github)
-        if not expected or not re.fullmatch(
-            r'https://(twitter|x)\.com/' + re.escape(expected), value
-        ):
-            warnings += add_warning(
-                path, line_number, f'{at}{key[0]} requires manual verification'
-            )
-
-    for key_id in ['homepage', 'donateUrl']:
-        key = (key_id, None)
-        if key in properties:
-            value, line_number = properties[key]
-            if not re.match(r'https?://', value):
-                warnings += add_warning(
-                    path,
-                    line_number,
-                    f'{at}{key[0]} must start with "http://" or "https://"',
+        if author_data and 'twitter' in author_data:
+            # Existing author with twitter - must match exactly
+            if value != author_data['twitter']:
+                warning_msg = (
+                    f'Expected {at}{key[0]} to be "{author_data["twitter"]}" based'
+                    f' on previous submissions for {github}'
                 )
+                warnings += add_warning(path, line_number, warning_msg)
+        else:
+            # New twitter value - check it's not used by someone else
+            for other_github, other_data in mod_author_data.items():
+                if 'twitter' in other_data and other_data['twitter'].lower() == value.lower():
+                    warning_msg = (
+                        f'Twitter account "{value}" is already used by {other_github}. '
+                        'If this is correct, manual verification is required.'
+                    )
+                    warnings += add_warning(path, line_number, warning_msg)
+                    break
+            else:
+                # Not used by anyone else, still requires manual verification
+                warnings += add_warning(
+                    path, line_number, f'{at}{key[0]} requires manual verification'
+                )
+
+    key = ('homepage', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if not re.match(r'https?://', value):
+            warnings += add_warning(
+                path,
+                line_number,
+                f'{at}{key[0]} must start with "http://" or "https://"',
+            )
+        else:
+            # Check if this homepage is used by someone else
+            homepage_already_used = False
+            if author_data:
+                # For existing authors, check if it's in their list
+                homepage_already_used = value in author_data.get('homepages', [])
+
+            if not homepage_already_used:
+                # New homepage - check it's not used by another author
+                for other_github, other_data in mod_author_data.items():
+                    if other_github.lower() != (github or '').lower():
+                        if value.lower() in [h.lower() for h in other_data.get('homepages', [])]:
+                            warning_msg = (
+                                f'Homepage "{value}" is already used by {other_github}. '
+                                'Please use a different homepage or verify this is correct.'
+                            )
+                            warnings += add_warning(path, line_number, warning_msg)
+                            break
+
+    key = ('donateUrl', None)
+    if key in properties:
+        value, line_number = properties[key]
+        if not re.match(r'https?://', value):
+            warnings += add_warning(
+                path,
+                line_number,
+                f'{at}{key[0]} must start with "http://" or "https://"',
+            )
 
     key = ('compilerOptions', None)
     if key in properties:
@@ -277,10 +341,6 @@ def validate_metadata(path: Path, expected_author: str):
             warnings += add_warning(path, line_number, warning_msg)
 
     key = ('name', None)
-    if key not in properties:
-        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
-
-    key = ('author', None)
     if key not in properties:
         warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
