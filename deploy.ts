@@ -7,6 +7,13 @@ import { Feed } from 'feed';
 import { OutgoingHttpHeaders } from 'http';
 import showdown from 'showdown';
 
+type ModAuthorData = {
+    github: string;
+    author: string;
+    homepages: Set<string>,
+    twitter?: string;
+};
+
 // Inspired by https://gist.github.com/ktheory/df3440b01d4b9d3197180d5254d7fb65
 async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
     return new Promise<any>((resolve, reject) => {
@@ -117,7 +124,147 @@ function compileMod(modFilePath: string, output32FilePath: string, output64FileP
     }
 }
 
-function generateModData(modId: string, changelogPath: string, modDir: string) {
+function validateAndUpdateAuthorData(
+    modId: string,
+    commit: string,
+    metadata: {
+        github: string;
+        author: string;
+        homepage?: string;
+        twitter?: string;
+    },
+    modAuthorData: Record<string, ModAuthorData>
+) {
+    const authorKey = metadata.github.toLowerCase();
+    if (!modAuthorData[authorKey]) {
+        modAuthorData[authorKey] = {
+            github: metadata.github,
+            author: metadata.author,
+            homepages: new Set<string>(),
+        };
+    }
+
+    const entry = modAuthorData[authorKey];
+
+    if (metadata.homepage !== undefined) {
+        entry.homepages.add(metadata.homepage);
+    }
+
+    if (entry.twitter === undefined && metadata.twitter !== undefined) {
+        entry.twitter = metadata.twitter;
+    }
+
+    const inconsistencies: string[] = [];
+
+    if (metadata.github !== entry.github) {
+        inconsistencies.push(`github: expected '${entry.github}', got '${metadata.github}'`);
+    }
+
+    if (metadata.author !== entry.author) {
+        // Allow specific known author name variations
+        const allowedPairs = [
+            ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
+            ['Anixx', 'anixx'],
+            ['Isabella Lulamoon (kawapure)', 'kawapure'],
+        ];
+
+        const matchedPair = allowedPairs.find(pair =>
+            pair.includes(metadata.author) && pair.includes(entry.author)
+        );
+
+        if (matchedPair) {
+            // Normalize to the first item in the pair
+            entry.author = matchedPair[0];
+        } else {
+            inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
+        }
+    }
+
+    if (metadata.twitter !== undefined && metadata.twitter !== entry.twitter) {
+        inconsistencies.push(`twitter: expected '${entry.twitter}', got '${metadata.twitter}'`);
+    }
+
+    if (inconsistencies.length > 0) {
+        throw new Error(
+            `Mod ${modId} has inconsistent author data in commit ${commit}:\n` +
+            inconsistencies.map(msg => `  - ${msg}`).join('\n')
+        );
+    }
+}
+
+function handleCompiledFiles(
+    modId: string,
+    modDir: string,
+    modVersionFilePath: string,
+    metadata: { version: string; architecture?: string[] }
+) {
+    const modVersionCompiled32FilePath = path.join(modDir, `${metadata.version}_32.dll`);
+    const modVersionCompiled64FilePath = path.join(modDir, `${metadata.version}_64.dll`);
+    const modVersionCompiledArm64FilePath = path.join(modDir, `${metadata.version}_arm64.dll`);
+    const cachedMod32Path = findCachedMod(modId, metadata.version, '32');
+    const cachedMod64Path = findCachedMod(modId, metadata.version, '64');
+    const cachedModArm64Path = findCachedMod(modId, metadata.version, 'arm64');
+
+    if (cachedMod32Path || cachedMod64Path || cachedModArm64Path) {
+        const modHas32 = metadata.architecture?.includes('x86') ?? true;
+        const modHas64 =
+            (metadata.architecture?.includes('x86-64') ?? true) ||
+            (metadata.architecture?.includes('amd64') ?? true);
+        const modHasArm64 =
+            (metadata.architecture?.includes('x86-64') ?? true) ||
+            (metadata.architecture?.includes('arm64') ?? true);
+        if (modHas32 != !!cachedMod32Path || modHas64 != !!cachedMod64Path || modHasArm64 != !!cachedModArm64Path) {
+            throw new Error(`Mod ${modId} architecture mismatch`);
+        }
+
+        if (cachedMod32Path) {
+            fs.copyFileSync(cachedMod32Path, modVersionCompiled32FilePath);
+        }
+
+        if (cachedMod64Path) {
+            fs.copyFileSync(cachedMod64Path, modVersionCompiled64FilePath);
+        }
+
+        if (cachedModArm64Path) {
+            fs.copyFileSync(cachedModArm64Path, modVersionCompiledArm64FilePath);
+        }
+    } else {
+        compileMod(modVersionFilePath, modVersionCompiled32FilePath, modVersionCompiled64FilePath, modVersionCompiledArm64FilePath);
+    }
+}
+
+function generateChangelogEntry(modId: string, commit: string, lastCommit: string, metadata: { version: string }) {
+    const commitTime = parseInt(gitExec([
+        'log',
+        '--format=%ct',
+        '-1',
+        commit,
+    ]), 10);
+
+    const commitFormattedDate = new Date(commitTime * 1000)
+        .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+    const modVersionUrl = `https://github.com/ramensoftware/windhawk-mods/blob/${commit}/mods/${modId}.wh.cpp`;
+
+    let changelogEntry = `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
+
+    if (commit !== lastCommit) {
+        const commitMessage = gitExec([
+            'log',
+            '-1',
+            '--pretty=format:%B',
+            commit,
+        ]);
+        const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
+        changelogEntry += `${changelogItem}\n\n`;
+    } else {
+        changelogEntry += 'Initial release.\n';
+    }
+
+    return { changelogEntry, commitTime };
+}
+
+function generateModData(modId: string, changelogPath: string, modDir: string, modAuthorData: Record<string, ModAuthorData>) {
     if (!fs.existsSync(modDir)) {
         fs.mkdirSync(modDir);
     }
@@ -148,9 +295,16 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
-        if (!metadata.version) {
-            throw new Error(`Mod ${modId} has no version in commit ${commit}`);
+        if (!metadata.version || !metadata.github || !metadata.author) {
+            throw new Error(`Mod ${modId} has incomplete metadata in commit ${commit}`);
         }
+
+        validateAndUpdateAuthorData(modId, commit, {
+            github: metadata.github,
+            author: metadata.author,
+            homepage: metadata.homepage,
+            twitter: metadata.twitter,
+        }, modAuthorData);
 
         const prerelease = metadata.version.includes('-');
         if (prerelease && sawReleaseVersion) {
@@ -170,65 +324,15 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
             sawReleaseVersion = true;
         }
 
-        const modVersionCompiled32FilePath = path.join(modDir, `${metadata.version}_32.dll`);
-        const modVersionCompiled64FilePath = path.join(modDir, `${metadata.version}_64.dll`);
-        const modVersionCompiledArm64FilePath = path.join(modDir, `${metadata.version}_arm64.dll`);
-        const cachedMod32Path = findCachedMod(modId, metadata.version, '32');
-        const cachedMod64Path = findCachedMod(modId, metadata.version, '64');
-        const cachedModArm64Path = findCachedMod(modId, metadata.version, 'arm64');
-        if (cachedMod32Path || cachedMod64Path || cachedModArm64Path) {
-            const modHas32 = metadata.architecture?.includes('x86') ?? true;
-            const modHas64 = 
-                (metadata.architecture?.includes('x86-64') ?? true) ||
-                (metadata.architecture?.includes('amd64') ?? true);
-            const modHasArm64 =
-                (metadata.architecture?.includes('x86-64') ?? true) ||
-                (metadata.architecture?.includes('arm64') ?? true);
-            if (modHas32 != !!cachedMod32Path || modHas64 != !!cachedMod64Path || modHasArm64 != !!cachedModArm64Path) {
-                throw new Error(`Mod ${modId} architecture mismatch`);
-            }
+        handleCompiledFiles(modId, modDir, modVersionFilePath, {
+            version: metadata.version,
+            architecture: metadata.architecture,
+        });
 
-            if (cachedMod32Path) {
-                fs.copyFileSync(cachedMod32Path, modVersionCompiled32FilePath);
-            }
-
-            if (cachedMod64Path) {
-                fs.copyFileSync(cachedMod64Path, modVersionCompiled64FilePath);
-            }
-
-            if (cachedModArm64Path) {
-                fs.copyFileSync(cachedModArm64Path, modVersionCompiledArm64FilePath);
-            }
-        } else {
-            compileMod(modVersionFilePath, modVersionCompiled32FilePath, modVersionCompiled64FilePath, modVersionCompiledArm64FilePath);
-        }
-
-        const commitTime = parseInt(gitExec([
-            'log',
-            '--format=%ct',
-            '-1',
-            commit,
-        ]), 10);
-
-        const commitFormattedDate = new Date(commitTime * 1000)
-            .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-
-        const modVersionUrl = `https://github.com/ramensoftware/windhawk-mods/blob/${commit}/mods/${modId}.wh.cpp`;
-
-        changelog += `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
-
-        if (commit !== lastCommit) {
-            const commitMessage = gitExec([
-                'log',
-                '-1',
-                '--pretty=format:%B',
-                commit,
-            ]);
-            const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
-            changelog += `${changelogItem}\n\n`;
-        } else {
-            changelog += 'Initial release.\n';
-        }
+        const { changelogEntry, commitTime } = generateChangelogEntry(modId, commit, lastCommit, {
+            version: metadata.version,
+        });
+        changelog += changelogEntry;
 
         versions.unshift({
             version: metadata.version,
@@ -243,11 +347,50 @@ function generateModData(modId: string, changelogPath: string, modDir: string) {
     fs.writeFileSync(versionsPath, JSON.stringify(versions));
 }
 
+function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
+    const seenGithub = new Map<string, string>();
+    const seenAuthor = new Map<string, string>();
+    const seenHomepage = new Map<string, string>();
+    const seenTwitter = new Map<string, string>();
+
+    for (const [authorKey, data] of Object.entries(modAuthorData)) {
+        const githubLower = data.github.toLowerCase();
+        if (seenGithub.has(githubLower) && seenGithub.get(githubLower) !== authorKey) {
+            throw new Error(`Duplicate github '${data.github}' found for authors '${authorKey}' and '${seenGithub.get(githubLower)}'`);
+        }
+        seenGithub.set(githubLower, authorKey);
+
+        const authorLower = data.author.toLowerCase();
+        if (seenAuthor.has(authorLower) && seenAuthor.get(authorLower) !== authorKey) {
+            throw new Error(`Duplicate author name '${data.author}' found for authors '${authorKey}' and '${seenAuthor.get(authorLower)}'`);
+        }
+        seenAuthor.set(authorLower, authorKey);
+
+        for (const homepage of data.homepages) {
+            const homepageLower = homepage.toLowerCase();
+            if (seenHomepage.has(homepageLower) && seenHomepage.get(homepageLower) !== authorKey) {
+                throw new Error(`Duplicate homepage '${homepage}' found for authors '${authorKey}' and '${seenHomepage.get(homepageLower)}'`);
+            }
+            seenHomepage.set(homepageLower, authorKey);
+        }
+
+        if (data.twitter) {
+            const twitterLower = data.twitter.toLowerCase();
+            if (seenTwitter.has(twitterLower) && seenTwitter.get(twitterLower) !== authorKey) {
+                throw new Error(`Duplicate twitter '${data.twitter}' found for authors '${authorKey}' and '${seenTwitter.get(twitterLower)}'`);
+            }
+            seenTwitter.set(twitterLower, authorKey);
+        }
+    }
+}
+
 function generateModsData() {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
     }
+
+    const modAuthorData: Record<string, ModAuthorData> = {};
 
     const modsSourceDir = fs.opendirSync('mods');
     try {
@@ -257,12 +400,16 @@ function generateModsData() {
                 const modId = modsSourceDirEntry.name.slice(0, -'.wh.cpp'.length);
                 const changelogPath = path.join(changelogDir, `${modId}.md`);
                 const modDir = path.join('mods', modId);
-                generateModData(modId, changelogPath, modDir);
+                generateModData(modId, changelogPath, modDir, modAuthorData);
             }
         }
     } finally {
         modsSourceDir.closeSync();
     }
+
+    validateModAuthorData(modAuthorData);
+
+    fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 4));
 }
 
 function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any) {
