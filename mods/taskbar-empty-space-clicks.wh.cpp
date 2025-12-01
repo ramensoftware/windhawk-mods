@@ -189,6 +189,10 @@ Please open an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mo
 - Mod settings you are using - a screenshot of the mod's Settings tab, or ideally the entire settings JSON record from the `Advanced` tab
 - Mod log output, ideally with `DEBUG` logging enabled (see the previous section for instructions on how to enable it)
 
+### I can't click on empty space when the taskbar gets full.
+
+If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve a minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
+
 ## Suggestions and new features
 
 If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues). Please, be as specific as possible and provide as much information as you can. Please consider using AI chatbot if you are struggling with putting all together in English.
