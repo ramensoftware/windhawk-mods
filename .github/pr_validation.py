@@ -9,8 +9,10 @@ import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 from functools import cache
+from io import StringIO
 from pathlib import Path
 from typing import Optional, TextIO, Tuple
 
@@ -72,9 +74,26 @@ ModPropertyValue = Tuple[str, int]  # (value, line_number)
 
 
 def get_mod_file_metadata(
-    path: Path, file: TextIO
+    file: TextIO, warn_callback=None
 ) -> Tuple[dict[ModPropertyKey, ModPropertyValue], int]:
+    """
+    Parse mod metadata from file content.
+
+    Args:
+        file: Text stream to read from
+        warn_callback: Optional callback(line_number, message) for warnings
+
+    Returns:
+        Tuple of (properties dict, warning count)
+    """
     warnings = 0
+
+    def warn(line_number: int, message: str):
+        nonlocal warnings
+        if warn_callback:
+            warnings += warn_callback(line_number, message)
+        else:
+            warnings += 1
 
     properties: dict[ModPropertyKey, ModPropertyValue] = {}
 
@@ -89,9 +108,7 @@ def get_mod_file_metadata(
             if re.fullmatch(r'//[ \t]+==WindhawkMod==[ \t]*', line):
                 inside_metadata_block = True
                 if line_number != 1:
-                    warnings += add_warning(
-                        path, line_number, 'Metadata block must start at line 1'
-                    )
+                    warn(line_number, 'Metadata block must start at line 1')
             continue
 
         if re.fullmatch(r'//[ \t]+==\/WindhawkMod==[ \t]*', line):
@@ -106,7 +123,7 @@ def get_mod_file_metadata(
             line.strip(),
         )
         if not match:
-            warnings += add_warning(path, line_number, 'Invalid metadata line format')
+            warn(line_number, 'Invalid metadata line format')
             continue
 
         key = match.group(1)
@@ -114,18 +131,14 @@ def get_mod_file_metadata(
         value = match.group(3)
 
         if not any(key in x for x in MOD_METADATA_PARAMS.values()):
-            warnings += add_warning(
-                path, line_number, f'{key} is not a valid metadata parameter'
-            )
+            warn(line_number, f'{key} is not a valid metadata parameter')
             continue
 
         if (
             key not in MOD_METADATA_PARAMS['singleValueLocalizable']
             and language is not None
         ):
-            warnings += add_warning(
-                path, line_number, 'Language cannot be specified for this property'
-            )
+            warn(line_number, 'Language cannot be specified for this property')
             continue
 
         if key in MOD_METADATA_PARAMS['multiValue']:
@@ -133,15 +146,13 @@ def get_mod_file_metadata(
             properties[(key, language)] = f'{prefix}{value}\n', line_number
         else:
             if (key, language) in properties:
-                warnings += add_warning(
-                    path, line_number, f'{key} must be specified only once'
-                )
+                warn(line_number, f'{key} must be specified only once')
                 continue
 
             properties[(key, language)] = value, line_number
 
     if inside_metadata_block:
-        warnings += add_warning(path, 1, 'Metadata block must be closed')
+        warn(1, 'Metadata block must be closed')
 
     return properties, warnings
 
@@ -163,6 +174,45 @@ def get_valid_license_identifiers_lowercase():
 
 def is_valid_license_identifier(license_id: str):
     return license_id.lower() in get_valid_license_identifiers_lowercase()
+
+
+@cache
+def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
+    """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
+    try:
+        url = f'https://mods.windhawk.net/mods/{mod_id}.wh.cpp'
+        response = urllib.request.urlopen(url)
+        content = response.read().decode('utf-8')
+
+        # Use existing robust metadata parser (no warnings needed for existing mods)
+        properties, _ = get_mod_file_metadata(StringIO(content), warn_callback=None)
+
+        # Convert to simple dict with only non-localized single values
+        metadata = {}
+        for (key, language), (value, _) in properties.items():
+            # Only include non-localized properties for validation
+            if language is None:
+                metadata[key] = value
+
+        return metadata if metadata else None
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+@cache
+def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
+    """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
+    try:
+        url = f'https://mods.windhawk.net/mods/{mod_id}/versions.json'
+        response = urllib.request.urlopen(url)
+        data = json.loads(response.read())
+        return [item['version'] for item in data]
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
 
 
 def at(key_name: str) -> str:
@@ -232,6 +282,16 @@ class ModMetadataValidator:
         self.expected_author = expected_author
         self.mod_author_data = get_mod_author_data()
 
+        # Extract mod ID and fetch existing mod data
+        id_prop = self.property('id')
+        self.mod_id = id_prop.value if id_prop else None
+        self.existing_metadata = (
+            get_existing_mod_metadata(self.mod_id) if self.mod_id else None
+        )
+        self.existing_versions = (
+            get_existing_mod_versions(self.mod_id) if self.mod_id else None
+        )
+
         # Extract github URL and fetch author data
         github_prop = self.property('github')
         self.github_url = github_prop.value if github_prop else None
@@ -278,6 +338,14 @@ class ModMetadataValidator:
         if not prop:
             return
 
+        # Check if mod already exists - github must not change
+        if self.existing_metadata and 'github' in self.existing_metadata:
+            if prop.value != self.existing_metadata['github']:
+                prop.warn(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["github"]}", got "{prop.value}"'
+                )
+
         expected = f'https://github.com/{self.expected_author}'
         if prop.value != expected and prop.value.lower() == expected.lower():
             prop.warn(f'Expected @@ to be "{expected}" (case-sensitive)')
@@ -297,6 +365,14 @@ class ModMetadataValidator:
         prop = self.property('id', warn_if_missing=True)
         if not prop:
             return
+
+        # Check if mod already exists - id must not change
+        if self.existing_metadata and 'id' in self.existing_metadata:
+            if prop.value != self.existing_metadata['id']:
+                prop.warn(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["id"]}", got "{prop.value}"'
+                )
 
         expected = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
         if prop.value != expected:
@@ -321,11 +397,27 @@ class ModMetadataValidator:
             '@@ must contain only numbers and dots',
         )
 
+        # Check if version is already used
+        if self.existing_versions and prop.value in self.existing_versions:
+            prop.warn(
+                f'@@ "{prop.value}" is already used. Please use a new, unused'
+                ' version.\n'
+                f'Previous versions: {", ".join(self.existing_versions)}'
+            )
+
     def validate_author(self):
         """Validate author name against existing records."""
         prop = self.property('author', warn_if_missing=True)
         if not prop:
             return
+
+        # Check if mod already exists - author must not change
+        if self.existing_metadata and 'author' in self.existing_metadata:
+            if prop.value != self.existing_metadata['author']:
+                prop.warn(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["author"]}", got "{prop.value}"'
+                )
 
         if self.author_data:
             # Existing author - must match exactly
@@ -347,6 +439,14 @@ class ModMetadataValidator:
         prop = self.property('twitter')
         if not prop:
             return
+
+        # Check if mod already exists - twitter must not change
+        if self.existing_metadata and 'twitter' in self.existing_metadata:
+            if prop.value != self.existing_metadata['twitter']:
+                prop.warn(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["twitter"]}", got "{prop.value}"'
+                )
 
         if self.author_data and 'twitter' in self.author_data:
             # Existing author with twitter - must match exactly
@@ -451,7 +551,9 @@ class ModMetadataValidator:
 
 def validate_metadata(path: Path, expected_author: str) -> int:
     with path.open(encoding='utf-8') as file:
-        properties, initial_warnings = get_mod_file_metadata(path, file)
+        properties, initial_warnings = get_mod_file_metadata(
+            file, warn_callback=lambda line, msg: add_warning(path, line, msg)
+        )
 
     # Validate metadata properties
     validator = ModMetadataValidator(path, properties, expected_author)
