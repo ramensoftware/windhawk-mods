@@ -14,7 +14,7 @@ import urllib.request
 from functools import cache
 from io import StringIO
 from pathlib import Path
-from typing import Optional, TextIO, Tuple
+from typing import Callable, Optional, TextIO, Tuple
 
 from extract_mod_symbols import get_mod_symbols
 
@@ -74,7 +74,7 @@ ModPropertyValue = Tuple[str, int]  # (value, line_number)
 
 
 def get_mod_file_metadata(
-    file: TextIO, warn_callback=None
+    file: TextIO, warn_callback: Optional[Callable[[int, str], int]] = None
 ) -> Tuple[dict[ModPropertyKey, ModPropertyValue], int]:
     """
     Parse mod metadata from file content.
@@ -552,7 +552,7 @@ class ModMetadataValidator:
 def validate_metadata(path: Path, expected_author: str) -> int:
     with path.open(encoding='utf-8') as file:
         properties, initial_warnings = get_mod_file_metadata(
-            file, warn_callback=lambda line, msg: add_warning(path, line, msg)
+            file, warn_callback=lambda line, msg: add_warning(line, line, msg)
         )
 
     # Validate metadata properties
