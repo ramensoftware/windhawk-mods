@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-11-28T23:32:07.000Z</updated>
+    <updated>2025-12-01T15:35:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#7833da2a65bf74c639d33f1432664d552056e2de</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2025-12-01T15:35:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <code>Troubleshooting</code> chapter to address recent issues with incorrect trigger settings after update from v1 to v2</li>
+<li>Added info about reserving empty space on the taskbar - resolves https://github.com/m1lhaus/windhawk-mods/issues/47</li>
+</ul>]]></content>
+        <author>
+            <name>m1lhaus</name>
+            <uri>https://github.com/m1lhaus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Enable SyslistView32 2.0.0]]></title>
         <id>https://windhawk.net/mods/syslistview32-enabler#70689aad8bf800ef9ae22bb52a4f35632489f51d</id>
@@ -297,19 +311,6 @@ being erroneously loaded</li>
         <link href="https://windhawk.net/mods/no-icon-messagebox-sound"/>
         <updated>2025-11-01T19:20:59.000Z</updated>
         <content type="html"><![CDATA[<p>Update Readme to further note about Message Box Fix</p>]]></content>
-        <author>
-            <name>Jevil7452</name>
-            <uri>https://github.com/Jevil7452</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No icon MessageBox Sound Restore 1.0]]></title>
-        <id>https://windhawk.net/mods/no-icon-messagebox-sound#5401972bce638083d128c6917a5930f245ee9d57</id>
-        <link href="https://windhawk.net/mods/no-icon-messagebox-sound"/>
-        <updated>2025-11-01T17:17:19.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod restores the sound that plays whenever a MessageBox that does not have an icon set pops up.</p>
-<p>This replicates behavior from Windows Vista and below.</p>
-<p>NOTE: If you use "Message Box Fix" mod with XP and below style, this is not needed as the mod will cause the sound to play in this scenario.</p>]]></content>
         <author>
             <name>Jevil7452</name>
             <uri>https://github.com/Jevil7452</uri>

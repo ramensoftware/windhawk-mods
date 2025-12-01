@@ -1,3 +1,8 @@
+## 2.2 ([Dec 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7833da2a65bf74c639d33f1432664d552056e2de/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- Added `Troubleshooting` chapter to address recent issues with incorrect trigger settings after update from v1 to v2
+- Added info about reserving empty space on the taskbar - resolves https://github.com/m1lhaus/windhawk-mods/issues/47
+
 ## 2.1 ([Nov 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/077c9d5ae5e80ce1c341354c4dc628516f2b5201/mods/taskbar-empty-space-clicks.wh.cpp))
 
 - implemented "Eager trigger evaluation" option - resolves https://github.com/m1lhaus/windhawk-mods/issues/40
