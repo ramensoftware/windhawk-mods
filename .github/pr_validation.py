@@ -67,10 +67,16 @@ def add_warning(file: Path, line: int, message: str):
     return 1
 
 
-def get_mod_file_metadata(path: Path, file: TextIO):
+ModPropertyKey = Tuple[str, Optional[str]]  # (key_name, language)
+ModPropertyValue = Tuple[str, int]  # (value, line_number)
+
+
+def get_mod_file_metadata(
+    path: Path, file: TextIO
+) -> Tuple[dict[ModPropertyKey, ModPropertyValue], int]:
     warnings = 0
 
-    properties: dict[Tuple[str, Optional[str]], Tuple[str, int]] = {}
+    properties: dict[ModPropertyKey, ModPropertyValue] = {}
 
     inside_metadata_block = False
 
@@ -159,27 +165,125 @@ def is_valid_license_identifier(license_id: str):
     return license_id.lower() in get_valid_license_identifiers_lowercase()
 
 
-def validate_metadata(path: Path, expected_author: str):
-    with path.open(encoding='utf-8') as file:
-        properties, warnings = get_mod_file_metadata(path, file)
+def at(key_name: str) -> str:
+    """Format property name with Zero Width Non-Joiner to prevent GitHub tagging."""
+    return f'@\u200c{key_name}'
 
-    # Print properties with Zero Width Non-Joiner (ZWNJ) to prevent GitHub from
-    # tagging users.
-    at = '@\u200c'
 
-    github = None
+class ValidationContext:
+    """Manages validation state and warning count."""
 
-    key = ('github', None)
-    if key in properties:
-        value, line_number = properties[key]
-        github = value
-        expected = f'https://github.com/{expected_author}'
-        if value != expected and value.lower() == expected.lower():
-            warning_msg = f'Expected {at}{key[0]} to be "{expected}" (case-sensitive)'
-            warnings += add_warning(path, line_number, warning_msg)
-        elif value != expected:
-            warning_msg = (
-                f'Expected {at}{key[0]} to be "{expected}".\n'
+    def __init__(self, path: Path):
+        self.path = path
+        self.__warning_count = 0
+
+    def warn(self, message: str, line_number: Optional[int] = None) -> None:
+        """Add a warning to the context."""
+        line = line_number if line_number is not None else 1
+        add_warning(self.path, line, message)
+        self.__warning_count += 1
+
+    def warning_count(self) -> int:
+        """Get total number of warnings."""
+        return self.__warning_count
+
+
+class PropertyValidator:
+    """Represents a single property with fluent validation methods."""
+
+    def __init__(
+        self, ctx: ValidationContext, key_name: str, value: str, line_number: int
+    ):
+        self.ctx = ctx
+        self.key_name = key_name
+        self.value = value
+        self.line_number = line_number
+
+    def warn(self, message: str) -> 'PropertyValidator':
+        """Add a warning for this property. Use @@ as placeholder for property name."""
+        message = message.replace('@@', at(self.key_name))
+        self.ctx.warn(message, self.line_number)
+        return self
+
+    def validate_match(self, pattern: str, error_msg: str) -> 'PropertyValidator':
+        """Validate value matches regex pattern."""
+        if not re.fullmatch(pattern, self.value):
+            self.warn(error_msg)
+        return self
+
+    def validate_url_format(self) -> 'PropertyValidator':
+        """Validate URL starts with http:// or https://."""
+        if not re.match(r'https?://', self.value):
+            self.warn('@@ must start with "http://" or "https://"')
+        return self
+
+
+class ModMetadataValidator:
+    """High-level validator that orchestrates all metadata validations."""
+
+    def __init__(
+        self,
+        path: Path,
+        properties: dict[ModPropertyKey, ModPropertyValue],
+        expected_author: str,
+    ):
+        self.ctx = ValidationContext(path)
+        self.properties = properties
+        self.expected_author = expected_author
+        self.mod_author_data = get_mod_author_data()
+
+        # Extract github URL and fetch author data
+        github_prop = self.property('github')
+        self.github_url = github_prop.value if github_prop else None
+        self.author_data = (
+            self.mod_author_data.get(self.github_url.lower())
+            if self.github_url
+            else None
+        )
+
+    def property(
+        self,
+        key_name: str,
+        language: Optional[str] = None,
+        warn_if_missing: bool = False,
+    ) -> Optional[PropertyValidator]:
+        """Get a property validator for the given key, or None if property doesn't exist."""
+        key = (key_name, language)
+        if key in self.properties:
+            value, line_number = self.properties[key]
+            return PropertyValidator(self.ctx, key_name, value, line_number)
+        if warn_if_missing:
+            self.ctx.warn(f'Missing {at(key_name)}')
+        return None
+
+    def validate_all(self) -> int:
+        """Run all validations and return warning count."""
+        self.validate_github()
+        self.validate_id()
+        self.validate_version()
+        self.validate_author()
+        self.validate_twitter()
+        self.validate_homepage()
+        self.validate_donate_url()
+        self.validate_compiler_options()
+        self.validate_license()
+        self.validate_name()
+        self.validate_architecture()
+
+        return self.ctx.warning_count()
+
+    def validate_github(self):
+        """Validate GitHub URL."""
+        prop = self.property('github', warn_if_missing=True)
+        if not prop:
+            return
+
+        expected = f'https://github.com/{self.expected_author}'
+        if prop.value != expected and prop.value.lower() == expected.lower():
+            prop.warn(f'Expected @@ to be "{expected}" (case-sensitive)')
+        elif prop.value != expected:
+            prop.warn(
+                f'Expected @@ to be "{expected}".\n'
                 'Note that only the original author of the mod is allowed to submit'
                 ' updates.\n'
                 'If you are not the original author, you might want to contact them to'
@@ -187,190 +291,180 @@ def validate_metadata(path: Path, expected_author: str):
                 'For more information about submitting a mod update, refer to the'
                 ' "Submitting a Mod Update" section in the repository\'s README.md.'
             )
-            warnings += add_warning(path, line_number, warning_msg)
-    else:
-        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
-    key = ('id', None)
-    if key in properties:
-        value, line_number = properties[key]
-        expected = path.name.removesuffix('.cpp').removesuffix('.wh')
-        if value != expected:
-            warnings += add_warning(
-                path,
-                line_number,
-                f'Expected {at}{key[0]} ({value}) to match the file name ({expected})',
-            )
+    def validate_id(self):
+        """Validate mod ID."""
+        prop = self.property('id', warn_if_missing=True)
+        if not prop:
+            return
 
-        if not re.fullmatch(r'([0-9a-z]+-)*[0-9a-z]+', value):
-            warnings += add_warning(
-                path,
-                line_number,
-                f'{at}{key[0]} must contain only letters, numbers and dashes',
-            )
+        expected = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
+        if prop.value != expected:
+            prop.warn(f'Expected @@ ({prop.value}) to match the file name ({expected})')
 
-        if len(value) < 8 or len(value) > 50:
-            warnings += add_warning(
-                path, line_number, f'{at}{key[0]} must be between 8 and 50 characters'
-            )
-    else:
-        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
+        prop.validate_match(
+            r'([0-9a-z]+-)*[0-9a-z]+',
+            '@@ must contain only lowercase letters, numbers and dashes',
+        )
 
-    key = ('version', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if not re.fullmatch(r'([0-9]+\.)*[0-9]+(-\w+)?', value):
-            warnings += add_warning(
-                path,
-                line_number,
-                f'{at}{key[0]} must contain only numbers and dots, and optionally a'
-                ' prerelease suffix (e.g. 1.2.3-beta)',
-            )
-    else:
-        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
+        if len(prop.value) < 8 or len(prop.value) > 50:
+            prop.warn('@@ must be between 8 and 50 characters')
 
-    # Validate author data against existing records
-    mod_author_data = get_mod_author_data()
-    author_data = github and mod_author_data.get(github.lower())
+    def validate_version(self):
+        """Validate version format."""
+        prop = self.property('version', warn_if_missing=True)
+        if not prop:
+            return
 
-    key = ('author', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if author_data:
+        prop.validate_match(
+            r'([0-9]+\.)*[0-9]+',
+            '@@ must contain only numbers and dots',
+        )
+
+    def validate_author(self):
+        """Validate author name against existing records."""
+        prop = self.property('author', warn_if_missing=True)
+        if not prop:
+            return
+
+        if self.author_data:
             # Existing author - must match exactly
-            if value != author_data['author']:
-                warning_msg = (
-                    f'Expected {at}{key[0]} to be "{author_data["author"]}" based on'
-                    f' previous submissions for {github}'
+            if prop.value != self.author_data['author']:
+                prop.warn(
+                    f'Expected @@ to be "{self.author_data["author"]}" based on'
+                    f' previous submissions for {self.github_url}'
                 )
-                warnings += add_warning(path, line_number, warning_msg)
         else:
-            # New author - make sure this author name isn't used by someone else
-            for other_github, other_data in mod_author_data.items():
-                if other_data['author'].lower() == value.lower():
-                    warning_msg = (
-                        f'Author name "{value}" is already used by {other_github}. '
-                        'Please use a different author name.'
+            for other_github, other_data in self.mod_author_data.items():
+                if other_data['author'].lower() == prop.value.lower():
+                    prop.warn(
+                        f'Author name "{prop.value}" is already used by {other_github}.'
                     )
-                    warnings += add_warning(path, line_number, warning_msg)
                     break
-    else:
-        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
 
-    key = ('twitter', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if author_data and 'twitter' in author_data:
+    def validate_twitter(self):
+        """Validate Twitter handle."""
+        prop = self.property('twitter')
+        if not prop:
+            return
+
+        if self.author_data and 'twitter' in self.author_data:
             # Existing author with twitter - must match exactly
-            if value != author_data['twitter']:
-                warning_msg = (
-                    f'Expected {at}{key[0]} to be "{author_data["twitter"]}" based'
-                    f' on previous submissions for {github}'
+            if prop.value != self.author_data['twitter']:
+                prop.warn(
+                    f'Expected @@ to be "{self.author_data["twitter"]}" based on'
+                    f' previous submissions for {self.github_url}'
                 )
-                warnings += add_warning(path, line_number, warning_msg)
         else:
             # New twitter value - check it's not used by someone else
-            for other_github, other_data in mod_author_data.items():
-                if 'twitter' in other_data and other_data['twitter'].lower() == value.lower():
-                    warning_msg = (
-                        f'Twitter account "{value}" is already used by {other_github}. '
-                        'If this is correct, manual verification is required.'
+            for other_github, other_data in self.mod_author_data.items():
+                if (
+                    'twitter' in other_data
+                    and other_data['twitter'].lower() == prop.value.lower()
+                ):
+                    prop.warn(
+                        f'Twitter account "{prop.value}" is already used by'
+                        f' {other_github}.'
                     )
-                    warnings += add_warning(path, line_number, warning_msg)
                     break
             else:
                 # Not used by anyone else, still requires manual verification
-                warnings += add_warning(
-                    path, line_number, f'{at}{key[0]} requires manual verification'
-                )
+                prop.warn('@@ requires manual verification')
 
-    key = ('homepage', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if not re.match(r'https?://', value):
-            warnings += add_warning(
-                path,
-                line_number,
-                f'{at}{key[0]} must start with "http://" or "https://"',
-            )
-        else:
-            # Check if this homepage is used by someone else
-            homepage_already_used = False
-            if author_data:
-                # For existing authors, check if it's in their list
-                homepage_already_used = value in author_data.get('homepages', [])
+    def validate_homepage(self):
+        """Validate homepage URL."""
+        prop = self.property('homepage')
+        if not prop:
+            return
 
-            if not homepage_already_used:
-                # New homepage - check it's not used by another author
-                for other_github, other_data in mod_author_data.items():
-                    if other_github.lower() != (github or '').lower():
-                        if value.lower() in [h.lower() for h in other_data.get('homepages', [])]:
-                            warning_msg = (
-                                f'Homepage "{value}" is already used by {other_github}. '
-                                'Please use a different homepage or verify this is correct.'
-                            )
-                            warnings += add_warning(path, line_number, warning_msg)
-                            break
+        prop.validate_url_format()
 
-    key = ('donateUrl', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if not re.match(r'https?://', value):
-            warnings += add_warning(
-                path,
-                line_number,
-                f'{at}{key[0]} must start with "http://" or "https://"',
-            )
+        # Check if this homepage is used by someone else
+        homepage_already_used = False
+        if self.author_data:
+            # For existing authors, check if it's in their list
+            homepage_already_used = prop.value in self.author_data.get('homepages', [])
 
-    key = ('compilerOptions', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if not re.fullmatch(r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', value + ' '):
-            warnings += add_warning(
-                path, line_number, f'{at}{key[0]} require manual verification'
-            )
+        if not homepage_already_used:
+            # New homepage - check it's not used by another author
+            for other_github, other_data in self.mod_author_data.items():
+                if other_github.lower() != (self.github_url or '').lower():
+                    if prop.value.lower() in [
+                        h.lower() for h in other_data.get('homepages', [])
+                    ]:
+                        prop.warn(
+                            f'Homepage "{prop.value}" is already used by'
+                            f' {other_github}.'
+                        )
+                        break
 
-    key = ('license', None)
-    if key in properties:
-        value, line_number = properties[key]
-        if not is_valid_license_identifier(value):
-            warning_msg = (
-                f'Unknown license identifier "{value}". The license must be'
+    def validate_donate_url(self):
+        """Validate donate URL format."""
+        prop = self.property('donateUrl')
+        if prop:
+            prop.validate_url_format()
+
+    def validate_compiler_options(self):
+        """Validate compiler options format."""
+        prop = self.property('compilerOptions')
+        if not prop:
+            return
+
+        if not re.fullmatch(
+            r'((-[lD]\S+|-Wl,--export-all-symbols)\s+)+', prop.value + ' '
+        ):
+            prop.warn('@@ require manual verification')
+
+    def validate_license(self):
+        """Validate license identifier."""
+        prop = self.property('license')
+        if not prop:
+            return
+
+        if not is_valid_license_identifier(prop.value):
+            prop.warn(
+                f'Unknown license identifier "{prop.value}". The license must be'
                 ' a valid SPDX identifier from https://spdx.org/licenses/.'
             )
-            warnings += add_warning(path, line_number, warning_msg)
 
-    key = ('name', None)
-    if key not in properties:
-        warnings += add_warning(path, 1, f'Missing {at}{key[0]}')
+    def validate_name(self):
+        """Validate name exists."""
+        self.property('name', warn_if_missing=True)
 
-    key = ('architecture', None)
-    if key in properties:
-        value, line_number = properties[key]
-        for arch in value.split('\n'):
+    def validate_architecture(self):
+        """Validate architecture values."""
+        prop = self.property('architecture')
+        if not prop:
+            return
+
+        for arch in prop.value.split('\n'):
             if arch.strip() == '':
                 pass
             elif arch not in {'x86', 'x86-64', 'amd64', 'arm64'}:
-                warnings += add_warning(
-                    path, line_number, f'Unknown architecture "{arch}"'
-                )
+                prop.warn(f'Unknown architecture "{arch}"')
             elif arch not in {'x86', 'x86-64'}:
-                warnings += add_warning(
-                    path,
-                    line_number,
+                prop.warn(
                     f'Architecture "{arch}" isn\'t commonly used, manual verification'
-                    ' is required',
+                    ' is required'
                 )
 
-    # Validate that this file has the required extensions
-    if not path.name.endswith('.wh.cpp'):
-        warnings += add_warning(path, 1, 'Filename should end with .wh.cpp')
+
+def validate_metadata(path: Path, expected_author: str) -> int:
+    with path.open(encoding='utf-8') as file:
+        properties, initial_warnings = get_mod_file_metadata(path, file)
+
+    # Validate metadata properties
+    validator = ModMetadataValidator(path, properties, expected_author)
+    metadata_warnings = validator.validate_all()
 
     # Validate file path
+    file_warnings = 0
+    if not path.name.endswith('.wh.cpp'):
+        file_warnings += add_warning(path, 1, 'Filename should end with .wh.cpp')
     if path.parent != Path('mods'):
-        warnings += add_warning(path, 1, 'File is not placed in the mods folder')
+        file_warnings += add_warning(path, 1, 'File is not placed in the mods folder')
 
-    return warnings
+    return initial_warnings + metadata_warnings + file_warnings
 
 
 @cache
@@ -470,7 +564,26 @@ def validate_symbol_hooks(path: Path):
     return warnings
 
 
+def test_run():
+    if len(sys.argv) != 3:
+        print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
+        sys.exit(1)
+
+    print('Test run: Validating single file...')
+    path = Path(sys.argv[1])
+    pr_author = sys.argv[2]
+    warnings = 0
+    warnings += validate_metadata(path, pr_author)
+    warnings += validate_symbol_hooks(path)
+    if warnings > 0:
+        print(f'Got {warnings} warnings')
+
+
 def main():
+    if len(sys.argv) > 1:
+        test_run()
+        return
+
     print('Validating PR...')
 
     pr_author = os.environ['PR_AUTHOR']
