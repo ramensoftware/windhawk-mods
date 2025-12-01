@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
-// @version         2.1
+// @version         2.2
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -147,6 +147,51 @@ I will not supporting Insider preview or other minor versions of Windows. Howeve
 ## Classic taskbar on Windows 11
 
 In case you are using old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 24H2).
+
+## Troubleshooting
+
+### I just installed/updated the mod, but no actions are triggered.
+
+The mod uses Windhawk's `ArrayOfNestedOptions` widget type that enables you to create multiple trigger+action configurations. However, if you have just installed or updated the mod, there are no configurations set up yet. It might happen that Windhawk spawns a default empty configuration with all keyboard modifiers selected and no mouse trigger or action selected. Users then overlook the modifiers and only set up the mouse trigger and action. The mod will never trigger any action since it is impossible to press all keyboard modifiers at once on most keyboards. If that's the case, open the mod's Settings and either remove the empty configuration or set up your desired trigger+action configuration (including keyboard modifiers). For more information, please see the gif animation on the mod's `Description` tab.
+
+### I have set my trigger correctly, but the action is not executed.
+
+Please see the previous section about empty configuration. If that is not the issue, check the mod's log for any error messages or other clues:
+
+1. Disable the mod
+2. Go to the `Advanced` tab
+3. Under `Debug logging`, select `Mod logs`
+4. Click on the `Show log output` button
+5. You can clear the console first using the buttons in the upper right corner
+6. Re-enable the mod and try to trigger your action again
+7. Check the log for any error messages or other clues
+
+Make sure the action trigger parsed from settings corresponds to your expectation. Make sure the mod reports a taskbar version that corresponds to your Windows taskbar. If you are using ExplorerPatcher with the Windows 10 taskbar, check that the mod is using Windows 10 taskbar mode. If you are using the Windows 11 taskbar with ExplorerPatcher, make sure the mod is using Windows 11 taskbar mode.
+
+If you can't find anything useful, try enabling `DEBUG` logging:
+
+1. Disable the mod
+2. Fork the mod and click on the `Edit` button
+3. Find `// #define ENABLE_LOG_DEBUG` and remove the leading `// ` characters to uncomment the line
+4. In the toolbar on the left, enable logging and click on `Compile Mod`
+5. Enable your forked mod
+6. Now much more information will be logged
+7. Try to trigger your action again and check the log for any error messages or other clues
+
+### I have tried everything, but the mod is still not working as expected.
+
+Please open an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mods/issues) describing your problem. Please always include the following information:
+
+- Your Windows version including the exact build number (e.g., Windows 10 25H2 build 26200.7171) - use the `winver` command to get this information
+- Whether you are using the classic taskbar on Windows 11 (ExplorerPatcher or a similar tool)
+- Windhawk version
+- Mod version
+- Mod settings you are using - a screenshot of the mod's Settings tab, or ideally the entire settings JSON record from the `Advanced` tab
+- Mod log output, ideally with `DEBUG` logging enabled (see the previous section for instructions on how to enable it)
+
+### I can't click on empty space when the taskbar gets full.
+
+If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve a minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
 
 ## Suggestions and new features
 
