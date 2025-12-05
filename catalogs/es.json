@@ -1113,7 +1113,7 @@
                     1
                 ],
                 "ratingUsers": 1,
-                "updated": 1752682973000,
+                "updated": 1764957171000,
                 "users": 278
             },
             "metadata": {
@@ -1125,7 +1125,7 @@
                     "*"
                 ],
                 "name": "Classic Progress Bars",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "classic-start-menu-folders-icon": {

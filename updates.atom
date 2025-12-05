@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-01T15:35:57.000Z</updated>
+    <updated>2025-12-05T17:52:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Progress Bars 1.0.1]]></title>
+        <id>https://windhawk.net/mods/classic-progress-bars#3caf9644d09c86e455315ba11dafa6b57c6fc8c2</id>
+        <link href="https://windhawk.net/mods/classic-progress-bars"/>
+        <updated>2025-12-05T17:52:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix incorrectly defined symbol hook which caused a crash on x86-32 applications</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#7833da2a65bf74c639d33f1432664d552056e2de</id>
@@ -303,17 +316,6 @@ being erroneously loaded</li>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No icon MessageBox Sound Restore 1.0.1]]></title>
-        <id>https://windhawk.net/mods/no-icon-messagebox-sound#ccd78b3d3d094a182b60841f34daa4bb3a214f3b</id>
-        <link href="https://windhawk.net/mods/no-icon-messagebox-sound"/>
-        <updated>2025-11-01T19:20:59.000Z</updated>
-        <content type="html"><![CDATA[<p>Update Readme to further note about Message Box Fix</p>]]></content>
-        <author>
-            <name>Jevil7452</name>
-            <uri>https://github.com/Jevil7452</uri>
         </author>
     </entry>
 </feed>
