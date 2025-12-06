@@ -6,7 +6,7 @@
 // @author          anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
-// @license         LGPL-2.1 or later
+// @license         LGPL-2.1-or-later
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
