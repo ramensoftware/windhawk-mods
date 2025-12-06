@@ -32,10 +32,11 @@ This mod lets you assign an action to a mouse click on Windows taskbar. Single, 
 5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature
 6. **Win+Tab** - Opens Win+Tab dialog
 7. **Hide desktop icons** - Toggle show/hide of all desktop icons
-7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
-7. **Open Start menu** - Sends Win key press to open Start menu
-8. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
-9. **Start application** - Starts arbitrary application or runs a command
+8. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
+9. **Toggle Taskbar alignment** - Toggle taskbar icon alignment between left and center (Windows 11 only)
+10. **Open Start menu** - Sends Win key press to open Start menu
+11. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
+12. **Start application** - Starts arbitrary application or runs a command
 
 ### Example
 
@@ -82,17 +83,18 @@ Some actions support or require additional arguments. You can set them in the Se
 5. Taskbar auto-hide - no additional arguments supported
 6. Win+Tab - no additional arguments supported
 7. Hide desktop icons - no additional arguments supported
-7. Combine Taskbar buttons - `priTaskBarBtnState1;priTaskBarBtnState2;secTaskBarBtnState1;secTaskBarBtnState2`
+8. Combine Taskbar buttons - `priTaskBarBtnState1;priTaskBarBtnState2;secTaskBarBtnState1;secTaskBarBtnState2`
     - priTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - priTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - secTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - secTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - Example: `COMBINE_ALWAYS;COMBINE_WHEN_FULL;COMBINE_ALWAYS;COMBINE_NEVER`
-7. Open Start menu - no additional arguments supported
-8. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
+9. Toggle Taskbar alignment - no additional arguments supported
+10. Open Start menu - no additional arguments supported
+11. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
     - Example: `0x5B;0x45`
     - Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in [win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
-9. Start application - `applicationPath arg1 arg2 ... argN`
+12. Start application - `applicationPath arg1 arg2 ... argN`
     - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt`
     - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
     - Example: `cmd.exe /c echo Hello & pause`
@@ -245,6 +247,7 @@ If you have request for new functions, suggestions or you are experiencing some 
       - ACTION_WIN_TAB: Win+Tab
       - ACTION_HIDE_ICONS: Hide desktop icons
       - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+      - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
       - ACTION_OPEN_START_MENU: Open Start menu
       - ACTION_SEND_KEYPRESS: Virtual key press
       - ACTION_START_PROCESS: Start application
@@ -925,6 +928,9 @@ void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2);
 DWORD GetCombineTaskbarButtons(const wchar_t *optionName);
 bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option);
+DWORD GetTaskbarAlignment();
+bool SetTaskbarAlignment(DWORD alignment);
+void ToggleTaskbarAlignment();
 void StartProcess(const std::wstring &command);
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
 
@@ -1135,7 +1141,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     {
         const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000;  // reset context menu suppression after 1 second
+        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000; // reset context menu suppression after 1 second
         if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
             (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
         {
@@ -1671,7 +1677,7 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
 {
     LOG_TRACE();
 
-    auto doNothing = [](HWND) { /* Do nothing */ };
+    auto doNothing = [](HWND) { LOG_INFO(L"Doing empty action"); };
 
     if (actionName == L"ACTION_NOTHING")
     {
@@ -1714,13 +1720,30 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
     {
-        TaskBarButtonsState primaryState1; // use tie for Windhawk 1.4.1 compiler compatibility
-        TaskBarButtonsState primaryState2;
-        TaskBarButtonsState secondaryState1;
-        TaskBarButtonsState secondaryState2;
-        std::tie(primaryState1, primaryState2, secondaryState1, secondaryState2) = ParseTaskBarButtonsState(args);
-        return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
-        { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
+        if (g_taskbarVersion == WIN_11_TASKBAR)
+        {
+            const auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
+            return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
+            { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
+        }
+        else
+        {
+            LOG_INFO(L"Taskbar alignment toggle is not supported on Windows 10 taskbar");
+            return doNothing;
+        }
+    }
+    else if (actionName == L"ACTION_TOGGLE_TASKBAR_ALIGNMENT")
+    {
+        if (g_taskbarVersion == WIN_11_TASKBAR)
+        {
+            return [](HWND)
+            { ToggleTaskbarAlignment(); };
+        }
+        else
+        {
+            LOG_INFO(L"Taskbar alignment toggle is not supported on Windows 10 taskbar");
+            return doNothing;
+        }
     }
     else if (actionName == L"ACTION_OPEN_START_MENU")
     {
@@ -2377,6 +2400,103 @@ bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
         LOG_ERROR(L"Invalid option for combining taskbar buttons!");
     }
     return shallNotify;
+}
+
+/**
+ * Retrieves the current taskbar alignment setting.
+ *
+ * @return The current value of the taskbar alignment. (0 = Left, 1 = Center)
+ *         Returns 1 (Center) as default if the registry key doesn't exist.
+ */
+DWORD GetTaskbarAlignment()
+{
+    LOG_TRACE();
+
+    HKEY hKey = NULL;
+    DWORD dwValue = 1; // Default to center alignment if key doesn't exist
+    DWORD dwBufferSize = sizeof(DWORD);
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        if (RegQueryValueEx(hKey, TEXT("TaskbarAl"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) != ERROR_SUCCESS)
+        {
+            LOG_INFO(L"TaskbarAl registry key not found, using default value (1 = Center)");
+            dwValue = 1; // Default to center
+        }
+        RegCloseKey(hKey);
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+    }
+
+    return dwValue;
+}
+
+/**
+ * Sets the taskbar alignment to the specified value.
+ *
+ * @param alignment The alignment value to set. (0 = Left, 1 = Center)
+ * @return true if the value was set successfully, false otherwise.
+ */
+bool SetTaskbarAlignment(DWORD alignment)
+{
+    LOG_TRACE();
+
+    HKEY hKey = NULL;
+    bool success = false;
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                     0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD dwValue = alignment;
+        if (RegSetValueEx(hKey, TEXT("TaskbarAl"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
+        {
+            LOG_INFO(L"Set taskbar alignment to %d", alignment);
+            success = true;
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to set registry key TaskbarAl!");
+        }
+        RegCloseKey(hKey);
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+    }
+
+    return success;
+}
+
+void ToggleTaskbarAlignment()
+{
+    LOG_TRACE();
+
+    DWORD currentAlignment = GetTaskbarAlignment();
+    DWORD newAlignment = 0;
+    if (currentAlignment == 0)
+    {
+        newAlignment = 1;
+    }
+    else if (currentAlignment == 1)
+    {
+        newAlignment = 0;
+    }
+    else
+    {
+        LOG_ERROR(L"Invalid current alignment value %d (must be 0 or 1)", currentAlignment); // report in case API changes in future
+        return;
+    }
+    const wchar_t *alignmentStrs[] = {L"Left", L"Center"};
+    LOG_INFO(L"Toggling taskbar alignment from '%s' to '%s'", alignmentStrs[currentAlignment], alignmentStrs[newAlignment]);
+
+    if (SetTaskbarAlignment(newAlignment))
+    {
+        // Notify all applications of the change
+        SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+    }
 }
 
 void StartProcess(const std::wstring &command)
