@@ -1893,30 +1893,14 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
     {
-        if (g_taskbarVersion == WIN_11_TASKBAR)
-        {
-            const auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
-            return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
-            { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
-        }
-        else
-        {
-            LOG_INFO(L"Taskbar alignment toggle is not supported on Windows 10 taskbar");
-            return doNothing;
-        }
+        const auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
+        return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
+        { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
     }
     else if (actionName == L"ACTION_TOGGLE_TASKBAR_ALIGNMENT")
     {
-        if (g_taskbarVersion == WIN_11_TASKBAR)
-        {
-            return [](HWND)
-            { ToggleTaskbarAlignment(); };
-        }
-        else
-        {
-            LOG_INFO(L"Taskbar alignment toggle is not supported on Windows 10 taskbar");
-            return doNothing;
-        }
+        return [](HWND)
+        { ToggleTaskbarAlignment(); };
     }
     else if (actionName == L"ACTION_OPEN_START_MENU")
     {
@@ -2499,6 +2483,12 @@ void HideIcons()
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2)
 {
+    if (g_taskbarVersion != WIN_11_TASKBAR)
+    {
+        LOG_INFO(L"Taskbar button combining is only supported on Windows 11 taskbar");
+        return;
+    }
+    
     bool shallNotify = false;
     if ((primaryTaskBarButtonsState1 != COMBINE_INVALID) && (primaryTaskBarButtonsState2 != COMBINE_INVALID))
     {
@@ -2671,6 +2661,12 @@ bool SetTaskbarAlignment(DWORD alignment)
 void ToggleTaskbarAlignment()
 {
     LOG_TRACE();
+
+    if (g_taskbarVersion != WIN_11_TASKBAR)
+    {
+        LOG_INFO(L"Taskbar alignment toggle is only supported on Windows 11 taskbar");
+        return;
+    }
 
     DWORD currentAlignment = GetTaskbarAlignment();
     DWORD newAlignment = 0;
