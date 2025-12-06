@@ -148,9 +148,9 @@ I will not be supporting Insider preview or other minor versions of Windows. How
 
 ⚠️ **Caution!** Avoid using the option "Get the latest updates as soon as they're available" in Windows Update. Microsoft releases symbols for new Windows versions with a delay. This can render Windhawk mods unusable until the symbols are released (usually a few days).
 
-## Classic taskbar on Windows 11
+## Windows 10 taskbar on Windows 11
 
-If you are using the old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable the corresponding option in the Settings menu. This option will be tested only with the latest major version of Windows 11 (e.g. 24H2).
+If you are using the old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable the corresponding option in the Settings menu. ExplorerPatcher should get detected automatically.
 
 ## Troubleshooting
 
@@ -259,11 +259,9 @@ If you have a request for new functions, suggestions, or you are experiencing so
   $name: Taskbar empty space actions
   $description: "Using the Keyboard and Mouse combo boxes, select a trigger for a specific action. For example, the combination 'Left Ctrl + Double-click + Task Manager' will open the Windows Task Manager when the user double-clicks empty space on the taskbar while holding the Left Ctrl key. More actions can be set up with the Add new item button."
 - oldTaskbarOnWin11: false
-  $name: Use the old taskbar on Windows 11
+  $name: Use the old Windows 10 taskbar on Windows 11
   $description: >-
-    Enable this option to customize the old taskbar on Windows 11 (if using
-    ExplorerPatcher or a similar tool). Note: For Windhawk versions earlier
-    than 1.3, you must disable and re-enable the mod to apply this option.
+    Enable this option to if you are using the old Windows 10 taskbar on Windows 11 (ExplorerPatcher or a similar tool).
 - eagerTriggerEvaluation: false
   $name: Eager trigger evaluation
   $description: >-
@@ -285,12 +283,12 @@ If you have a request for new functions, suggestions, or you are experiencing so
 #include <winuser.h>
 #include <windowsx.h>
 #include <windhawk_utils.h>
-
 #include <UIAnimation.h>
 #include <UIAutomationClient.h>
 #include <UIAutomationCore.h>
 #include <comutil.h>
 #include <winrt/base.h>
+#include <psapi.h>
 
 #include <string>
 #include <unordered_set>
@@ -1511,6 +1509,85 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
     }
 }
 
+bool IsExplorerPatcherModule(HMODULE module)
+{
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath)))
+    {
+    case 0:
+    case ARRAYSIZE(moduleFilePath):
+        return false;
+    }
+
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName)
+    {
+        return false;
+    }
+
+    moduleFileName++;
+
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void HandleLoadedExplorerPatcher()
+{
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
+                           &cbNeeded))
+    {
+        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++)
+        {
+            if (IsExplorerPatcherModule(hMods[i]))
+            {
+                if (g_taskbarVersion != WIN_10_TASKBAR)
+                {
+                    LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10_TASKBAR mode");
+                }
+                g_taskbarVersion = WIN_10_TASKBAR;
+                break;
+            }
+        }
+    }
+}
+
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module)
+{
+    if (module && !((ULONG_PTR)module & 3))
+    {
+        if (IsExplorerPatcherModule(module))
+        {
+            if (g_taskbarVersion != WIN_10_TASKBAR)
+            {
+                LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10_TASKBAR mode");
+            }
+            g_taskbarVersion = WIN_10_TASKBAR;
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags)
+{
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module)
+    {
+        HandleLoadedModuleIfExplorerPatcher(module);
+    }
+
+    return module;
+}
+
 // finds main task bar and returns its hWnd,
 // optinally it finds also secondary taskbars and fills them to the set
 // secondaryTaskbarWindows
@@ -1850,7 +1927,8 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
 {
     LOG_TRACE();
 
-    auto doNothing = [](HWND) { LOG_INFO(L"Doing empty action"); };
+    auto doNothing = [](HWND)
+    { LOG_INFO(L"Doing empty action"); };
 
     if (actionName == L"ACTION_NOTHING")
     {
@@ -2488,7 +2566,7 @@ void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1
         LOG_INFO(L"Taskbar button combining is only supported on Windows 11 taskbar");
         return;
     }
-    
+
     bool shallNotify = false;
     if ((primaryTaskBarButtonsState1 != COMBINE_INVALID) && (primaryTaskBarButtonsState2 != COMBINE_INVALID))
     {
@@ -3215,6 +3293,38 @@ BOOL Wh_ModInit()
         LOG_ERROR(L"Failed to hook CreateWindowInBand, ModInit failed");
         return FALSE;
     }
+
+    // autodetect Explorer Patcher on Windows 11 taskbar
+    if (g_taskbarVersion == WIN_11_TASKBAR)
+    {
+        // hook LoadLibraryExW to detect Explorer Patcher loading after us
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW = (void *)GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+        if (!Wh_SetFunctionHook(pKernelBaseLoadLibraryExW, (void *)LoadLibraryExW_Hook, (void **)&LoadLibraryExW_Original))
+        {
+            LOG_ERROR(L"Failed to hook LoadLibraryExW, automatic Explorer Patcher detection might not work properly!");
+        }
+
+        HandleLoadedExplorerPatcher();
+    }
+
+    g_isWhInitialized = true; // if not set the hook operations will not be applied after Windows startup
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    LOG_TRACE();
+
+    // autodetect Explorer Patcher on Windows 11 taskbar
+    if (g_taskbarVersion == WIN_11_TASKBAR)
+    {
+        // Try again in case there's a race between the previous attempt and the
+        // LoadLibraryExW hook.
+        HandleLoadedExplorerPatcher();
+    }
+
     // indentify taskbar windows so that message processing can be hooked
     WNDCLASS wndclass;
     if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) // if Shell_TrayWnd class is defined
@@ -3229,10 +3339,6 @@ BOOL Wh_ModInit()
     {
         LOG_ERROR(L"Failed to find Shell_TrayWnd class. Something changed under the hood! Taskbar might not get hooked properly!");
     }
-
-    g_isWhInitialized = true; // if not set the hook operations will not be applied after Windows startup
-
-    return TRUE;
 }
 
 BOOL Wh_ModSettingsChanged(BOOL *bReload)
