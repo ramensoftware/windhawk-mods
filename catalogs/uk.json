@@ -2903,7 +2903,7 @@
                     14
                 ],
                 "ratingUsers": 15,
-                "updated": 1760691662000,
+                "updated": 1765052792000,
                 "users": 844
             },
             "metadata": {
@@ -2911,10 +2911,15 @@
                 "description": "Prevent F1 from opening the help page in File Explorer and/or other selected applications",
                 "github": "https://github.com/d0gkiller87",
                 "include": [
-                    "explorer.exe"
+                    "HelpPane.exe",
+                    "explorer.exe",
+                    "notepad.exe",
+                    "7zFM.exe",
+                    "WinRAR.exe"
                 ],
+                "license": "MIT",
                 "name": "F1 Blocker",
-                "version": "0.0.2"
+                "version": "0.0.3"
             }
         },
         "fake-explorer-path": {
