@@ -2,10 +2,11 @@
 // @id              icon16bitfix
 // @name            Icons of Win16 apps in Explorer
 // @description     Adds support for icons of 16-bit (Win16) applications in File Explorer
-// @version         1.0.2
-// @author          anixx
+// @version         1.0.3
+// @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
+// @license         LGPL-2.1-or-later
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -15,7 +16,6 @@ The mod is adapted from [Icon16bitFix utility](https://github.com/otya128/Icon16
 
 ![Foler view](https://i.imgur.com/g4epNjk.png)
 
-License: LGPL-2.1 or later
 */
 // ==/WindhawkModReadme==
 
