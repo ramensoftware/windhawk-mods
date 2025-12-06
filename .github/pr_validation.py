@@ -419,9 +419,9 @@ class ModMetadataValidator:
 
         # Check if mod already exists - author must not change
         if self.existing_metadata and 'author' in self.existing_metadata:
-            if prop.value != self.existing_metadata['author'] and not (
-                ALLOWED_AUTHOR_NAME_CHANGES.get(self.existing_metadata['github'])
-                == prop.value
+            if prop.value != self.existing_metadata['author'] and (
+                ALLOWED_AUTHOR_NAME_CHANGES.get(self.existing_metadata['author'])
+                != prop.value
             ):
                 prop.warn(
                     '@@ cannot be changed for existing mods. Expected'
