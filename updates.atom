@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-05T17:52:51.000Z</updated>
+    <updated>2025-12-06T11:37:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.0.7]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#6a6219103e4213f15f2495a07651fa165653ee38</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2025-12-06T11:37:02.000Z</updated>
+        <content type="html"><![CDATA[<p>Update the tutorial for WH v. 1.7</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Progress Bars 1.0.1]]></title>
         <id>https://windhawk.net/mods/classic-progress-bars#3caf9644d09c86e455315ba11dafa6b57c6fc8c2</id>
@@ -301,21 +312,6 @@ the remembering of the positions of the folder windows.</p>
         <author>
             <name>giedriuslt</name>
             <uri>https://github.com/giedriuslt</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.x Alt+Tab Loader 2.1.1]]></title>
-        <id>https://windhawk.net/mods/win7-alttab-loader#12618343e98bf08a6af6465008bd9eda2cdd1c5a</id>
-        <link href="https://windhawk.net/mods/win7-alttab-loader"/>
-        <updated>2025-11-01T19:23:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Use <code>LoadLibraryExW</code> with <code>LOAD_LIBRARY_SEARCH_SYSTEM32</code> flag</li>
-<li>This prevents C:\Windows\AltTab.dll from ancient configurations
-being erroneously loaded</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
