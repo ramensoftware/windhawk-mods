@@ -117,7 +117,7 @@ instead of the both. If confused, you can install all three, they do not conflic
 [*Enable SyslistView32*](https://windhawk.net/mods/syslistview32-enabler).
 
 13. To get back the full Explorer context menus on Windows 11, install this mod:
-[*Classic menus*](https://windhawk.net/mods/classic-menus).
+[*Classic context menu on Windows 11*](https://windhawk.net/mods/explorer-context-menu-classic).
 
 14. To get rid of the immersive Windows 7 Command bar and the ribbon interface in File Explorer, install this mod:
 [*Windows 7 Command Bar*](https://windhawk.net/mods/win7-command-bar).
