@@ -3555,18 +3555,19 @@
                     8
                 ],
                 "ratingUsers": 8,
-                "updated": 1739622078000,
+                "updated": 1765047009000,
                 "users": 479
             },
             "metadata": {
-                "author": "anixx",
+                "author": "Anixx",
                 "description": "Adds support for icons of 16-bit (Win16) applications in File Explorer",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "explorer.exe"
                 ],
+                "license": "LGPL-2.1-or-later",
                 "name": "Icons of Win16 apps in Explorer",
-                "version": "1.0.2"
+                "version": "1.0.3"
             }
         },
         "ignore-focus-loss": {

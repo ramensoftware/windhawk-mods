@@ -1,3 +1,7 @@
+## 1.0.3 ([Dec 6, 2025](https://github.com/ramensoftware/windhawk-mods/blob/cd81217fb6724ce3344d01205d99e69e7a9b5e76/mods/icon16bitfix.wh.cpp))
+
+Update metadata for WH v.1.7
+
 ## 1.0.2 ([Feb 15, 2025](https://github.com/ramensoftware/windhawk-mods/blob/80df04b114131c98440b5155570d300f9c50e45a/mods/icon16bitfix.wh.cpp))
 
 Add license tag according to the license on the original code.

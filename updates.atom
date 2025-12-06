@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-06T11:37:02.000Z</updated>
+    <updated>2025-12-06T18:50:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icons of Win16 apps in Explorer 1.0.3]]></title>
+        <id>https://windhawk.net/mods/icon16bitfix#cd81217fb6724ce3344d01205d99e69e7a9b5e76</id>
+        <link href="https://windhawk.net/mods/icon16bitfix"/>
+        <updated>2025-12-06T18:50:09.000Z</updated>
+        <content type="html"><![CDATA[<p>Update metadata for WH v.1.7</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme 1.0.7]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#6a6219103e4213f15f2495a07651fa165653ee38</id>
@@ -295,19 +306,6 @@ the remembering of the positions of the folder windows.</p>
 <li>Add support for ExplorerPatcher's reimplemented taskbar (developed by @Amrsatrio, supports Windows 10 15063~Windows 11 27975 and beyond)<ul>
 <li>Tested on 23H2, ep_taskbar.2.dll variant</li></ul></li>
 <li>Invalidate the taskbar task list window on mod enabling/disabling</li>
-</ul>]]></content>
-        <author>
-            <name>giedriuslt</name>
-            <uri>https://github.com/giedriuslt</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide running indicator for Windows 10 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-hide-running-indicator-w10#33cf21483f9a72886f706b51752e661e0f4d28c9</id>
-        <link href="https://windhawk.net/mods/taskbar-hide-running-indicator-w10"/>
-        <updated>2025-11-01T19:25:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix to make focus/hover indicator rectangle take full button space</li>
 </ul>]]></content>
         <author>
             <name>giedriuslt</name>
