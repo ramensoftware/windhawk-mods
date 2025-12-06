@@ -24,6 +24,12 @@ DISALLOWED_AUTHORS = [
 ]
 
 
+ALLOWED_AUTHOR_NAME_CHANGES = {
+    'anixx': 'Anixx',
+    'kawapure': 'Isabella Lulamoon (kawapure)',
+}
+
+
 MOD_METADATA_PARAMS = {
     'singleValue': {
         'id',
@@ -413,7 +419,10 @@ class ModMetadataValidator:
 
         # Check if mod already exists - author must not change
         if self.existing_metadata and 'author' in self.existing_metadata:
-            if prop.value != self.existing_metadata['author']:
+            if prop.value != self.existing_metadata['author'] and not (
+                ALLOWED_AUTHOR_NAME_CHANGES.get(self.existing_metadata['github'])
+                == prop.value
+            ):
                 prop.warn(
                     '@@ cannot be changed for existing mods. Expected'
                     f' "{self.existing_metadata["author"]}", got "{prop.value}"'
@@ -552,7 +561,7 @@ class ModMetadataValidator:
 def validate_metadata(path: Path, expected_author: str) -> int:
     with path.open(encoding='utf-8') as file:
         properties, initial_warnings = get_mod_file_metadata(
-            file, warn_callback=lambda line, msg: add_warning(line, line, msg)
+            file, warn_callback=lambda line, msg: add_warning(path, line, msg)
         )
 
     # Validate metadata properties
