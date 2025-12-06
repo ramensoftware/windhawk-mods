@@ -78,8 +78,8 @@ namespace Hooks {
   using ShellExecuteW_t = decltype( &ShellExecuteW );
   ShellExecuteW_t ShellExecuteW_Original;
 
-  BOOL WINAPI ShellExecuteW_Hook( HWND hWnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShowCmd ) {
-    return 33; // return > 32 if function succeeds
+  HINSTANCE WINAPI ShellExecuteW_Hook( HWND hWnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShowCmd ) {
+    return ( HINSTANCE ) 33; // return > 32 if function succeeds
   }
 }
 
