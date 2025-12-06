@@ -3,7 +3,7 @@
 // @name            Icons of Win16 apps in Explorer
 // @description     Adds support for icons of 16-bit (Win16) applications in File Explorer
 // @version         1.0.3
-// @author          anixx
+// @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
 // @license         LGPL-2.1-or-later
