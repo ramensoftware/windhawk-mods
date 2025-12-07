@@ -508,7 +508,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
                 SetWindowSubclass(statusBar, SubclassStatusProc, (UINT_PTR)statusBar, (DWORD_PTR)pData);
                 SetWindowSubclass(hWnd, SubclassDUIViewProc, (UINT_PTR)hWnd, (DWORD_PTR)pData);
                 
-                SetTimer(statusBar, 1, 100, NULL);
+                SetTimer(statusBar, 1, 200, NULL);
             }
         }
         
