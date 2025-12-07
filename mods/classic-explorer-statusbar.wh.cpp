@@ -44,6 +44,8 @@ const PROPERTYKEY PKEY_Size = {
 #define PART_FREE 1
 #define PART_SIZE 2
 
+#define WM_UPDATE_STATUSBAR (WM_USER + 100)
+
 static const wchar_t* STATUSBAR_DATA_PROP = L"ExplorerStatusBarData";
 
 struct StatusBarData {
@@ -119,7 +121,6 @@ HWND FindShellDefView(HWND hwndExplorer) {
     HWND directUI = FindWindowEx(duiView, NULL, L"DirectUIHWND", NULL);
     if (!directUI) return NULL;
     
-    // Ищем CtrlNotifySink, который содержит SHELLDLL_DefView
     HWND child = NULL;
     while ((child = FindWindowEx(directUI, child, NULL, NULL)) != NULL) {
         HWND defView = FindWindowEx(child, NULL, L"SHELLDLL_DefView", NULL);
@@ -192,7 +193,6 @@ bool GetStatusText(IShellBrowser* pBrowser, wchar_t* textBuf, int textSize, wcha
                         GetNumberFormat(LOCALE_USER_DEFAULT, 0, numBuf, &numFmt, formattedNum, _countof(formattedNum));
                         
                         wchar_t fmtStr[128];
-                        // ID 38194 = "Выбрано элементов: %s"
                         if (LoadString(GetModuleHandle(L"shell32.dll"), 38194, fmtStr, _countof(fmtStr)) > 0) {
                             swprintf_s(textBuf, textSize, fmtStr, formattedNum);
                         } else {
@@ -203,7 +203,6 @@ bool GetStatusText(IShellBrowser* pBrowser, wchar_t* textBuf, int textSize, wcha
                         GetNumberFormat(LOCALE_USER_DEFAULT, 0, numBuf, &numFmt, formattedNum, _countof(formattedNum));
                         
                         wchar_t fmtStr[128];
-                        // ID 38192 = "Элементов: %s"
                         if (LoadString(GetModuleHandle(L"shell32.dll"), 38192, fmtStr, _countof(fmtStr)) > 0) {
                             swprintf_s(textBuf, textSize, fmtStr, formattedNum);
                         } else {
@@ -224,7 +223,6 @@ bool GetStatusText(IShellBrowser* pBrowser, wchar_t* textBuf, int textSize, wcha
                     StrFormatByteSize64(diskSize.QuadPart, sizeStr, _countof(sizeStr));
                     
                     wchar_t freeLabel[64];
-                    // ID 9307 = "Свободно"
                     if (LoadString(GetModuleHandle(L"shell32.dll"), 9307, freeLabel, _countof(freeLabel)) > 0) {
                         swprintf_s(freeBuf, freeSize, L"%s: %s", freeLabel, sizeStr);
                     } else {
@@ -326,7 +324,6 @@ void UpdateStatusBar(StatusBarData* pData) {
     GetStatusText(pData->pBrowser, textBuf, _countof(textBuf), freeBuf, _countof(freeBuf));
     GetFileSize(pData->pBrowser, sizeBuf, _countof(sizeBuf));
     
-    // Вычисляем какие секции нужны
     bool hasFree = freeBuf[0] != 0;
     bool hasSize = sizeBuf[0] != 0;
     
@@ -363,8 +360,7 @@ LRESULT CALLBACK SubclassStatusProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                                      UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     StatusBarData* pData = (StatusBarData*)dwRefData;
     
-    if (uMsg == WM_CLEAR) {
-        Wh_Log(L"WM_CLEAR received");
+    if (uMsg == WM_CLEAR || uMsg == WM_UPDATE_STATUSBAR) {
         UpdateStatusBar(pData);
         return 0;
     }
@@ -373,7 +369,6 @@ LRESULT CALLBACK SubclassStatusProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         KillTimer(hWnd, 1);
         Wh_Log(L"Timer fired, updating status bar");
         
-        // Ищем и subclass'им SHELLDLL_DefView если ещё не сделали
         if (!pData->shellDefView) {
             pData->shellDefView = FindShellDefView(pData->explorerWnd);
             if (pData->shellDefView) {
@@ -405,9 +400,8 @@ LRESULT CALLBACK SubclassDUIViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
             pPos->cy -= height;
             SetWindowPos(pData->statusBar, NULL, pPos->x, pPos->y + pPos->cy, pPos->cx, height, SWP_NOZORDER);
             
-            int parts[] = {pPos->cx - height - pData->fileSizeWidth - pData->freeSpaceWidth, 
-                        pPos->cx - height - pData->fileSizeWidth, -1};
-            SendMessage(pData->statusBar, SB_SETPARTS, 3, (LPARAM)parts);
+            // Запрашиваем полное обновление статус-бара после изменения размера
+            PostMessage(pData->statusBar, WM_UPDATE_STATUSBAR, 0, 0);
         }
     }
     
@@ -436,7 +430,6 @@ LRESULT CALLBACK SubclassShellViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             NMLISTVIEW* pNMLV = (NMLISTVIEW*)lParam;
             if (pNMLV->uChanged & LVIF_STATE) {
                 if ((pNMLV->uOldState & LVIS_SELECTED) != (pNMLV->uNewState & LVIS_SELECTED)) {
-                    Wh_Log(L"Selection changed");
                     PostMessage(pData->statusBar, WM_CLEAR, 0, 0);
                 }
             }
@@ -471,20 +464,16 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
             RECT rc;
             GetClientRect(parentWnd, &rc);
             
-            // Создаём статус-бар - он сам определит свою высоту
             HWND statusBar = CreateWindowEx(0, STATUSCLASSNAME, NULL,
                 WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | SBARS_SIZEGRIP,
                 0, 0, rc.right, 0,
                 parentWnd, NULL, NULL, NULL);
             
             if (statusBar) {
-                // Отправляем WM_SIZE чтобы статус-бар вычислил свой размер
                 SendMessage(statusBar, WM_SIZE, 0, 0);
                 
-                // Получаем реальную высоту, которую статус-бар выбрал сам
                 int height = GetStatusBarHeight(statusBar);
                 
-                // Позиционируем статус-бар внизу
                 SetWindowPos(statusBar, NULL, 0, rc.bottom - height, 
                             rc.right, height, SWP_NOZORDER);
                 
