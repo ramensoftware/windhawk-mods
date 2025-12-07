@@ -33,7 +33,11 @@ This is an alternative to the status bar from Classic Explorer from Open-Shell p
 #include <propkey.h>
 #include <initguid.h>
 
-#if !defined(__clang__)
+#if defined(__clang_major__) && __clang_major__ >= 20
+// Новый Clang — PKEY_Size уже есть в libuuid.a, просто объявляем extern
+extern const PROPERTYKEY PKEY_Size;
+#else
+// Старый MinGW — определяем сами
 const PROPERTYKEY PKEY_Size = {
     { 0xB725F130, 0x47EF, 0x101A, { 0xA5, 0xF1, 0x02, 0x60, 0x8C, 0x9E, 0xEB, 0xAC } },
     12
