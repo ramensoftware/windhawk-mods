@@ -33,7 +33,7 @@ This is an alternative to the status bar from Classic Explorer from Open-Shell p
 #include <propkey.h>
 #include <initguid.h>
 
-#ifdef __MINGW32__
+#if !defined(__clang__)
 const PROPERTYKEY PKEY_Size = {
     { 0xB725F130, 0x47EF, 0x101A, { 0xA5, 0xF1, 0x02, 0x60, 0x8C, 0x9E, 0xEB, 0xAC } },
     12
