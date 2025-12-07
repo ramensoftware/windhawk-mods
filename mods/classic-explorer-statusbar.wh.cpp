@@ -18,8 +18,6 @@ This mod adds a classic status bar to Windows Explorer, showing:
 - Free disk space
 - Total size of selected files
 
-![Screenshot](https://i.imgur.com/65uw69r.png)
-
 This is an alternative to the status bar from Classic Explorer from Open-Shell project.
 */
 // ==/WindhawkModReadme==
@@ -483,15 +481,21 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
                 
                 HDC hdc = GetDC(statusBar);
                 SIZE size = {0};
-                
-                GetTextExtentPoint32(hdc, L"999 MB", 6, &size);
+                HFONT hFont = (HFONT)SendMessage(statusBar, WM_GETFONT, 0, 0);
+                HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+                GetTextExtentPoint32(hdc, L"999.99 MB", 9, &size);
                 int fileSizeWidth = size.cx;
                 if (fileSizeWidth < 50) fileSizeWidth = 50;
-                
-                GetTextExtentPoint32(hdc, L"xxxxxxxxx: 999 GB", 17, &size);
+
+                wchar_t freeLabel[64];
+                LoadString(GetModuleHandle(L"shell32.dll"), 9307, freeLabel, _countof(freeLabel));
+                wcscat_s(freeLabel, L": 999.99 GB");
+                GetTextExtentPoint32(hdc, freeLabel, (int)wcslen(freeLabel), &size);
                 int freeSpaceWidth = size.cx;
                 if (freeSpaceWidth < 70) freeSpaceWidth = 70;
-                
+
+                SelectObject(hdc, hOldFont);
                 ReleaseDC(statusBar, hdc);
                 
                 StatusBarData* pData = new StatusBarData();
