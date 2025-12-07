@@ -1,3 +1,8 @@
+## 1.3.2 ([Dec 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3dbcdc2e02dfec61723b97eeb3d9300523e759f4/mods/dark-menus.wh.cpp))
+
+- A better fix for https://github.com/MGGSK/DarkMenus/issues/9
+- Code cleanup
+
 ## 1.3.1 ([Aug 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/ca342adbf51da6ba433036de9b0704c95d010b08/mods/dark-menus.wh.cpp))
 
 - Fix crashes in Firefox as reported in [this issue](https://github.com/MGGSK/DarkMenus/issues/9).

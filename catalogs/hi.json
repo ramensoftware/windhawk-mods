@@ -1770,22 +1770,19 @@
                     162
                 ],
                 "ratingUsers": 186,
-                "updated": 1754599412000,
+                "updated": 1765136241000,
                 "users": 26128
             },
             "metadata": {
                 "author": "Mgg Sk",
                 "compilerOptions": "-lUxTheme -lGdi32",
                 "description": "Enables dark mode for all win32 menus.",
-                "exclude": [
-                    "firefox.exe"
-                ],
                 "github": "https://github.com/MGGSK",
                 "include": [
                     "*"
                 ],
                 "name": "Dark mode context menus",
-                "version": "1.3.1"
+                "version": "1.3.2"
             }
         },
         "dark-theme-browser-colors-fix": {
