@@ -31,7 +31,7 @@ This is an alternative to the status bar from Classic Explorer from Open-Shell p
 #include <exdisp.h>
 #include <objbase.h>
 #include <propkey.h>
-#include <propkeydef.h>
+#include <initguid.h>
 
 #define PART_TEXT 0
 #define PART_FREE 1
