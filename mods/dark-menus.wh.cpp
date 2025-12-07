@@ -1,10 +1,9 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.3.1
+// @version           1.3.2
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
-// @exclude           firefox.exe
 // @compilerOptions   -lUxTheme -lGdi32
 
 // @name              Dark mode context menus
@@ -55,6 +54,7 @@ The code for dark menubars is based on [win32-darkmode](https://github.com/adzm/
 #include <windows.h>
 
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <winnt.h>
 
 const COLORREF crItemForeground = 0xFFFFFF;
@@ -231,7 +231,7 @@ RtlGetNtVersionNumbers_T RtlGetNtVersionNumbers;
 using DefWindowProcW_T = decltype(&DefWindowProcW);
 DefWindowProcW_T DefWindowProcW_Original;
 
-enum AppMode
+enum class AppMode
 {
 	Default,
 	AllowDark,
@@ -270,21 +270,21 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 }
 
 //Applies the theme to all menus.
-void ApplyTheme(const AppMode inputTheme = Max)
+void ApplyTheme(const AppMode inputTheme = AppMode::Max)
 {
     AppMode theme = inputTheme;
 
     //Get the saved theme from the settings.
-    if(theme == Max)
+    if(theme == AppMode::Max)
     {
         const PCWSTR savedTheme = Wh_GetStringSetting(L"AppMode");
 
         if(wcscmp(savedTheme, L"AllowDark") == 0)
-            theme = AllowDark;
+            theme = AppMode::AllowDark;
         else if(wcscmp(savedTheme, L"ForceLight") == 0)
-            theme = ForceLight;
+            theme = AppMode::ForceLight;
         else
-            theme = ForceDark;
+            theme = AppMode::ForceDark;
 
         Wh_FreeStringSetting(savedTheme);
     }
@@ -331,7 +331,7 @@ BOOL Wh_ModInit()
 
     Wh_Log(L"Init");
 
-    if(!Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original))
+    if(!WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original))
         return FALSE;
 
     const HMODULE hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -347,13 +347,24 @@ BOOL Wh_ModInit()
     return TRUE;
 }
 
+//Fixes https://github.com/MGGSK/DarkMenus/issues/9
+bool IsSystemCallDisableMitigationEnabled() 
+{
+    PROCESS_MITIGATION_SYSTEM_CALL_DISABLE_POLICY policy{};
+    return GetProcessMitigationPolicy(GetCurrentProcess(), ProcessSystemCallDisablePolicy, &policy, sizeof(policy))
+        && policy.DisallowWin32kSystemCalls != 0;
+}
+
 //Restores the default theme.
 void Wh_ModUninit()
 {
     Wh_Log(L"Restoring the default theme.");
-    ApplyTheme(Default);
+    ApplyTheme(AppMode::Default);
 
-    DeleteObject(brBackground);
-    DeleteObject(brItemBackgroundHot);
-    DeleteObject(brItemBackgroundSelected);
+    if(!IsSystemCallDisableMitigationEnabled())
+    {
+        DeleteObject(brBackground);
+        DeleteObject(brItemBackgroundHot);
+        DeleteObject(brItemBackgroundSelected);
+    }
 }
