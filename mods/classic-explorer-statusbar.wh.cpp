@@ -17,6 +17,8 @@ This mod adds a classic status bar to Windows Explorer, showing:
 - Item count / selection count
 - Free disk space
 - Total size of selected files
+
+This is an alternative to the status bar from Classic Explorer from Open-Shell project.
 */
 // ==/WindhawkModReadme==
 
