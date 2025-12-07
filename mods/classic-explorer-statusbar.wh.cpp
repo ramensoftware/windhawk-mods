@@ -17,8 +17,6 @@ This mod adds a classic status bar to Windows Explorer, showing:
 - Item count / selection count
 - Free disk space
 - Total size of selected files
-
-This is an alternative to the status bar from Classic Explorer from Open-Shell project.
 */
 // ==/WindhawkModReadme==
 
@@ -29,62 +27,49 @@ This is an alternative to the status bar from Classic Explorer from Open-Shell p
 #include <commctrl.h>
 #include <shobjidl.h>
 #include <exdisp.h>
-#include <objbase.h>
 #include <propkey.h>
-#include <initguid.h>
 
 #if !(defined(__clang_major__) && __clang_major__ >= 20)
+#include <initguid.h>
 const PROPERTYKEY PKEY_Size = {
-    { 0xB725F130, 0x47EF, 0x101A, { 0xA5, 0xF1, 0x02, 0x60, 0x8C, 0x9E, 0xEB, 0xAC } },
-    12
+    { 0xB725F130, 0x47EF, 0x101A, { 0xA5, 0xF1, 0x02, 0x60, 0x8C, 0x9E, 0xEB, 0xAC } }, 12
 };
 #endif
 
-#define PART_TEXT 0
-#define PART_FREE 1
-#define PART_SIZE 2
-
 #define WM_UPDATE_STATUSBAR (WM_USER + 100)
-
-static const wchar_t* STATUSBAR_DATA_PROP = L"ExplorerStatusBarData";
 
 struct StatusBarData {
     HWND statusBar;
-    HWND dUIView;
-    HWND shellDefView;
     HWND explorerWnd;
+    HWND shellDefView;
     int fileSizeWidth;
     int freeSpaceWidth;
     IShellBrowser* pBrowser;
+    int retryCount;
 };
 
-// Получает реальную высоту статус-бара
+LRESULT CALLBACK SubclassShellViewProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR, DWORD_PTR);
+
 int GetStatusBarHeight(HWND statusBar) {
     RECT rc;
     GetWindowRect(statusBar, &rc);
     return rc.bottom - rc.top;
 }
 
-LRESULT CALLBACK SubclassShellViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
-                                        UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
-
 IShellBrowser* GetShellBrowser(HWND hwndExplorer) {
     IShellBrowser* pBrowser = nullptr;
-    
     IShellWindows* pShellWindows = nullptr;
+    
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER, 
-                                 IID_IShellWindows, (void**)&pShellWindows)) || !pShellWindows) {
+                                 IID_IShellWindows, (void**)&pShellWindows)) || !pShellWindows)
         return nullptr;
-    }
     
     long count = 0;
     pShellWindows->get_Count(&count);
     
-    for (long i = 0; i < count; i++) {
-        VARIANT vi;
-        VariantInit(&vi);
-        V_VT(&vi) = VT_I4;
-        V_I4(&vi) = i;
+    for (long i = 0; i < count && !pBrowser; i++) {
+        VARIANT vi = { VT_I4 };
+        vi.lVal = i;
         
         IDispatch* pDisp = nullptr;
         if (SUCCEEDED(pShellWindows->Item(vi, &pDisp)) && pDisp) {
@@ -97,9 +82,6 @@ IShellBrowser* GetShellBrowser(HWND hwndExplorer) {
                         pSP->QueryService(SID_STopLevelBrowser, IID_IShellBrowser, (void**)&pBrowser);
                         pSP->Release();
                     }
-                    pWB2->Release();
-                    pDisp->Release();
-                    break;
                 }
                 pWB2->Release();
             }
@@ -107,137 +89,118 @@ IShellBrowser* GetShellBrowser(HWND hwndExplorer) {
         }
     }
     pShellWindows->Release();
-    
     return pBrowser;
 }
 
 HWND FindShellDefView(HWND hwndExplorer) {
     HWND shellTab = FindWindowEx(hwndExplorer, NULL, L"ShellTabWindowClass", NULL);
-    if (!shellTab) return NULL;
+    HWND duiView = shellTab ? FindWindowEx(shellTab, NULL, L"DUIViewWndClassName", NULL) : NULL;
+    HWND directUI = duiView ? FindWindowEx(duiView, NULL, L"DirectUIHWND", NULL) : NULL;
     
-    HWND duiView = FindWindowEx(shellTab, NULL, L"DUIViewWndClassName", NULL);
-    if (!duiView) return NULL;
-    
-    HWND directUI = FindWindowEx(duiView, NULL, L"DirectUIHWND", NULL);
     if (!directUI) return NULL;
     
-    HWND child = NULL;
-    while ((child = FindWindowEx(directUI, child, NULL, NULL)) != NULL) {
+    for (HWND child = NULL; (child = FindWindowEx(directUI, child, NULL, NULL)) != NULL; ) {
         HWND defView = FindWindowEx(child, NULL, L"SHELLDLL_DefView", NULL);
         if (defView) return defView;
     }
-    
     return NULL;
 }
 
-bool GetStatusText(IShellBrowser* pBrowser, wchar_t* textBuf, int textSize, wchar_t* freeBuf, int freeSize) {
-    textBuf[0] = 0;
-    freeBuf[0] = 0;
-    if (!pBrowser) return false;
-
-    bool res = false;
+int GetItemCount(IShellBrowser* pBrowser) {
+    int itemCount = 0;
+    if (!pBrowser) return 0;
+    
     IShellView* pView = nullptr;
     if (SUCCEEDED(pBrowser->QueryActiveShellView(&pView)) && pView) {
         IFolderView2* pView2 = nullptr;
         if (SUCCEEDED(pView->QueryInterface(IID_IFolderView2, (void**)&pView2)) && pView2) {
-            int selCount = 0, totalCount = 0;
-            pView2->ItemCount(SVGIO_SELECTION, &selCount);
-            pView2->ItemCount(SVGIO_ALLVIEW, &totalCount);
-            
-            IPersistFolder2* pFolder = nullptr;
-            if (SUCCEEDED(pView2->GetFolder(IID_IPersistFolder2, (void**)&pFolder)) && pFolder) {
-                
-                if (selCount == 1) {
-                    IEnumIDList* pEnum = nullptr;
-                    PITEMID_CHILD child;
-                    if (SUCCEEDED(pView2->Items(SVGIO_SELECTION, IID_IEnumIDList, (void**)&pEnum)) && pEnum && 
-                        pEnum->Next(1, &child, NULL) == S_OK) {
-                        
-                        IShellFolder* pShellFolder = nullptr;
-                        if (SUCCEEDED(pFolder->QueryInterface(IID_IShellFolder, (void**)&pShellFolder)) && pShellFolder) {
-                            IQueryInfo* pQueryInfo = nullptr;
-                            if (SUCCEEDED(pShellFolder->GetUIObjectOf(NULL, 1, (PCUITEMID_CHILD*)&child, 
-                                         IID_IQueryInfo, NULL, (void**)&pQueryInfo)) && pQueryInfo) {
-                                LPWSTR pTip = nullptr;
-                                if (SUCCEEDED(pQueryInfo->GetInfoTip(QITIPF_DEFAULT | QITIPF_SINGLELINE, &pTip)) && pTip) {
-                                    wcsncpy_s(textBuf, textSize, pTip, _TRUNCATE);
-                                    for (wchar_t* p = textBuf; *p; p++)
-                                        if (*p == '\t') *p = ' ';
-                                    CoTaskMemFree(pTip);
-                                    res = true;
-                                }
-                                pQueryInfo->Release();
-                            }
-                            pShellFolder->Release();
-                        }
-                        ILFree(child);
-                    }
-                    if (pEnum) pEnum->Release();
-                    
-                } else {
-                    NUMBERFMT numFmt = {0};
-                    wchar_t decSep[10], thousandSep[10];
-                    numFmt.NumDigits = 0;
-                    numFmt.LeadingZero = 0;
-                    numFmt.Grouping = 3;
-                    GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SDECIMAL, decSep, 10);
-                    numFmt.lpDecimalSep = decSep;
-                    GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, thousandSep, 10);
-                    numFmt.lpThousandSep = thousandSep;
-                    
-                    wchar_t numBuf[64];
-                    wchar_t formattedNum[64];
-                    
-                    if (selCount > 1) {
-                        swprintf_s(numBuf, L"%d", selCount);
-                        GetNumberFormat(LOCALE_USER_DEFAULT, 0, numBuf, &numFmt, formattedNum, _countof(formattedNum));
-                        
-                        wchar_t fmtStr[128];
-                        if (LoadString(GetModuleHandle(L"shell32.dll"), 38194, fmtStr, _countof(fmtStr)) > 0) {
-                            swprintf_s(textBuf, textSize, fmtStr, formattedNum);
-                        } else {
-                            swprintf_s(textBuf, textSize, L"%s selected", formattedNum);
-                        }
-                    } else {
-                        swprintf_s(numBuf, L"%d", totalCount);
-                        GetNumberFormat(LOCALE_USER_DEFAULT, 0, numBuf, &numFmt, formattedNum, _countof(formattedNum));
-                        
-                        wchar_t fmtStr[128];
-                        if (LoadString(GetModuleHandle(L"shell32.dll"), 38192, fmtStr, _countof(fmtStr)) > 0) {
-                            swprintf_s(textBuf, textSize, fmtStr, formattedNum);
-                        } else {
-                            swprintf_s(textBuf, textSize, L"%s items", formattedNum);
-                        }
-                    }
-                    res = true;
-                }
-                
-                // Свободное место
-                PIDLIST_ABSOLUTE pidl = nullptr;
-                wchar_t path[MAX_PATH];
-                ULARGE_INTEGER diskSize;
-                if (SUCCEEDED(pFolder->GetCurFolder(&pidl)) && pidl && 
-                    SHGetPathFromIDList(pidl, path) && 
-                    GetDiskFreeSpaceEx(path, NULL, NULL, &diskSize)) {
-                    wchar_t sizeStr[64];
-                    StrFormatByteSize64(diskSize.QuadPart, sizeStr, _countof(sizeStr));
-                    
-                    wchar_t freeLabel[64];
-                    if (LoadString(GetModuleHandle(L"shell32.dll"), 9307, freeLabel, _countof(freeLabel)) > 0) {
-                        swprintf_s(freeBuf, freeSize, L"%s: %s", freeLabel, sizeStr);
-                    } else {
-                        swprintf_s(freeBuf, freeSize, L"Free: %s", sizeStr);
-                    }
-                }
-                if (pidl) ILFree(pidl);
-                
-                pFolder->Release();
-            }
+            pView2->ItemCount(SVGIO_ALLVIEW, &itemCount);
             pView2->Release();
         }
         pView->Release();
     }
-    return res;
+    return itemCount;
+}
+
+void GetStatusText(IShellBrowser* pBrowser, wchar_t* textBuf, int textSize, wchar_t* freeBuf, int freeSize) {
+    textBuf[0] = freeBuf[0] = 0;
+    if (!pBrowser) return;
+
+    IShellView* pView = nullptr;
+    if (FAILED(pBrowser->QueryActiveShellView(&pView)) || !pView) return;
+    
+    IFolderView2* pView2 = nullptr;
+    if (FAILED(pView->QueryInterface(IID_IFolderView2, (void**)&pView2)) || !pView2) {
+        pView->Release();
+        return;
+    }
+    
+    int selCount = 0, totalCount = 0;
+    pView2->ItemCount(SVGIO_SELECTION, &selCount);
+    pView2->ItemCount(SVGIO_ALLVIEW, &totalCount);
+    
+    IPersistFolder2* pFolder = nullptr;
+    if (SUCCEEDED(pView2->GetFolder(IID_IPersistFolder2, (void**)&pFolder)) && pFolder) {
+        if (selCount == 1) {
+            IEnumIDList* pEnum = nullptr;
+            PITEMID_CHILD child;
+            if (SUCCEEDED(pView2->Items(SVGIO_SELECTION, IID_IEnumIDList, (void**)&pEnum)) && pEnum && 
+                pEnum->Next(1, &child, NULL) == S_OK) {
+                IShellFolder* pSF = nullptr;
+                if (SUCCEEDED(pFolder->QueryInterface(IID_IShellFolder, (void**)&pSF)) && pSF) {
+                    IQueryInfo* pQI = nullptr;
+                    if (SUCCEEDED(pSF->GetUIObjectOf(NULL, 1, (PCUITEMID_CHILD*)&child, IID_IQueryInfo, NULL, (void**)&pQI)) && pQI) {
+                        LPWSTR pTip = nullptr;
+                        if (SUCCEEDED(pQI->GetInfoTip(QITIPF_DEFAULT | QITIPF_SINGLELINE, &pTip)) && pTip) {
+                            wcsncpy_s(textBuf, textSize, pTip, _TRUNCATE);
+                            for (wchar_t* p = textBuf; *p; p++) if (*p == '\t') *p = ' ';
+                            CoTaskMemFree(pTip);
+                        }
+                        pQI->Release();
+                    }
+                    pSF->Release();
+                }
+                ILFree(child);
+            }
+            if (pEnum) pEnum->Release();
+        } else {
+            NUMBERFMT numFmt = {0, 0, 3};
+            wchar_t decSep[10], thousandSep[10], numBuf[64], fmtNum[64], fmtStr[128];
+            GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_SDECIMAL, decSep, 10);
+            GetLocaleInfo(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, thousandSep, 10);
+            numFmt.lpDecimalSep = decSep;
+            numFmt.lpThousandSep = thousandSep;
+            
+            int count = selCount > 1 ? selCount : totalCount;
+            UINT strId = selCount > 1 ? 38194 : 38192;
+            
+            swprintf_s(numBuf, L"%d", count);
+            GetNumberFormat(LOCALE_USER_DEFAULT, 0, numBuf, &numFmt, fmtNum, _countof(fmtNum));
+            
+            if (LoadString(GetModuleHandle(L"shell32.dll"), strId, fmtStr, _countof(fmtStr)) > 0)
+                swprintf_s(textBuf, textSize, fmtStr, fmtNum);
+            else
+                swprintf_s(textBuf, textSize, selCount > 1 ? L"%s selected" : L"%s items", fmtNum);
+        }
+        
+        PIDLIST_ABSOLUTE pidl = nullptr;
+        wchar_t path[MAX_PATH];
+        ULARGE_INTEGER diskFree;
+        if (SUCCEEDED(pFolder->GetCurFolder(&pidl)) && pidl) {
+            if (SHGetPathFromIDList(pidl, path) && GetDiskFreeSpaceEx(path, NULL, NULL, &diskFree)) {
+                wchar_t sizeStr[64], freeLabel[64];
+                StrFormatByteSize64(diskFree.QuadPart, sizeStr, _countof(sizeStr));
+                if (LoadString(GetModuleHandle(L"shell32.dll"), 9307, freeLabel, _countof(freeLabel)) > 0)
+                    swprintf_s(freeBuf, freeSize, L"%s: %s", freeLabel, sizeStr);
+                else
+                    swprintf_s(freeBuf, freeSize, L"Free: %s", sizeStr);
+            }
+            ILFree(pidl);
+        }
+        pFolder->Release();
+    }
+    pView2->Release();
+    pView->Release();
 }
 
 void GetFileSize(IShellBrowser* pBrowser, wchar_t* buf, int size) {
@@ -245,110 +208,76 @@ void GetFileSize(IShellBrowser* pBrowser, wchar_t* buf, int size) {
     if (!pBrowser) return;
 
     __int64 fileSize = -1;
-    bool bMore = false;
-    DWORD time0 = GetTickCount();
 
     IShellView* pView = nullptr;
-    if (SUCCEEDED(pBrowser->QueryActiveShellView(&pView)) && pView) {
-        IFolderView* pView2 = nullptr;
-        if (SUCCEEDED(pView->QueryInterface(IID_IFolderView, (void**)&pView2)) && pView2) {
-            IPersistFolder2* pFolder = nullptr;
-            if (SUCCEEDED(pView2->GetFolder(IID_IPersistFolder2, (void**)&pFolder)) && pFolder) {
-                IShellFolder2* pFolder2 = nullptr;
-                if (SUCCEEDED(pFolder->QueryInterface(IID_IShellFolder2, (void**)&pFolder2)) && pFolder2) {
-                    int selCount = 0, totalCount = 0;
-                    pView2->ItemCount(SVGIO_SELECTION, &selCount);
-                    pView2->ItemCount(SVGIO_ALLVIEW, &totalCount);
-                    
-                    UINT type = (selCount > 0) ? SVGIO_SELECTION : SVGIO_ALLVIEW;
-                    
-                    IEnumIDList* pEnum = nullptr;
-                    if ((totalCount < 10000 || selCount < 1000) && 
-                        SUCCEEDED(pView2->Items(type, IID_IEnumIDList, (void**)&pEnum)) && pEnum) {
-                        
-                        PITEMID_CHILD child;
-                        SHCOLUMNID column;
-                        column.fmtid = PKEY_Size.fmtid;
-                        column.pid = PKEY_Size.pid;
-                        
-                        int index = 0;
-                        while (pEnum->Next(1, &child, NULL) == S_OK) {
-                            index++;
-                            if ((index % 100) == 0 && (GetTickCount() - time0) > 500) {
-                                ILFree(child);
-                                bMore = true;
-                                break;
-                            }
-                            VARIANT var;
-                            VariantInit(&var);
-                            if (SUCCEEDED(pFolder2->GetDetailsEx(child, &column, &var)) && var.vt == VT_UI8) {
-                                if (fileSize < 0)
-                                    fileSize = var.ullVal;
-                                else
-                                    fileSize += var.ullVal;
-                            }
-                            VariantClear(&var);
-                            ILFree(child);
-                        }
-                        pEnum->Release();
-                    }
-                    pFolder2->Release();
-                }
-                pFolder->Release();
-            }
-            pView2->Release();
-        }
+    if (FAILED(pBrowser->QueryActiveShellView(&pView)) || !pView) return;
+    
+    IFolderView* pFV = nullptr;
+    if (FAILED(pView->QueryInterface(IID_IFolderView, (void**)&pFV)) || !pFV) {
         pView->Release();
+        return;
     }
     
-    if (fileSize >= 0) {
-        StrFormatByteSize64(fileSize, buf, size);
-        if (bMore)
-            wcscat_s(buf, size, L"+");
+    IPersistFolder2* pFolder = nullptr;
+    IShellFolder2* pFolder2 = nullptr;
+    if (SUCCEEDED(pFV->GetFolder(IID_IPersistFolder2, (void**)&pFolder)) && pFolder &&
+        SUCCEEDED(pFolder->QueryInterface(IID_IShellFolder2, (void**)&pFolder2)) && pFolder2) {
+        
+        int selCount = 0;
+        pFV->ItemCount(SVGIO_SELECTION, &selCount);
+        
+        UINT type = selCount > 0 ? SVGIO_SELECTION : SVGIO_ALLVIEW;
+        IEnumIDList* pEnum = nullptr;
+        
+        if (SUCCEEDED(pFV->Items(type, IID_IEnumIDList, (void**)&pEnum)) && pEnum) {
+            PITEMID_CHILD child;
+            SHCOLUMNID column = { PKEY_Size.fmtid, PKEY_Size.pid };
+            
+            while (pEnum->Next(1, &child, NULL) == S_OK) {
+                VARIANT var = {};
+                if (SUCCEEDED(pFolder2->GetDetailsEx(child, &column, &var)) && var.vt == VT_UI8)
+                    fileSize = fileSize < 0 ? var.ullVal : fileSize + var.ullVal;
+                VariantClear(&var);
+                ILFree(child);
+            }
+            pEnum->Release();
+        }
+        pFolder2->Release();
     }
+    if (pFolder) pFolder->Release();
+    pFV->Release();
+    pView->Release();
+    
+    if (fileSize >= 0)
+        StrFormatByteSize64(fileSize, buf, size);
 }
 
 void UpdateStatusBar(StatusBarData* pData) {
     if (!pData || !pData->statusBar) return;
-    
-    if (!pData->pBrowser) {
-        pData->pBrowser = GetShellBrowser(pData->explorerWnd);
-    }
-    
+    if (!pData->pBrowser) pData->pBrowser = GetShellBrowser(pData->explorerWnd);
     if (!pData->pBrowser) return;
     
-    wchar_t textBuf[512];
-    wchar_t freeBuf[128];
-    wchar_t sizeBuf[128];
-    
+    wchar_t textBuf[512], freeBuf[128], sizeBuf[128];
     GetStatusText(pData->pBrowser, textBuf, _countof(textBuf), freeBuf, _countof(freeBuf));
     GetFileSize(pData->pBrowser, sizeBuf, _countof(sizeBuf));
     
+    RECT rc;
+    GetClientRect(pData->statusBar, &rc);
+    int w = rc.right, h = GetStatusBarHeight(pData->statusBar);
     bool hasFree = freeBuf[0] != 0;
     bool hasSize = sizeBuf[0] != 0;
     
-    RECT rc;
-    GetClientRect(pData->statusBar, &rc);
-    int width = rc.right;
-    int height = GetStatusBarHeight(pData->statusBar);
-    
     if (hasSize && hasFree) {
-        int parts[] = {width - height - pData->fileSizeWidth - pData->freeSpaceWidth, 
-                       width - height - pData->fileSizeWidth, -1};
+        int parts[] = {w - h - pData->fileSizeWidth - pData->freeSpaceWidth, w - h - pData->fileSizeWidth, -1};
         SendMessage(pData->statusBar, SB_SETPARTS, 3, (LPARAM)parts);
-        SendMessage(pData->statusBar, SB_SETTEXT, PART_TEXT, (LPARAM)textBuf);
-        SendMessage(pData->statusBar, SB_SETTEXT, PART_FREE, (LPARAM)freeBuf);
-        SendMessage(pData->statusBar, SB_SETTEXT, PART_SIZE, (LPARAM)sizeBuf);
-    } else if (hasFree) {
-        int parts[] = {width - height - pData->freeSpaceWidth, -1};
-        SendMessage(pData->statusBar, SB_SETPARTS, 2, (LPARAM)parts);
         SendMessage(pData->statusBar, SB_SETTEXT, 0, (LPARAM)textBuf);
         SendMessage(pData->statusBar, SB_SETTEXT, 1, (LPARAM)freeBuf);
-    } else if (hasSize) {
-        int parts[] = {width - height - pData->fileSizeWidth, -1};
+        SendMessage(pData->statusBar, SB_SETTEXT, 2, (LPARAM)sizeBuf);
+    } else if (hasFree || hasSize) {
+        int parts[] = {w - h - (hasFree ? pData->freeSpaceWidth : pData->fileSizeWidth), -1};
         SendMessage(pData->statusBar, SB_SETPARTS, 2, (LPARAM)parts);
         SendMessage(pData->statusBar, SB_SETTEXT, 0, (LPARAM)textBuf);
-        SendMessage(pData->statusBar, SB_SETTEXT, 1, (LPARAM)sizeBuf);
+        SendMessage(pData->statusBar, SB_SETTEXT, 1, (LPARAM)(hasFree ? freeBuf : sizeBuf));
     } else {
         int parts[] = {-1};
         SendMessage(pData->statusBar, SB_SETPARTS, 1, (LPARAM)parts);
@@ -367,17 +296,27 @@ LRESULT CALLBACK SubclassStatusProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
     
     if (uMsg == WM_TIMER && wParam == 1) {
         KillTimer(hWnd, 1);
-        Wh_Log(L"Timer fired, updating status bar");
         
         if (!pData->shellDefView) {
             pData->shellDefView = FindShellDefView(pData->explorerWnd);
-            if (pData->shellDefView) {
-                Wh_Log(L"Found SHELLDLL_DefView: %p", pData->shellDefView);
+            if (pData->shellDefView)
                 SetWindowSubclass(pData->shellDefView, SubclassShellViewProc, (UINT_PTR)pData->shellDefView, (DWORD_PTR)pData);
-            }
         }
         
+        if (!pData->pBrowser)
+            pData->pBrowser = GetShellBrowser(pData->explorerWnd);
+        
+        int itemCount = GetItemCount(pData->pBrowser);
+        
+        if (itemCount == 0 && pData->retryCount < 50) {
+            pData->retryCount++;
+            SetTimer(hWnd, 1, 100, NULL);
+            return 0;
+        }
+        
+        pData->retryCount = 0;
         UpdateStatusBar(pData);
+        
         return 0;
     }
     
@@ -396,24 +335,18 @@ LRESULT CALLBACK SubclassDUIViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     if (uMsg == WM_WINDOWPOSCHANGING && pData->statusBar) {
         WINDOWPOS* pPos = (WINDOWPOS*)lParam;
         if (!(pPos->flags & SWP_NOSIZE)) {
-            int height = GetStatusBarHeight(pData->statusBar);
-            pPos->cy -= height;
-            SetWindowPos(pData->statusBar, NULL, pPos->x, pPos->y + pPos->cy, pPos->cx, height, SWP_NOZORDER);
-            
-            // Запрашиваем полное обновление статус-бара после изменения размера
+            int h = GetStatusBarHeight(pData->statusBar);
+            pPos->cy -= h;
+            SetWindowPos(pData->statusBar, NULL, pPos->x, pPos->y + pPos->cy, pPos->cx, h, SWP_NOZORDER);
             PostMessage(pData->statusBar, WM_UPDATE_STATUSBAR, 0, 0);
         }
     }
     
     if (uMsg == WM_NCDESTROY) {
         RemoveWindowSubclass(hWnd, SubclassDUIViewProc, uIdSubclass);
-        if (pData->shellDefView) {
+        if (pData->shellDefView)
             RemoveWindowSubclass(pData->shellDefView, SubclassShellViewProc, (UINT_PTR)pData->shellDefView);
-        }
-        if (pData->pBrowser) {
-            pData->pBrowser->Release();
-        }
-        RemoveProp(pData->explorerWnd, STATUSBAR_DATA_PROP);
+        if (pData->pBrowser) pData->pBrowser->Release();
         delete pData;
     }
     
@@ -425,19 +358,24 @@ LRESULT CALLBACK SubclassShellViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
     StatusBarData* pData = (StatusBarData*)dwRefData;
     
     if (uMsg == WM_NOTIFY) {
-        NMHDR* pNMHdr = (NMHDR*)lParam;
-        if (pNMHdr->code == LVN_ITEMCHANGED) {
-            NMLISTVIEW* pNMLV = (NMLISTVIEW*)lParam;
-            if (pNMLV->uChanged & LVIF_STATE) {
-                if ((pNMLV->uOldState & LVIS_SELECTED) != (pNMLV->uNewState & LVIS_SELECTED)) {
-                    PostMessage(pData->statusBar, WM_CLEAR, 0, 0);
-                }
-            }
+        NMHDR* pNM = (NMHDR*)lParam;
+        if (pNM->code == LVN_ITEMCHANGED) {
+            NMLISTVIEW* pLV = (NMLISTVIEW*)lParam;
+            if ((pLV->uChanged & LVIF_STATE) && 
+                ((pLV->uOldState ^ pLV->uNewState) & LVIS_SELECTED))
+                PostMessage(pData->statusBar, WM_CLEAR, 0, 0);
         }
     }
     
     if (uMsg == WM_NCDESTROY) {
+        pData->shellDefView = NULL;
+        pData->retryCount = 0;
+        if (pData->pBrowser) {
+            pData->pBrowser->Release();
+            pData->pBrowser = nullptr;
+        }
         RemoveWindowSubclass(hWnd, SubclassShellViewProc, uIdSubclass);
+        SetTimer(pData->statusBar, 1, 100, NULL);
     }
     
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -453,82 +391,58 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     
-    if ((((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0) && !wcscmp(lpClassName, L"DUIViewWndClassName")) {
-        HWND explorerWnd = GetAncestor(hWnd, GA_ROOT);
-        wchar_t name[256];
-        if (GetClassName(explorerWnd, name, _countof(name)) && _wcsicmp(name, L"CabinetWClass") == 0) {
-            Wh_Log(L"Found DUIViewWndClassName: %p, Explorer: %p", hWnd, explorerWnd);
-            
-            HWND parentWnd = GetParent(hWnd);
-            
-            RECT rc;
-            GetClientRect(parentWnd, &rc);
-            
-            HWND statusBar = CreateWindowEx(0, STATUSCLASSNAME, NULL,
-                WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | SBARS_SIZEGRIP,
-                0, 0, rc.right, 0,
-                parentWnd, NULL, NULL, NULL);
-            
-            if (statusBar) {
-                SendMessage(statusBar, WM_SIZE, 0, 0);
-                
-                int height = GetStatusBarHeight(statusBar);
-                
-                SetWindowPos(statusBar, NULL, 0, rc.bottom - height, 
-                            rc.right, height, SWP_NOZORDER);
-                
-                Wh_Log(L"Created status bar: %p, parent: %p, height: %d", statusBar, parentWnd, height);
-                
-                HDC hdc = GetDC(statusBar);
-                SIZE size = {0};
-                HFONT hFont = (HFONT)SendMessage(statusBar, WM_GETFONT, 0, 0);
-                HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
-
-                GetTextExtentPoint32(hdc, L"999.99 MB", 9, &size);
-                int fileSizeWidth = size.cx;
-                if (fileSizeWidth < 50) fileSizeWidth = 50;
-
-                wchar_t freeLabel[64];
-                LoadString(GetModuleHandle(L"shell32.dll"), 9307, freeLabel, _countof(freeLabel));
-                wcscat_s(freeLabel, L": 999.99 GB");
-                GetTextExtentPoint32(hdc, freeLabel, (int)wcslen(freeLabel), &size);
-                int freeSpaceWidth = size.cx;
-                if (freeSpaceWidth < 70) freeSpaceWidth = 70;
-
-                SelectObject(hdc, hOldFont);
-                ReleaseDC(statusBar, hdc);
-                
-                StatusBarData* pData = new StatusBarData();
-                pData->statusBar = statusBar;
-                pData->dUIView = hWnd;
-                pData->shellDefView = NULL;
-                pData->explorerWnd = explorerWnd;
-                pData->fileSizeWidth = fileSizeWidth;
-                pData->freeSpaceWidth = freeSpaceWidth;
-                pData->pBrowser = nullptr;
-                
-                SetProp(explorerWnd, STATUSBAR_DATA_PROP, (HANDLE)pData);
-                
-                SetWindowSubclass(statusBar, SubclassStatusProc, (UINT_PTR)statusBar, (DWORD_PTR)pData);
-                SetWindowSubclass(hWnd, SubclassDUIViewProc, (UINT_PTR)hWnd, (DWORD_PTR)pData);
-                
-                SetTimer(statusBar, 1, 200, NULL);
-            }
-        }
-        
-    }
+    if (!hWnd || ((ULONG_PTR)lpClassName <= 0xffff) || wcscmp(lpClassName, L"DUIViewWndClassName"))
+        return hWnd;
+    
+    HWND explorerWnd = GetAncestor(hWnd, GA_ROOT);
+    wchar_t cls[64];
+    if (!GetClassName(explorerWnd, cls, _countof(cls)) || _wcsicmp(cls, L"CabinetWClass"))
+        return hWnd;
+    
+    HWND parentWnd = GetParent(hWnd);
+    RECT rc;
+    GetClientRect(parentWnd, &rc);
+    
+    HWND statusBar = CreateWindowEx(0, STATUSCLASSNAME, NULL,
+        WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | SBARS_SIZEGRIP,
+        0, 0, rc.right, 0, parentWnd, NULL, NULL, NULL);
+    
+    if (!statusBar) return hWnd;
+    
+    SendMessage(statusBar, WM_SIZE, 0, 0);
+    int h = GetStatusBarHeight(statusBar);
+    SetWindowPos(statusBar, NULL, 0, rc.bottom - h, rc.right, h, SWP_NOZORDER);
+    
+    HDC hdc = GetDC(statusBar);
+    HFONT hFont = (HFONT)SendMessage(statusBar, WM_GETFONT, 0, 0);
+    HFONT hOld = (HFONT)SelectObject(hdc, hFont);
+    SIZE sz;
+    
+    GetTextExtentPoint32(hdc, L"999.99 MB", 9, &sz);
+    int fileW = sz.cx < 50 ? 50 : sz.cx;
+    
+    wchar_t freeLabel[64];
+    LoadString(GetModuleHandle(L"shell32.dll"), 9307, freeLabel, _countof(freeLabel));
+    wcscat_s(freeLabel, L": 999.99 GB");
+    GetTextExtentPoint32(hdc, freeLabel, (int)wcslen(freeLabel), &sz);
+    int freeW = sz.cx < 70 ? 70 : sz.cx;
+    
+    SelectObject(hdc, hOld);
+    ReleaseDC(statusBar, hdc);
+    
+    StatusBarData* pData = new StatusBarData{statusBar, explorerWnd, NULL, fileW, freeW, nullptr, 0};
+    
+    SetWindowSubclass(statusBar, SubclassStatusProc, (UINT_PTR)statusBar, (DWORD_PTR)pData);
+    SetWindowSubclass(hWnd, SubclassDUIViewProc, (UINT_PTR)hWnd, (DWORD_PTR)pData);
+    
+    SetTimer(statusBar, 1, 100, NULL);
+    
     return hWnd;
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init");
-    
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, 
-                        (void**)&CreateWindowExW_Original);
-    
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
-}
+void Wh_ModUninit() {}
