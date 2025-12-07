@@ -32,8 +32,6 @@ This is an alternative to the status bar from Classic Explorer from Open-Shell p
 #include <objbase.h>
 #include <propkey.h>
 
-DEFINE_PROPERTYKEY(PKEY_Size, 0xB725F130, 0x47EF, 0x101A, 0xA5, 0xF1, 0x02, 0x60, 0x8C, 0x9E, 0xEB, 0xAC, 12);
-
 #define PART_TEXT 0
 #define PART_FREE 1
 #define PART_SIZE 2
