@@ -56,6 +56,13 @@ struct StatusBarData {
     IShellBrowser* pBrowser;
 };
 
+// Получает реальную высоту статус-бара
+int GetStatusBarHeight(HWND statusBar) {
+    RECT rc;
+    GetWindowRect(statusBar, &rc);
+    return rc.bottom - rc.top;
+}
+
 LRESULT CALLBACK SubclassShellViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, 
                                         UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
@@ -320,14 +327,13 @@ void UpdateStatusBar(StatusBarData* pData) {
     GetFileSize(pData->pBrowser, sizeBuf, _countof(sizeBuf));
     
     // Вычисляем какие секции нужны
-    bool hasText = textBuf[0] != 0;
     bool hasFree = freeBuf[0] != 0;
     bool hasSize = sizeBuf[0] != 0;
     
     RECT rc;
     GetClientRect(pData->statusBar, &rc);
     int width = rc.right;
-    int height = 22;
+    int height = GetStatusBarHeight(pData->statusBar);
     
     if (hasSize && hasFree) {
         int parts[] = {width - height - pData->fileSizeWidth - pData->freeSpaceWidth, 
@@ -395,9 +401,7 @@ LRESULT CALLBACK SubclassDUIViewProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     if (uMsg == WM_WINDOWPOSCHANGING && pData->statusBar) {
         WINDOWPOS* pPos = (WINDOWPOS*)lParam;
         if (!(pPos->flags & SWP_NOSIZE)) {
-            RECT rc;
-            GetWindowRect(pData->statusBar, &rc);
-            int height = rc.bottom - rc.top;
+            int height = GetStatusBarHeight(pData->statusBar);
             pPos->cy -= height;
             SetWindowPos(pData->statusBar, NULL, pPos->x, pPos->y + pPos->cy, pPos->cx, height, SWP_NOZORDER);
             
@@ -467,13 +471,24 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
             RECT rc;
             GetClientRect(parentWnd, &rc);
             
+            // Создаём статус-бар - он сам определит свою высоту
             HWND statusBar = CreateWindowEx(0, STATUSCLASSNAME, NULL,
                 WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | SBARS_SIZEGRIP,
-                0, rc.bottom - 22, rc.right, 22,
+                0, 0, rc.right, 0,
                 parentWnd, NULL, NULL, NULL);
             
             if (statusBar) {
-                Wh_Log(L"Created status bar: %p, parent: %p", statusBar, parentWnd);
+                // Отправляем WM_SIZE чтобы статус-бар вычислил свой размер
+                SendMessage(statusBar, WM_SIZE, 0, 0);
+                
+                // Получаем реальную высоту, которую статус-бар выбрал сам
+                int height = GetStatusBarHeight(statusBar);
+                
+                // Позиционируем статус-бар внизу
+                SetWindowPos(statusBar, NULL, 0, rc.bottom - height, 
+                            rc.right, height, SWP_NOZORDER);
+                
+                Wh_Log(L"Created status bar: %p, parent: %p, height: %d", statusBar, parentWnd, height);
                 
                 HDC hdc = GetDC(statusBar);
                 SIZE size = {0};
@@ -482,7 +497,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
                 int fileSizeWidth = size.cx;
                 if (fileSizeWidth < 50) fileSizeWidth = 50;
                 
-                GetTextExtentPoint32(hdc, L"xxxxxxxxx: 999 GB", 16, &size);
+                GetTextExtentPoint32(hdc, L"xxxxxxxxx: 999 GB", 17, &size);
                 int freeSpaceWidth = size.cx;
                 if (freeSpaceWidth < 70) freeSpaceWidth = 70;
                 
