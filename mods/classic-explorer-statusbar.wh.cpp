@@ -31,6 +31,7 @@ This is an alternative to the status bar from Classic Explorer from Open-Shell p
 #include <exdisp.h>
 #include <objbase.h>
 #include <propkey.h>
+#include <propkeydef.h>
 
 #define PART_TEXT 0
 #define PART_FREE 1
@@ -494,7 +495,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
                 SetWindowSubclass(statusBar, SubclassStatusProc, (UINT_PTR)statusBar, (DWORD_PTR)pData);
                 SetWindowSubclass(hWnd, SubclassDUIViewProc, (UINT_PTR)hWnd, (DWORD_PTR)pData);
                 
-                SetTimer(statusBar, 1, 500, NULL);
+                SetTimer(statusBar, 1, 100, NULL);
             }
         }
         
