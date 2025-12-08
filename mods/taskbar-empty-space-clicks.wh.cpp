@@ -236,6 +236,13 @@ If you have a request for new functions, suggestions, or you are experiencing so
       - tapSingle: Touchscreen single tap
       - tapDouble: Touchscreen double tap
       - tapTriple: Touchscreen triple tap
+    - TaskbarType: all
+      $name: Taskbar
+      $description: Select the taskbar for which the mouse click trigger should be active.
+      $options:
+      - all: All taskbars
+      - primary: Primary taskbar only
+      - secondary: Secondary taskbars only
     - Action: ACTION_NOTHING
       $name: Action
       $description: Action to invoke on trigger.
@@ -466,6 +473,7 @@ enum TaskBarButtonsState
 struct TriggerAction
 {
     std::wstring mouseTriggerName;            // Mouse trigger parsed from settings - represents what kind of button click should be detected
+    std::wstring taskbarTypeName;             // Taskbar type parsed from settings - represents which taskbar the trigger should be active on
     std::wstring actionName;                  // Name of the action parsed from settings
     uint32_t expectedKeyModifiersState;       // expected state (bitmask) of the key modifiers that should be checked
     std::function<void(HWND)> actionExecutor; // function that executes the action
@@ -1480,6 +1488,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
         }
     }
 }
+
 void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
@@ -2032,16 +2041,23 @@ void LoadSettings()
             keyboardTriggers.push_back(keyboardTriggerStr);
         }
         auto mouseTriggerStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].MouseTrigger", i)));
+        auto taskbarTypeStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].TaskbarType", i)));
         auto actionStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].Action", i)));
         auto additionalArgsStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].AdditionalArgs", i)));
 
         // no other actions were added by user, end parsing
-        if (keyboardTriggers.empty() && mouseTriggerStr.empty() && actionStr.empty() && additionalArgsStr.empty())
+        if (keyboardTriggers.empty() && mouseTriggerStr.empty() && taskbarTypeStr.empty() && actionStr.empty() && additionalArgsStr.empty())
             break;
 
         // if mouse trigger or action is missing, skip since the rest is irrelevant
         if (mouseTriggerStr.empty() || actionStr.empty())
             continue;
+
+        // handle default value
+        if (taskbarTypeStr.empty())
+        {
+            taskbarTypeStr = L"all"; 
+        }
 
 #ifdef ENABLE_LOG_INFO
         std::wstring logMessage = std::wstring(L"Settings: TriggerActionOptions[") + std::to_wstring(i) + std::wstring(L"] = ");
@@ -2053,6 +2069,9 @@ void LoadSettings()
         }
         logMessage += L"Mouse(";
         logMessage += mouseTriggerStr.c_str();
+        logMessage += L") + ";
+        logMessage += L"TaskbarType(";;
+        logMessage += taskbarTypeStr.c_str();
         logMessage += L") -> ";
         logMessage += actionStr.c_str();
         if (!additionalArgsStr.empty())
@@ -2079,6 +2098,7 @@ void LoadSettings()
             }
         }
         triggerAction.mouseTriggerName = mouseTriggerStr;
+        triggerAction.taskbarTypeName = taskbarTypeStr;
         triggerAction.actionName = actionStr;
         triggerAction.actionExecutor = ParseMouseActionSetting(actionStr, additionalArgsStr);
         g_settings.triggerActions.push_back(triggerAction);
