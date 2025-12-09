@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-08T20:28:07.000Z</updated>
+    <updated>2025-12-09T12:50:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 1.0.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#835cd298a06d12ab8373c6e07f94db05b2e1c536</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2025-12-09T12:50:43.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="virtualdesktopmovewindow">Virtual Desktop Move Window</h1>
+<p>This mod allows you to go to a specific virtual desktop and move the active window to a specific virtual desktop using hotkeys.</p>
+<p>Based on VD.ahk by FuPeiJiang.</p>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Status Bar 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-explorer-statusbar#dd5108480299a5dcf0fc4499376bde508fa5440e</id>
@@ -304,17 +317,6 @@ is not English (UK/US).</li>
         <author>
             <name>rinosaur681</name>
             <uri>https://github.com/rinosaur681</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remember the folder windows' positions 1.2]]></title>
-        <id>https://windhawk.net/mods/remember-folder-positions#08fc3fd684176a81ad98c922c9da30f1b64ddc1f</id>
-        <link href="https://windhawk.net/mods/remember-folder-positions"/>
-        <updated>2025-11-03T09:40:30.000Z</updated>
-        <content type="html"><![CDATA[<p>Get rid of subclassing</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

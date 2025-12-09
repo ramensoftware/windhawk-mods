@@ -7331,6 +7331,34 @@
                 "version": "1.0.0"
             }
         },
+        "virtual-desktop-helper": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1765284643000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1765284643000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "u2x1",
+                "compilerOptions": "-lole32 -loleaut32 -luuid",
+                "description": "Go to a specific virtual desktop and move the active window to a specific virtual desktop",
+                "github": "https://github.com/u2x1",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "name": "Virtual Desktop Helper",
+                "version": "1.0.0"
+            }
+        },
         "virtual-desktop-taskbar-order": {
             "details": {
                 "defaultSorting": 17950,
