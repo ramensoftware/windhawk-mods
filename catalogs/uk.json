@@ -5857,7 +5857,7 @@
                     289
                 ],
                 "ratingUsers": 298,
-                "updated": 1748989411000,
+                "updated": 1765321882000,
                 "users": 27958
             },
             "featured": true,
@@ -5875,7 +5875,7 @@
                 ],
                 "name": "Middle click to close on the taskbar",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.8"
+                "version": "1.0.9"
             }
         },
         "taskbar-button-scroll": {

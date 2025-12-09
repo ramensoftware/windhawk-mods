@@ -1,3 +1,8 @@
+## 1.0.9 ([Dec 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b43686cacbdb524ba6ddb1776332ecd32bfd4e3f/mods/taskbar-button-click.wh.cpp))
+
+* Ending task (i.e. terminating the process) is no longer applied for store (modern/UWP) apps, since several apps might share the same process.
+* Fixed a crash due to the removal of unused taskbar functions in recent Windows 11 builds. Only relevant if the "Multiple items behavior" option is set to "Close foreground window".
+
 ## 1.0.8 ([Jun 3, 2025](https://github.com/ramensoftware/windhawk-mods/blob/78fc318a181cfb5299fab5beaf42a8726ebe5f9e/mods/taskbar-button-click.wh.cpp))
 
 * Added support for ARM64.

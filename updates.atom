@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-09T21:53:28.000Z</updated>
+    <updated>2025-12-09T23:11:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.9]]></title>
+        <id>https://windhawk.net/mods/taskbar-button-click#b43686cacbdb524ba6ddb1776332ecd32bfd4e3f</id>
+        <link href="https://windhawk.net/mods/taskbar-button-click"/>
+        <updated>2025-12-09T23:11:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Ending task (i.e. terminating the process) is no longer applied for store (modern/UWP) apps, since several apps might share the same process.</li>
+<li>Fixed a crash due to the removal of unused taskbar functions in recent Windows 11 builds. Only relevant if the "Multiple items behavior" option is set to "Close foreground window".</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.10]]></title>
         <id>https://windhawk.net/mods/taskbar-wheel-cycle#c06b8a9588be043226a4fa9159d15bf6e835cc74</id>
@@ -295,21 +309,6 @@ You can experiment with the <strong>radius</strong> value to achieve the best re
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Home, Gallery & OneDrive in Explorer 0.3]]></title>
-        <id>https://windhawk.net/mods/hide-home-gallery-explorer#0a7de6ee91db437ff121aeef0208b77c8d2df4dc</id>
-        <link href="https://windhawk.net/mods/hide-home-gallery-explorer"/>
-        <updated>2025-11-11T08:43:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Eliminates flashing: periodic scans do a dry-run first and only freeze/redraw when deletions are needed.</li>
-<li>Optional OneDrive toggle with configurable label.</li>
-<li>Custom items hiding: type one or more labels, choose match mode, and case sensitivity.</li>
-</ul>]]></content>
-        <author>
-            <name>rinosaur681</name>
-            <uri>https://github.com/rinosaur681</uri>
         </author>
     </entry>
 </feed>
