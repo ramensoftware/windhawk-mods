@@ -5,7 +5,7 @@
 // @version         1.0.0
 // @author          u2x1
 // @github          https://github.com/u2x1
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
 
@@ -446,6 +446,24 @@ void CleanupVirtualDesktopAPI() {
 DWORD WINAPI HotkeyThreadProc(LPVOID) {
     g_hotkeyThreadId = GetCurrentThreadId();
 
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
+        Wh_Log(L"CoInitializeEx failed in hotkey thread: 0x%08X", hr);
+        if (g_hHotkeyReadyEvent) {
+            SetEvent(g_hHotkeyReadyEvent);
+        }
+        return 1;
+    }
+
+    if (!InitializeVirtualDesktopAPI()) {
+        Wh_Log(L"Failed to initialize Virtual Desktop API in hotkey thread");
+        CoUninitialize();
+        if (g_hHotkeyReadyEvent) {
+            SetEvent(g_hHotkeyReadyEvent);
+        }
+        return 1;
+    }
+
     MSG msg;
     PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE);
     if (g_hHotkeyReadyEvent) {
@@ -505,6 +523,9 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
             g_goHotkeysRegistered[desktopNum - 1] = false;
         }
     }
+
+    CleanupVirtualDesktopAPI();
+    CoUninitialize();
 
     return 0;
 }
@@ -756,31 +777,17 @@ bool MoveActiveWindowToDesktopNum(int desktopNum) {
 
 
 //=============================================================================
-// Windhawk Mod Entry Points
+// Windhawk Tool Mod Entry Points
 //=============================================================================
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Virtual Desktop Helper mod initializing...");
 
     // Load settings first
     LoadSettings();
 
-    // Initialize COM
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
-        Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
-        return FALSE;
-    }
-
-    // Initialize the Virtual Desktop API
-    if (!InitializeVirtualDesktopAPI()) {
-        Wh_Log(L"Failed to initialize Virtual Desktop API");
-        return FALSE;
-    }
-
     if (!StartHotkeyThread()) {
         Wh_Log(L"Failed to register required hotkeys");
-        CleanupVirtualDesktopAPI();
         return FALSE;
     }
 
@@ -788,27 +795,188 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Virtual Desktop Helper mod uninitializing...");
 
     StopHotkeyThread();
-    CleanupVirtualDesktopAPI();
 
     Wh_Log(L"Virtual Desktop Helper mod uninitialized");
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed, reloading...");
 
-    // Stop hotkey thread and cleanup
+    // Stop hotkey thread
     StopHotkeyThread();
-    CleanupVirtualDesktopAPI();
 
     // Reload settings
     LoadSettings();
 
-    // Reinitialize
-    if (InitializeVirtualDesktopAPI()) {
-        StartHotkeyThread();
+    // Restart hotkey thread
+    StartHotkeyThread();
+}
+
+//=============================================================================
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk-mods/pull/1916
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//=============================================================================
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
