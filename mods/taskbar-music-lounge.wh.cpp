@@ -1,75 +1,51 @@
 // ==WindhawkMod==
 // @id              taskbar-music-lounge
 // @name            Taskbar Music Lounge
-// @description     A "Pill-shaped" scrolling music ticker with media controls.
-// @version         2.1
+// @description     A native-style music ticker with media controls.
+// @version         3.0
 // @author          Hashah2311
 // @github          https://github.com/Hashah2311
 // @include         windhawk.exe
-// @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lgdiplus -lshell32 -ladvapi32
+// @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Taskbar Music Lounge
 
-A sleek, pill-shaped music ticker for your Windows 11 taskbar.
+A media controller that uses Windows 11 native DWM styling for a seamless look.
 
-## 🎵 Features
-* **Glass Look:** Uses shaped window regions to create a true rounded acrylic pill.
-* **Auto-Theming:** Automatically adapts to Windows Light/Dark mode.
-* **Marquee Text:** Automatically scrolls long song titles.
-* **Controls:** Dedicated **Prev / Play / Next** buttons.
-* **Volume:** Scroll mouse wheel over the widget to adjust volume.
-* **Architecture:** Runs as a standalone process (Safe Mode).
+## ✨ Features
+* **Universal Support:** Works with any media player via GSMTC.
+* **Album Art:** Displays current track cover art.
+* **Native Look:** Uses Windows 11 hardware-accelerated rounding and acrylic blur.
+* **Controls:** Play/Pause, Next, Previous.
+* **Volume:** Scroll over widget to adjust volume.
 
-## ⚠️ Important Requirement
-This mod occupies the **left corner** of the taskbar. To prevent overlap, you must disable the Windows "Widgets" (Weather) icon:
-1. Right-click your Taskbar.
-2. Select **Taskbar Settings**.
-3. Toggle **Widgets** to **Off**.
-
-## ⚙️ Customization
-Go to the **Settings** tab in Windhawk to adjust:
-* **Panel Width/Height:** Make it wider or slimmer.
-* **Font Size:** Adjust text readability.
-* **Offsets:** Fine-tune X/Y offsets.
-* **Manual Colors:** You can disable "Auto Theme" to enforce specific colors.
-
-## 🐛 Troubleshooting
-* **"Zombie" Process:** If the mod looks stuck, open Task Manager, go to "Details", and end any `windhawk.exe` process that isn't the main one. Then restart Windhawk.
+## ⚠️ Requirements
+* **Disable Widgets:** Taskbar Settings -> Widgets -> Off.
+* **Windows 11:** Required for rounded corners.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- PanelWidth: 260
+- PanelWidth: 300
   $name: Panel Width
-  $description: Width of the pill widget in pixels (min 150, max 600).
-- PanelHeight: 40
+- PanelHeight: 48
   $name: Panel Height
-  $description: Height of the pill widget in pixels (min 24, max 60).
 - FontSize: 11
   $name: Font Size
-  $description: Size of the scrolling text font.
 - OffsetX: 12
   $name: X Offset
-  $description: Distance from the left edge of the screen/taskbar.
 - OffsetY: 0
   $name: Y Offset
-  $description: Vertical adjustment (positive moves down, negative moves up).
 - AutoTheme: true
   $name: Auto Theme
-  $description: Automatically switch colors based on Windows System Theme (Overrides manual colors).
 - TextColor: 0xFFFFFF
   $name: Manual Text Color (Hex)
-  $description: Used only if Auto Theme is OFF.
-- BgColor: 0x000000
-  $name: Manual Background Tint (Hex)
-  $description: Used only if Auto Theme is OFF.
-- BgOpacity: 10
-  $name: Manual Background Opacity (0-255)
-  $description: Used only if Auto Theme is OFF. Lower = More Translucent.
+- BgOpacity: 0
+  $name: Acrylic Tint Opacity (0-255). Keep 0 for pure glass.
 */
 // ==/WindhawkModSettings==
 
@@ -77,24 +53,35 @@ Go to the **Settings** tab in Windhawk to adjust:
 #include <shellapi.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
+#include <shcore.h> 
 #include <string>
 #include <vector>
 #include <atomic>
 #include <thread>
-#include <algorithm>
+#include <mutex>
 #include <cstdio>
+
+// WinRT
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Media.Control.h>
+#include <winrt/Windows.Storage.Streams.h>
 
 using namespace Gdiplus;
 using namespace std;
+using namespace winrt;
+using namespace Windows::Media::Control;
+using namespace Windows::Storage::Streams;
 
-// --- Undocumented Acrylic API ---
+// --- Constants ---
+const WCHAR* FONT_NAME = L"Segoe UI Variable Display"; 
+
+// --- DWM API ---
+
 typedef enum _WINDOWCOMPOSITIONATTRIB { WCA_ACCENT_POLICY = 19 } WINDOWCOMPOSITIONATTRIB;
 typedef enum _ACCENT_STATE {
     ACCENT_DISABLED = 0,
-    ACCENT_ENABLE_GRADIENT = 1,
-    ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
     ACCENT_ENABLE_BLURBEHIND = 3,
-    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4, 
     ACCENT_INVALID_STATE = 5
 } ACCENT_STATE;
 typedef struct _ACCENT_POLICY {
@@ -110,49 +97,40 @@ typedef struct _WINDOWCOMPOSITIONATTRIBDATA {
 } WINDOWCOMPOSITIONATTRIBDATA;
 typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
 
-// --- Constants & IDs ---
-#define IDT_CHECK_MUSIC 1001
-#define IDT_SCROLL      1002
-#define IDT_ZORDER      1003
-
-const WCHAR* FONT_NAME = L"Segoe UI Variable Display"; 
-
 // --- Configurable State ---
 struct ModSettings {
-    int width = 260;
-    int height = 40;
+    int width = 300;
+    int height = 48;
     int fontSize = 11;
     int offsetX = 12;
     int offsetY = 0;
     bool autoTheme = true;
     DWORD manualTextColor = 0xFFFFFFFF; 
-    DWORD manualBgColor = 0x0A000000;   
+    int bgOpacity = 0;   
 } g_Settings;
 
 // --- Global State ---
 HWND g_hMediaWindow = NULL;
-wstring g_CurrentTrack = L"Waiting for music...";
+bool g_Running = true; 
+int g_HoverState = 0; 
+
+// Data Model
+struct MediaState {
+    wstring title = L"Waiting for media...";
+    wstring artist = L"";
+    bool isPlaying = false;
+    bool hasMedia = false;
+    Bitmap* albumArt = nullptr;
+    mutex lock;
+} g_MediaState;
+
+// Animation
 int g_ScrollOffset = 0;
 int g_TextWidth = 0;
 bool g_IsScrolling = false;
-int g_HoverState = 0; 
-int g_ScrollWait = 0;
-bool g_Running = true; 
+int g_ScrollWait = 60;
 
-// --- Helper: System Theme Detection ---
-bool IsSystemLightMode() {
-    DWORD value = 0;
-    DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", RRF_RT_DWORD, nullptr, &value, &size) == ERROR_SUCCESS) {
-        return value != 0;
-    }
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"SystemUsesLightTheme", RRF_RT_DWORD, nullptr, &value, &size) == ERROR_SUCCESS) {
-        return value != 0;
-    }
-    return false; 
-}
-
-// --- Helper: Load Settings ---
+// --- Settings ---
 void LoadSettings() {
     g_Settings.width = Wh_GetIntSetting(L"PanelWidth");
     g_Settings.height = Wh_GetIntSetting(L"PanelHeight");
@@ -163,185 +141,242 @@ void LoadSettings() {
     
     PCWSTR textHex = Wh_GetStringSetting(L"TextColor");
     DWORD textRGB = 0xFFFFFF;
-    if (textHex && wcslen(textHex) > 0) textRGB = wcstoul(textHex, nullptr, 16);
+    if (textHex) {
+        if (wcslen(textHex) > 0) textRGB = wcstoul(textHex, nullptr, 16);
+        Wh_FreeStringSetting(textHex);
+    }
     g_Settings.manualTextColor = 0xFF000000 | textRGB;
-
-    PCWSTR bgHex = Wh_GetStringSetting(L"BgColor");
-    DWORD bgRGB = 0x000000;
-    if (bgHex && wcslen(bgHex) > 0) bgRGB = wcstoul(bgHex, nullptr, 16);
-    int opacity = Wh_GetIntSetting(L"BgOpacity");
-    if (opacity < 0) opacity = 0;
-    if (opacity > 255) opacity = 255;
     
-    g_Settings.manualBgColor = (opacity << 24) | (bgRGB & 0xFFFFFF);
+    g_Settings.bgOpacity = Wh_GetIntSetting(L"BgOpacity");
+    if (g_Settings.bgOpacity < 0) g_Settings.bgOpacity = 0;
+    if (g_Settings.bgOpacity > 255) g_Settings.bgOpacity = 255;
 
-    if (g_Settings.width < 50) g_Settings.width = 260;
-    if (g_Settings.height < 10) g_Settings.height = 40;
+    if (g_Settings.width < 100) g_Settings.width = 300;
+    if (g_Settings.height < 24) g_Settings.height = 48;
 }
 
-// --- Helper: Window Enumeration ---
-BOOL CALLBACK EnumMusicWindowsProc(HWND hwnd, LPARAM lParam) {
-    if (!IsWindowVisible(hwnd)) { } 
+// --- WinRT / GSMTC ---
+GlobalSystemMediaTransportControlsSessionManager g_SessionManager = nullptr;
 
-    int len = GetWindowTextLength(hwnd);
-    if (len == 0) return TRUE;
-    vector<WCHAR> buf(len + 1);
-    GetWindowText(hwnd, &buf[0], len + 1);
-    wstring title(&buf[0]);
-    wstring* pResult = (wstring*)lParam;
+Bitmap* StreamToBitmap(IRandomAccessStreamWithContentType const& stream) {
+    if (!stream) return nullptr;
+    IStream* nativeStream = nullptr;
+    if (SUCCEEDED(CreateStreamOverRandomAccessStream(reinterpret_cast<IUnknown*>(winrt::get_abi(stream)), IID_PPV_ARGS(&nativeStream)))) {
+        Bitmap* bmp = Bitmap::FromStream(nativeStream);
+        nativeStream->Release();
+        if (bmp && bmp->GetLastStatus() == Ok) return bmp;
+        delete bmp;
+    }
+    return nullptr;
+}
 
-    size_t ytmPos = title.find(L" - YouTube Music");
-    if (ytmPos != wstring::npos) {
-        *pResult = title.substr(0, ytmPos);
-        return FALSE;
-    }
-    if (title.find(L"YouTube Music") != wstring::npos && title.find(L" - ") != wstring::npos) {
-        *pResult = title;
-        return FALSE;
-    }
-    if (title.find(L"Spotify") != wstring::npos && title.find(L" - ") != wstring::npos) {
-        if (title.length() > 16) { 
-            *pResult = title;
-            return FALSE;
+void UpdateMediaInfo() {
+    try {
+        if (!g_SessionManager) {
+            g_SessionManager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
         }
+        if (!g_SessionManager) return;
+
+        auto session = g_SessionManager.GetCurrentSession();
+        if (session) {
+            auto props = session.TryGetMediaPropertiesAsync().get();
+            auto info = session.GetPlaybackInfo();
+
+            lock_guard<mutex> guard(g_MediaState.lock);
+            
+            wstring newTitle = props.Title().c_str();
+            if (newTitle != g_MediaState.title || g_MediaState.albumArt == nullptr) {
+                if (g_MediaState.albumArt) { delete g_MediaState.albumArt; g_MediaState.albumArt = nullptr; }
+                auto thumbRef = props.Thumbnail();
+                if (thumbRef) {
+                    auto stream = thumbRef.OpenReadAsync().get();
+                    g_MediaState.albumArt = StreamToBitmap(stream);
+                }
+            }
+            g_MediaState.title = newTitle;
+            g_MediaState.artist = props.Artist().c_str();
+            g_MediaState.isPlaying = (info.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing);
+            g_MediaState.hasMedia = true;
+        } else {
+            lock_guard<mutex> guard(g_MediaState.lock);
+            g_MediaState.hasMedia = false;
+            g_MediaState.title = L"No Media";
+            g_MediaState.artist = L"";
+            if (g_MediaState.albumArt) { delete g_MediaState.albumArt; g_MediaState.albumArt = nullptr; }
+        }
+    } catch (...) {
+        lock_guard<mutex> guard(g_MediaState.lock);
+        g_MediaState.hasMedia = false;
     }
-    return TRUE;
 }
 
-wstring GetNowPlayingText() {
-    wstring foundTitle = L"";
-    EnumWindows(EnumMusicWindowsProc, (LPARAM)&foundTitle);
-    return foundTitle;
+void SendMediaCommand(int cmd) {
+    try {
+        if (!g_SessionManager) return;
+        auto session = g_SessionManager.GetCurrentSession();
+        if (session) {
+            if (cmd == 1) session.TrySkipPreviousAsync();
+            else if (cmd == 2) session.TryTogglePlayPauseAsync();
+            else if (cmd == 3) session.TrySkipNextAsync();
+        }
+    } catch (...) {}
 }
 
-// --- Color Logic ---
-DWORD GetCurrentBgColor() {
-    if (g_Settings.autoTheme) {
-        if (IsSystemLightMode()) return 0x05FFFFFF; 
-        else return 0x05000000; 
+// --- Visuals ---
+bool IsSystemLightMode() {
+    DWORD value = 0; DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"SystemUsesLightTheme", RRF_RT_DWORD, nullptr, &value, &size) == ERROR_SUCCESS) {
+        return value != 0;
     }
-    return g_Settings.manualBgColor;
+    return false;
 }
 
 DWORD GetCurrentTextColor() {
-    if (g_Settings.autoTheme) {
-        if (IsSystemLightMode()) return 0xFF000000; 
-        else return 0xFFFFFFFF; 
-    }
+    if (g_Settings.autoTheme) return IsSystemLightMode() ? 0xFF000000 : 0xFFFFFFFF;
     return g_Settings.manualTextColor;
 }
 
-void UpdateAcrylic(HWND hwnd) {
+void UpdateAppearance(HWND hwnd) {
+    // 1. Native Windows 11 Rounding
+    DWM_WINDOW_CORNER_PREFERENCE preference = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference, sizeof(preference));
+
+    // 2. Acrylic Blur
     HMODULE hUser = GetModuleHandle(L"user32.dll");
     if (hUser) {
         auto SetComp = (pSetWindowCompositionAttribute)GetProcAddress(hUser, "SetWindowCompositionAttribute");
         if (SetComp) {
-            ACCENT_POLICY policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 0, GetCurrentBgColor(), 0 };
+            // Calculate tint color based on theme
+            DWORD tint = 0; // Default transparent
+            if (g_Settings.autoTheme) {
+                // Light: Slight white tint, Dark: Slight black tint
+                tint = IsSystemLightMode() ? 0x40FFFFFF : 0x40000000;
+            } else {
+                tint = (g_Settings.bgOpacity << 24) | (0xFFFFFF); // User tint
+            }
+
+            ACCENT_POLICY policy = { ACCENT_ENABLE_ACRYLICBLURBEHIND, 0, tint, 0 };
             WINDOWCOMPOSITIONATTRIBDATA data = { WCA_ACCENT_POLICY, &policy, sizeof(ACCENT_POLICY) };
             SetComp(hwnd, &data);
         }
     }
 }
 
-// --- Region Clipping (Tightened for v9.0) ---
-void UpdateWindowShape(HWND hwnd, int width, int height) {
-    // Exact dimensions (removed +1). 
-    // This should fix the "weird rectangle" halo effect.
-    HRGN hRgn = CreateRoundRectRgn(0, 0, width, height, height, height);
-    SetWindowRgn(hwnd, hRgn, TRUE);
-}
-
-// --- Drawing ---
 void DrawMediaPanel(HDC hdc, int width, int height) {
     Graphics graphics(hdc);
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
+    // FIX: AntiAlias (Greyscale) looks smoother on glass than ClearType
     graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
     graphics.Clear(Color(0, 0, 0, 0)); 
 
-    // Draw Slightly Smaller Pill (1px inset) to ensure it fits INSIDE the clipped region
-    // This prevents aliased pixels from touching the rough edges of the region
-    Rect rect(1, 1, width - 3, height - 3);
-    GraphicsPath path;
-    int arcSize = height - 2; 
-    path.AddArc(rect.X, rect.Y, arcSize, arcSize, 180, 90);
-    path.AddArc(rect.X + rect.Width - arcSize, rect.Y, arcSize, arcSize, 270, 90);
-    path.AddArc(rect.X + rect.Width - arcSize, rect.Y + rect.Height - arcSize, arcSize, arcSize, 0, 90);
-    path.AddArc(rect.X, rect.Y + rect.Height - arcSize, arcSize, arcSize, 90, 90);
-    path.CloseFigure();
+    // NO BACKGROUND DRAWING HERE. 
+    // We let the DWM Acrylic blur handle the background.
+    // This prevents the "Rectangle" artifact because we aren't drawing a shape that conflicts with the window bounds.
 
-    SolidBrush bgBrush((Color(GetCurrentBgColor())));
-    graphics.FillPath(&bgBrush, &path);
+    Color mainColor{GetCurrentTextColor()};
     
-    Color mainColor((GetCurrentTextColor()));
-    Pen borderPen(Color(25, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()), 1);
-    graphics.DrawPath(&borderPen, &path);
+    // Lock Data
+    MediaState state;
+    {
+        lock_guard<mutex> guard(g_MediaState.lock);
+        state.title = g_MediaState.title;
+        state.artist = g_MediaState.artist;
+        state.albumArt = g_MediaState.albumArt ? g_MediaState.albumArt->Clone() : nullptr;
+        state.hasMedia = g_MediaState.hasMedia;
+        state.isPlaying = g_MediaState.isPlaying;
+    }
 
-    SolidBrush iconBrush(mainColor);
-    SolidBrush hoverBrush(Color(255, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
-    SolidBrush activeBg(Color(40, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
+    // 1. Album Art
+    int artSize = height - 12;
+    int artX = 6;
+    int artY = 6;
+    
+    if (state.albumArt) {
+        graphics.DrawImage(state.albumArt, artX, artY, artSize, artSize);
+        delete state.albumArt;
+    } else {
+        SolidBrush placeBrush{Color(40, 128, 128, 128)};
+        graphics.FillRectangle(&placeBrush, artX, artY, artSize, artSize);
+    }
 
-    int centerY = height / 2;
+    // 2. Controls
+    int startControlX = artX + artSize + 12;
+    int controlY = height / 2;
 
-    if (g_HoverState == 1) graphics.FillEllipse(&activeBg, 12, centerY - 12, 24, 24);
-    SolidBrush* pBrush = (g_HoverState == 1) ? &hoverBrush : &iconBrush;
-    Point prevPts[3] = { Point(28, centerY - 6), Point(28, centerY + 6), Point(18, centerY) };
-    graphics.FillPolygon(pBrush, prevPts, 3);
-    graphics.FillRectangle(pBrush, 16, centerY - 6, 2, 12); 
+    SolidBrush iconBrush{mainColor};
+    SolidBrush hoverBrush{Color(255, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue())};
+    SolidBrush activeBg{Color(40, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue())};
 
-    if (g_HoverState == 2) graphics.FillEllipse(&activeBg, 38, centerY - 12, 24, 24);
-    SolidBrush* plBrush = (g_HoverState == 2) ? &hoverBrush : &iconBrush;
-    Point playPts[3] = { Point(46, centerY - 8), Point(46, centerY + 8), Point(58, centerY) };
-    graphics.FillPolygon(plBrush, playPts, 3);
+    // Prev
+    int pX = startControlX;
+    if (g_HoverState == 1) graphics.FillEllipse(&activeBg, pX - 8, controlY - 12, 24, 24);
+    Point prevPts[3] = { Point(pX + 8, controlY - 6), Point(pX + 8, controlY + 6), Point(pX, controlY) };
+    graphics.FillPolygon(g_HoverState == 1 ? &hoverBrush : &iconBrush, prevPts, 3);
+    graphics.FillRectangle(g_HoverState == 1 ? &hoverBrush : &iconBrush, pX, controlY - 6, 2, 12);
 
-    if (g_HoverState == 3) graphics.FillEllipse(&activeBg, 64, centerY - 12, 24, 24);
-    SolidBrush* nBrush = (g_HoverState == 3) ? &hoverBrush : &iconBrush;
-    Point nextPts[3] = { Point(72, centerY - 6), Point(72, centerY + 6), Point(82, centerY) };
-    graphics.FillPolygon(nBrush, nextPts, 3);
-    graphics.FillRectangle(nBrush, 82, centerY - 6, 2, 12); 
+    // Play/Pause
+    int plX = startControlX + 28;
+    if (g_HoverState == 2) graphics.FillEllipse(&activeBg, plX - 8, controlY - 12, 24, 24);
+    if (state.isPlaying) {
+        graphics.FillRectangle(g_HoverState == 2 ? &hoverBrush : &iconBrush, plX, controlY - 7, 3, 14);
+        graphics.FillRectangle(g_HoverState == 2 ? &hoverBrush : &iconBrush, plX + 6, controlY - 7, 3, 14);
+    } else {
+        Point playPts[3] = { Point(plX, controlY - 8), Point(plX, controlY + 8), Point(plX + 10, controlY) };
+        graphics.FillPolygon(g_HoverState == 2 ? &hoverBrush : &iconBrush, playPts, 3);
+    }
 
-    Pen sepPen(Color(30, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()), 1);
-    graphics.DrawLine(&sepPen, 95, 10, 95, height - 10);
+    // Next
+    int nX = startControlX + 56;
+    if (g_HoverState == 3) graphics.FillEllipse(&activeBg, nX - 8, controlY - 12, 24, 24);
+    Point nextPts[3] = { Point(nX, controlY - 6), Point(nX, controlY + 6), Point(nX + 8, controlY) };
+    graphics.FillPolygon(g_HoverState == 3 ? &hoverBrush : &iconBrush, nextPts, 3);
+    graphics.FillRectangle(g_HoverState == 3 ? &hoverBrush : &iconBrush, nX + 8, controlY - 6, 2, 12);
 
-    FontFamily fontFamily(FONT_NAME);
+    // 3. Text
+    int textX = nX + 20;
+    int textMaxW = width - textX - 10;
+    
+    wstring fullText = state.title;
+    if (!state.artist.empty()) fullText += L" • " + state.artist;
+
+    FontFamily fontFamily(FONT_NAME, nullptr);
     Font font(&fontFamily, (REAL)g_Settings.fontSize, FontStyleBold, UnitPixel);
-    SolidBrush textBrush(mainColor);
+    SolidBrush textBrush{mainColor};
     
-    RectF layoutRect(0, 0, 1000, 100);
+    RectF layoutRect(0, 0, 2000, 100); 
     RectF boundRect;
-    graphics.MeasureString(g_CurrentTrack.c_str(), -1, &font, layoutRect, &boundRect);
+    graphics.MeasureString(fullText.c_str(), -1, &font, layoutRect, &boundRect);
     g_TextWidth = (int)boundRect.Width;
 
-    int textAreaWidth = width - 110; 
-    int textX = 100; 
+    Region textClip(Rect(textX, 0, textMaxW, height));
+    graphics.SetClip(&textClip);
 
-    graphics.SetClip(&path); 
-    Rect textClipRect(96, 0, width - 96, height);
-    graphics.SetClip(textClipRect, CombineModeIntersect); 
+    float textY = (height - boundRect.Height) / 2.0f;
 
-    if (g_TextWidth > textAreaWidth) {
+    if (g_TextWidth > textMaxW) {
         g_IsScrolling = true;
         float drawX = (float)(textX - g_ScrollOffset);
-        float textY = (height - boundRect.Height) / 2.0f;
-        graphics.DrawString(g_CurrentTrack.c_str(), -1, &font, PointF(drawX, textY), &textBrush);
+        graphics.DrawString(fullText.c_str(), -1, &font, PointF(drawX, textY), &textBrush);
         if (drawX + g_TextWidth < width) {
-             graphics.DrawString(g_CurrentTrack.c_str(), -1, &font, PointF(drawX + g_TextWidth + 40, textY), &textBrush);
+             graphics.DrawString(fullText.c_str(), -1, &font, PointF(drawX + g_TextWidth + 40, textY), &textBrush);
         }
     } else {
         g_IsScrolling = false;
         g_ScrollOffset = 0;
-        float drawX = textX + (textAreaWidth - g_TextWidth) / 2.0f;
-        float textY = (height - boundRect.Height) / 2.0f;
-        graphics.DrawString(g_CurrentTrack.c_str(), -1, &font, PointF(drawX, textY), &textBrush);
+        graphics.DrawString(fullText.c_str(), -1, &font, PointF((float)textX, textY), &textBrush);
     }
 }
 
 // --- Window Procedure ---
+#define IDT_POLL_MEDIA 1001
+#define IDT_ANIMATION  1002
+#define IDT_ZORDER     1003
+
 LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: 
-            UpdateAcrylic(hwnd);
-            UpdateWindowShape(hwnd, g_Settings.width, g_Settings.height); 
-            SetTimer(hwnd, IDT_CHECK_MUSIC, 1000, NULL); 
+            UpdateAppearance(hwnd); // Apply DWM Rounding + Acrylic
+            SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL); 
             SetTimer(hwnd, IDT_ZORDER, 2000, NULL);      
             return 0;
 
@@ -353,30 +388,15 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_SETTINGCHANGE:
-            UpdateAcrylic(hwnd);
+            UpdateAppearance(hwnd);
             InvalidateRect(hwnd, NULL, TRUE);
             return 0;
 
-        case WM_WINDOWPOSCHANGED: {
-            WINDOWPOS* wp = (WINDOWPOS*)lParam;
-            if (!(wp->flags & SWP_NOSIZE)) {
-                UpdateWindowShape(hwnd, wp->cx, wp->cy);
-            }
-            break;
-        }
-
         case WM_TIMER:
-            if (wParam == IDT_CHECK_MUSIC) {
-                wstring newTrack = GetNowPlayingText();
-                if (newTrack.empty()) newTrack = L"No Music Detected";
+            if (wParam == IDT_POLL_MEDIA) {
+                UpdateMediaInfo();
+                InvalidateRect(hwnd, NULL, FALSE);
                 
-                if (newTrack != g_CurrentTrack) {
-                    g_CurrentTrack = newTrack;
-                    g_ScrollOffset = 0; 
-                    g_ScrollWait = 60; 
-                    InvalidateRect(hwnd, NULL, FALSE);
-                }
-
                 HWND hTaskbar = FindWindow(TEXT("Shell_TrayWnd"), NULL);
                 if (hTaskbar) {
                     RECT rc; GetWindowRect(hTaskbar, &rc);
@@ -389,11 +409,10 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         (myRc.right - myRc.left) != g_Settings.width || 
                         (myRc.bottom - myRc.top) != g_Settings.height) {
                          SetWindowPos(hwnd, HWND_TOPMOST, x, y, g_Settings.width, g_Settings.height, SWP_NOACTIVATE);
-                         InvalidateRect(hwnd, NULL, TRUE);
                     }
                 }
             }
-            else if (wParam == IDT_SCROLL) {
+            else if (wParam == IDT_ANIMATION) {
                 if (g_IsScrolling) {
                     if (g_ScrollWait > 0) {
                         g_ScrollWait--;
@@ -406,7 +425,7 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         InvalidateRect(hwnd, NULL, FALSE);
                     }
                 } else {
-                    KillTimer(hwnd, IDT_SCROLL); 
+                    KillTimer(hwnd, IDT_ANIMATION); 
                 }
             }
             else if (wParam == IDT_ZORDER) {
@@ -416,54 +435,37 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_MOUSEMOVE: {
             int x = LOWORD(lParam);
+            int y = HIWORD(lParam);
+            int artSize = g_Settings.height - 12;
+            int startControlX = 6 + artSize + 12;
             int newState = 0;
-            if (x >= 10 && x < 36) newState = 1; 
-            else if (x >= 36 && x < 62) newState = 2; 
-            else if (x >= 62 && x < 90) newState = 3; 
+            
+            if (y > 10 && y < g_Settings.height - 10) {
+                if (x >= startControlX - 10 && x < startControlX + 14) newState = 1;
+                else if (x >= startControlX + 14 && x < startControlX + 42) newState = 2;
+                else if (x >= startControlX + 42 && x < startControlX + 66) newState = 3;
+            }
             
             if (newState != g_HoverState) {
                 g_HoverState = newState;
                 InvalidateRect(hwnd, NULL, FALSE);
             }
             
-            TRACKMOUSEEVENT tme;
-            tme.cbSize = sizeof(TRACKMOUSEEVENT);
-            tme.dwFlags = TME_LEAVE;
-            tme.hwndTrack = hwnd;
+            TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0 };
             TrackMouseEvent(&tme);
             return 0;
         }
         case WM_MOUSELEAVE:
-            if (g_HoverState != 0) {
-                g_HoverState = 0;
-                InvalidateRect(hwnd, NULL, FALSE);
-            }
+            g_HoverState = 0;
+            InvalidateRect(hwnd, NULL, FALSE);
             break;
-        case WM_LBUTTONUP: {
-            int x = LOWORD(lParam);
-            if (x >= 10 && x < 36) {
-                keybd_event(VK_MEDIA_PREV_TRACK, 0, 0, 0);
-                keybd_event(VK_MEDIA_PREV_TRACK, 0, KEYEVENTF_KEYUP, 0);
-            }
-            else if (x >= 36 && x < 62) {
-                keybd_event(VK_MEDIA_PLAY_PAUSE, 0, 0, 0);
-                keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_KEYUP, 0);
-            }
-            else if (x >= 62 && x < 90) {
-                keybd_event(VK_MEDIA_NEXT_TRACK, 0, 0, 0);
-                keybd_event(VK_MEDIA_NEXT_TRACK, 0, KEYEVENTF_KEYUP, 0);
-            }
+        case WM_LBUTTONUP:
+            if (g_HoverState > 0) SendMediaCommand(g_HoverState);
             return 0;
-        }
         case WM_MOUSEWHEEL: {
             short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-            if (zDelta > 0) {
-                keybd_event(VK_VOLUME_UP, 0, 0, 0);
-                keybd_event(VK_VOLUME_UP, 0, KEYEVENTF_KEYUP, 0);
-            } else {
-                keybd_event(VK_VOLUME_DOWN, 0, 0, 0);
-                keybd_event(VK_VOLUME_DOWN, 0, KEYEVENTF_KEYUP, 0);
-            }
+            keybd_event(zDelta > 0 ? VK_VOLUME_UP : VK_VOLUME_DOWN, 0, 0, 0);
+            keybd_event(zDelta > 0 ? VK_VOLUME_UP : VK_VOLUME_DOWN, 0, KEYEVENTF_KEYUP, 0);
             return 0;
         }
         case WM_PAINT: {
@@ -476,22 +478,21 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             
             DrawMediaPanel(memDC, rc.right, rc.bottom);
             
-            if (g_IsScrolling) {
-                SetTimer(hwnd, IDT_SCROLL, 16, NULL);
-            }
+            if (g_IsScrolling) SetTimer(hwnd, IDT_ANIMATION, 16, NULL);
 
             BitBlt(hdc, 0, 0, rc.right, rc.bottom, memDC, 0, 0, SRCCOPY);
             SelectObject(memDC, oldBitmap); DeleteObject(memBitmap); DeleteDC(memDC);
             EndPaint(hwnd, &ps);
             return 0;
         }
-        case WM_NCHITTEST: return HTCLIENT;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
 // --- Main Thread ---
 void MediaThread() {
+    winrt::init_apartment();
+
     GdiplusStartupInput gdiplusStartupInput;
     ULONG_PTR gdiplusToken;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
@@ -499,7 +500,7 @@ void MediaThread() {
     WNDCLASS wc = {0};
     wc.lpfnWndProc = MediaWndProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = TEXT("WindhawkMusicLounge");
+    wc.lpszClassName = TEXT("WindhawkMusicLounge_GSMTC");
     wc.hCursor = LoadCursor(NULL, IDC_HAND);
     RegisterClass(&wc);
 
@@ -521,13 +522,13 @@ void MediaThread() {
 
     UnregisterClass(wc.lpszClassName, wc.hInstance);
     GdiplusShutdown(gdiplusToken);
+    winrt::uninit_apartment();
 }
 
 std::thread* g_pMediaThread = nullptr;
 
-// --- RENAMED CALLBACKS ---
+// --- CALLBACKS ---
 BOOL WhTool_ModInit() {
-    Wh_Log(L"[MusicLounge] Tool Init - Starting Media Thread");
     LoadSettings(); 
     g_Running = true;
     g_pMediaThread = new std::thread(MediaThread);
@@ -535,11 +536,8 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"[MusicLounge] Tool Uninit");
     g_Running = false;
-    if (g_hMediaWindow) {
-        SendMessage(g_hMediaWindow, WM_CLOSE, 0, 0); 
-    }
+    if (g_hMediaWindow) SendMessage(g_hMediaWindow, WM_CLOSE, 0, 0);
     if (g_pMediaThread) {
         if (g_pMediaThread->joinable()) g_pMediaThread->join();
         delete g_pMediaThread;
@@ -548,22 +546,14 @@ void WhTool_ModUninit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"[MusicLounge] Settings Changed");
     LoadSettings();
     if (g_hMediaWindow) {
-         UpdateAcrylic(g_hMediaWindow);
-         // Re-apply clipping in case size changed
-         UpdateWindowShape(g_hMediaWindow, g_Settings.width, g_Settings.height);
-         InvalidateRect(g_hMediaWindow, NULL, TRUE);
-         SendMessage(g_hMediaWindow, WM_TIMER, IDT_CHECK_MUSIC, 0);
+         SendMessage(g_hMediaWindow, WM_TIMER, IDT_POLL_MEDIA, 0);
+         SendMessage(g_hMediaWindow, WM_SETTINGCHANGE, 0, 0); 
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod launcher code
-// DO NOT MODIFY
-////////////////////////////////////////////////////////////////////////////////
-
+// --- LAUNCHER CODE ---
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -578,145 +568,75 @@ BOOL Wh_ModInit() {
     bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) {
-        Wh_Log(L"CommandLineToArgvW failed");
-        return FALSE;
-    }
+    if (!argv) return FALSE;
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
-            break;
-        }
+        if (wcscmp(argv[i], L"-service") == 0) { isService = true; break; }
     }
 
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isCurrentToolModProcess = true;
-            }
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
             break;
         }
     }
-
     LocalFree(argv);
 
-    if (isService) {
-        return FALSE;
-    }
+    if (isService) return FALSE;
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
+        if (!WhTool_ModInit()) ExitProcess(1);
 
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
-        }
-
-        if (!WhTool_ModInit()) {
-            ExitProcess(1);
-        }
-
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
-
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        Wh_SetFunctionHook((BYTE*)dosHeader + entryPointRVA, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess) {
-        return FALSE;
-    }
+    if (isToolModProcess) return FALSE;
 
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
-        return;
-    }
+    if (!g_isToolModProcessLauncher) return;
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
+    if (!GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) return;
 
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
+    WCHAR commandLine[MAX_PATH * 2];
+    _snwprintf(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-        if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
-            return;
+    if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
+    
+    if (kernelModule) {
+        typedef BOOL(WINAPI* CreateProcessInternalW_t)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
+        CreateProcessInternalW_t pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+        
+        if (pCreateProcessInternalW) {
+            STARTUPINFO si = { sizeof(STARTUPINFO) };
+            PROCESS_INFORMATION pi;
+            if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
         }
     }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
-
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
-    };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
-        return;
-    }
-
-    WhTool_ModSettingsChanged();
+    if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        return;
+    if (!g_isToolModProcessLauncher) {
+        WhTool_ModUninit();
+        ExitProcess(0);
     }
-
-    WhTool_ModUninit();
-    ExitProcess(0);
 }
