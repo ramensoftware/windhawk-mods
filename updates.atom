@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-09T12:50:43.000Z</updated>
+    <updated>2025-12-09T19:08:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinDbg No OleFlushClipboard 0.1]]></title>
+        <id>https://windhawk.net/mods/windbg-no-ole-flush-clipboard#8151fc99274966b89432864cc4ec53cbcea764d2</id>
+        <link href="https://windhawk.net/mods/windbg-no-ole-flush-clipboard"/>
+        <updated>2025-12-09T19:08:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windbgnooleflushclipboard">WinDbg No OleFlushClipboard</h1>
+<p>Prevents the UI from getting stuck on Ctrl-C…
+This happens when a clipboard monitor tries to read the clipboard as soon as WinDbg copies something.
+One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
+<p>This mod patches OleFlushClipboard to do nothing in WinDbg's UI process.
+(Will update with a full writeup once it's published.)</p>]]></content>
+        <author>
+            <name>Nikita</name>
+            <uri>https://github.com/nikital</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Helper 1.0.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-helper#835cd298a06d12ab8373c6e07f94db05b2e1c536</id>
@@ -292,31 +308,6 @@ You can experiment with the <strong>radius</strong> value to achieve the best re
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Home & Gallery in Explorer 0.2]]></title>
-        <id>https://windhawk.net/mods/hide-home-gallery-explorer#813f2444023ba0ae224d1469fac92f3ea688b71e</id>
-        <link href="https://windhawk.net/mods/hide-home-gallery-explorer"/>
-        <updated>2025-11-05T08:18:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidehomegalleryinexplorer">Hide Home &amp; Gallery in Explorer</h1>
-<p>This mod removes the "Home" and "Gallery" items from the File Explorer navigation pane in Windows 11
-by finding the TreeView control and deleting those entries. It scans periodically in case Explorer
-re-inserts them during refresh/reload.</p>
-<p>What’s new in v0.2:</p>
-<ul>
-<li>Prevents the nav pane from jumping to the bottom at first open.</li>
-<li>Adds timing.initialDelayMs and timing.scanIntervalMs settings.</li>
-</ul>
-<p>Notes:</p>
-<ul>
-<li>Locale: matching is text-based ("Home", "Gallery"). Adjust the strings in the settings if your OS
-is not English (UK/US).</li>
-<li>No registry changes are made. Unload the mod to restore the items immediately.</li>
-</ul>]]></content>
-        <author>
-            <name>rinosaur681</name>
-            <uri>https://github.com/rinosaur681</uri>
         </author>
     </entry>
 </feed>

@@ -7928,6 +7928,34 @@
                 "version": "1.0.0"
             }
         },
+        "windbg-no-ole-flush-clipboard": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1765307304000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1765307304000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Nikita",
+                "description": "Prevents the UI from getting stuck on Ctrl-C",
+                "github": "https://github.com/nikital",
+                "homepage": "https://www.leshenko.net/",
+                "include": [
+                    "DbgX.Shell.exe"
+                ],
+                "name": "WinDbg No OleFlushClipboard",
+                "version": "0.1"
+            }
+        },
         "windows-11-file-explorer-styler": {
             "details": {
                 "defaultSorting": 558900,
