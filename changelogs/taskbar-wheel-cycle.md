@@ -1,3 +1,7 @@
+## 1.1.10 ([Dec 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c06b8a9588be043226a4fa9159d15bf6e835cc74/mods/taskbar-wheel-cycle.wh.cpp))
+
+* Fixed a crash due to the removal of unused taskbar functions in recent Windows 11 builds.
+
 ## 1.1.9 ([Mar 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/09b9d5016d082de95fdcbedcfd9e5ce8d0d19738/mods/taskbar-wheel-cycle.wh.cpp))
 
 * Made mouse wheel cycling and keyboard shortcuts optional, so that only one of them can be selected and used.

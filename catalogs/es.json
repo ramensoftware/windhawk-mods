@@ -6807,7 +6807,7 @@
                     56
                 ],
                 "ratingUsers": 58,
-                "updated": 1742928968000,
+                "updated": 1765317208000,
                 "users": 2759
             },
             "metadata": {
@@ -6824,7 +6824,7 @@
                 ],
                 "name": "Cycle taskbar buttons with mouse wheel",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.9"
+                "version": "1.1.10"
             }
         },
         "taskmgr-taller-tab": {

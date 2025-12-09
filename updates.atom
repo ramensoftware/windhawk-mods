@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-09T19:08:24.000Z</updated>
+    <updated>2025-12-09T21:53:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.10]]></title>
+        <id>https://windhawk.net/mods/taskbar-wheel-cycle#c06b8a9588be043226a4fa9159d15bf6e835cc74</id>
+        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
+        <updated>2025-12-09T21:53:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a crash due to the removal of unused taskbar functions in recent Windows 11 builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinDbg No OleFlushClipboard 0.1]]></title>
         <id>https://windhawk.net/mods/windbg-no-ole-flush-clipboard#8151fc99274966b89432864cc4ec53cbcea764d2</id>
@@ -297,17 +310,6 @@ You can experiment with the <strong>radius</strong> value to achieve the best re
         <author>
             <name>rinosaur681</name>
             <uri>https://github.com/rinosaur681</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Command Prompt Folder Larp 1.1]]></title>
-        <id>https://windhawk.net/mods/cmd-folder-larp#056cead7a22636a34b5a531af18f11613d9468cb</id>
-        <link href="https://windhawk.net/mods/cmd-folder-larp"/>
-        <updated>2025-11-10T20:07:36.000Z</updated>
-        <content type="html"><![CDATA[<p>Fixed a bug where the actual path was clobbered for some commands, resulting in an error messaging stating that the path is not valid and no command running.</p>]]></content>
-        <author>
-            <name>Isabella Lulamoon (kawapure)</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>
