@@ -42,11 +42,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/windhawk
-          key: v1-${{ runner.os }}-1.6.1
+          key: v1-${{ runner.os }}-1.7.3
       - name: Extract Windhawk
         if: steps.cache-windhawk.outputs.cache-hit != 'true'
         run: |
-          installer_url="https://github.com/ramensoftware/windhawk/releases/download/v1.6.1/windhawk_setup.exe"
+          installer_url="https://github.com/ramensoftware/windhawk/releases/download/v1.7.3/windhawk_setup.exe"
           installer_path="${{ runner.temp }}/windhawk_setup.exe"
           echo "Downloading $installer_url to $installer_path"
           curl -L "$installer_url" -o "$installer_path"
