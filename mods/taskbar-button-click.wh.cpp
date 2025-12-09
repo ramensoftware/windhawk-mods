@@ -2,7 +2,7 @@
 // @id              taskbar-button-click
 // @name            Middle click to close on the taskbar
 // @description     Close programs with a middle click on the taskbar instead of creating a new instance
-// @version         1.0.8
+// @version         1.0.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -74,6 +74,7 @@ or a similar tool), enable the relevant option in the mod's settings.
 #include <psapi.h>
 
 #include <atomic>
+#include <unordered_map>
 
 enum {
     MULTIPLE_ITEMS_BEHAVIOR_NONE,
@@ -100,6 +101,13 @@ WinVersion g_winVersion;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
+struct TaskBtnGroupButtonInfo {
+    void* taskBtnGroup;
+    int buttonIndex;
+};
+
+std::unordered_map<void*, TaskBtnGroupButtonInfo> g_lastTaskListActiveItem;
+
 using CTaskListWnd_HandleClick_t = long(WINAPI*)(
     LPVOID pThis,
     LPVOID,  // ITaskGroup *
@@ -124,10 +132,10 @@ using CTaskBand_Launch_t = long(WINAPI*)(LPVOID pThis,
 );
 CTaskBand_Launch_t CTaskBand_Launch_Original;
 
-using CTaskListWnd_GetActiveBtn_t = HRESULT(WINAPI*)(LPVOID pThis,
-                                                     LPVOID*,  // ITaskGroup **
-                                                     int*);
-CTaskListWnd_GetActiveBtn_t CTaskListWnd_GetActiveBtn_Original;
+using CTaskListWnd__SetActiveItem_t = void(WINAPI*)(LPVOID pThis,
+                                                    LPVOID,  // ITaskBtnGroup *
+                                                    int);
+CTaskListWnd__SetActiveItem_t CTaskListWnd__SetActiveItem_Original;
 
 using CTaskListWnd_ProcessJumpViewCloseWindow_t =
     void(WINAPI*)(LPVOID pThis,
@@ -160,6 +168,7 @@ CImmersiveTaskItem_GetWindow_t CImmersiveTaskItem_GetWindow_Original;
 void* CImmersiveTaskItem_vftable;
 
 LPVOID g_pCTaskListWndHandlingClick;
+LPVOID g_pTaskListLongPtrHandlingClick;
 LPVOID g_pCTaskListWndTaskBtnGroup;
 int g_CTaskListWndTaskItemIndex = -1;
 int g_CTaskListWndClickAction = -1;
@@ -192,6 +201,7 @@ void WINAPI CTaskListWnd__HandleClick_Hook(LPVOID pThis,
         g_pCTaskListWndHandlingClick = (BYTE*)pThis + 0x28;
     }
 
+    g_pTaskListLongPtrHandlingClick = pThis;
     g_pCTaskListWndTaskBtnGroup = taskBtnGroup;
     g_CTaskListWndTaskItemIndex = taskItemIndex;
     g_CTaskListWndClickAction = clickAction;
@@ -203,6 +213,7 @@ void WINAPI CTaskListWnd__HandleClick_Hook(LPVOID pThis,
         g_pCTaskListWndHandlingClick = nullptr;
     }
 
+    g_pTaskListLongPtrHandlingClick = nullptr;
     g_pCTaskListWndTaskBtnGroup = nullptr;
     g_CTaskListWndTaskItemIndex = -1;
     g_CTaskListWndClickAction = -1;
@@ -218,7 +229,8 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
         return CTaskBand_Launch_Original(pThis, taskGroup, param2, param3);
     };
 
-    if (!g_pCTaskListWndHandlingClick || !g_pCTaskListWndTaskBtnGroup) {
+    if (!g_pCTaskListWndHandlingClick || !g_pTaskListLongPtrHandlingClick ||
+        !g_pCTaskListWndTaskBtnGroup) {
         return original();
     }
 
@@ -259,33 +271,22 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
 
         if (g_settings.multipleItemsBehavior ==
             MULTIPLE_ITEMS_BEHAVIOR_CLOSE_FOREGROUND) {
-            void* activeTaskGroup;
-            if (FAILED(CTaskListWnd_GetActiveBtn_Original(
-                    (BYTE*)g_pCTaskListWndHandlingClick + 0x18,
-                    &activeTaskGroup, &taskItemIndex)) ||
-                !activeTaskGroup) {
+            auto it =
+                g_lastTaskListActiveItem.find(g_pTaskListLongPtrHandlingClick);
+            if (it == g_lastTaskListActiveItem.end()) {
                 return 0;
             }
 
-            ((IUnknown*)activeTaskGroup)->Release();
-            if (activeTaskGroup != realTaskGroup || taskItemIndex < 0) {
+            const auto& lastActiveItem = it->second;
+            if (lastActiveItem.taskBtnGroup != g_pCTaskListWndTaskBtnGroup ||
+                lastActiveItem.buttonIndex < 0) {
                 return 0;
             }
+
+            taskItemIndex = lastActiveItem.buttonIndex;
         }
     } else {
         taskItemIndex = g_CTaskListWndTaskItemIndex;
-    }
-
-    HWND hWnd = nullptr;
-
-    if (taskItemIndex >= 0) {
-        void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
-            g_pCTaskListWndTaskBtnGroup, taskItemIndex);
-        if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
-            hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
-        } else {
-            hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
-        }
     }
 
     bool ctrlDown = GetKeyState(VK_CONTROL) < 0;
@@ -293,6 +294,27 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
     bool endTask = (ctrlDown || altDown) &&
                    g_settings.keysToEndTaskCtrl == ctrlDown &&
                    g_settings.keysToEndTaskAlt == altDown;
+
+    HWND hWnd = nullptr;
+
+    if (taskItemIndex >= 0) {
+        void* taskItem = CTaskBtnGroup_GetTaskItem_Original(
+            g_pCTaskListWndTaskBtnGroup, taskItemIndex);
+        if (!taskItem) {
+            Wh_Log(L"No task item for index %d", taskItemIndex);
+            return 0;
+        }
+
+        if (*(void**)taskItem == CImmersiveTaskItem_vftable) {
+            hWnd = CImmersiveTaskItem_GetWindow_Original(taskItem);
+
+            // Don't end task for immersive (Store/Modern) apps, as multiple
+            // apps might share the same process.
+            endTask = false;
+        } else {
+            hWnd = CWindowTaskItem_GetWindow_Original(taskItem);
+        }
+    }
 
     if (endTask) {
         if (hWnd) {
@@ -312,6 +334,19 @@ long WINAPI CTaskBand_Launch_Hook(LPVOID pThis,
     }
 
     return 0;
+}
+
+void WINAPI CTaskListWnd__SetActiveItem_Hook(LPVOID pThis,
+                                             LPVOID taskBtnGroup,
+                                             int buttonIndex) {
+    Wh_Log(L">");
+
+    g_lastTaskListActiveItem[pThis] = {
+        .taskBtnGroup = taskBtnGroup,
+        .buttonIndex = buttonIndex,
+    };
+
+    CTaskListWnd__SetActiveItem_Original(pThis, taskBtnGroup, buttonIndex);
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -405,8 +440,9 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
          &CTaskListWnd__HandleClick_Original, CTaskListWnd__HandleClick_Hook},
         {R"(?Launch@CTaskBand@@UEAAJPEAUITaskGroup@@AEBUtagPOINT@@W4LaunchFromTaskbarOptions@@@Z)",
          &CTaskBand_Launch_Original, CTaskBand_Launch_Hook},
-        {R"(?GetActiveBtn@CTaskListWnd@@UEAAJPEAPEAUITaskGroup@@PEAH@Z)",
-         &CTaskListWnd_GetActiveBtn_Original},
+        {R"(?_SetActiveItem@CTaskListWnd@@IEAAXPEAUITaskBtnGroup@@H@Z)",
+         &CTaskListWnd__SetActiveItem_Original,
+         CTaskListWnd__SetActiveItem_Hook},
         {R"(?ProcessJumpViewCloseWindow@CTaskListWnd@@UEAAXPEAUHWND__@@PEAUITaskGroup@@PEAUHMONITOR__@@@Z)",
          &CTaskListWnd_ProcessJumpViewCloseWindow_Original},
         {R"(?_EndTask@CTaskBand@@IEAAXQEAUHWND__@@H@Z)",
@@ -530,8 +566,9 @@ bool HookTaskbarSymbols() {
             CTaskBand_Launch_Hook,
         },
         {
-            {LR"(public: virtual long __cdecl CTaskListWnd::GetActiveBtn(struct ITaskGroup * *,int *))"},
-            &CTaskListWnd_GetActiveBtn_Original,
+            {LR"(protected: void __cdecl CTaskListWnd::_SetActiveItem(struct ITaskBtnGroup *,int))"},
+            &CTaskListWnd__SetActiveItem_Original,
+            CTaskListWnd__SetActiveItem_Hook,
         },
         {
             {LR"(public: virtual void __cdecl CTaskListWnd::ProcessJumpViewCloseWindow(struct HWND__ *,struct ITaskGroup *,struct HMONITOR__ *))"},
@@ -582,7 +619,8 @@ bool HookTaskbarSymbols() {
             return false;
         }
     } else {
-        HMODULE taskbarModule = LoadLibrary(L"taskbar.dll");
+        HMODULE taskbarModule = LoadLibraryEx(L"taskbar.dll", nullptr,
+                                              LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!taskbarModule) {
             Wh_Log(L"Couldn't load taskbar.dll");
             return false;
