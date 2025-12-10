@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-09T23:11:22.000Z</updated>
+    <updated>2025-12-10T23:23:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.0.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-uifile-fix#afd34c994da3edbd827a3eb17ee052831d5cf729</id>
+        <link href="https://windhawk.net/mods/classic-theme-uifile-fix"/>
+        <updated>2025-12-10T23:23:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicthemeuifilefix">Classic Theme UIFILE Fix</h1>
+<p>Fixes Control Panel pages (Accessibility, Personalization, Storage Spaces, etc.) that fail to load 
+when using the Windows Classic theme.</p>
+<p><img src="https://i.imgur.com/TVmK9IR.png" alt="Screenshot" /></p>
+<h2 id="howitworks">How it works</h2>
+<ul>
+<li>Replaces <code>gtc()</code> (GetThemeColor) with <code>windowtext</code></li>
+<li>Wraps bare <code>dtb()</code> (DrawThemeBackground) in <code>themeable(dtb(...), dfc(0, 0))</code></li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Middle click to close on the taskbar 1.0.9]]></title>
         <id>https://windhawk.net/mods/taskbar-button-click#b43686cacbdb524ba6ddb1776332ecd32bfd4e3f</id>
@@ -291,24 +310,6 @@ You can experiment with the <strong>radius</strong> value to achieve the best re
         <author>
             <name>Ph0en1x-dev</name>
             <uri>https://github.com/Ph0en1x-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#532a7d6e3c03d67efbd5d889b367b8185caf7fc1</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2025-11-15T12:47:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>concept of triggers completely reworked (incompatible with v1.x settings)</li>
-<li>user can add up to 50 triggers</li>
-<li>added keyboard modifiers for each trigger - resolves https://github.com/m1lhaus/windhawk-mods/issues/22 and resolves https://github.com/m1lhaus/windhawk-mods/issues/1</li>
-<li>added single left/right button click triggers - resolves https://github.com/m1lhaus/windhawk-mods/issues/27 and resolves https://github.com/m1lhaus/windhawk-mods/issues/24</li>
-<li>smart handling of taskbar context menu on right-click triggers</li>
-<li>media keys not working bug fixed - fixes https://github.com/m1lhaus/windhawk-mods/issues/30</li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>
