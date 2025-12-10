@@ -417,6 +417,7 @@ function generateModsData() {
 function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any) {
     const app = {
         version: enrichment.app.version,
+        versionBleedingEdge: enrichment.app.versionBleedingEdge,
     };
 
     const mods: Record<string, any> = {};
