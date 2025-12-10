@@ -117,7 +117,7 @@ BOOL Wh_ModInit() {
     HMODULE hDui70 = LoadLibraryW(L"dui70.dll");
     if (!hDui70) return FALSE;
     
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK dui70DllHooks[] = {
         {
             {L"public: long __cdecl DirectUI::DUIXmlParser::SetXML(unsigned short const *,struct HINSTANCE__ *,struct HINSTANCE__ *)"},
             &g_origSetXML,
@@ -126,5 +126,5 @@ BOOL Wh_ModInit() {
         }
     };
     
-    return WindhawkUtils::HookSymbols(hDui70, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(hDui70, dui70DllHooks, ARRAYSIZE(dui70DllHooks));
 }
