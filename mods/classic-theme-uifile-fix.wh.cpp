@@ -12,9 +12,8 @@
 /*
 # Classic Theme UIFILE Fix
 
-Fixes Control Panel pages (Accessibility, Storage Spaces, etc.) that fail to load 
-when using the Windows Classic theme. Tested with Personalization, Accessibility,
-Storage Spaces.
+Fixes Control Panel pages (Accessibility, Personalization, Storage Spaces, etc.) that fail to load 
+when using the Windows Classic theme.
 
 ![Screenshot](https://i.imgur.com/TVmK9IR.png)
 
