@@ -117,7 +117,6 @@ HRESULT WINAPI Hook_SetXML(void* pThis, const WCHAR* pszXML, HINSTANCE hInstance
 
 BOOL Wh_ModInit() {
     HMODULE hDui70 = LoadLibraryW(L"dui70.dll");
-    if (!hDui70) return FALSE;
     
     WindhawkUtils::SYMBOL_HOOK dui70DllHooks[] = {
         {
@@ -128,5 +127,8 @@ BOOL Wh_ModInit() {
         }
     };
     
-    return WindhawkUtils::HookSymbols(hDui70, dui70DllHooks, ARRAYSIZE(dui70DllHooks));
+    return hDui70 && (Wh_SetFunctionHook((void*)GetProcAddress(hDui70, 
+            "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z"), 
+             (void*)Hook_SetXML, (void**)&g_origSetXML)||
+             WindhawkUtils::HookSymbols(hDui70, dui70DllHooks, ARRAYSIZE(dui70DllHooks)));
 }
