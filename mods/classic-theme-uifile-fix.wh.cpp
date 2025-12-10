@@ -16,6 +16,8 @@ Fixes Control Panel pages (Accessibility, Storage Spaces, etc.) that fail to loa
 when using the Windows Classic theme. Tested with Personalization, Accessibility,
 Storage Spaces.
 
+![Screenshot](https://i.imgur.com/TVmK9IR.png)
+
 ## How it works
 - Replaces `gtc()` (GetThemeColor) with `windowtext`
 - Wraps bare `dtb()` (DrawThemeBackground) in `themeable(dtb(...), dfc(0, 0))`
