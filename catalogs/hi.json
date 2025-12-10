@@ -3034,6 +3034,36 @@
                 "version": "1.0.0"
             }
         },
+        "fancyzones-winshift-hotkey": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1765410049000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1765410049000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "David Trapp (CherryDT)",
+                "description": "Makes FancyZones override Win+Shift+Arrows instead of Win+Arrows",
+                "github": "https://github.com/CherryDT",
+                "include": [
+                    "PowerToys.FancyZones.exe"
+                ],
+                "name": "FancyZones Win+Shift+Arrows Hotkey",
+                "version": "1.0"
+            }
+        },
         "favorites-in-navpane": {
             "details": {
                 "defaultSorting": 2450,

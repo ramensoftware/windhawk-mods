@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-10T23:23:42.000Z</updated>
+    <updated>2025-12-10T23:40:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[FancyZones Win+Shift+Arrows Hotkey 1.0]]></title>
+        <id>https://windhawk.net/mods/fancyzones-winshift-hotkey#c4f1fd1f16d5880fbd76f456dc67678ed0bcd638</id>
+        <link href="https://windhawk.net/mods/fancyzones-winshift-hotkey"/>
+        <updated>2025-12-10T23:40:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Normally, when you enable "Override Windows Snap" in PowerToys' FancyZones, you can no
+longer use the regular Snap feature for maximizing Windows and such. This mod changes
+the behavior so that it overrides Win+Shift+Arrows instead (which is normally used for
+moving Windows between monitors and stretching a window vertically, these are both
+functionalities that can be done with FancyZones too in one way or another). This way,
+you can still use Win+Arrows for regular Windows Snap and Win+Shift+Arrows for FancyZones.</p>
+<p>Basically, this is a workaround for <a href="https://github.com/microsoft/PowerToys/issues/2382">this GitHub issue</a>.</p>
+<p><em>Note: Please do not open GitHub issues to ask for support or other modifier keys. The way the mod works only works well with Shift due to how FancyZones checks and uses different modifier keys.</em></p>]]></content>
+        <author>
+            <name>David Trapp (CherryDT)</name>
+            <uri>https://github.com/CherryDT</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.0.0]]></title>
         <id>https://windhawk.net/mods/classic-theme-uifile-fix#afd34c994da3edbd827a3eb17ee052831d5cf729</id>
@@ -287,29 +305,6 @@ Since the desktop cannot navigate folders, files are created directly in the des
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Dock Animation 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-dock-animation#cbcbcc57ce2db3350ff804cf7bbdbee5d9c729d3</id>
-        <link href="https://windhawk.net/mods/taskbar-dock-animation"/>
-        <updated>2025-11-16T00:29:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbardockanimation">Taskbar Dock Animation</h1>
-<p>This mod adds a macOS-like taskbar animation.
-The current version is <strong>experimental</strong> and not yet fully stable.
-A few issues are still being worked on:</p>
-<ul>
-<li>Icons are sometimes clipped by the taskbar.</li>
-<li>Upscaled icons may appear slightly blurry.</li>
-</ul>
-<p>At this stage, since the mod is still in active testing, it’s recommended to <strong>keep the maximum scale around 130%</strong> to avoid visual glitches.
-You can experiment with the <strong>radius</strong> value to achieve the best result for your setup until proper fixes for the issues above are found.</p>
-<hr />
-<h2 id="preview">🖼️ Preview</h2>
-<p><img src="https://raw.githubusercontent.com/Ph0en1x-dev/edu_db_labs/master/Записування%20з%20екрана%202025-11-06%20155028.gif" alt="Taskbar Dock Animation Preview" /></p>]]></content>
-        <author>
-            <name>Ph0en1x-dev</name>
-            <uri>https://github.com/Ph0en1x-dev</uri>
         </author>
     </entry>
 </feed>
