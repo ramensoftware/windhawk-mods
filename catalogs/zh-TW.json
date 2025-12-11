@@ -1478,18 +1478,19 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1765409022000,
+                "updated": 1765440398000,
                 "users": 0
             },
             "metadata": {
                 "author": "Anixx",
+                "compilerOptions": "-luxtheme",
                 "description": "Fixes Control Panel pages that don't display in Windows Classic theme",
                 "github": "https://github.com/Anixx",
                 "include": [
                     "explorer.exe"
                 ],
                 "name": "Classic Theme UIFILE Fix",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "classic-uwp-fix": {

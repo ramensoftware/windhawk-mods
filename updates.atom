@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-10T23:40:49.000Z</updated>
+    <updated>2025-12-11T08:06:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-uifile-fix#e60778e52d2aeea1d6c72903fb7f79aa7020a35d</id>
+        <link href="https://windhawk.net/mods/classic-theme-uifile-fix"/>
+        <updated>2025-12-11T08:06:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Avoid replacing gtc's which have CONTROLPANELSTYLE inside so to address issue of hyperlinks becoming black</p></li>
+<li><p>If Explorer is themed, just do nothing</p></li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[FancyZones Win+Shift+Arrows Hotkey 1.0]]></title>
         <id>https://windhawk.net/mods/fancyzones-winshift-hotkey#c4f1fd1f16d5880fbd76f456dc67678ed0bcd638</id>
@@ -294,17 +308,6 @@ Since the desktop cannot navigate folders, files are created directly in the des
         <author>
             <name>Guerra24</name>
             <uri>https://github.com/Guerra24</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.0.6]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#99d558b204a080b3f1974b47289ae94c205571e9</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2025-11-16T09:29:57.000Z</updated>
-        <content type="html"><![CDATA[<p>Update the tutotial.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
