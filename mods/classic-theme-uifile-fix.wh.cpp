@@ -2,7 +2,7 @@
 // @id              classic-theme-uifile-fix
 // @name            Classic Theme UIFILE Fix
 // @description     Fixes Control Panel pages that don't display in Windows Classic theme
-// @version         1.0.0
+// @version         1.1.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
