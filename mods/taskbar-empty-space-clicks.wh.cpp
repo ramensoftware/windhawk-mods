@@ -2056,7 +2056,7 @@ void LoadSettings()
         // handle default value
         if (taskbarTypeStr.empty())
         {
-            taskbarTypeStr = L"all"; 
+            taskbarTypeStr = L"all";
         }
 
 #ifdef ENABLE_LOG_INFO
@@ -2070,7 +2070,7 @@ void LoadSettings()
         logMessage += L"Mouse(";
         logMessage += mouseTriggerStr.c_str();
         logMessage += L") + ";
-        logMessage += L"TaskbarType(";;
+        logMessage += L"TaskbarType(";
         logMessage += taskbarTypeStr.c_str();
         logMessage += L") -> ";
         logMessage += actionStr.c_str();
@@ -2862,6 +2862,20 @@ bool IsTaskbarWindow(HWND hWnd)
     }
 }
 
+bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
+{
+    bool isCorrectTaskbar = true;
+    if (taskbarTypeName == L"primary")
+    {
+        isCorrectTaskbar = (hWnd == g_hTaskbarWnd);
+    }
+    else if (taskbarTypeName == L"secondary")
+    {
+        isCorrectTaskbar = g_secondaryTaskbarWindows.contains(hWnd);
+    }
+    return isCorrectTaskbar;
+}
+
 void SetBit(uint32_t &value, uint32_t bit)
 {
     value |= (1U << bit);
@@ -3104,11 +3118,13 @@ bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks)
         if ((triggerAction.mouseTriggerName == mouseTriggerName) && triggerAction.actionExecutor)
         {
             bool allModifiersPressed = true;
+            bool isCorrectTaskbar = true;
             for (int i = 1; i <= numClicks; i++)
             {
                 allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
+                isCorrectTaskbar &= IsCorrectTaskbarType(triggerAction.taskbarTypeName, g_mouseClickQueue[-i].hWnd);
             }
-            return allModifiersPressed;
+            return allModifiersPressed && isCorrectTaskbar;
         }
     }
     return false;
@@ -3128,13 +3144,15 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
         {
             LOG_DEBUG(L"Found action: %s", triggerAction.actionName.c_str());
             bool allModifiersPressed = true;
+            bool isCorrectTaskbar = true;
             for (int i = 1; i <= numClicks; i++)
             {
                 allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
-                LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u",
-                          i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.expectedKeyModifiersState);
+                isCorrectTaskbar &= IsCorrectTaskbarType(triggerAction.taskbarTypeName, g_mouseClickQueue[-i].hWnd);
+                LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u, taskbar type: %s",
+                          i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.expectedKeyModifiersState, triggerAction.taskbarTypeName.c_str());
             }
-            if (allModifiersPressed)
+            if (allModifiersPressed && isCorrectTaskbar)
             {
                 if (triggerAction.actionExecutor)
                 {
