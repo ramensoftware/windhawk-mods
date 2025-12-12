@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-12T14:38:08.000Z</updated>
+    <updated>2025-12-12T15:20:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.2.0]]></title>
+        <id>https://windhawk.net/mods/classic-theme-uifile-fix#c2342ce7b1d7b935ed635c739c4178e0ff55214e</id>
+        <link href="https://windhawk.net/mods/classic-theme-uifile-fix"/>
+        <updated>2025-12-12T15:20:24.000Z</updated>
+        <content type="html"><![CDATA[<p>Compatibility with x86, does not need symbols and more compact.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[FancyZones Win+Shift/Ctrl+Arrows Hotkey 1.1]]></title>
         <id>https://windhawk.net/mods/fancyzones-winshift-hotkey#d046209610d7ade1a7fda2574b25c49693872ef3</id>
@@ -292,20 +303,6 @@ Since the desktop cannot navigate folders, files are created directly in the des
         <author>
             <name>lieyanbang</name>
             <uri>https://github.com/lieyanbang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#077c9d5ae5e80ce1c341354c4dc628516f2b5201</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2025-11-20T19:38:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>implemented "Eager trigger evaluation" option - resolves https://github.com/m1lhaus/windhawk-mods/issues/40</li>
-<li>Toggle Volume Mute feature now mutes all devices, not just the default one - resolves https://github.com/m1lhaus/windhawk-mods/issues/33</li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>
