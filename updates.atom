@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-12T15:20:24.000Z</updated>
+    <updated>2025-12-12T16:08:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Theme 1.0.8]]></title>
+        <id>https://windhawk.net/mods/classic-theme-enable#e130982f86c22bf23884a66f4a59510d2fb6b99d</id>
+        <link href="https://windhawk.net/mods/classic-theme-enable"/>
+        <updated>2025-12-12T16:08:32.000Z</updated>
+        <content type="html"><![CDATA[<p>Add Classic Theme UIFILE Fix</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.2.0]]></title>
         <id>https://windhawk.net/mods/classic-theme-uifile-fix#c2342ce7b1d7b935ed635c739c4178e0ff55214e</id>
@@ -282,27 +293,6 @@ Restart File Explorer after enabling.</p>
         <author>
             <name>TheShadyRainbow4</name>
             <uri>https://github.com/TheShadyRainbow4</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Ctrl+N to New File 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-ctrln-newfile#b39425a15084dc10756c51355b79623d8d59b596</id>
-        <link href="https://windhawk.net/mods/explorer-ctrln-newfile"/>
-        <updated>2025-11-23T12:18:26.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>English</strong></p>
-<p>Intercepts Explorer’s <strong>Ctrl+N</strong> (open new window) and replaces it with creating an empty file in the current directory, then entering rename mode.</p>
-<p><strong>How it works</strong></p>
-<p>Uses Windhawk to inject a <code>WH_KEYBOARD_LL</code> low-level keyboard hook into explorer.exe to intercept Ctrl+N.
-Since the desktop cannot navigate folders, files are created directly in the desktop path.</p>
-<hr />
-<p><strong>中文说明</strong></p>
-<p>拦截资源管理器的 <strong>Ctrl+N</strong>（新建窗口操作），改为在当前目录创建空文件并重命名。</p>
-<p><strong>实现原理</strong></p>
-<p>通过 Windhawk 在 explorer.exe 注入 <code>WH_KEYBOARD_LL</code> 低级键盘钩子拦截ctrl+n。
-在桌面无法导航，因此直接在桌面路径生成文件。</p>]]></content>
-        <author>
-            <name>lieyanbang</name>
-            <uri>https://github.com/lieyanbang</uri>
         </author>
     </entry>
 </feed>
