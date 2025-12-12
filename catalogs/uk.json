@@ -3048,7 +3048,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1765410049000,
+                "updated": 1765550288000,
                 "users": 3
             },
             "metadata": {
@@ -3056,13 +3056,13 @@
                     "x86-64"
                 ],
                 "author": "David Trapp (CherryDT)",
-                "description": "Makes FancyZones override Win+Shift+Arrows instead of Win+Arrows",
+                "description": "Makes FancyZones override Win+Shift/Ctrl+Arrows instead of Win+Arrows",
                 "github": "https://github.com/CherryDT",
                 "include": [
                     "PowerToys.FancyZones.exe"
                 ],
-                "name": "FancyZones Win+Shift+Arrows Hotkey",
-                "version": "1.0"
+                "name": "FancyZones Win+Shift/Ctrl+Arrows Hotkey",
+                "version": "1.1"
             }
         },
         "favorites-in-navpane": {

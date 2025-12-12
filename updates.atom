@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-11T08:06:38.000Z</updated>
+    <updated>2025-12-12T14:38:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[FancyZones Win+Shift/Ctrl+Arrows Hotkey 1.1]]></title>
+        <id>https://windhawk.net/mods/fancyzones-winshift-hotkey#d046209610d7ade1a7fda2574b25c49693872ef3</id>
+        <link href="https://windhawk.net/mods/fancyzones-winshift-hotkey"/>
+        <updated>2025-12-12T14:38:08.000Z</updated>
+        <content type="html"><![CDATA[<p>Do allow Win+Ctrl+Arrows as alternative to Win+Shift+Arrows for FancyZones hotkey override.</p>]]></content>
+        <author>
+            <name>David Trapp (CherryDT)</name>
+            <uri>https://github.com/CherryDT</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.1.0]]></title>
         <id>https://windhawk.net/mods/classic-theme-uifile-fix#e60778e52d2aeea1d6c72903fb7f79aa7020a35d</id>
@@ -295,19 +306,6 @@ Since the desktop cannot navigate folders, files are created directly in the des
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.3]]></title>
-        <id>https://windhawk.net/mods/win11-accent-border#a5f2753114108d8032a62ddb858864a7aa39e27a</id>
-        <link href="https://windhawk.net/mods/win11-accent-border"/>
-        <updated>2025-11-18T22:24:59.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Prevent apps from overwriting the border color.</li>
-</ul>]]></content>
-        <author>
-            <name>Guerra24</name>
-            <uri>https://github.com/Guerra24</uri>
         </author>
     </entry>
 </feed>
