@@ -2,7 +2,7 @@
 // @id              classic-theme-uifile-fix
 // @name            Classic Theme UIFILE Fix
 // @description     Fixes Control Panel pages that don't display in Windows Classic theme
-// @version         1.1.0
+// @version         1.2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -122,19 +122,16 @@ HRESULT WINAPI Hook_SetXML(void* pThis, const WCHAR* pszXML, HINSTANCE hInstance
 }
 
 BOOL Wh_ModInit() {
-    HMODULE hDui70 = LoadLibraryW(L"dui70.dll");
-    
-    WindhawkUtils::SYMBOL_HOOK dui70DllHooks[] = {
-        {
-            {L"public: long __cdecl DirectUI::DUIXmlParser::SetXML(unsigned short const *,struct HINSTANCE__ *,struct HINSTANCE__ *)"},
-            &g_origSetXML,
-            Hook_SetXML,
-            false
-        }
-    };
-    
-    return hDui70 && (Wh_SetFunctionHook((void*)GetProcAddress(hDui70, 
-            "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z"), 
-             (void*)Hook_SetXML, (void**)&g_origSetXML)||
-             WindhawkUtils::HookSymbols(hDui70, dui70DllHooks, ARRAYSIZE(dui70DllHooks)));
+
+HMODULE hDui70 = LoadLibraryW(L"dui70.dll");
+
+return hDui70 && (
+        Wh_SetFunctionHook((void*)GetProcAddress(hDui70, 
+    // public: long __cdecl DirectUI::DUIXmlParser::SetXML(unsigned short const *,struct HINSTANCE__ *,struct HINSTANCE__ *)
+        "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z"), 
+         (void*)Hook_SetXML, (void**)&g_origSetXML)||
+        Wh_SetFunctionHook((void*)GetProcAddress(hDui70, 
+    // public: long __thiscall DirectUI::DUIXmlParser::SetXML(unsigned short const *,struct HINSTANCE__ *,struct HINSTANCE__ *)
+        "?SetXML@DUIXmlParser@DirectUI@@QAAJPBGPAUHINSTANCE__@@1@Z"), 
+         (void*)Hook_SetXML, (void**)&g_origSetXML));
 }
