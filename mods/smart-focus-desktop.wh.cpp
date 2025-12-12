@@ -3,7 +3,8 @@
 // @name            Smart Focus Desktop
 // @description     Auto-hides desktop icons when windows are active. Click on the empty wallpaper to toggle "Show Desktop" (Win+D) and reveal icons.
 // @version         1.0.0
-// @author          yetzu
+// @author          tetsudaux
+// @github          https://github.com/tetsudaux
 
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
