@@ -6,7 +6,7 @@
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @compilerOptions -lpsapi
-// @license         GPLv3
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
