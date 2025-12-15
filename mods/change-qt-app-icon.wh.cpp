@@ -82,7 +82,6 @@ LRESULT WINAPI SendMessageW_hook(
             ULONG_PTR uRetAddr = (ULONG_PTR)__builtin_return_address(0);
             if (uRetAddr >= s_uQWindowsBase && uRetAddr <= s_uQWindowsEnd)
             {
-                DestroyIcon((HICON)lParam);
                 lParam = (wParam == ICON_BIG) ? (LPARAM)g_hIconBig : (LPARAM)g_hIconSmall;
             }
         }
