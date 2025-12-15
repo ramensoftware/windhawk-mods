@@ -494,6 +494,32 @@
                 "version": "1.0.0"
             }
         },
+        "change-qt-app-icon": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1765763667000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1765763667000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "aubymori",
+                "compilerOptions": "-lpsapi",
+                "description": "Change the icon of all windows in a Qt app",
+                "github": "https://github.com/aubymori",
+                "license": "GPL-3.0",
+                "name": "Change Qt App Icon",
+                "version": "1.0.0"
+            }
+        },
         "chinese-ime-fixed-mode": {
             "details": {
                 "defaultSorting": 540,

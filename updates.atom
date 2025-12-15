@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-12T16:08:32.000Z</updated>
+    <updated>2025-12-15T01:54:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Change Qt App Icon 1.0.0]]></title>
+        <id>https://windhawk.net/mods/change-qt-app-icon#f1782d79034f62b166dcd88871f4f323284fe0b0</id>
+        <link href="https://windhawk.net/mods/change-qt-app-icon"/>
+        <updated>2025-12-15T01:54:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="changeqtappicon">Change Qt App Icon</h1>
+<p>This mod allows you to change the window icon of all windows for a Qt
+application. Due to the way Qt stores resources, it is difficult to
+differentiate icons, and as such, you may only set one icon to be
+used at all times for an application.</p>
+<p><strong>Example</strong>: <em>IDA 9.2 with its pre-6.0 icon</em></p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/change-qt-app-icon-example.png" alt="Example: IDA 9.2 with its pre-6.0 icon" /></p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Go to the "Advanced" tab of this mod.</li>
+<li>Find the "Custom process inclusion list" option.</li>
+<li>Add the name of the EXE you want to change window icons for.</li>
+</ol>
+<ul>
+<li>If you don't know the name of the EXE, you can find it using 
+ Task Manager.</li>
+</ul>
+<ol>
+<li>Click Save.</li>
+<li>Configure the mod as you want it to be.</li>
+<li>If the program is open already, restart it.</li>
+</ol>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme 1.0.8]]></title>
         <id>https://windhawk.net/mods/classic-theme-enable#e130982f86c22bf23884a66f4a59510d2fb6b99d</id>
@@ -265,34 +297,6 @@ Restart File Explorer after enabling.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Ctrl+Q to New Folder 1.2]]></title>
-        <id>https://windhawk.net/mods/explorer-ctrlq-new-folder#a858cdb9669e736d6693d50acc2b534d8b3978f5</id>
-        <link href="https://windhawk.net/mods/explorer-ctrlq-new-folder"/>
-        <updated>2025-11-26T17:40:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerctrlqtonewfolder">Explorer Ctrl+Q to New Folder</h1>
-<p>This mod enhances Windows Explorer by mapping <strong>Ctrl+Q</strong> to create a new folder instantly.</p>
-<h3 id="purposeforkdetails">Purpose &amp; Fork Details</h3>
-<p>This is a fork of "Explorer Ctrl+N to New File". The original mod bound the action to <strong>Ctrl+N</strong>, which conflicted with the native "New Window" shortcut, and generated blank, extension-less files which were not useful for most users.</p>
-<p>This version improves the workflow by:</p>
-<ol>
-<li><strong>Remapping to Ctrl+Q</strong>: Eliminates conflicts with standard Windows shortcuts.</li>
-<li><strong>Creating Directories</strong>: Generates standard file system folders instead of empty files.</li>
-<li><strong>Stability Fixes</strong>: Implements <code>SHChangeNotify</code> and thread synchronization to prevent the "Race Condition" crash where Explorer would attempt to rename the folder before the UI had finished creating it.</li>
-</ol>
-<h3 id="howitworks">How it works</h3>
-<p>The mod utilizes Windhawk to inject a <code>WH_KEYBOARD_LL</code> (low-level keyboard hook) directly into the <code>explorer.exe</code> process. Upon triggering:</p>
-<ol>
-<li>It resolves the current directory path (supporting Windowed Explorer windows only not Desktop).</li>
-<li>It creates a unique directory name (e.g., "New folder (2)").</li>
-<li>It forces a Shell Update to register the change immediately.</li>
-<li>It programmatically selects the new folder and initiates the rename command.</li>
-</ol>]]></content>
-        <author>
-            <name>TheShadyRainbow4</name>
-            <uri>https://github.com/TheShadyRainbow4</uri>
         </author>
     </entry>
 </feed>
