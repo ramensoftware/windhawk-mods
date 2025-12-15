@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              windows-11-beter-ultrawide-taskbar.wh
+// @id              windows-11-beter-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers the taskbar and system tray as a single unit
 // @version         1.0
