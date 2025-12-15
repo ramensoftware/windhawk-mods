@@ -24,7 +24,7 @@ used at all times for an application.
 ## How to use
 1. Go to the "Advanced" tab of this mod.
 2. Find the "Custom process inclusion list" option.
-3. Add the name of the EXE you want to disable tray icons for.
+3. Add the name of the EXE you want to change window icons for.
    - If you don't know the name of the EXE, you can find it using 
      Task Manager.
 4. Click Save.
