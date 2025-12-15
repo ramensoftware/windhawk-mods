@@ -5,7 +5,7 @@
 // @version         3.0
 // @author          Hashah2311
 // @github          https://github.com/Hashah2311
-// @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus
 // ==/WindhawkMod==
 
@@ -96,6 +96,48 @@ typedef struct _WINDOWCOMPOSITIONATTRIBDATA {
     SIZE_T SizeOfData;
 } WINDOWCOMPOSITIONATTRIBDATA;
 typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
+
+// --- Z-Band API ---
+enum ZBID {
+    ZBID_DEFAULT = 0,
+    ZBID_DESKTOP = 1,
+    ZBID_UIACCESS = 2,
+    ZBID_IMMERSIVE_IHM = 3,
+    ZBID_IMMERSIVE_NOTIFICATION = 4,
+    ZBID_IMMERSIVE_APPCHROME = 5,
+    ZBID_IMMERSIVE_MOGO = 6,
+    ZBID_IMMERSIVE_EDGY = 7,
+    ZBID_IMMERSIVE_INACTIVEMOBODY = 8,
+    ZBID_IMMERSIVE_INACTIVEDOCK = 9,
+    ZBID_IMMERSIVE_ACTIVEMOBODY = 10,
+    ZBID_IMMERSIVE_ACTIVEDOCK = 11,
+    ZBID_IMMERSIVE_BACKGROUND = 12,
+    ZBID_IMMERSIVE_SEARCH = 13,
+    ZBID_GENUINE_WINDOWS = 14,
+    ZBID_IMMERSIVE_RESTRICTED = 15,
+    ZBID_SYSTEM_TOOLS = 16,
+    ZBID_LOCK = 17,
+    ZBID_ABOVELOCK_UX = 18,
+};
+
+typedef HWND(WINAPI* pCreateWindowInBand)(
+    DWORD dwExStyle,
+    LPCWSTR lpClassName,
+    LPCWSTR lpWindowName,
+    DWORD dwStyle,
+    int x,
+    int y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam,
+    DWORD dwBand
+);
+
+typedef BOOL(WINAPI* pSetWindowBand)(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand);
+typedef BOOL(WINAPI* pGetWindowBand)(HWND hWnd, PDWORD pdwBand);
 
 // --- Configurable State ---
 struct ModSettings {
@@ -370,20 +412,27 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
 // --- Window Procedure ---
 #define IDT_POLL_MEDIA 1001
 #define IDT_ANIMATION  1002
-#define IDT_ZORDER     1003
+#define APP_WM_CLOSE   WM_APP
 
 LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: 
             UpdateAppearance(hwnd); // Apply DWM Rounding + Acrylic
             SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL); 
-            SetTimer(hwnd, IDT_ZORDER, 2000, NULL);      
             return 0;
 
         case WM_ERASEBKGND: 
             return 1;
 
+        case WM_CLOSE:
+            return 0;
+
+        case APP_WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+
         case WM_DESTROY:
+            g_SessionManager = nullptr;
             PostQuitMessage(0);
             return 0;
 
@@ -427,9 +476,6 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 } else {
                     KillTimer(hwnd, IDT_ANIMATION); 
                 }
-            }
-            else if (wParam == IDT_ZORDER) {
-                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
             return 0;
 
@@ -504,13 +550,38 @@ void MediaThread() {
     wc.hCursor = LoadCursor(NULL, IDC_HAND);
     RegisterClass(&wc);
 
-    g_hMediaWindow = CreateWindowEx(
-        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-        wc.lpszClassName, TEXT("MusicLounge"),
-        WS_POPUP | WS_VISIBLE,
-        0, 0, g_Settings.width, g_Settings.height,
-        NULL, NULL, wc.hInstance, NULL
-    );
+    // Try to use CreateWindowInBand for proper z-ordering
+    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+    pCreateWindowInBand CreateWindowInBand = nullptr;
+    if (hUser32) {
+        CreateWindowInBand = (pCreateWindowInBand)GetProcAddress(hUser32, "CreateWindowInBand");
+    }
+
+    if (CreateWindowInBand) {
+        g_hMediaWindow = CreateWindowInBand(
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            wc.lpszClassName, TEXT("MusicLounge"),
+            WS_POPUP | WS_VISIBLE,
+            0, 0, g_Settings.width, g_Settings.height,
+            NULL, NULL, wc.hInstance, NULL,
+            ZBID_IMMERSIVE_NOTIFICATION
+        );
+        if (g_hMediaWindow) {
+            Wh_Log(L"Created window in ZBID_IMMERSIVE_NOTIFICATION band");
+        }
+    }
+
+    // Fallback to CreateWindowEx if CreateWindowInBand failed or unavailable
+    if (!g_hMediaWindow) {
+        Wh_Log(L"CreateWindowInBand failed or unavailable, falling back to CreateWindowEx");
+        g_hMediaWindow = CreateWindowEx(
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            wc.lpszClassName, TEXT("MusicLounge"),
+            WS_POPUP | WS_VISIBLE,
+            0, 0, g_Settings.width, g_Settings.height,
+            NULL, NULL, wc.hInstance, NULL
+        );
+    }
 
     SetLayeredWindowAttributes(g_hMediaWindow, 0, 255, LWA_ALPHA);
     
@@ -537,7 +608,7 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     g_Running = false;
-    if (g_hMediaWindow) SendMessage(g_hMediaWindow, WM_CLOSE, 0, 0);
+    if (g_hMediaWindow) SendMessage(g_hMediaWindow, APP_WM_CLOSE, 0, 0);
     if (g_pMediaThread) {
         if (g_pMediaThread->joinable()) g_pMediaThread->join();
         delete g_pMediaThread;
@@ -553,7 +624,20 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
-// --- LAUNCHER CODE ---
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk-mods/pull/1916
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -568,75 +652,145 @@ BOOL Wh_ModInit() {
     bool isCurrentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) return FALSE;
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) { isService = true; break; }
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
     }
 
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
             break;
         }
     }
+
     LocalFree(argv);
 
-    if (isService) return FALSE;
+    if (isService) {
+        return FALSE;
+    }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
-        if (!WhTool_ModInit()) ExitProcess(1);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook((BYTE*)dosHeader + entryPointRVA, (void*)EntryPoint_Hook, nullptr);
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess) return FALSE;
+    if (isToolModProcess) {
+        return FALSE;
+    }
 
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
 
     WCHAR currentProcessPath[MAX_PATH];
-    if (!GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
 
-    WCHAR commandLine[MAX_PATH * 2];
-    _snwprintf(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
-    
-    if (kernelModule) {
-        typedef BOOL(WINAPI* CreateProcessInternalW_t)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-        CreateProcessInternalW_t pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
-        
-        if (pCreateProcessInternalW) {
-            STARTUPINFO si = { sizeof(STARTUPINFO) };
-            PROCESS_INFORMATION pi;
-            if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
-                CloseHandle(pi.hProcess);
-                CloseHandle(pi.hThread);
-            }
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
         }
     }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) WhTool_ModSettingsChanged();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModUninit();
-        ExitProcess(0);
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
