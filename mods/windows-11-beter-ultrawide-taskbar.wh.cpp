@@ -4,6 +4,7 @@
 // @description     Centers the taskbar and system tray as a single unit
 // @version         1.0
 // @author          Molko
+// @github          https://github.com/roeseth
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
