@@ -71,7 +71,6 @@ LRESULT WINAPI SendMessageW_hook(
                     GetCurrentProcess(), hQWindows, &mi, sizeof(mi));
                 s_uQWindowsBase = (ULONG_PTR)mi.lpBaseOfDll;
                 s_uQWindowsEnd  = (ULONG_PTR)mi.lpBaseOfDll + mi.SizeOfImage;
-                FreeLibrary(hQWindows);
             }
         }
 
