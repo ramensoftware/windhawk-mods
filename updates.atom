@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-15T01:54:27.000Z</updated>
+    <updated>2025-12-16T22:59:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.5.2]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#9345ef955e6053e4e564c66a511146e60e4470dc</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2025-12-16T22:59:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added new themes: SunValley, Surface, Oversimplified&amp;Accentuated, Luminosity.</li>
+<li>Updated themes: SimplyTransparent, Squircle, Matter, WinXP, TaskbarXII, Windows7, WindowGlass.</li>
+<li>Renamed the 21996Taskbar theme to SunValley (Legacy).</li>
+<li>For themes using images from http(s) sources, the mod now retries loading once an internet connection is available.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Change Qt App Icon 1.0.0]]></title>
         <id>https://windhawk.net/mods/change-qt-app-icon#f1782d79034f62b166dcd88871f4f323284fe0b0</id>
@@ -281,21 +297,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <content type="html"><![CDATA[<p>Use another method, so to hook only a WINAPI function. This should make it compatible with ARM and not require the symbol download.</p>]]></content>
         <author>
             <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Two-sided snapping in Win11 1.0.0]]></title>
-        <id>https://windhawk.net/mods/two-sided-snapping#2b7ee110564110eeef7aa6fc8b1f53e64dc804f0</id>
-        <link href="https://windhawk.net/mods/two-sided-snapping"/>
-        <updated>2025-11-28T19:42:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disableaerosnapquadrants">Disable Aero Snap Quadrants</h1>
-<p>This mod disables the corner snapping and enables the two-sided snapping, thus
-restoring the behavior before Windows 10. This mod works only on Windows 11. 
-Restart File Explorer after enabling.</p>
-<p>This mod is ported from Explorer Patcher.</p>]]></content>
-        <author>
-            <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
         </author>
     </entry>

@@ -1,3 +1,10 @@
+## 1.5.2 ([Dec 16, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9345ef955e6053e4e564c66a511146e60e4470dc/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Added new themes: SunValley, Surface, Oversimplified&Accentuated, Luminosity.
+* Updated themes: SimplyTransparent, Squircle, Matter, WinXP, TaskbarXII, Windows7, WindowGlass.
+* Renamed the 21996Taskbar theme to SunValley (Legacy).
+* For themes using images from http(s) sources, the mod now retries loading once an internet connection is available.
+
 ## 1.5.1 ([Sep 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/423d9610b97bf4c6b11590948ca171b9b56a3c81/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Updated themes: TranslucentTaskbar, Windows7.
