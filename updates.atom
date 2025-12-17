@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-16T22:59:27.000Z</updated>
+    <updated>2025-12-17T14:43:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Music Lounge 3.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-music-lounge#2eddf6953b7aaee9ad5eb050bb329e135f4c7798</id>
+        <link href="https://windhawk.net/mods/taskbar-music-lounge"/>
+        <updated>2025-12-17T14:43:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarmusiclounge">Taskbar Music Lounge</h1>
+<p>A media controller that uses Windows 11 native DWM styling for a seamless look.</p>
+<h2 id="features">✨ Features</h2>
+<ul>
+<li><strong>Universal Support:</strong> Works with any media player via GSMTC.</li>
+<li><strong>Album Art:</strong> Displays current track cover art.</li>
+<li><strong>Native Look:</strong> Uses Windows 11 hardware-accelerated rounding and acrylic blur.</li>
+<li><strong>Controls:</strong> Play/Pause, Next, Previous.</li>
+<li><strong>Volume:</strong> Scroll over widget to adjust volume.</li>
+</ul>
+<h2 id="requirements">⚠️ Requirements</h2>
+<ul>
+<li><strong>Disable Widgets:</strong> Taskbar Settings -&gt; Widgets -&gt; Off.</li>
+<li><strong>Windows 11:</strong> Required for rounded corners.</li>
+</ul>]]></content>
+        <author>
+            <name>Hashah2311</name>
+            <uri>https://github.com/Hashah2311</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.5.2]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#9345ef955e6053e4e564c66a511146e60e4470dc</id>
@@ -287,17 +312,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable SyslistView32 2.0.0]]></title>
-        <id>https://windhawk.net/mods/syslistview32-enabler#70689aad8bf800ef9ae22bb52a4f35632489f51d</id>
-        <link href="https://windhawk.net/mods/syslistview32-enabler"/>
-        <updated>2025-11-28T23:32:07.000Z</updated>
-        <content type="html"><![CDATA[<p>Use another method, so to hook only a WINAPI function. This should make it compatible with ARM and not require the symbol download.</p>]]></content>
-        <author>
-            <name>anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

@@ -6443,6 +6443,34 @@
                 "version": "1.1.2"
             }
         },
+        "taskbar-music-lounge": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1765982611000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1765982611000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Hashah2311",
+                "compilerOptions": "-lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus",
+                "description": "A native-style music ticker with media controls.",
+                "github": "https://github.com/Hashah2311",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar Music Lounge",
+                "version": "3.0"
+            }
+        },
         "taskbar-notification-icon-spacing": {
             "details": {
                 "defaultSorting": 180510,
