@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-19T17:44:52.000Z</updated>
+    <updated>2025-12-19T22:21:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#bfba1b55ec10ecd3f7b78009533838598191141d</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2025-12-19T22:21:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed drag and drop for tray icons.</li>
+<li>Fixed secondary taskbar clock rotation on startup.</li>
+<li>Fixed badge orientation for taskbar icons (contribution by Lubomir Stanko).</li>
+<li>Fixed notification center being shown on the primary monitor when clicking on the secondary monitor clock.</li>
+<li>Fixed labels vertical alignment when using small icons.</li>
+<li>Fixed the start menu sliding over the taskbar with the "Adjust Start menu animation" option.</li>
+<li>Improved start menu handling with multiple monitors.</li>
+<li>Fixed broken share picker UI layout.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Helper 2.0.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-helper#c504a465dcdc607b3caff5c1852a1ef752f200ee</id>
@@ -300,17 +320,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <link href="https://windhawk.net/mods/icon16bitfix"/>
         <updated>2025-12-06T18:50:09.000Z</updated>
         <content type="html"><![CDATA[<p>Update metadata for WH v.1.7</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.0.7]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#6a6219103e4213f15f2495a07651fa165653ee38</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2025-12-06T11:37:02.000Z</updated>
-        <content type="html"><![CDATA[<p>Update the tutorial for WH v. 1.7</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>

@@ -1,3 +1,14 @@
+## 1.3.8 ([Dec 19, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bfba1b55ec10ecd3f7b78009533838598191141d/mods/taskbar-vertical.wh.cpp))
+
+* Fixed drag and drop for tray icons.
+* Fixed secondary taskbar clock rotation on startup.
+* Fixed badge orientation for taskbar icons (contribution by Lubomir Stanko).
+* Fixed notification center being shown on the primary monitor when clicking on the secondary monitor clock.
+* Fixed labels vertical alignment when using small icons.
+* Fixed the start menu sliding over the taskbar with the "Adjust Start menu animation" option.
+* Improved start menu handling with multiple monitors.
+* Fixed broken share picker UI layout.
+
 ## 1.3.7 ([Oct 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7f2f2a00bede1e5e55dc49331996d18ed88547cd/mods/taskbar-vertical.wh.cpp))
 
 * Made the start menu animation adjustment optional and off by default, since it's incompatible with the Phone Link sidebar and with some Start Menu Styler themes.
