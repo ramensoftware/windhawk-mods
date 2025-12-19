@@ -1254,12 +1254,7 @@ void StopHotkeyThread() {
     PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
   }
   if (g_hThread) {
-    // Wait longer (3 seconds) since COM calls can be slow
-    DWORD waitResult = WaitForSingleObject(g_hThread, 3000);
-    if (waitResult == WAIT_TIMEOUT) {
-      Wh_Log(L"Warning: Hotkey thread did not exit in time, terminating");
-      TerminateThread(g_hThread, 0);
-    }
+    WaitForSingleObject(g_hThread, INFINITE);
     CloseHandle(g_hThread);
     g_hThread = nullptr;
   }
