@@ -5800,6 +5800,39 @@
                 "version": "1.1.2"
             }
         },
+        "taskbar-auto-hide-per-monitor": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1766160536000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1766160536000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lversion",
+                "description": "By default, Windows uses the same auto-hide setting for all monitors. This mod allows setting different auto-hide settings for each monitor.",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar auto-hide per monitor",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-auto-hide-speed": {
             "details": {
                 "defaultSorting": 157310,

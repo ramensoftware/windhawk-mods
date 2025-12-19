@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-17T14:43:31.000Z</updated>
+    <updated>2025-12-19T16:08:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#b21301f26f2a4daba74aa302fa7d81cb059ccaf1</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-per-monitor"/>
+        <updated>2025-12-19T16:08:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarautohidepermonitor">Taskbar auto-hide per monitor</h1>
+<p>By default, Windows uses the same auto-hide setting for all monitors. This mod
+allows setting different auto-hide settings for each monitor.</p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Music Lounge 3.0]]></title>
         <id>https://windhawk.net/mods/taskbar-music-lounge#2eddf6953b7aaee9ad5eb050bb329e135f4c7798</id>
@@ -298,20 +311,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 2.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#7833da2a65bf74c639d33f1432664d552056e2de</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2025-12-01T15:35:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <code>Troubleshooting</code> chapter to address recent issues with incorrect trigger settings after update from v1 to v2</li>
-<li>Added info about reserving empty space on the taskbar - resolves https://github.com/m1lhaus/windhawk-mods/issues/47</li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>
