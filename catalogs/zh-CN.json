@@ -7490,19 +7490,19 @@
                     5
                 ],
                 "ratingUsers": 6,
-                "updated": 1765284643000,
+                "updated": 1766166292000,
                 "users": 39
             },
             "metadata": {
                 "author": "u2x1",
-                "compilerOptions": "-lole32 -loleaut32 -luuid",
-                "description": "Go to a specific virtual desktop and move the active window to a specific virtual desktop",
+                "compilerOptions": "-lole32 -loleaut32 -luuid -ldwmapi",
+                "description": "Switch virtual desktops, move windows between desktops, pin windows, and tile windows with customizable hotkeys",
                 "github": "https://github.com/u2x1",
                 "include": [
                     "windhawk.exe"
                 ],
                 "name": "Virtual Desktop Helper",
-                "version": "1.0.0"
+                "version": "2.0.0"
             }
         },
         "virtual-desktop-taskbar-order": {

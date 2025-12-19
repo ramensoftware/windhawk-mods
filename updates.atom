@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-19T16:08:56.000Z</updated>
+    <updated>2025-12-19T17:44:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.0.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#c504a465dcdc607b3caff5c1852a1ef752f200ee</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2025-12-19T17:44:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add window tiling (manually triggered by hotkey)</li>
+<li>Add window pinning to all desktops</li>
+<li>Add previous desktop toggle</li>
+<li>Add per-desktop focus/layout memory</li>
+</ul>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#b21301f26f2a4daba74aa302fa7d81cb059ccaf1</id>
@@ -298,19 +314,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Progress Bars 1.0.1]]></title>
-        <id>https://windhawk.net/mods/classic-progress-bars#3caf9644d09c86e455315ba11dafa6b57c6fc8c2</id>
-        <link href="https://windhawk.net/mods/classic-progress-bars"/>
-        <updated>2025-12-05T17:52:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix incorrectly defined symbol hook which caused a crash on x86-32 applications</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
