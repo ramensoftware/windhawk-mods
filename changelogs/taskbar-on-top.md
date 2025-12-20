@@ -1,3 +1,8 @@
+## 1.1.6 ([Dec 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/de4cfd5ea752b671743eb99a1dd9abeba39e413f/mods/taskbar-on-top.wh.cpp))
+
+* Implemented basic support for taskbar auto-hide.
+* Fixed incorrect Alt+Tab window position with multiple monitors in some cases.
+
 ## 1.1.5 ([Oct 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6a179f7c2bc4de25e0d72167534b5583c43db03e/mods/taskbar-on-top.wh.cpp))
 
 * Reworked Start menu positioning:

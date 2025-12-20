@@ -6583,7 +6583,7 @@
                     296
                 ],
                 "ratingUsers": 345,
-                "updated": 1761504367000,
+                "updated": 1766250184000,
                 "users": 17408
             },
             "featured": true,
@@ -6602,7 +6602,7 @@
                 ],
                 "name": "Taskbar on top for Windows 11",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1.5"
+                "version": "1.1.6"
             }
         },
         "taskbar-primary-on-secondary-monitor": {
