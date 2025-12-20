@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.3.2
+// @version           1.3.3
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
@@ -252,7 +252,7 @@ AppMode g_currentAppMode;
 
 LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if(g_currentAppMode == AppMode::ForceDark || (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode()))
+    if((g_currentAppMode == AppMode::ForceDark || (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode())) && GetMenu(hWnd))
     {
         LRESULT lResult = 0;
         if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
@@ -267,6 +267,14 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     }
 
     return DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
+}
+
+decltype(&SetMenuInfo) SetMenuInfo_Original;
+WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
+{
+    LPMENUINFO lpMenuInfo = const_cast<LPMENUINFO>(lpInfo);
+    lpMenuInfo->hbrBack = nullptr; //Disable custom menu backgrounds because they are broken in dark mode. (See https://github.com/MGGSK/DarkMenus/issues/16)
+    return SetMenuInfo_Original(hMenu, lpInfo);
 }
 
 //Applies the theme to all menus.
@@ -332,6 +340,9 @@ BOOL Wh_ModInit()
     Wh_Log(L"Init");
 
     if(!WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original))
+        return FALSE;
+
+    if(!WindhawkUtils::SetFunctionHook(SetMenuInfo, SetMenuInfo_Hook, &SetMenuInfo_Original))
         return FALSE;
 
     const HMODULE hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
