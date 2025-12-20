@@ -2,7 +2,7 @@
 // @id              classic-explorer-dragdrop
 // @name            Classic Explorer Drag/Drop
 // @description     Enables/fixes the classic drag/drop image in File Explorer.
-// @version         1.0
+// @version         1.1
 // @author          Isabella Lulamoon (kawapure)
 // @github          https://github.com/kawapure
 // @twitter         https://twitter.com/kawaipure
@@ -25,20 +25,8 @@ style will always be used.
 */
 // ==/WindhawkModReadme==
 
-#include <processenv.h>
-#include <processthreadsapi.h>
-#include <windhawk_api.h>
 #include <windhawk_utils.h>
-#include <libloaderapi.h>
-#include <memoryapi.h>
 #include <uxtheme.h>
-#include <winerror.h>
-#include <winnt.h>
-#include <tlhelp32.h>
-#include <dwmapi.h>
-#include <shlwapi.h>
-#include <psapi.h>
-#include <cstdint>
 
 #if __WIN64
 #define WINAPI_STR L"__cdecl"
@@ -52,28 +40,26 @@ style will always be used.
 #define THISCALL_STR L"__thiscall"
 #endif
 
-bool IsCallerModule(HMODULE hMod, void *pfn)
+thread_local bool g_fGettingDragDropTheme = false;
+
+HRESULT (__thiscall *CDragDropHelper__AddInfoToWindow_orig)(void *);
+HRESULT __thiscall CDragDropHelper__AddInfoToWindow_hook(void *pThis)
 {
-    MODULEINFO mi = { 0 };
-    
-    if (!GetModuleInformation(GetCurrentProcess(), hMod, &mi, sizeof(mi)))
-    {
-        return false;
-    }
-
-    return (uintptr_t)pfn >= (uintptr_t)hMod &&
-           (uintptr_t)pfn < ( (uintptr_t)hMod + mi.SizeOfImage );
+    g_fGettingDragDropTheme = true;
+    HRESULT hr = CDragDropHelper__AddInfoToWindow_orig(pThis);
+    g_fGettingDragDropTheme = false;
+    return hr;
 }
-
-HANDLE g_hLocalTheme;
 
 using OpenThemeData_t = decltype(&OpenThemeData);
 OpenThemeData_t OpenThemeData_orig;
 HTHEME WINAPI OpenThemeData_hook(HWND hwnd, LPCWSTR pszClassList)
 {
+
     if (!IsAppThemed() && wcscmp(pszClassList, L"DragDrop") == 0 &&
-        IsCallerModule(GetModuleHandleW(L"shell32.dll"), __builtin_return_address(0)))
+        g_fGettingDragDropTheme)
     {
+        Wh_Log(L"Faking theme handle");
         // Return a fake theme handle to force the correct control flow
         // due to a bug introduced in Windows 7. The classic theme list-view drag/drop image
         // still exists perfectly intact as in Vista, but a bug makes it not render.
@@ -111,20 +97,16 @@ UINT GetDragImageMsg()
     return s_uMsg;
 }
 
-DWORD g_dwUnthemedThreadId = 0;
+thread_local bool g_fSpoofingUnthemed = false;
 
 using IsAppThemed_t = decltype(&IsAppThemed);
 IsAppThemed_t IsAppThemed_orig;
 WINBOOL WINAPI IsAppThemed_hook()
 {
-    if (GetCurrentThreadId() == g_dwUnthemedThreadId)
+    if (g_fSpoofingUnthemed)
     {
-        Wh_Log(L"Lying about theme status on thread %d", GetCurrentThreadId());
+        Wh_Log(L"Lying about theme status");
         return FALSE;
-    }
-    else if (g_dwUnthemedThreadId)
-    {
-        Wh_Log(L"g_dwUnthemedThreadId is set to %d, which differs from us %d", g_dwUnthemedThreadId, GetCurrentThreadId());
     }
 
     return IsAppThemed_orig();
@@ -135,16 +117,14 @@ LRESULT CALLBACK CListViewHost__s_ListViewSubclassWndProc_hook(HWND hWnd, UINT u
 {
     if (uMsg == GetDragImageMsg())
     {
-        Wh_Log(L"Setting unthemed thread ID to %d", GetCurrentThreadId());
-        g_dwUnthemedThreadId = GetCurrentThreadId();
+        g_fSpoofingUnthemed = true;
     }
 
     LRESULT lRes = CListViewHost__s_ListViewSubclassWndProc_orig(hWnd, uMsg, wParam, lParam, uIdSubclass, dwRefData);
 
     if (uMsg == GetDragImageMsg())
     {
-        Wh_Log(L"Clearing unthemed thread ID.");
-        g_dwUnthemedThreadId = 0;
+        g_fSpoofingUnthemed = false;
     }
 
     return lRes;
@@ -152,6 +132,14 @@ LRESULT CALLBACK CListViewHost__s_ListViewSubclassWndProc_hook(HWND hWnd, UINT u
 
 // shell32.dll
 const WindhawkUtils::SYMBOL_HOOK c_rgShell32Hooks[] = {
+    {
+        {
+            L"private: long " THISCALL_STR L" CDragDropHelper::_AddInfoToWindow(void)"
+        },
+        &CDragDropHelper__AddInfoToWindow_orig,
+        CDragDropHelper__AddInfoToWindow_hook,
+        false
+    },
     {
         { 
             L"GetDragImageMsg"
@@ -212,10 +200,4 @@ BOOL Wh_ModInit()
     }
 
     return TRUE;
-}
-
-// The mod is being unloaded, free all allocated resources.
-void Wh_ModUninit()
-{
-
 }
