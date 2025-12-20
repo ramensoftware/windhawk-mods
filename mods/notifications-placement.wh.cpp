@@ -2,7 +2,7 @@
 // @id              notifications-placement
 // @name            Customize Windows notifications placement
 // @description     Move notifications to another monitor or another corner of the screen
-// @version         1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lshcore
+// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -64,15 +64,32 @@ Only Windows 10 64-bit and Windows 11 are supported.
   - center: Center
 - verticalDistanceFromScreenEdge: 0
   $name: Distance from the bottom/top side of the screen
+- animationDirection: automatic
+  $name: Notification appearance animation direction
+  $options:
+  - automatic: Automatic
+  - fromLeft: From left
+  - fromRight: From right
+  - fromTop: From top
+  - fromBottom: From bottom
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
+#undef GetCurrentTime
+
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+
 #include <atomic>
+#include <functional>
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+using namespace winrt::Windows::UI::Xaml;
 
 std::atomic<bool> g_unloading;
 
@@ -88,6 +105,14 @@ enum class VerticalPlacement {
     center,
 };
 
+enum class AnimationDirection {
+    automatic,
+    fromLeft,
+    fromRight,
+    fromTop,
+    fromBottom,
+};
+
 struct {
     int monitor;
     WindhawkUtils::StringSetting monitorInterfaceName;
@@ -95,7 +120,19 @@ struct {
     int horizontalDistanceFromScreenEdge;
     VerticalPlacement verticalPlacement;
     int verticalDistanceFromScreenEdge;
+    AnimationDirection animationDirection;
 } g_settings;
+
+enum class Target {
+    Explorer,
+    ShellExperienceHost,
+};
+
+Target g_target;
+
+bool g_inCToastCenterExperienceManager_PositionView;
+
+bool g_customAnimationDirectionApplied;
 
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 typedef enum MONITOR_DPI_TYPE {
@@ -207,6 +244,40 @@ std::wstring GetProcessFileName(DWORD dwProcessId) {
     return processFileNameUpper;
 }
 
+FrameworkElement EnumChildElements(
+    FrameworkElement element,
+    std::function<bool(FrameworkElement)> enumCallback) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
+            continue;
+        }
+
+        if (enumCallback(child)) {
+            return child;
+        }
+    }
+
+    return nullptr;
+}
+
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
+    return EnumChildElements(element, [name](FrameworkElement child) {
+        return child.Name() == name;
+    });
+}
+
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                      PCWSTR className) {
+    return EnumChildElements(element, [className](FrameworkElement child) {
+        return winrt::get_class_name(child) == className;
+    });
+}
+
 bool IsTargetCoreWindow(HWND hWnd) {
     DWORD processId = 0;
     if (!hWnd || !GetWindowThreadProcessId(hWnd, &processId)) {
@@ -289,7 +360,7 @@ std::vector<HWND> GetCoreWindows() {
     std::vector<HWND> hWnds;
     ENUM_WINDOWS_PARAM param = {&hWnds};
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
 
             if (IsTargetCoreWindow(hWnd)) {
@@ -305,9 +376,6 @@ std::vector<HWND> GetCoreWindows() {
 
 void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     Wh_Log(L"Before: %dx%d %dx%d", *x, *y, *cx, *cy);
-
-    HMONITOR primaryMonitor =
-        MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
 
     HMONITOR srcMonitor = MonitorFromPoint({*x + *cx / 2, *y + *cy * 2},
                                            MONITOR_DEFAULTTONEAREST);
@@ -337,6 +405,9 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     }
 
     if (!destMonitor) {
+        HMONITOR primaryMonitor =
+            MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
+
         destMonitor = primaryMonitor;
     }
 
@@ -389,21 +460,6 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
         }
     }
 
-    if (destMonitor != primaryMonitor) {
-        UINT destMonitorDpiX = 96;
-        UINT destMonitorDpiY = 96;
-        GetDpiForMonitor(destMonitor, MDT_DEFAULT, &destMonitorDpiX,
-                         &destMonitorDpiY);
-
-        UINT primaryMonitorDpiX = 96;
-        UINT primaryMonitorDpiY = 96;
-        GetDpiForMonitor(primaryMonitor, MDT_DEFAULT, &primaryMonitorDpiX,
-                         &primaryMonitorDpiY);
-
-        *cx = MulDiv(*cx, destMonitorDpiX, primaryMonitorDpiX);
-        // *cy = MulDiv(*cy, destMonitorDpiY, primaryMonitorDpiY);
-    }
-
     switch (g_unloading ? HorizontalPlacement::right
                         : g_settings.horizontalPlacement) {
         case HorizontalPlacement::right:
@@ -443,6 +499,149 @@ void AdjustCoreWindowPos(int* x, int* y, int* cx, int* cy) {
     }
 
     Wh_Log(L"After: %dx%d %dx%d", *x, *y, *cx, *cy);
+}
+
+using CToastCenterExperienceManager_PositionView_t =
+    HRESULT(WINAPI*)(void* pThis);
+CToastCenterExperienceManager_PositionView_t
+    CToastCenterExperienceManager_PositionView_Original;
+HRESULT WINAPI CToastCenterExperienceManager_PositionView_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    g_inCToastCenterExperienceManager_PositionView = true;
+    HRESULT ret = CToastCenterExperienceManager_PositionView_Original(pThis);
+    g_inCToastCenterExperienceManager_PositionView = false;
+
+    return ret;
+}
+
+using MonitorFromPoint_t = decltype(&MonitorFromPoint);
+MonitorFromPoint_t MonitorFromPoint_Original;
+HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD dwFlags) {
+    Wh_Log(L">");
+
+    if (g_inCToastCenterExperienceManager_PositionView && !g_unloading &&
+        pt.x == 0 && pt.y == 0) {
+        HMONITOR monitor = nullptr;
+
+        if (*g_settings.monitorInterfaceName.get()) {
+            monitor = GetMonitorByInterfaceNameSubstr(
+                g_settings.monitorInterfaceName.get());
+        } else if (g_settings.monitor == 0) {
+            POINT cursorPt;
+            GetCursorPos(&cursorPt);
+            monitor =
+                MonitorFromPoint_Original(cursorPt, MONITOR_DEFAULTTONEAREST);
+        } else if (g_settings.monitor >= 1) {
+            monitor = GetMonitorById(g_settings.monitor - 1);
+        }
+
+        if (monitor) {
+            return monitor;
+        }
+    }
+
+    return MonitorFromPoint_Original(pt, dwFlags);
+}
+
+void UpdateAnimationDirectionStyle() {
+    int angle = 0;
+
+    switch (g_unloading ? AnimationDirection::fromRight
+                        : g_settings.animationDirection) {
+        case AnimationDirection::automatic:
+            if (g_settings.horizontalPlacement == HorizontalPlacement::center) {
+                if (g_settings.verticalPlacement == VerticalPlacement::bottom) {
+                    angle = 90;
+                } else {
+                    angle = -90;
+                }
+            } else if (g_settings.horizontalPlacement ==
+                       HorizontalPlacement::left) {
+                angle = 180;
+            }
+            break;
+
+        case AnimationDirection::fromLeft:
+            angle = 180;
+            break;
+
+        case AnimationDirection::fromRight:
+            break;
+
+        case AnimationDirection::fromTop:
+            angle = 90;
+            break;
+
+        case AnimationDirection::fromBottom:
+            angle = -90;
+            break;
+    }
+
+    if (!g_customAnimationDirectionApplied && !angle) {
+        return;
+    }
+
+    auto window = Window::Current();
+    if (!window) {
+        Wh_Log(L"Failed to get current window");
+        return;
+    }
+
+    FrameworkElement windowContent = window.Content().as<FrameworkElement>();
+    if (!windowContent) {
+        Wh_Log(L"Failed to get window content");
+        return;
+    }
+
+    FrameworkElement launcherFrame = nullptr;
+
+    FrameworkElement child = windowContent;
+    if ((child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.ContentPresenter")) &&
+        (child =
+             FindChildByClassName(child, L"ActionCenter.ToastCenterPage")) &&
+        (child = FindChildByName(child, L"ToastCenterMainGrid")) &&
+        (child = FindChildByName(child, L"ToastCenterView")) &&
+        (child = FindChildByName(child, L"ToastCenterScrollViewer")) &&
+        (child = FindChildByName(child, L"Root")) &&
+        (child =
+             FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid")) &&
+        (child = FindChildByName(child, L"ScrollContentPresenter")) &&
+        (child = FindChildByName(child, L"ToastCenterGrid"))) {
+        launcherFrame = child;
+    }
+
+    if (!launcherFrame) {
+        Wh_Log(L"Failed to find launcher frame");
+        return;
+    }
+
+    FrameworkElement rootGridContent = nullptr;
+    child = launcherFrame;
+    if ((child = FindChildByName(child, L"FlexibleNormalToastView")) &&
+        (child = FindChildByName(child, L"MainGrid")) &&
+        (child = FindChildByName(child, L"RevealGrid2"))) {
+        rootGridContent = child;
+    }
+
+    if (!rootGridContent) {
+        Wh_Log(L"Failed to find root grid content");
+        return;
+    }
+
+    Media::RotateTransform transform;
+    transform.Angle(angle);
+    launcherFrame.RenderTransform(transform);
+    Media::RotateTransform transform2;
+    transform2.Angle(-angle);
+    rootGridContent.RenderTransform(transform2);
+
+    auto origin = winrt::Windows::Foundation::Point{0.5, 0.5};
+    launcherFrame.RenderTransformOrigin(origin);
+    rootGridContent.RenderTransformOrigin(origin);
+
+    g_customAnimationDirectionApplied = (angle != 0);
 }
 
 using SetWindowPos_t = decltype(&SetWindowPos);
@@ -489,14 +688,20 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
 
     AdjustCoreWindowPos(&X, &Y, &cx, &cy);
 
-    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
-}
+    BOOL ret =
+        SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 
-void ApplySettings() {
-    if (!GetModuleHandle(L"ShellExperienceHost.exe")) {
-        return;
+    if (g_target == Target::ShellExperienceHost &&
+        GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
+        UpdateAnimationDirectionStyle();
     }
 
+    return ret;
+}
+
+namespace ShellExperienceHost {
+
+void ApplySettings() {
     for (HWND hCoreWnd : GetCoreWindows()) {
         Wh_Log(L"Adjusting core window %08X", (DWORD)(ULONG_PTR)hCoreWnd);
 
@@ -515,6 +720,33 @@ void ApplySettings() {
         SetWindowPos_Original(hCoreWnd, nullptr, x, y, cx, cy,
                               SWP_NOZORDER | SWP_NOACTIVATE);
     }
+}
+
+}  // namespace ShellExperienceHost
+
+bool HookTwinuiPcshellSymbols() {
+    HMODULE module = LoadLibraryEx(L"twinui.pcshell.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Loading twinui.pcshell.dll failed");
+        return false;
+    }
+
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(private: long __cdecl CToastCenterExperienceManager::PositionView(void))"},
+            &CToastCenterExperienceManager_PositionView_Original,
+            CToastCenterExperienceManager_PositionView_Hook,
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
 void LoadSettings() {
@@ -545,6 +777,19 @@ void LoadSettings() {
 
     g_settings.verticalDistanceFromScreenEdge =
         Wh_GetIntSetting(L"verticalDistanceFromScreenEdge");
+
+    PCWSTR animationDirection = Wh_GetStringSetting(L"animationDirection");
+    g_settings.animationDirection = AnimationDirection::automatic;
+    if (wcscmp(animationDirection, L"fromLeft") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromLeft;
+    } else if (wcscmp(animationDirection, L"fromRight") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromRight;
+    } else if (wcscmp(animationDirection, L"fromTop") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromTop;
+    } else if (wcscmp(animationDirection, L"fromBottom") == 0) {
+        g_settings.animationDirection = AnimationDirection::fromBottom;
+    }
+    Wh_FreeStringSetting(animationDirection);
 }
 
 BOOL Wh_ModInit() {
@@ -552,8 +797,40 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook,
-                       (void**)&SetWindowPos_Original);
+    g_target = Target::Explorer;
+
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+        case 0:
+        case ARRAYSIZE(moduleFilePath):
+            Wh_Log(L"GetModuleFileName failed");
+            break;
+
+        default:
+            if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
+                moduleFileName++;
+                if (_wcsicmp(moduleFileName, L"ShellExperienceHost.exe") == 0) {
+                    g_target = Target::ShellExperienceHost;
+                }
+            } else {
+                Wh_Log(L"GetModuleFileName returned an unsupported path");
+            }
+            break;
+    }
+
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
+                                   &SetWindowPos_Original);
+
+    if (g_target == Target::Explorer) {
+        if (!HookTwinuiPcshellSymbols()) {
+            return FALSE;
+        }
+
+        WindhawkUtils::Wh_SetFunctionHookT(MonitorFromPoint,
+                                           MonitorFromPoint_Hook,
+                                           &MonitorFromPoint_Original);
+    }
 
     return TRUE;
 }
@@ -561,7 +838,9 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    ApplySettings();
+    if (g_target == Target::ShellExperienceHost) {
+        ShellExperienceHost::ApplySettings();
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -569,7 +848,9 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    ApplySettings();
+    if (g_target == Target::ShellExperienceHost) {
+        ShellExperienceHost::ApplySettings();
+    }
 }
 
 void Wh_ModUninit() {
@@ -581,5 +862,7 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    ApplySettings();
+    if (g_target == Target::ShellExperienceHost) {
+        ShellExperienceHost::ApplySettings();
+    }
 }
