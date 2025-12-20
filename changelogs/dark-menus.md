@@ -1,3 +1,8 @@
+## 1.3.3 ([Dec 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5af46458a081fc5d471092dc08018f377125d915/mods/dark-menus.wh.cpp))
+
+- Fixed: Input Director v2.3 (https://github.com/MGGSK/DarkMenus/issues/16)
+- Fixed: Black screen/Rendering failure in Electron apps (Jellyfin, RStudio) due to GDI painting conflict (https://github.com/MGGSK/DarkMenus/issues/14)
+
 ## 1.3.2 ([Dec 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3dbcdc2e02dfec61723b97eeb3d9300523e759f4/mods/dark-menus.wh.cpp))
 
 - A better fix for https://github.com/MGGSK/DarkMenus/issues/9

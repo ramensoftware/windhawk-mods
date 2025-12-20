@@ -1853,7 +1853,7 @@
                     174
                 ],
                 "ratingUsers": 201,
-                "updated": 1765136241000,
+                "updated": 1766266688000,
                 "users": 27054
             },
             "metadata": {
@@ -1865,7 +1865,7 @@
                     "*"
                 ],
                 "name": "Dark mode context menus",
-                "version": "1.3.2"
+                "version": "1.3.3"
             }
         },
         "dark-theme-browser-colors-fix": {
@@ -4742,7 +4742,7 @@
                     92
                 ],
                 "ratingUsers": 103,
-                "updated": 1735666754000,
+                "updated": 1766266742000,
                 "users": 8485
             },
             "metadata": {
@@ -4750,7 +4750,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-DWINVER=0x0A00 -lshcore",
+                "compilerOptions": "-DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -lshcore",
                 "description": "Move notifications to another monitor or another corner of the screen",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -4760,7 +4760,7 @@
                 ],
                 "name": "Customize Windows notifications placement",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "office-ui-reverter": {

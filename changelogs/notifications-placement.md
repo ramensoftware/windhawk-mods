@@ -1,3 +1,8 @@
+## 1.2 ([Dec 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/1748376b3e34dedbc9f685ce8c5804ba5aec7bd7/mods/notifications-placement.wh.cpp))
+
+* Added an option to control the notification appearance animation direction.
+* Fixed the notification content being cut off if the DPI of the target monitor is different than the primary monitor.
+
 ## 1.1 ([Dec 31, 2024](https://github.com/ramensoftware/windhawk-mods/blob/d8232bbf9fd4b173e4848587d1b9604acc359453/mods/notifications-placement.wh.cpp))
 
 * Added the "Monitor interface name" option which can be used instead of the monitor number. Can be useful if the monitor numbers change often.

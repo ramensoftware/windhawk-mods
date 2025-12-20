@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-20T20:36:53.000Z</updated>
+    <updated>2025-12-20T21:39:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Customize Windows notifications placement 1.2]]></title>
+        <id>https://windhawk.net/mods/notifications-placement#1748376b3e34dedbc9f685ce8c5804ba5aec7bd7</id>
+        <link href="https://windhawk.net/mods/notifications-placement"/>
+        <updated>2025-12-20T21:39:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to control the notification appearance animation direction.</li>
+<li>Fixed the notification content being cut off if the DPI of the target monitor is different than the primary monitor.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.3.3]]></title>
+        <id>https://windhawk.net/mods/dark-menus#5af46458a081fc5d471092dc08018f377125d915</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2025-12-20T21:38:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: Input Director v2.3 (https://github.com/MGGSK/DarkMenus/issues/16)</li>
+<li>Fixed: Black screen/Rendering failure in Electron apps (Jellyfin, RStudio) due to GDI painting conflict (https://github.com/MGGSK/DarkMenus/issues/14)</li>
+</ul>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer Drag/Drop 1.1]]></title>
         <id>https://windhawk.net/mods/classic-explorer-dragdrop#707610439857bfad6e1a83486ee595bf0f67f540</id>
@@ -293,39 +321,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <author>
             <name>u2x1</name>
             <uri>https://github.com/u2x1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Status Bar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-statusbar#dd5108480299a5dcf0fc4499376bde508fa5440e</id>
-        <link href="https://windhawk.net/mods/classic-explorer-statusbar"/>
-        <updated>2025-12-08T20:28:07.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicexplorerstatusbar">Classic Explorer Status Bar</h1>
-<p>This mod adds a classic status bar to Windows Explorer, showing:</p>
-<ul>
-<li>Item count / selection count</li>
-<li>Free disk space</li>
-<li>Total size of selected files</li>
-</ul>
-<p><img src="https://i.imgur.com/65uw69r.png" alt="Screenshot" /></p>
-<p>This is an alternative to the status bar from Classic Explorer from Open-Shell project.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.3.2]]></title>
-        <id>https://windhawk.net/mods/dark-menus#3dbcdc2e02dfec61723b97eeb3d9300523e759f4</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2025-12-07T19:37:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>A better fix for https://github.com/MGGSK/DarkMenus/issues/9</li>
-<li>Code cleanup</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>
