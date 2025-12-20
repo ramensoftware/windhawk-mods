@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-20T17:03:04.000Z</updated>
+    <updated>2025-12-20T20:36:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer Drag/Drop 1.1]]></title>
+        <id>https://windhawk.net/mods/classic-explorer-dragdrop#707610439857bfad6e1a83486ee595bf0f67f540</id>
+        <link href="https://windhawk.net/mods/classic-explorer-dragdrop"/>
+        <updated>2025-12-20T20:36:53.000Z</updated>
+        <content type="html"><![CDATA[<p>Refactor and bug fixes</p>]]></content>
+        <author>
+            <name>Isabella Lulamoon (kawapure)</name>
+            <uri>https://github.com/kawapure</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.6]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#de4cfd5ea752b671743eb99a1dd9abeba39e413f</id>
@@ -315,17 +326,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[F1 Blocker 0.0.3]]></title>
-        <id>https://windhawk.net/mods/f1-blocker#c5efece242fd748f8c1aaaedcd7ce7cf1f43174a</id>
-        <link href="https://windhawk.net/mods/f1-blocker"/>
-        <updated>2025-12-06T20:26:32.000Z</updated>
-        <content type="html"><![CDATA[<p>Support more programs by default &amp; block HelpPane as fallback</p>]]></content>
-        <author>
-            <name>d0gkiller87</name>
-            <uri>https://github.com/d0gkiller87</uri>
         </author>
     </entry>
 </feed>

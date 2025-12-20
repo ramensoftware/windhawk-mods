@@ -842,7 +842,7 @@
                     0
                 ],
                 "ratingUsers": 1,
-                "updated": 1753336035000,
+                "updated": 1766263013000,
                 "users": 156
             },
             "metadata": {
@@ -855,7 +855,7 @@
                 ],
                 "name": "Classic Explorer Drag/Drop",
                 "twitter": "https://twitter.com/kawaipure",
-                "version": "1.0"
+                "version": "1.1"
             }
         },
         "classic-explorer-dragdrop-lite": {
