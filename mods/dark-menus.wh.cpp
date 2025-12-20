@@ -272,9 +272,15 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 decltype(&SetMenuInfo) SetMenuInfo_Original;
 WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
 {
-    LPMENUINFO lpMenuInfo = const_cast<LPMENUINFO>(lpInfo);
-    lpMenuInfo->hbrBack = nullptr; //Disable custom menu backgrounds because they are broken in dark mode. (See https://github.com/MGGSK/DarkMenus/issues/16)
-    return SetMenuInfo_Original(hMenu, lpInfo);
+    //Disable custom menu backgrounds because they are broken in dark mode. (See https://github.com/MGGSK/DarkMenus/issues/16)
+    alignas(MENUINFO) BYTE buffer[256];
+    if (!(lpInfo->fMask & MIM_BACKGROUND) || lpInfo->cbSize > sizeof(buffer))
+        return SetMenuInfo_Original(hMenu, lpInfo);
+
+    memcpy(buffer, lpInfo, lpInfo->cbSize);
+    LPMENUINFO pCopy = reinterpret_cast<LPMENUINFO>(buffer);
+    pCopy->fMask &= ~MIM_BACKGROUND;
+    return SetMenuInfo_Original(hMenu, pCopy);
 }
 
 //Applies the theme to all menus.
