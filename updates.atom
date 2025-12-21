@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-20T21:39:02.000Z</updated>
+    <updated>2025-12-21T08:23:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.3.4]]></title>
+        <id>https://windhawk.net/mods/dark-menus#334e79cea972761014dadc9cc0b5118eb18d0521</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2025-12-21T08:23:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: Outline in right click menu (https://github.com/MGGSK/DarkMenus/issues/17)</li>
+</ul>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Customize Windows notifications placement 1.2]]></title>
         <id>https://windhawk.net/mods/notifications-placement#1748376b3e34dedbc9f685ce8c5804ba5aec7bd7</id>
@@ -308,19 +321,6 @@ One example is when running SPICE’s vdagent (Windows VM on Linux).</p>
         <author>
             <name>Nikita</name>
             <uri>https://github.com/nikital</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#835cd298a06d12ab8373c6e07f94db05b2e1c536</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2025-12-09T12:50:43.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="virtualdesktopmovewindow">Virtual Desktop Move Window</h1>
-<p>This mod allows you to go to a specific virtual desktop and move the active window to a specific virtual desktop using hotkeys.</p>
-<p>Based on VD.ahk by FuPeiJiang.</p>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>

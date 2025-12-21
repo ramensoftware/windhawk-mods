@@ -1,3 +1,7 @@
+## 1.3.4 ([Dec 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/334e79cea972761014dadc9cc0b5118eb18d0521/mods/dark-menus.wh.cpp))
+
+- Fixed: Outline in right click menu (https://github.com/MGGSK/DarkMenus/issues/17)
+
 ## 1.3.3 ([Dec 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/5af46458a081fc5d471092dc08018f377125d915/mods/dark-menus.wh.cpp))
 
 - Fixed: Input Director v2.3 (https://github.com/MGGSK/DarkMenus/issues/16)
