@@ -2606,7 +2606,7 @@ void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1
     }
     if (shallNotify)
     {
-        SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100, NULL);
     }
 }
 
@@ -2787,7 +2787,7 @@ void ToggleTaskbarAlignment()
     if (SetTaskbarAlignment(newAlignment))
     {
         // Notify all applications of the change
-        SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100, NULL);
     }
 }
 
