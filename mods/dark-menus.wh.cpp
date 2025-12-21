@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.3.3
+// @version           1.3.4
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
@@ -59,7 +59,7 @@ The code for dark menubars is based on [win32-darkmode](https://github.com/adzm/
 
 const COLORREF crItemForeground = 0xFFFFFF;
 const COLORREF crItemDisabled = 0xAAAAAA;
-const HBRUSH brBackground = CreateSolidBrush(0x262626);
+const HBRUSH brBackground = CreateSolidBrush(0x2c2c2c);
 const HBRUSH brItemBackgroundHot = CreateSolidBrush(0x353535);
 const HBRUSH brItemBackgroundSelected = CreateSolidBrush(0x454545);
 
@@ -279,7 +279,7 @@ WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
 
     memcpy(buffer, lpInfo, lpInfo->cbSize);
     LPMENUINFO pCopy = reinterpret_cast<LPMENUINFO>(buffer);
-    pCopy->fMask &= ~MIM_BACKGROUND;
+    pCopy->hbrBack = brBackground;
     return SetMenuInfo_Original(hMenu, pCopy);
 }
 
