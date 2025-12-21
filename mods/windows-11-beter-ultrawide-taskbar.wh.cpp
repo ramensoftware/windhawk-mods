@@ -2,13 +2,18 @@
 // @id              windows-11-beter-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers the taskbar and system tray as a single unit
-// @version         1.0
+// @version         1.1
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -Wl,--export-all-symbols
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
 
 // ==WindhawkModReadme==
 /*
@@ -29,18 +34,22 @@ The centering is calculated based on the combined width of both elements.
 - **Gap**: Add spacing between taskbar buttons and system tray
 - **Maximum taskbar width**: Limit the taskbar buttons area width
 
+Center Mode (System Taskbar Alignment set to Center):
+![Center Mode with System Taskbar Alignment set to Center](https://i.imgur.com/j8a5deC.png)
+
 ### Offset Only Mode
 Only shifts the system tray by a fixed offset, reducing the taskbar width to
 allow the system tray to overlap into the taskbar area. The taskbar buttons
 remain in their original position.
 
+Offset Mode (System Taskbar Alignment set to Center):
+![Offset Mode with System Taskbar Alignment set to Center](https://i.imgur.com/DfhNDc4.png)
+
+Offset Mode (System Taskbar Alignment set to Left):
+![Offset Mode with System Taskbar Alignment set to Left](https://i.imgur.com/LZdzlka.png)
+
 **Settings:**
 - **Offset value**: How many pixels to shift the system tray left
-
-## Common Settings
-
-- **Animation duration**: Smooth transition animation when repositioning
-  (set to 0 to disable)
 
 ## Multi-Monitor Support
 
@@ -82,837 +91,581 @@ Secondary monitor taskbars are not affected.
         The maximum width (in pixels) for the taskbar buttons area. This sets the
         Width property on TaskbarFrame directly, leveraging native XAML layout.
         Set to 0 to disable (no maximum).
-- animationDuration: 200
-  $name: Animation duration (ms)
-  $description: >-
-    Duration of the transition animation in milliseconds when the taskbar
-    repositions. Set to 0 to disable animation (instant repositioning).
 */
 // ==/WindhawkModSettings==
 
-#include <xamlom.h>
+#include <windhawk_utils.h>
 
 #include <atomic>
+#include <functional>
 #include <limits>
-#include <unordered_map>
-#include <vector>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.Media.Animation.h>
+#include <winrt/Windows.UI.Xaml.h>
 
-std::atomic<bool> g_initialized;
-thread_local bool g_initializedForThread;
+using namespace winrt::Windows::UI::Xaml;
 
 // Settings
-struct {
-    bool offsetOnlyMode;   // false = Center mode, true = Offset only mode
-    int offsetValue;       // Offset value for offset only mode
+struct
+{
+    bool offsetOnlyMode;
+    int offsetValue;
     int minTotalWidth;
     int gap;
     int maxTotalWidth;
-    int animationDuration;
 } g_settings;
 
-// Element tracking info
-struct ElementInfo {
-    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> element;
-    winrt::event_token sizeChangedToken;
-    bool isTaskbarFrame;  // true = TaskbarFrame, false = SystemTrayFrame
-    winrt::Windows::UI::Xaml::HorizontalAlignment originalAlignment;  // Store original alignment for restoration
-    double originalWidth;  // Store original width for TaskbarFrame (NaN means auto)
-};
+std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_unloading;
 
-// Store references to elements we've customized
-thread_local std::unordered_map<InstanceHandle, ElementInfo> g_customizedElements;
+// Store original taskbar frame width for offset mode
+double g_originalTaskbarFrameWidth = 0;
 
-// Track taskbar child elements (all direct children of TaskbarFrameRepeater)
-struct TaskbarChildInfo {
-    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> element;
-    winrt::event_token sizeChangedToken;
-    double lastWidth;
-};
-thread_local std::unordered_map<InstanceHandle, TaskbarChildInfo> g_taskbarChildren;
+// Event token for LayoutUpdated handler (used for deferred width capture)
+winrt::event_token g_layoutUpdatedToken{};
 
-// Track previous count for change detection
-thread_local size_t g_lastTaskbarChildCount = 0;
+// Weak reference to taskbar frame for deferred width capture
+winrt::weak_ref<FrameworkElement> g_taskbarFrameWeakRef;
 
-// References to main frames for centering
-thread_local winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> g_taskbarFrame;
-thread_local winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> g_systemTrayFrame;
+// XamlRoot weak reference for applying style after width capture
+winrt::weak_ref<XamlRoot> g_pendingXamlRootWeakRef;
 
-// Track original taskbar frame width for shift mode (before any modifications)
-thread_local double g_originalTaskbarFrameWidth = 0;
+HWND FindCurrentProcessTaskbarWnd()
+{
+    HWND hTaskbarWnd = nullptr;
 
-// Calculate total width of all taskbar children
-// Only counts elements with CanBeScrollAnchor=true (actual visible buttons)
-double CalculateTotalTaskbarWidth() {
-    double totalWidth = 0;
-    for (auto& [handle, info] : g_taskbarChildren) {
-        if (auto elem = info.element.get()) {
-            // Only count elements that can be scroll anchors (actual visible buttons)
-            // Elements with CanBeScrollAnchor=false are invisible placeholders
-            try {
-                if (elem.CanBeScrollAnchor()) {
-                    totalWidth += elem.ActualWidth();
-                }
-            } catch (...) {
-                // Fallback: count all elements if property access fails
-                totalWidth += elem.ActualWidth();
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL
+        {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0)
+            {
+                *reinterpret_cast<HWND *>(lParam) = hWnd;
+                return FALSE;
             }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+FrameworkElement EnumChildElements(
+    FrameworkElement element,
+    std::function<bool(FrameworkElement)> enumCallback)
+{
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+
+    for (int i = 0; i < childrenCount; i++)
+    {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child)
+        {
+            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
+            continue;
+        }
+
+        if (enumCallback(child))
+        {
+            return child;
         }
     }
+
+    return nullptr;
+}
+
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name)
+{
+    return EnumChildElements(element, [name](FrameworkElement child)
+                             { return child.Name() == name; });
+}
+
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                      PCWSTR className)
+{
+    return EnumChildElements(element, [className](FrameworkElement child)
+                             { return winrt::get_class_name(child) == className; });
+}
+
+// Calculate total width of visible taskbar buttons
+double CalculateTaskbarButtonsWidth(FrameworkElement taskbarFrameRepeater)
+{
+    double totalWidth = 0;
+
+    EnumChildElements(taskbarFrameRepeater, [&totalWidth](FrameworkElement child)
+                      {
+                          try
+                          {
+                              // Only count elements that can be scroll anchors (actual visible buttons)
+                              if (child.CanBeScrollAnchor())
+                              {
+                                  totalWidth += child.ActualWidth();
+                              }
+}
+catch (...)
+{
+                              // Fallback: count all elements if property access fails
+                              totalWidth += child.ActualWidth();
+                          }
+                          return false; // Continue enumeration
+                      });
+
     return totalWidth;
 }
 
-// Forward declarations
-void ApplyTransformOffset(winrt::Windows::UI::Xaml::FrameworkElement element, double offsetX);
-void ActionOnTaskbarChanges();
-
-void ApplyCustomizations(InstanceHandle handle,
-                         winrt::Windows::UI::Xaml::FrameworkElement element,
-                         PCWSTR fallbackClassName);
-void CleanupCustomizations(InstanceHandle handle);
-
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module)) {
-        return nullptr;
-    }
-
-    return module;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// clang-format off
-
-#pragma region winrt_hpp
-
-#include <Unknwn.h>
-#include <winrt/base.h>
-
-// forward declare namespaces we alias
-namespace winrt {
-    namespace Windows {
-        namespace Foundation {}
-        namespace UI::Xaml {}
-    }
-}
-
-// alias some long namespaces for convenience
-namespace wf = winrt::Windows::Foundation;
-namespace wux = winrt::Windows::UI::Xaml;
-namespace wuxm = winrt::Windows::UI::Xaml::Media;
-namespace wuxma = winrt::Windows::UI::Xaml::Media::Animation;
-
-#pragma endregion  // winrt_hpp
-
-#pragma region visualtreewatcher_hpp
-
-class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile>
+// Apply a TranslateTransform to visually offset an element
+void ApplyTransformOffset(FrameworkElement element, double offsetX)
 {
-public:
-    VisualTreeWatcher(winrt::com_ptr<IUnknown> site);
-
-    VisualTreeWatcher(const VisualTreeWatcher&) = delete;
-    VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
-
-    VisualTreeWatcher(VisualTreeWatcher&&) = delete;
-    VisualTreeWatcher& operator=(VisualTreeWatcher&&) = delete;
-
-    ~VisualTreeWatcher();
-
-    void UnadviseVisualTreeChange();
-
-private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation relation, VisualElement element, VisualMutationType mutationType) override;
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle element, VisualElementState elementState, LPCWSTR context) noexcept override;
-
-    wf::IInspectable FromHandle(InstanceHandle handle)
+    try
     {
-        wf::IInspectable obj;
-        winrt::check_hresult(m_XamlDiagnostics->GetIInspectableFromHandle(handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(obj))));
-        return obj;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
-};
-
-#pragma endregion  // visualtreewatcher_hpp
-
-#pragma region visualtreewatcher_cpp
-
-VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) :
-    m_XamlDiagnostics(site.as<IXamlDiagnostics>())
-{
-    Wh_Log(L"Constructing VisualTreeWatcher");
-
-    // Calling AdviseVisualTreeChange from the current thread causes the app to
-    // hang in Advising::RunOnUIThread sometimes. Creating a new thread and
-    // calling it from there fixes it.
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID lpParam) -> DWORD {
-            auto watcher = reinterpret_cast<VisualTreeWatcher*>(lpParam);
-            HRESULT hr = watcher->m_XamlDiagnostics.as<IVisualTreeService3>()->AdviseVisualTreeChange(watcher);
-            watcher->Release();
-            if (FAILED(hr)) {
-                Wh_Log(L"Error %08X", hr);
-            }
-            return 0;
-        },
-        this, 0, nullptr);
-    if (thread) {
-        AddRef();
-        CloseHandle(thread);
-    }
-}
-
-VisualTreeWatcher::~VisualTreeWatcher()
-{
-    Wh_Log(L"Destructing VisualTreeWatcher");
-}
-
-void VisualTreeWatcher::UnadviseVisualTreeChange()
-{
-    Wh_Log(L"UnadviseVisualTreeChange VisualTreeWatcher");
-    winrt::check_hresult(m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this));
-}
-
-HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation, VisualElement element, VisualMutationType mutationType) try
-{
-    if (!g_initializedForThread) {
-        return S_OK;
-    }
-
-    switch (mutationType)
-    {
-    case Add:
+        // Get or create the TranslateTransform
+        Media::TranslateTransform transform{nullptr};
+        auto existingTransform = element.RenderTransform();
+        if (auto tt = existingTransform.try_as<Media::TranslateTransform>())
         {
-            const auto inspectable = FromHandle(element.Handle);
-            auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
-            if (frameworkElement)
-            {
-                ApplyCustomizations(element.Handle, frameworkElement, element.Type);
-            }
-        }
-        break;
-
-    case Remove:
-        CleanupCustomizations(element.Handle);
-        break;
-    }
-
-    return S_OK;
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return S_OK;
-}
-
-HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementState, LPCWSTR) noexcept
-{
-    return S_OK;
-}
-
-#pragma endregion  // visualtreewatcher_cpp
-
-#pragma region tap_hpp
-
-#include <ocidl.h>
-
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-// {D6E7B2A1-9C3F-4E8A-B5D2-1A2B3C4D5E6F}
-static constexpr CLSID CLSID_WindhawkTAP = { 0xd6e7b2a1, 0x9c3f, 0x4e8a, { 0xb5, 0xd2, 0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f } };
-
-class WindhawkTAP : public winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile>
-{
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown *pUnkSite) override;
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void **ppvSite) noexcept override;
-
-private:
-    winrt::com_ptr<IUnknown> site;
-};
-
-#pragma endregion  // tap_hpp
-
-#pragma region tap_cpp
-
-HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite) try
-{
-    // Only ever 1 VTW at once.
-    if (g_visualTreeWatcher)
-    {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
-
-    site.copy_from(pUnkSite);
-
-    if (site)
-    {
-        // Decrease refcount increased by InitializeXamlDiagnosticsEx.
-        FreeLibrary(GetCurrentModuleHandle());
-
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
-    }
-
-    return S_OK;
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
-}
-
-HRESULT WindhawkTAP::GetSite(REFIID riid, void **ppvSite) noexcept
-{
-    return site.as(riid, ppvSite);
-}
-
-#pragma endregion  // tap_cpp
-
-#pragma region simplefactory_hpp
-
-#include <Unknwn.h>
-
-template<class T>
-struct SimpleFactory : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile>
-{
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppvObject) override try
-    {
-        if (!pUnkOuter)
-        {
-            *ppvObject = nullptr;
-            return winrt::make<T>().as(riid, ppvObject);
+            transform = tt;
         }
         else
         {
-            return CLASS_E_NOAGGREGATION;
-        }
-    }
-    catch (...)
-    {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
-        return hr;
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override
-    {
-        return S_OK;
-    }
-};
-
-#pragma endregion  // simplefactory_hpp
-
-#pragma region module_cpp
-
-#include <combaseapi.h>
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-__declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) try
-{
-    if (rclsid == CLSID_WindhawkTAP)
-    {
-        *ppv = nullptr;
-        return winrt::make<SimpleFactory<WindhawkTAP>>().as(riid, ppv);
-    }
-    else
-    {
-        return CLASS_E_CLASSNOTAVAILABLE;
-    }
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
-}
-
-__declspec(dllexport)
-_Use_decl_annotations_ STDAPI DllCanUnloadNow(void)
-{
-    if (winrt::get_module_lock())
-    {
-        return S_FALSE;
-    }
-
-    return S_OK;
-}
-
-#pragma clang diagnostic pop
-
-#pragma endregion  // module_cpp
-
-#pragma region api_cpp
-
-HRESULT InjectWindhawkTAP() noexcept
-{
-    HMODULE module = GetCurrentModuleHandle();
-    if (!module) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    WCHAR location[MAX_PATH];
-    switch (GetModuleFileName(module, location, ARRAYSIZE(location))) {
-    case 0:
-    case ARRAYSIZE(location):
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const HMODULE wux(LoadLibraryEx(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32));
-    if (!wux) [[unlikely]]
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const auto pInitializeXamlDiagnosticsEx = reinterpret_cast<decltype(&InitializeXamlDiagnosticsEx)>(GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
-    if (!pInitializeXamlDiagnosticsEx) [[unlikely]]
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const HRESULT hr2 = pInitializeXamlDiagnosticsEx(L"VisualDiagConnection1", GetCurrentProcessId(), nullptr, location, CLSID_WindhawkTAP, nullptr);
-    if (FAILED(hr2)) [[unlikely]]
-    {
-        return hr2;
-    }
-
-    return S_OK;
-}
-
-#pragma endregion  // api_cpp
-
-// clang-format on
-////////////////////////////////////////////////////////////////////////////////
-
-void ApplyTransformOffset(wux::FrameworkElement element, double offsetX) {
-    try {
-        // Get or create the TranslateTransform
-        wuxm::TranslateTransform transform{nullptr};
-        auto existingTransform = element.RenderTransform();
-        if (auto tt = existingTransform.try_as<wuxm::TranslateTransform>()) {
-            transform = tt;
-        } else {
-            transform = wuxm::TranslateTransform();
+            transform = Media::TranslateTransform();
             transform.Y(0);
             element.RenderTransform(transform);
         }
-        
-        // Skip if already at target position
-        if (transform.X() == offsetX) {
-            return;
-        }
-        
-        // If animation is disabled, set directly
-        if (g_settings.animationDuration <= 0) {
-            transform.X(offsetX);
-            return;
-        }
-        
-        // Create animation
-        wuxma::DoubleAnimation animation;
-        animation.To(offsetX);
-        animation.Duration(wux::DurationHelper::FromTimeSpan(
-            std::chrono::milliseconds(g_settings.animationDuration)));
-        
-        // Add easing function for smooth animation
-        wuxma::QuadraticEase easing;
-        easing.EasingMode(wuxma::EasingMode::EaseOut);
-        animation.EasingFunction(easing);
-        
-        // Create and configure storyboard
-        wuxma::Storyboard storyboard;
-        storyboard.Children().Append(animation);
-        wuxma::Storyboard::SetTarget(animation, transform);
-        wuxma::Storyboard::SetTargetProperty(animation, L"X");
-        
-        // Start animation
-        storyboard.Begin();
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Error applying transform %08X: %s", ex.code(), ex.message().c_str());
+
+        transform.X(offsetX);
+    }
+    catch (winrt::hresult_error const &ex)
+    {
+        Wh_Log(L"Error applying transform %08X: %s", ex.code().value, ex.message().c_str());
     }
 }
 
-void ActionOnTaskbarChanges() {
-    size_t currentCount = g_taskbarChildren.size();
-    double totalWidth = CalculateTotalTaskbarWidth();
-    
-    // Log count change if it happened
-    if (currentCount != g_lastTaskbarChildCount) {
-        Wh_Log(L"Taskbar child count changed: %zu -> %zu", g_lastTaskbarChildCount, currentCount);
-        g_lastTaskbarChildCount = currentCount;
-    }
-    
-    Wh_Log(L"Taskbar total width: %f (from %zu children)", totalWidth, currentCount);
-    
-    // Get frame references
-    auto taskbarFrame = g_taskbarFrame.get();
-    auto systemTrayFrame = g_systemTrayFrame.get();
-    
-    if (!taskbarFrame || !systemTrayFrame) {
-        return;
-    }
-    
-    if (g_settings.offsetOnlyMode) {
-        // Offset only mode: Only apply offset to system tray, reduce taskbar width for overlap
-        double offsetValue = static_cast<double>(g_settings.offsetValue);
-        
-        // Use original width as base (captured when TaskbarFrame was first found)
-        // This prevents compounding width reductions on repeated calls
-        double baseWidth = g_originalTaskbarFrameWidth;
-        if (baseWidth <= 0) {
-            // Fallback: capture current width as original if not set
-            baseWidth = taskbarFrame.ActualWidth();
-            g_originalTaskbarFrameWidth = baseWidth;
-        }
-        
-        // Reduce taskbar width by 2*offset to allow system tray to overlap
-        double newTaskbarWidth = baseWidth - (2.0 * offsetValue);
-        if (newTaskbarWidth > 0) {
-            taskbarFrame.Width(newTaskbarWidth);
-        }
-        
-        // Apply offset only to system tray (shift left into taskbar area)
-        ApplyTransformOffset(taskbarFrame, 0);  // No offset for taskbar
-        ApplyTransformOffset(systemTrayFrame, -offsetValue);  // Shift system tray left
-        
-        Wh_Log(L"Offset only mode: SystemTray offset=%f, TaskbarFrame width=%f (base=%f)", 
-               -offsetValue, newTaskbarWidth, baseWidth);
-    } else {
-        // Center mode: Original behavior - center both as a single unit
-        double systemTrayWidth = systemTrayFrame.ActualWidth();
-        double halfGap = g_settings.gap / 2.0;
-        
-        // Apply minimum total width setting
-        double effectiveTotalWidth = totalWidth + systemTrayWidth;
-        if (g_settings.minTotalWidth > 0 && effectiveTotalWidth < g_settings.minTotalWidth) {
-            // Distribute the extra width evenly to both sides
-            halfGap = (g_settings.minTotalWidth - effectiveTotalWidth) / 2.0;
-        }
-        
-        // Calculate offsets for centering both as a single unit:
-        double taskbarOffset = -systemTrayWidth / 2.0 - halfGap;
-        double systemTrayOffset = totalWidth / 2.0 + halfGap;
-        
-        Wh_Log(L"Center mode: TaskbarFrame=%f, SystemTrayFrame=%f (gap=%d)", 
-               taskbarOffset, systemTrayOffset, g_settings.gap);
-        
-        ApplyTransformOffset(taskbarFrame, taskbarOffset);
-        ApplyTransformOffset(systemTrayFrame, systemTrayOffset);
-    }
+// Helper function to reset taskbar state to defaults
+// Used both for unloading and for cleaning up previous mode state
+void ResetTaskbarState(FrameworkElement taskbarFrame, FrameworkElement systemTrayFrame)
+{
+    // Clear transforms
+    taskbarFrame.RenderTransform(nullptr);
+    systemTrayFrame.RenderTransform(nullptr);
+
+    // Reset margins
+    auto taskbarMargin = taskbarFrame.Margin();
+    taskbarMargin.Left = 0;
+    taskbarMargin.Right = 0;
+    taskbarFrame.Margin(taskbarMargin);
+
+    auto systemTrayMargin = systemTrayFrame.Margin();
+    systemTrayMargin.Left = 0;
+    systemTrayMargin.Right = 0;
+    systemTrayFrame.Margin(systemTrayMargin);
+
+    // Reset width to auto
+    taskbarFrame.Width(std::numeric_limits<double>::quiet_NaN());
+
+    // Reset SystemTrayFrame alignment to default (Right)
+    systemTrayFrame.HorizontalAlignment(HorizontalAlignment::Right);
 }
 
-void ApplyCustomizations(InstanceHandle handle,
-                         wux::FrameworkElement element,
-                         PCWSTR fallbackClassName) {
-    // Get element type and name
-    auto elementName = element.Name();
-    std::wstring_view className(fallbackClassName);
+// Forward declaration for deferred style application
+bool ApplyStyleInternal(XamlRoot xamlRoot, bool skipWidthCapture);
 
-    // Check if this element is a direct child of TaskbarFrameRepeater
-    // AND belongs to the primary monitor's taskbar (has g_taskbarFrame as ancestor)
-    bool isTaskbarChild = false;
-    bool isPrimaryMonitor = false;
-    try {
-        auto parent = wux::Media::VisualTreeHelper::GetParent(element);
-        if (parent) {
-            if (auto parentElement = parent.try_as<wux::FrameworkElement>()) {
-                if (parentElement.Name() == L"TaskbarFrameRepeater") {
-                    isTaskbarChild = true;
-                    
-                    // Check if this belongs to primary monitor by walking up to find g_taskbarFrame
-                    auto primaryFrame = g_taskbarFrame.get();
-                    if (primaryFrame) {
-                        auto current = parent;
-                        for (int i = 0; i < 15 && current; i++) {
-                            if (current == primaryFrame) {
-                                isPrimaryMonitor = true;
-                                break;
-                            }
-                            current = wux::Media::VisualTreeHelper::GetParent(current);
-                        }
-                    }
-                }
-            }
-        }
-    } catch (...) {
-        // Ignore errors during parent check
-    }
-    
-    // Only track children from the primary monitor
-    if (isTaskbarChild && isPrimaryMonitor) {
-        double buttonWidth = element.ActualWidth();
-        
-        // Set up SizeChanged event handler to track width changes
-        auto sizeChangedToken = element.SizeChanged([className = std::wstring(className)](wf::IInspectable const& sender, wux::SizeChangedEventArgs const& args) {
-            auto newSize = args.NewSize();
-            auto prevSize = args.PreviousSize();
-            if (prevSize.Width != newSize.Width) {
-                Wh_Log(L"%s size changed: width %f -> %f", className.c_str(), prevSize.Width, newSize.Width);
-                ActionOnTaskbarChanges();
-            }
-        });
-        
-        g_taskbarChildren[handle] = TaskbarChildInfo{
-            .element = element,
-            .sizeChangedToken = sizeChangedToken,
-            .lastWidth = buttonWidth
-        };
-        
-        Wh_Log(L"%s added (handle=%llu, width=%f)", fallbackClassName, (unsigned long long)handle, buttonWidth);
-        ActionOnTaskbarChanges();
+// Handler for LayoutUpdated event to capture width after layout completes
+void OnLayoutUpdatedForWidthCapture(winrt::Windows::Foundation::IInspectable const& sender,
+                                     winrt::Windows::Foundation::IInspectable const& args)
+{
+    // Get the taskbar frame from weak reference
+    auto taskbarFrame = g_taskbarFrameWeakRef.get();
+    if (!taskbarFrame)
+    {
+        Wh_Log(L"LayoutUpdated: TaskbarFrame weak ref expired");
         return;
     }
 
-    // Check if this is the TaskbarFrame or SystemTrayFrame element
-    // Target: Taskbar.TaskbarFrame#TaskbarFrame
-    bool isTaskbarFrame = (className == L"Taskbar.TaskbarFrame" && elementName == L"TaskbarFrame");
-    // Target: SystemTray.SystemTrayFrame (no specific name)
-    bool isSystemTrayFrame = (className == L"SystemTray.SystemTrayFrame");
-
-    if (!isTaskbarFrame && !isSystemTrayFrame) {
-        return;
-    }
-
-    Wh_Log(L"Found target element: %s#%s", fallbackClassName, elementName.c_str());
-
-    // Log initial width
-    double width = element.ActualWidth();
-    const wchar_t* elementType = isTaskbarFrame ? L"TaskbarFrame" : L"SystemTrayFrame";
-    Wh_Log(L"%s initial width: %f", elementType, width);
-
-    // Store frame reference for centering - ONLY store the first (primary) monitor's frames
-    if (isTaskbarFrame) {
-        // Only store the first TaskbarFrame we encounter
-        if (!g_taskbarFrame.get()) {
-            g_taskbarFrame = element;
-            Wh_Log(L"Stored TaskbarFrame (primary monitor)");
-            
-            // Store original width (NaN means auto/unset) for restoration
-            double originalWidth = element.Width();
-            
-            // Capture original ActualWidth for shift mode calculations
-            g_originalTaskbarFrameWidth = element.ActualWidth();
-            Wh_Log(L"Captured original TaskbarFrame ActualWidth: %f", g_originalTaskbarFrameWidth);
-            
-            // Apply max width if configured (Center mode only)
-            if (!g_settings.offsetOnlyMode && g_settings.maxTotalWidth > 0) {
-                element.Width(static_cast<double>(g_settings.maxTotalWidth));
-                Wh_Log(L"Set TaskbarFrame Width=%d", g_settings.maxTotalWidth);
-            }
-            
-            // TaskbarFrame doesn't fire SizeChanged when content changes
-            // We track content changes via taskbar child elements instead
-            // Just store reference, no event handler needed
-            g_customizedElements[handle] = ElementInfo{
-                .element = element,
-                .sizeChangedToken = {},  // No event token
-                .isTaskbarFrame = true,
-                .originalAlignment = wux::HorizontalAlignment::Stretch,  // TaskbarFrame default
-                .originalWidth = originalWidth
-            };
-        } else {
-            Wh_Log(L"TaskbarFrame found (secondary monitor) - skipping storage");
+    // Unsubscribe from the event immediately to prevent multiple calls
+    if (g_layoutUpdatedToken)
+    {
+        try
+        {
+            taskbarFrame.LayoutUpdated(g_layoutUpdatedToken);
+            g_layoutUpdatedToken = {};
         }
-    } else {
-        // Only store the first SystemTrayFrame we encounter
-        if (!g_systemTrayFrame.get()) {
-            g_systemTrayFrame = element;
-            Wh_Log(L"Stored SystemTrayFrame (primary monitor)");
-            
-            // Save original alignment BEFORE modifying
-            auto originalAlignment = element.HorizontalAlignment();
-            
-            // Apply HorizontalAlignment=Center to SystemTrayFrame ONLY in Center mode
-            if (!g_settings.offsetOnlyMode) {
-                element.HorizontalAlignment(wux::HorizontalAlignment::Center);
-                Wh_Log(L"Set SystemTrayFrame HorizontalAlignment=Center (Center mode)");
-            } else {
-                Wh_Log(L"Keeping SystemTrayFrame original alignment (Offset only mode)");
-            }
-            
-            // SystemTrayFrame does fire SizeChanged, so monitor it
-            auto sizeChangedToken = element.SizeChanged([](wf::IInspectable const& sender, wux::SizeChangedEventArgs const& args) {
-                auto newSize = args.NewSize();
-                auto prevSize = args.PreviousSize();
-                Wh_Log(L"SystemTrayFrame size changed: width %f -> %f", prevSize.Width, newSize.Width);
-                ActionOnTaskbarChanges();
-            });
-            
-            g_customizedElements[handle] = ElementInfo{
-                .element = element,
-                .sizeChangedToken = sizeChangedToken,
-                .isTaskbarFrame = false,
-                .originalAlignment = originalAlignment,  // Store original for restoration
-                .originalWidth = std::numeric_limits<double>::quiet_NaN()  // Not used for SystemTrayFrame
-            };
-        } else {
-            Wh_Log(L"SystemTrayFrame found (secondary monitor) - skipping storage");
-            
-            // Apply centering to secondary monitor ONLY in Center mode
-            if (!g_settings.offsetOnlyMode) {
-                element.HorizontalAlignment(wux::HorizontalAlignment::Center);
-            }
-        }
-    }
-    
-    // Apply initial centering (only if we have both frames from primary monitor)
-    if (g_taskbarFrame.get() && g_systemTrayFrame.get()) {
-        ActionOnTaskbarChanges();
-    }
-}
-
-void CleanupCustomizations(InstanceHandle handle) {
-    // Check if this is a taskbar child element being removed
-    auto childIt = g_taskbarChildren.find(handle);
-    if (childIt != g_taskbarChildren.end()) {
-        auto& info = childIt->second;
-        if (auto element = info.element.get()) {
-            try {
-                element.SizeChanged(info.sizeChangedToken);
-            } catch (...) {}
-        }
-        g_taskbarChildren.erase(childIt);
-        Wh_Log(L"Taskbar child removed (handle=%llu)", (unsigned long long)handle);
-        ActionOnTaskbarChanges();
-        return;
-    }
-
-    auto it = g_customizedElements.find(handle);
-    if (it != g_customizedElements.end()) {
-        auto& info = it->second;
-        if (auto element = info.element.get()) {
-            try {
-                element.SizeChanged(info.sizeChangedToken);
-                // Clear RenderTransform
-                element.RenderTransform(nullptr);
-                // Restore SystemTrayFrame alignment to ORIGINAL value (not default)
-                if (!info.isTaskbarFrame) {
-                    element.HorizontalAlignment(info.originalAlignment);  // Restore to saved original
-                    g_systemTrayFrame = nullptr;
-                } else {
-                    // Restore TaskbarFrame original width
-                    element.Width(info.originalWidth);  // NaN restores to auto
-                    g_taskbarFrame = nullptr;
-                }
-            } catch (...) {}
-        }
-        g_customizedElements.erase(it);
-    }
-}
-
-void UninitializeForCurrentThread() {
-    // Clean up taskbar children
-    for (auto& [handle, info] : g_taskbarChildren) {
-        if (auto element = info.element.get()) {
-            try {
-                element.SizeChanged(info.sizeChangedToken);
-            } catch (...) {}
-        }
-    }
-    g_taskbarChildren.clear();
-
-    // Clean up customized elements
-    for (auto& [handle, info] : g_customizedElements) {
-        if (auto element = info.element.get()) {
-            try {
-                element.SizeChanged(info.sizeChangedToken);
-                // Clear RenderTransform
-                element.RenderTransform(nullptr);
-                if (!info.isTaskbarFrame) {
-                    // Restore SystemTrayFrame alignment to ORIGINAL value (not default)
-                    element.HorizontalAlignment(info.originalAlignment);  // Restore to saved original
-                } else {
-                    // Restore TaskbarFrame original width
-                    element.Width(info.originalWidth);  // NaN restores to auto
-                }
-            } catch (...) {}
+        catch (...)
+        {
+            // Ignore errors during unsubscription
         }
     }
 
-    g_customizedElements.clear();
-    g_taskbarFrame = nullptr;
-    g_systemTrayFrame = nullptr;
-    g_lastTaskbarChildCount = 0;
-    g_originalTaskbarFrameWidth = 0;
-    g_initializedForThread = false;
-}
+    // Capture the width now that layout is complete
+    double actualWidth = taskbarFrame.ActualWidth();
+    if (actualWidth > 0)
+    {
+        g_originalTaskbarFrameWidth = actualWidth;
+        Wh_Log(L"LayoutUpdated: Captured original TaskbarFrame ActualWidth: %f", g_originalTaskbarFrameWidth);
 
-void UninitializeSettingsAndTap() {
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+        // Now apply the style with the captured width
+        auto xamlRoot = g_pendingXamlRootWeakRef.get();
+        if (xamlRoot && !g_unloading)
+        {
+            ApplyStyleInternal(xamlRoot, true); // Skip width capture since we just did it
+        }
+    }
+    else
+    {
+        Wh_Log(L"LayoutUpdated: ActualWidth still 0, width capture failed");
     }
 
-    g_initialized = false;
+    // Clear weak references
+    g_taskbarFrameWeakRef = nullptr;
+    g_pendingXamlRootWeakRef = nullptr;
 }
 
-void InitializeForCurrentThread() {
-    if (g_initializedForThread) {
-        return;
-    }
-
-    g_initializedForThread = true;
-}
-
-void InitializeSettingsAndTap() {
-    if (g_initialized.exchange(true)) {
-        return;
-    }
-
-    HRESULT hr = InjectWindhawkTAP();
-    if (FAILED(hr)) {
-        Wh_Log(L"Error %08X", hr);
-    }
-}
-
-using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
-
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         PVOID procParam) {
-    static const UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        PVOID procParam;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
+// Internal implementation that can skip width capture
+bool ApplyStyleInternal(XamlRoot xamlRoot, bool skipWidthCapture)
+{
+    if (!xamlRoot)
+    {
         return false;
     }
 
-    if (dwThreadId == GetCurrentThreadId()) {
+    auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+    if (!xamlRootContent)
+    {
+        return false;
+    }
+
+    // Find TaskbarFrame and TaskbarFrameRepeater
+    FrameworkElement taskbarFrame = nullptr;
+    FrameworkElement taskbarFrameRepeater = nullptr;
+
+    FrameworkElement child = xamlRootContent;
+    if (child &&
+        (child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")))
+    {
+        taskbarFrame = child;
+        if ((child = FindChildByName(child, L"RootGrid")) &&
+            (child = FindChildByName(child, L"TaskbarFrameRepeater")))
+        {
+            taskbarFrameRepeater = child;
+        }
+    }
+
+    if (!taskbarFrame || !taskbarFrameRepeater)
+    {
+        Wh_Log(L"Failed to find TaskbarFrame or TaskbarFrameRepeater");
+        return false;
+    }
+
+    // Find SystemTrayFrame
+    auto systemTrayFrame =
+        FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
+    if (!systemTrayFrame)
+    {
+        Wh_Log(L"Failed to find SystemTrayFrame");
+        return false;
+    }
+
+    double systemTrayWidth = systemTrayFrame.ActualWidth();
+    double taskbarButtonsWidth = CalculateTaskbarButtonsWidth(taskbarFrameRepeater);
+
+    Wh_Log(L"TaskbarButtons width: %f, SystemTray width: %f",
+           taskbarButtonsWidth, systemTrayWidth);
+
+    if (g_unloading)
+    {
+        // Restore original state
+        ResetTaskbarState(taskbarFrame, systemTrayFrame);
+        Wh_Log(L"Restored original taskbar state");
+        return true;
+    }
+
+    // Clean up any previous mode's state before applying new mode
+    // This ensures switching between modes works correctly
+    ResetTaskbarState(taskbarFrame, systemTrayFrame);
+
+    // Capture original width ONCE (after reset, so we get the true original)
+    // This is used by offset mode to calculate the reduced width
+    if (g_originalTaskbarFrameWidth <= 0 && !skipWidthCapture)
+    {
+        // XAML layout is asynchronous - UpdateLayout() doesn't guarantee immediate completion.
+        // We need to use the LayoutUpdated event to capture the width after layout completes.
+        // First, try to get the current ActualWidth - it might already be valid.
+        double currentWidth = taskbarFrame.ActualWidth();
+
+        if (currentWidth > 0)
+        {
+            // Width is already valid, use it directly
+            g_originalTaskbarFrameWidth = currentWidth;
+            Wh_Log(L"Captured original TaskbarFrame ActualWidth immediately: %f", g_originalTaskbarFrameWidth);
+        }
+        else
+        {
+            // Width is not yet available, defer capture using LayoutUpdated event
+            Wh_Log(L"ActualWidth is 0, deferring width capture via LayoutUpdated event");
+
+            // Store weak references for the callback
+            g_taskbarFrameWeakRef = taskbarFrame;
+            g_pendingXamlRootWeakRef = xamlRoot;
+
+            // Subscribe to LayoutUpdated event
+            try
+            {
+                g_layoutUpdatedToken = taskbarFrame.LayoutUpdated(OnLayoutUpdatedForWidthCapture);
+
+                // Trigger a layout pass
+                taskbarFrame.UpdateLayout();
+            }
+            catch (winrt::hresult_error const& ex)
+            {
+                Wh_Log(L"Failed to subscribe to LayoutUpdated: %08X: %s", ex.code().value, ex.message().c_str());
+                // Fall back to using whatever width we have
+                g_originalTaskbarFrameWidth = currentWidth > 0 ? currentWidth : 1000.0; // Default fallback
+            }
+
+            // Return true - we'll apply the style when LayoutUpdated fires
+            return true;
+        }
+    }
+
+    if (g_settings.offsetOnlyMode)
+    {
+        // Offset only mode: Only apply offset to system tray, reduce taskbar width
+        double offsetValue = static_cast<double>(g_settings.offsetValue);
+
+        // Reduce taskbar width by 2*offset to allow system tray to overlap
+        // Clamp to a minimum of 100 pixels to prevent visual corruption from negative/tiny widths
+        constexpr double minTaskbarWidth = 100.0;
+        double newTaskbarWidth = g_originalTaskbarFrameWidth - (2.0 * offsetValue);
+        newTaskbarWidth = (std::max)(newTaskbarWidth, minTaskbarWidth);
+
+        taskbarFrame.Width(newTaskbarWidth);
+
+        // Apply offset only to system tray using margin (shift left into taskbar area)
+        auto systemTrayMargin = systemTrayFrame.Margin();
+        systemTrayMargin.Right = offsetValue; // Positive right margin shifts left
+        systemTrayFrame.Margin(systemTrayMargin);
+
+        Wh_Log(L"Offset only mode: SystemTray margin.Right=%f, TaskbarFrame width=%f (clamped from %f)",
+               offsetValue, newTaskbarWidth, g_originalTaskbarFrameWidth - (2.0 * offsetValue));
+    }
+    else
+    {
+        // Center mode: Center both as a single unit using transforms
+
+        // Apply max width if configured
+        if (g_settings.maxTotalWidth > 0)
+        {
+            taskbarFrame.Width(static_cast<double>(g_settings.maxTotalWidth));
+        }
+
+        // Set SystemTrayFrame to center alignment for proper centering
+        systemTrayFrame.HorizontalAlignment(HorizontalAlignment::Center);
+
+        // Calculate the gap between taskbar buttons and system tray
+        // The gap setting adds extra spacing (positive = apart, negative = closer)
+        double halfGap = g_settings.gap / 2.0;
+
+        // Apply minimum total width setting
+        // When minTotalWidth is set and the actual width is smaller, we increase the gap
+        // to make the centered group appear wider
+        double effectiveTotalWidth = taskbarButtonsWidth + systemTrayWidth;
+        if (g_settings.minTotalWidth > 0 && effectiveTotalWidth < g_settings.minTotalWidth)
+        {
+            // Calculate extra gap needed to reach minimum width
+            double extraGap = (g_settings.minTotalWidth - effectiveTotalWidth) / 2.0;
+            halfGap += extraGap;
+        }
+
+        // Calculate offsets for centering both as a single unit
+        // The goal is to position the combined taskbar+systray group in the center
+        // TaskbarFrame shifts left (negative X offset) by half the system tray width
+        // SystemTrayFrame shifts right (positive X offset) by half the taskbar buttons width
+        // The halfGap adds spacing between them
+        double taskbarOffset = -(systemTrayWidth / 2.0 + halfGap);
+        double systemTrayOffset = taskbarButtonsWidth / 2.0 + halfGap;
+
+        // Apply transforms for visual positioning
+        ApplyTransformOffset(taskbarFrame, taskbarOffset);
+        ApplyTransformOffset(systemTrayFrame, systemTrayOffset);
+
+        Wh_Log(L"Center mode: TaskbarFrame offset=%f, SystemTray offset=%f (gap=%d)",
+               taskbarOffset, systemTrayOffset, g_settings.gap);
+    }
+
+    return true;
+}
+
+// Public entry point that always attempts width capture if needed
+bool ApplyStyle(XamlRoot xamlRoot)
+{
+    return ApplyStyleInternal(xamlRoot, false);
+}
+
+// Symbol hook targets
+void *CTaskBand_ITaskListWndSite_vftable;
+void *CSecondaryTaskBand_ITaskListWndSite_vftable;
+
+using CTaskBand_GetTaskbarHost_t = void *(WINAPI *)(void *pThis, void **result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+void *TaskbarHost_FrameHeight_Original;
+
+using CSecondaryTaskBand_GetTaskbarHost_t = void *(WINAPI *)(void *pThis, void **result);
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI *)(void *pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void *taskbarHostSharedPtr[2])
+{
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1])
+    {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x48;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE *b = (const BYTE *)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F)
+        {
+            taskbarElementIUnknownOffset = b[7];
+        }
+        else
+        {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    // Just use the default offset which will hopefully work in most cases.
+#else
+#error "Unsupported architecture"
+#endif
+
+    auto *taskbarElementIUnknown =
+        *(IUnknown **)((BYTE *)taskbarHostSharedPtr[0] +
+                       taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(taskbarElement));
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
+}
+
+XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd)
+{
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd)
+    {
+        return nullptr;
+    }
+
+    void *taskBand = (void *)GetWindowLongPtr(hTaskSwWnd, 0);
+    void *taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void **)taskBandForTaskListWndSite !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++)
+    {
+        if (i == 20)
+        {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void **)taskBandForTaskListWndSite + 1;
+    }
+
+    void *taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd)
+{
+    HWND hTaskSwWnd =
+        (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!hTaskSwWnd)
+    {
+        return nullptr;
+    }
+
+    void *taskBand = (void *)GetWindowLongPtr(hTaskSwWnd, 0);
+    void *taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void **)taskBandForTaskListWndSite !=
+                    CSecondaryTaskBand_ITaskListWndSite_vftable;
+         i++)
+    {
+        if (i == 20)
+        {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void **)taskBandForTaskListWndSite + 1;
+    }
+
+    void *taskbarHostSharedPtr[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                               taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI *)(void *parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         void *procParam)
+{
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM
+    {
+        RunFromWindowThreadProc_t proc;
+        void *procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0)
+    {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId())
+    {
         proc(procParam);
         return true;
     }
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    RUN_FROM_WINDOW_THREAD_PARAM* param =
-                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT
+        {
+            if (nCode == HC_ACTION)
+            {
+                const CWPSTRUCT *cwp = (const CWPSTRUCT *)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg)
+                {
+                    RUN_FROM_WINDOW_THREAD_PARAM *param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM *)cwp->lParam;
                     param->proc(param->procParam);
                 }
             }
@@ -920,7 +673,8 @@ bool RunFromWindowThread(HWND hWnd,
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
         },
         nullptr, dwThreadId);
-    if (!hook) {
+    if (!hook)
+    {
         return false;
     }
 
@@ -934,343 +688,356 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-std::vector<HWND> GetXamlHostWnds() {
-    struct ENUM_WINDOWS_PARAM {
-        std::vector<HWND>* hWnds;
+void ApplySettingsFromTaskbarThread()
+{
+    Wh_Log(L"Applying settings");
+
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) -> BOOL
+        {
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
+            {
+                return TRUE;
+            }
+
+            XamlRoot xamlRoot = nullptr;
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0)
+            {
+                xamlRoot = GetTaskbarXamlRoot(hWnd);
+            }
+            else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0)
+            {
+                // Skip secondary taskbars for now - only apply to primary
+                return TRUE;
+            }
+            else
+            {
+                return TRUE;
+            }
+
+            if (!xamlRoot)
+            {
+                Wh_Log(L"Getting XamlRoot failed");
+            return TRUE;
+            }
+
+            if (!ApplyStyle(xamlRoot))
+            {
+                Wh_Log(L"ApplyStyle failed");
+                return TRUE;
+            }
+
+                return TRUE;
+        },
+        0);
+}
+
+void ApplySettings(HWND hTaskbarWnd)
+{
+    RunFromWindowThread(
+        hTaskbarWnd, [](void *pParam)
+        { ApplySettingsFromTaskbarThread(); }, 0);
+}
+
+// Hook for TaskbarFrame::SystemTrayExtent - called when system tray size changes
+using TaskbarFrame_SystemTrayExtent_t = void(WINAPI *)(void *pThis, double value);
+TaskbarFrame_SystemTrayExtent_t TaskbarFrame_SystemTrayExtent_Original;
+void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void *pThis, double value)
+{
+    Wh_Log(L"> SystemTrayExtent: %f", value);
+
+    TaskbarFrame_SystemTrayExtent_Original(pThis, value);
+
+    if (g_unloading)
+    {
+        return;
+    }
+
+    // Validate pThis pointer before accessing
+    if (!pThis)
+    {
+        Wh_Log(L"pThis is null, skipping");
+        return;
+    }
+
+    // Get the TaskbarFrame element
+    // The IUnknown pointer is at offset 1 in the object's vtable array
+    IUnknown **pThisArray = (IUnknown **)pThis;
+    IUnknown *pUnknown = pThisArray[1];
+    if (!pUnknown)
+    {
+        Wh_Log(L"IUnknown pointer at offset 1 is null, skipping");
+        return;
+    }
+
+    FrameworkElement taskbarFrameElement = nullptr;
+    HRESULT hr = pUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                          winrt::put_abi(taskbarFrameElement));
+    if (FAILED(hr) || !taskbarFrameElement)
+    {
+        Wh_Log(L"QueryInterface failed or returned null element, hr=%08X", hr);
+        return;
+    }
+
+    auto xamlRoot = taskbarFrameElement.XamlRoot();
+    if (xamlRoot)
+    {
+        ApplyStyle(xamlRoot);
+    }
+}
+
+bool HookTaskbarDllSymbols()
+{
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module)
+    {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+        },
     };
 
-    std::vector<HWND> hWnds;
-    ENUM_WINDOWS_PARAM param = {&hWnds};
+    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks)))
+    {
+        Wh_Log(L"HookSymbols failed for taskbar.dll");
+        return false;
+    }
 
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            auto param = reinterpret_cast<ENUM_WINDOWS_PARAM*>(lParam);
+    return true;
+}
 
-            DWORD processId = 0;
-            if (!GetWindowThreadProcessId(hWnd, &processId) ||
-                processId != GetCurrentProcessId()) {
-                return TRUE;
-            }
-
-            WCHAR className[64];
-            if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
-                return TRUE;
-            }
-
-            if (_wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
-                _wcsicmp(className, L"Shell_InputSwitchTopLevelWindow") == 0) {
-                param->hWnds->push_back(hWnd);
-            }
-
-            return TRUE;
+bool HookTaskbarViewDllSymbols(HMODULE module)
+{
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::SystemTrayExtent(double))"},
+            &TaskbarFrame_SystemTrayExtent_Original,
+            TaskbarFrame_SystemTrayExtent_Hook,
         },
-        (LPARAM)&param);
+    };
 
-    return hWnds;
-}
-
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND hTaskbarWnd = nullptr;
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD processId = 0;
-            if (!GetWindowThreadProcessId(hWnd, &processId) ||
-                processId != GetCurrentProcessId()) {
-                return TRUE;
-            }
-
-            WCHAR className[64];
-            if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
-                return TRUE;
-            }
-
-            if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd));
-
-    return hTaskbarWnd;
-}
-
-HWND GetTaskbarUiWnd() {
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hTaskbarWnd) {
-        return nullptr;
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks)))
+    {
+        Wh_Log(L"HookSymbols failed for Taskbar.View.dll");
+        return false;
     }
 
-    return FindWindowEx(hTaskbarWnd, nullptr,
-                        L"Windows.UI.Composition.DesktopWindowContentBridge",
-                        nullptr);
+    return true;
 }
 
-void OnWindowCreated(HWND hWnd,
-                     HWND hWndParent,
-                     LPCWSTR lpClassName,
-                     PCSTR funcName) {
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
-
-    WCHAR className[64];
-    if (hWndParent && GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className,
-                 L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 &&
-        GetClassName(hWndParent, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-        Wh_Log(L"Initializing - Created DesktopWindowContentBridge window");
-        InitializeForCurrentThread();
-        InitializeSettingsAndTap();
-        return;
+HMODULE GetTaskbarViewModuleHandle()
+{
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module)
+    {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
 
-    if (bTextualClassName &&
-        (_wcsicmp(lpClassName, L"XamlExplorerHostIslandWindow") == 0 ||
-         _wcsicmp(lpClassName, L"Shell_InputSwitchTopLevelWindow") == 0)) {
-        Wh_Log(L"Initializing - Created XAML host window: %08X via %S",
-               (DWORD)(ULONG_PTR)hWnd, funcName);
-        InitializeForCurrentThread();
-        InitializeSettingsAndTap();
-        return;
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName)
+{
+    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true))
+    {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module))
+        {
+            Wh_ApplyHookOperations();
+        }
     }
 }
 
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 PVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd) {
-        OnWindowCreated(hWnd, hWndParent, lpClassName, __FUNCTION__);
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags)
+{
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module)
+    {
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
     }
 
-    return hWnd;
+    return module;
 }
 
-using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
-                                           LPCWSTR lpClassName,
-                                           LPCWSTR lpWindowName,
-                                           DWORD dwStyle,
-                                           int X,
-                                           int Y,
-                                           int nWidth,
-                                           int nHeight,
-                                           HWND hWndParent,
-                                           HMENU hMenu,
-                                           HINSTANCE hInstance,
-                                           PVOID lpParam,
-                                           DWORD dwBand);
-CreateWindowInBand_t CreateWindowInBand_Original;
-HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
-                                    LPCWSTR lpClassName,
-                                    LPCWSTR lpWindowName,
-                                    DWORD dwStyle,
-                                    int X,
-                                    int Y,
-                                    int nWidth,
-                                    int nHeight,
-                                    HWND hWndParent,
-                                    HMENU hMenu,
-                                    HINSTANCE hInstance,
-                                    PVOID lpParam,
-                                    DWORD dwBand) {
-    HWND hWnd = CreateWindowInBand_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (hWnd) {
-        OnWindowCreated(hWnd, hWndParent, lpClassName, __FUNCTION__);
-    }
-
-    return hWnd;
-}
-
-using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
-                                             LPCWSTR lpClassName,
-                                             LPCWSTR lpWindowName,
-                                             DWORD dwStyle,
-                                             int X,
-                                             int Y,
-                                             int nWidth,
-                                             int nHeight,
-                                             HWND hWndParent,
-                                             HMENU hMenu,
-                                             HINSTANCE hInstance,
-                                             PVOID lpParam,
-                                             DWORD dwBand,
-                                             DWORD dwTypeFlags);
-CreateWindowInBandEx_t CreateWindowInBandEx_Original;
-HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
-                                      LPCWSTR lpClassName,
-                                      LPCWSTR lpWindowName,
-                                      DWORD dwStyle,
-                                      int X,
-                                      int Y,
-                                      int nWidth,
-                                      int nHeight,
-                                      HWND hWndParent,
-                                      HMENU hMenu,
-                                      HINSTANCE hInstance,
-                                      PVOID lpParam,
-                                      DWORD dwBand,
-                                      DWORD dwTypeFlags) {
-    HWND hWnd = CreateWindowInBandEx_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
-    if (hWnd) {
-        OnWindowCreated(hWnd, hWndParent, lpClassName, __FUNCTION__);
-    }
-
-    return hWnd;
-}
-
-void LoadSettings() {
+void LoadSettings()
+{
     g_settings.offsetOnlyMode = Wh_GetIntSetting(L"offsetOnlyMode") != 0;
-    g_settings.offsetValue = Wh_GetIntSetting(L"OffsetOnlySettings.offsetValue");
-    g_settings.minTotalWidth = Wh_GetIntSetting(L"CenterSettings.minTotalWidth");
+
+    // Load and validate offsetValue (minimum 0)
+    // Negative values would shift system tray right (wrong direction)
+    // No upper limit - users may want large offsets for ultrawide monitors
+    int offsetValue = Wh_GetIntSetting(L"OffsetOnlySettings.offsetValue");
+    g_settings.offsetValue = (std::max)(0, offsetValue);
+
+    // Load and validate minTotalWidth (minimum 0)
+    // 0 means disabled, negative values make no sense
+    // No upper limit - users may want very large minimum widths
+    int minTotalWidth = Wh_GetIntSetting(L"CenterSettings.minTotalWidth");
+    g_settings.minTotalWidth = (std::max)(0, minTotalWidth);
+
+    // Load gap without clamping
+    // Negative values pull elements closer, positive push apart
+    // No limits - users have full control over spacing
     g_settings.gap = Wh_GetIntSetting(L"CenterSettings.gap");
-    g_settings.maxTotalWidth = Wh_GetIntSetting(L"CenterSettings.maxTotalWidth");
-    g_settings.animationDuration = Wh_GetIntSetting(L"animationDuration");
-    
-    Wh_Log(L"Settings loaded: offsetOnlyMode=%d, offsetValue=%d, minTotalWidth=%d, gap=%d, maxTotalWidth=%d, animationDuration=%d", 
-           g_settings.offsetOnlyMode, g_settings.offsetValue, g_settings.minTotalWidth, g_settings.gap, 
-           g_settings.maxTotalWidth, g_settings.animationDuration);
+
+    // Load and validate maxTotalWidth (minimum 0)
+    // 0 means disabled (no maximum), negative values make no sense
+    // No upper limit - users may want very large maximum widths
+    int maxTotalWidth = Wh_GetIntSetting(L"CenterSettings.maxTotalWidth");
+    g_settings.maxTotalWidth = (std::max)(0, maxTotalWidth);
+
+    Wh_Log(L"Settings loaded: offsetOnlyMode=%d, offsetValue=%d, minTotalWidth=%d, gap=%d, maxTotalWidth=%d",
+           g_settings.offsetOnlyMode, g_settings.offsetValue, g_settings.minTotalWidth, g_settings.gap,
+           g_settings.maxTotalWidth);
 }
 
-BOOL Wh_ModInit() {
+BOOL Wh_ModInit()
+{
     Wh_Log(L">");
-    
+
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+    if (!HookTaskbarDllSymbols())
+    {
+        return FALSE;
+    }
 
-    HMODULE user32Module =
-        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (user32Module) { 
-        void* pCreateWindowInBand =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
-        if (pCreateWindowInBand) {
-            Wh_SetFunctionHook(pCreateWindowInBand,
-                               (void*)CreateWindowInBand_Hook,
-                               (void**)&CreateWindowInBand_Original);
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle())
+    {
+        g_taskbarViewDllLoaded = true;
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule))
+        {
+            return FALSE;
         }
+    }
+    else
+    {
+        Wh_Log(L"Taskbar view module not loaded yet");
 
-        void* pCreateWindowInBandEx =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBandEx");
-        if (pCreateWindowInBandEx) {
-            Wh_SetFunctionHook(pCreateWindowInBandEx,
-                               (void*)CreateWindowInBandEx_Hook,
-                               (void**)&CreateWindowInBandEx_Original);
-        }
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                      "LoadLibraryExW");
+        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
+                                           LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
     }
 
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
+void Wh_ModAfterInit()
+{
     Wh_Log(L">");
 
-    bool initialize = false;
+    if (!g_taskbarViewDllLoaded)
+    {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle())
+        {
+            if (!g_taskbarViewDllLoaded.exchange(true))
+            {
+                Wh_Log(L"Got Taskbar.View.dll");
 
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd) {
-        Wh_Log(L"Initializing - Found DesktopWindowContentBridge window");
-        RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID) { InitializeForCurrentThread(); },
-            nullptr);
-        initialize = true;
+                if (HookTaskbarViewDllSymbols(taskbarViewModule))
+                {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
     }
 
-    for (auto hXamlHostWnd : GetXamlHostWnds()) {
-        Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
-        RunFromWindowThread(
-            hXamlHostWnd, [](PVOID) { InitializeForCurrentThread(); }, nullptr);
-        initialize = true;
-    }
-
-    if (initialize) {
-        InitializeSettingsAndTap();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd)
+    {
+        ApplySettings(hTaskbarWnd);
     }
 }
 
-void Wh_ModUninit() {
+void Wh_ModBeforeUninit()
+{
     Wh_Log(L">");
-    
-    // Reset settings to defaults
-    g_settings.offsetOnlyMode = false;
-    g_settings.offsetValue = 0;
-    g_settings.minTotalWidth = 0;
-    g_settings.gap = 0;
-    g_settings.maxTotalWidth = 0;
-    g_settings.animationDuration = 0;
 
-    UninitializeSettingsAndTap();
+    g_unloading = true;
 
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd) {
-        Wh_Log(L"Uninitializing - Found DesktopWindowContentBridge window");
-        RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID) { UninitializeForCurrentThread(); },
-            nullptr);
+    // Clean up any pending LayoutUpdated event subscription
+    if (g_layoutUpdatedToken)
+    {
+        auto taskbarFrame = g_taskbarFrameWeakRef.get();
+        if (taskbarFrame)
+        {
+            try
+            {
+                taskbarFrame.LayoutUpdated(g_layoutUpdatedToken);
+            }
+            catch (...)
+            {
+                // Ignore errors during cleanup
+            }
+        }
+        g_layoutUpdatedToken = {};
     }
+    g_taskbarFrameWeakRef = nullptr;
+    g_pendingXamlRootWeakRef = nullptr;
 
-    for (auto hXamlHostWnd : GetXamlHostWnds()) {
-        Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
-        RunFromWindowThread(
-            hXamlHostWnd, [](PVOID) { UninitializeForCurrentThread(); },
-            nullptr);
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd)
+    {
+        ApplySettings(hTaskbarWnd);
     }
 }
 
-void Wh_ModSettingsChanged() {
+void Wh_ModUninit()
+{
     Wh_Log(L">");
-    
+}
+
+void Wh_ModSettingsChanged()
+{
+    Wh_Log(L">");
+
+    // Note: We do NOT reset g_originalTaskbarFrameWidth here
+    // because we want to preserve the original width captured at mod init
+    // The original width should only be captured once and reused
+
     LoadSettings();
 
-    UninitializeSettingsAndTap();
-
-    bool initialize = false;
-
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd) {
-        Wh_Log(L"Reinitializing - Found DesktopWindowContentBridge window");
-        RunFromWindowThread(
-            hTaskbarUiWnd,
-            [](PVOID) {
-                UninitializeForCurrentThread();
-                InitializeForCurrentThread();
-            },
-            nullptr);
-        initialize = true;
-    }
-
-    for (auto hXamlHostWnd : GetXamlHostWnds()) {
-        Wh_Log(L"Reinitializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
-        RunFromWindowThread(
-            hXamlHostWnd,
-            [](PVOID) {
-                UninitializeForCurrentThread();
-                InitializeForCurrentThread();
-            },
-            nullptr);
-        initialize = true;
-    }
-
-    if (initialize) {
-        InitializeSettingsAndTap();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd)
+    {
+        ApplySettings(hTaskbarWnd);
     }
 }
