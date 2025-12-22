@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-per-monitor
 // @name            Taskbar auto-hide per monitor
 // @description     By default, Windows uses the same auto-hide setting for all monitors. This mod allows setting different auto-hide settings for each monitor.
-// @version         1.0
+// @version         1.0.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -26,6 +26,10 @@
 
 By default, Windows uses the same auto-hide setting for all monitors. This mod
 allows setting different auto-hide settings for each monitor.
+
+This mod requires auto-hide to be enabled in Windows settings.
+
+This mod is only supported on Windows 11.
 */
 // ==/WindhawkModReadme==
 
@@ -201,6 +205,20 @@ DWORD WINAPI TrayUI_GetAutoHideFlags_Hook(void* pThis) {
     DWORD ret = TrayUI_GetAutoHideFlags_Original(pThis);
 
     return ret;
+}
+
+using TaskbarHost_Start_System_t = void(WINAPI*)(void* pThis);
+TaskbarHost_Start_System_t TaskbarHost_Start_System_Original;
+void WINAPI TaskbarHost_Start_System_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    // Disable auto-hide on all monitors during startup. Without this, secondary
+    // taskbars are stuck hidden if auto-hide is disabled for them.
+    g_autoHideDisabledForMonitor = true;
+
+    TaskbarHost_Start_System_Original(pThis);
+
+    g_autoHideDisabledForMonitor = false;
 }
 
 enum {
@@ -398,6 +416,7 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
          CSecondaryTray__LoadSettings_Hook},
         {R"(?CheckSize@CSecondaryTray@@UEAAXH@Z)",
          &CSecondaryTray_CheckSize_Original, CSecondaryTray_CheckSize_Hook},
+        // TaskbarHost::Start_System is missing in ExplorerPatcher.
     };
 
     bool succeeded = true;
@@ -516,6 +535,11 @@ bool HookTaskbarSymbols() {
             {LR"(public: virtual void __cdecl CSecondaryTray::CheckSize(int))"},
             &CSecondaryTray_CheckSize_Original,
             CSecondaryTray_CheckSize_Hook,
+        },
+        {
+            {LR"(public: void __cdecl TaskbarHost::Start_System(void))"},
+            &TaskbarHost_Start_System_Original,
+            TaskbarHost_Start_System_Hook,
         },
     };
 
