@@ -237,6 +237,8 @@ bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRE
                 glyph = L'\ue923'; //Maximize icon
             else if (offset == 1)
                 glyph = L'\ue8bb'; //Close icon
+            else
+                return false;
 
             HFONT hOldFont = SelectFont(drawingInfo->um.hdc, g_iconFont);
 
@@ -256,12 +258,14 @@ bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRE
     }
 
     case WM_THEMECHANGED:
+    case WM_DESTROY:
         if (g_menuBarTheme)
         {
             CloseThemeData(g_menuBarTheme);
             g_menuBarTheme = nullptr;
         }
         return false;
+        
     default:
         return false;
     }
@@ -378,7 +382,7 @@ WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
     alignas(MENUINFO) BYTE buffer[256];
     if (!(lpInfo->fMask & MIM_BACKGROUND) || lpInfo->cbSize > sizeof(buffer))
         return SetMenuInfo_Original(hMenu, lpInfo);
-
+	
     memcpy(buffer, lpInfo, lpInfo->cbSize);
     auto* infoCopy = reinterpret_cast<LPMENUINFO>(buffer);
     infoCopy->hbrBack = CreateSolidBrush(DARK_MENU_COLOR); //Fixes https://github.com/MGGSK/DarkMenus/issues/18
