@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-22T17:40:15.000Z</updated>
+    <updated>2025-12-22T22:53:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.4]]></title>
+        <id>https://windhawk.net/mods/dark-menus#35fe88158b7b0b747cb24906a09716b9bb2e15d6</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2025-12-22T22:53:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: The white outline problem in the latest version (https://github.com/MGGSK/DarkMenus/issues/18)</li>
+<li>Added support for mdi windows</li>
+<li>Code cleanup</li>
+<li>Improved readme</li>
+</ul>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0.1]]></title>
         <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#15a49670add29c0521d1825dc0e7cb263d053989</id>
@@ -301,19 +317,6 @@ when using the Windows Classic theme.</p>
         <content type="html"><![CDATA[<ul>
 <li>Ending task (i.e. terminating the process) is no longer applied for store (modern/UWP) apps, since several apps might share the same process.</li>
 <li>Fixed a crash due to the removal of unused taskbar functions in recent Windows 11 builds. Only relevant if the "Multiple items behavior" option is set to "Close foreground window".</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cycle taskbar buttons with mouse wheel 1.1.10]]></title>
-        <id>https://windhawk.net/mods/taskbar-wheel-cycle#c06b8a9588be043226a4fa9159d15bf6e835cc74</id>
-        <link href="https://windhawk.net/mods/taskbar-wheel-cycle"/>
-        <updated>2025-12-09T21:53:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash due to the removal of unused taskbar functions in recent Windows 11 builds.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

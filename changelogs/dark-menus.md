@@ -1,3 +1,10 @@
+## 1.4 ([Dec 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/35fe88158b7b0b747cb24906a09716b9bb2e15d6/mods/dark-menus.wh.cpp))
+
+- Fixed: The white outline problem in the latest version (https://github.com/MGGSK/DarkMenus/issues/18)
+- Added support for mdi windows
+- Code cleanup
+- Improved readme
+
 ## 1.3.4 ([Dec 21, 2025](https://github.com/ramensoftware/windhawk-mods/blob/334e79cea972761014dadc9cc0b5118eb18d0521/mods/dark-menus.wh.cpp))
 
 - Fixed: Outline in right click menu (https://github.com/MGGSK/DarkMenus/issues/17)

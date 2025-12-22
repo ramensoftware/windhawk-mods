@@ -1853,19 +1853,19 @@
                     179
                 ],
                 "ratingUsers": 205,
-                "updated": 1766305390000,
+                "updated": 1766444008000,
                 "users": 27138
             },
             "metadata": {
                 "author": "Mgg Sk",
-                "compilerOptions": "-lUxTheme -lGdi32",
+                "compilerOptions": "-lUxTheme -lGdi32 -lNtDll",
                 "description": "Enables dark mode for all win32 menus.",
                 "github": "https://github.com/MGGSK",
                 "include": [
                     "*"
                 ],
                 "name": "Dark mode context menus",
-                "version": "1.3.4"
+                "version": "1.4"
             }
         },
         "dark-theme-browser-colors-fix": {
