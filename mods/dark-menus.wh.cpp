@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.3.4
+// @version           1.4
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
-// @compilerOptions   -lUxTheme -lGdi32
+// @compilerOptions   -lUxTheme -lGdi32 -lNtDll
 
 // @name              Dark mode context menus
 // @description       Enables dark mode for all win32 menus.
@@ -16,19 +16,22 @@
 // ==WindhawkModReadme==
 /*
 # Dark mode context menus
-Forces dark mode for all win32 menus to create a more consistent UI. Requires Windows 10 build 18362 or later.
+Enables dark mode for all win32 menus to create a consistent UI. Requires Windows 10 build 18362 or later.
 
 ### Before:
 ![Before](https://i.imgur.com/bGRVJz8.png)
-![Before10](https://i.imgur.com/FGyph05.png)
 ![MenubarBefore](https://raw.githubusercontent.com/MGGSK/DarkMenus/main/Images/menubar_before.png)
 
 ### After:
 ![After](https://i.imgur.com/BURKEki.png)
-![After10](https://i.imgur.com/MUqVAcG.png)
 ![Menubar](https://raw.githubusercontent.com/MGGSK/DarkMenus/main/Images/menubar.png)
 
-The code for dark menubars is based on [win32-darkmode](https://github.com/adzm/win32-darkmode) and [notepad++](https://github.com/notepad-plus-plus/notepad-plus-plus). Create a [issue](https://github.com/MGGSK/DarkMenus/issues) or [discussion](https://github.com/MGGSK/DarkMenus/discussions) to send feedback.
+# Feedback:
+
+### Dark menus: [Repository](https://github.com/MGGSK/DarkMenus) [Issues](https://github.com/MGGSK/DarkMenus/issues) [Discussions](https://github.com/MGGSK/DarkMenus/discussions)
+### Windhawk mods: [Repository](https://github.com/ramensoftware/windhawk-mods) [Issues](https://github.com/ramensoftware/windhawk-mods/issues) [Discussions](https://github.com/ramensoftware/windhawk-mods/discussions)
+
+## Credits: [win32-darkmode](https://github.com/adzm/win32-darkmode), [notepad++](https://github.com/notepad-plus-plus/notepad-plus-plus) 
 */
 // ==/WindhawkModReadme==
 
@@ -52,16 +55,24 @@ The code for dark menubars is based on [win32-darkmode](https://github.com/adzm/
 #include <uxtheme.h>
 #include <vsstyle.h>
 #include <windows.h>
+#include <windowsx.h>
 
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
-#include <winnt.h>
 
-const COLORREF crItemForeground = 0xFFFFFF;
-const COLORREF crItemDisabled = 0xAAAAAA;
-const HBRUSH brBackground = CreateSolidBrush(0x2c2c2c);
-const HBRUSH brItemBackgroundHot = CreateSolidBrush(0x353535);
-const HBRUSH brItemBackgroundSelected = CreateSolidBrush(0x454545);
+constexpr COLORREF DARK_MENU_COLOR = 0x2C2C2C;
+constexpr COLORREF DARK_MENU_ITEM_FOREGROUND = 0xFFFFFF;
+constexpr COLORREF DARK_MENU_ITEM_FOREGROUND_DISABLED = 0xAAAAAA;
+
+const HBRUSH DARK_CONTROL_BRUSH = CreateSolidBrush(0x262626);
+const HBRUSH DARK_MENU_BRUSH = CreateSolidBrush(DARK_MENU_COLOR);
+const HBRUSH DARK_MENUBAR_SEPARATOR_BRUSH = CreateSolidBrush(0x222222);
+const HBRUSH DARK_MENU_ITEM_BACKGROUND_HOVER = CreateSolidBrush(0x353535);
+const HBRUSH DARK_MENU_ITEM_BACKGROUND_SELECTED = CreateSolidBrush(0x454545);
+
+thread_local HTHEME g_menuBarTheme = nullptr;
+HFONT g_iconFont = nullptr;
+HMODULE g_hUxtheme = nullptr;
 
 #define WM_UAHDRAWMENU         0x91
 #define WM_UAHDRAWMENUITEM     0x92
@@ -105,13 +116,13 @@ struct UAHDRAWMENUITEM
 	UAHMENUITEM umi;
 };
 
-//Code based on : https://github.com/notepad-plus-plus/notepad-plus-plus/blob/bab3573be708bb908b8080e3e2007ea78a7f1932/PowerEditor/src/NppDarkMode.cpp
+//Code based on https://github.com/notepad-plus-plus/notepad-plus-plus/blob/bab3573be708bb908b8080e3e2007ea78a7f1932/PowerEditor/src/NppDarkMode.cpp
 #pragma region CodeBasedOnNotepad++
 
 void DrawUAHMenuNCBottomLine(HWND hWnd)
 {
-	MENUBARINFO mbi = { sizeof(mbi) };
-	if (!GetMenuBarInfo(hWnd, OBJID_MENU, 0, &mbi))
+	MENUBARINFO menuBarInfo{ sizeof(menuBarInfo) };
+	if (!GetMenuBarInfo(hWnd, OBJID_MENU, 0, &menuBarInfo))
 		return;
 
 	RECT rcClient;
@@ -123,13 +134,13 @@ void DrawUAHMenuNCBottomLine(HWND hWnd)
 
 	OffsetRect(&rcClient, -rcWindow.left, -rcWindow.top);
 
-	// the rcBar is offset by the window rect
+	//The rcBar is offset by the window rect
 	RECT rcAnnoyingLine = rcClient;
 	rcAnnoyingLine.bottom = rcAnnoyingLine.top;
 	rcAnnoyingLine.top--;
 
 	HDC hdc = GetWindowDC(hWnd);
-	FillRect(hdc, &rcAnnoyingLine, brBackground);
+	FillRect(hdc, &rcAnnoyingLine, DARK_MENUBAR_SEPARATOR_BRUSH);
 	ReleaseDC(hWnd, hdc);
 }
 
@@ -138,98 +149,130 @@ void DrawUAHMenuNCBottomLine(HWND hWnd)
 //Code based on https://github.com/adzm/win32-darkmode/blob/darkmenubar/win32-darkmode/win32-darkmode.cpp
 #pragma region CodeBasedOnWin32DarkMode
 
-thread_local HTHEME g_menuTheme = nullptr;
-
 //Processes messages related to custom menubar drawing.
 //Returns true if handled, false to continue with normal processing
 bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* lpResult)
 {
-    switch (uMsg)
+    switch (uMsg)  
     {
     case WM_UAHDRAWMENU:
     {
-        const auto* pUdm = (UAHMENU*)lParam;
-        RECT rc;
+        const auto* drawingInfo = (UAHMENU*)lParam;
+        RECT rcMenu;
 
         //Get the menubar rect
-        MENUBARINFO mbi { sizeof(MENUBARINFO) };
-        GetMenuBarInfo(hWnd, OBJID_MENU, 0, &mbi);
+        MENUBARINFO menuBarInfo{ sizeof(menuBarInfo) };
+        if (!GetMenuBarInfo(hWnd, OBJID_MENU, 0, &menuBarInfo))
+            return false;
 
         RECT rcWindow;
-        GetWindowRect(hWnd, &rcWindow);
+        if (!GetWindowRect(hWnd, &rcWindow))
+            return false;
 
         //The rcBar is offset by the window rect
-        rc = mbi.rcBar;
-        OffsetRect(&rc, -rcWindow.left, -rcWindow.top);
+        rcMenu = menuBarInfo.rcBar;
+        if (!OffsetRect(&rcMenu, -rcWindow.left, -rcWindow.top))
+            return false;
 
-        FillRect(pUdm->hdc, &rc, brBackground);
-
+        FillRect(drawingInfo->hdc, &rcMenu, DARK_MENU_BRUSH);
         return true;
     }
+
     case WM_UAHDRAWMENUITEM:
     {
-        auto* pUDMI = (UAHDRAWMENUITEM*)lParam;
-        const HBRUSH* pbrBackground = &brBackground;
+        auto* drawingInfo = (UAHDRAWMENUITEM*)lParam;
+        const HBRUSH* hBrBackground = &DARK_MENU_BRUSH;
 
         //Get the menu item string
-        wchar_t menuString[256] = { 0 };
-        MENUITEMINFO mii = { sizeof(mii), MIIM_STRING };
-        {
-            mii.dwTypeData = menuString;
-            mii.cch = (sizeof(menuString) / 2) - 1;
+        wchar_t menuString[256]{};
+        MENUITEMINFO itemInfo{ sizeof(itemInfo), MIIM_STRING };
+        itemInfo.dwTypeData = menuString;
+        itemInfo.cch = (sizeof(menuString) / sizeof(wchar_t)) - 1;
 
-            GetMenuItemInfoW(pUDMI->um.hMenu, pUDMI->umi.iPosition, TRUE, &mii);
-        }
+        if (!GetMenuItemInfoW(drawingInfo->um.hMenu, drawingInfo->umi.iPosition, TRUE, &itemInfo))
+            return false;
+        menuString[255] = L'\0';
 
         //Get the item state for drawing
         DWORD dwFlags = DT_CENTER | DT_SINGLELINE | DT_VCENTER;
-
         int iTextStateID = 0;
 
-        if ((pUDMI->dis.itemState & ODS_INACTIVE) || (pUDMI->dis.itemState & ODS_DEFAULT)) 
+        if ((drawingInfo->dis.itemState & ODS_INACTIVE) || (drawingInfo->dis.itemState & ODS_DEFAULT))
             iTextStateID = MBI_NORMAL;
-        else if (pUDMI->dis.itemState & ODS_HOTLIGHT)
+        else if (drawingInfo->dis.itemState & ODS_HOTLIGHT)
             iTextStateID = MBI_HOT;
-        else if (pUDMI->dis.itemState & ODS_SELECTED)
+        else if (drawingInfo->dis.itemState & ODS_SELECTED)
             iTextStateID = MBI_PUSHED;
-        else if ((pUDMI->dis.itemState & ODS_GRAYED) || (pUDMI->dis.itemState & ODS_DISABLED))
+        else if ((drawingInfo->dis.itemState & ODS_GRAYED) || (drawingInfo->dis.itemState & ODS_DISABLED))
             iTextStateID = MBI_DISABLED;
 
-        if (pUDMI->dis.itemState & ODS_HOTLIGHT)
-            pbrBackground = &brItemBackgroundHot;
-        else if (pUDMI->dis.itemState & ODS_SELECTED)
-            pbrBackground = &brItemBackgroundSelected;
+        if (GetForegroundWindow() != hWnd)
+            iTextStateID = MBI_DISABLED;
 
-        if (pUDMI->dis.itemState & ODS_NOACCEL)
+        if (drawingInfo->dis.itemState & ODS_HOTLIGHT)
+            hBrBackground = &DARK_MENU_ITEM_BACKGROUND_HOVER;
+        else if (drawingInfo->dis.itemState & ODS_SELECTED)
+            hBrBackground = &DARK_MENU_ITEM_BACKGROUND_SELECTED;
+
+        if (drawingInfo->dis.itemState & ODS_NOACCEL)
             dwFlags |= DT_HIDEPREFIX;
 
-        if (!g_menuTheme)
-            g_menuTheme = OpenThemeData(hWnd, L"Menu");
+        if (!g_menuBarTheme)
+            g_menuBarTheme = OpenThemeData(hWnd, L"Menu");
 
-        const DTTOPTS opts { sizeof(opts), DTT_TEXTCOLOR, iTextStateID != MBI_DISABLED ? crItemForeground : crItemDisabled };
+        const DTTOPTS textOptions{ sizeof(textOptions), DTT_TEXTCOLOR, iTextStateID != MBI_DISABLED ? DARK_MENU_ITEM_FOREGROUND : DARK_MENU_ITEM_FOREGROUND_DISABLED };
+        FillRect(drawingInfo->um.hdc, &drawingInfo->dis.rcItem, *hBrBackground);
 
-        FillRect(pUDMI->um.hdc, &pUDMI->dis.rcItem, *pbrBackground);
-        DrawThemeTextEx(g_menuTheme, pUDMI->um.hdc, MENU_BARITEM, MBI_NORMAL, menuString, mii.cch, dwFlags, &pUDMI->dis.rcItem, &opts);
+        bool isMdiCaptionButton = menuString[0] == L'\0';
+        if (isMdiCaptionButton)
+        {
+            int offset = GetMenuItemCount(drawingInfo->um.hMenu) - drawingInfo->umi.iPosition;
+
+            wchar_t glyph;
+            if (drawingInfo->umi.iPosition == 0)
+                glyph = L'\ue700'; //Menu icon
+            else if (offset == 3)
+                glyph = L'\ue921'; //Minimize icon
+            else if (offset == 2)
+                glyph = L'\ue923'; //Maximize icon
+            else if (offset == 1)
+                glyph = L'\ue8bb'; //Close icon
+            else
+                return false;
+
+            HFONT hOldFont = SelectFont(drawingInfo->um.hdc, g_iconFont);
+
+            HRESULT hResult = DrawThemeTextEx(g_menuBarTheme, drawingInfo->um.hdc, MENU_BARITEM, MBI_NORMAL, &glyph, 1, dwFlags, &drawingInfo->dis.rcItem, &textOptions);
+            if (FAILED(hResult))
+                return false;
+
+            SelectFont(drawingInfo->um.hdc, hOldFont);
+            return true;
+        }
+
+        HRESULT hResult = DrawThemeTextEx(g_menuBarTheme, drawingInfo->um.hdc, MENU_BARITEM, MBI_NORMAL, menuString, itemInfo.cch, dwFlags, &drawingInfo->dis.rcItem, &textOptions);
+        if (FAILED(hResult))
+            return false;
 
         return true;
     }
+
     case WM_THEMECHANGED:
-    {
-        CloseThemeData(g_menuTheme);
-        g_menuTheme = nullptr;
+    case WM_DESTROY:
+        if (g_menuBarTheme)
+        {
+            CloseThemeData(g_menuBarTheme);
+            g_menuBarTheme = nullptr;
+        }
         return false;
-    }
+        
     default:
         return false;
     }
 }
 #pragma endregion
 
-using RtlGetNtVersionNumbers_T = void (WINAPI *)(LPDWORD, LPDWORD, LPDWORD);
-RtlGetNtVersionNumbers_T RtlGetNtVersionNumbers;
-
-using DefWindowProcW_T = decltype(&DefWindowProcW);
-DefWindowProcW_T DefWindowProcW_Original;
+EXTERN_C NTSYSAPI VOID NTAPI RtlGetNtVersionNumbers(LPDWORD dwMajor, LPDWORD dwMinor, LPDWORD dwBuild);
 
 enum class AppMode
 {
@@ -244,29 +287,92 @@ using FlushMenuThemes_T = void(WINAPI*)();
 using SetPreferredAppMode_T = AppMode(WINAPI*)(AppMode);
 using ShouldAppsUseDarkMode_T = bool(WINAPI*)();
 
-FlushMenuThemes_T FlushMenuThemes;
-SetPreferredAppMode_T SetPreferredAppMode;
-ShouldAppsUseDarkMode_T ShouldAppsUseDarkMode;
+FlushMenuThemes_T FlushMenuThemes = nullptr;
+SetPreferredAppMode_T SetPreferredAppMode = nullptr;
+ShouldAppsUseDarkMode_T ShouldAppsUseDarkMode = nullptr;
 
 AppMode g_currentAppMode;
 
+#define IS_DARK_MODE(hWnd) ((g_currentAppMode == AppMode::ForceDark || (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode())) && GetMenu(hWnd))
+
+decltype(&DefFrameProcW) DefFrameProcW_Original;
+LRESULT CALLBACK DefFrameProcW_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if(!IS_DARK_MODE(hWnd))
+        return DefFrameProcW_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
+    
+    LRESULT lResult = 0;
+    if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
+        return lResult;
+
+    if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
+    {
+        lResult = DefFrameProcW_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
+        DrawUAHMenuNCBottomLine(hWnd);
+        return lResult;
+    }
+
+    return DefFrameProcW_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
+}
+
+decltype(&DefWindowProcW) DefWindowProcW_Original;
 LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if((g_currentAppMode == AppMode::ForceDark || (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode())) && GetMenu(hWnd))
+    if(!IS_DARK_MODE(hWnd))
+        return DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
+
+    LRESULT lResult = 0;
+    if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
+        return lResult;
+
+    if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
     {
-        LRESULT lResult = 0;
-        if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
-            return lResult;
-    
-        if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
-        {
-            lResult = DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
-            DrawUAHMenuNCBottomLine(hWnd);
-            return lResult;
-        }
+        lResult = DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
+        DrawUAHMenuNCBottomLine(hWnd);
+        return lResult;
     }
 
     return DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
+}
+
+decltype(&DefFrameProcA) DefFrameProcA_Original;
+LRESULT CALLBACK DefFrameProcA_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if(!IS_DARK_MODE(hWnd))
+        return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
+
+    LRESULT lResult = 0;
+    if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
+        return lResult;
+
+    if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
+    {
+        lResult = DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
+        DrawUAHMenuNCBottomLine(hWnd);
+        return lResult;
+    }
+
+    return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
+}
+
+decltype(&DefWindowProcA) DefWindowProcA_Original;
+LRESULT CALLBACK DefWindowProcA_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if(!IS_DARK_MODE(hWnd))
+        return DefWindowProcA_Original(hWnd, uMsg, wParam, lParam);
+
+    LRESULT lResult = 0;
+    if(UAHWndProc(hWnd, uMsg, wParam, lParam, &lResult))
+        return lResult;
+
+    if(uMsg == WM_ACTIVATE || uMsg == WM_NCPAINT)
+    {
+        lResult = DefWindowProcA_Original(hWnd, uMsg, wParam, lParam);
+        DrawUAHMenuNCBottomLine(hWnd);
+        return lResult;
+    }
+
+    return DefWindowProcA_Original(hWnd, uMsg, wParam, lParam);
 }
 
 decltype(&SetMenuInfo) SetMenuInfo_Original;
@@ -276,11 +382,11 @@ WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
     alignas(MENUINFO) BYTE buffer[256];
     if (!(lpInfo->fMask & MIM_BACKGROUND) || lpInfo->cbSize > sizeof(buffer))
         return SetMenuInfo_Original(hMenu, lpInfo);
-
+	
     memcpy(buffer, lpInfo, lpInfo->cbSize);
-    LPMENUINFO pCopy = reinterpret_cast<LPMENUINFO>(buffer);
-    pCopy->hbrBack = brBackground;
-    return SetMenuInfo_Original(hMenu, pCopy);
+    auto* infoCopy = reinterpret_cast<LPMENUINFO>(buffer);
+    infoCopy->hbrBack = CreateSolidBrush(DARK_MENU_COLOR); //Fixes https://github.com/MGGSK/DarkMenus/issues/18
+    return SetMenuInfo_Original(hMenu, infoCopy);
 }
 
 //Applies the theme to all menus.
@@ -310,16 +416,19 @@ void ApplyTheme(const AppMode inputTheme = AppMode::Max)
     g_currentAppMode = theme;
 }
 
+//Checks if the windows build is 22000 or later.
+bool IsWindows11()
+{
+    DWORD build;
+    RtlGetNtVersionNumbers(nullptr, nullptr, &build);
+
+    build &= ~0xF0000000;
+    return build >= 22000;
+}
+
 //Checks if the windows build is 18362 or later.
 bool IsAPISupported()
 {
-    if(!RtlGetNtVersionNumbers)
-    {
-        const HMODULE hNtDll = LoadLibraryExW(L"ntdll.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        const FARPROC pRtlGetNtVersionNumbers = GetProcAddress(hNtDll, "RtlGetNtVersionNumbers");
-	    RtlGetNtVersionNumbers = reinterpret_cast<RtlGetNtVersionNumbers_T>(pRtlGetNtVersionNumbers);
-    }
-
     DWORD build;
     RtlGetNtVersionNumbers(nullptr, nullptr, &build);
 
@@ -345,20 +454,35 @@ BOOL Wh_ModInit()
 
     Wh_Log(L"Init");
 
-    if(!WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original))
+    if(!WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original) ||
+        !WindhawkUtils::SetFunctionHook(DefWindowProcA, DefWindowProcA_Hook, &DefWindowProcA_Original))
+    {
+        Wh_Log(L"Failed to hook DefWindowProc!");
         return FALSE;
+    }
+
+    if(!WindhawkUtils::SetFunctionHook(DefFrameProcW, DefFrameProcW_Hook, &DefFrameProcW_Original) ||
+        !WindhawkUtils::SetFunctionHook(DefFrameProcA, DefFrameProcA_Hook, &DefFrameProcA_Original))
+    {
+        Wh_Log(L"Failed to hook DefFrameProc!");
+        return FALSE;
+    }
 
     if(!WindhawkUtils::SetFunctionHook(SetMenuInfo, SetMenuInfo_Hook, &SetMenuInfo_Original))
+    {
+        Wh_Log(L"Failed to hook SetMenuInfo!");
         return FALSE;
+    }
 
-    const HMODULE hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    const FARPROC pSetPreferredAppMode = GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
-    const FARPROC pFlushMenuThemes = GetProcAddress(hUxtheme, MAKEINTRESOURCEA(136));
-    const FARPROC pShouldAppsUseDarkMode = GetProcAddress(hUxtheme, MAKEINTRESOURCEA(132));
+    g_hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
-    SetPreferredAppMode = reinterpret_cast<SetPreferredAppMode_T>(pSetPreferredAppMode);
-    FlushMenuThemes = reinterpret_cast<FlushMenuThemes_T>(pFlushMenuThemes);
-    ShouldAppsUseDarkMode = reinterpret_cast<ShouldAppsUseDarkMode_T>(pShouldAppsUseDarkMode);
+    SetPreferredAppMode = (SetPreferredAppMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135));
+    FlushMenuThemes = (FlushMenuThemes_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136));
+    ShouldAppsUseDarkMode = (ShouldAppsUseDarkMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(132));
+
+    g_iconFont = CreateFontW(10, NULL, NULL, NULL, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        (IsWindows11() ? L"Segoe Fluent Icons" : L"Segoe Mdl2 Assets"));
 
     ApplyTheme();
     return TRUE;
@@ -380,8 +504,14 @@ void Wh_ModUninit()
 
     if(!IsSystemCallDisableMitigationEnabled())
     {
-        DeleteObject(brBackground);
-        DeleteObject(brItemBackgroundHot);
-        DeleteObject(brItemBackgroundSelected);
+        DeleteObject(DARK_CONTROL_BRUSH);
+        DeleteObject(DARK_MENU_BRUSH);
+        DeleteObject(DARK_MENUBAR_SEPARATOR_BRUSH);
+        DeleteObject(DARK_MENU_ITEM_BACKGROUND_HOVER);
+        DeleteObject(DARK_MENU_ITEM_BACKGROUND_SELECTED);
+
+        DeleteObject(g_iconFont);
+        CloseThemeData(g_menuBarTheme);
+        FreeLibrary(g_hUxtheme);
     }
 }
