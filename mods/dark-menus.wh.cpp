@@ -177,7 +177,6 @@ void DrawUAHMenuNCBottomLine(HWND hWnd)
 //Returns true if handled, false to continue with normal processing
 bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* lpResult)
 {
-    return false;
     switch (uMsg)  
     {
     case WM_UAHDRAWMENU:
@@ -522,4 +521,5 @@ void Wh_ModUninit()
         FreeLibrary(g_hUxtheme);
     }
 }
+
 
