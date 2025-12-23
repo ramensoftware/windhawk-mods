@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.3.8
+// @version         1.3.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -3721,8 +3721,6 @@ namespace StartMenuUI {
 bool g_applyStylePending;
 bool g_inApplyStyle;
 bool g_startMenuAnimationAdjusted;
-std::optional<double> g_previousCanvasTop;
-std::optional<double> g_previousCanvasLeft;
 winrt::weak_ref<DependencyObject> g_startSizingFrameWeakRef;
 int64_t g_canvasTopPropertyChangedToken;
 int64_t g_canvasLeftPropertyChangedToken;
@@ -3854,34 +3852,10 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
         }
     }
 
-    if (g_unloading) {
-        if (g_previousCanvasTop.has_value()) {
-            Wh_Log(L"Restoring Canvas.Top to %f", g_previousCanvasTop.value());
-            Controls::Canvas::SetTop(startSizingFrame,
-                                     g_previousCanvasTop.value());
-        }
-        if (g_previousCanvasLeft.has_value()) {
-            Wh_Log(L"Restoring Canvas.Left to %f",
-                   g_previousCanvasLeft.value());
-            Controls::Canvas::SetLeft(startSizingFrame,
-                                      g_previousCanvasLeft.value());
-        }
-    } else {
-        if (!g_previousCanvasTop.has_value()) {
-            double canvasTop = Controls::Canvas::GetTop(startSizingFrame);
-            // The value might be zero when not yet initialized.
-            if (canvasTop) {
-                g_previousCanvasTop = canvasTop;
-            }
-        }
-        if (!g_previousCanvasLeft.has_value()) {
-            double canvasLeft = Controls::Canvas::GetLeft(startSizingFrame);
-            // The value might be zero when not yet initialized.
-            if (canvasLeft) {
-                g_previousCanvasLeft = canvasLeft;
-            }
-        }
+    Wh_Log(L"Invalidating measure");
+    startSizingFrame.InvalidateMeasure();
 
+    if (!g_unloading) {
         MONITORINFO monitorInfo{
             .cbSize = sizeof(MONITORINFO),
         };
@@ -3891,14 +3865,8 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
         UINT monitorDpiY = 96;
         GetDpiForMonitor(monitor, MDT_DEFAULT, &monitorDpiX, &monitorDpiY);
 
-        // Use the monitor size and not the content size, because the content
-        // size might not be updated yet when this function is called.
-        double canvasWidth =
-            MulDiv(monitorInfo.rcWork.right - monitorInfo.rcWork.left, 96,
-                   monitorDpiX);
-        double canvasHeight =
-            MulDiv(monitorInfo.rcWork.bottom - monitorInfo.rcWork.top, 96,
-                   monitorDpiY);
+        double canvasWidth = content.ActualWidth();
+        double canvasHeight = content.ActualHeight();
 
         constexpr int kStartMenuMargin = 12;
 
