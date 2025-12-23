@@ -1,3 +1,8 @@
+## 1.3.9 ([Dec 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/8d55be3283a54c65186cc221e3502adb27413d04/mods/taskbar-vertical.wh.cpp))
+
+* Fixed gap between the taskbar and the Start menu when the taskbar is on the right.
+* Improved Start menu handling, especially when opened on a different monitor.
+
 ## 1.3.8 ([Dec 19, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bfba1b55ec10ecd3f7b78009533838598191141d/mods/taskbar-vertical.wh.cpp))
 
 * Fixed drag and drop for tray icons.
