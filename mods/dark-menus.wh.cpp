@@ -116,6 +116,30 @@ struct UAHDRAWMENUITEM
 	UAHMENUITEM umi;
 };
 
+EXTERN_C NTSYSAPI VOID NTAPI RtlGetNtVersionNumbers(LPDWORD dwMajor, LPDWORD dwMinor, LPDWORD dwBuild);
+
+//Checks if the windows build is 22000 or later.
+bool IsWindows11()
+{
+    return true;
+    DWORD build;
+    RtlGetNtVersionNumbers(nullptr, nullptr, &build);
+
+    build &= ~0xF0000000;
+    return build >= 22000;
+}
+
+//Checks if the windows build is 18362 or later.
+bool IsAPISupported()
+{
+    return true;
+    DWORD build;
+    RtlGetNtVersionNumbers(nullptr, nullptr, &build);
+
+    build &= ~0xF0000000;
+    return build >= 18362;
+}
+
 //Code based on https://github.com/notepad-plus-plus/notepad-plus-plus/blob/bab3573be708bb908b8080e3e2007ea78a7f1932/PowerEditor/src/NppDarkMode.cpp
 #pragma region CodeBasedOnNotepad++
 
@@ -153,6 +177,7 @@ void DrawUAHMenuNCBottomLine(HWND hWnd)
 //Returns true if handled, false to continue with normal processing
 bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* lpResult)
 {
+    return false;
     switch (uMsg)  
     {
     case WM_UAHDRAWMENU:
@@ -240,6 +265,13 @@ bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRE
             else
                 return false;
 
+            if(!g_iconFont)
+            {
+                g_iconFont = CreateFontW(10, NULL, NULL, NULL, FW_NORMAL, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                    (IsWindows11() ? L"Segoe Fluent Icons" : L"Segoe Mdl2 Assets"));
+            }
+
             HFONT hOldFont = SelectFont(drawingInfo->um.hdc, g_iconFont);
 
             HRESULT hResult = DrawThemeTextEx(g_menuBarTheme, drawingInfo->um.hdc, MENU_BARITEM, MBI_NORMAL, &glyph, 1, dwFlags, &drawingInfo->dis.rcItem, &textOptions);
@@ -271,8 +303,6 @@ bool CALLBACK UAHWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRE
     }
 }
 #pragma endregion
-
-EXTERN_C NTSYSAPI VOID NTAPI RtlGetNtVersionNumbers(LPDWORD dwMajor, LPDWORD dwMinor, LPDWORD dwBuild);
 
 enum class AppMode
 {
@@ -338,6 +368,7 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 decltype(&DefFrameProcA) DefFrameProcA_Original;
 LRESULT CALLBACK DefFrameProcA_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
     if(!IS_DARK_MODE(hWnd))
         return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
 
@@ -382,7 +413,7 @@ WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
     alignas(MENUINFO) BYTE buffer[256];
     if (!(lpInfo->fMask & MIM_BACKGROUND) || lpInfo->cbSize > sizeof(buffer))
         return SetMenuInfo_Original(hMenu, lpInfo);
-	
+
     memcpy(buffer, lpInfo, lpInfo->cbSize);
     auto* infoCopy = reinterpret_cast<LPMENUINFO>(buffer);
     infoCopy->hbrBack = CreateSolidBrush(DARK_MENU_COLOR); //Fixes https://github.com/MGGSK/DarkMenus/issues/18
@@ -414,26 +445,6 @@ void ApplyTheme(const AppMode inputTheme = AppMode::Max)
     SetPreferredAppMode(theme);
 
     g_currentAppMode = theme;
-}
-
-//Checks if the windows build is 22000 or later.
-bool IsWindows11()
-{
-    DWORD build;
-    RtlGetNtVersionNumbers(nullptr, nullptr, &build);
-
-    build &= ~0xF0000000;
-    return build >= 22000;
-}
-
-//Checks if the windows build is 18362 or later.
-bool IsAPISupported()
-{
-    DWORD build;
-    RtlGetNtVersionNumbers(nullptr, nullptr, &build);
-
-    build &= ~0xF0000000;
-    return build >= 18362;
 }
 
 //Updates the theme of the window when the settings change.
@@ -479,10 +490,6 @@ BOOL Wh_ModInit()
     SetPreferredAppMode = (SetPreferredAppMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(135));
     FlushMenuThemes = (FlushMenuThemes_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(136));
     ShouldAppsUseDarkMode = (ShouldAppsUseDarkMode_T)GetProcAddress(g_hUxtheme, MAKEINTRESOURCEA(132));
-
-    g_iconFont = CreateFontW(10, NULL, NULL, NULL, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        (IsWindows11() ? L"Segoe Fluent Icons" : L"Segoe Mdl2 Assets"));
 
     ApplyTheme();
     return TRUE;
