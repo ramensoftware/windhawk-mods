@@ -515,11 +515,13 @@ void Wh_ModUninit()
         DeleteObject(DARK_MENU_ITEM_BACKGROUND_HOVER);
         DeleteObject(DARK_MENU_ITEM_BACKGROUND_SELECTED);
 
-        DeleteObject(g_iconFont);
+		if(g_iconFont)
+            DeleteObject(g_iconFont);
         CloseThemeData(g_menuBarTheme);
         FreeLibrary(g_hUxtheme);
     }
 }
+
 
 
 
