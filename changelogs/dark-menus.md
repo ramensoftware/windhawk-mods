@@ -1,3 +1,7 @@
+## 1.4.1 ([Dec 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/4301dbfbb94e430a66f346b5454ce0d7e03b77e3/mods/dark-menus.wh.cpp))
+
+- Fixed: Firefox crashes after update 1.4 (https://github.com/MGGSK/DarkMenus/issues/19)
+
 ## 1.4 ([Dec 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/35fe88158b7b0b747cb24906a09716b9bb2e15d6/mods/dark-menus.wh.cpp))
 
 - Fixed: The white outline problem in the latest version (https://github.com/MGGSK/DarkMenus/issues/18)

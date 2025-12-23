@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-23T08:29:33.000Z</updated>
+    <updated>2025-12-23T10:34:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dark mode context menus 1.4.1]]></title>
+        <id>https://windhawk.net/mods/dark-menus#4301dbfbb94e430a66f346b5454ce0d7e03b77e3</id>
+        <link href="https://windhawk.net/mods/dark-menus"/>
+        <updated>2025-12-23T10:34:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: Firefox crashes after update 1.4 (https://github.com/MGGSK/DarkMenus/issues/19)</li>
+</ul>]]></content>
+        <author>
+            <name>Mgg Sk</name>
+            <uri>https://github.com/MGGSK</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.9]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#8d55be3283a54c65186cc221e3502adb27413d04</id>
@@ -302,25 +315,6 @@ you can still use Win+Arrows for regular Windows Snap and Win+Shift+Arrows for F
         <author>
             <name>David Trapp (CherryDT)</name>
             <uri>https://github.com/CherryDT</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.0.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-uifile-fix#afd34c994da3edbd827a3eb17ee052831d5cf729</id>
-        <link href="https://windhawk.net/mods/classic-theme-uifile-fix"/>
-        <updated>2025-12-10T23:23:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicthemeuifilefix">Classic Theme UIFILE Fix</h1>
-<p>Fixes Control Panel pages (Accessibility, Personalization, Storage Spaces, etc.) that fail to load 
-when using the Windows Classic theme.</p>
-<p><img src="https://i.imgur.com/TVmK9IR.png" alt="Screenshot" /></p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>Replaces <code>gtc()</code> (GetThemeColor) with <code>windowtext</code></li>
-<li>Wraps bare <code>dtb()</code> (DrawThemeBackground) in <code>themeable(dtb(...), dfc(0, 0))</code></li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
