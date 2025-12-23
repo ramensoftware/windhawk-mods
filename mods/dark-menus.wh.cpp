@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.4
+// @version           1.4.1
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
@@ -522,3 +522,4 @@ void Wh_ModUninit()
         FreeLibrary(g_hUxtheme);
     }
 }
+
