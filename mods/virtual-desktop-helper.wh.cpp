@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, pin windows, and tile windows with customizable hotkeys
-// @version         2.0.0
+// @version         2.1.0
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -37,11 +37,12 @@ Based on VD.ahk by FuPeiJiang.
 | Switch to desktop 1-9 | `Alt + 1-9` |
 | Move window to desktop 1-9 | `Alt + Shift + 1-9` |
 | Toggle previous desktop | `Alt + Q` (configurable modifier) |
+| Switch to next desktop | `Alt + X` (configurable modifier) |
 | Pin/unpin window | `Alt + P` (configurable modifier) |
 | Tile windows | `Alt + D` (configurable modifier) |
 | Cycle layout | `Alt + L` (configurable modifier) |
 
-Note: The modifier for utility hotkeys (Previous Desktop, Pin, Tile, Layout) can be changed in settings.
+Note: The modifier for utility hotkeys (Previous Desktop, Next Desktop, Pin, Tile, Layout) can be changed in settings.
 
 ## Tiling Layouts
 
@@ -109,6 +110,15 @@ Select your Windows version in settings for correct functionality:
     - Q: Q
     - Grave: "` (Backtick)"
     - Tab: Tab
+
+- NextDesktopKey: X
+  $name: Next Desktop Key
+  $description: Key to switch to the next desktop (wraps around) (used with Utility Modifier)
+  $options:
+    - X: X
+    - E: E
+    - N: N
+    - Z: Z
 
 - PinKey: P
   $name: Pin Window Key
@@ -329,7 +339,16 @@ static bool g_hasPreviousDesktop = false;
 // HK_TILE (20): Tile windows on current monitor
 // HK_LAYOUT (21): Cycle through tiling layouts
 // HK_PIN (22): Pin/unpin current window
-enum HotkeyIds { HK_MOVE_BASE = 1, HK_SWITCH_BASE = 10, HK_PREV = 19, HK_TILE = 20, HK_LAYOUT = 21, HK_PIN = 22 };
+// HK_NEXT (23): Switch to next desktop (wrap around)
+enum HotkeyIds {
+  HK_MOVE_BASE = 1,
+  HK_SWITCH_BASE = 10,
+  HK_PREV = 19,
+  HK_TILE = 20,
+  HK_LAYOUT = 21,
+  HK_PIN = 22,
+  HK_NEXT = 23
+};
 
 static LONG g_tileMargin = 4;
 static LONG g_tileGap = 4;
@@ -339,6 +358,7 @@ enum class TileLayout { MasterStack, Columns, Rows, MasterStackH, BSP, Monocle, 
 static TileLayout g_currentLayout = TileLayout::MasterStack;
 
 static UINT g_prevDesktopKey = 'Q';
+static UINT g_nextDesktopKey = 'X';
 static UINT g_tileKey = 'D';
 static UINT g_layoutKey = 'L';
 static UINT g_pinKey = 'P';
@@ -394,9 +414,9 @@ T LookupTable(PCWSTR str, const std::pair<PCWSTR, T>* table, size_t count, T def
 }
 
 UINT ParseKeyCode(PCWSTR str) {
-  static const std::pair<PCWSTR, UINT> kKeyMap[] = {{L"Q", 'Q'},          {L"D", 'D'},      {L"T", 'T'},
-                                                    {L"L", 'L'},          {L"P", 'P'},      {L"W", 'W'},
-                                                    {L"Grave", VK_OEM_3}, {L"Tab", VK_TAB}, {L"Space", VK_SPACE}};
+  static const std::pair<PCWSTR, UINT> kKeyMap[] = {
+      {L"Q", 'Q'}, {L"X", 'X'}, {L"E", 'E'}, {L"N", 'N'},          {L"Z", 'Z'},      {L"D", 'D'},         {L"T", 'T'},
+      {L"L", 'L'}, {L"P", 'P'}, {L"W", 'W'}, {L"Grave", VK_OEM_3}, {L"Tab", VK_TAB}, {L"Space", VK_SPACE}};
   return LookupTable(str, kKeyMap, _countof(kKeyMap), (UINT)0);
 }
 
@@ -460,6 +480,7 @@ void LoadSettings() {
   Wh_FreeStringSetting(layout);
 
   g_prevDesktopKey = ReadStringSetting(L"PrevDesktopKey", ParseKeyCode, (UINT)'Q');
+  g_nextDesktopKey = ReadStringSetting(L"NextDesktopKey", ParseKeyCode, (UINT)'X');
   g_tileKey = ReadStringSetting(L"TileKey", ParseKeyCode, (UINT)'D');
   g_layoutKey = ReadStringSetting(L"LayoutKey", ParseKeyCode, (UINT)'L');
   g_pinKey = ReadStringSetting(L"PinKey", ParseKeyCode, (UINT)'P');
@@ -776,6 +797,47 @@ bool SwitchToPreviousDesktop() {
     return false;
   }
   return GoToDesktopNum(index + 1);
+}
+
+bool SwitchToNextDesktop() {
+  Wh_Log(L"SwitchToNextDesktop called");
+  if (!InitializeVirtualDesktopAPI()) {
+    Wh_Log(L"SwitchToNextDesktop: API not initialized");
+    return false;
+  }
+
+  GUID currentDesktopId = {};
+  if (!GetCurrentDesktopId(&currentDesktopId)) {
+    Wh_Log(L"SwitchToNextDesktop: Failed to get current desktop ID");
+    return false;
+  }
+
+  int currentIndex = GetDesktopIndexById(currentDesktopId);
+  if (currentIndex < 0) {
+    Wh_Log(L"SwitchToNextDesktop: Invalid current index");
+    return false;
+  }
+
+  IObjectArray* desktops = GetDesktops();
+  if (!desktops) {
+    Wh_Log(L"SwitchToNextDesktop: Failed to get desktops");
+    return false;
+  }
+
+  UINT desktopCount = 0;
+  desktops->GetCount(&desktopCount);
+  desktops->Release();
+
+  Wh_Log(L"SwitchToNextDesktop: currentIndex=%d, desktopCount=%u, maxDesktops=%d", currentIndex, desktopCount,
+         g_maxDesktops);
+
+  int cycleCount = (int)desktopCount;
+  if (cycleCount > g_maxDesktops) cycleCount = g_maxDesktops;
+  if (cycleCount <= 0) return false;
+
+  int nextIndex = (currentIndex + 1) % cycleCount;
+  Wh_Log(L"SwitchToNextDesktop: Switching to desktop %d", nextIndex + 1);
+  return GoToDesktopNum(nextIndex + 1);
 }
 
 bool MoveActiveWindowToDesktopNum(int desktopNum) {
@@ -1167,6 +1229,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
     RegisterHotKey(nullptr, HK_SWITCH_BASE + i - 1, g_switchModifiers, '0' + i);
   }
   RegisterHotKey(nullptr, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
+  RegisterHotKey(nullptr, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
   RegisterHotKey(nullptr, HK_PIN, g_utilityModifiers, g_pinKey);
   RegisterHotKey(nullptr, HK_TILE, g_utilityModifiers, g_tileKey);
   RegisterHotKey(nullptr, HK_LAYOUT, g_utilityModifiers, g_layoutKey);
@@ -1176,7 +1239,7 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
   while (!g_stopHotkeyThread) {
     // Wait for message or timeout (100ms) to check stop flag
     DWORD waitResult = MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
-    
+
     if (waitResult == WAIT_OBJECT_0) {
       // Messages available
       while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -1195,6 +1258,8 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
             GoToDesktopNum(hotkeyId - HK_SWITCH_BASE + 1);
           } else if (hotkeyId == HK_PREV) {
             SwitchToPreviousDesktop();
+          } else if (hotkeyId == HK_NEXT) {
+            SwitchToNextDesktop();
           } else if (hotkeyId == HK_PIN) {
             TogglePinWindow();
           } else if (hotkeyId == HK_TILE) {
@@ -1217,7 +1282,7 @@ cleanup:
     UnregisterHotKey(nullptr, HK_MOVE_BASE + i);
     UnregisterHotKey(nullptr, HK_SWITCH_BASE + i);
   }
-  for (int hk : {HK_PREV, HK_PIN, HK_TILE, HK_LAYOUT}) UnregisterHotKey(nullptr, hk);
+  for (int hk : {HK_PREV, HK_NEXT, HK_PIN, HK_TILE, HK_LAYOUT}) UnregisterHotKey(nullptr, hk);
 
   CleanupVirtualDesktopAPI();
   CoUninitialize();
@@ -1249,7 +1314,7 @@ void StopHotkeyThread() {
 
   // Signal thread to stop
   g_stopHotkeyThread = true;
-  
+
   if (g_threadId) {
     PostThreadMessage(g_threadId, WM_QUIT, 0, 0);
   }
