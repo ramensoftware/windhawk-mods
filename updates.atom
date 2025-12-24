@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-23T10:34:48.000Z</updated>
+    <updated>2025-12-24T10:31:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.1.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#bf674013e9b1ad958972eb0c5cc632aa1674f17e</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2025-12-24T10:31:42.000Z</updated>
+        <content type="html"><![CDATA[<p>Add X (alongside E, N, Z) key option for "Switch to Next Desktop" hotkey, which cycles through virtual desktops in a wrap-around manner (1→2→3→…→1)</p>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dark mode context menus 1.4.1]]></title>
         <id>https://windhawk.net/mods/dark-menus#4301dbfbb94e430a66f346b5454ce0d7e03b77e3</id>
@@ -297,24 +308,6 @@ used at all times for an application.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[FancyZones Win+Shift+Arrows Hotkey 1.0]]></title>
-        <id>https://windhawk.net/mods/fancyzones-winshift-hotkey#c4f1fd1f16d5880fbd76f456dc67678ed0bcd638</id>
-        <link href="https://windhawk.net/mods/fancyzones-winshift-hotkey"/>
-        <updated>2025-12-10T23:40:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Normally, when you enable "Override Windows Snap" in PowerToys' FancyZones, you can no
-longer use the regular Snap feature for maximizing Windows and such. This mod changes
-the behavior so that it overrides Win+Shift+Arrows instead (which is normally used for
-moving Windows between monitors and stretching a window vertically, these are both
-functionalities that can be done with FancyZones too in one way or another). This way,
-you can still use Win+Arrows for regular Windows Snap and Win+Shift+Arrows for FancyZones.</p>
-<p>Basically, this is a workaround for <a href="https://github.com/microsoft/PowerToys/issues/2382">this GitHub issue</a>.</p>
-<p><em>Note: Please do not open GitHub issues to ask for support or other modifier keys. The way the mod works only works well with Shift due to how FancyZones checks and uses different modifier keys.</em></p>]]></content>
-        <author>
-            <name>David Trapp (CherryDT)</name>
-            <uri>https://github.com/CherryDT</uri>
         </author>
     </entry>
 </feed>

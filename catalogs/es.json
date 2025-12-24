@@ -7490,7 +7490,7 @@
                     5
                 ],
                 "ratingUsers": 7,
-                "updated": 1766166292000,
+                "updated": 1766572302000,
                 "users": 55
             },
             "metadata": {
@@ -7502,7 +7502,7 @@
                     "windhawk.exe"
                 ],
                 "name": "Virtual Desktop Helper",
-                "version": "2.0.0"
+                "version": "2.1.0"
             }
         },
         "virtual-desktop-taskbar-order": {
