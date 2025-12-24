@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-24T10:31:42.000Z</updated>
+    <updated>2025-12-24T11:57:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 2.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#37d5bb9775479a78c2fd5bbfbfd2d04216c42a66</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2025-12-24T11:57:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>send virtual key press to the last active window with <code>focusPreviousWindow</code> option - https://github.com/m1lhaus/windhawk-mods/issues/34</li>
+<li>added new action <code>Toggle Taskbar alignment</code> to toggle between <code>Left</code> and <code>Center</code> taskbar icons alignment - https://github.com/m1lhaus/windhawk-mods/issues/31</li>
+<li>implemented autodetection of ExplorerPatcher - https://github.com/m1lhaus/windhawk-mods/issues/46</li>
+<li>added taskbar type (primary/secondary) as a new condition to action trigger - https://github.com/m1lhaus/windhawk-mods/issues/45</li>
+</ul>]]></content>
+        <author>
+            <name>m1lhaus</name>
+            <uri>https://github.com/m1lhaus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Helper 2.1.0]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-helper#bf674013e9b1ad958972eb0c5cc632aa1674f17e</id>
@@ -294,20 +310,6 @@ used at all times for an application.</p>
         <author>
             <name>David Trapp (CherryDT)</name>
             <uri>https://github.com/CherryDT</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-uifile-fix#e60778e52d2aeea1d6c72903fb7f79aa7020a35d</id>
-        <link href="https://windhawk.net/mods/classic-theme-uifile-fix"/>
-        <updated>2025-12-11T08:06:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Avoid replacing gtc's which have CONTROLPANELSTYLE inside so to address issue of hyperlinks becoming black</p></li>
-<li><p>If Explorer is themed, just do nothing</p></li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

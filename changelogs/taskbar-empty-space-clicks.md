@@ -1,3 +1,10 @@
+## 2.3 ([Dec 24, 2025](https://github.com/ramensoftware/windhawk-mods/blob/37d5bb9775479a78c2fd5bbfbfd2d04216c42a66/mods/taskbar-empty-space-clicks.wh.cpp))
+
+- send virtual key press to the last active window with `focusPreviousWindow` option - https://github.com/m1lhaus/windhawk-mods/issues/34
+- added new action `Toggle Taskbar alignment` to toggle between `Left` and `Center` taskbar icons alignment - https://github.com/m1lhaus/windhawk-mods/issues/31
+- implemented autodetection of ExplorerPatcher - https://github.com/m1lhaus/windhawk-mods/issues/46
+- added taskbar type (primary/secondary) as a new condition to action trigger - https://github.com/m1lhaus/windhawk-mods/issues/45
+
 ## 2.2 ([Dec 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/7833da2a65bf74c639d33f1432664d552056e2de/mods/taskbar-empty-space-clicks.wh.cpp))
 
 - Added `Troubleshooting` chapter to address recent issues with incorrect trigger settings after update from v1 to v2
