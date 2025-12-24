@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
-// @version         2.2
+// @version         2.3
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -21,35 +21,36 @@
 /*
 # Click on empty taskbar space
 
-This mod lets you assign an action to a mouse click on Windows taskbar. Single, double and triple clicks are supported - both mouse and touchscreen clicks. You can also assign a keyboard modifier to the action. For example, you can set up a double click on the taskbar to open Task Manager while holding down the Ctrl key. The mod is designed to be as flexible as possible. You can assign any action to any mouse click or touch screen tap. You can also assign multiple actions to the same trigger. This mod reacts when empty space of the taskbar is clicked. Buttons, menus or other function of the taskbar are not affected. Click events are normally forwarded to the system, so you can still use the taskbar as usual. Both primary and secondary taskbars are supported.
+This mod lets you assign an action to a mouse click on the Windows taskbar. Single, double, and triple clicks are supported - both mouse and touchscreen clicks. You can also assign a keyboard modifier to the action. For example, you can set up a double-click on the taskbar to open Task Manager while holding down the Ctrl key. The mod is designed to be as flexible as possible. You can assign any action to any mouse click or touchscreen tap. You can also assign multiple actions to the same trigger. This mod reacts when empty space on the taskbar is clicked. Buttons, menus, or other taskbar functions are not affected. Click events are normally forwarded to the system, so you can still use the taskbar as usual. Both primary and secondary taskbars are supported.
 
 ## Supported actions:
 
 1. **Show desktop** - Toggle show/hide desktop
 2. **Ctrl+Alt+Tab** - Opens Ctrl+Alt+Tab dialog
-3. **Task Manager** - Opens Windows default task manager
+3. **Task Manager** - Opens Windows default Task Manager
 4. **Mute system volume** - Toggle mute of system volume (all sound)
 5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature
 6. **Win+Tab** - Opens Win+Tab dialog
 7. **Hide desktop icons** - Toggle show/hide of all desktop icons
-7. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
-7. **Open Start menu** - Sends Win key press to open Start menu
-8. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
-9. **Start application** - Starts arbitrary application or runs a command
+8. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
+9. **Toggle Taskbar alignment** - Toggle taskbar icon alignment between left and center (Windows 11 only)
+10. **Open Start menu** - Sends Win key press to open Start menu
+11. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
+12. **Start application** - Starts arbitrary application or runs a command
 
 ### Example
 
-Following animation shows how to setup **taskbar auto-hide** feature toggle on midle mouse button click and **toggle volume mute** on Ctrl + double-click.
+The following animation shows how to set up the **taskbar auto-hide** feature toggle on middle mouse button click and **toggle volume mute** on Ctrl + double-click.
 
 ![How to set "Click on empty taskbar space" Windhawk mod](https://i.imgur.com/b6rBLfF.gif)
 
-Once set, simple middle-click on empty taskbar space will toggle auto-hide feature:
+Once set, a simple middle-click on empty taskbar space will toggle the auto-hide feature:
 
 ![Demonstration of Toggle taskbar autohide mod for Windhawk](https://i.imgur.com/BRQrVnX.gif)
 
 ## Supported triggers:
 
-- **Keyboard** - Optional. Keyboard keypress modifiers. If None is selected or added, the modifier gets ignored.
+- **Keyboard** - Optional. Keyboard keypress modifiers. If None is selected or added, the modifier is ignored.
     - **Left Ctrl** - Left Ctrl key
     - **Left Shift** - Left Shift key
     - **Left Alt** - Left Alt key
@@ -57,16 +58,16 @@ Once set, simple middle-click on empty taskbar space will toggle auto-hide featu
     - **Right Ctrl** - Right Ctrl key
     - **Right Shift** - Right Shift key
     - **Right Alt** - Right Alt key
-- **Mouse** - Required. Mouse click or touchscreen tap trigger. If None is selected, the whole trigger+action gets ignored.
+- **Mouse** - Required. Mouse click or touchscreen tap trigger. If None is selected, the entire trigger+action is ignored.
     - **Left** - Mouse left button click
-    - **Left Double** - Mouse left button double click
-    - **Left Triple** - Mouse left button triple click
+    - **Left Double** - Mouse left button double-click
+    - **Left Triple** - Mouse left button triple-click
     - **Middle** - Mouse middle button click
-    - **Middle Double** - Mouse middle button double click
-    - **Middle Triple** - Mouse middle button triple click
+    - **Middle Double** - Mouse middle button double-click
+    - **Middle Triple** - Mouse middle button triple-click
     - **Right** - Mouse right button click
-    - **Right Double** - Mouse right button double click
-    - **Right Triple** - Mouse right button triple click
+    - **Right Double** - Mouse right button double-click
+    - **Right Triple** - Mouse right button triple-click
     - **Tap** - Touchscreen single tap
     - **Tap Double** - Touchscreen double tap
     - **Tap Triple** - Touchscreen triple tap
@@ -82,21 +83,24 @@ Some actions support or require additional arguments. You can set them in the Se
 5. Taskbar auto-hide - no additional arguments supported
 6. Win+Tab - no additional arguments supported
 7. Hide desktop icons - no additional arguments supported
-7. Combine Taskbar buttons - `priTaskBarBtnState1;priTaskBarBtnState2;secTaskBarBtnState1;secTaskBarBtnState2`
+8. Combine Taskbar buttons - `priTaskBarBtnState1;priTaskBarBtnState2;secTaskBarBtnState1;secTaskBarBtnState2`
     - priTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - priTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - secTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - secTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - Example: `COMBINE_ALWAYS;COMBINE_WHEN_FULL;COMBINE_ALWAYS;COMBINE_NEVER`
-7. Open Start menu - no additional arguments supported
-8. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
-    - Example: `0x5B;0x45`
-    - Each following text field correspond to one virtual key press. Fill hexa-decimal key codes of keys you want to press. Key codes are defined in [win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexa-decimal (0x) or decimal format of a key code! Example: (0x5B and 0x45) corresponds to  (Win + E) shortcut that opens Explorer window. If your key combination has no effect, check out log for more information. Please note, that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via inputdev interface.
-9. Start application - `applicationPath arg1 arg2 ... argN`
+9. Toggle Taskbar alignment - no additional arguments supported
+10. Open Start menu - no additional arguments supported
+11. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
+    - Example: `0x5B;0x45` or `0x7A;focusPreviousWindow`
+    - Each text field corresponds to one virtual key press. Fill in hexadecimal key codes of the keys you want to press. Key codes are defined in [Win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexadecimal (0x) or decimal format for a key code! Example: (0x5B and 0x45) corresponds to (Win + E) shortcut that opens an Explorer window. If your key combination has no effect, check the log for more information.
+    - There is a special keyword `focusPreviousWindow` that can be used to set focus back to the previously active window. This is useful when you want to send keypresses to the last active window instead of the taskbar. That way you can, for example, turn on fullscreen mode in the web browser by sending the F11 key. You can use this keyword anywhere in the sequence of virtual keys.
+    - Please note that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via the inputdev interface.
+12. Start application - `applicationPath arg1 arg2 ... argN`
     - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt`
     - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
     - Example: `cmd.exe /c echo Hello & pause`
-    - Takes and executes the whole `applicationPath` string as a new process. No semicolons are parsed! Only leading and trailing white characters are removed. You can use full path to the application or just the executable name if it is in PATH. In case you want to execute shell command, use cmd.exe with corresponding flag.
+    - Takes and executes the entire `applicationPath` string as a new process. No semicolons are parsed! Only leading and trailing whitespace characters are removed. You can use the full path to the application or just the executable name if it is in PATH. If you want to execute a shell command, use cmd.exe with the corresponding flag.
 
 ## Caveats and limitations:
 
@@ -111,12 +115,12 @@ This short delay is needed so the mod can correctly decide whether you did a:
 
 This is what allows you, for example, to double-click the taskbar without triggering the single-click action first.
 
-If you don’t like this delay, you can turn on the **Eager trigger evaluation** option in the mod’s settings.
+If you don't like this delay, you can turn on the **Eager trigger evaluation** option in the mod's settings.
 
 With **Eager trigger evaluation** enabled:
 
 The action runs immediately when a matching trigger is detected (no waiting).
-However, double or triple clicks/taps can still trigger the single-click/tap action, as long as you haven’t configured a separate double or triple click/tap action for that same trigger.
+However, double or triple clicks/taps can still trigger the single-click/tap action, as long as you haven't configured a separate double or triple click/tap action for that same trigger.
 In other words, this option is a trade-off:
 
 - Off – slight delay, but more accurate recognition of single vs. double vs. triple gestures
@@ -136,17 +140,17 @@ If you set up a right-click trigger without keyboard modifiers (for example, a r
 
 Tip: To avoid this delay, consider using keyboard modifiers with your right-click triggers (like Ctrl + right double-click). This way, the mod can instantly show the context menu when you right-click without holding the modifier key.
 
-## Supported Windows versions are:
+## Supported Windows versions:
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
-- Windows 11 24H2 - latest major (prior versions are not tested, but should work as well)
+- Windows 11 24H2 - latest major release (prior versions are not tested, but should work as well)
 
-I will not supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
+I will not be supporting Insider preview or other minor versions of Windows. However, feel free to [report any issues](https://github.com/m1lhaus/windhawk-mods/issues) related to those versions. I'll appreciate the heads-up in advance.
 
-⚠️ **Caution!** Avoid using option "Get the latest updates as soon as they're available" in Windows Update. Microsoft releases symbols for new Windows versions with a delay. This can render Windhawk mods unusable until the symbols are released (usually few days).
+⚠️ **Caution!** Avoid using the option "Get the latest updates as soon as they're available" in Windows Update. Microsoft releases symbols for new Windows versions with a delay. This can render Windhawk mods unusable until the symbols are released (usually a few days).
 
-## Classic taskbar on Windows 11
+## Windows 10 taskbar on Windows 11
 
-In case you are using old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable corresponding option on Settings menu. This options will be tested only with the latest major version of Windows 11 (e.g. 24H2).
+If you are using the old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable the corresponding option in the Settings menu. ExplorerPatcher should get detected automatically.
 
 ## Troubleshooting
 
@@ -191,11 +195,11 @@ Please open an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mo
 
 ### I can't click on empty space when the taskbar gets full.
 
-If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve a minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
+If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
 
 ## Suggestions and new features
 
-If you have request for new functions, suggestions or you are experiencing some issues, please post an [Issue on Github page](https://github.com/m1lhaus/windhawk-mods/issues). Please, be as specific as possible and provide as much information as you can. Please consider using AI chatbot if you are struggling with putting all together in English.
+If you have a request for new functions, suggestions, or you are experiencing some issues, please post an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mods/issues). Please be as specific as possible and provide as much information as you can. Please consider using an AI chatbot if you are struggling to put everything together in English.
 
 */
 // ==/WindhawkModReadme==
@@ -232,6 +236,13 @@ If you have request for new functions, suggestions or you are experiencing some 
       - tapSingle: Touchscreen single tap
       - tapDouble: Touchscreen double tap
       - tapTriple: Touchscreen triple tap
+    - TaskbarType: all
+      $name: Taskbar
+      $description: Select the taskbar for which the mouse click trigger should be active.
+      $options:
+      - all: All taskbars
+      - primary: Primary taskbar only
+      - secondary: Secondary taskbars only
     - Action: ACTION_NOTHING
       $name: Action
       $description: Action to invoke on trigger.
@@ -245,6 +256,7 @@ If you have request for new functions, suggestions or you are experiencing some 
       - ACTION_WIN_TAB: Win+Tab
       - ACTION_HIDE_ICONS: Hide desktop icons
       - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
+      - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
       - ACTION_OPEN_START_MENU: Open Start menu
       - ACTION_SEND_KEYPRESS: Virtual key press
       - ACTION_START_PROCESS: Start application
@@ -254,11 +266,9 @@ If you have request for new functions, suggestions or you are experiencing some 
   $name: Taskbar empty space actions
   $description: "Using the Keyboard and Mouse combo boxes, select a trigger for a specific action. For example, the combination 'Left Ctrl + Double-click + Task Manager' will open the Windows Task Manager when the user double-clicks empty space on the taskbar while holding the Left Ctrl key. More actions can be set up with the Add new item button."
 - oldTaskbarOnWin11: false
-  $name: Use the old taskbar on Windows 11
+  $name: Use the old Windows 10 taskbar on Windows 11
   $description: >-
-    Enable this option to customize the old taskbar on Windows 11 (if using
-    ExplorerPatcher or a similar tool). Note: For Windhawk versions earlier
-    than 1.3, you must disable and re-enable the mod to apply this option.
+    Enable this option to if you are using the old Windows 10 taskbar on Windows 11 (ExplorerPatcher or a similar tool).
 - eagerTriggerEvaluation: false
   $name: Eager trigger evaluation
   $description: >-
@@ -280,12 +290,12 @@ If you have request for new functions, suggestions or you are experiencing some 
 #include <winuser.h>
 #include <windowsx.h>
 #include <windhawk_utils.h>
-
 #include <UIAnimation.h>
 #include <UIAutomationClient.h>
 #include <UIAutomationCore.h>
 #include <comutil.h>
 #include <winrt/base.h>
+#include <psapi.h>
 
 #include <string>
 #include <unordered_set>
@@ -463,6 +473,7 @@ enum TaskBarButtonsState
 struct TriggerAction
 {
     std::wstring mouseTriggerName;            // Mouse trigger parsed from settings - represents what kind of button click should be detected
+    std::wstring taskbarTypeName;             // Taskbar type parsed from settings - represents which taskbar the trigger should be active on
     std::wstring actionName;                  // Name of the action parsed from settings
     uint32_t expectedKeyModifiersState;       // expected state (bitmask) of the key modifiers that should be checked
     std::function<void(HWND)> actionExecutor; // function that executes the action
@@ -582,6 +593,163 @@ protected:
 };
 static COMAPI g_comAPI;
 
+class WindowFocusTracker
+{
+private:
+    HWINEVENTHOOK m_hEventHook;
+    HANDLE m_hThread;
+    DWORD m_dwThreadId;
+    volatile bool m_bRunning;
+
+    static void CALLBACK WinEventProc(
+        HWINEVENTHOOK hWinEventHook,
+        DWORD event,
+        HWND hwnd,
+        LONG idObject,
+        LONG idChild,
+        DWORD dwEventThread,
+        DWORD dwmsEventTime)
+    {
+        if (event == EVENT_SYSTEM_FOREGROUND && idObject == OBJID_WINDOW)
+        {
+            if (hwnd && IsWindow(hwnd) && (hwnd != g_hwndLastActive))
+            {
+                // Check if it's not the taskbar
+                WCHAR className[256];
+                GetClassName(hwnd, className, 256);
+                if ((wcscmp(className, L"Shell_TrayWnd") != 0) &&
+                    (wcscmp(className, L"Shell_SecondaryTrayWnd") != 0) &&
+                    (wcscmp(className, L"Windows.UI.Input.InputSite.WindowClass") != 0) &&
+                    (wcscmp(className, L"Taskbar.TaskbarFrameAutomationPeer") != 0) &&
+                    (wcscmp(className, L"Windows.UI.Core.CoreWindow") != 0) &&
+                    (wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") != 0))
+                {
+#ifdef ENABLE_LOG_DEBUG
+                    // Retrieve and log the full window title and process id for debugging
+                    DWORD dwProcessId = 0;
+                    GetWindowThreadProcessId(hwnd, &dwProcessId);
+
+                    // Get window text length (in characters) and read the title
+                    int textLen = GetWindowTextLengthW(hwnd);
+                    std::wstring windowTitle;
+                    if (textLen > 0)
+                    {
+                        windowTitle.resize(textLen + 1);
+                        if (GetWindowTextW(hwnd, &windowTitle[0], textLen + 1) > 0)
+                        {
+                            windowTitle.resize(std::wcslen(windowTitle.c_str()));
+                        }
+                        else
+                        {
+                            windowTitle.clear();
+                        }
+                    }
+
+                    LOG_DEBUG(L"Foreground window changed: CurrentThread: %u HWND=%p PID=%u ClassName=%s Title=%s",
+                              GetCurrentThreadId(), hwnd, dwProcessId, className, windowTitle.c_str());
+#endif
+                    g_hwndLastActive = hwnd;
+                }
+            }
+        }
+    }
+
+    static DWORD WINAPI ThreadProc(LPVOID lpParam)
+    {
+        WindowFocusTracker *pThis = (WindowFocusTracker *)lpParam;
+
+        pThis->m_hEventHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+            NULL, WinEventProc, 0, 0,
+            WINEVENT_OUTOFCONTEXT);
+
+        if (!pThis->m_hEventHook)
+        {
+            LOG_ERROR(L"Registering of WindowFocusTracker::WinEventProc hook failed");
+            return 1;
+        }
+
+        LOG_INFO(L"WindowFocusTracker thread started with hook %p", pThis->m_hEventHook);
+
+        MSG msg;
+        while (pThis->m_bRunning && GetMessage(&msg, NULL, 0, 0))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        if (pThis->m_hEventHook)
+        {
+            UnhookWinEvent(pThis->m_hEventHook);
+            pThis->m_hEventHook = NULL;
+        }
+
+        LOG_INFO(L"WindowFocusTracker thread terminated");
+        return 0;
+    }
+
+public:
+    static HWND g_hwndLastActive;
+
+    WindowFocusTracker() : m_hEventHook(NULL), m_hThread(NULL), m_dwThreadId(0), m_bRunning(false) {}
+
+    void Start()
+    {
+        if (m_hThread)
+        {
+            LOG_ERROR(L"WindowFocusTracker already started");
+            return;
+        }
+
+        m_bRunning = true;
+        m_hThread = CreateThread(NULL, 0, ThreadProc, this, 0, &m_dwThreadId);
+        if (!m_hThread)
+        {
+            LOG_ERROR(L"Failed to create WindowFocusTracker thread");
+            m_bRunning = false;
+        }
+        else
+        {
+            LOG_INFO(L"WindowFocusTracker thread created with ID %u ", m_dwThreadId);
+        }
+    }
+
+    void Stop()
+    {
+        if (m_hThread)
+        {
+            LOG_INFO(L"Stopping WindowFocusTracker...");
+            m_bRunning = false;
+
+            // Post a quit message to the thread's message queue
+            PostThreadMessage(m_dwThreadId, WM_QUIT, 0, 0);
+
+            // Wait for thread to finish
+            WaitForSingleObject(m_hThread, 500);
+            CloseHandle(m_hThread);
+            m_hThread = NULL;
+        }
+    }
+
+    bool IsRunning()
+    {
+        return m_hThread && m_bRunning;
+    }
+
+    HWND GetLastActiveWindow()
+    {
+        return g_hwndLastActive;
+    }
+
+    ~WindowFocusTracker()
+    {
+        Stop(); // should be stopped during mod uninit
+    }
+};
+HWND WindowFocusTracker::g_hwndLastActive = NULL;
+
+static WindowFocusTracker g_windowFocusTracker;
+
 // few helpers to ease up working with strings
 namespace stringtools
 {
@@ -609,6 +777,13 @@ namespace stringtools
     std::wstring trim(const std::wstring &s)
     {
         return rtrim(ltrim(s));
+    }
+
+    std::wstring toLower(const std::wstring &s)
+    {
+        std::wstring result = s;
+        std::transform(result.begin(), result.end(), result.begin(), ::towlower);
+        return result;
     }
 }
 
@@ -912,7 +1087,7 @@ bool GetTaskbarAutohideState();
 void SetTaskbarAutohide(bool enabled);
 void ToggleTaskbarAutohide();
 void ShowDesktop();
-void SendKeypress(std::vector<int> keys);
+void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow = false);
 void SendCtrlAltTabKeypress();
 void SendWinTabKeypress();
 bool ClickStartMenu();
@@ -925,6 +1100,9 @@ void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2);
 DWORD GetCombineTaskbarButtons(const wchar_t *optionName);
 bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option);
+DWORD GetTaskbarAlignment();
+bool SetTaskbarAlignment(DWORD alignment);
+void ToggleTaskbarAlignment();
 void StartProcess(const std::wstring &command);
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
 
@@ -1135,7 +1313,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     {
         const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000;  // reset context menu suppression after 1 second
+        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000; // reset context menu suppression after 1 second
         if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
             (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
         {
@@ -1338,6 +1516,85 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
             }
         }
     }
+}
+
+bool IsExplorerPatcherModule(HMODULE module)
+{
+    WCHAR moduleFilePath[MAX_PATH];
+    switch (
+        GetModuleFileName(module, moduleFilePath, ARRAYSIZE(moduleFilePath)))
+    {
+    case 0:
+    case ARRAYSIZE(moduleFilePath):
+        return false;
+    }
+
+    PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\');
+    if (!moduleFileName)
+    {
+        return false;
+    }
+
+    moduleFileName++;
+
+    if (_wcsnicmp(L"ep_taskbar.", moduleFileName, sizeof("ep_taskbar.") - 1) == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void HandleLoadedExplorerPatcher()
+{
+    HMODULE hMods[1024];
+    DWORD cbNeeded;
+    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods),
+                           &cbNeeded))
+    {
+        for (size_t i = 0; i < cbNeeded / sizeof(HMODULE); i++)
+        {
+            if (IsExplorerPatcherModule(hMods[i]))
+            {
+                if (g_taskbarVersion != WIN_10_TASKBAR)
+                {
+                    LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10_TASKBAR mode");
+                }
+                g_taskbarVersion = WIN_10_TASKBAR;
+                break;
+            }
+        }
+    }
+}
+
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module)
+{
+    if (module && !((ULONG_PTR)module & 3))
+    {
+        if (IsExplorerPatcherModule(module))
+        {
+            if (g_taskbarVersion != WIN_10_TASKBAR)
+            {
+                LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10_TASKBAR mode");
+            }
+            g_taskbarVersion = WIN_10_TASKBAR;
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags)
+{
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module)
+    {
+        HandleLoadedModuleIfExplorerPatcher(module);
+    }
+
+    return module;
 }
 
 // finds main task bar and returns its hWnd,
@@ -1648,30 +1905,39 @@ std::wstring ParseProcessArg(const std::wstring &args)
     return cmd;
 }
 
-std::vector<int> ParseVirtualKeypressSetting(const std::wstring &args)
+std::tuple<std::vector<int>, bool> ParseVirtualKeypressSetting(const std::wstring &args)
 {
     LOG_TRACE();
 
     std::vector<int> keys;
 
+    bool focusPreviousWindow = false;
     const auto argsSplit = SplitArgs(args);
     for (const auto &arg : argsSplit)
     {
-        const auto keyCode = ParseVirtualKey(arg.c_str());
-        if (keyCode)
+        if (stringtools::toLower(arg) == L"focuspreviouswindow")
         {
-            keys.push_back(keyCode);
+            focusPreviousWindow = true;
+        }
+        else
+        {
+            const auto keyCode = ParseVirtualKey(arg.c_str());
+            if (keyCode)
+            {
+                keys.push_back(keyCode);
+            }
         }
     }
 
-    return keys;
+    return std::make_tuple(keys, focusPreviousWindow);
 }
 
 std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName, const std::wstring &args)
 {
     LOG_TRACE();
 
-    auto doNothing = [](HWND) { /* Do nothing */ };
+    auto doNothing = [](HWND)
+    { LOG_INFO(L"Doing empty action"); };
 
     if (actionName == L"ACTION_NOTHING")
     {
@@ -1714,13 +1980,14 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_COMBINE_TASKBAR_BUTTONS")
     {
-        TaskBarButtonsState primaryState1; // use tie for Windhawk 1.4.1 compiler compatibility
-        TaskBarButtonsState primaryState2;
-        TaskBarButtonsState secondaryState1;
-        TaskBarButtonsState secondaryState2;
-        std::tie(primaryState1, primaryState2, secondaryState1, secondaryState2) = ParseTaskBarButtonsState(args);
+        const auto [primaryState1, primaryState2, secondaryState1, secondaryState2] = ParseTaskBarButtonsState(args);
         return [primaryState1, primaryState2, secondaryState1, secondaryState2](HWND)
         { CombineTaskbarButtons(primaryState1, primaryState2, secondaryState1, secondaryState2); };
+    }
+    else if (actionName == L"ACTION_TOGGLE_TASKBAR_ALIGNMENT")
+    {
+        return [](HWND)
+        { ToggleTaskbarAlignment(); };
     }
     else if (actionName == L"ACTION_OPEN_START_MENU")
     {
@@ -1729,11 +1996,18 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_SEND_KEYPRESS")
     {
-        std::vector<int> keyCodes = ParseVirtualKeypressSetting(args);
-        return [keyCodes](HWND)
+        const auto [keyCodes, focusPreviousWindow] = ParseVirtualKeypressSetting(args);
+
+        // start focus tracker only if needed
+        if (focusPreviousWindow && !g_windowFocusTracker.IsRunning())
+        {
+            g_windowFocusTracker.Start();
+        }
+
+        return [keyCodes, focusPreviousWindow](HWND)
         {
             LOG_INFO(L"Sending arbitrary keypress");
-            SendKeypress(keyCodes);
+            SendKeypress(keyCodes, focusPreviousWindow);
         };
     }
     else if (actionName == L"ACTION_START_PROCESS")
@@ -1767,16 +2041,23 @@ void LoadSettings()
             keyboardTriggers.push_back(keyboardTriggerStr);
         }
         auto mouseTriggerStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].MouseTrigger", i)));
+        auto taskbarTypeStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].TaskbarType", i)));
         auto actionStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].Action", i)));
         auto additionalArgsStr = std::wstring(StringSetting(Wh_GetStringSetting(L"TriggerActionOptions[%d].AdditionalArgs", i)));
 
         // no other actions were added by user, end parsing
-        if (keyboardTriggers.empty() && mouseTriggerStr.empty() && actionStr.empty() && additionalArgsStr.empty())
+        if (keyboardTriggers.empty() && mouseTriggerStr.empty() && taskbarTypeStr.empty() && actionStr.empty() && additionalArgsStr.empty())
             break;
 
         // if mouse trigger or action is missing, skip since the rest is irrelevant
         if (mouseTriggerStr.empty() || actionStr.empty())
             continue;
+
+        // handle default value
+        if (taskbarTypeStr.empty())
+        {
+            taskbarTypeStr = L"all";
+        }
 
 #ifdef ENABLE_LOG_INFO
         std::wstring logMessage = std::wstring(L"Settings: TriggerActionOptions[") + std::to_wstring(i) + std::wstring(L"] = ");
@@ -1788,6 +2069,9 @@ void LoadSettings()
         }
         logMessage += L"Mouse(";
         logMessage += mouseTriggerStr.c_str();
+        logMessage += L") + ";
+        logMessage += L"TaskbarType(";
+        logMessage += taskbarTypeStr.c_str();
         logMessage += L") -> ";
         logMessage += actionStr.c_str();
         if (!additionalArgsStr.empty())
@@ -1814,6 +2098,7 @@ void LoadSettings()
             }
         }
         triggerAction.mouseTriggerName = mouseTriggerStr;
+        triggerAction.taskbarTypeName = taskbarTypeStr;
         triggerAction.actionName = actionStr;
         triggerAction.actionExecutor = ParseMouseActionSetting(actionStr, additionalArgsStr);
         g_settings.triggerActions.push_back(triggerAction);
@@ -1937,13 +2222,31 @@ void ShowDesktop()
     }
 }
 
-void SendKeypress(std::vector<int> keys)
+void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
 {
     LOG_TRACE();
     if (keys.empty())
     {
         LOG_DEBUG(L"No virtual key codes to send");
         return;
+    }
+
+    if (focusPreviousWindow && WindowFocusTracker::g_hwndLastActive && IsWindow(WindowFocusTracker::g_hwndLastActive))
+    {
+        // bring the target window to foreground to ensure it receives the keypresses
+        LOG_DEBUG(L"Focusing the previously active window (HWND=%p) before sending keypresses", WindowFocusTracker::g_hwndLastActive);
+        SetForegroundWindow(WindowFocusTracker::g_hwndLastActive);
+
+        // Wait until the window is actually in the foreground
+        for (int i = 0; i < 50; i++) // Max 500ms
+        {
+            if (GetForegroundWindow() == WindowFocusTracker::g_hwndLastActive)
+            {
+                LOG_DEBUG(L"Focused the previously active window successfully");
+                break;
+            }
+            Sleep(10);
+        }
     }
 
     const int NUM_KEYS = keys.size();
@@ -2278,6 +2581,12 @@ void HideIcons()
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2)
 {
+    if (g_taskbarVersion != WIN_11_TASKBAR)
+    {
+        LOG_INFO(L"Taskbar button combining is only supported on Windows 11 taskbar");
+        return;
+    }
+
     bool shallNotify = false;
     if ((primaryTaskBarButtonsState1 != COMBINE_INVALID) && (primaryTaskBarButtonsState2 != COMBINE_INVALID))
     {
@@ -2297,7 +2606,7 @@ void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1
     }
     if (shallNotify)
     {
-        SendMessage(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"));
+        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100, NULL);
     }
 }
 
@@ -2379,6 +2688,109 @@ bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
     return shallNotify;
 }
 
+/**
+ * Retrieves the current taskbar alignment setting.
+ *
+ * @return The current value of the taskbar alignment. (0 = Left, 1 = Center)
+ *         Returns 1 (Center) as default if the registry key doesn't exist.
+ */
+DWORD GetTaskbarAlignment()
+{
+    LOG_TRACE();
+
+    HKEY hKey = NULL;
+    DWORD dwValue = 1; // Default to center alignment if key doesn't exist
+    DWORD dwBufferSize = sizeof(DWORD);
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                     0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        if (RegQueryValueEx(hKey, TEXT("TaskbarAl"), NULL, NULL, (LPBYTE)&dwValue, &dwBufferSize) != ERROR_SUCCESS)
+        {
+            LOG_INFO(L"TaskbarAl registry key not found, using default value (1 = Center)");
+            dwValue = 1; // Default to center
+        }
+        RegCloseKey(hKey);
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+    }
+
+    return dwValue;
+}
+
+/**
+ * Sets the taskbar alignment to the specified value.
+ *
+ * @param alignment The alignment value to set. (0 = Left, 1 = Center)
+ * @return true if the value was set successfully, false otherwise.
+ */
+bool SetTaskbarAlignment(DWORD alignment)
+{
+    LOG_TRACE();
+
+    HKEY hKey = NULL;
+    bool success = false;
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+                     0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD dwValue = alignment;
+        if (RegSetValueEx(hKey, TEXT("TaskbarAl"), 0, REG_DWORD, (BYTE *)&dwValue, sizeof(dwValue)) == ERROR_SUCCESS)
+        {
+            LOG_INFO(L"Set taskbar alignment to %d", alignment);
+            success = true;
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to set registry key TaskbarAl!");
+        }
+        RegCloseKey(hKey);
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to open registry path Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced!");
+    }
+
+    return success;
+}
+
+void ToggleTaskbarAlignment()
+{
+    LOG_TRACE();
+
+    if (g_taskbarVersion != WIN_11_TASKBAR)
+    {
+        LOG_INFO(L"Taskbar alignment toggle is only supported on Windows 11 taskbar");
+        return;
+    }
+
+    DWORD currentAlignment = GetTaskbarAlignment();
+    DWORD newAlignment = 0;
+    if (currentAlignment == 0)
+    {
+        newAlignment = 1;
+    }
+    else if (currentAlignment == 1)
+    {
+        newAlignment = 0;
+    }
+    else
+    {
+        LOG_ERROR(L"Invalid current alignment value %d (must be 0 or 1)", currentAlignment); // report in case API changes in future
+        return;
+    }
+    const wchar_t *alignmentStrs[] = {L"Left", L"Center"};
+    LOG_INFO(L"Toggling taskbar alignment from '%s' to '%s'", alignmentStrs[currentAlignment], alignmentStrs[newAlignment]);
+
+    if (SetTaskbarAlignment(newAlignment))
+    {
+        // Notify all applications of the change
+        SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)TEXT("TraySettings"), SMTO_ABORTIFHUNG, 100, NULL);
+    }
+}
+
 void StartProcess(const std::wstring &command)
 {
     LOG_TRACE();
@@ -2448,6 +2860,20 @@ bool IsTaskbarWindow(HWND hWnd)
         LOG_ERROR(L"Failed to get window class name");
         return false;
     }
+}
+
+bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
+{
+    bool isCorrectTaskbar = true;
+    if (taskbarTypeName == L"primary")
+    {
+        isCorrectTaskbar = (hWnd == g_hTaskbarWnd);
+    }
+    else if (taskbarTypeName == L"secondary")
+    {
+        isCorrectTaskbar = g_secondaryTaskbarWindows.contains(hWnd);
+    }
+    return isCorrectTaskbar;
 }
 
 void SetBit(uint32_t &value, uint32_t bit)
@@ -2692,11 +3118,13 @@ bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks)
         if ((triggerAction.mouseTriggerName == mouseTriggerName) && triggerAction.actionExecutor)
         {
             bool allModifiersPressed = true;
+            bool isCorrectTaskbar = true;
             for (int i = 1; i <= numClicks; i++)
             {
                 allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
+                isCorrectTaskbar &= IsCorrectTaskbarType(triggerAction.taskbarTypeName, g_mouseClickQueue[-i].hWnd);
             }
-            return allModifiersPressed;
+            return allModifiersPressed && isCorrectTaskbar;
         }
     }
     return false;
@@ -2716,13 +3144,15 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
         {
             LOG_DEBUG(L"Found action: %s", triggerAction.actionName.c_str());
             bool allModifiersPressed = true;
+            bool isCorrectTaskbar = true;
             for (int i = 1; i <= numClicks; i++)
             {
                 allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
-                LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u",
-                          i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.expectedKeyModifiersState);
+                isCorrectTaskbar &= IsCorrectTaskbarType(triggerAction.taskbarTypeName, g_mouseClickQueue[-i].hWnd);
+                LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u, taskbar type: %s",
+                          i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.expectedKeyModifiersState, triggerAction.taskbarTypeName.c_str());
             }
-            if (allModifiersPressed)
+            if (allModifiersPressed && isCorrectTaskbar)
             {
                 if (triggerAction.actionExecutor)
                 {
@@ -2901,6 +3331,38 @@ BOOL Wh_ModInit()
         LOG_ERROR(L"Failed to hook CreateWindowInBand, ModInit failed");
         return FALSE;
     }
+
+    // autodetect Explorer Patcher on Windows 11 taskbar
+    if (g_taskbarVersion == WIN_11_TASKBAR)
+    {
+        // hook LoadLibraryExW to detect Explorer Patcher loading after us
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW = (void *)GetProcAddress(kernelBaseModule, "LoadLibraryExW");
+        if (!Wh_SetFunctionHook(pKernelBaseLoadLibraryExW, (void *)LoadLibraryExW_Hook, (void **)&LoadLibraryExW_Original))
+        {
+            LOG_ERROR(L"Failed to hook LoadLibraryExW, automatic Explorer Patcher detection might not work properly!");
+        }
+
+        HandleLoadedExplorerPatcher();
+    }
+
+    g_isWhInitialized = true; // if not set the hook operations will not be applied after Windows startup
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    LOG_TRACE();
+
+    // autodetect Explorer Patcher on Windows 11 taskbar
+    if (g_taskbarVersion == WIN_11_TASKBAR)
+    {
+        // Try again in case there's a race between the previous attempt and the
+        // LoadLibraryExW hook.
+        HandleLoadedExplorerPatcher();
+    }
+
     // indentify taskbar windows so that message processing can be hooked
     WNDCLASS wndclass;
     if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) // if Shell_TrayWnd class is defined
@@ -2915,10 +3377,6 @@ BOOL Wh_ModInit()
     {
         LOG_ERROR(L"Failed to find Shell_TrayWnd class. Something changed under the hood! Taskbar might not get hooked properly!");
     }
-
-    g_isWhInitialized = true; // if not set the hook operations will not be applied after Windows startup
-
-    return TRUE;
 }
 
 BOOL Wh_ModSettingsChanged(BOOL *bReload)
@@ -2934,6 +3392,9 @@ BOOL Wh_ModSettingsChanged(BOOL *bReload)
 void Wh_ModUninit()
 {
     LOG_TRACE();
+
+    g_windowFocusTracker.Stop();
+
     if (g_hTaskbarWnd)
     {
         SendMessage(g_hTaskbarWnd, g_uninitCOMAPIMsg, FALSE, 0); // uninitialize COM API from gui thread
