@@ -1,5 +1,9 @@
 # Top Status Bar
 
+![Preview](screenshots/screenshot%20(1).png)
+
+![Settings](screenshots/screenshot%20(2).png)
+
 [English](#english) | [Español](#español)
 
 ---
@@ -10,7 +14,7 @@
 **Top Status Bar** is a simple and intuitive replacement for the system top bar, designed to be accessible for all types of users. It provides quick access to basic system functions and real-time resource monitoring in a lightweight package.
 
 #### **Core Features:**
-*   **Intelligent Dodging:** The bar automatically "esquiva" (dodges) the active window if it invades the top area of the screen, ensuring it never overlaps your work while remaining accessible. It appears instantly when you move the mouse to the top edge.
+*   **Intelligent Dodging:** The bar automatically **"esquiva" (dodges)** the active window if it invades the top area of the screen, ensuring it never overlaps your work while remaining accessible. It appears instantly when you move the mouse to the top edge.
 *   **Native & Lightweight:** Designed to be extremely light on resources by utilizing built-in system dialogs and native Windows components, ensuring high stability and minimal memory usage.
 *   **Multi-Monitor Support:** Fully independent instances for every connected monitor.
 *   **Essential Shortcuts (Left):** Easy access to Start Menu, Task View, Alt-Tab switcher, System Settings, and File Explorer.
@@ -29,7 +33,7 @@ Due to how Windows handles focus and security layers, the **Task View** and **Al
 **Top Status Bar** es un reemplazo sencillo e intuitivo para la barra superior del sistema, diseñado para ser accesible para todo tipo de usuarios. Ofrece acceso rápido a funciones básicas del sistema y monitoreo de recursos en un paquete ligero y fácil de entender.
 
 #### **Características principales:**
-*   **Esquiva Inteligente:** La barra "esquiva" automáticamente la ventana activa si esta invade la zona superior de la pantalla, garantizando que nunca se superponga a tu trabajo pero manteniéndose siempre accesible. Aparece al mover el ratón al borde superior.
+*   **Esquiva Inteligente:** La barra **"esquiva"** automáticamente la ventana activa si esta invade la zona superior de la pantalla, garantizando que nunca se superponga a tu trabajo pero manteniéndose siempre accesible. Aparece al mover el ratón al borde superior.
 *   **Nativo y Ligero:** Diseñado para ser extremadamente ligero al utilizar diálogos y componentes nativos de Windows, lo que asegura una alta estabilidad y un consumo mínimo de memoria.
 *   **Soporte Multi-Monitor:** Instancias totalmente independientes para cada monitor conectado.
 *   **Accesos Esenciales (Izquierda):** Acceso fácil al Menú Inicio, Vista de Tareas, Alt-Tab, Configuración y Explorador de Archivos.
