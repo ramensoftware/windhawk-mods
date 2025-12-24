@@ -2,7 +2,7 @@
 // @id              classic-theme-enable
 // @name            Classic Theme
 // @description     Disables theming (enables Classic theme)
-// @version         1.0.6
+// @version         1.0.8
 // @author          Anixx
 // @github 			https://github.com/Anixx
 // @include         winlogon.exe
@@ -44,15 +44,16 @@ to prevent the color scheme change after pressing Ctrl+Alt+Del or going to the l
 On Windows 11 version 21H2 to 23H2 it is recommended to enable the Windows 10 taskbar with the
 [*Windows 10 taskbar on Windows 11*](https://windhawk.net/mods/win10-taskbar-on-win11) mod while
 on Windows 11 24H2 install the Windows 10 taskbar using the
-[*Win10 taskbar on Win11 24H2*](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) mod.
+[*Win10 taskbar on Win11 24H2*](https://windhawk.net/mods/win10-taskbar-on-win11-24h2) mod. For
+the later mod, also the mod [*Fake Explorer path*](https://windhawk.net/mods/fake-explorer-path) is needed.
 
 5. The Windows 10 taskbar still needs a compatibility fix, so install the mod
 [*Classic Theme Explorer Lite*](https://windhawk.net/mods/classic-theme-explorer-lite).
 
 6. If you are using the Windows 10 taskbar, install the [OpenShell utility](https://github.com/Open-Shell/Open-Shell-Menu).
-After installing the OpenShell, put the patched file [StartMenuDLL for OpenShell 4.4.190](https://github.com/valinet/ExplorerPatcher/files/13359466/StartMenuDLL.zip)
+After installing the OpenShell, put the patched file [StartMenuDLL](https://github.com/valinet/ExplorerPatcher/files/13359466/StartMenuDLL.zip)
 into the Open Shell folder, replacing the existing one. 
-Alternatively, install the [patched version of OpenShell4.4.191](http://redirect.viglink.com/?key=71fe2139a887ad501313cd8cce3053c5&subId=6513581&u=https%3A//github.com/OrthodoxWindows/Open-Shell-Menu/blob/master/OpenShellSetup_4_4_191-hlvioynt.exe)
+Alternatively, install the already [patched version of OpenShell](http://redirect.viglink.com/?key=71fe2139a887ad501313cd8cce3053c5&subId=6513581&u=https%3A//github.com/OrthodoxWindows/Open-Shell-Menu/blob/master/OpenShellSetup_4_4_191-hlvioynt.exe)
     
     Alternatively to patching OpenShell you can install the mod
     [*Classic Taskbar background fix*](https://windhawk.net/mods/classic-taskbar-background-fix),
@@ -94,14 +95,17 @@ Alternatively, install the [patched version of OpenShell4.4.191](http://redirect
 7. Enabling the classic theme will make UWP apps to hang on splash screen. Install the [*Classic UWP Fix*](https://windhawk.net/mods/classic-uwp-fix) mod 
 to mitigate this.
 
-8. Some windows will manifest the unwanted transparency. 
+8. Some Control Panel applets (like Accessibility) will also fail to load, so to fix it, install this mod:
+[*Classic Theme UIFILE Fix*](https://windhawk.net/mods/classic-theme-uifile-fix).
+
+9. Some windows will manifest the unwanted transparency. 
 To fix this, install the [*Classic theme transparency fix*](https://windhawk.net/mods/classic-theme-transparency-fix) mod.
 
-9. On Windows 11 22H2 and later it is recommended to install the mod 
+10. On Windows 11 22H2 and later it is recommended to install the mod 
 [*Explorerframe fixes for Win11 22H2+*](https://windhawk.net/mods/explorerframe-fixes-for-win11-22h2plus) 
 and enable all options in its settings.
 
-10. To fix the empty context menus in Explorer, install the mods
+11. To fix the empty context menus in Explorer, install the mods
 [*Disable Immersive Context Menus*](https://windhawk.net/mods/disable-immersive-context-menus)
 and
 [*Non Immersive Taskbar Context Menu*](https://windhawk.net/mods/classic-taskbar-context-menu),
@@ -109,82 +113,85 @@ alternatively, if you are on Windows 11 23H2 or below, you can install the mod
 [*Eradicate Immersive Menus*](https://windhawk.net/mods/eradicate-immersive-menus)
 instead of the both. If confused, you can install all three, they do not conflict.
 
-11. To restore the dragged items image during drag-and-drop, install this mod:
+12. To restore the dragged items image during drag-and-drop, install this mod:
 [*Classic Explorer Drag-n-Drop Lite*](https://windhawk.net/mods/classic-explorer-dragdrop-lite).
 
-12. To restore the pre-Windows7 appearance of the File Explorer icons, install this mod:
+13. To restore the pre-Windows7 appearance of the File Explorer icons, install this mod:
 [*Enable SyslistView32*](https://windhawk.net/mods/syslistview32-enabler).
 
-13. To get rid of the immersive Windows 7 Command bar and the ribbon interface in File Explorer, install this mod:
+14. To get back the full Explorer context menus on Windows 11, install this mod:
+[*Classic context menu on Windows 11*](https://windhawk.net/mods/explorer-context-menu-classic).
+
+15. To get rid of the immersive Windows 7 Command bar and the ribbon interface in File Explorer, install this mod:
 [*Windows 7 Command Bar*](https://windhawk.net/mods/win7-command-bar).
 
-14. If you did the previous point but dislike the Windows 7 Command bar as well, install additionally this mod:
+16. If you did the previous point but dislike the Windows 7 Command bar as well, install additionally this mod:
 [*Remove Command Bar*](https://windhawk.net/mods/remove-command-bar).
 
-15. If you also dislike the Navigation bar, install this mod:
+17. If you also dislike the Navigation bar, install this mod:
 [*Disable Navigation Bar*](https://windhawk.net/mods/disable-navigation-bar).
 
-16. To have the classic 3D borders in Notepad and other programs, install this mod:
+18. To have the classic 3D borders in Notepad and other programs, install this mod:
 [*Clientedge Everywhere*](https://windhawk.net/mods/clientedge-in-apps).
 
-17. To have the Windows XP-like file picker dialog, install this mod:
-[*Classic File Picker dialog*](https://windhawk.net/mods/classic-file-picker-dialog).
-
-18. To fix the ribbon appearance an apps that use it, install this mod:
+19. To fix the ribbon appearance an apps that use it, install this mod:
 [*Basic/Classic Theme Ribbon Fix*](https://windhawk.net/mods/basic-classic-theme-ribbon-fix).
 
-19. To have the hanged windows to have the classic window frame, install this mod:
+20. To have the Windows XP-like file picker dialog, install this mod:
+[*Classic File Picker dialog*](https://windhawk.net/mods/classic-file-picker-dialog).
+
+21. To have the hanged windows to have the classic window frame, install this mod:
 [*DWM Ghost Mods*](https://windhawk.net/mods/dwm-ghost-mods), but read the instructions there.
 
-20. If you are using the Firefox browser of version greater than 128, install this mod:
+22. If you are using the Firefox browser of version greater than 128, install this mod:
 [*Firefox border fix for Classic theme*](https://windhawk.net/mods/firefox-border-fix).
 
-21. To fix the borders in Edge, Chromium and restore the classic titlebar in other applications, install this mod:
+23. To fix the borders in Edge, Chromium and restore the classic titlebar in other applications, install this mod:
 [*Titlebar For Everyone*](https://windhawk.net/mods/titlebar-for-everyone).
 
-22. If you prefer the 3D buttons on taskbar, like in Windows 7 and before, install this mod:
+24. If you prefer the 3D buttons on taskbar, like in Windows 7 and before, install this mod:
 [*Classic Taskbar 3D buttons Lite*](https://windhawk.net/mods/classic-taskbar-buttons-lite).
 
-23. To restore the classic tray clock flyout, use this mod:
+25. To restore the classic tray clock flyout, use this mod:
 [*Legacy (Win32) clock flyout (Win11-friendly)*](https://windhawk.net/mods/legacy-clock-flyout).
 
-24. To have the classic sound volume flyout, install this mod:
+26. To have the classic sound volume flyout, install this mod:
 [*Legacy (Win32) sound volume flyout*](https://windhawk.net/mods/legacy-sound-flyout).
 
-25. To restore the classic window titlebars in UWP apps, install this mod:
+27. To restore the classic window titlebars in UWP apps, install this mod:
 [*Remove UWP titlebars*](https://winclassic.net/post/32692).
 
-26. To restore the legacy Alt+Tab task selector on Windows 10, Windows 11 23H2 or earlier, use this mod:
+28. To restore the legacy Alt+Tab task selector on Windows 10, Windows 11 23H2 or earlier, use this mod:
 [*Legacy Alt+Tab dialog*](https://windhawk.net/mods/legacy-alt-tab).
 
-27. To have the classic console windows, install this mod:
+29. To have the classic console windows, install this mod:
 [*Classic Conhost [Deprecated]*](https://windhawk.net/mods/classic-conhost). 
 Despite the deprecation notice, the mod works just as intended.
 
-28. To fix a glitch in the Explorer's toolbar gripper, install this mod:
+30. To fix a glitch in the Explorer's toolbar gripper, install this mod:
 [*Explorer Unlocked Toolbars Fix (WINAPI)*](https://windhawk.net/mods/explorer-no-toolbars-bottom-gripper).
 
-29. To get the classic directory tree view in File Explorer, install this mod:
+31. To get the classic directory tree view in File Explorer, install this mod:
 [*Classic Explorer Treeview*](https://windhawk.net/mods/classic-explorer-treeview).
 
-30. You may want to install the mod
+32. You may want to install the mod
 [*Disable Taskbar Thumbnails*](https://windhawk.net/mods/taskbar-thumbnails) because taskbar thumbnails
 do not work in classic theme anyway, so to remove the useless popup.
 
-31. If you are using a Windows 10 taskbar (either under Windows 10 or Windows 11), 
+33. If you are using a Windows 10 taskbar (either under Windows 10 or Windows 11), 
 you may prefer the classic taskbar button context menus. For this, install the mod
 [*Taskbar classic context menu*](https://windhawk.net/mods/taskbar-classic-menu) mod 
 and enable the support for Windows 10 taskbar in the mod's settings.
 
-32. If you want the classic, 32px icon size in folders, install this mod:
+34. If you want the classic, 32px icon size in folders, install this mod:
 [*Explorer 32px Icons*](https://windhawk.net/mods/explorer-32px-icons).
 
-33. If you want the color of the Control Panel pages' sidebar to match the color scheme,
-install this mod: [*Control Panel Color Fix*](https://winclassic.net/thread/3288/control-panel-color-fix-version).
-Notice that even though the repository has a newer version of this mod, the version 1.0.1 broke the
-compatibility with Classic theme and will have no effect.
+35. If you want the color of the Control Panel pages' sidebar to match the color scheme,
+install this mod: [*Control Panel Color Fix*](https://windhawk.net/mods/control-panel-color-fix).
+On Windhawk 1.7 or newer, manually choose the older version 1.0 of the mod during or after installation
+because the later version 1.0.1 broke the compatibility with Classic theme and will have no effect.
 
-34. To make File Explorer to remember positions of the folders' windows the way it was before Vista,
+36. To make File Explorer to remember positions of the folders' windows the way it was before Vista,
 install this mod: [*Remember the folder windows' positions*](https://windhawk.net/mods/remember-folder-positions).
 
 To customize the color scheme, you can use the [Desktp Architect](https://www.themeworld.com/themes/utilities.html) 

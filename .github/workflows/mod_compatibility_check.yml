@@ -20,15 +20,16 @@ jobs:
       fail-fast: false
       matrix:
         version: [
-          '1.4.1',
+          # '1.4.1',
           # '1.5',  # Same compiler as 1.5.1.
           '1.5.1',
           # '1.6', # Same compiler as 1.6.1.
           '1.6.1',
+          '1.7.3',
         ]
-        exclude:
-          # Exclude 1.4.1, which is quite old, for everyone but m417z.
-          - version: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'm417z') && '1.4.1' }}
+        # exclude:
+        #   # Exclude 1.4.1, which is quite old, for everyone but m417z.
+        #   - version: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'm417z') && '1.4.1' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
