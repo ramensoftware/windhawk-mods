@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
-// @version         2.3
+// @version         2.4
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -68,6 +68,12 @@ Once set, a simple middle-click on empty taskbar space will toggle the auto-hide
     - **Right** - Mouse right button click
     - **Right Double** - Mouse right button double-click
     - **Right Triple** - Mouse right button triple-click
+    - **Side Button 1** - Mouse side button 1 click (mouse button 4)
+    - **Side Button 1 Double** - Mouse side button 1 double-click (mouse button 4)
+    - **Side Button 1 Triple** - Mouse side button 1 triple-click (mouse button 4)
+    - **Side Button 2** - Mouse side button 2 click (mouse button 5)
+    - **Side Button 2 Double** - Mouse side button 2 double-click(mouse button 5)
+    - **Side Button 2 Triple** - Mouse side button 2 triple-click (mouse button 5)
     - **Tap** - Touchscreen single tap
     - **Tap Double** - Touchscreen double tap
     - **Tap Triple** - Touchscreen triple tap
@@ -233,6 +239,12 @@ If you have a request for new functions, suggestions, or you are experiencing so
       - right: Mouse right button click
       - rightDouble: Mouse right button double-click
       - rightTriple: Mouse right button triple-click
+      - mouse4: Mouse side button 1 click
+      - mouse4Double: Mouse side button 1 double-click
+      - mouse4Triple: Mouse side button 1 triple-click
+      - mouse5: Mouse side button 2 click
+      - mouse5Double: Mouse side button 2 double-click
+      - mouse5Triple: Mouse side button 2 triple-click
       - tapSingle: Touchscreen single tap
       - tapDouble: Touchscreen double tap
       - tapTriple: Touchscreen triple tap
@@ -814,6 +826,8 @@ struct MouseClick
         LEFT = 0,
         RIGHT,
         MIDDLE,
+        MOUSE4, // side button 1
+        MOUSE5, // side button 2
         INVALID
     };
 
@@ -1279,8 +1293,8 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
     const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
     const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
-    if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-        (isLeftButton || isRightButton || isMiddleButton))
+    const bool isXButton = (uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN) || (uMsg == WM_XBUTTONDBLCLK || uMsg == WM_NCXBUTTONDBLCLK);
+    if ((g_taskbarVersion == WIN_10_TASKBAR) && (isLeftButton || isRightButton || isMiddleButton || isXButton))
     {
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
         if (extraInfo != g_injectedClickID)
@@ -1291,7 +1305,23 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
                 g_comAPI.Init(); // make sure it gets initialied from GUI thread
             }
 
-            MouseClick::Button button = isLeftButton ? MouseClick::Button::LEFT : (isRightButton ? MouseClick::Button::RIGHT : MouseClick::Button::MIDDLE);
+            MouseClick::Button button = MouseClick::Button::INVALID;
+            if (isLeftButton)
+            {
+                button = MouseClick::Button::LEFT;
+            }
+            else if (isRightButton)
+            {
+                button = MouseClick::Button::RIGHT;
+            }
+            else if (isMiddleButton)
+            {
+                button = MouseClick::Button::MIDDLE;
+            }
+            else if (isXButton)
+            {
+                button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? MouseClick::Button::MOUSE4 : MouseClick::Button::MOUSE5;
+            }
             const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
             if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
                 ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
@@ -1365,6 +1395,14 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
             {
                 button = MouseClick::Button::MIDDLE;
+            }
+            else if (IS_POINTER_FOURTHBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MOUSE4;
+            }
+            else if (IS_POINTER_FIFTHBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MOUSE5;
             }
             else
             {
@@ -3083,6 +3121,14 @@ std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numC
         {
             mouseTriggerName = L"middle";
         }
+        else if (button == MouseClick::Button::MOUSE4)
+        {
+            mouseTriggerName = L"mouse4";
+        }
+        else if (button == MouseClick::Button::MOUSE5)
+        {
+            mouseTriggerName = L"mouse5";
+        }
         if (numClicks == 3)
         {
             mouseTriggerName += L"Triple";
@@ -3192,7 +3238,8 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
     };
 
     // mouse clicks
-    const MouseClick::Button mouseButtons[] = {MouseClick::Button::LEFT, MouseClick::Button::RIGHT, MouseClick::Button::MIDDLE};
+    const MouseClick::Button mouseButtons[] = {MouseClick::Button::LEFT, MouseClick::Button::RIGHT, MouseClick::Button::MIDDLE,
+                                               MouseClick::Button::MOUSE4, MouseClick::Button::MOUSE5};
     const std::function<bool(MouseClick::Button)> mouseChecks[] = {IsTripleClick, static_cast<bool (*)(MouseClick::Button)>(IsDoubleClick), IsSingleClick};
     for (const auto &button : mouseButtons)
     {
