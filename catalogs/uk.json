@@ -6075,7 +6075,7 @@
                     870
                 ],
                 "ratingUsers": 981,
-                "updated": 1756195879000,
+                "updated": 1766791920000,
                 "users": 56915
             },
             "featured": true,
@@ -6084,8 +6084,8 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-lole32 -loleaut32 -lpdh -lruntimeobject -lshlwapi -lversion -lwininet",
-                "description": "Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM), custom fonts and colors, and more",
+                "compilerOptions": "-ldxgi -lole32 -loleaut32 -lpdh -lpowrprof -lruntimeobject -lshlwapi -lversion -lwininet",
+                "description": "Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM, GPU, battery), media player info, custom fonts and colors, and more",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
                 "include": [
@@ -6093,7 +6093,7 @@
                 ],
                 "name": "Taskbar Clock Customization",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.6.3"
+                "version": "1.7"
             }
         },
         "taskbar-disappearing-icon-fix-win11": {

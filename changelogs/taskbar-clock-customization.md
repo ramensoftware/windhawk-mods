@@ -1,3 +1,24 @@
+## 1.7 ([Dec 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f5c9e38460918ba1fa4b643dedab4ecf42faf03c/mods/taskbar-clock-customization.wh.cpp))
+
+- Added new system performance metrics patterns:
+  - `%total_speed%` - combined upload and download transfer rate.
+  - `%disk_read%` - disk read speed.
+  - `%disk_write%` - disk write speed.
+  - `%disk_total%` - combined disk read and write speed.
+  - `%gpu%` - GPU usage.
+  - `%battery%` - battery level percentage.
+  - `%battery_time%` - battery time remaining (charging/discharging time left).
+  - `%power%` - battery power in watts (negative when discharging, positive when charging).
+- Added media player info patterns, based on the work contributed by trashpanda ([kaoshipaws](https://github.com/kaoshipaws)):
+  - `%media_title%` - currently playing media title.
+  - `%media_artist%` - currently playing media artist.
+  - `%media_album%` - currently playing media album.
+  - `%media_status%` - media playback status icon (⏯, ⏸, ⏹).
+  - `%media_info%` - combined media info (Artist - Title), truncated with ellipsis.
+- Added tooltip line mode option to replace the default tooltip instead of appending to it.
+- Added network adapter name filter for upload/download metrics.
+- Added "single space padding" option for percentage format (useful for monospaced fonts).
+
 ## 1.6.3 ([Aug 26, 2025](https://github.com/ramensoftware/windhawk-mods/blob/a1e5471c16c55ce3827e8f85367aafa200d0e69a/mods/taskbar-clock-customization.wh.cpp))
 
 * Added more settings for system performance metrics:

@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-24T11:57:10.000Z</updated>
+    <updated>2025-12-26T23:32:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#f5c9e38460918ba1fa4b643dedab4ecf42faf03c</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2025-12-26T23:32:00.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added new system performance metrics patterns:</li>
+<li><code>%total_speed%</code> - combined upload and download transfer rate.</li>
+<li><code>%disk_read%</code> - disk read speed.</li>
+<li><code>%disk_write%</code> - disk write speed.</li>
+<li><code>%disk_total%</code> - combined disk read and write speed.</li>
+<li><code>%gpu%</code> - GPU usage.</li>
+<li><code>%battery%</code> - battery level percentage.</li>
+<li><code>%battery_time%</code> - battery time remaining (charging/discharging time left).</li>
+<li><code>%power%</code> - battery power in watts (negative when discharging, positive when charging).</li>
+<li>Added media player info patterns, based on the work contributed by trashpanda (<a href="https://github.com/kaoshipaws">kaoshipaws</a>):</li>
+<li><code>%media_title%</code> - currently playing media title.</li>
+<li><code>%media_artist%</code> - currently playing media artist.</li>
+<li><code>%media_album%</code> - currently playing media album.</li>
+<li><code>%media_status%</code> - media playback status icon (⏯, ⏸, ⏹).</li>
+<li><code>%media_info%</code> - combined media info (Artist - Title), truncated with ellipsis.</li>
+<li>Added tooltip line mode option to replace the default tooltip instead of appending to it.</li>
+<li>Added network adapter name filter for upload/download metrics.</li>
+<li>Added "single space padding" option for percentage format (useful for monospaced fonts).</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Click on empty taskbar space 2.3]]></title>
         <id>https://windhawk.net/mods/taskbar-empty-space-clicks#37d5bb9775479a78c2fd5bbfbfd2d04216c42a66</id>
@@ -299,17 +329,6 @@ used at all times for an application.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[FancyZones Win+Shift/Ctrl+Arrows Hotkey 1.1]]></title>
-        <id>https://windhawk.net/mods/fancyzones-winshift-hotkey#d046209610d7ade1a7fda2574b25c49693872ef3</id>
-        <link href="https://windhawk.net/mods/fancyzones-winshift-hotkey"/>
-        <updated>2025-12-12T14:38:08.000Z</updated>
-        <content type="html"><![CDATA[<p>Do allow Win+Ctrl+Arrows as alternative to Win+Shift+Arrows for FancyZones hotkey override.</p>]]></content>
-        <author>
-            <name>David Trapp (CherryDT)</name>
-            <uri>https://github.com/CherryDT</uri>
         </author>
     </entry>
 </feed>
