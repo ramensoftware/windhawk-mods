@@ -76,6 +76,7 @@ bool g_menuOpenAtMouseDown = false;
 
 // UI Automation (initialized on InputSite thread)
 IUIAutomation* g_pAutomation = nullptr;
+bool g_comInitialized = false;
 HWND g_cleanupWindow = nullptr;
 const wchar_t* g_cleanupWindowClass = L"StartButtonFix_Cleanup";
 
@@ -88,7 +89,10 @@ LRESULT CALLBACK CleanupWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
             if (g_pAutomation) {
                 g_pAutomation->Release();
                 g_pAutomation = nullptr;
-                CoUninitialize();
+                if (g_comInitialized) {
+                    CoUninitialize();
+                    g_comInitialized = false;
+                }
                 Wh_Log(L"UI Automation cleaned up on InputSite thread");
             }
             return 0;
@@ -105,12 +109,14 @@ bool InitUIAutomation() {
     if (g_pAutomation) return true;
 
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE && hr != S_FALSE) return false;
+    if (FAILED(hr)) return false;
+    g_comInitialized = true;
 
     hr = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER,
                           __uuidof(IUIAutomation), (void**)&g_pAutomation);
     if (FAILED(hr) || !g_pAutomation) {
         CoUninitialize();
+        g_comInitialized = false;
         return false;
     }
 
