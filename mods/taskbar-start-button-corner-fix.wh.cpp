@@ -154,6 +154,7 @@ IUIAutomationElement* GetStartButtonElement() {
 
 // Check if Start menu is open via toggle state
 bool IsStartMenuOpen() {
+    InitUIAutomation();
     std::lock_guard<std::mutex> lock(g_automationMutex);
     IUIAutomationElement* pStartButton = GetStartButtonElement();
     if (!pStartButton) return false;
@@ -174,6 +175,7 @@ bool IsStartMenuOpen() {
 
 // Toggle Start menu via UI Automation
 void ToggleStartMenu() {
+    InitUIAutomation();
     std::lock_guard<std::mutex> lock(g_automationMutex);
     IUIAutomationElement* pStartButton = GetStartButtonElement();
     if (!pStartButton) {
@@ -366,22 +368,10 @@ void LoadSettings() {
     g_settings.debugLogging = Wh_GetIntSetting(L"debugLogging");
 }
 
-void CleanupUIAutomation() {
-    std::lock_guard<std::mutex> lock(g_automationMutex);
-    if (g_pAutomation) {
-        g_pAutomation->Release();
-        g_pAutomation = nullptr;
-    }
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing...");
 
     LoadSettings();
-
-    if (!InitUIAutomation()) {
-        Wh_Log(L"Warning: UI Automation init failed");
-    }
 
     // Spawn worker thread to wait for taskbar and install hook
     g_workerThread = CreateThread(NULL, 0, WorkerThread, NULL, 0, NULL);
@@ -420,7 +410,7 @@ void Wh_ModUninit() {
         CloseHandle(g_taskbarMutex);
         g_taskbarMutex = NULL;
     }
-    CleanupUIAutomation();
+
     Wh_Log(L"Uninitialized");
 }
 
