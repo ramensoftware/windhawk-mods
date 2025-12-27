@@ -60,7 +60,6 @@ real button doesn't handle the click.
 #include <uiautomation.h>
 
 #include <atomic>
-#include <mutex>
 
 // Settings
 struct {
@@ -75,9 +74,49 @@ std::atomic<bool> g_menuOpenAtMouseDown{false};
 HHOOK g_mouseHook = NULL;
 bool g_inputSiteHooked = false;
 
-// UI Automation
+// UI Automation (initialized on InputSite thread)
 IUIAutomation* g_pAutomation = nullptr;
-std::mutex g_automationMutex;
+HWND g_cleanupWindow = nullptr;
+const wchar_t* g_cleanupWindowClass = L"StartButtonFix_Cleanup";
+
+#define WM_CLEANUP_COM (WM_USER + 100)
+
+// Cleanup window procedure - runs on InputSite thread
+LRESULT CALLBACK CleanupWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_CLEANUP_COM:
+            if (g_pAutomation) {
+                g_pAutomation->Release();
+                g_pAutomation = nullptr;
+                CoUninitialize();
+                Wh_Log(L"UI Automation cleaned up on InputSite thread");
+            }
+            return 0;
+
+        case WM_CLOSE:
+            DestroyWindow(hWnd);
+            return 0;
+    }
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Initialize UI Automation (call from InputSite thread only)
+bool InitUIAutomation() {
+    if (g_pAutomation) return true;
+
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE && hr != S_FALSE) return false;
+
+    hr = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER,
+                          __uuidof(IUIAutomation), (void**)&g_pAutomation);
+    if (FAILED(hr) || !g_pAutomation) {
+        CoUninitialize();
+        return false;
+    }
+
+    Wh_Log(L"UI Automation initialized on thread %lu", GetCurrentThreadId());
+    return true;
+}
 
 // Check if point is in corner region (L-shaped Fitts' Law corner)
 bool IsInCornerRegion(int x, int y) {
@@ -97,33 +136,19 @@ bool IsInCornerRegion(int x, int y) {
     return (x < edgeThickness) || (y > screenHeight - edgeThickness);
 }
 
-// Initialize UI Automation
-bool InitUIAutomation() {
-    std::lock_guard<std::mutex> lock(g_automationMutex);
-    if (g_pAutomation) return true;
-
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE && hr != S_FALSE) return false;
-
-    hr = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER,
-                          __uuidof(IUIAutomation), (void**)&g_pAutomation);
-    return SUCCEEDED(hr) && g_pAutomation;
-}
-
 // Helper: Find Start button element via UI Automation (caller must Release)
-// Must be called with g_automationMutex held
-IUIAutomationElement* GetStartButtonElement() {
-    if (!g_pAutomation) return nullptr;
+IUIAutomationElement* GetStartButtonElement(IUIAutomation* pAutomation) {
+    if (!pAutomation) return nullptr;
 
     IUIAutomationElement* pRoot = nullptr;
-    if (FAILED(g_pAutomation->GetRootElement(&pRoot)) || !pRoot) return nullptr;
+    if (FAILED(pAutomation->GetRootElement(&pRoot)) || !pRoot) return nullptr;
 
     VARIANT varProp;
     varProp.vt = VT_BSTR;
     varProp.bstrVal = SysAllocString(L"StartButton");
 
     IUIAutomationCondition* pCondition = nullptr;
-    HRESULT hr = g_pAutomation->CreatePropertyCondition(UIA_AutomationIdPropertyId, varProp, &pCondition);
+    HRESULT hr = pAutomation->CreatePropertyCondition(UIA_AutomationIdPropertyId, varProp, &pCondition);
     SysFreeString(varProp.bstrVal);
 
     if (FAILED(hr) || !pCondition) {
@@ -140,9 +165,9 @@ IUIAutomationElement* GetStartButtonElement() {
 
 // Check if Start menu is open via toggle state
 bool IsStartMenuOpen() {
-    InitUIAutomation();
-    std::lock_guard<std::mutex> lock(g_automationMutex);
-    IUIAutomationElement* pStartButton = GetStartButtonElement();
+    if (!InitUIAutomation()) return false;
+
+    IUIAutomationElement* pStartButton = GetStartButtonElement(g_pAutomation);
     if (!pStartButton) return false;
 
     bool isOpen = false;
@@ -161,9 +186,9 @@ bool IsStartMenuOpen() {
 
 // Toggle Start menu via UI Automation
 void ToggleStartMenu() {
-    InitUIAutomation();
-    std::lock_guard<std::mutex> lock(g_automationMutex);
-    IUIAutomationElement* pStartButton = GetStartButtonElement();
+    if (!InitUIAutomation()) return;
+
+    IUIAutomationElement* pStartButton = GetStartButtonElement(g_pAutomation);
     if (!pStartButton) {
         Wh_Log(L"Start button not found, using Win key fallback");
         INPUT inputs[2] = {};
@@ -227,6 +252,24 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
+// Create cleanup window on InputSite thread (called via SendMessage)
+void CreateCleanupWindow() {
+    WNDCLASS wc = {};
+    wc.lpfnWndProc = CleanupWindowProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = g_cleanupWindowClass;
+    RegisterClass(&wc);
+
+    g_cleanupWindow = CreateWindowEx(
+        0, g_cleanupWindowClass, NULL, 0,
+        0, 0, 0, 0,
+        HWND_MESSAGE, NULL, wc.hInstance, NULL);
+
+    if (g_cleanupWindow) {
+        Wh_Log(L"Cleanup window created on thread %lu", GetCurrentThreadId());
+    }
+}
+
 // Handle InputSite window - install mouse hook on its thread
 void HandleInputSiteWindow(HWND hWnd) {
     if (g_inputSiteHooked) {
@@ -239,6 +282,12 @@ void HandleInputSiteWindow(HWND hWnd) {
         Wh_Log(L"Failed to install mouse hook (error: %lu)", GetLastError());
         return;
     }
+
+    // Create cleanup window on the InputSite thread via a timer callback
+    SetTimer(hWnd, (UINT_PTR)CreateCleanupWindow, 0, [](HWND hWnd, UINT, UINT_PTR idEvent, DWORD) {
+        KillTimer(hWnd, idEvent);
+        CreateCleanupWindow();
+    });
 
     g_inputSiteHooked = true;
     Wh_Log(L"Mouse hook installed on InputSite thread %lu", threadId);
@@ -345,6 +394,18 @@ void Wh_ModUninit() {
         UnhookWindowsHookEx(g_mouseHook);
         g_mouseHook = NULL;
     }
+
+    // Send cleanup message to the InputSite thread
+    if (g_cleanupWindow) {
+        SendMessageTimeout(g_cleanupWindow, WM_CLEANUP_COM, 0, 0,
+                           SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, NULL);
+        // DestroyWindow must be called from the owning thread, use SendMessage
+        SendMessageTimeout(g_cleanupWindow, WM_CLOSE, 0, 0,
+                           SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, NULL);
+        g_cleanupWindow = nullptr;
+    }
+
+    UnregisterClass(g_cleanupWindowClass, GetModuleHandle(NULL));
 
     g_inputSiteHooked = false;
     Wh_Log(L"Uninitialized");
