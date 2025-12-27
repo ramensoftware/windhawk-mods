@@ -27,14 +27,10 @@ This seems to be caused by the "sticky corners" feature, and thus only affects m
 
 ## The Solution
 
-This mod installs a thread-specific mouse hook on the InputSite window's thread.
-This hook intercepts mouse clicks at the corner region and invokes the Start menu via
-UI Automation when the real button doesn't handle the click.
-
-The hook can only be installed on threads within the same process, so only the explorer.exe
-that owns the taskbar will successfully activate the mod. A background worker thread waits
-for the taskbar to appear (without blocking explorer startup) and shuts itself down when the
-taskbar has been aquired. A mutex prevents subequent / invalid explorer processes from infinitely running this worker.
+This mod hooks `CreateWindowInBand` to detect when the InputSite window is created,
+then installs a thread-specific mouse hook on its thread. This hook intercepts mouse
+clicks at the corner region and invokes the Start menu via UI Automation when the
+real button doesn't handle the click.
 
 ## Requirements
 
@@ -76,18 +72,8 @@ struct {
 // Global state
 std::atomic<bool> g_mouseDownInCorner{false};
 std::atomic<bool> g_menuOpenAtMouseDown{false};
-std::atomic<bool> g_shuttingDown{false};
 HHOOK g_mouseHook = NULL;
-HANDLE g_workerThread = NULL;
-
-// Mutex to indicate an instance has claimed the taskbar
-#define TASKBAR_MUTEX_NAME L"Local\\TaskbarStartMenuCornerFix"
-HANDLE g_taskbarMutex = NULL;
-
-// For signaling main thread to install hook
-#define HOOK_INSTALL_TIMER_ID 0x5442  // "TB" in hex
-std::atomic<DWORD> g_pendingHookThreadId{0};
-std::atomic<HWND> g_taskbarWnd{NULL};
+bool g_inputSiteHooked = false;
 
 // UI Automation
 IUIAutomation* g_pAutomation = nullptr;
@@ -241,7 +227,71 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
-// Find InputSite window
+// Handle InputSite window - install mouse hook on its thread
+void HandleInputSiteWindow(HWND hWnd) {
+    if (g_inputSiteHooked) {
+        return;
+    }
+
+    DWORD threadId = GetWindowThreadProcessId(hWnd, NULL);
+    g_mouseHook = SetWindowsHookExW(WH_MOUSE, MouseHookProc, NULL, threadId);
+    if (!g_mouseHook) {
+        Wh_Log(L"Failed to install mouse hook (error: %lu)", GetLastError());
+        return;
+    }
+
+    g_inputSiteHooked = true;
+    Wh_Log(L"Mouse hook installed on InputSite thread %lu", threadId);
+}
+
+// CreateWindowInBand hook
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           LPVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    LPVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+
+    if (bTextualClassName &&
+        wcscmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) {
+        Wh_Log(L"InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        HandleInputSiteWindow(hWnd);
+    }
+
+    return hWnd;
+}
+
+// Find existing InputSite window
 BOOL CALLBACK FindInputSiteCallback(HWND hWnd, LPARAM lParam) {
     wchar_t className[256];
     if (GetClassNameW(hWnd, className, 256)) {
@@ -251,115 +301,6 @@ BOOL CALLBACK FindInputSiteCallback(HWND hWnd, LPARAM lParam) {
         }
     }
     return TRUE;
-}
-
-// Check if mutex is already owned by another instance
-bool IsMutexOwned() {
-    HANDLE testMutex = OpenMutexW(SYNCHRONIZE, FALSE, TASKBAR_MUTEX_NAME);
-    if (testMutex) {
-        CloseHandle(testMutex);
-        return true;  // Mutex exists = another instance owns it
-    }
-    return false;
-}
-
-// Timer callback - runs on taskbar thread to install hook
-VOID CALLBACK HookInstallTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    (void)uMsg; (void)dwTime;
-    KillTimer(hwnd, idEvent);
-
-    DWORD inputSiteThreadId = g_pendingHookThreadId.load();
-    if (inputSiteThreadId == 0) {
-        Wh_Log(L"Timer fired but no pending thread ID");
-        return;
-    }
-
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE, MouseHookProc, NULL, inputSiteThreadId);
-    if (!g_mouseHook) {
-        Wh_Log(L"Failed to install mouse hook from timer (error: %lu)", GetLastError());
-        if (g_taskbarMutex) {
-            ReleaseMutex(g_taskbarMutex);
-            CloseHandle(g_taskbarMutex);
-            g_taskbarMutex = NULL;
-        }
-        return;
-    }
-
-    Wh_Log(L"Mouse hook installed on InputSite thread %lu (from taskbar thread)", inputSiteThreadId);
-}
-
-// Worker thread that waits for taskbar + InputSite and signals main thread
-DWORD WINAPI WorkerThread(LPVOID lpParam) {
-    (void)lpParam;
-    DWORD ourPid = GetCurrentProcessId();
-
-    // Wait for taskbar AND InputSite to appear
-    HWND taskbarWnd = NULL;
-    HWND inputSiteWnd = NULL;
-
-    while (!g_shuttingDown.load()) {
-        // Check if another instance already has the mutex
-        if (IsMutexOwned()) {
-            Wh_Log(L"Another instance already active - mod inactive");
-            return 0;
-        }
-
-        // Find taskbar
-        taskbarWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-        if (taskbarWnd) {
-            DWORD taskbarPid = 0;
-            GetWindowThreadProcessId(taskbarWnd, &taskbarPid);
-
-            if (taskbarPid != ourPid) {
-                Wh_Log(L"Taskbar owned by different process - mod inactive");
-                return 0;
-            }
-
-            // Taskbar is ours - now find InputSite
-            inputSiteWnd = NULL;
-            EnumChildWindows(taskbarWnd, FindInputSiteCallback, (LPARAM)&inputSiteWnd);
-
-            if (inputSiteWnd) {
-                break;  // Found both taskbar and InputSite
-            }
-        }
-
-        Sleep(500);
-    }
-
-    if (g_shuttingDown.load()) return 0;
-
-    // Acquire mutex now that we're ready to install the hook
-    g_taskbarMutex = CreateMutexW(NULL, TRUE, TASKBAR_MUTEX_NAME);
-    if (!g_taskbarMutex) {
-        Wh_Log(L"Failed to create mutex");
-        return 0;
-    }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_taskbarMutex);
-        g_taskbarMutex = NULL;
-        Wh_Log(L"Another instance claimed mutex first - mod inactive");
-        return 0;
-    }
-
-    DWORD inputSiteThreadId = GetWindowThreadProcessId(inputSiteWnd, NULL);
-
-    // Store thread ID and taskbar window for timer callback
-    g_pendingHookThreadId.store(inputSiteThreadId);
-    g_taskbarWnd.store(taskbarWnd);
-
-    // Schedule hook installation on taskbar thread via timer
-    // SetTimer posts WM_TIMER to the window's thread, so the callback runs there
-    if (!SetTimer(taskbarWnd, HOOK_INSTALL_TIMER_ID, 0, HookInstallTimerProc)) {
-        Wh_Log(L"Failed to set timer for hook installation (error: %lu)", GetLastError());
-        ReleaseMutex(g_taskbarMutex);
-        CloseHandle(g_taskbarMutex);
-        g_taskbarMutex = NULL;
-        return 0;
-    }
-
-    Wh_Log(L"Scheduled hook installation on taskbar thread for InputSite thread %lu", inputSiteThreadId);
-    return 1;
 }
 
 void LoadSettings() {
@@ -373,44 +314,39 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    // Spawn worker thread to wait for taskbar and install hook
-    g_workerThread = CreateThread(NULL, 0, WorkerThread, NULL, 0, NULL);
-    if (!g_workerThread) {
-        Wh_Log(L"Failed to create worker thread");
-        return FALSE;
+    // Hook CreateWindowInBand to detect InputSite window creation
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32) {
+        void* pCreateWindowInBand = (void*)GetProcAddress(user32, "CreateWindowInBand");
+        if (pCreateWindowInBand) {
+            Wh_SetFunctionHook(pCreateWindowInBand,
+                               (void*)CreateWindowInBand_Hook,
+                               (void**)&CreateWindowInBand_Original);
+        }
     }
 
-    Wh_Log(L"Worker thread spawned, waiting for taskbar...");
+    // Check for existing InputSite window (taskbar may already exist)
+    HWND taskbarWnd = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (taskbarWnd) {
+        HWND inputSiteWnd = NULL;
+        EnumChildWindows(taskbarWnd, FindInputSiteCallback, (LPARAM)&inputSiteWnd);
+        if (inputSiteWnd) {
+            Wh_Log(L"Found existing InputSite window: %08X", (DWORD)(ULONG_PTR)inputSiteWnd);
+            HandleInputSiteWindow(inputSiteWnd);
+        }
+    }
+
+    Wh_Log(L"Initialized");
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    // Signal worker thread to stop
-    g_shuttingDown.store(true);
-
-    // Wait for worker thread to finish
-    if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 2000);
-        CloseHandle(g_workerThread);
-        g_workerThread = NULL;
-    }
-
-    // Kill any pending timer
-    HWND taskbarWnd = g_taskbarWnd.load();
-    if (taskbarWnd) {
-        KillTimer(taskbarWnd, HOOK_INSTALL_TIMER_ID);
-    }
-
     if (g_mouseHook) {
         UnhookWindowsHookEx(g_mouseHook);
         g_mouseHook = NULL;
     }
-    if (g_taskbarMutex) {
-        ReleaseMutex(g_taskbarMutex);
-        CloseHandle(g_taskbarMutex);
-        g_taskbarMutex = NULL;
-    }
 
+    g_inputSiteHooked = false;
     Wh_Log(L"Uninitialized");
 }
 
