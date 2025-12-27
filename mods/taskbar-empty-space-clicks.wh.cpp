@@ -36,7 +36,7 @@ This mod lets you assign an action to a mouse click on the Windows taskbar. Sing
 9. **Toggle Taskbar alignment** - Toggle taskbar icon alignment between left and center (Windows 11 only)
 10. **Open Start menu** - Sends Win key press to open Start menu
 11. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
-12. **Start application** - Starts arbitrary application or runs a command
+12. **Open application, path or URL** - Starts arbitrary application executable, opens path in Explorer or URL in web browser
 13. **Media Play/Pause** - Toggle play/pause for media playback
 14. **Media Stop** - Stop media playback
 15. **Media Next Track** - Skip to next track
@@ -107,10 +107,15 @@ Some actions support or require additional arguments. You can set them in the Se
     - There is a special keyword `focusPreviousWindow` that can be used to set focus back to the previously active window. This is useful when you want to send keypresses to the last active window instead of the taskbar. That way you can, for example, turn on fullscreen mode in the web browser by sending the F11 key. You can use this keyword anywhere in the sequence of virtual keys.
     - Please note that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via the inputdev interface.
 12. Start application - `applicationPath arg1 arg2 ... argN`
-    - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt`
-    - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
-    - Example: `cmd.exe /c echo Hello & pause`
-    - Takes and executes the entire `applicationPath` string as a new process. No semicolons are parsed! Only leading and trailing whitespace characters are removed. You can use the full path to the application or just the executable name if it is in PATH. If you want to execute a shell command, use cmd.exe with the corresponding flag.
+    - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt` - any executable with optional arguments
+    - Example: `uac;C:\Windows\System32\notepad.exe C:\Windows\System32\drivers\etc\hosts` - start application with elevated privileges (UAC prompt will appear)
+    - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3` - user must handle proper quoting of arguments
+    - Example: `cmd.exe /c echo Hello & pause` - execute shell commands
+    - Example: `https://windhawk.net/mods/` - open URL in default web browser
+    - Example: `c:\Users\username\Documents\` - open folder in Explorer
+    - Example: `shell:Recent` - open special shell folder in Explorer ([more special shell commands](https://www.winhelponline.com/blog/shell-commands-to-access-the-special-folders/))
+    - Uses [ShellExecute](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutea) to open applications, paths, or URLs. If command starts with special keyword `uac`, the application will be started with elevated privileges (UAC prompt will appear). 
+    - Error codes and error messages can be found in the mod log if the application fails to start.
 13. Media Play/Pause - no additional arguments supported
 14. Media Next Track - no additional arguments supported
 15. Media Previous Track - no additional arguments supported
@@ -286,7 +291,7 @@ If you have a request for new functions, suggestions, or you are experiencing so
       - ACTION_MUTE: Mute system volume
       - ACTION_OPEN_START_MENU: Open Start menu
       - ACTION_SHOW_DESKTOP: Show desktop
-      - ACTION_START_PROCESS: Start application
+      - ACTION_START_PROCESS: Open application, path or URL
       - ACTION_TASK_MANAGER: Task Manager
       - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
       - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
@@ -1160,7 +1165,7 @@ bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option);
 DWORD GetTaskbarAlignment();
 bool SetTaskbarAlignment(DWORD alignment);
 void ToggleTaskbarAlignment();
-void StartProcess(const std::wstring &command);
+void StartProcess(std::wstring command);
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
 
 #pragma endregion // declarations
@@ -1696,7 +1701,7 @@ KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
 }
 
 // Splits semicolon-separated argument string into vector
-std::vector<std::wstring> SplitArgs(const std::wstring &args)
+std::vector<std::wstring> SplitArgs(const std::wstring &args, const wchar_t delimiter = L';')
 {
     std::vector<std::wstring> result;
 
@@ -1707,7 +1712,7 @@ std::vector<std::wstring> SplitArgs(const std::wstring &args)
     }
 
     size_t start = 0;
-    size_t end = args_.find(L';');
+    size_t end = args_.find(delimiter);
     while (end != std::wstring::npos)
     {
         auto substring = stringtools::trim(args_.substr(start, end - start));
@@ -1716,7 +1721,7 @@ std::vector<std::wstring> SplitArgs(const std::wstring &args)
             result.push_back(substring);
         }
         start = end + 1;
-        end = args_.find(L';', start);
+        end = args_.find(delimiter, start);
     }
     auto substring = stringtools::trim(args_.substr(start));
     if (!substring.empty())
@@ -2684,7 +2689,7 @@ void ToggleTaskbarAlignment()
 }
 
 // Starts a process with command line arguments
-void StartProcess(const std::wstring &command)
+void StartProcess(std::wstring command)
 {
     LOG_TRACE();
     if (command.empty())
@@ -2693,47 +2698,73 @@ void StartProcess(const std::wstring &command)
         return;
     }
 
-    std::vector<std::wstring> args = SplitArgs(command);
-    if (args.empty())
+    // check for UAC prefix
+    std::vector<std::wstring> uac_args = SplitArgs(command, L';');
+    std::wstring shellExVerb = L"open";
+    if (stringtools::toLower(uac_args[0]) == L"uac")
     {
-        LOG_DEBUG(L"Command parsing resulted in empty arguments, nothing to start");
-        return;
+        shellExVerb = L"runas"; // request elevation
+        command = stringtools::ltrim(command.substr(uac_args[0].length() + 1)); // remove the "uac;" prefix
     }
 
-    // First argument is the executable path/name
+    // Get current cursor position and monitor handle
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+    LOG_DEBUG(L"Launching process on monitor handle: %p", hMonitor);
+
+    // First argument is the executable/file path
+    // TODO: what if user provided file path with space?
+    std::vector<std::wstring> args = SplitArgs(command, L' ');
     std::wstring executable = args[0];
 
-    // Build command line with remaining arguments
-    std::wstring commandLine = executable;
-    for (size_t i = 1; i < args.size(); i++)
+    // Extract parameters by removing the executable from the command
+    // let the use handle the escaping/quoting as they wish
+    std::wstring parameters;
+    if (command.length() > executable.length())
     {
-        // Add quotes around arguments that contain spaces
-        if (args[i].find(L' ') != std::wstring::npos &&
-            (args[i].front() != L'"' || args[i].back() != L'"'))
+        parameters = command.substr(executable.length());
+        parameters = stringtools::ltrim(parameters); // Remove leading whitespace
+    }
+
+    LOG_INFO(L"Starting process: '%s' '%s'", executable.c_str(), parameters.c_str());
+
+    // Use ShellExecuteEx with hMonitor to launch on the correct monitor
+    SHELLEXECUTEINFO sei = {sizeof(sei)};
+    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = shellExVerb.c_str();
+    sei.lpFile = executable.c_str();
+    sei.lpParameters = parameters.empty() ? NULL : parameters.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    sei.hMonitor = hMonitor;  // Specify the target monitor, but most apps ignore this anyway
+
+    if (!ShellExecuteEx(&sei))
+    {
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED)  // User cancelled UAC or similar
         {
-            commandLine += L" \"" + args[i] + L"\"";
+            LPWSTR errorMsg = nullptr;
+            FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                          NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                          (LPWSTR)&errorMsg, 0, NULL);
+            if (errorMsg)
+            {
+                LOG_ERROR(L"Failed to start process - ShellExecuteEx failed with error code %d: %s", error, errorMsg);
+                LocalFree(errorMsg);
+            }
+            else
+            {
+                LOG_ERROR(L"Failed to start process - ShellExecuteEx failed with error code: %d", error);
+            }
         }
         else
         {
-            commandLine += L" " + args[i];
+            LOG_DEBUG(L"Process launch cancelled by user");
         }
-    }
-
-    LOG_INFO(L"Starting process: %s", commandLine.c_str());
-
-    STARTUPINFO si{};
-    PROCESS_INFORMATION pi{};
-    si.cb = sizeof(si);
-
-    if (!CreateProcess(NULL, (LPWSTR)commandLine.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
-    {
-        DWORD error = GetLastError();
-        LOG_ERROR(L"Failed to start process - CreateProcess failed with error code: %d", error);
     }
     else
     {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
+        LOG_DEBUG(L"Process launched successfully on target monitor");
     }
 }
 
