@@ -77,31 +77,74 @@ bool g_menuOpenAtMouseDown = false;
 // UI Automation (initialized on InputSite thread)
 IUIAutomation* g_pAutomation = nullptr;
 bool g_comInitialized = false;
-HWND g_cleanupWindow = nullptr;
-const wchar_t* g_cleanupWindowClass = L"StartButtonFix_Cleanup";
+HWND g_inputSiteWnd = nullptr;
 
-#define WM_CLEANUP_COM (WM_USER + 100)
+// Helper to run code on a window's thread
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
-// Cleanup window procedure - runs on InputSite thread
-LRESULT CALLBACK CleanupWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {
-        case WM_CLEANUP_COM:
-            if (g_pAutomation) {
-                g_pAutomation->Release();
-                g_pAutomation = nullptr;
-                if (g_comInitialized) {
-                    CoUninitialize();
-                    g_comInitialized = false;
-                }
-                Wh_Log(L"UI Automation cleaned up on InputSite thread");
-            }
-            return 0;
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         void* procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
-        case WM_CLOSE:
-            DestroyWindow(hWnd);
-            return 0;
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
     }
-    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                static const UINT msg =
+                    RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+                if (cwp->message == msg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+// Cleanup UI Automation (called on InputSite thread)
+void WINAPI CleanupUIAutomation(void*) {
+    if (g_pAutomation) {
+        g_pAutomation->Release();
+        g_pAutomation = nullptr;
+        if (g_comInitialized) {
+            CoUninitialize();
+            g_comInitialized = false;
+        }
+        Wh_Log(L"UI Automation cleaned up on InputSite thread");
+    }
 }
 
 // Initialize UI Automation (call from InputSite thread only)
@@ -254,24 +297,6 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
-// Create cleanup window on InputSite thread (called via SendMessage)
-void CreateCleanupWindow() {
-    WNDCLASS wc = {};
-    wc.lpfnWndProc = CleanupWindowProc;
-    wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = g_cleanupWindowClass;
-    RegisterClass(&wc);
-
-    g_cleanupWindow = CreateWindowEx(
-        0, g_cleanupWindowClass, NULL, 0,
-        0, 0, 0, 0,
-        HWND_MESSAGE, NULL, wc.hInstance, NULL);
-
-    if (g_cleanupWindow) {
-        Wh_Log(L"Cleanup window created on thread %lu", GetCurrentThreadId());
-    }
-}
-
 // Handle InputSite window - install mouse hook on its thread
 void HandleInputSiteWindow(HWND hWnd) {
     if (g_inputSiteHooked) {
@@ -285,12 +310,7 @@ void HandleInputSiteWindow(HWND hWnd) {
         return;
     }
 
-    // Create cleanup window on the InputSite thread via a timer callback
-    SetTimer(hWnd, (UINT_PTR)CreateCleanupWindow, 0, [](HWND hWnd, UINT, UINT_PTR idEvent, DWORD) {
-        KillTimer(hWnd, idEvent);
-        CreateCleanupWindow();
-    });
-
+    g_inputSiteWnd = hWnd;
     g_inputSiteHooked = true;
     Wh_Log(L"Mouse hook installed on InputSite thread %lu", threadId);
 }
@@ -419,17 +439,11 @@ void Wh_ModUninit() {
         g_mouseHook = NULL;
     }
 
-    // Send cleanup message to the InputSite thread
-    if (g_cleanupWindow) {
-        SendMessageTimeout(g_cleanupWindow, WM_CLEANUP_COM, 0, 0,
-                           SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, NULL);
-        // DestroyWindow must be called from the owning thread, use SendMessage
-        SendMessageTimeout(g_cleanupWindow, WM_CLOSE, 0, 0,
-                           SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, NULL);
-        g_cleanupWindow = nullptr;
+    // Clean up UI Automation on the InputSite thread
+    if (g_inputSiteWnd && IsWindow(g_inputSiteWnd)) {
+        RunFromWindowThread(g_inputSiteWnd, CleanupUIAutomation, nullptr);
     }
-
-    UnregisterClass(g_cleanupWindowClass, GetModuleHandle(NULL));
+    g_inputSiteWnd = nullptr;
 
     g_inputSiteHooked = false;
     Wh_Log(L"Uninitialized");
