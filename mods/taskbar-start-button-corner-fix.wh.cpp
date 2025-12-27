@@ -59,8 +59,6 @@ real button doesn't handle the click.
 #include <objbase.h>
 #include <uiautomation.h>
 
-#include <atomic>
-
 // Settings
 struct {
     int edgeThickness;
@@ -69,10 +67,12 @@ struct {
 } g_settings;
 
 // Global state
-std::atomic<bool> g_mouseDownInCorner{false};
-std::atomic<bool> g_menuOpenAtMouseDown{false};
 HHOOK g_mouseHook = NULL;
 bool g_inputSiteHooked = false;
+
+// Mouse hook state (only accessed from InputSite thread)
+bool g_mouseDownInCorner = false;
+bool g_menuOpenAtMouseDown = false;
 
 // UI Automation (initialized on InputSite thread)
 IUIAutomation* g_pAutomation = nullptr;
@@ -227,26 +227,22 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
         MOUSEHOOKSTRUCT* pMouse = (MOUSEHOOKSTRUCT*)lParam;
 
         if (wParam == WM_LBUTTONDOWN) {
-            bool inCorner = IsInCornerRegion(pMouse->pt.x, pMouse->pt.y);
-            g_mouseDownInCorner.store(inCorner);
+            g_mouseDownInCorner = IsInCornerRegion(pMouse->pt.x, pMouse->pt.y);
 
-            if (inCorner) {
-                g_menuOpenAtMouseDown.store(IsStartMenuOpen());
+            if (g_mouseDownInCorner) {
+                g_menuOpenAtMouseDown = IsStartMenuOpen();
                 if (g_settings.debugLogging) {
                     Wh_Log(L"Mouse down at (%d, %d) in corner", pMouse->pt.x, pMouse->pt.y);
                 }
             }
         }
-        else if (wParam == WM_LBUTTONUP && g_mouseDownInCorner.load()) {
-            bool menuWasOpen = g_menuOpenAtMouseDown.load();
-            bool menuIsOpen = IsStartMenuOpen();
-
+        else if (wParam == WM_LBUTTONUP && g_mouseDownInCorner) {
             // Only toggle if menu state hasn't changed (real button didn't handle it)
-            if (menuWasOpen == menuIsOpen) {
+            if (g_menuOpenAtMouseDown == IsStartMenuOpen()) {
                 Wh_Log(L"Corner click at (%d, %d) - toggling Start menu", pMouse->pt.x, pMouse->pt.y);
                 ToggleStartMenu();
             }
-            g_mouseDownInCorner.store(false);
+            g_mouseDownInCorner = false;
         }
     }
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
@@ -352,6 +348,28 @@ BOOL CALLBACK FindInputSiteCallback(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
+// Find taskbar window in current process (other programs may use Shell_TrayWnd class)
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            wchar_t className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                wcscmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
 void LoadSettings() {
     g_settings.edgeThickness = Wh_GetIntSetting(L"edgeThickness");
     g_settings.edgeLength = Wh_GetIntSetting(L"edgeLength");
@@ -375,7 +393,7 @@ BOOL Wh_ModInit() {
     }
 
     // Check for existing InputSite window (taskbar may already exist)
-    HWND taskbarWnd = FindWindowW(L"Shell_TrayWnd", NULL);
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
     if (taskbarWnd) {
         HWND inputSiteWnd = NULL;
         EnumChildWindows(taskbarWnd, FindInputSiteCallback, (LPARAM)&inputSiteWnd);
