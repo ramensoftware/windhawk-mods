@@ -336,6 +336,8 @@ using bstr_ptr = _bstr_t;
 
 // =====================================================================
 
+#pragma region declarations
+
 #ifdef ENABLE_FILE_LOGGER
 #include <fstream>
 // file logger works as simple Tee to log to both console and file
@@ -513,7 +515,7 @@ public:
             if (SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) // COM was most likely already initialized in the GUI thread, but just to be sure
             {
                 m_isCOMInitialized = true;
-                LOG_INFO(L"COM initilized");
+                LOG_INFO(L"COM initialized");
             }
             else
             {
@@ -759,7 +761,6 @@ public:
     }
 };
 HWND WindowFocusTracker::g_hwndLastActive = NULL;
-
 static WindowFocusTracker g_windowFocusTracker;
 
 // few helpers to ease up working with strings
@@ -799,8 +800,15 @@ namespace stringtools
     }
 }
 
-void SetBit(uint32_t &value, uint32_t bit);
-bool GetBit(const uint32_t &value, uint32_t bit);
+void SetBit(uint32_t &value, uint32_t bit)
+{
+    value |= (1U << bit);
+}
+
+bool GetBit(const uint32_t &value, uint32_t bit)
+{
+    return (value & (1U << bit)) != 0;
+}
 
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
@@ -1120,9 +1128,19 @@ void ToggleTaskbarAlignment();
 void StartProcess(const std::wstring &command);
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
 
+#pragma endregion // declarations
+
 // =====================================================================
 
-#pragma region hook_magic
+#pragma region hooks_and_win32_methods
+
+// proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
+                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData);
+
+// proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
+WNDPROC InputSiteWindowProc_Original;
+LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
@@ -1183,267 +1201,6 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
     UnhookWindowsHookEx(hook);
 
     return param.result;
-}
-
-#ifdef ENABLE_LOG_DEBUG
-void printMessage(UINT uMsg)
-{
-    if ((uMsg != WM_NCMOUSEMOVE) &&
-        (uMsg != WM_NOTIFY) &&
-        (uMsg != 0x84) && // ? SPI_GETMOUSEDRAGOUTTHRESHOLD
-        (uMsg != 0x20) &&
-        (uMsg != WM_WINDOWPOSCHANGING) &&
-        (uMsg != WM_WINDOWPOSCHANGED) &&
-        (uMsg != WM_ACTIVATEAPP) &&
-        (uMsg != WM_NCACTIVATE) &&
-        (uMsg != WM_ACTIVATE) &&
-        (uMsg != 0x281) &&
-        (uMsg != 0x282) &&
-        (uMsg != 0x003D) &&
-        (uMsg != WM_SETFOCUS) &&
-        (uMsg != WM_KILLFOCUS) &&
-        (uMsg != WM_SYSCOMMAND) &&
-        (uMsg != WM_CAPTURECHANGED) &&
-        (uMsg != 0x0014) &&
-        (uMsg != WM_PRINTCLIENT) &&
-        (uMsg != WM_CHANGEUISTATE) &&
-        (uMsg != CB_GETCOMBOBOXINFO) &&
-        (uMsg != WM_ENTERIDLE) &&
-        (uMsg != 0x2b) &&
-        (uMsg != 0x2c) &&
-        (uMsg != 0x113) &&
-        (uMsg != 0x200) &&
-        (uMsg != 0x24a) &&
-        (uMsg != 0x245))
-    {
-        switch (uMsg)
-        {
-        case WM_CONTEXTMENU:
-            LOG_DEBUG(L"Message: WM_CONTEXTMENU");
-            break;
-        case WM_NCLBUTTONDOWN:
-            LOG_DEBUG(L"Message: WM_NCLBUTTONDOWN");
-            break;
-        case WM_NCLBUTTONUP:
-            LOG_DEBUG(L"Message: WM_NCLBUTTONUP");
-            break;
-        case WM_NCLBUTTONDBLCLK:
-            LOG_DEBUG(L"Message: WM_NCLBUTTONDBLCLK");
-            break;
-        case WM_NCRBUTTONDOWN:
-            LOG_DEBUG(L"Message: WM_NCRBUTTONDOWN");
-            break;
-        case WM_NCRBUTTONUP:
-            LOG_DEBUG(L"Message: WM_NCRBUTTONUP");
-            break;
-        case WM_NCRBUTTONDBLCLK:
-            LOG_DEBUG(L"Message: WM_NCRBUTTONDBLCLK");
-            break;
-        case WM_NCMBUTTONDOWN:
-            LOG_DEBUG(L"Message: WM_NCMBUTTONDOWN");
-            break;
-        case WM_NCMBUTTONUP:
-            LOG_DEBUG(L"Message: WM_NCMBUTTONUP");
-            break;
-        case WM_NCMBUTTONDBLCLK:
-            LOG_DEBUG(L"Message: WM_NCMBUTTONDBLCLK");
-            break;
-        case WM_POINTERDOWN:
-            LOG_DEBUG(L"Message: WM_POINTERDOWN");
-            break;
-        case WM_POINTERUP:
-            LOG_DEBUG(L"Message: WM_POINTERUP");
-            break;
-        default:
-            LOG_DEBUG(L"Message: 0x%x", uMsg);
-            break;
-        }
-    }
-}
-#endif
-
-// proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
-LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
-                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
-{
-    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam))
-    {
-        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
-    }
-    if (WM_NCDESTROY == uMsg)
-    {
-        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        if (hWnd != g_hTaskbarWnd)
-        {
-            g_secondaryTaskbarWindows.erase(hWnd);
-        }
-        return result;
-    }
-    if (uMsg == g_uninitCOMAPIMsg)
-    {
-        LOG_INFO("Received uninit COM API message, uninitializing COM API");
-        g_comAPI.Uninit();
-        return 0;
-    }
-
-    // printMessage(uMsg);
-
-    bool suppress = false;
-    // button up messages seems really unreliable, so only process down and dblclk messages
-    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
-    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
-    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
-    const bool isXButton = (uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN) || (uMsg == WM_XBUTTONDBLCLK || uMsg == WM_NCXBUTTONDBLCLK);
-    if ((g_taskbarVersion == WIN_10_TASKBAR) && (isLeftButton || isRightButton || isMiddleButton || isXButton))
-    {
-        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if (extraInfo != g_injectedClickID)
-        {
-            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-            if (!g_comAPI.IsInitialized())
-            {
-                g_comAPI.Init(); // make sure it gets initialied from GUI thread
-            }
-
-            MouseClick::Button button = MouseClick::Button::INVALID;
-            if (isLeftButton)
-            {
-                button = MouseClick::Button::LEFT;
-            }
-            else if (isRightButton)
-            {
-                button = MouseClick::Button::RIGHT;
-            }
-            else if (isMiddleButton)
-            {
-                button = MouseClick::Button::MIDDLE;
-            }
-            else if (isXButton)
-            {
-                button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? MouseClick::Button::MOUSE4 : MouseClick::Button::MOUSE5;
-            }
-            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
-            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
-                ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
-            {
-                g_isContextMenuSuppressed = true;
-            }
-
-            OnMouseClick(lastClick);
-        }
-        else
-        {
-            LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping, 0x%x", uMsg);
-        }
-    }
-
-    else if ((WM_NCRBUTTONUP == uMsg) ||                // WM_NCRBUTTONUP for Win10
-             (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
-             (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
-    {
-        const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
-        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000; // reset context menu suppression after 1 second
-        if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
-            (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
-        {
-            suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
-        }
-        else
-        {
-            g_isContextMenuSuppressed = false;
-        }
-    }
-
-    LRESULT result = 0;
-    if (!suppress)
-    {
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
-    return result;
-}
-
-// proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
-WNDPROC InputSiteWindowProc_Original;
-LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    if (uMsg == g_uninitCOMAPIMsg)
-    {
-        LOG_INFO("Received uninit COM API message, uninitializing COM API");
-        g_comAPI.Uninit();
-        return 0;
-    }
-
-    // printMessage(uMsg);
-
-    bool suppressMsg = false;
-    switch (uMsg)
-    {
-    case WM_POINTERDOWN:
-        HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-        if (IsTaskbarWindow(hRootWnd))
-        {
-            MouseClick::Button button = MouseClick::Button::INVALID;
-            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::LEFT;
-            }
-            else if (IS_POINTER_SECONDBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::RIGHT;
-            }
-            else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::MIDDLE;
-            }
-            else if (IS_POINTER_FOURTHBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::MOUSE4;
-            }
-            else if (IS_POINTER_FIFTHBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::MOUSE5;
-            }
-            else
-            {
-                break;
-            }
-
-            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-            if (!g_comAPI.IsInitialized())
-            {
-                g_comAPI.Init(); // make sure it gets initialied from GUI thread
-            }
-
-            // check whether we need to suppress the context menu for right clicks
-            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd);
-            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
-            {
-                LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-                if (extraInfo == g_injectedClickID)
-                {
-                    LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
-                    break;
-                }
-                if (ShallSuppressContextMenu(lastClick))
-                {
-                    g_isContextMenuSuppressed = true;
-                    suppressMsg = true; // suppress the right click menu (otherwise a double click would be impossible)
-                }
-            }
-            OnMouseClick(lastClick);
-        }
-        break;
-    }
-
-    if (suppressMsg)
-    {
-        return 0; // suppress the message
-    }
-    else
-    {
-        return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
-    }
 }
 
 BOOL SubclassTaskbarWindow(HWND hWnd)
@@ -1636,7 +1393,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 // finds main task bar and returns its hWnd,
-// optinally it finds also secondary taskbars and fills them to the set
+// optionally it finds also secondary taskbars and fills them to the set
 // secondaryTaskbarWindows
 HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbarWindows)
 {
@@ -1733,8 +1490,6 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
     return hWnd;
 }
 
-#pragma endregion // hook_magic
-
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 {
     LOG_TRACE();
@@ -1810,6 +1565,75 @@ BOOL WindowsVersionInit()
 
     return TRUE;
 }
+
+/**
+ * @brief Finds the desktop window. Desktop window handle is used to send messages to the desktop (show/hide icons).
+ *
+ * @return HWND Desktop window handle
+ */
+HWND FindDesktopWindow()
+{
+    LOG_TRACE();
+
+    HWND hParentWnd = FindWindow(L"Progman", NULL); // Program Manager window
+    if (!hParentWnd)
+    {
+        LOG_ERROR(L"Failed to find Progman window");
+        return NULL;
+    }
+
+    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL); // parent window of the desktop
+    if (!hChildWnd)
+    {
+        DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
+        EnumThreadWindows(
+            dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
+            {
+            WCHAR szClassName[16];
+            if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
+                return TRUE;
+
+            if (lstrcmp(szClassName, L"WorkerW") != 0)
+                return TRUE;
+
+            HWND hChildWnd = FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
+            if (!hChildWnd)
+                return TRUE;
+
+            *(HWND *)lParam = hChildWnd;
+            return FALSE; },
+            (LPARAM)&hChildWnd);
+    }
+
+    if (!hChildWnd)
+    {
+        LOG_ERROR(L"Failed to find SHELLDLL_DefView window");
+        return NULL;
+    }
+    return hChildWnd;
+}
+
+bool IsTaskbarWindow(HWND hWnd)
+{
+    LOG_TRACE();
+
+    WCHAR szClassName[32];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
+    {
+        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to get window class name");
+        return false;
+    }
+}
+
+#pragma endregion // hooks_and_win32_methods
+
+// =====================================================================
+
+#pragma region actions
 
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
 {
@@ -2144,53 +1968,6 @@ void LoadSettings()
 
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
     g_settings.eagerTriggerEvaluation = Wh_GetIntSetting(L"eagerTriggerEvaluation");
-}
-
-/**
- * @brief Finds the desktop window. Desktop window handle is used to send messages to the desktop (show/hide icons).
- *
- * @return HWND Desktop window handle
- */
-HWND FindDesktopWindow()
-{
-    LOG_TRACE();
-
-    HWND hParentWnd = FindWindow(L"Progman", NULL); // Program Manager window
-    if (!hParentWnd)
-    {
-        LOG_ERROR(L"Failed to find Progman window");
-        return NULL;
-    }
-
-    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL); // parent window of the desktop
-    if (!hChildWnd)
-    {
-        DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
-        EnumThreadWindows(
-            dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
-            {
-            WCHAR szClassName[16];
-            if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
-                return TRUE;
-
-            if (lstrcmp(szClassName, L"WorkerW") != 0)
-                return TRUE;
-
-            HWND hChildWnd = FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
-            if (!hChildWnd)
-                return TRUE;
-
-            *(HWND *)lParam = hChildWnd;
-            return FALSE; },
-            (LPARAM)&hChildWnd);
-    }
-
-    if (!hChildWnd)
-    {
-        LOG_ERROR(L"Failed to find SHELLDLL_DefView window");
-        return NULL;
-    }
-    return hChildWnd;
 }
 
 bool GetTaskbarAutohideState()
@@ -2882,23 +2659,11 @@ void StartProcess(const std::wstring &command)
     }
 }
 
+#pragma endregion // actions
+
 // =====================================================================
 
-bool IsTaskbarWindow(HWND hWnd)
-{
-    LOG_TRACE();
-
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
-    {
-        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
-    }
-    else
-    {
-        LOG_ERROR(L"Failed to get window class name");
-        return false;
-    }
-}
+#pragma region trigger_handling
 
 bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
 {
@@ -2912,16 +2677,6 @@ bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
         isCorrectTaskbar = g_secondaryTaskbarWindows.contains(hWnd);
     }
     return isCorrectTaskbar;
-}
-
-void SetBit(uint32_t &value, uint32_t bit)
-{
-    value |= (1U << bit);
-}
-
-bool GetBit(const uint32_t &value, uint32_t bit)
-{
-    return (value & (1U << bit)) != 0;
 }
 
 bool ShallSuppressContextMenu(const MouseClick &lastClick)
@@ -3291,6 +3046,195 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
     return nullptr;
 }
 
+#pragma endregion // trigger_handling
+
+// =====================================================================
+
+#pragma region proc_handlers
+
+// proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
+                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam))
+    {
+        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
+    }
+    if (WM_NCDESTROY == uMsg)
+    {
+        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        if (hWnd != g_hTaskbarWnd)
+        {
+            g_secondaryTaskbarWindows.erase(hWnd);
+        }
+        return result;
+    }
+    if (uMsg == g_uninitCOMAPIMsg)
+    {
+        LOG_INFO("Received uninit COM API message, uninitializing COM API");
+        g_comAPI.Uninit();
+        return 0;
+    }
+
+    // printMessage(uMsg);
+
+    bool suppress = false;
+    // button up messages seems really unreliable, so only process down and dblclk messages
+    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
+    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
+    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
+    const bool isXButton = (uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN) || (uMsg == WM_XBUTTONDBLCLK || uMsg == WM_NCXBUTTONDBLCLK);
+    if ((g_taskbarVersion == WIN_10_TASKBAR) && (isLeftButton || isRightButton || isMiddleButton || isXButton))
+    {
+        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+        if (extraInfo != g_injectedClickID)
+        {
+            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+            if (!g_comAPI.IsInitialized())
+            {
+                g_comAPI.Init(); // make sure it gets initialied from GUI thread
+            }
+
+            MouseClick::Button button = MouseClick::Button::INVALID;
+            if (isLeftButton)
+            {
+                button = MouseClick::Button::LEFT;
+            }
+            else if (isRightButton)
+            {
+                button = MouseClick::Button::RIGHT;
+            }
+            else if (isMiddleButton)
+            {
+                button = MouseClick::Button::MIDDLE;
+            }
+            else if (isXButton)
+            {
+                button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? MouseClick::Button::MOUSE4 : MouseClick::Button::MOUSE5;
+            }
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
+            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
+                ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
+            {
+                g_isContextMenuSuppressed = true;
+            }
+
+            OnMouseClick(lastClick);
+        }
+        else
+        {
+            LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping, 0x%x", uMsg);
+        }
+    }
+
+    else if ((WM_NCRBUTTONUP == uMsg) ||                // WM_NCRBUTTONUP for Win10
+             (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
+             (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
+    {
+        const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
+        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000; // reset context menu suppression after 1 second
+        if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
+            (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
+        {
+            suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
+        }
+        else
+        {
+            g_isContextMenuSuppressed = false;
+        }
+    }
+
+    LRESULT result = 0;
+    if (!suppress)
+    {
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+    return result;
+}
+
+// proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
+LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == g_uninitCOMAPIMsg)
+    {
+        LOG_INFO("Received uninit COM API message, uninitializing COM API");
+        g_comAPI.Uninit();
+        return 0;
+    }
+
+    // printMessage(uMsg);
+
+    bool suppressMsg = false;
+    switch (uMsg)
+    {
+    case WM_POINTERDOWN:
+        HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+        if (IsTaskbarWindow(hRootWnd))
+        {
+            MouseClick::Button button = MouseClick::Button::INVALID;
+            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::LEFT;
+            }
+            else if (IS_POINTER_SECONDBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::RIGHT;
+            }
+            else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MIDDLE;
+            }
+            else if (IS_POINTER_FOURTHBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MOUSE4;
+            }
+            else if (IS_POINTER_FIFTHBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MOUSE5;
+            }
+            else
+            {
+                break;
+            }
+
+            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+            if (!g_comAPI.IsInitialized())
+            {
+                g_comAPI.Init(); // make sure it gets initialied from GUI thread
+            }
+
+            // check whether we need to suppress the context menu for right clicks
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd);
+            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+            {
+                LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+                if (extraInfo == g_injectedClickID)
+                {
+                    LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
+                    break;
+                }
+                if (ShallSuppressContextMenu(lastClick))
+                {
+                    g_isContextMenuSuppressed = true;
+                    suppressMsg = true; // suppress the right click menu (otherwise a double click would be impossible)
+                }
+            }
+            OnMouseClick(lastClick);
+        }
+        break;
+    }
+
+    if (suppressMsg)
+    {
+        return 0; // suppress the message
+    }
+    else
+    {
+        return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
+    }
+}
+
 // main body of the mod called every time a taskbar is clicked
 bool OnMouseClick(MouseClick click)
 {
@@ -3334,7 +3278,11 @@ bool OnMouseClick(MouseClick click)
     return true;
 }
 
-////////////////////////////////////////////////////////////
+#pragma endregion // proc_handlers
+
+// =====================================================================
+
+#pragma region windhawk_mod_functions
 
 BOOL Wh_ModInit()
 {
@@ -3453,3 +3401,5 @@ void Wh_ModUninit()
         }
     }
 }
+
+#pragma endregion // windhawk_mod_functions
