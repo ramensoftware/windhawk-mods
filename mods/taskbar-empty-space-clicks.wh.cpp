@@ -210,6 +210,16 @@ Please open an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mo
 
 If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
 
+## Hints
+
+### Opening an application on the currently active monitor
+
+Windows by default opens new application windows on the primary monitor. If you want to open an application on the currently active monitor instead, you can use [Microsoft PowerToys](https://github.com/microsoft/PowerToys?tab=readme-ov-file#-installation) with the [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) feature enabled. FancyZones will remember the last active monitor and open new application windows there. See GitHub [issue #52](https://github.com/m1lhaus/windhawk-mods/issues/52#issuecomment-3693251071) for more information.
+
+### Volume control with mouse wheel over taskbar
+
+If you wish to extend media playback control further, you can use the [Taskbar Volume Control](https://windhawk.net/mods/taskbar-volume-control) mod. It lets you control the system volume by scrolling the mouse wheel over the taskbar.
+
 ## Suggestions and new features
 
 If you have a request for new functions, suggestions, or you are experiencing some issues, please post an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mods/issues). Please be as specific as possible and provide as much information as you can. Please consider using an AI chatbot if you are struggling to put everything together in English.
