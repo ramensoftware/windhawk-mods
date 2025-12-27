@@ -37,6 +37,10 @@ This mod lets you assign an action to a mouse click on the Windows taskbar. Sing
 10. **Open Start menu** - Sends Win key press to open Start menu
 11. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
 12. **Start application** - Starts arbitrary application or runs a command
+13. **Media Play/Pause** - Toggle play/pause for media playback
+14. **Media Stop** - Stop media playback
+15. **Media Next Track** - Skip to next track
+16. **Media Previous Track** - Skip to previous track
 
 ### Example
 
@@ -107,6 +111,9 @@ Some actions support or require additional arguments. You can set them in the Se
     - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
     - Example: `cmd.exe /c echo Hello & pause`
     - Takes and executes the entire `applicationPath` string as a new process. No semicolons are parsed! Only leading and trailing whitespace characters are removed. You can use the full path to the application or just the executable name if it is in PATH. If you want to execute a shell command, use cmd.exe with the corresponding flag.
+13. Media Play/Pause - no additional arguments supported
+14. Media Next Track - no additional arguments supported
+15. Media Previous Track - no additional arguments supported
 
 ## Caveats and limitations:
 
@@ -260,18 +267,21 @@ If you have a request for new functions, suggestions, or you are experiencing so
       $description: Action to invoke on trigger.
       $options:
       - ACTION_NOTHING: Nothing (default)
-      - ACTION_SHOW_DESKTOP: Show desktop
-      - ACTION_ALT_TAB: Ctrl+Alt+Tab
-      - ACTION_TASK_MANAGER: Task Manager
-      - ACTION_MUTE: Mute system volume
-      - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
-      - ACTION_WIN_TAB: Win+Tab
-      - ACTION_HIDE_ICONS: Hide desktop icons
       - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
-      - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
+      - ACTION_ALT_TAB: Ctrl+Alt+Tab
+      - ACTION_HIDE_ICONS: Hide desktop icons
+      - ACTION_MEDIA_NEXT: Media Next Track
+      - ACTION_MEDIA_PLAY_PAUSE: Media Play/Pause
+      - ACTION_MEDIA_PREV: Media Previous Track
+      - ACTION_MUTE: Mute system volume
       - ACTION_OPEN_START_MENU: Open Start menu
-      - ACTION_SEND_KEYPRESS: Virtual key press
+      - ACTION_SHOW_DESKTOP: Show desktop
       - ACTION_START_PROCESS: Start application
+      - ACTION_TASK_MANAGER: Task Manager
+      - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
+      - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
+      - ACTION_SEND_KEYPRESS: Virtual key press
+      - ACTION_WIN_TAB: Win+Tab
     - AdditionalArgs: arg1;arg2
       $name: Additional Args
       $description: Additional arguments for the selected action, separated by semicolons. See the mod's Details tab for more information about the supported arguments for each action.
@@ -1123,6 +1133,10 @@ void ShowDesktop();
 void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow = false);
 void SendCtrlAltTabKeypress();
 void SendWinTabKeypress();
+void MediaPlayPause();
+void MediaStop();
+void MediaNext();
+void MediaPrev();
 bool ClickStartMenu();
 void OpenStartMenu();
 void OpenTaskManager(HWND taskbarhWnd);
@@ -1902,6 +1916,21 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
             StartProcess(cmd);
         };
     }
+    else if (actionName == L"ACTION_MEDIA_PLAY_PAUSE")
+    {
+        return [](HWND)
+        { MediaPlayPause(); };
+    }
+    else if (actionName == L"ACTION_MEDIA_NEXT")
+    {
+        return [](HWND)
+        { MediaNext(); };
+    }
+    else if (actionName == L"ACTION_MEDIA_PREV")
+    {
+        return [](HWND)
+        { MediaPrev(); };
+    }
 
     LOG_ERROR(L"Unknown action '%s'", actionName.c_str());
     return doNothing;
@@ -2138,6 +2167,33 @@ void SendWinTabKeypress()
 
     LOG_INFO(L"Sending Win+Tab keypress");
     SendKeypress({VK_LWIN, VK_TAB});
+}
+
+// Sends Media Play/Pause keypress
+void MediaPlayPause()
+{
+    LOG_TRACE();
+
+    LOG_INFO(L"Sending Media Play/Pause keypress");
+    SendKeypress({VK_MEDIA_PLAY_PAUSE});
+}
+
+// Sends Media Next Track keypress
+void MediaNext()
+{
+    LOG_TRACE();
+
+    LOG_INFO(L"Sending Media Next Track keypress");
+    SendKeypress({VK_MEDIA_NEXT_TRACK});
+}
+
+// Sends Media Previous Track keypress
+void MediaPrev()
+{
+    LOG_TRACE();
+
+    LOG_INFO(L"Sending Media Previous Track keypress");
+    SendKeypress({VK_MEDIA_PREV_TRACK});
 }
 
 // Clicks Start button using UIAutomation, handling Win10/Win11 differences
