@@ -106,15 +106,16 @@ Some actions support or require additional arguments. You can set them in the Se
     - Each text field corresponds to one virtual key press. Fill in hexadecimal key codes of the keys you want to press. Key codes are defined in [Win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexadecimal (0x) or decimal format for a key code! Example: (0x5B and 0x45) corresponds to (Win + E) shortcut that opens an Explorer window. If your key combination has no effect, check the log for more information.
     - There is a special keyword `focusPreviousWindow` that can be used to set focus back to the previously active window. This is useful when you want to send keypresses to the last active window instead of the taskbar. That way you can, for example, turn on fullscreen mode in the web browser by sending the F11 key. You can use this keyword anywhere in the sequence of virtual keys.
     - Please note that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via the inputdev interface.
-12. Start application - `applicationPath arg1 arg2 ... argN`
-    - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt` - any executable with optional arguments
+12. Open application, path or URL - `applicationPath arg1 arg2 ... argN`
+    - Example: `"c:\Program Files\Notepad++\notepad++.exe" C:\Users\username\Desktop\test.txt` - use quotes around paths with spaces
     - Example: `uac;C:\Windows\System32\notepad.exe C:\Windows\System32\drivers\etc\hosts` - start application with elevated privileges (UAC prompt will appear)
     - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3` - user must handle proper quoting of arguments
     - Example: `cmd.exe /c echo Hello & pause` - execute shell commands
     - Example: `https://windhawk.net/mods/` - open URL in default web browser
-    - Example: `c:\Users\username\Documents\` - open folder in Explorer
+    - Example: `c:\Users\John Doe\Documents\` - open folder in Explorer
     - Example: `shell:Recent` - open special shell folder in Explorer ([more special shell commands](https://www.winhelponline.com/blog/shell-commands-to-access-the-special-folders/))
-    - Uses [ShellExecute](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutea) to open applications, paths, or URLs. If command starts with special keyword `uac`, the application will be started with elevated privileges (UAC prompt will appear). 
+    - Uses [ShellExecute](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutea) to open applications, paths, or URLs. If the command starts with the special keyword `uac`, the application will be started with elevated privileges (UAC prompt will appear).
+    - The command line parser attempts to intelligently handle spaces in file paths and arguments. However, if you encounter issues, enclose paths containing spaces in double quotes.
     - Error codes and error messages can be found in the mod log if the application fails to start.
 13. Media Play/Pause - no additional arguments supported
 14. Media Next Track - no additional arguments supported
@@ -339,6 +340,8 @@ If you have a request for new functions, suggestions, or you are experiencing so
 #include <vector>
 #include <functional>
 #include <algorithm>
+#include <filesystem>
+#include <tuple>
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -827,6 +830,15 @@ namespace stringtools
         std::wstring result = s;
         std::transform(result.begin(), result.end(), result.begin(), ::towlower);
         return result;
+    }
+
+    bool startsWith(const std::wstring &s, const std::wstring &prefix)
+    {
+        if (s.length() < prefix.length())
+        {
+            return false;
+        }
+        return std::equal(prefix.begin(), prefix.end(), s.begin());
     }
 }
 
@@ -2688,6 +2700,58 @@ void ToggleTaskbarAlignment()
     }
 }
 
+// Parses command line into executable path and parameters
+std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(const std::wstring &command)
+{
+    std::wstring executable = command;
+    std::wstring parameters;
+
+    // in case user provided quoted executable path
+    if (stringtools::startsWith(command, L"\"") || stringtools::startsWith(command, L"'"))
+    {
+        // Find the closing quote
+        size_t closingQuotePos = command.find(command[0], 1);
+        if (closingQuotePos != std::wstring::npos)
+        {
+            executable = command.substr(1, closingQuotePos - 1);
+            if (command.length() > closingQuotePos + 1)
+            {
+                parameters = command.substr(closingQuotePos + 1);
+            }
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to parse executable and parameters - missing closing quote in command");
+        }
+    }
+    else
+    {
+        // split by space and try to put together executable path that may contain spaces
+        std::vector<std::wstring> args = SplitArgs(command, L' ');
+        if (args.size() > 1)
+        {
+            executable = L"";
+            for (const auto &arg : args)
+            {
+                executable += arg;
+                if (std::filesystem::path(executable).extension().wstring().length() > 1) // is ext more than just dot ?
+                {
+                    break;
+                }
+                else
+                {
+                    executable += L" ";
+                }
+            }
+            if (command.length() > executable.length())
+            {
+                parameters = command.substr(executable.length());
+            }
+        }
+    }
+    return std::make_tuple(stringtools::trim(executable), stringtools::trim(parameters));
+}
+
 // Starts a process with command line arguments
 void StartProcess(std::wstring command)
 {
@@ -2703,31 +2767,18 @@ void StartProcess(std::wstring command)
     std::wstring shellExVerb = L"open";
     if (stringtools::toLower(uac_args[0]) == L"uac")
     {
-        shellExVerb = L"runas"; // request elevation
+        shellExVerb = L"runas";                                                 // request elevation
         command = stringtools::ltrim(command.substr(uac_args[0].length() + 1)); // remove the "uac;" prefix
     }
+
+    const auto [executable, parameters] = ParseExecutableAndParameters(command);
+    LOG_INFO(L"Starting process with %s: '%s' '%s'", shellExVerb.c_str(), executable.c_str(), parameters.c_str());
 
     // Get current cursor position and monitor handle
     POINT cursorPos;
     GetCursorPos(&cursorPos);
     HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
     LOG_DEBUG(L"Launching process on monitor handle: %p", hMonitor);
-
-    // First argument is the executable/file path
-    // TODO: what if user provided file path with space?
-    std::vector<std::wstring> args = SplitArgs(command, L' ');
-    std::wstring executable = args[0];
-
-    // Extract parameters by removing the executable from the command
-    // let the use handle the escaping/quoting as they wish
-    std::wstring parameters;
-    if (command.length() > executable.length())
-    {
-        parameters = command.substr(executable.length());
-        parameters = stringtools::ltrim(parameters); // Remove leading whitespace
-    }
-
-    LOG_INFO(L"Starting process: '%s' '%s'", executable.c_str(), parameters.c_str());
 
     // Use ShellExecuteEx with hMonitor to launch on the correct monitor
     SHELLEXECUTEINFO sei = {sizeof(sei)};
@@ -2736,17 +2787,17 @@ void StartProcess(std::wstring command)
     sei.lpFile = executable.c_str();
     sei.lpParameters = parameters.empty() ? NULL : parameters.c_str();
     sei.nShow = SW_SHOWNORMAL;
-    sei.hMonitor = hMonitor;  // Specify the target monitor, but most apps ignore this anyway
+    sei.hMonitor = hMonitor; // Specify the target monitor, but most apps ignore this anyway
 
     if (!ShellExecuteEx(&sei))
     {
         DWORD error = GetLastError();
-        if (error != ERROR_CANCELLED)  // User cancelled UAC or similar
+        if (error != ERROR_CANCELLED) // User cancelled UAC or similar
         {
             LPWSTR errorMsg = nullptr;
             FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                          NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                          (LPWSTR)&errorMsg, 0, NULL);
+                           NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                           (LPWSTR)&errorMsg, 0, NULL);
             if (errorMsg)
             {
                 LOG_ERROR(L"Failed to start process - ShellExecuteEx failed with error code %d: %s", error, errorMsg);
