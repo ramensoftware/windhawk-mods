@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-28T08:52:01.000Z</updated>
+    <updated>2025-12-28T14:10:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Click on empty taskbar space 2.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#d5d60e47eb69f50bfa9ea4dd394d884e95eaf823</id>
+        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
+        <updated>2025-12-28T14:10:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Implemented support for mouse side buttons (mouse4 and mouse5 buttons) - https://github.com/m1lhaus/windhawk-mods/issues/50</li>
+<li>Added new actions for media playback control - pause, next track, prev track - https://github.com/m1lhaus/windhawk-mods/issues/51</li>
+<li>Added Hints section to mod's description</li>
+<li>Start application action reworked - users can now open URLs and paths in Explorer - https://github.com/m1lhaus/windhawk-mods/issues/53</li>
+<li>Started applications will now try to start on currently active monitor - https://github.com/m1lhaus/windhawk-mods/issues/52</li>
+<li>Default keyboard modifiers (all selected) are now ignored - https://github.com/ramensoftware/windhawk-mods/issues/2745#issuecomment-3591791526</li>
+</ul>]]></content>
+        <author>
+            <name>m1lhaus</name>
+            <uri>https://github.com/m1lhaus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start Menu Corner Click Fix 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#7a97b948c1747274d849d2c53f6f88be9920f95f</id>
@@ -321,38 +339,6 @@ allows setting different auto-hide settings for each monitor.</p>]]></content>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Change Qt App Icon 1.0.0]]></title>
-        <id>https://windhawk.net/mods/change-qt-app-icon#f1782d79034f62b166dcd88871f4f323284fe0b0</id>
-        <link href="https://windhawk.net/mods/change-qt-app-icon"/>
-        <updated>2025-12-15T01:54:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="changeqtappicon">Change Qt App Icon</h1>
-<p>This mod allows you to change the window icon of all windows for a Qt
-application. Due to the way Qt stores resources, it is difficult to
-differentiate icons, and as such, you may only set one icon to be
-used at all times for an application.</p>
-<p><strong>Example</strong>: <em>IDA 9.2 with its pre-6.0 icon</em></p>
-<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/change-qt-app-icon-example.png" alt="Example: IDA 9.2 with its pre-6.0 icon" /></p>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Go to the "Advanced" tab of this mod.</li>
-<li>Find the "Custom process inclusion list" option.</li>
-<li>Add the name of the EXE you want to change window icons for.</li>
-</ol>
-<ul>
-<li>If you don't know the name of the EXE, you can find it using 
- Task Manager.</li>
-</ul>
-<ol>
-<li>Click Save.</li>
-<li>Configure the mod as you want it to be.</li>
-<li>If the program is open already, restart it.</li>
-</ol>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
