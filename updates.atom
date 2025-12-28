@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-28T07:47:16.000Z</updated>
+    <updated>2025-12-28T08:52:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Corner Click Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#7a97b948c1747274d849d2c53f6f88be9920f95f</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-corner-fix"/>
+        <updated>2025-12-28T08:52:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startmenucornerclickfix">Start Menu Corner Click Fix</h1>
+<p>Fixes an issue on Windows 11 where clicking in the very corner of the taskbar doesn't open the Start menu
+on left-aligned taskbars when the start menu button is "in a sticky corner".</p>
+<h2 id="theproblem">The Problem</h2>
+<p>Windows 11's taskbar has an InputSite window (Windows.UI.Input.InputSite.WindowClass)
+that intercepts mouse clicks before they reach the Start button.</p>
+<p>This seems to be caused by the "sticky corners" feature, and thus only affects multi-monitor setups.</p>
+<h2 id="thesolution">The Solution</h2>
+<p>This mod hooks <code>CreateWindowInBand</code> to detect when the InputSite window is created,
+then installs a thread-specific mouse hook on its thread. This hook intercepts mouse
+clicks at the corner region and invokes the Start menu via UI Automation when the
+real button doesn't handle the click.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 11 64-bit (tested on 25H2)</li>
+<li>Windhawk v1.4 or later</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CEF/Spotify Tweaks 1.6]]></title>
         <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#b10d6bd9375f96e105e8b13d2db6a2a75b4868bf</id>
@@ -326,17 +353,6 @@ used at all times for an application.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.0.8]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#e130982f86c22bf23884a66f4a59510d2fb6b99d</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2025-12-12T16:08:32.000Z</updated>
-        <content type="html"><![CDATA[<p>Add Classic Theme UIFILE Fix</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
