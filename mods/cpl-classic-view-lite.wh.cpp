@@ -29,7 +29,7 @@ It has also an option to make the individual category folders to look like regul
 There is an empty, non-functional icon in the Control panel folder, so to remove it, execute this command with elevated rights:
 
 ```
-reg delete "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{98F2AB62-0E29-4E4C-8EE7-B542E66740B1}" /f
+reg delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{98F2AB62-0E29-4E4C-8EE7-B542E66740B1}" /f
 ```
 To create a shortcut to the `all Items` view, create a folder with this name extension: 
 `{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}`, 
