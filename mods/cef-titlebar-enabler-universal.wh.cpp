@@ -66,23 +66,24 @@
     * This API is only available on Spotify 1.2.4 and above, and only if the mod is enabled before Spotify starts
     * The API is disabled by default on untested CEF versions
 ## JavaScript API Documentation
-* All functions are synchronous, and do not have a return value, with the exception of `query()`.
+* All functions are synchronous and do not have a return value, with the exception of `query()`.
 * May throw exceptions when called with invalid arguments or when an internal error occurs.
 * Some functions may not exist in specific conditions (e.g., Spotify version, architecture, mod version, etc.). Check for the existence of the function before calling it to avoid exceptions.
 * The following are functions and properties available in the object returned by `_getSpotifyModule('ctewh')` or `cancelEsperantoCall('ctewh')`:
 * `query()`: Queries various information about the main window and the mod settings. Returns an object with the following properties:
     * `isMaximized`: Whether the main window is maximized
     * `isTopMost`: Whether the main window is always on top
-    * `isLayered`: Whether the main window is layered (transparent rendering enabled)
+    * `isLayered`: Whether the main window is layered
+    * `isTransparent`: Whether the main window is in transparent mode (by `setTransparent()`)
     * `isThemingEnabled`: Whether visual styles are enabled
-    * `isDwmEnabled`: Whether DWM is enabled
+    * `isDwmEnabled`: Whether DWM is enabled. Also returns false when a basic themer has been applied
     * `hwAccelerated`: Whether hardware acceleration is enabled
-    * `minWidth`: The minimum width of the main window
-    * `minHeight`: The minimum height of the main window
-    * `titleLocked`: Whether the title bar text is locked
+    * `minWidth`: The minimum width of the main window. Returns -1 if no minimum width is set with `setMinSize()`
+    * `minHeight`: The minimum height of the main window. Returns -1 if no minimum height is set with `setMinSize()`
+    * `titleLocked`: Whether the title bar text is locked (by `lockTitle()`)
     * `dpi`: The DPI of the main window
+    * `playbackSpeed`: The current playback speed as a decimal number (by `setPlaybackSpeed()`)
     * `speedModSupported`: Whether playback speed modification is supported
-    * `playbackSpeed`: The current playback speed
     * `immediateSpeedChange`: Whether playback speed changes are applied immediately
     * Various mod settings as boolean properties (described below)
 * `extendFrame(int: left, int: top, int: right, int: bottom)`
@@ -2364,6 +2365,7 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
             AddValueToObj(retobj, u"isMaximized", cef_v8value_create_bool(g_queryResponse.isMaximized));
             AddValueToObj(retobj, u"isTopMost", cef_v8value_create_bool(g_queryResponse.isTopMost));
             AddValueToObj(retobj, u"isLayered", cef_v8value_create_bool(g_queryResponse.isLayered));
+            AddValueToObj(retobj, u"isTransparent", cef_v8value_create_bool(g_queryResponse.isTransparent));
             AddValueToObj(retobj, u"isThemingEnabled", cef_v8value_create_bool(g_queryResponse.isThemingEnabled));
             AddValueToObj(retobj, u"isDwmEnabled", cef_v8value_create_bool(g_queryResponse.isDwmEnabled));
             AddValueToObj(retobj, u"hwAccelerated", cef_v8value_create_bool(g_queryResponse.hwAccelerated));
