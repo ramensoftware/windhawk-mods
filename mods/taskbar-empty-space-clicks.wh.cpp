@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
-// @version         2.3
+// @version         2.4
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -36,7 +36,11 @@ This mod lets you assign an action to a mouse click on the Windows taskbar. Sing
 9. **Toggle Taskbar alignment** - Toggle taskbar icon alignment between left and center (Windows 11 only)
 10. **Open Start menu** - Sends Win key press to open Start menu
 11. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
-12. **Start application** - Starts arbitrary application or runs a command
+12. **Open application, path or URL** - Starts arbitrary application executable, opens path in Explorer or URL in web browser
+13. **Media Play/Pause** - Toggle play/pause for media playback
+14. **Media Stop** - Stop media playback
+15. **Media Next Track** - Skip to next track
+16. **Media Previous Track** - Skip to previous track
 
 ### Example
 
@@ -68,6 +72,12 @@ Once set, a simple middle-click on empty taskbar space will toggle the auto-hide
     - **Right** - Mouse right button click
     - **Right Double** - Mouse right button double-click
     - **Right Triple** - Mouse right button triple-click
+    - **Side Button 1** - Mouse side button 1 click (mouse button 4)
+    - **Side Button 1 Double** - Mouse side button 1 double-click (mouse button 4)
+    - **Side Button 1 Triple** - Mouse side button 1 triple-click (mouse button 4)
+    - **Side Button 2** - Mouse side button 2 click (mouse button 5)
+    - **Side Button 2 Double** - Mouse side button 2 double-click(mouse button 5)
+    - **Side Button 2 Triple** - Mouse side button 2 triple-click (mouse button 5)
     - **Tap** - Touchscreen single tap
     - **Tap Double** - Touchscreen double tap
     - **Tap Triple** - Touchscreen triple tap
@@ -96,11 +106,20 @@ Some actions support or require additional arguments. You can set them in the Se
     - Each text field corresponds to one virtual key press. Fill in hexadecimal key codes of the keys you want to press. Key codes are defined in [Win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexadecimal (0x) or decimal format for a key code! Example: (0x5B and 0x45) corresponds to (Win + E) shortcut that opens an Explorer window. If your key combination has no effect, check the log for more information.
     - There is a special keyword `focusPreviousWindow` that can be used to set focus back to the previously active window. This is useful when you want to send keypresses to the last active window instead of the taskbar. That way you can, for example, turn on fullscreen mode in the web browser by sending the F11 key. You can use this keyword anywhere in the sequence of virtual keys.
     - Please note that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via the inputdev interface.
-12. Start application - `applicationPath arg1 arg2 ... argN`
-    - Example: `C:\Windows\System32\notepad.exe C:\Users\username\Desktop\test.txt`
-    - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3`
-    - Example: `cmd.exe /c echo Hello & pause`
-    - Takes and executes the entire `applicationPath` string as a new process. No semicolons are parsed! Only leading and trailing whitespace characters are removed. You can use the full path to the application or just the executable name if it is in PATH. If you want to execute a shell command, use cmd.exe with the corresponding flag.
+12. Open application, path or URL - `applicationPath arg1 arg2 ... argN`
+    - Example: `"c:\Program Files\Notepad++\notepad++.exe" C:\Users\username\Desktop\test.txt` - use quotes around paths with spaces
+    - Example: `uac;C:\Windows\System32\notepad.exe C:\Windows\System32\drivers\etc\hosts` - start application with elevated privileges (UAC prompt will appear)
+    - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3` - user must handle proper quoting of arguments
+    - Example: `cmd.exe /c echo Hello & pause` - execute shell commands
+    - Example: `https://windhawk.net/mods/` - open URL in default web browser
+    - Example: `c:\Users\John Doe\Documents\` - open folder in Explorer
+    - Example: `shell:Recent` - open special shell folder in Explorer ([more special shell commands](https://www.winhelponline.com/blog/shell-commands-to-access-the-special-folders/))
+    - Uses [ShellExecute](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutea) to open applications, paths, or URLs. If the command starts with the special keyword `uac`, the application will be started with elevated privileges (UAC prompt will appear).
+    - The command line parser attempts to intelligently handle spaces in file paths and arguments. However, if you encounter issues, enclose paths containing spaces in double quotes.
+    - Error codes and error messages can be found in the mod log if the application fails to start.
+13. Media Play/Pause - no additional arguments supported
+14. Media Next Track - no additional arguments supported
+15. Media Previous Track - no additional arguments supported
 
 ## Caveats and limitations:
 
@@ -197,6 +216,16 @@ Please open an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mo
 
 If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
 
+## Hints
+
+### Opening an application on the currently active monitor
+
+By default, Windows opens new application windows on the primary monitor. Even if monitor hint information is provided, many applications ignore it and still open on the primary monitor. If you want to open an application on the currently active monitor more reliably, you can use [Microsoft PowerToys](https://github.com/microsoft/PowerToys?tab=readme-ov-file#-installation) with the [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) feature enabled. FancyZones will remember the last active monitor and open new windows there. For more information, see GitHub [issue #52](https://github.com/m1lhaus/windhawk-mods/issues/52#issuecomment-3693251071).
+
+### Volume control with mouse wheel over taskbar
+
+If you wish to extend media playback control further, you can use the [Taskbar Volume Control](https://windhawk.net/mods/taskbar-volume-control) mod. It lets you control the system volume by scrolling the mouse wheel over the taskbar.
+
 ## Suggestions and new features
 
 If you have a request for new functions, suggestions, or you are experiencing some issues, please post an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mods/issues). Please be as specific as possible and provide as much information as you can. Please consider using an AI chatbot if you are struggling to put everything together in English.
@@ -233,6 +262,12 @@ If you have a request for new functions, suggestions, or you are experiencing so
       - right: Mouse right button click
       - rightDouble: Mouse right button double-click
       - rightTriple: Mouse right button triple-click
+      - mouse4: Mouse side button 1 click
+      - mouse4Double: Mouse side button 1 double-click
+      - mouse4Triple: Mouse side button 1 triple-click
+      - mouse5: Mouse side button 2 click
+      - mouse5Double: Mouse side button 2 double-click
+      - mouse5Triple: Mouse side button 2 triple-click
       - tapSingle: Touchscreen single tap
       - tapDouble: Touchscreen double tap
       - tapTriple: Touchscreen triple tap
@@ -248,18 +283,21 @@ If you have a request for new functions, suggestions, or you are experiencing so
       $description: Action to invoke on trigger.
       $options:
       - ACTION_NOTHING: Nothing (default)
-      - ACTION_SHOW_DESKTOP: Show desktop
-      - ACTION_ALT_TAB: Ctrl+Alt+Tab
-      - ACTION_TASK_MANAGER: Task Manager
-      - ACTION_MUTE: Mute system volume
-      - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
-      - ACTION_WIN_TAB: Win+Tab
-      - ACTION_HIDE_ICONS: Hide desktop icons
       - ACTION_COMBINE_TASKBAR_BUTTONS: Combine Taskbar buttons
-      - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
+      - ACTION_ALT_TAB: Ctrl+Alt+Tab
+      - ACTION_HIDE_ICONS: Hide desktop icons
+      - ACTION_MEDIA_NEXT: Media Next Track
+      - ACTION_MEDIA_PLAY_PAUSE: Media Play/Pause
+      - ACTION_MEDIA_PREV: Media Previous Track
+      - ACTION_MUTE: Mute system volume
       - ACTION_OPEN_START_MENU: Open Start menu
+      - ACTION_SHOW_DESKTOP: Show desktop
+      - ACTION_START_PROCESS: Open application, path or URL
+      - ACTION_TASK_MANAGER: Task Manager
+      - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
+      - ACTION_TOGGLE_TASKBAR_ALIGNMENT: Toggle Taskbar alignment
       - ACTION_SEND_KEYPRESS: Virtual key press
-      - ACTION_START_PROCESS: Start application
+      - ACTION_WIN_TAB: Win+Tab
     - AdditionalArgs: arg1;arg2
       $name: Additional Args
       $description: Additional arguments for the selected action, separated by semicolons. See the mod's Details tab for more information about the supported arguments for each action.
@@ -302,6 +340,8 @@ If you have a request for new functions, suggestions, or you are experiencing so
 #include <vector>
 #include <functional>
 #include <algorithm>
+#include <filesystem>
+#include <tuple>
 
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
@@ -323,6 +363,8 @@ using bstr_ptr = _bstr_t;
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
 // =====================================================================
+
+#pragma region declarations
 
 #ifdef ENABLE_FILE_LOGGER
 #include <fstream>
@@ -486,14 +528,14 @@ static struct
     std::vector<TriggerAction> triggerActions;
 } g_settings;
 
-// wrapper around COM API initialization and usage to enable lazy init and safe resource management
+// Wrapper around COM API initialization and usage to enable lazy init and safe resource management
 class COMAPI
 {
 public:
     COMAPI() : m_isInitialized(false), m_isCOMInitialized(false), m_isUIAInitialized(false), m_isDEInitialized(false),
                m_pUIAutomation(nullptr), m_pDeviceEnumerator(nullptr) {}
 
-    // init COM for UIAutomation and Volume control
+    // Initializes COM interfaces for UIAutomation and Volume control
     bool Init()
     {
         if (!m_isCOMInitialized)
@@ -501,7 +543,7 @@ public:
             if (SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) // COM was most likely already initialized in the GUI thread, but just to be sure
             {
                 m_isCOMInitialized = true;
-                LOG_INFO(L"COM initilized");
+                LOG_INFO(L"COM initialized");
             }
             else
             {
@@ -547,6 +589,7 @@ public:
         return m_isInitialized;
     }
 
+    // Releases COM resources and uninitializes interfaces
     void Uninit()
     {
         if (m_isDEInitialized)
@@ -593,6 +636,7 @@ protected:
 };
 static COMAPI g_comAPI;
 
+// Tracks foreground window changes to support focusPreviousWindow feature
 class WindowFocusTracker
 {
 private:
@@ -601,6 +645,7 @@ private:
     DWORD m_dwThreadId;
     volatile bool m_bRunning;
 
+    // Captures foreground window changes and stores non-taskbar windows
     static void CALLBACK WinEventProc(
         HWINEVENTHOOK hWinEventHook,
         DWORD event,
@@ -654,6 +699,7 @@ private:
         }
     }
 
+    // Window focus tracker thread procedure that processes window events
     static DWORD WINAPI ThreadProc(LPVOID lpParam)
     {
         WindowFocusTracker *pThis = (WindowFocusTracker *)lpParam;
@@ -693,6 +739,7 @@ public:
 
     WindowFocusTracker() : m_hEventHook(NULL), m_hThread(NULL), m_dwThreadId(0), m_bRunning(false) {}
 
+    // Starts the focus tracking thread
     void Start()
     {
         if (m_hThread)
@@ -714,6 +761,7 @@ public:
         }
     }
 
+    // Stops the focus tracking thread and cleans up
     void Stop()
     {
         if (m_hThread)
@@ -747,10 +795,8 @@ public:
     }
 };
 HWND WindowFocusTracker::g_hwndLastActive = NULL;
-
 static WindowFocusTracker g_windowFocusTracker;
 
-// few helpers to ease up working with strings
 namespace stringtools
 {
     std::wstring ltrim(const std::wstring &s)
@@ -785,10 +831,28 @@ namespace stringtools
         std::transform(result.begin(), result.end(), result.begin(), ::towlower);
         return result;
     }
+
+    bool startsWith(const std::wstring &s, const std::wstring &prefix)
+    {
+        if (s.length() < prefix.length())
+        {
+            return false;
+        }
+        return std::equal(prefix.begin(), prefix.end(), s.begin());
+    }
 }
 
-void SetBit(uint32_t &value, uint32_t bit);
-bool GetBit(const uint32_t &value, uint32_t bit);
+// Sets a bit in a bitmask
+void SetBit(uint32_t &value, uint32_t bit)
+{
+    value |= (1U << bit);
+}
+
+// Checks if a bit is set in a bitmask
+bool GetBit(const uint32_t &value, uint32_t bit)
+{
+    return (value & (1U << bit)) != 0;
+}
 
 static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
@@ -806,7 +870,7 @@ static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify 
 static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
 
-// object to store information about the mouse click, its position, button, timestamp and whether it was on empty space
+// Stores mouse click information including position, button, timestamp and empty space detection
 struct MouseClick
 {
     enum class Button
@@ -814,6 +878,8 @@ struct MouseClick
         LEFT = 0,
         RIGHT,
         MIDDLE,
+        MOUSE4, // side button 1
+        MOUSE5, // side button 2
         INVALID
     };
 
@@ -828,6 +894,7 @@ struct MouseClick
     {
     }
 
+    // Constructs MouseClick from window message parameters and detects if click is on empty taskbar space
     MouseClick(WPARAM wParam, LPARAM lParam, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
     {
         timestamp = GetTickCount();
@@ -878,6 +945,7 @@ struct MouseClick
 #endif
     }
 
+    // Extracts mouse position from message parameters, handling Win10/Win11 differences
     static bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation)
     {
         LOG_TRACE();
@@ -900,6 +968,7 @@ struct MouseClick
         return true;
     }
 
+    // Determines if input is from mouse or touch/pen based on pointer info
     static MouseClick::Type GetPointerType(WPARAM wParam, LPARAM lParam)
     {
         MouseClick::Type type = MouseClick::Type::INVALID;
@@ -943,6 +1012,7 @@ struct MouseClick
         return type;
     }
 
+    // Returns bitmask of currently pressed modifier keys (Ctrl, Alt, Shift, Win)
     static uint32_t GetKeyModifiersState()
     {
         // Get all key states at once
@@ -995,7 +1065,7 @@ struct MouseClick
     uint32_t keyModifiersState;
 };
 
-// simple ring buffer to store last 3 mouse clicks with python-like index access
+// Ring buffer storing last 4 clicks with python-style negative indexing (-1 is newest)
 class MouseClickQueue
 {
 public:
@@ -1090,6 +1160,10 @@ void ShowDesktop();
 void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow = false);
 void SendCtrlAltTabKeypress();
 void SendWinTabKeypress();
+void MediaPlayPause();
+void MediaStop();
+void MediaNext();
+void MediaPrev();
 bool ClickStartMenu();
 void OpenStartMenu();
 void OpenTaskManager(HWND taskbarhWnd);
@@ -1103,17 +1177,28 @@ bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option);
 DWORD GetTaskbarAlignment();
 bool SetTaskbarAlignment(DWORD alignment);
 void ToggleTaskbarAlignment();
-void StartProcess(const std::wstring &command);
+void StartProcess(std::wstring command);
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
+
+#pragma endregion // declarations
 
 // =====================================================================
 
-#pragma region hook_magic
+#pragma region hooks_and_win32_methods
+
+// proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
+                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData);
+
+// proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
+WNDPROC InputSiteWindowProc_Original;
+LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
 UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_empty-space-clicks");
 
+// Subclasses window from any thread using temporary hook
 BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
     LOG_TRACE();
@@ -1171,243 +1256,6 @@ BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PT
     return param.result;
 }
 
-#ifdef ENABLE_LOG_DEBUG
-void printMessage(UINT uMsg)
-{
-    if ((uMsg != WM_NCMOUSEMOVE) &&
-        (uMsg != WM_NOTIFY) &&
-        (uMsg != 0x84) && // ? SPI_GETMOUSEDRAGOUTTHRESHOLD
-        (uMsg != 0x20) &&
-        (uMsg != WM_WINDOWPOSCHANGING) &&
-        (uMsg != WM_WINDOWPOSCHANGED) &&
-        (uMsg != WM_ACTIVATEAPP) &&
-        (uMsg != WM_NCACTIVATE) &&
-        (uMsg != WM_ACTIVATE) &&
-        (uMsg != 0x281) &&
-        (uMsg != 0x282) &&
-        (uMsg != 0x003D) &&
-        (uMsg != WM_SETFOCUS) &&
-        (uMsg != WM_KILLFOCUS) &&
-        (uMsg != WM_SYSCOMMAND) &&
-        (uMsg != WM_CAPTURECHANGED) &&
-        (uMsg != 0x0014) &&
-        (uMsg != WM_PRINTCLIENT) &&
-        (uMsg != WM_CHANGEUISTATE) &&
-        (uMsg != CB_GETCOMBOBOXINFO) &&
-        (uMsg != WM_ENTERIDLE) &&
-        (uMsg != 0x2b) &&
-        (uMsg != 0x2c) &&
-        (uMsg != 0x113) &&
-        (uMsg != 0x200) &&
-        (uMsg != 0x24a) &&
-        (uMsg != 0x245))
-    {
-        switch (uMsg)
-        {
-        case WM_CONTEXTMENU:
-            LOG_DEBUG(L"Message: WM_CONTEXTMENU");
-            break;
-        case WM_NCLBUTTONDOWN:
-            LOG_DEBUG(L"Message: WM_NCLBUTTONDOWN");
-            break;
-        case WM_NCLBUTTONUP:
-            LOG_DEBUG(L"Message: WM_NCLBUTTONUP");
-            break;
-        case WM_NCLBUTTONDBLCLK:
-            LOG_DEBUG(L"Message: WM_NCLBUTTONDBLCLK");
-            break;
-        case WM_NCRBUTTONDOWN:
-            LOG_DEBUG(L"Message: WM_NCRBUTTONDOWN");
-            break;
-        case WM_NCRBUTTONUP:
-            LOG_DEBUG(L"Message: WM_NCRBUTTONUP");
-            break;
-        case WM_NCRBUTTONDBLCLK:
-            LOG_DEBUG(L"Message: WM_NCRBUTTONDBLCLK");
-            break;
-        case WM_NCMBUTTONDOWN:
-            LOG_DEBUG(L"Message: WM_NCMBUTTONDOWN");
-            break;
-        case WM_NCMBUTTONUP:
-            LOG_DEBUG(L"Message: WM_NCMBUTTONUP");
-            break;
-        case WM_NCMBUTTONDBLCLK:
-            LOG_DEBUG(L"Message: WM_NCMBUTTONDBLCLK");
-            break;
-        case WM_POINTERDOWN:
-            LOG_DEBUG(L"Message: WM_POINTERDOWN");
-            break;
-        case WM_POINTERUP:
-            LOG_DEBUG(L"Message: WM_POINTERUP");
-            break;
-        default:
-            LOG_DEBUG(L"Message: 0x%x", uMsg);
-            break;
-        }
-    }
-}
-#endif
-
-// proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
-LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
-                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
-{
-    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam))
-    {
-        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
-    }
-    if (WM_NCDESTROY == uMsg)
-    {
-        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        if (hWnd != g_hTaskbarWnd)
-        {
-            g_secondaryTaskbarWindows.erase(hWnd);
-        }
-        return result;
-    }
-    if (uMsg == g_uninitCOMAPIMsg)
-    {
-        LOG_INFO("Received uninit COM API message, uninitializing COM API");
-        g_comAPI.Uninit();
-        return 0;
-    }
-
-    // printMessage(uMsg);
-
-    bool suppress = false;
-    // button up messages seems really unreliable, so only process down and dblclk messages
-    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
-    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
-    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
-    if ((g_taskbarVersion == WIN_10_TASKBAR) &&
-        (isLeftButton || isRightButton || isMiddleButton))
-    {
-        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if (extraInfo != g_injectedClickID)
-        {
-            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-            if (!g_comAPI.IsInitialized())
-            {
-                g_comAPI.Init(); // make sure it gets initialied from GUI thread
-            }
-
-            MouseClick::Button button = isLeftButton ? MouseClick::Button::LEFT : (isRightButton ? MouseClick::Button::RIGHT : MouseClick::Button::MIDDLE);
-            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
-            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
-                ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
-            {
-                g_isContextMenuSuppressed = true;
-            }
-
-            OnMouseClick(lastClick);
-        }
-        else
-        {
-            LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping, 0x%x", uMsg);
-        }
-    }
-
-    else if ((WM_NCRBUTTONUP == uMsg) ||                // WM_NCRBUTTONUP for Win10
-             (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
-             (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
-    {
-        const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
-        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000; // reset context menu suppression after 1 second
-        if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
-            (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
-        {
-            suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
-        }
-        else
-        {
-            g_isContextMenuSuppressed = false;
-        }
-    }
-
-    LRESULT result = 0;
-    if (!suppress)
-    {
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
-    return result;
-}
-
-// proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
-WNDPROC InputSiteWindowProc_Original;
-LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    if (uMsg == g_uninitCOMAPIMsg)
-    {
-        LOG_INFO("Received uninit COM API message, uninitializing COM API");
-        g_comAPI.Uninit();
-        return 0;
-    }
-
-    // printMessage(uMsg);
-
-    bool suppressMsg = false;
-    switch (uMsg)
-    {
-    case WM_POINTERDOWN:
-        HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-        if (IsTaskbarWindow(hRootWnd))
-        {
-            MouseClick::Button button = MouseClick::Button::INVALID;
-            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::LEFT;
-            }
-            else if (IS_POINTER_SECONDBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::RIGHT;
-            }
-            else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::MIDDLE;
-            }
-            else
-            {
-                break;
-            }
-
-            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-            if (!g_comAPI.IsInitialized())
-            {
-                g_comAPI.Init(); // make sure it gets initialied from GUI thread
-            }
-
-            // check whether we need to suppress the context menu for right clicks
-            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd);
-            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
-            {
-                LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-                if (extraInfo == g_injectedClickID)
-                {
-                    LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
-                    break;
-                }
-                if (ShallSuppressContextMenu(lastClick))
-                {
-                    g_isContextMenuSuppressed = true;
-                    suppressMsg = true; // suppress the right click menu (otherwise a double click would be impossible)
-                }
-            }
-            OnMouseClick(lastClick);
-        }
-        break;
-    }
-
-    if (suppressMsg)
-    {
-        return 0; // suppress the message
-    }
-    else
-    {
-        return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
-    }
-}
-
 BOOL SubclassTaskbarWindow(HWND hWnd)
 {
     return SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0);
@@ -1418,6 +1266,7 @@ void UnsubclassTaskbarWindow(HWND hWnd)
     SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
 }
 
+// Hooks InputSite window proc for Win11 taskbar pointer events
 void HandleIdentifiedInputSiteWindow(HWND hWnd)
 {
     if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId)
@@ -1457,6 +1306,7 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd)
     g_inputSiteProcHooked = true;
 }
 
+// Subclasses main taskbar and secondary taskbars, hooks InputSite for Win11
 void HandleIdentifiedTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
@@ -1489,6 +1339,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
     }
 }
 
+// Subclasses secondary taskbar window and hooks InputSite for Win11
 void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
 {
     LOG_TRACE();
@@ -1518,6 +1369,7 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
     }
 }
 
+// Checks if module is ExplorerPatcher based on filename
 bool IsExplorerPatcherModule(HMODULE module)
 {
     WCHAR moduleFilePath[MAX_PATH];
@@ -1545,6 +1397,7 @@ bool IsExplorerPatcherModule(HMODULE module)
     return false;
 }
 
+// Scans loaded modules for ExplorerPatcher and switches to Win10 mode
 void HandleLoadedExplorerPatcher()
 {
     HMODULE hMods[1024];
@@ -1567,6 +1420,7 @@ void HandleLoadedExplorerPatcher()
     }
 }
 
+// Checks newly loaded module for ExplorerPatcher and switches to Win10 mode
 void HandleLoadedModuleIfExplorerPatcher(HMODULE module)
 {
     if (module && !((ULONG_PTR)module & 3))
@@ -1597,9 +1451,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
-// finds main task bar and returns its hWnd,
-// optinally it finds also secondary taskbars and fills them to the set
-// secondaryTaskbarWindows
+// Finds main and secondary taskbar windows in current process
 HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbarWindows)
 {
     struct ENUM_WINDOWS_PARAM
@@ -1695,8 +1547,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
     return hWnd;
 }
 
-#pragma endregion // hook_magic
-
+// Extracts version info from module resources
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 {
     LOG_TRACE();
@@ -1734,6 +1585,7 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
     return (VS_FIXEDFILEINFO *)pFixedFileInfo;
 }
 
+// Detects Windows version and sets taskbar version (Win10/Win11/Unknown)
 BOOL WindowsVersionInit()
 {
     LOG_TRACE();
@@ -1773,6 +1625,73 @@ BOOL WindowsVersionInit()
     return TRUE;
 }
 
+// Finds desktop window for show/hide icons command
+HWND FindDesktopWindow()
+{
+    LOG_TRACE();
+
+    HWND hParentWnd = FindWindow(L"Progman", NULL); // Program Manager window
+    if (!hParentWnd)
+    {
+        LOG_ERROR(L"Failed to find Progman window");
+        return NULL;
+    }
+
+    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL); // parent window of the desktop
+    if (!hChildWnd)
+    {
+        DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
+        EnumThreadWindows(
+            dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
+            {
+            WCHAR szClassName[16];
+            if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
+                return TRUE;
+
+            if (lstrcmp(szClassName, L"WorkerW") != 0)
+                return TRUE;
+
+            HWND hChildWnd = FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
+            if (!hChildWnd)
+                return TRUE;
+
+            *(HWND *)lParam = hChildWnd;
+            return FALSE; },
+            (LPARAM)&hChildWnd);
+    }
+
+    if (!hChildWnd)
+    {
+        LOG_ERROR(L"Failed to find SHELLDLL_DefView window");
+        return NULL;
+    }
+    return hChildWnd;
+}
+
+// Checks if window is primary or secondary taskbar
+bool IsTaskbarWindow(HWND hWnd)
+{
+    LOG_TRACE();
+
+    WCHAR szClassName[32];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
+    {
+        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to get window class name");
+        return false;
+    }
+}
+
+#pragma endregion // hooks_and_win32_methods
+
+// =====================================================================
+
+#pragma region actions
+
+// Converts key name string to KeyModifier enum
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
 {
     if (keyName == L"lctrl")
@@ -1793,7 +1712,8 @@ KeyModifier GetKeyModifierFromName(const std::wstring &keyName)
     return KEY_MODIFIER_INVALID; // Return 0 for unrecognized key names
 }
 
-std::vector<std::wstring> SplitArgs(const std::wstring &args)
+// Splits semicolon-separated argument string into vector
+std::vector<std::wstring> SplitArgs(const std::wstring &args, const wchar_t delimiter = L';')
 {
     std::vector<std::wstring> result;
 
@@ -1804,7 +1724,7 @@ std::vector<std::wstring> SplitArgs(const std::wstring &args)
     }
 
     size_t start = 0;
-    size_t end = args_.find(L';');
+    size_t end = args_.find(delimiter);
     while (end != std::wstring::npos)
     {
         auto substring = stringtools::trim(args_.substr(start, end - start));
@@ -1813,7 +1733,7 @@ std::vector<std::wstring> SplitArgs(const std::wstring &args)
             result.push_back(substring);
         }
         start = end + 1;
-        end = args_.find(L';', start);
+        end = args_.find(delimiter, start);
     }
     auto substring = stringtools::trim(args_.substr(start));
     if (!substring.empty())
@@ -1823,6 +1743,7 @@ std::vector<std::wstring> SplitArgs(const std::wstring &args)
     return result;
 }
 
+// Parses taskbar button combine states from arg string (4 states: primary1, primary2, secondary1, secondary2)
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args)
 {
     LOG_TRACE();
@@ -1874,6 +1795,7 @@ std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBa
     return std::make_tuple(primaryTaskBarButtonsState1, primaryTaskBarButtonsState2, secondaryTaskBarButtonsState1, secondaryTaskBarButtonsState2);
 }
 
+// Parses virtual key code from hex (0x prefix) or decimal string
 unsigned int ParseVirtualKey(const wchar_t *value)
 {
     LOG_TRACE();
@@ -1893,6 +1815,7 @@ unsigned int ParseVirtualKey(const wchar_t *value)
     return keyCode;
 }
 
+// Returns trimmed command string for process execution
 std::wstring ParseProcessArg(const std::wstring &args)
 {
     LOG_TRACE();
@@ -1905,6 +1828,7 @@ std::wstring ParseProcessArg(const std::wstring &args)
     return cmd;
 }
 
+// Parses virtual key codes and focusPreviousWindow flag from settings string
 std::tuple<std::vector<int>, bool> ParseVirtualKeypressSetting(const std::wstring &args)
 {
     LOG_TRACE();
@@ -1932,6 +1856,7 @@ std::tuple<std::vector<int>, bool> ParseVirtualKeypressSetting(const std::wstrin
     return std::make_tuple(keys, focusPreviousWindow);
 }
 
+// Creates action executor lambda from action name and arguments
 std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName, const std::wstring &args)
 {
     LOG_TRACE();
@@ -2018,11 +1943,27 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
             StartProcess(cmd);
         };
     }
+    else if (actionName == L"ACTION_MEDIA_PLAY_PAUSE")
+    {
+        return [](HWND)
+        { MediaPlayPause(); };
+    }
+    else if (actionName == L"ACTION_MEDIA_NEXT")
+    {
+        return [](HWND)
+        { MediaNext(); };
+    }
+    else if (actionName == L"ACTION_MEDIA_PREV")
+    {
+        return [](HWND)
+        { MediaPrev(); };
+    }
 
     LOG_ERROR(L"Unknown action '%s'", actionName.c_str());
     return doNothing;
 }
 
+// Loads trigger-action settings from Windhawk configuration
 void LoadSettings()
 {
     LOG_TRACE();
@@ -2097,6 +2038,18 @@ void LoadSettings()
                 SetBit(triggerAction.expectedKeyModifiersState, keyModifier);
             }
         }
+        // when settings storage is empty, it can return all key modifiers set and users may not be aware of it -> assume 'none' in that case
+        uint32_t defaultKeyModifierValue = 0;
+        for (int i = 0; i < KeyModifier::KEY_MODIFIER_INVALID; i++)
+        {
+            SetBit(defaultKeyModifierValue, i);
+        }
+        if (triggerAction.expectedKeyModifiersState == defaultKeyModifierValue)
+        {
+            LOG_INFO(L"Default (invalid) keyboard modifiers detected for TriggerActionOptions[%d], ignoring", i);
+            triggerAction.expectedKeyModifiersState = 0U; // no modifiers
+        }
+
         triggerAction.mouseTriggerName = mouseTriggerStr;
         triggerAction.taskbarTypeName = taskbarTypeStr;
         triggerAction.actionName = actionStr;
@@ -2108,53 +2061,7 @@ void LoadSettings()
     g_settings.eagerTriggerEvaluation = Wh_GetIntSetting(L"eagerTriggerEvaluation");
 }
 
-/**
- * @brief Finds the desktop window. Desktop window handle is used to send messages to the desktop (show/hide icons).
- *
- * @return HWND Desktop window handle
- */
-HWND FindDesktopWindow()
-{
-    LOG_TRACE();
-
-    HWND hParentWnd = FindWindow(L"Progman", NULL); // Program Manager window
-    if (!hParentWnd)
-    {
-        LOG_ERROR(L"Failed to find Progman window");
-        return NULL;
-    }
-
-    HWND hChildWnd = FindWindowEx(hParentWnd, NULL, L"SHELLDLL_DefView", NULL); // parent window of the desktop
-    if (!hChildWnd)
-    {
-        DWORD dwThreadId = GetWindowThreadProcessId(hParentWnd, NULL);
-        EnumThreadWindows(
-            dwThreadId, [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
-            {
-            WCHAR szClassName[16];
-            if (GetClassName(hWnd, szClassName, _countof(szClassName)) == 0)
-                return TRUE;
-
-            if (lstrcmp(szClassName, L"WorkerW") != 0)
-                return TRUE;
-
-            HWND hChildWnd = FindWindowEx(hWnd, NULL, L"SHELLDLL_DefView", NULL);
-            if (!hChildWnd)
-                return TRUE;
-
-            *(HWND *)lParam = hChildWnd;
-            return FALSE; },
-            (LPARAM)&hChildWnd);
-    }
-
-    if (!hChildWnd)
-    {
-        LOG_ERROR(L"Failed to find SHELLDLL_DefView window");
-        return NULL;
-    }
-    return hChildWnd;
-}
-
+// Returns current taskbar autohide state
 bool GetTaskbarAutohideState()
 {
     LOG_TRACE();
@@ -2173,6 +2080,7 @@ bool GetTaskbarAutohideState()
     }
 }
 
+// Sets taskbar autohide state
 void SetTaskbarAutohide(bool enabled)
 {
     LOG_TRACE();
@@ -2187,6 +2095,7 @@ void SetTaskbarAutohide(bool enabled)
     }
 }
 
+// Toggles taskbar autohide state
 void ToggleTaskbarAutohide()
 {
     LOG_TRACE();
@@ -2203,6 +2112,7 @@ void ToggleTaskbarAutohide()
     }
 }
 
+// Sends show desktop command to taskbar
 void ShowDesktop()
 {
     LOG_TRACE();
@@ -2222,6 +2132,7 @@ void ShowDesktop()
     }
 }
 
+// Sends virtual key sequence, optionally focusing previous window first
 void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
 {
     LOG_TRACE();
@@ -2279,6 +2190,7 @@ void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
     }
 }
 
+// Sends Ctrl+Alt+Tab keypress
 void SendCtrlAltTabKeypress()
 {
     LOG_TRACE();
@@ -2287,6 +2199,7 @@ void SendCtrlAltTabKeypress()
     SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
 }
 
+// Sends Win+Tab keypress
 void SendWinTabKeypress()
 {
     LOG_TRACE();
@@ -2295,6 +2208,34 @@ void SendWinTabKeypress()
     SendKeypress({VK_LWIN, VK_TAB});
 }
 
+// Sends Media Play/Pause keypress
+void MediaPlayPause()
+{
+    LOG_TRACE();
+
+    LOG_INFO(L"Sending Media Play/Pause keypress");
+    SendKeypress({VK_MEDIA_PLAY_PAUSE});
+}
+
+// Sends Media Next Track keypress
+void MediaNext()
+{
+    LOG_TRACE();
+
+    LOG_INFO(L"Sending Media Next Track keypress");
+    SendKeypress({VK_MEDIA_NEXT_TRACK});
+}
+
+// Sends Media Previous Track keypress
+void MediaPrev()
+{
+    LOG_TRACE();
+
+    LOG_INFO(L"Sending Media Previous Track keypress");
+    SendKeypress({VK_MEDIA_PREV_TRACK});
+}
+
+// Clicks Start button using UIAutomation, handling Win10/Win11 differences
 bool ClickStartMenu()
 {
     const MouseClick &lastClick = g_mouseClickQueue[-1];
@@ -2433,6 +2374,7 @@ bool ClickStartMenu()
     return true;
 }
 
+// Opens Start menu, falls back to Win key if Start button is hidden
 void OpenStartMenu()
 {
     LOG_TRACE();
@@ -2443,6 +2385,7 @@ void OpenStartMenu()
     }
 }
 
+// Opens Task Manager using ShellExecuteEx
 void OpenTaskManager(HWND taskbarhWnd)
 {
     LOG_TRACE();
@@ -2469,6 +2412,7 @@ void OpenTaskManager(HWND taskbarhWnd)
     }
 }
 
+// Returns mute state of default audio device
 BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator)
 {
     // GUID of audio enpoint defined in Windows SDK (see Endpointvolume.h) - defined manually to avoid linking the whole lib
@@ -2500,6 +2444,7 @@ BOOL IsAudioMuted(com_ptr<IMMDeviceEnumerator> pDeviceEnumerator)
     return isMuted;
 }
 
+// Toggles mute state for all active audio devices
 void ToggleVolMuted()
 {
     LOG_TRACE();
@@ -2559,6 +2504,7 @@ void ToggleVolMuted()
     }
 }
 
+// Toggles desktop icon visibility
 void HideIcons()
 {
     LOG_TRACE();
@@ -2578,6 +2524,7 @@ void HideIcons()
     }
 }
 
+// Toggles taskbar button combining between two states for primary and secondary taskbars (Win11 only)
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2)
 {
@@ -2610,12 +2557,7 @@ void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1
     }
 }
 
-/**
- * Retrieves the current setting for combining taskbar buttons. This setting is used as initial value for the toggle
- * so that the toggle actually does the toggling for the forst time it is activated.
- *
- * @return The current value of the taskbar button combining setting. (0 = Always, 1 = When taskbar is full, 2 = Never)
- */
+// Returns current taskbar button combine state from registry (0=Always, 1=WhenFull, 2=Never)
 DWORD GetCombineTaskbarButtons(const wchar_t *optionName)
 {
     LOG_TRACE();
@@ -2639,19 +2581,7 @@ DWORD GetCombineTaskbarButtons(const wchar_t *optionName)
     return dwValue;
 }
 
-/**
- * @brief Sets the option for combining taskbar buttons.
- *
- * This function allows you to set the option for combining taskbar buttons.
- * The option parameter specifies the desired behavior for combining taskbar buttons.
- *
- * @param optionName The name of the registry key to set.
- * @param option The option for combining taskbar buttons.
- *               Possible values:
- *               - 0: Do not combine taskbar buttons.
- *               - 1: Combine taskbar buttons when the taskbar is full.
- *               - 2: Always combine taskbar buttons.
- */
+// Sets taskbar button combine state in registry (0=Never, 1=WhenFull, 2=Always)
 bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
 {
     LOG_TRACE();
@@ -2688,12 +2618,7 @@ bool SetCombineTaskbarButtons(const wchar_t *optionName, unsigned int option)
     return shallNotify;
 }
 
-/**
- * Retrieves the current taskbar alignment setting.
- *
- * @return The current value of the taskbar alignment. (0 = Left, 1 = Center)
- *         Returns 1 (Center) as default if the registry key doesn't exist.
- */
+// Returns taskbar alignment from registry (0=Left, 1=Center), defaults to 1
 DWORD GetTaskbarAlignment()
 {
     LOG_TRACE();
@@ -2720,12 +2645,7 @@ DWORD GetTaskbarAlignment()
     return dwValue;
 }
 
-/**
- * Sets the taskbar alignment to the specified value.
- *
- * @param alignment The alignment value to set. (0 = Left, 1 = Center)
- * @return true if the value was set successfully, false otherwise.
- */
+// Sets taskbar alignment in registry (0=Left, 1=Center)
 bool SetTaskbarAlignment(DWORD alignment)
 {
     LOG_TRACE();
@@ -2756,6 +2676,7 @@ bool SetTaskbarAlignment(DWORD alignment)
     return success;
 }
 
+// Toggles taskbar alignment between left and center (Win11 only)
 void ToggleTaskbarAlignment()
 {
     LOG_TRACE();
@@ -2791,7 +2712,60 @@ void ToggleTaskbarAlignment()
     }
 }
 
-void StartProcess(const std::wstring &command)
+// Parses command line into executable path and parameters
+std::tuple<std::wstring, std::wstring> ParseExecutableAndParameters(const std::wstring &command)
+{
+    std::wstring executable = command;
+    std::wstring parameters;
+
+    // in case user provided quoted executable path
+    if (stringtools::startsWith(command, L"\"") || stringtools::startsWith(command, L"'"))
+    {
+        // Find the closing quote
+        size_t closingQuotePos = command.find(command[0], 1);
+        if (closingQuotePos != std::wstring::npos)
+        {
+            executable = command.substr(1, closingQuotePos - 1);
+            if (command.length() > closingQuotePos + 1)
+            {
+                parameters = command.substr(closingQuotePos + 1);
+            }
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to parse executable and parameters - missing closing quote in command");
+        }
+    }
+    else
+    {
+        // split by space and try to put together executable path that may contain spaces
+        std::vector<std::wstring> args = SplitArgs(command, L' ');
+        if (args.size() > 1)
+        {
+            executable = L"";
+            for (const auto &arg : args)
+            {
+                executable += arg;
+                if (std::filesystem::path(executable).extension().wstring().length() > 1) // is ext more than just dot ?
+                {
+                    break;
+                }
+                else
+                {
+                    executable += L" ";
+                }
+            }
+            if (command.length() > executable.length())
+            {
+                parameters = command.substr(executable.length());
+            }
+        }
+    }
+    return std::make_tuple(stringtools::trim(executable), stringtools::trim(parameters));
+}
+
+// Starts a process with command line arguments
+void StartProcess(std::wstring command)
 {
     LOG_TRACE();
     if (command.empty())
@@ -2800,68 +2774,70 @@ void StartProcess(const std::wstring &command)
         return;
     }
 
-    std::vector<std::wstring> args = SplitArgs(command);
-    if (args.empty())
+    // check for UAC prefix
+    std::vector<std::wstring> uac_args = SplitArgs(command, L';');
+    std::wstring shellExVerb = L"open";
+    if (stringtools::toLower(uac_args[0]) == L"uac")
     {
-        LOG_DEBUG(L"Command parsing resulted in empty arguments, nothing to start");
-        return;
+        shellExVerb = L"runas";                                                 // request elevation
+        command = stringtools::ltrim(command.substr(uac_args[0].length() + 1)); // remove the "uac;" prefix
     }
 
-    // First argument is the executable path/name
-    std::wstring executable = args[0];
+    const auto [executable, parameters] = ParseExecutableAndParameters(command);
+    LOG_INFO(L"Starting process with %s: '%s' '%s'", shellExVerb.c_str(), executable.c_str(), parameters.c_str());
 
-    // Build command line with remaining arguments
-    std::wstring commandLine = executable;
-    for (size_t i = 1; i < args.size(); i++)
+    // Get current cursor position and monitor handle
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
+    LOG_DEBUG(L"Launching process on monitor handle: %p", hMonitor);
+
+    // Use ShellExecuteEx with hMonitor to launch on the correct monitor
+    SHELLEXECUTEINFO sei = {sizeof(sei)};
+    sei.fMask = SEE_MASK_HMONITOR | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = shellExVerb.c_str();
+    sei.lpFile = executable.c_str();
+    sei.lpParameters = parameters.empty() ? NULL : parameters.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    sei.hMonitor = hMonitor; // Specify the target monitor, but most apps ignore this anyway
+
+    if (!ShellExecuteEx(&sei))
     {
-        // Add quotes around arguments that contain spaces
-        if (args[i].find(L' ') != std::wstring::npos &&
-            (args[i].front() != L'"' || args[i].back() != L'"'))
+        DWORD error = GetLastError();
+        if (error != ERROR_CANCELLED) // User cancelled UAC or similar
         {
-            commandLine += L" \"" + args[i] + L"\"";
+            LPWSTR errorMsg = nullptr;
+            FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                           NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                           (LPWSTR)&errorMsg, 0, NULL);
+            if (errorMsg)
+            {
+                LOG_ERROR(L"Failed to start process - ShellExecuteEx failed with error code %d: %s", error, errorMsg);
+                LocalFree(errorMsg);
+            }
+            else
+            {
+                LOG_ERROR(L"Failed to start process - ShellExecuteEx failed with error code: %d", error);
+            }
         }
         else
         {
-            commandLine += L" " + args[i];
+            LOG_DEBUG(L"Process launch cancelled by user");
         }
-    }
-
-    LOG_INFO(L"Starting process: %s", commandLine.c_str());
-
-    STARTUPINFO si{};
-    PROCESS_INFORMATION pi{};
-    si.cb = sizeof(si);
-
-    if (!CreateProcess(NULL, (LPWSTR)commandLine.c_str(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
-    {
-        DWORD error = GetLastError();
-        LOG_ERROR(L"Failed to start process - CreateProcess failed with error code: %d", error);
     }
     else
     {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
+        LOG_DEBUG(L"Process launched successfully on target monitor");
     }
 }
+
+#pragma endregion // actions
 
 // =====================================================================
 
-bool IsTaskbarWindow(HWND hWnd)
-{
-    LOG_TRACE();
+#pragma region trigger_handling
 
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
-    {
-        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
-    }
-    else
-    {
-        LOG_ERROR(L"Failed to get window class name");
-        return false;
-    }
-}
-
+// Checks if window matches desired taskbar type (primary/secondary/all)
 bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
 {
     bool isCorrectTaskbar = true;
@@ -2876,16 +2852,7 @@ bool IsCorrectTaskbarType(const std::wstring &taskbarTypeName, HWND hWnd)
     return isCorrectTaskbar;
 }
 
-void SetBit(uint32_t &value, uint32_t bit)
-{
-    value |= (1U << bit);
-}
-
-bool GetBit(const uint32_t &value, uint32_t bit)
-{
-    return (value & (1U << bit)) != 0;
-}
-
+// Determines if context menu should be suppressed for right-click triggers
 bool ShallSuppressContextMenu(const MouseClick &lastClick)
 {
     for (const auto &triggerAction : g_settings.triggerActions)
@@ -2911,6 +2878,7 @@ bool IsSingleClick(const MouseClick::Button button)
     return (currentClick.type == MouseClick::Type::MOUSE) && (currentClick.button == button);
 }
 
+// Checks if two clicks form a double-click based on timing and distance
 bool IsDoubleClick(const MouseClick::Button button, const MouseClick &previousClick, const MouseClick &currentClick)
 {
     LOG_TRACE();
@@ -2943,6 +2911,7 @@ bool IsDoubleClick(const MouseClick::Button button)
     return IsDoubleClick(button, g_mouseClickQueue[-2], g_mouseClickQueue[-1]);
 }
 
+// Checks if last 3 clicks form a triple-click
 bool IsTripleClick(const MouseClick::Button button)
 {
     LOG_TRACE();
@@ -2950,6 +2919,7 @@ bool IsTripleClick(const MouseClick::Button button)
            IsDoubleClick(button, g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
 }
 
+// Checks if last 4 clicks form a multi-click (to ignore quad-clicks)
 bool IsMultiClick(const MouseClick::Button button)
 {
     LOG_TRACE();
@@ -2965,6 +2935,7 @@ bool IsSingleTap()
     return (currentClick.type == MouseClick::Type::TOUCH) && (currentClick.button == MouseClick::Button::LEFT);
 }
 
+// Checks if two touch taps form a double-tap based on timing and distance
 bool IsDoubleTap(const MouseClick &previousClick, const MouseClick &currentClick)
 {
     LOG_TRACE();
@@ -3002,12 +2973,14 @@ bool IsDoubleTap()
     return IsDoubleTap(previousClick, currentClick);
 }
 
+// Checks if last 3 taps form a triple-tap
 bool IsTripleTap()
 {
     LOG_TRACE();
     return IsDoubleTap(g_mouseClickQueue[-2], g_mouseClickQueue[-1]) && IsDoubleTap(g_mouseClickQueue[-3], g_mouseClickQueue[-2]);
 }
 
+// Checks if last 4 taps form a multi-tap (to ignore quad-taps)
 bool IsMultiTap()
 {
     LOG_TRACE();
@@ -3021,6 +2994,7 @@ bool IsKeyPressed(int vkCode)
     return (GetAsyncKeyState(vkCode) & 0x8000) != 0;
 }
 
+// Injects a synthetic right-click at specified screen position
 void SynthesizeTaskbarRightClick(POINT ptScreen)
 {
     LOG_DEBUG(L"Synthesizing right-click at %ld,%ld", ptScreen.x, ptScreen.y);
@@ -3042,6 +3016,7 @@ void SynthesizeTaskbarRightClick(POINT ptScreen)
     }
 }
 
+// Timer callback that executes action after double-click timeout expires
 void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
 {
     if (!KillTimer(NULL, gMouseClickTimer))
@@ -3066,6 +3041,7 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
     g_isContextMenuSuppressed = false;
 }
 
+// Constructs trigger name string from click type, count and button
 std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button)
 {
     std::wstring mouseTriggerName;
@@ -3082,6 +3058,14 @@ std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numC
         else if (button == MouseClick::Button::MIDDLE)
         {
             mouseTriggerName = L"middle";
+        }
+        else if (button == MouseClick::Button::MOUSE4)
+        {
+            mouseTriggerName = L"mouse4";
+        }
+        else if (button == MouseClick::Button::MOUSE5)
+        {
+            mouseTriggerName = L"mouse5";
         }
         if (numClicks == 3)
         {
@@ -3111,6 +3095,7 @@ std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numC
     return mouseTriggerName;
 }
 
+// Checks if a trigger with matching name and modifiers is defined in settings
 bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks)
 {
     for (const auto &triggerAction : g_settings.triggerActions)
@@ -3130,6 +3115,7 @@ bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks)
     return false;
 }
 
+// Finds and executes action matching trigger name and current modifier state
 bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t numClicks)
 {
     LOG_TRACE();
@@ -3175,6 +3161,7 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
     return wasActionExecuted;
 }
 
+// Returns action executor for detected click pattern, checking for higher-order triggers if requested
 std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks)
 {
     const auto isHigherOrderClickDefined = [&](const MouseClick::Type clickType, const int currentCount, const MouseClick::Button button)
@@ -3192,7 +3179,8 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
     };
 
     // mouse clicks
-    const MouseClick::Button mouseButtons[] = {MouseClick::Button::LEFT, MouseClick::Button::RIGHT, MouseClick::Button::MIDDLE};
+    const MouseClick::Button mouseButtons[] = {MouseClick::Button::LEFT, MouseClick::Button::RIGHT, MouseClick::Button::MIDDLE,
+                                               MouseClick::Button::MOUSE4, MouseClick::Button::MOUSE5};
     const std::function<bool(MouseClick::Button)> mouseChecks[] = {IsTripleClick, static_cast<bool (*)(MouseClick::Button)>(IsDoubleClick), IsSingleClick};
     for (const auto &button : mouseButtons)
     {
@@ -3244,7 +3232,196 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
     return nullptr;
 }
 
-// main body of the mod called every time a taskbar is clicked
+#pragma endregion // trigger_handling
+
+// =====================================================================
+
+#pragma region proc_handlers
+
+// Proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
+                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam))
+    {
+        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
+    }
+    if (WM_NCDESTROY == uMsg)
+    {
+        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        if (hWnd != g_hTaskbarWnd)
+        {
+            g_secondaryTaskbarWindows.erase(hWnd);
+        }
+        return result;
+    }
+    if (uMsg == g_uninitCOMAPIMsg)
+    {
+        LOG_INFO("Received uninit COM API message, uninitializing COM API");
+        g_comAPI.Uninit();
+        return 0;
+    }
+
+    // printMessage(uMsg);
+
+    bool suppress = false;
+    // button up messages seems really unreliable, so only process down and dblclk messages
+    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
+    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
+    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
+    const bool isXButton = (uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN) || (uMsg == WM_XBUTTONDBLCLK || uMsg == WM_NCXBUTTONDBLCLK);
+    if ((g_taskbarVersion == WIN_10_TASKBAR) && (isLeftButton || isRightButton || isMiddleButton || isXButton))
+    {
+        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+        if (extraInfo != g_injectedClickID)
+        {
+            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+            if (!g_comAPI.IsInitialized())
+            {
+                g_comAPI.Init(); // make sure it gets initialied from GUI thread
+            }
+
+            MouseClick::Button button = MouseClick::Button::INVALID;
+            if (isLeftButton)
+            {
+                button = MouseClick::Button::LEFT;
+            }
+            else if (isRightButton)
+            {
+                button = MouseClick::Button::RIGHT;
+            }
+            else if (isMiddleButton)
+            {
+                button = MouseClick::Button::MIDDLE;
+            }
+            else if (isXButton)
+            {
+                button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? MouseClick::Button::MOUSE4 : MouseClick::Button::MOUSE5;
+            }
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
+            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
+                ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
+            {
+                g_isContextMenuSuppressed = true;
+            }
+
+            OnMouseClick(lastClick);
+        }
+        else
+        {
+            LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping, 0x%x", uMsg);
+        }
+    }
+
+    else if ((WM_NCRBUTTONUP == uMsg) ||                // WM_NCRBUTTONUP for Win10
+             (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
+             (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
+    {
+        const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
+        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+        const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000; // reset context menu suppression after 1 second
+        if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
+            (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
+        {
+            suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
+        }
+        else
+        {
+            g_isContextMenuSuppressed = false;
+        }
+    }
+
+    LRESULT result = 0;
+    if (!suppress)
+    {
+        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+    return result;
+}
+
+// Proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
+LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == g_uninitCOMAPIMsg)
+    {
+        LOG_INFO("Received uninit COM API message, uninitializing COM API");
+        g_comAPI.Uninit();
+        return 0;
+    }
+
+    // printMessage(uMsg);
+
+    bool suppressMsg = false;
+    switch (uMsg)
+    {
+    case WM_POINTERDOWN:
+        HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+        if (IsTaskbarWindow(hRootWnd))
+        {
+            MouseClick::Button button = MouseClick::Button::INVALID;
+            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::LEFT;
+            }
+            else if (IS_POINTER_SECONDBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::RIGHT;
+            }
+            else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MIDDLE;
+            }
+            else if (IS_POINTER_FOURTHBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MOUSE4;
+            }
+            else if (IS_POINTER_FIFTHBUTTON_WPARAM(wParam))
+            {
+                button = MouseClick::Button::MOUSE5;
+            }
+            else
+            {
+                break;
+            }
+
+            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+            if (!g_comAPI.IsInitialized())
+            {
+                g_comAPI.Init(); // make sure it gets initialied from GUI thread
+            }
+
+            // check whether we need to suppress the context menu for right clicks
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd);
+            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+            {
+                LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+                if (extraInfo == g_injectedClickID)
+                {
+                    LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
+                    break;
+                }
+                if (ShallSuppressContextMenu(lastClick))
+                {
+                    g_isContextMenuSuppressed = true;
+                    suppressMsg = true; // suppress the right click menu (otherwise a double click would be impossible)
+                }
+            }
+            OnMouseClick(lastClick);
+        }
+        break;
+    }
+
+    if (suppressMsg)
+    {
+        return 0; // suppress the message
+    }
+    else
+    {
+        return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
+    }
+}
+
+// Processes mouse clicks, starts timer for multi-click detection, called from taskbar window proc handlers
 bool OnMouseClick(MouseClick click)
 {
     LOG_TRACE();
@@ -3287,7 +3464,11 @@ bool OnMouseClick(MouseClick click)
     return true;
 }
 
-////////////////////////////////////////////////////////////
+#pragma endregion // proc_handlers
+
+// =====================================================================
+
+#pragma region windhawk_mod_functions
 
 BOOL Wh_ModInit()
 {
@@ -3406,3 +3587,5 @@ void Wh_ModUninit()
         }
     }
 }
+
+#pragma endregion // windhawk_mod_functions
