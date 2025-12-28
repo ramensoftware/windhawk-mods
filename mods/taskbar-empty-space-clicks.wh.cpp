@@ -2038,6 +2038,18 @@ void LoadSettings()
                 SetBit(triggerAction.expectedKeyModifiersState, keyModifier);
             }
         }
+        // when settings storage is empty, it can return all key modifiers set and users may not be aware of it -> assume 'none' in that case
+        uint32_t defaultKeyModifierValue = 0;
+        for (int i = 0; i < KeyModifier::KEY_MODIFIER_INVALID; i++)
+        {
+            SetBit(defaultKeyModifierValue, i);
+        }
+        if (triggerAction.expectedKeyModifiersState == defaultKeyModifierValue)
+        {
+            LOG_INFO(L"Default (invalid) keyboard modifiers detected for TriggerActionOptions[%d], ignoring", i);
+            triggerAction.expectedKeyModifiersState = 0U; // no modifiers
+        }
+
         triggerAction.mouseTriggerName = mouseTriggerStr;
         triggerAction.taskbarTypeName = taskbarTypeStr;
         triggerAction.actionName = actionStr;
