@@ -81,12 +81,12 @@
     * `minWidth`: The minimum width of the main window. Returns -1 if no minimum width is set with `setMinSize()`
     * `minHeight`: The minimum height of the main window. Returns -1 if no minimum height is set with `setMinSize()`
     * `titleLocked`: Whether the title bar text is locked (by `lockTitle()`)
-    * `dpi`: The DPI of the main window
+    * `dpi`: The DPI of the main window. 96 for 100%, 120 for 125%, etc.
     * `playbackSpeed`: The current playback speed as a decimal number (by `setPlaybackSpeed()`)
     * `speedModSupported`: Whether playback speed modification is supported
     * `immediateSpeedChange`: Whether playback speed changes are applied immediately
     * Various mod settings as boolean properties (described below)
-* `extendFrame(int: left, int: top, int: right, int: bottom)`
+* `extendFrame(int: left, int: right, int: top, int: bottom)`
     * Extends the window frame into the client area by the given number of pixels on each side. Use `-1, -1, -1, -1` to extend to the entire window.
 * `minimize()`
     * Minimizes the main window.
