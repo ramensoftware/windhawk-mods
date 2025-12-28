@@ -2,7 +2,7 @@
 // @id              cpl-classic-view-lite
 // @name            Control Panel Classic View Lite
 // @description     Makes the Control Panel folder to appear as any other
-// @version         1.0.0
+// @version         1.0.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -22,25 +22,24 @@ This mod differs in that
 * It does not provide the mechanism to use a custom UIFILE for Control Panel layout.
 * It affects both the `all items` view and the `category view`.
 
-It has an option to also make the individual category folders to look like regular folders (this option is disabled by default).
+It has also an option to make the individual category folders to look like regular folders (this option is disabled by default).
 
 ![All items view](https://i.imgur.com/etljMic.png)
 
-There is an empty, non-functional icon in Control panel, so to remove it, import this reg file
+There is an empty, non-functional icon in Control panel folder, so to remove it, execute this command with elevated rights:
 
 ```
-Windows Registry Editor Version 5.00
-[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{98F2AB62-0E29-4E4C-8EE7-B542E66740B1}]
+reg delete "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{98F2AB62-0E29-4E4C-8EE7-B542E66740B1}" /f
 ```
-To create a shortcut to the `all Items` view, create a folder with name extension: 
+To create a shortcut to the `all Items` view, create a folder with this name extension: 
 `{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}`, 
 
-or run a command `explorer shell:::{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}`.
+or, to open it once, run a command `explorer shell:::{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}`.
 
-To create a shortcut to the `category view`, create a folder with name extension:
+To create a shortcut to the `category view`, create a folder with this name extension:
 `{26EE0668-A00A-44D7-9371-BEB064C98683}`, 
 
-or run a command `explorer shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}`.
+or, to open it once, run a command `explorer shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}`.
 
 */
 // ==/WindhawkModReadme==
