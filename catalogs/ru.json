@@ -1764,7 +1764,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1766936766000,
+                "updated": 1766940664000,
                 "users": 0
             },
             "metadata": {
@@ -1775,7 +1775,7 @@
                     "explorer.exe"
                 ],
                 "name": "Control Panel Classic View Lite",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "custom-cmd-startup-text": {
