@@ -22,11 +22,11 @@ This mod differs in that
 * It does not provide the mechanism to use a custom UIFILE for Control Panel layout.
 * It affects both the `all items` view and the `category view`.
 
-It also has an option to make the individual category folders to look like regular folders (this option is disabled by default).
+It has an option to also make the individual category folders to look like regular folders (this option is disabled by default).
 
 ![All items view](https://i.imgur.com/etljMic.png)
 
-There is an empty, non-functional icon in the Control panel, so to remove it, import this reg file
+There is an empty, non-functional icon in Control panel, so to remove it, import this reg file
 
 ```
 Windows Registry Editor Version 5.00
@@ -55,20 +55,26 @@ or run a command `explorer shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}`.
 
 #include <windhawk_utils.h>
 
-HRESULT (*CreateCommonFrame_orig)(void *, UINT, GUID, void **);
-HRESULT CreateCommonFrame_hook(void * psf, UINT uLayoutType, GUID guid, void **ppv)
+#ifdef _WIN64
+#define CALL_SYM L"__cdecl"
+#else
+#define CALL_SYM L"__stdcall"
+#endif
+
+HRESULT (__stdcall *CreateCommonFrame_orig)(void *, UINT, const GUID*, void **);
+HRESULT __stdcall CreateCommonFrame_hook(void * psf, UINT uLayoutType, const GUID* guid, void **ppv)
 {  
-    if ((uLayoutType==4) || ((uLayoutType==3) && Wh_GetIntSetting(L"categ"))) uLayoutType=1;
+    if ((uLayoutType == 4) || ((uLayoutType == 3) && Wh_GetIntSetting(L"categ"))) 
+        uLayoutType = 1;
     return CreateCommonFrame_orig(psf, uLayoutType, guid, ppv);
 }
 
 BOOL Wh_ModInit() 
 {
-
     WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         {
             {
-                L"long __cdecl CreateCommonFrame(struct IShellFolder *,enum tagLAYOUTTYPE,struct _GUID const &,void * *)"
+                L"long " CALL_SYM L" CreateCommonFrame(struct IShellFolder *,enum tagLAYOUTTYPE,struct _GUID const &,void * *)"
             },
             &CreateCommonFrame_orig,
             CreateCommonFrame_hook,
@@ -77,5 +83,4 @@ BOOL Wh_ModInit()
     };
 
     return WindhawkUtils::HookSymbols(LoadLibraryW(L"shell32.dll"), shell32DllHooks, ARRAYSIZE(shell32DllHooks));
-
 }
