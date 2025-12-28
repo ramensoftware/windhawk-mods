@@ -2,7 +2,7 @@
 // @id              taskbar-empty-space-clicks
 // @name            Click on empty taskbar space
 // @description     Trigger custom action when empty space on a taskbar is clicked. Various mouse clicks and keyboard modifiers are supported.
-// @version         2.4
+// @version         2.5
 // @author          m1lhaus
 // @github          https://github.com/m1lhaus
 // @include         explorer.exe
@@ -221,6 +221,10 @@ If your taskbar becomes fully occupied by open windows and pinned icons, there i
 ### Opening an application on the currently active monitor
 
 By default, Windows opens new application windows on the primary monitor. Even if monitor hint information is provided, many applications ignore it and still open on the primary monitor. If you want to open an application on the currently active monitor more reliably, you can use [Microsoft PowerToys](https://github.com/microsoft/PowerToys?tab=readme-ov-file#-installation) with the [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) feature enabled. FancyZones will remember the last active monitor and open new windows there. For more information, see GitHub [issue #52](https://github.com/m1lhaus/windhawk-mods/issues/52#issuecomment-3693251071).
+
+### Opening Start menu on currently active monitor
+
+The mod tries to find the Start button on the taskbar you clicked on to open the Start menu. However, if you used e.g., [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod to hide the button, the mod will fall back and send a `Win` key press to open the Start menu. By default, Windows opens the Start menu on the primary monitor. If you want to open the Start menu on the currently active monitor, you can use the [Start menu open location](https://windhawk.net/mods/start-menu-open-location) mod.
 
 ### Volume control with mouse wheel over taskbar
 
