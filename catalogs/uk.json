@@ -1751,6 +1751,33 @@
                 "version": "1.0.1"
             }
         },
+        "cpl-classic-view-lite": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1766936766000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1766936766000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Anixx",
+                "description": "Makes the Control Panel folder to appear as any other",
+                "github": "https://github.com/Anixx",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Control Panel Classic View Lite",
+                "version": "1.0.0"
+            }
+        },
         "custom-cmd-startup-text": {
             "details": {
                 "defaultSorting": 1830,
