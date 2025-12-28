@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-26T23:32:00.000Z</updated>
+    <updated>2025-12-28T07:47:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.6]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#b10d6bd9375f96e105e8b13d2db6a2a75b4868bf</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2025-12-28T07:47:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.76 to 1.2.80</li>
+<li>Add a 'transparent mode', which allows full transparency when the transparent rendering is enabled, and native frames are disabled</li>
+<li>To activate, call the <code>setTransparent(true)</code> function of the mod's JavaScript API</li>
+<li>This mode conflicts with DWM effect applicators like MicaForEveryone and Translucent Windows, and the Basic Themer Windhawk mod that has the Spotify window excluded by the exclusion options or the 'secure desktop only' mode.</li>
+<li>Please exclude Spotify from MicaForEveryone/Translucent Windows, and for the Basic Themer mod, Spotify must be included in the mod's basic theme apply list, or the mod must be fully disabled.</li>
+<li>Add support for removing DWM effects with the JS API via <code>setBackdrop('none')</code>.</li>
+<li>Update the readme and add documentation for the mod's JavaScript API.</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.7]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#f5c9e38460918ba1fa4b643dedab4ecf42faf03c</id>
@@ -315,17 +334,6 @@ used at all times for an application.</p>
         <link href="https://windhawk.net/mods/classic-theme-enable"/>
         <updated>2025-12-12T16:08:32.000Z</updated>
         <content type="html"><![CDATA[<p>Add Classic Theme UIFILE Fix</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.2.0]]></title>
-        <id>https://windhawk.net/mods/classic-theme-uifile-fix#c2342ce7b1d7b935ed635c739c4178e0ff55214e</id>
-        <link href="https://windhawk.net/mods/classic-theme-uifile-fix"/>
-        <updated>2025-12-12T15:20:24.000Z</updated>
-        <content type="html"><![CDATA[<p>Compatibility with x86, does not need symbols and more compact.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>

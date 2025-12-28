@@ -1,3 +1,13 @@
+## 1.6 ([Dec 28, 2025](https://github.com/ramensoftware/windhawk-mods/blob/b10d6bd9375f96e105e8b13d2db6a2a75b4868bf/mods/cef-titlebar-enabler-universal.wh.cpp))
+
+* Add support for Spotify 1.2.76 to 1.2.80
+* Add a 'transparent mode', which allows full transparency when the transparent rendering is enabled, and native frames are disabled
+  * To activate, call the `setTransparent(true)` function of the mod's JavaScript API
+  * This mode conflicts with DWM effect applicators like MicaForEveryone and Translucent Windows, and the Basic Themer Windhawk mod that has the Spotify window excluded by the exclusion options or the 'secure desktop only' mode.
+  * Please exclude Spotify from MicaForEveryone/Translucent Windows, and for the Basic Themer mod, Spotify must be included in the mod's basic theme apply list, or the mod must be fully disabled.
+* Add support for removing DWM effects with the JS API via `setBackdrop('none')`.
+* Update the readme and add documentation for the mod's JavaScript API.
+
 ## 1.5 ([Oct 20, 2025](https://github.com/ramensoftware/windhawk-mods/blob/c09f0f7e253100a65cff60ea5399a8d5074623c9/mods/cef-titlebar-enabler-universal.wh.cpp))
 
 * Add support for Spotify 1.2.75
