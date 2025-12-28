@@ -220,7 +220,7 @@ If your taskbar becomes fully occupied by open windows and pinned icons, there i
 
 ### Opening an application on the currently active monitor
 
-Windows by default opens new application windows on the primary monitor. If you want to open an application on the currently active monitor instead, you can use [Microsoft PowerToys](https://github.com/microsoft/PowerToys?tab=readme-ov-file#-installation) with the [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) feature enabled. FancyZones will remember the last active monitor and open new application windows there. See GitHub [issue #52](https://github.com/m1lhaus/windhawk-mods/issues/52#issuecomment-3693251071) for more information.
+By default, Windows opens new application windows on the primary monitor. Even if monitor hint information is provided, many applications ignore it and still open on the primary monitor. If you want to open an application on the currently active monitor more reliably, you can use [Microsoft PowerToys](https://github.com/microsoft/PowerToys?tab=readme-ov-file#-installation) with the [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) feature enabled. FancyZones will remember the last active monitor and open new windows there. For more information, see GitHub [issue #52](https://github.com/m1lhaus/windhawk-mods/issues/52#issuecomment-3693251071).
 
 ### Volume control with mouse wheel over taskbar
 
