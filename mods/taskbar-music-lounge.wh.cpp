@@ -6,7 +6,7 @@
 // @author          Hashah2311
 // @github          https://github.com/Hashah2311
 // @include         explorer.exe
-// @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus
+// @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lshcore -lgdiplus -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -46,6 +46,9 @@ A media controller that uses Windows 11 native DWM styling for a seamless look.
   $name: Manual Text Color (Hex)
 - BgOpacity: 0
   $name: Acrylic Tint Opacity (0-255). Keep 0 for pure glass.
+- HideOnFullscreen: true
+  $name: Hide on Fullscreen
+  $description: Hide the widget when a fullscreen application is active.
 */
 // ==/WindhawkModSettings==
 
@@ -148,7 +151,8 @@ struct ModSettings {
     int offsetY = 0;
     bool autoTheme = true;
     DWORD manualTextColor = 0xFFFFFFFF; 
-    int bgOpacity = 0;   
+    int bgOpacity = 0;
+    bool hideOnFullscreen = true;
 } g_Settings;
 
 // --- Global State ---
@@ -192,9 +196,54 @@ void LoadSettings() {
     g_Settings.bgOpacity = Wh_GetIntSetting(L"BgOpacity");
     if (g_Settings.bgOpacity < 0) g_Settings.bgOpacity = 0;
     if (g_Settings.bgOpacity > 255) g_Settings.bgOpacity = 255;
+    
+    g_Settings.hideOnFullscreen = Wh_GetIntSetting(L"HideOnFullscreen") != 0;
 
     if (g_Settings.width < 100) g_Settings.width = 300;
     if (g_Settings.height < 24) g_Settings.height = 48;
+}
+
+// --- Fullscreen Detection ---
+bool IsFullscreenAppRunning() {
+    // Method 1: Shell notification state (D3D games, presentations)
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
+        if (state == QUNS_RUNNING_D3D_FULL_SCREEN || 
+            state == QUNS_PRESENTATION_MODE) {
+            return true;
+        }
+    }
+    
+    // Method 2: Check if foreground window covers entire monitor
+    HWND hwndFg = GetForegroundWindow();
+    if (!hwndFg || hwndFg == GetDesktopWindow() || hwndFg == g_hMediaWindow) {
+        return false;
+    }
+    
+    // Skip shell windows
+    WCHAR className[256];
+    if (GetClassNameW(hwndFg, className, 256)) {
+        if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
+            wcscmp(className, L"WorkerW") == 0 ||
+            wcscmp(className, L"Progman") == 0) {
+            return false;
+        }
+    }
+    
+    // Get monitor info
+    HMONITOR hMon = MonitorFromWindow(hwndFg, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfo(hMon, &mi)) return false;
+    
+    // Get window rect
+    RECT rcWnd;
+    if (!GetWindowRect(hwndFg, &rcWnd)) return false;
+    
+    // Check if window covers entire monitor
+    return (rcWnd.left <= mi.rcMonitor.left &&
+            rcWnd.top <= mi.rcMonitor.top &&
+            rcWnd.right >= mi.rcMonitor.right &&
+            rcWnd.bottom >= mi.rcMonitor.bottom);
 }
 
 // --- WinRT / GSMTC ---
@@ -410,15 +459,19 @@ void DrawMediaPanel(HDC hdc, int width, int height) {
 }
 
 // --- Window Procedure ---
-#define IDT_POLL_MEDIA 1001
-#define IDT_ANIMATION  1002
-#define APP_WM_CLOSE   WM_APP
+#define IDT_POLL_MEDIA     1001
+#define IDT_ANIMATION      1002
+#define IDT_FULLSCREEN     1003
+#define APP_WM_CLOSE       WM_APP
 
 LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: 
             UpdateAppearance(hwnd); // Apply DWM Rounding + Acrylic
-            SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL); 
+            SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL);
+            if (g_Settings.hideOnFullscreen) {
+                SetTimer(hwnd, IDT_FULLSCREEN, 100, NULL); // Fast polling for fullscreen
+            }
             return 0;
 
         case WM_ERASEBKGND: 
@@ -459,6 +512,15 @@ LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         (myRc.bottom - myRc.top) != g_Settings.height) {
                          SetWindowPos(hwnd, HWND_TOPMOST, x, y, g_Settings.width, g_Settings.height, SWP_NOACTIVATE);
                     }
+                }
+                
+            }
+            else if (wParam == IDT_FULLSCREEN) {
+                // Fast fullscreen detection (100ms)
+                if (g_Settings.hideOnFullscreen && IsFullscreenAppRunning()) {
+                    if (IsWindowVisible(hwnd)) ShowWindow(hwnd, SW_HIDE);
+                } else {
+                    if (!IsWindowVisible(hwnd)) ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 }
             }
             else if (wParam == IDT_ANIMATION) {
