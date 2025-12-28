@@ -2,7 +2,7 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.5
+// @version         1.6
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -34,13 +34,13 @@
 * Block automatic updates
 * Use the settings tab on the mod details page to configure the features
 ## Notes
-* Supported CEF versions: 90.4 to 140
+* Supported CEF versions: 90.4 to 143
     * This mod won't work with versions before 90.4
-    * Versions after 132 may work, but are not tested
+    * Newer versions may work, but are not tested. Some features, such as the JS API, are disabled on untested versions by default to prevent possible crashes, and transparent rendering may not work properly as well
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.75 (newer versions may work)
+* Supported Spotify versions: 1.1.60 to 1.2.80 (newer versions may work)
 * Spotify notes:
     * Old releases are available [here](https://loadspot.pages.dev/)
     * 1.1.60-1.1.67: Use [SpotifyNoControl](https://github.com/JulienMaille/SpotifyNoControl) to remove the window controls
@@ -58,7 +58,6 @@
     * When the `Enable native frames and title bars on the main window` option is disabled, this mod is not compatible with the [Translucent Windows](https://windhawk.net/mods/translucent-windows) Windhawk mod older than version 1.5
     * Please update the mod to 1.5+, or use [MicaForEveryone](https://github.com/MicaForEveryone/MicaForEveryone) instead, when the native frames are disabled
 * Notes for Spicetify extension/theme developers
-    * Use `window.outerHeight - window.innerHeight > 0` to detect if the window has a native title bar
     * This mod exposes a JavaScript API that can be used to interact with the main window and this mod
     * The API is available with `window._getSpotifyModule('ctewh')` (1.2.4-1.2.55) or `window.cancelEsperantoCall('ctewh')` (1.2.33-latest)
     * Use `(window.cancelEsperantoCall || window._getSpotifyModule)('ctewh').query()` to get various information about the window and the mod
@@ -66,6 +65,79 @@
     * See [here](https://github.com/Ingan121/WMPotify/blob/master/theme/src/js/WindhawkComm.js) for a simple example of how to use the functions
     * This API is only available on Spotify 1.2.4 and above, and only if the mod is enabled before Spotify starts
     * The API is disabled by default on untested CEF versions
+## JavaScript API Documentation
+* All functions are synchronous, and do not have a return value, with the exception of `query()`.
+* May throw exceptions when called with invalid arguments or when an internal error occurs.
+* Some functions may not exist in specific conditions (e.g., Spotify version, architecture, mod version, etc.). Check for the existence of the function before calling it to avoid exceptions.
+* The following are functions and properties available in the object returned by `_getSpotifyModule('ctewh')` or `cancelEsperantoCall('ctewh')`:
+* `query()`: Queries various information about the main window and the mod settings. Returns an object with the following properties:
+    * `isMaximized`: Whether the main window is maximized
+    * `isTopMost`: Whether the main window is always on top
+    * `isLayered`: Whether the main window is layered (transparent rendering enabled)
+    * `isThemingEnabled`: Whether visual styles are enabled
+    * `isDwmEnabled`: Whether DWM is enabled
+    * `hwAccelerated`: Whether hardware acceleration is enabled
+    * `minWidth`: The minimum width of the main window
+    * `minHeight`: The minimum height of the main window
+    * `titleLocked`: Whether the title bar text is locked
+    * `dpi`: The DPI of the main window
+    * `speedModSupported`: Whether playback speed modification is supported
+    * `playbackSpeed`: The current playback speed
+    * `immediateSpeedChange`: Whether playback speed changes are applied immediately
+    * Various mod settings as boolean properties (described below)
+* `extendFrame(int: left, int: top, int: right, int: bottom)`
+    * Extends the window frame into the client area by the given number of pixels on each side. Use `-1, -1, -1, -1` to extend to the entire window.
+* `minimize()`
+    * Minimizes the main window.
+* `maximizeRestore()`
+    * Maximizes or restores the main window depending on its current state.
+* `close()`
+    * Closes the main window. Respects the 'minimize to tray' setting, unlike `window.close()`.
+* `focus()`
+    * Brings the main window to the foreground and gives it focus.
+* `setLayered(bool: layered, int?: opacity, string?: colorKey)`
+    * Sets whether the main window is layered (WS_EX_LAYERED).
+    * `opacity` is an optional integer parameter (0-255) that sets the opacity of the window when `layered` is true.
+    * `colorKey` is an optional string parameter that sets the color key for transparency when `layered` is true. Must be a six-digit hexadecimal RGB value (e.g., "FF00FF" for magenta).
+* `setTransparent(bool: transparent)`
+    * Only available in mod version 1.6 and above; missing in older versions
+    * Enables or disables transparent mode. Only works when the transparent rendering option is enabled, and native frames are disabled.
+* `setBackdrop(string: type)`
+    * Sets the backdrop type of the main window. Only works on Windows 11 when native frames are enabled.
+    * `type` can be one of the following values:
+        * `"none"`: No backdrop (Only supported on mod version 1.6 and above; will throw an exception on older versions)
+        * `"mica"`: Mica backdrop
+        * `"acrylic"`: Acrylic backdrop
+        * `"tabbed"`: Tabbed backdrop
+* `resizeTo(int: width, int: height)`
+    * Resizes the main window to the given width and height in pixels.
+* `setMinSize(int: minWidth, int: minHeight)`
+    * Sets the minimum size of the main window to the given width and height in pixels.
+* `setTopMost(bool: topMost)`
+    * Sets whether the main window is always on top.
+* `setTitle(string: title)`
+    * Sets the title bar text of the main window. Ignores the title lock state.
+* `lockTitle(bool: lock)`
+    * Prevents the Spotify client from changing the title bar text when `lock` is true.
+* `openSpotifyMenu()`
+    * Opens the Spotify menu. Equivalent to pressing the Alt key. Does nothing if the menu button is hidden in the mod settings.
+* `setPlaybackSpeed(float: speed)`
+    * Sets the playback speed to the given decimal number. 1.0 represents normal speed.
+    * Only available on an x64 version of the Spotify client between 1.2.36 and 1.2.66.
+* `initialOptions`: An object containing the initial mod settings when Spotify was started.
+* `version`: The mod version as a string.
+* Mod settings (boolean properties):
+    * `showframe`: Enable native frames and title bars on the main window
+    * `showframeonothers`: Enable native frames and title bars on other windows
+    * `showmenu`: Show the menu button
+    * `showcontrols`: Show Spotify's custom window controls
+    * `transparentcontrols`: Make Spotify's custom window controls transparent
+    * `ignoreminsize`: Ignore minimum window size
+    * `transparentrendering`: Enable transparent rendering
+    * `noforceddarkmode`: Disable forced dark mode
+    * `forceextensions`: Force enable Chrome extensions
+    * `blockupdates`: Block automatic updates
+    * `allowuntested`: (Advanced) Use unsafe methods on untested CEF versions
 */
 // ==/WindhawkModReadme==
 
@@ -180,7 +252,9 @@
 134: 1.2.62-1.2.69
 138: 1.2.70
 139: 1.2.71-1.2.74
-140: 1.2.75
+140: 1.2.75-1.2.77
+142: 1.2.78-1.2.79
+143: 1.2.80
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -210,7 +284,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 140
+#define LAST_TESTED_CEF_VERSION 143
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
@@ -306,6 +380,7 @@ HWND g_mainHwnd = NULL;
 int g_minWidth = -1;
 int g_minHeight = -1;
 BOOL g_titleLocked = FALSE;
+BOOL g_transparentMode = FALSE;
 
 double g_playbackSpeed = 1.0;
 int64_t g_currentTrackPlayer = NULL;
@@ -324,6 +399,7 @@ struct cte_queryResponse_t {
     BOOL isMaximized;
     BOOL isTopMost;
     BOOL isLayered;
+    BOOL isTransparent;
     BOOL isThemingEnabled;
     BOOL isDwmEnabled;
     BOOL hwAccelerated;
@@ -619,7 +695,7 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     switch (uMsg) {
         case WM_SIZE:
             // Fix Basic frames being wrongly drawn when entering and exiting fullscreen
-            if (!cte_settings.showframe) {
+            if (hWnd == g_mainHwnd &&!cte_settings.showframe) {
                 return 0;
             } else {
                 return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -1588,6 +1664,11 @@ void HandleWindhawkComm(LPCWSTR command) {
     // /WH:ExtendFrame:<left>:<right>:<top>:<bottom>
     // Set DWM margins to extend frame into client area
     if (wcsncmp(command, L"/WH:ExtendFrame:", 16) == 0) {
+        if (g_transparentMode) {
+            int ncRenderingPolicy = DWMNCRP_ENABLED;
+            DwmSetWindowAttribute(g_mainHwnd, DWMWA_NCRENDERING_POLICY, &ncRenderingPolicy, sizeof(ncRenderingPolicy));
+            g_transparentMode = FALSE;
+        }
         if (!IsDwmEnabled()) {
             return;
         }
@@ -1637,10 +1718,39 @@ void HandleWindhawkComm(LPCWSTR command) {
                 SetWindowLong(g_mainHwnd, GWL_EXSTYLE, GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & ~WS_EX_LAYERED);
             }
         }
-    // /WH:SetBackdrop:<mica|acrylic|tabbed>
+    // /WH:SetTransparent:<transparent (1/0)>
+    // Enable or disable true transparency trick for frameless windows
+    } else if (wcsncmp(command, L"/WH:SetTransparent:", 19) == 0) {
+        // CEF paints non-alpha-blended black background by default
+        // I tried things like suppressing WM_PAINT to stop that, but I couldn't get rid of black painting on window maximize
+        // (I think this is a DWM quirk? Transparency by not drawing anything isn't a documented behavior after all)
+        // So instead we use DwmExtendFrameIntoClientArea to enable DWM's transparency handling of alphaless pixels (which just turns black to transparent)
+        // And disable DWM frames to get real transparency instead of DWM frames/effects
+        if (cte_settings.showframe) {
+            // Don't do this if native frames are enabled, as it breaks the frame
+            return;
+        }
+        int transparent;
+        if (swscanf(command + 19, L"%d", &transparent) == 1) {
+            MARGINS margins = { transparent ? -1 : 0 };
+            DwmExtendFrameIntoClientArea_original(g_mainHwnd, &margins);
+            BOOL value = FALSE;
+            DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
+            int backdrop_type = DWMSBT_NONE;
+            DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
+            int ncRenderingPolicy = transparent ? DWMNCRP_DISABLED : DWMNCRP_ENABLED;
+            DwmSetWindowAttribute(g_mainHwnd, DWMWA_NCRENDERING_POLICY, &ncRenderingPolicy, sizeof(ncRenderingPolicy));
+            g_transparentMode = transparent;
+        }
+    // /WH:SetBackdrop:<none|mica|acrylic|tabbed>
     // Set the window backdrop type (Windows 11 only)
     } else if (wcsncmp(command, L"/WH:SetBackdrop:", 16) == 0) {
-        if (wcscmp(command + 16, L"mica") == 0) {
+        if (wcscmp(command + 16, L"none") == 0) {
+            BOOL value = FALSE;
+            DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
+            int backdrop_type = DWMSBT_NONE;
+            DwmSetWindowAttribute(g_mainHwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop_type, sizeof(backdrop_type));
+        } else if (wcscmp(command + 16, L"mica") == 0) {
             BOOL value = TRUE;
             DwmSetWindowAttribute(g_mainHwnd, DWMWA_USE_HOSTBACKDROPBRUSH, &value, sizeof(value));
             int backdrop_type = DWMSBT_MAINWINDOW;
@@ -1711,8 +1821,8 @@ void HandleWindhawkComm(LPCWSTR command) {
             return;
         }
         wchar_t queryResponse[256];
-        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:blockupdates:allowuntested:isMaximized:isTopMost:isLayered:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
-        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+        // <showframe:showframeonothers:showmenu:showcontrols:transparentcontrols:transparentrendering:ignoreminsize:noforceddarkmode:forceextensions:blockupdates:allowuntested:isMaximized:isTopMost:isLayered:isTransparent:isThemingEnabled:isDwmEnabled:hwAccelerated:minWidth:minHeight:titleLocked:dpi:speedModSupported:playbackSpeed:immediateSpeedChange>
+        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
             cte_settings.showframe,
             cte_settings.showframeonothers,
             cte_settings.showmenu,
@@ -1727,6 +1837,7 @@ void HandleWindhawkComm(LPCWSTR command) {
             IsZoomed(g_mainHwnd),
             GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST,
             GetWindowLong(g_mainHwnd, GWL_EXSTYLE) & WS_EX_LAYERED,
+            g_transparentMode,
             IsAppThemed() && IsThemeActive(),
             IsDwmEnabled(),
             FindWindowExW(g_mainHwnd, NULL, L"Intermediate D3D Window", NULL) != NULL,
@@ -1923,7 +2034,7 @@ int ConnectToNamedPipe() {
                         buffer[bytesRead / sizeof(wchar_t)] = L'\0';
                         Wh_Log(L"Received message: %s", buffer);
                         if (wcsncmp(buffer, L"/WH:QueryResponse:", 18) == 0) {
-                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
                                 &g_queryResponse.showframe,
                                 &g_queryResponse.showframeonothers,
                                 &g_queryResponse.showmenu,
@@ -1938,6 +2049,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.isMaximized,
                                 &g_queryResponse.isTopMost,
                                 &g_queryResponse.isLayered,
+                                &g_queryResponse.isTransparent,
                                 &g_queryResponse.isThemingEnabled,
                                 &g_queryResponse.isDwmEnabled,
                                 &g_queryResponse.hwAccelerated,
@@ -1947,7 +2059,7 @@ int ConnectToNamedPipe() {
                                 &g_queryResponse.dpi,
                                 &g_queryResponse.speedModSupported,
                                 &g_queryResponse.playbackSpeed,
-                                &g_queryResponse.immediateSpeedChange) == 24
+                                &g_queryResponse.immediateSpeedChange) == 25
                             ) {
                                 g_queryResponse.success = TRUE;
                             }
@@ -2112,14 +2224,25 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
             free(msg);
             return TRUE;
         }
+    } else if (nameStr == u"setTransparent") {
+        if (argumentsCount >= 1 && arguments[0]->is_bool(arguments[0])) {
+            bool transparent = arguments[0]->get_bool_value(arguments[0]);
+            ipcRes = SendNamedPipeMessage((L"/WH:SetTransparent:" + std::to_wstring(transparent)).c_str());
+        } else {
+            cef_string_t* msg = GenerateCefString(u"Invalid argument types, expected (bool)");
+            *exception = *msg;
+            free(msg->str);
+            free(msg);
+            return TRUE;
+        }
     } else if (nameStr == u"setBackdrop") {
         if (argumentsCount == 1 && arguments[0]->is_string(arguments[0])) {
             cef_string_t* backdropArg = arguments[0]->get_string_value(arguments[0]);
             std::wstring backdropStr(backdropArg->str, backdropArg->str + backdropArg->length);
-            if (backdropStr == L"mica" || backdropStr == L"acrylic" || backdropStr == L"tabbed") {
+            if (backdropStr == L"none" || backdropStr == L"mica" || backdropStr == L"acrylic" || backdropStr == L"tabbed") {
                 ipcRes = SendNamedPipeMessage((L"/WH:SetBackdrop:" + backdropStr).c_str());
             } else {
-                cef_string_t* msg = GenerateCefString(u"Invalid backdrop type, expected 'mica', 'acrylic', or 'tabbed'");
+                cef_string_t* msg = GenerateCefString(u"Invalid backdrop type, expected 'none', 'mica', 'acrylic', or 'tabbed'");
                 *exception = *msg;
                 free(msg->str);
                 free(msg);
@@ -2291,6 +2414,7 @@ int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) 
         AddFunctionToObj(retobj, u"close", cancelCosmosRequest_v8handler);
         AddFunctionToObj(retobj, u"focus", cancelCosmosRequest_v8handler);
         AddFunctionToObj(retobj, u"setLayered", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setTransparent", cancelCosmosRequest_v8handler);
         AddFunctionToObj(retobj, u"setBackdrop", cancelCosmosRequest_v8handler);
         AddFunctionToObj(retobj, u"resizeTo", cancelCosmosRequest_v8handler);
         AddFunctionToObj(retobj, u"setMinSize", cancelCosmosRequest_v8handler);
