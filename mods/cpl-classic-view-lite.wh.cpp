@@ -26,7 +26,7 @@ It has also an option to make the individual category folders to look like regul
 
 ![All items view](https://i.imgur.com/etljMic.png)
 
-There is an empty, non-functional icon in Control panel folder, so to remove it, execute this command with elevated rights:
+There is an empty, non-functional icon in the Control panel folder, so to remove it, execute this command with elevated rights:
 
 ```
 reg delete "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{98F2AB62-0E29-4E4C-8EE7-B542E66740B1}" /f
