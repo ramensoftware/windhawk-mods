@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-29T08:54:24.000Z</updated>
+    <updated>2025-12-29T14:10:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No MS Edge WebView2 for Copilot 1.0]]></title>
+        <id>https://windhawk.net/mods/xs-nomsedgewebview4copilot#c679b5821fce82b0225f4586949ddc2b4448eb72</id>
+        <link href="https://windhawk.net/mods/xs-nomsedgewebview4copilot"/>
+        <updated>2025-12-29T14:10:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="description">Description</h1>
+<p>All this mod does is disables certain processes from creating <code>msedgewebview2.exe</code> child processes to provide Copilot functionality within the app.</p>
+<p>This mod is minimal — it does only what's required to accomplish that goal. It does not handle the scenario where <code>msedgewebview2.exe</code> instances are already running; in that case restart the affected application.</p>
+<h1 id="hookedprocesses">Hooked Processes</h1>
+<h2 id="onedriveonedriveexe">OneDrive (<code>onedrive.exe</code>)</h2>
+<p>As of version <code>25.222.1112.0002</code>, OneDrive may launch <code>msedgewebview2.exe</code> child processes. This appears related to the Copilot Actions feature. You may see this regardless of whether you have an M365-enabled Copilot license.</p>
+<h2 id="gamebarxboxgamebarwidgetsexe">Gamebar (<code>XboxGameBarWidgets.exe</code>)</h2>
+<p>After updating to 25H2 build 7462 I observed <code>msedgewebview2.exe</code> instances started by <code>XboxGameBarWidgets.exe</code> (the Windows Game Bar). This is again for Copilot integration.</p>
+<h1 id="disclaimer">Disclaimer</h1>
+<p>I haven't tested every scenario. I only verified that OneDrive (personal and business, running together) still starts and sync works.</p>]]></content>
+        <author>
+            <name>Xetrill</name>
+            <uri>https://github.com/Xetrill</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Theme UIFILE Fix 1.2.1]]></title>
         <id>https://windhawk.net/mods/classic-theme-uifile-fix#1e45dd418cddfdc614229f666ac388614589f800</id>
@@ -322,22 +342,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 2.0.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#c504a465dcdc607b3caff5c1852a1ef752f200ee</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2025-12-19T17:44:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add window tiling (manually triggered by hotkey)</li>
-<li>Add window pinning to all desktops</li>
-<li>Add previous desktop toggle</li>
-<li>Add per-desktop focus/layout memory</li>
-</ul>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>

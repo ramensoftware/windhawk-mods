@@ -8410,6 +8410,34 @@
                 "name": "Control Discord's Registered Games",
                 "version": "1.0"
             }
+        },
+        "xs-nomsedgewebview4copilot": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767017454000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767017454000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Xetrill",
+                "description": "Disables MSEdgeWebView2 child process creation for certain application, which is used for Copilot functionality.",
+                "github": "https://github.com/Xetrill",
+                "include": [
+                    "onedrive.exe",
+                    "XboxGameBarWidgets.exe"
+                ],
+                "name": "No MS Edge WebView2 for Copilot",
+                "version": "1.0"
+            }
         }
     }
 }
