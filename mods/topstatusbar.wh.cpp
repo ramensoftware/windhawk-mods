@@ -1,10 +1,11 @@
 // ==WindhawkMod==
 // @id              topstatusbar
 // @name            Top Status Bar
-// @description     Minimalist top status bar with battery, resource monitoring, and smart system app detection.
-// @version         1.1.0
+// @description     Minimalist status bar. v1.3.0: Windows 11 DWM Native logic for improved app detection. Migrated from GDI+ to Direct2D.
+// @version         1.3.0
 // @author          AlexanderOG
-// @github          https://github.com/alexandr0g/windhawk-mod-topstatusbar
+// @github          https://github.com/alexandr0g
+// @homepage        https://github.com/alexandr0g/windhawk-mod-topstatusbar
 // @include         explorer.exe
 // @compilerOptions -ldwmapi -luser32 -lgdi32 -lshell32 -ld2d1 -ldwrite -lole32 -lwindowscodecs -lshlwapi
 // ==/WindhawkMod==
