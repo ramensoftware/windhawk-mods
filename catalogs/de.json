@@ -1504,7 +1504,7 @@
                     2
                 ],
                 "ratingUsers": 2,
-                "updated": 1765552824000,
+                "updated": 1766998464000,
                 "users": 66
             },
             "metadata": {
@@ -1516,7 +1516,7 @@
                     "explorer.exe"
                 ],
                 "name": "Classic Theme UIFILE Fix",
-                "version": "1.2.0"
+                "version": "1.2.1"
             }
         },
         "classic-uwp-fix": {
