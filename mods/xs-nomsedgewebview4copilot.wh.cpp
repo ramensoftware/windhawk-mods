@@ -49,6 +49,21 @@ static WINBOOL (WINAPI *orig_CreateProcessW)(
     LPPROCESS_INFORMATION
 ) = nullptr;
 
+static const wchar_t* wcsistr(const wchar_t* haystack, const wchar_t* needle)
+{
+    if (!haystack || !needle || !*needle)
+        return nullptr;
+
+    const size_t needle_len = wcslen(needle);
+
+    for (const wchar_t* p = haystack; *p; ++p) {
+        if (_wcsnicmp(p, needle, needle_len) == 0) {
+            return p;
+        }
+    }
+    return nullptr;
+}
+
 static WINBOOL WINAPI hk_CreateProcessW(
     LPCWSTR lpApplicationName,
     LPWSTR lpCommandLine,
@@ -65,7 +80,7 @@ static WINBOOL WINAPI hk_CreateProcessW(
     const wchar_t *cmd = lpCommandLine ? lpCommandLine : L"";
     Wh_Log(L"[CreateProcessW] Cmdline: '%s'", cmd);
 
-    if (wcsstr(cmd, L"msedgewebview2.exe") != nullptr) {
+    if (wcsistr(cmd, L"msedgewebview2.exe") != nullptr) {
         Wh_Log(L"[CreateProcessW] blocking msedgewebview2.exe");
         SetLastError(ERROR_ACCESS_DENIED);
         return FALSE;
