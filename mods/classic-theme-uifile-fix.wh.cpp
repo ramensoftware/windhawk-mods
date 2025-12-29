@@ -2,7 +2,7 @@
 // @id              classic-theme-uifile-fix
 // @name            Classic Theme UIFILE Fix
 // @description     Fixes Control Panel pages that don't display in Windows Classic theme
-// @version         1.2.0
+// @version         1.2.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -14,7 +14,7 @@
 # Classic Theme UIFILE Fix
 
 Fixes Control Panel pages (Accessibility, Personalization, Storage Spaces, etc.) that fail to load 
-when using the Windows Classic theme.
+when using the Windows Classic theme. This mod is based on the findings of R.O.B., the originator of the WinClassic forum.
 
 ![Screenshot](https://i.imgur.com/TVmK9IR.png)
 
