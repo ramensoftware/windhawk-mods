@@ -2,9 +2,10 @@
 // @id              taskbar-idle-clean-desktop
 // @name            Clean Desktop on Idle
 // @description     Hides the taskbar and minimizes all windows after a period of user inactivity. Includes smart detection.
-// @version         1.7
+// @version         1.8
 // @author          Breiq
-// @include         explorer.exe
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lshell32
 // @architecture    x86-64
 // @github          https://github.com/BREIQ
 // @donateUrl       https://www.paypal.com/paypalme/breiq
@@ -105,7 +106,7 @@ BOOL Wh_ModInit() {
     g_running = true;
     g_thread = CreateThread(nullptr, 0, IdleThread, nullptr, 0, nullptr);
     
-    Wh_Log(L"Mod iniciado correctamente y barra reseteada.");
+    Wh_Log(L"Mod iniciado como proceso dedicado y barra reseteada.");
     return g_thread != nullptr;
 }
 
