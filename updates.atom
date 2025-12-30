@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-29T14:10:54.000Z</updated>
+    <updated>2025-12-30T19:20:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Dock Animation 1.7]]></title>
+        <id>https://windhawk.net/mods/taskbar-dock-animation#e02578f8da0413422830baa6b5c0934d6446b1f4</id>
+        <link href="https://windhawk.net/mods/taskbar-dock-animation"/>
+        <updated>2025-12-30T19:20:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Expanded Taskbar Support: Added support for vertical and top-aligned taskbars.</li>
+<li>Focus Animation: Added smooth fade-in/fade-out focus animation.</li>
+<li>Scale Range: Adjusted customization limits (Min: 101%, Max: 220%).</li>
+<li>Animation Curves: Added a selection of 3 animation curves (Cosine, Linear, Exponential).</li>
+<li>Labels Mode: Added support for "Taskbar Labels" (Icon + Text mode). Please report any visual glitches.</li>
+<li>Optimization: General code cleanup and performance improvements.</li>
+</ul>]]></content>
+        <author>
+            <name>Ph0en1x-dev</name>
+            <uri>https://github.com/Ph0en1x-dev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No MS Edge WebView2 for Copilot 1.0]]></title>
         <id>https://windhawk.net/mods/xs-nomsedgewebview4copilot#c679b5821fce82b0225f4586949ddc2b4448eb72</id>
@@ -318,26 +336,6 @@ real button doesn't handle the click.</p>
         <content type="html"><![CDATA[<ul>
 <li>Implemented basic support for taskbar auto-hide.</li>
 <li>Fixed incorrect Alt+Tab window position with multiple monitors in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.8]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#bfba1b55ec10ecd3f7b78009533838598191141d</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2025-12-19T22:21:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed drag and drop for tray icons.</li>
-<li>Fixed secondary taskbar clock rotation on startup.</li>
-<li>Fixed badge orientation for taskbar icons (contribution by Lubomir Stanko).</li>
-<li>Fixed notification center being shown on the primary monitor when clicking on the secondary monitor clock.</li>
-<li>Fixed labels vertical alignment when using small icons.</li>
-<li>Fixed the start menu sliding over the taskbar with the "Adjust Start menu animation" option.</li>
-<li>Improved start menu handling with multiple monitors.</li>
-<li>Fixed broken share picker UI layout.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
