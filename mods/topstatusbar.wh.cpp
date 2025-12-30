@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              topstatusbar
 // @name            Top Status Bar
-// @description     Minimalist status bar. v1.7.0: Decoupled animation (33ms) from detection (100ms) for maximum efficiency and smoothness.
-// @version         1.7.0
+// @description     Minimalist status bar. v1.7.3: Restored original Acrylic/Mica Alt logic, magic color refs, and 33ms/99ms decoupled sync.
+// @version         1.7.3
 // @author          AlexanderOG
 // @github          https://github.com/alexandr0g
 // @homepage        https://github.com/alexandr0g/windhawk-mod-topstatusbar
@@ -29,7 +29,7 @@
 #define MARGIN_TOP 4.0f
 #define TIMER_ID_MAIN 1
 #define TIMER_ID_CLOCK 2
-#define REFRESH_RATE 33 // Pulso base de 30 FPS para fluidez visual
+#define REFRESH_RATE 33 
 
 // --- ESTRUCTURAS ---
 struct SystemCache {
@@ -84,7 +84,7 @@ struct TopBarInstance {
     float currentY = MARGIN_TOP, targetY = MARGIN_TOP;
     bool isAnimating = false, mouseTracked = false;
     
-    // Variables de control de frecuencia
+    // Variables de sincronización
     int detectionCounter = 0;
     bool isLocked = false;
     bool shouldDodge = false;
@@ -156,11 +156,16 @@ ID2D1Bitmap* CreateSymbolicIcon(ID2D1HwndRenderTarget* pRT, HICON hI) {
     pConv->Release(); pWic->Release(); return pD2D;
 }
 
+// --- RESTAURACIÓN DISEÑO AlexanderOG (ACRYLIC/MICA ALT) ---
 void SyncDwmStyle(HWND h) {
     DwmSetWindowAttribute(h, 20, &g_cache.darkMode, sizeof(BOOL));
+    // DISEÑO: Acrylic (3) con transparencias, Mica Alt (4) sin ellas.
     DWORD bdr = g_cache.transparency ? 3 : 4; DwmSetWindowAttribute(h, 38, &bdr, sizeof(bdr));
     DWORD crn = 2; DwmSetWindowAttribute(h, 33, &crn, sizeof(crn));
-    COLORREF bord = 0xFFFFFFFF, cap = 0xFFFFFFFE; DwmSetWindowAttribute(h, 34, &bord, sizeof(bord)); DwmSetWindowAttribute(h, 35, &cap, sizeof(cap));
+    // REQUISITO: Magic Colors para no recortar el fondo del DWM
+    COLORREF bord = 0xFFFFFFFF, cap = 0xFFFFFFFE; 
+    DwmSetWindowAttribute(h, 34, &bord, sizeof(bord)); 
+    DwmSetWindowAttribute(h, 35, &cap, sizeof(cap));
     MARGINS m = {-1,-1,-1,-1}; DwmExtendFrameIntoClientArea(h, &m);
     SetWindowPos(h, NULL, 0,0,0,0, SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
@@ -320,12 +325,12 @@ struct ModuleManager {
     }
 } g_modManager;
 
-// --- LÓGICA AlexanderOG v1.7.0 (Sincronización híbrida) ---
+// --- LÓGICA AlexanderOG v1.7.2 ---
 
 void UpdateState(TopBarInstance* b) {
     POINT pt; GetCursorPos(&pt);
     
-    // FRECUENCIA 1: Lógica de Detección (100ms / 1 de cada 3 pulsos)
+    // FRECUENCIA: 1 de cada 3 pulsos (~99ms) para detección de ventanas
     b->detectionCounter++;
     if (b->detectionCounter % 3 == 0) {
         HWND fgRaw = GetForegroundWindow();
@@ -341,6 +346,7 @@ void UpdateState(TopBarInstance* b) {
 
         bool isDesktop = (wcscmp(cls, L"WorkerW") == 0 || wcscmp(cls, L"Progman") == 0);
         bool isTaskbar = (wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+        
         bool isShellUI = (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 || 
                           wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0 || 
                           wcscmp(cls, L"NotifyIconOverflowWindow") == 0 ||   
@@ -363,7 +369,7 @@ void UpdateState(TopBarInstance* b) {
         }
     }
 
-    // FRECUENCIA 2: Lógica de Animación (33ms / Todos los pulsos)
+    // ANIMACIÓN: Cada pulso (33ms)
     bool mouseIn = (pt.x >= (float)b->monitorRect.left && pt.x <= (float)b->monitorRect.right);
     bool over = false;
 
@@ -388,6 +394,8 @@ void UpdateState(TopBarInstance* b) {
 LRESULT CALLBACK BarWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     TopBarInstance* b = (TopBarInstance*)GetWindowLongPtr(h, GWLP_USERDATA);
     switch (m) {
+        case WM_ERASEBKGND: return 1; // NO RELLENAR FONDO GDI (Crucial para Acrylic)
+        case WM_NCACTIVATE: return DefWindowProc(h, m, TRUE, l);
         case WM_MOUSEMOVE: {
             if (!b->mouseTracked) { TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme); b->mouseTracked = true; }
             POINT p = {(int)(short)LOWORD(l), (int)(short)HIWORD(l)}; g_modManager.HandleMouse(h, m, p); return 0;
@@ -396,7 +404,8 @@ LRESULT CALLBACK BarWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case WM_LBUTTONDOWN: case WM_LBUTTONUP: { POINT p = {(int)(short)LOWORD(l), (int)(short)HIWORD(l)}; g_modManager.HandleMouse(h, m, p); return 0; }
         case WM_TIMER: if (w == TIMER_ID_MAIN && b) UpdateState(b); if (w == TIMER_ID_CLOCK) { g_cache.UpdateResources(); if(b && !b->isAnimating) InvalidateRect(h, NULL, FALSE); } return 0;
         case WM_PAINT: { if (!b) return 0; if (b->isAnimating) { ValidateRect(h, NULL); return 0; }
-            CreateBarResources(b); b->pRT->BeginDraw(); b->pRT->Clear(D2D1::ColorF(0,0,0,0)); g_modManager.Render(b, GetForegroundWindow()); b->pRT->EndDraw(); ValidateRect(h, NULL); return 0; }
+            CreateBarResources(b); b->pRT->BeginDraw(); b->pRT->Clear(D2D1::ColorF(0,0,0,0)); // FONDO TRANSPARENTE D2D
+            g_modManager.Render(b, GetForegroundWindow()); b->pRT->EndDraw(); ValidateRect(h, NULL); return 0; }
         case WM_SETTINGCHANGE: g_cache.Update(); if(b) { b->ReleaseBrushes(); SyncDwmStyle(h); InvalidateRect(h, NULL, FALSE); } return 0;
         case WM_DESTROY: if (b) b->Release(); return 0;
     } return DefWindowProc(h, m, w, l);
@@ -408,8 +417,11 @@ BOOL CALLBACK MonitorEnum(HMONITOR hM, HDC, LPRECT, LPARAM) {
     b->hwndTrigger = CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_TRANSPARENT, L"TopT", NULL, WS_POPUP|WS_VISIBLE, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right-mi.rcMonitor.left, MOUSE_TRIGGER_ZONE, NULL, NULL, GetModuleHandle(NULL), NULL);
     b->hwndBar = CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED, L"TopC", NULL, WS_POPUP|WS_VISIBLE, mi.rcMonitor.left+8, mi.rcMonitor.top+(int)MARGIN_TOP, (mi.rcMonitor.right-mi.rcMonitor.left)-16, BAR_HEIGHT, NULL, NULL, GetModuleHandle(NULL), NULL);
     if (b->hwndBar) {
-        SetWindowLongPtr(b->hwndBar, GWLP_USERDATA, (LONG_PTR)b); SetLayeredWindowAttributes(b->hwndBar, 0, 255, LWA_ALPHA);
-        SyncDwmStyle(b->hwndBar); SetTimer(b->hwndBar, TIMER_ID_MAIN, REFRESH_RATE, NULL); SetTimer(b->hwndBar, TIMER_ID_CLOCK, 1000, NULL); g_bars.push_back(b);
+        SetWindowLongPtr(b->hwndBar, GWLP_USERDATA, (LONG_PTR)b); 
+        SetLayeredWindowAttributes(b->hwndBar, 0, 255, LWA_ALPHA); // MODO ALFA TOTAL
+        SyncDwmStyle(b->hwndBar); 
+        SetTimer(b->hwndBar, TIMER_ID_MAIN, REFRESH_RATE, NULL); 
+        SetTimer(b->hwndBar, TIMER_ID_CLOCK, 1000, NULL); g_bars.push_back(b);
     } return TRUE;
 }
 
