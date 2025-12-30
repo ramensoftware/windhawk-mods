@@ -362,7 +362,7 @@ using bstr_ptr = _bstr_t;
 // =====================================================================
 
 #define ENABLE_LOG_INFO // info messages will be enabled
-// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
@@ -864,8 +864,13 @@ static DWORD g_dwTaskbarThreadId;
 static bool g_isWhInitialized = false;
 static bool g_inputSiteProcHooked = false;
 
-static HWND g_hTaskbarWnd;
+static HWND g_hTaskbarWnd;          // Shell_TrayWnd window handle
+static HWND g_hTaskbarInputSiteWnd; // Windows.UI.Input.InputSite.WindowClass window handle (Win11 taskbar)
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
+static std::unordered_set<HWND> g_secondaryTaskbarInputSiteWindows;
+
+static HWND g_hTaskSwitchingWnd; // Alt+Tab window handle
+
 static bool g_isContextMenuSuppressed = false;
 static DWORD g_contextMenuSuppressionTimestamp = 0;
 
@@ -873,6 +878,10 @@ static const int g_mouseClickTimeoutMs = 200;       // time to wait since the la
 static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
 static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
+static const UINT g_hookedClickMsg = RegisterWindowMessageW(L"Windhawk_hookedClick_empty-space-clicks");
+
+static HHOOK g_hMouseHook = NULL;       // low-level mouse hook handle to suppress mouse input when Alt+Tab is active
+static bool suppressMouseInput = false; // flag to indicate whether mouse input should be suppressed
 
 // Stores mouse click information including position, button, timestamp and empty space detection
 struct MouseClick
@@ -1136,6 +1145,14 @@ static UINT_PTR gMouseClickTimer = (UINT_PTR)NULL;
 // =====================================================================
 // Forward declarations
 
+const wchar_t *GetMessageName(UINT uMsg);
+std::wstring GetClassNameString(HWND hWnd);
+HWND FindTaskSwitchingWindow();
+bool IsPrimaryTaskbarWindow(HWND hWnd);
+bool IsSecondaryTaskbarWindow(HWND hWnd);
+bool IsTaskbarWindow(HWND hWnd);
+std::unordered_set<HWND> KeepOnlyValidWindows(const std::unordered_set<HWND> &windows);
+
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName);
 bool IsTaskbarWindow(HWND hWnd);
 bool ShallSuppressContextMenu(const MouseClick &lastClick);
@@ -1194,9 +1211,14 @@ std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBa
 LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
                                            _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData);
 
+LRESULT CALLBACK TaskSwitchingWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
+                                                 _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData);
+
 // proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
 WNDPROC InputSiteWindowProc_Original;
+WNDPROC InputSiteWindowProc2_Original;
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK InputSiteWindowProc2_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
@@ -1292,6 +1314,17 @@ void HandleIdentifiedInputSiteWindow(HWND hWnd)
     {
         LOG_DEBUG("Parent window of Windows.UI.Composition.DesktopWindowContentBridge is not taskbar window");
         return;
+    }
+
+    // store hwnd of InputSite window so we can later send messages to its wndproc
+    if (IsPrimaryTaskbarWindow(hParentWnd))
+    {
+        g_hTaskbarInputSiteWnd = hWnd;
+    }
+    else
+    {
+        g_secondaryTaskbarInputSiteWindows = KeepOnlyValidWindows(g_secondaryTaskbarInputSiteWindows);
+        g_secondaryTaskbarInputSiteWindows.insert(hWnd);
     }
 
     // At first, I tried to subclass the window instead of hooking its wndproc,
@@ -1551,6 +1584,226 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
     return hWnd;
 }
 
+// Low-level mouse hook callback
+LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    if (nCode == HC_ACTION)
+    {
+        if (suppressMouseInput)
+        {
+            if (g_hTaskSwitchingWnd && IsWindow(g_hTaskSwitchingWnd) && IsWindowVisible(g_hTaskSwitchingWnd))
+            {
+                if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONDBLCLK ||
+                    wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONDBLCLK ||
+                    wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONDBLCLK)
+                {
+                    MSLLHOOKSTRUCT *pMouseStruct = (MSLLHOOKSTRUCT *)lParam;
+                    HWND hClickedWnd = WindowFromPoint(pMouseStruct->pt);
+
+                    HWND hRootWnd = GetAncestor(hClickedWnd, GA_ROOT);
+                    HWND receiverWnd = hRootWnd;
+                    if (IsPrimaryTaskbarWindow(hRootWnd))
+                    {
+                        receiverWnd = (g_taskbarVersion == WIN_11_TASKBAR) ? g_hTaskbarInputSiteWnd : g_hTaskbarWnd;
+                    }
+                    else
+                    {
+                        const auto &windowSet = (g_taskbarVersion == WIN_11_TASKBAR) ? g_secondaryTaskbarInputSiteWindows : g_secondaryTaskbarWindows;
+                        if (!g_secondaryTaskbarInputSiteWindows.empty()) // should be always true here
+                            receiverWnd = *windowSet.begin();            // forward to any secondary taskbar window
+                    }
+
+                    // Forward the click to taskbar window using custom message
+                    // wParam encodes the original message type
+                    // lParam encodes the screen coordinates
+                    PostMessage(g_hTaskbarInputSiteWnd, g_hookedClickMsg, wParam, MAKELPARAM(pMouseStruct->pt.x, pMouseStruct->pt.y));
+                    LOG_DEBUG(L"Forwarded suppressed mouse click %s to taskbar window", GetMessageName((UINT)wParam));
+                    return 1; // suppress the message from going to Desktop
+                }
+            }
+            else
+            {
+                LOG_DEBUG("Task switching window is not visible anymore, stopping mouse input suppression");
+                suppressMouseInput = false;
+            }
+        }
+    }
+
+    return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+}
+
+// Install the hook (call from Wh_ModInit or when needed)
+void InstallMouseHook()
+{
+    if (!g_hMouseHook)
+    {
+        g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
+        if (g_hMouseHook)
+        {
+            LOG_INFO(L"Low-level mouse hook installed");
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to install mouse hook, error: %d", GetLastError());
+        }
+    }
+}
+
+// Remove the hook (call from Wh_ModUninit)
+void UninstallMouseHook()
+{
+    if (g_hMouseHook)
+    {
+        UnhookWindowsHookEx(g_hMouseHook);
+        g_hMouseHook = NULL;
+        LOG_INFO(L"Mouse hook uninstalled");
+    }
+}
+
+#pragma endregion // hooks_and_win32_methods
+
+// =====================================================================
+
+#pragma region win32_helpers
+
+const wchar_t *GetMessageName(UINT uMsg)
+{
+    switch (uMsg)
+    {
+    // Mouse messages
+    case WM_MOUSEMOVE:
+        return L"WM_MOUSEMOVE";
+    case WM_LBUTTONDOWN:
+        return L"WM_LBUTTONDOWN";
+    case WM_LBUTTONUP:
+        return L"WM_LBUTTONUP";
+    case WM_LBUTTONDBLCLK:
+        return L"WM_LBUTTONDBLCLK";
+    case WM_RBUTTONDOWN:
+        return L"WM_RBUTTONDOWN";
+    case WM_RBUTTONUP:
+        return L"WM_RBUTTONUP";
+    case WM_RBUTTONDBLCLK:
+        return L"WM_RBUTTONDBLCLK";
+    case WM_MBUTTONDOWN:
+        return L"WM_MBUTTONDOWN";
+    case WM_MBUTTONUP:
+        return L"WM_MBUTTONUP";
+    case WM_MBUTTONDBLCLK:
+        return L"WM_MBUTTONDBLCLK";
+    case WM_XBUTTONDOWN:
+        return L"WM_XBUTTONDOWN";
+    case WM_XBUTTONUP:
+        return L"WM_XBUTTONUP";
+    case WM_XBUTTONDBLCLK:
+        return L"WM_XBUTTONDBLCLK";
+
+    // Non-client mouse messages
+    case WM_NCLBUTTONDOWN:
+        return L"WM_NCLBUTTONDOWN";
+    case WM_NCLBUTTONUP:
+        return L"WM_NCLBUTTONUP";
+    case WM_NCLBUTTONDBLCLK:
+        return L"WM_NCLBUTTONDBLCLK";
+    case WM_NCRBUTTONDOWN:
+        return L"WM_NCRBUTTONDOWN";
+    case WM_NCRBUTTONUP:
+        return L"WM_NCRBUTTONUP";
+    case WM_NCRBUTTONDBLCLK:
+        return L"WM_NCRBUTTONDBLCLK";
+    case WM_NCMBUTTONDOWN:
+        return L"WM_NCMBUTTONDOWN";
+    case WM_NCMBUTTONUP:
+        return L"WM_NCMBUTTONUP";
+    case WM_NCMBUTTONDBLCLK:
+        return L"WM_NCMBUTTONDBLCLK";
+    case WM_NCXBUTTONDOWN:
+        return L"WM_NCXBUTTONDOWN";
+    case WM_NCXBUTTONUP:
+        return L"WM_NCXBUTTONUP";
+    case WM_NCXBUTTONDBLCLK:
+        return L"WM_NCXBUTTONDBLCLK";
+
+    // Pointer messages (touch/pen)
+    case WM_POINTERDOWN:
+        return L"WM_POINTERDOWN";
+    case WM_POINTERUP:
+        return L"WM_POINTERUP";
+    case WM_POINTERUPDATE:
+        return L"WM_POINTERUPDATE";
+
+    // Common window messages
+    case WM_CREATE:
+        return L"WM_CREATE";
+    case WM_DESTROY:
+        return L"WM_DESTROY";
+    case WM_MOVE:
+        return L"WM_MOVE";
+    case WM_SIZE:
+        return L"WM_SIZE";
+    case WM_ACTIVATE:
+        return L"WM_ACTIVATE";
+    case WM_SETFOCUS:
+        return L"WM_SETFOCUS";
+    case WM_KILLFOCUS:
+        return L"WM_KILLFOCUS";
+    case WM_PAINT:
+        return L"WM_PAINT";
+    case WM_CLOSE:
+        return L"WM_CLOSE";
+    case WM_CONTEXTMENU:
+        return L"WM_CONTEXTMENU";
+    case WM_NCDESTROY:
+        return L"WM_NCDESTROY";
+    case WM_NCPAINT:
+        return L"WM_NCPAINT";
+    case WM_TIMER:
+        return L"WM_TIMER";
+    case WM_PARENTNOTIFY:
+        return L"WM_PARENTNOTIFY";
+    case WM_QUIT:
+        return L"WM_QUIT";
+    case WM_SHOWWINDOW:
+        return L"WM_SHOWWINDOW";
+    case WM_WINDOWPOSCHANGING:
+        return L"WM_WINDOWPOSCHANGING";
+    case WM_WINDOWPOSCHANGED:
+        return L"WM_WINDOWPOSCHANGED";
+    case WM_NCACTIVATE:
+        return L"WM_NCACTIVATE";
+    case WM_ACTIVATEAPP:
+        return L"WM_ACTIVATEAPP";
+    case WM_GETOBJECT:
+        return L"WM_GETOBJECT";
+    case WM_SETCURSOR:
+        return L"WM_SETCURSOR";
+
+    default:
+    {
+        static wchar_t buffer[32];
+        swprintf(buffer, ARRAYSIZE(buffer), L"0x%04X", uMsg);
+        return buffer;
+    }
+    }
+}
+
+std::wstring GetClassNameString(HWND hWnd)
+{
+    if (!hWnd)
+    {
+        LOG_ERROR(L"GetClassNameString called with NULL hWnd");
+        return std::wstring();
+    }
+
+    WCHAR szClassName[64];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
+    {
+        LOG_ERROR(L"GetClassName failed for HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+        return std::wstring();
+    }
+    return std::wstring(szClassName);
+}
+
 // Extracts version info from module resources
 VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 {
@@ -1672,21 +1925,76 @@ HWND FindDesktopWindow()
     return hChildWnd;
 }
 
-// Checks if window is primary or secondary taskbar
-bool IsTaskbarWindow(HWND hWnd)
+// Finds XamlExplorerHostIslandWindow in current process
+HWND FindTaskSwitchingWindow()
 {
     LOG_TRACE();
 
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)))
+    struct ENUM_WINDOWS_PARAM
     {
-        return _wcsicmp(szClassName, L"Shell_TrayWnd") == 0 || _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
-    }
-    else
+        HWND hWnd;
+    };
+
+    ENUM_WINDOWS_PARAM param = {nullptr};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
+        {
+            ENUM_WINDOWS_PARAM &param = *(ENUM_WINDOWS_PARAM *)lParam;
+
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId())
+                return TRUE;
+
+            if (GetClassNameString(hWnd) == L"XamlExplorerHostIslandWindow")
+            {
+                param.hWnd = hWnd;
+                return FALSE;
+            }
+
+            return TRUE;
+        },
+        (LPARAM)&param);
+
+    return param.hWnd;
+}
+
+// Checks if window is Shell_TrayWnd class
+bool IsPrimaryTaskbarWindow(HWND hWnd)
+{
+    LOG_TRACE();
+    return GetClassNameString(hWnd) == L"Shell_TrayWnd";
+}
+
+// Checks if window is Shell_SecondaryTrayWnd class
+bool IsSecondaryTaskbarWindow(HWND hWnd)
+{
+    LOG_TRACE();
+    return GetClassNameString(hWnd) == L"Shell_SecondaryTrayWnd";
+}
+
+// Checks if window is either Shell_TrayWnd or Shell_SecondaryTrayWnd class
+bool IsTaskbarWindow(HWND hWnd)
+{
+    LOG_TRACE();
+    return IsPrimaryTaskbarWindow(hWnd) || IsSecondaryTaskbarWindow(hWnd);
+}
+
+// Returns a new set containing only valid window handles from the input set
+std::unordered_set<HWND> KeepOnlyValidWindows(const std::unordered_set<HWND> &windows)
+{
+    std::unordered_set<HWND> validWindows;
+    for (HWND hWnd : windows)
     {
-        LOG_ERROR(L"Failed to get window class name");
-        return false;
+        if (IsWindow(hWnd))
+        {
+            validWindows.insert(hWnd);
+        }
+        else
+        {
+            LOG_DEBUG(L"Filtered out invalid window handle: %p", hWnd);
+        }
     }
+    return validWindows;
 }
 
 #pragma endregion // hooks_and_win32_methods
@@ -2201,6 +2509,7 @@ void SendCtrlAltTabKeypress()
 
     LOG_INFO(L"Sending Ctrl+Alt+Tab keypress");
     SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
+    suppressMouseInput = true;
 }
 
 // Sends Win+Tab keypress
@@ -3266,6 +3575,44 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         return 0;
     }
 
+    // // Handle hooked clicks forwarded from LowLevelMouseProc
+    // if (uMsg == g_hookedClickMsg)
+    // {
+    //     LOG_INFO(L"Received hooked click message: original msg=0x%X, coords=(%d,%d)",
+    //              wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+
+    //     // Decode original message type from wParam
+    //     WPARAM originalMsg = wParam;
+
+    //     // Convert screen coordinates to client coordinates
+    //     POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    //     ScreenToClient(hWnd, &pt);
+    //     LPARAM clientCoords = MAKELPARAM(pt.x, pt.y);
+
+    //     // Process as if it were the original message
+    //     // Reconstruct wParam based on message type
+    //     WPARAM originalWParam = 0;
+    //     if (originalMsg == WM_LBUTTONDOWN || originalMsg == WM_LBUTTONDBLCLK)
+    //     {
+    //         originalWParam = MK_LBUTTON;
+    //     }
+    //     else if (originalMsg == WM_RBUTTONDOWN || originalMsg == WM_RBUTTONDBLCLK)
+    //     {
+    //         originalWParam = MK_RBUTTON;
+    //     }
+    //     else if (originalMsg == WM_MBUTTONDOWN || originalMsg == WM_MBUTTONDBLCLK)
+    //     {
+    //         originalWParam = MK_MBUTTON;
+    //     }
+
+    //     // Continue processing with the decoded message
+    //     uMsg = originalMsg;
+    //     wParam = originalWParam;
+    //     lParam = clientCoords;
+
+    //     // Fall through to normal processing below
+    // }
+
     // printMessage(uMsg);
 
     bool suppress = false;
@@ -3343,6 +3690,37 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     return result;
 }
 
+std::tuple<WPARAM, LPARAM> TranslateMouseMessageFromMouseHookWin11(const WPARAM &wParam, const LPARAM &lParam)
+{
+    // Map the message type to pointer button flags
+    // Pointer flags are in HIWORD, pointer ID is in LOWORD
+    UINT pointerFlags = 0;
+    if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONDBLCLK)
+    {
+        pointerFlags = POINTER_MESSAGE_FLAG_FIRSTBUTTON;
+    }
+    else if (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONDBLCLK)
+    {
+        pointerFlags = POINTER_MESSAGE_FLAG_SECONDBUTTON;
+    }
+    else if (wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONDBLCLK)
+    {
+        pointerFlags = POINTER_MESSAGE_FLAG_THIRDBUTTON;
+    }
+    else
+    {
+        LOG_ERROR(L"Unsupported original mouse message 0x%X in TranslateMouseMessageFromMouseHookWin11", wParam);
+        std::make_tuple(wParam, lParam);
+    }
+
+    // Continue as WM_POINTERDOWN
+    // wParam = MAKEWPARAM(pointerID, flags) - flags in HIWORD, pointer ID in LOWORD
+    UINT pointerId = 0; // Use 0 as pointer ID
+    WPARAM translated_wParam = MAKEWPARAM(pointerId, pointerFlags);
+    LPARAM translated_lParam = lParam; // lParam stays as screen coordinates for WM_POINTERDOWN
+    return std::make_tuple(translated_wParam, translated_lParam);
+}
+
 // Proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -3351,6 +3729,19 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         LOG_INFO("Received uninit COM API message, uninitializing COM API");
         g_comAPI.Uninit();
         return 0;
+    }
+
+    // Handle hooked clicks forwarded from LowLevelMouseProc
+    if (uMsg == g_hookedClickMsg)
+    {
+        LOG_DEBUG(L"Received hooked click message in InputSite: original msg=0x%X, coords=(%d,%d)",
+                  wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        std::tie(wParam, lParam) = TranslateMouseMessageFromMouseHookWin11(wParam, lParam);
+    }
+
+    if (!g_hMouseHook)
+    {
+        InstallMouseHook(); // Install mouse hook from taskbar thread (has message loop)
     }
 
     // printMessage(uMsg);
@@ -3560,7 +3951,21 @@ void Wh_ModAfterInit()
     }
     else
     {
-        LOG_ERROR(L"Failed to find Shell_TrayWnd class. Something changed under the hood! Taskbar might not get hooked properly!");
+        LOG_ERROR(L"Failed to find Shell_TrayWnd class. Taskbar might not get hooked properly!");
+    }
+
+    // TODO: Win11 only
+    if (GetClassInfo(GetModuleHandle(NULL), L"XamlExplorerHostIslandWindow", &wndclass)) // if XamlExplorerHostIslandWindow class is defined
+    {
+        g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
+        if (!g_hTaskSwitchingWnd)
+        {
+            LOG_ERROR(L"Failed to find TaskSwitching window. Task switching windows might not get hooked properly!");
+        }
+    }
+    else
+    {
+        LOG_ERROR(L"Failed to find XamlExplorerHostIslandWindow class. TaskbarSwitching windows might not get hooked properly!");
     }
 }
 
@@ -3590,6 +3995,8 @@ void Wh_ModUninit()
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
+
+    UninstallMouseHook();
 }
 
 #pragma endregion // windhawk_mod_functions
