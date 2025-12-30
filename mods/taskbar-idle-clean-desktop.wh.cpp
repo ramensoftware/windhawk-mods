@@ -1,12 +1,12 @@
 // ==WindhawkMod==
-// @id              taskbar-idle-clean-desktop.wh.cpp
+// @id              taskbar-idle-clean-desktop
 // @name            Clean Desktop on Idle
 // @description     Hides the taskbar and minimizes all windows after a period of user inactivity. Includes smart detection.
 // @version         1.7
 // @author          Breiq
 // @include         explorer.exe
 // @architecture    x86-64
-// @github          https://github.com/BREIQ/
+// @github          https://github.com/BREIQ
 // @donateUrl       https://www.paypal.com/paypalme/breiq
 // ==/WindhawkMod==
 
