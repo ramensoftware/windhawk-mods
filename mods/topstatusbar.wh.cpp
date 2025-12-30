@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              topstatusbar
 // @name            Top Status Bar
-// @description     Minimalist status bar. v1.3.0: Windows 11 DWM Native logic for improved app detection. Migrated from GDI+ to Direct2D.
-// @version         1.3.0
+// @description     Minimalist status bar. v1.7.0: Decoupled animation (33ms) from detection (100ms) for maximum efficiency and smoothness.
+// @version         1.7.0
 // @author          AlexanderOG
 // @github          https://github.com/alexandr0g
 // @homepage        https://github.com/alexandr0g/windhawk-mod-topstatusbar
@@ -25,12 +25,13 @@
 #define BTN_H 24
 #define HIDE_OFFSET -55.0f
 #define MOUSE_TRIGGER_ZONE 2
+#define MARGIN_SIDE 8
 #define MARGIN_TOP 4.0f
 #define TIMER_ID_MAIN 1
 #define TIMER_ID_CLOCK 2
-#define REFRESH_RATE 30 
+#define REFRESH_RATE 33 // Pulso base de 30 FPS para fluidez visual
 
-// --- ESTRUCTURAS DE DATOS ---
+// --- ESTRUCTURAS ---
 struct SystemCache {
     BOOL darkMode, transparency;
     D2D1_COLOR_F textColor, hoverColor, pressColor, clockBgCol, grayLowCol;
@@ -71,7 +72,7 @@ struct SystemCache {
     }
 } g_cache;
 
-struct BarInstance {
+struct TopBarInstance {
     HWND hwndBar, hwndTrigger;
     HMONITOR hMonitor;
     RECT monitorRect;
@@ -82,6 +83,12 @@ struct BarInstance {
     HWND cachedHWND = NULL;
     float currentY = MARGIN_TOP, targetY = MARGIN_TOP;
     bool isAnimating = false, mouseTracked = false;
+    
+    // Variables de control de frecuencia
+    int detectionCounter = 0;
+    bool isLocked = false;
+    bool shouldDodge = false;
+    bool isTriggerVisible = true;
 
     void ReleaseBrushes() {
         if (pTextBr) pTextBr->Release(); pTextBr = NULL;
@@ -106,47 +113,28 @@ struct BarInstance {
 ID2D1Factory* g_pD2DFactory = NULL;
 IDWriteFactory* g_pDWriteFactory = NULL;
 IWICImagingFactory* g_pWICFactory = NULL;
-std::vector<BarInstance*> g_bars;
+std::vector<TopBarInstance*> g_bars;
 
-// --- UTILIDADES ---
-
+// --- UTILS ---
 bool IsProtocolAvailable(LPCWSTR protocol) {
-    WCHAR dummy[256];
-    DWORD size = 256;
-    // Verifica si hay una aplicación asociada al protocolo sin abrir la tienda
-    HRESULT hr = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE, protocol, NULL, dummy, &size);
-    return SUCCEEDED(hr);
+    WCHAR dummy[256]; DWORD size = 256;
+    return SUCCEEDED(AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE, protocol, NULL, dummy, &size));
 }
 
 void SendKeys(std::vector<WORD> keys) {
     std::vector<INPUT> in;
-    for (auto k : keys) { 
-        INPUT i = {0}; 
-        i.type = INPUT_KEYBOARD;
-        i.ki.wVk = k; 
-        in.push_back(i); 
-    }
-    for (auto it = keys.rbegin(); it != keys.rend(); ++it) { 
-        INPUT i = {0}; 
-        i.type = INPUT_KEYBOARD;
-        i.ki.wVk = *it; 
-        i.ki.dwFlags = KEYEVENTF_KEYUP; 
-        in.push_back(i); 
-    }
+    for (auto k : keys) { INPUT i = {INPUT_KEYBOARD, {}}; i.ki.wVk = k; in.push_back(i); }
+    for (auto it = keys.rbegin(); it != keys.rend(); ++it) { INPUT i = {INPUT_KEYBOARD, {}}; i.ki.wVk = *it; i.ki.dwFlags = KEYEVENTF_KEYUP; in.push_back(i); }
     SendInput((UINT)in.size(), in.data(), sizeof(INPUT));
 }
 
 void DrawLightning(ID2D1HwndRenderTarget* pRT, float x, float y, float h, ID2D1Brush* pBr) {
-    ID2D1PathGeometry* pG; g_pD2DFactory->CreatePathGeometry(&pG);
-    ID2D1GeometrySink* pS; pG->Open(&pS);
+    ID2D1PathGeometry* pG; g_pD2DFactory->CreatePathGeometry(&pG); ID2D1GeometrySink* pS; pG->Open(&pS);
     float w = h * 0.6f;
     pS->BeginFigure({x + w*0.6f, y}, D2D1_FIGURE_BEGIN_FILLED);
-    pS->AddLine({x, y + h*0.55f});
-    pS->AddLine({x + w*0.45f, y + h*0.55f});
-    pS->AddLine({x + w*0.25f, y + h});
-    pS->AddLine({x + w, y + h*0.4f});
-    pS->AddLine({x + w*0.55f, y + h*0.4f});
-    pS->AddLine({x + w*0.8f, y});
+    pS->AddLine({x, y + h*0.55f}); pS->AddLine({x + w*0.45f, y + h*0.55f});
+    pS->AddLine({x + w*0.25f, y + h}); pS->AddLine({x + w, y + h*0.4f});
+    pS->AddLine({x + w*0.55f, y + h*0.4f}); pS->AddLine({x + w*0.8f, y});
     pS->EndFigure(D2D1_FIGURE_END_CLOSED); pS->Close();
     pRT->FillGeometry(pG, pBr); pS->Release(); pG->Release();
 }
@@ -168,7 +156,16 @@ ID2D1Bitmap* CreateSymbolicIcon(ID2D1HwndRenderTarget* pRT, HICON hI) {
     pConv->Release(); pWic->Release(); return pD2D;
 }
 
-void CreateBarResources(BarInstance* b) {
+void SyncDwmStyle(HWND h) {
+    DwmSetWindowAttribute(h, 20, &g_cache.darkMode, sizeof(BOOL));
+    DWORD bdr = g_cache.transparency ? 3 : 4; DwmSetWindowAttribute(h, 38, &bdr, sizeof(bdr));
+    DWORD crn = 2; DwmSetWindowAttribute(h, 33, &crn, sizeof(crn));
+    COLORREF bord = 0xFFFFFFFF, cap = 0xFFFFFFFE; DwmSetWindowAttribute(h, 34, &bord, sizeof(bord)); DwmSetWindowAttribute(h, 35, &cap, sizeof(cap));
+    MARGINS m = {-1,-1,-1,-1}; DwmExtendFrameIntoClientArea(h, &m);
+    SetWindowPos(h, NULL, 0,0,0,0, SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+}
+
+void CreateBarResources(TopBarInstance* b) {
     if (!b->pRT) {
         RECT rc; GetClientRect(b->hwndBar, &rc);
         g_pD2DFactory->CreateHwndRenderTarget(D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT, {DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED}), D2D1::HwndRenderTargetProperties(b->hwndBar, D2D1::SizeU(rc.right, rc.bottom)), &b->pRT);
@@ -193,14 +190,14 @@ void CreateBarResources(BarInstance* b) {
     }
 }
 
-// --- GESTOR DE MÓDULOS ---
+// --- GESTOR MÓDULOS ---
 struct ModuleManager {
     int hoveredID = -1, pressedID = -1;
     struct ModRect { int id; D2D1_RECT_F rect; };
     std::vector<ModRect> rects;
 
     void DrawClockPiece(ID2D1HwndRenderTarget* pRT, D2D1_RECT_F r, ID2D1Brush* pBr, bool left, float rad) {
-        ID2D1PathGeometry* pP; g_pD2DFactory->CreatePathGeometry(&pP); ID2D1GeometrySink* pS; pP->Open(&pS);
+        ID2D1PathGeometry* pG; g_pD2DFactory->CreatePathGeometry(&pG); ID2D1GeometrySink* pS; pG->Open(&pS);
         if (left) {
             pS->BeginFigure({r.right, r.top}, D2D1_FIGURE_BEGIN_FILLED);
             pS->AddLine({r.left + rad, r.top}); pS->AddArc(D2D1::ArcSegment({r.left, r.top + rad}, {rad, rad}, 0, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
@@ -212,10 +209,10 @@ struct ModuleManager {
             pS->AddLine({r.right, r.bottom - rad}); pS->AddArc(D2D1::ArcSegment({r.right - rad, r.bottom}, {rad, rad}, 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
             pS->AddLine({r.left, r.bottom});
         }
-        pS->EndFigure(D2D1_FIGURE_END_CLOSED); pS->Close(); pRT->FillGeometry(pP, pBr); pS->Release(); pP->Release();
+        pS->EndFigure(D2D1_FIGURE_END_CLOSED); pS->Close(); pRT->FillGeometry(pG, pBr); pS->Release(); pG->Release();
     }
 
-    void Render(BarInstance* b, HWND fg) {
+    void Render(TopBarInstance* b, HWND fg) {
         rects.clear();
         ID2D1HwndRenderTarget* pRT = b->pRT; float s = GetDpiForWindow(b->hwndBar) / 96.0f;
         float barW = (float)(b->monitorRect.right - b->monitorRect.left - 16);
@@ -226,7 +223,6 @@ struct ModuleManager {
             else if (hoveredID == id) pRT->FillRoundedRectangle(D2D1::RoundedRect(r, 6*s, 6*s), b->pHoverBr);
         };
 
-        // IZQUIERDA
         float nX = 4.0f * s;
         auto AddL = [&](float w, const wchar_t* lbl, int id, bool icn = true) {
             float fw = w * s; D2D1_RECT_F r = D2D1::RectF(nX, offY, nX + fw, offY + btnH); DrawBtnBase(r, id);
@@ -256,7 +252,6 @@ struct ModuleManager {
         pRT->DrawText(szT, (UINT32)wcslen(szT), b->pTitleFmt, {rT.left + 28*s, rT.top, rT.right - 4*s, rT.bottom}, b->pTextBr);
         rects.push_back({17, rT});
 
-        // DERECHA
         float pX = barW - 4.0f * s;
         auto AddR = [&](float w, const wchar_t* lbl, int id, bool icn = true) {
             pX -= w*s; D2D1_RECT_F r = D2D1::RectF(pX, offY, pX+w*s, offY+btnH); DrawBtnBase(r, id);
@@ -265,21 +260,14 @@ struct ModuleManager {
         };
 
         AddR(36, L"\uE7E8", 108); AddR(36, L"\uE7E7", 100);
-        
-        // MÓDULO BATERÍA
         pX -= 76*s; D2D1_RECT_F rB = D2D1::RectF(pX, offY, pX+76*s, offY+btnH); DrawBtnBase(rB, 107);
         SYSTEM_POWER_STATUS sps; GetSystemPowerStatus(&sps); int pct = std::min((int)sps.BatteryLifePercent, 100);
         float bStart = rB.left + 5*s;
-        if (sps.ACLineStatus == 1) { 
-            DrawLightning(pRT, bStart, offY + 6.5f*s, 11*s, b->pTextBr);
-            bStart += 12*s;
-        }
+        if (sps.ACLineStatus == 1) { DrawLightning(pRT, bStart, offY + 6.5f*s, 11*s, b->pTextBr); bStart += 12*s; }
         float bw = 19*s, bh = 9*s, bx = bStart, by = rB.top + (btnH-bh)/2.0f;
         pRT->DrawRectangle(D2D1::RectF(bx, by, bx+bw, by+bh), b->pTextBr, 1.2f); 
         pRT->FillRectangle(D2D1::RectF(bx+bw, by+2.5f*s, bx+bw+2*s, by+bh-2.5f*s), b->pTextBr); 
-        float fillW = (bw) * pct / 100.0f; 
-        if (fillW > 0) pRT->FillRectangle(D2D1::RectF(bx, by, bx+fillW, by+bh), b->pTextBr);
-        
+        float fillW = (bw) * pct / 100.0f; if (fillW > 0) pRT->FillRectangle(D2D1::RectF(bx, by, bx+fillW, by+bh), b->pTextBr);
         WCHAR pS[8]; wsprintfW(pS, L"%d%%", pct);
         pRT->DrawText(pS, (UINT32)wcslen(pS), b->pSmallFmt, D2D1::RectF(bx+bw+2*s, offY, rB.right, offY+btnH), b->pTextBr);
         rects.push_back({107, rB}); pX -= 4*s;
@@ -288,12 +276,15 @@ struct ModuleManager {
         AddR(34, L"\uE702", 105); AddR(34, L"\uE706", 104);
         AddR(200, g_cache.resourceString, 102, false);
 
-        // CENTRO
         float mid = barW / 2.0f;
         WCHAR tT[16], tD[64]; GetDateFormatW(LOCALE_USER_DEFAULT, 0, NULL, L"dd MMM yyyy", tD, 64); GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS, NULL, NULL, tT, 16);
         D2D1_RECT_F rd = D2D1::RectF(mid-96*s, offY, mid-1*s, offY+btnH), rt = D2D1::RectF(mid+1*s, offY, mid+65*s, offY+btnH);
-        DrawClockPiece(pRT, rd, b->pClockBgBr, true, 8*s); DrawClockPiece(pRT, rt, b->pClockBgBr, false, 8*s);
-        if(hoveredID == 0) DrawClockPiece(pRT, rd, b->pHoverBr, true, 8*s); if(hoveredID == 1) DrawClockPiece(pRT, rt, b->pHoverBr, false, 8*s);
+        auto DrawCenterPiece = [&](D2D1_RECT_F r, int id, bool left) {
+            DrawClockPiece(pRT, r, b->pClockBgBr, left, 8*s);
+            if (pressedID == id) DrawClockPiece(pRT, r, b->pPressBr, left, 8*s);
+            else if (hoveredID == id) DrawClockPiece(pRT, r, b->pHoverBr, left, 8*s);
+        };
+        DrawCenterPiece(rd, 0, true); DrawCenterPiece(rt, 1, false);
         pRT->DrawText(tD, (UINT32)wcslen(tD), b->pTextFmt, rd, b->pTextBr); pRT->DrawText(tT, (UINT32)wcslen(tT), b->pTextFmt, rt, b->pTextBr);
         rects.push_back({0, rd}); rects.push_back({1, rt});
     }
@@ -304,15 +295,11 @@ struct ModuleManager {
         if (m == WM_LBUTTONDOWN) pressedID = hoveredID;
         if (m == WM_LBUTTONUP && pressedID != -1 && pressedID == hoveredID) {
             switch(pressedID) {
-                case 0: // Clic en Fecha (Calendario)
-                    if (IsProtocolAvailable(L"outlookcal:")) ShellExecuteW(NULL, L"open", L"outlookcal:", NULL, NULL, SW_SHOWNORMAL);
-                    else if (IsProtocolAvailable(L"ms-calendar:")) ShellExecuteW(NULL, L"open", L"ms-calendar:", NULL, NULL, SW_SHOWNORMAL);
-                    else ShellExecuteW(NULL, L"open", L"https://calendar.google.com", NULL, NULL, SW_SHOWNORMAL);
-                    break;
-                case 1: // Clic en Hora (Reloj)
-                    if (IsProtocolAvailable(L"ms-clock:")) ShellExecuteW(NULL, L"open", L"ms-clock:", NULL, NULL, SW_SHOWNORMAL);
-                    else ShellExecuteW(NULL, L"open", L"ms-settings:dateandtime", NULL, NULL, SW_SHOWNORMAL);
-                    break;
+                case 0: if (IsProtocolAvailable(L"outlookcal:")) ShellExecuteW(NULL, L"open", L"outlookcal:", NULL, NULL, SW_SHOWNORMAL);
+                        else if (IsProtocolAvailable(L"ms-calendar:")) ShellExecuteW(NULL, L"open", L"ms-calendar:", NULL, NULL, SW_SHOWNORMAL);
+                        else ShellExecuteW(NULL, L"open", L"https://calendar.google.com", NULL, NULL, SW_SHOWNORMAL); break;
+                case 1: if (IsProtocolAvailable(L"ms-clock:")) ShellExecuteW(NULL, L"open", L"ms-clock:", NULL, NULL, SW_SHOWNORMAL);
+                        else ShellExecuteW(NULL, L"open", L"ms-settings:dateandtime", NULL, NULL, SW_SHOWNORMAL); break;
                 case 10: SendKeys({VK_LWIN}); break;
                 case 11: SendKeys({VK_LWIN, VK_TAB}); break;
                 case 12: SendKeys({VK_CONTROL, VK_MENU, VK_TAB}); break;
@@ -333,68 +320,83 @@ struct ModuleManager {
     }
 } g_modManager;
 
-// --- LÓGICA DE VENTANA ---
-void SyncDwmStyle(HWND h) {
-    DwmSetWindowAttribute(h, 20, &g_cache.darkMode, sizeof(BOOL));
-    DWORD bdr = g_cache.transparency ? 3 : 4; DwmSetWindowAttribute(h, 38, &bdr, sizeof(bdr));
-    DWORD crn = 2; DwmSetWindowAttribute(h, 33, &crn, sizeof(crn));
-    COLORREF bord = 0xFFFFFFFF, cap = 0xFFFFFFFE; DwmSetWindowAttribute(h, 34, &bord, sizeof(bord)); DwmSetWindowAttribute(h, 35, &cap, sizeof(cap));
-    MARGINS m = {-1,-1,-1,-1}; DwmExtendFrameIntoClientArea(h, &m);
-    SetWindowPos(h, NULL, 0,0,0,0, SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
-}
+// --- LÓGICA AlexanderOG v1.7.0 (Sincronización híbrida) ---
 
-void UpdateBarState(BarInstance* b) {
-    HWND fg = GetForegroundWindow(); 
+void UpdateState(TopBarInstance* b) {
     POINT pt; GetCursorPos(&pt);
-    LONG style = GetWindowLong(fg, GWL_STYLE);
-    bool isAppWindow = (style & WS_CAPTION) == WS_CAPTION;
-    bool isMaximized = (style & WS_MAXIMIZE) == WS_MAXIMIZE; 
-    WCHAR cls[128]; GetClassNameW(fg, cls, 128);
-    bool isSystem = (wcscmp(cls, L"WorkerW") == 0 || wcscmp(cls, L"Progman") == 0 || 
-                     wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"#32768") == 0 ||
-                     wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 || 
-                     wcscmp(cls, L"NotifyIconOverflowWindow") == 0);
-
-    bool mouseIn = (pt.x >= (float)b->monitorRect.left && pt.x <= (float)b->monitorRect.right);
-    bool over = (b->currentY <= HIDE_OFFSET + 5) ? 
-                (mouseIn && pt.y >= (float)b->monitorRect.top && pt.y <= (float)b->monitorRect.top + MOUSE_TRIGGER_ZONE) : 
-                (mouseIn && pt.y >= (float)b->monitorRect.top && pt.y <= (float)b->monitorRect.top + BAR_HEIGHT + 4);
     
-    bool dodge = false;
-    if (!isSystem && fg && IsWindow(fg) && MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) == b->hMonitor) {
-        if (isMaximized) dodge = true;
-        else if (isAppWindow) {
-            RECT rc; GetWindowRect(fg, &rc); 
-            if (rc.top <= (b->monitorRect.top + BAR_HEIGHT + 4)) dodge = true;
+    // FRECUENCIA 1: Lógica de Detección (100ms / 1 de cada 3 pulsos)
+    b->detectionCounter++;
+    if (b->detectionCounter % 3 == 0) {
+        HWND fgRaw = GetForegroundWindow();
+        HWND fg = GetAncestor(fgRaw, GA_ROOT);
+        HWND owner = GetWindow(fg, GW_OWNER);
+        if (owner) fg = owner;
+
+        QUERY_USER_NOTIFICATION_STATE qstate; SHQueryUserNotificationState(&qstate);
+        bool isFS = (qstate == QUNS_RUNNING_D3D_FULL_SCREEN || qstate == QUNS_PRESENTATION_MODE || qstate == QUNS_BUSY);
+
+        WCHAR cls[128]; GetClassNameW(fg, cls, 128);
+        LONG exStyle = GetWindowLong(fg, GWL_EXSTYLE);
+
+        bool isDesktop = (wcscmp(cls, L"WorkerW") == 0 || wcscmp(cls, L"Progman") == 0);
+        bool isTaskbar = (wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+        bool isShellUI = (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 || 
+                          wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0 || 
+                          wcscmp(cls, L"NotifyIconOverflowWindow") == 0 ||   
+                          wcscmp(cls, L"ControlCenterWindow") == 0 ||
+                          wcscmp(cls, L"Taskbar.FlyoutWindow") == 0);
+
+        b->isLocked = isFS;
+        b->shouldDodge = false;
+
+        if (isFS) { b->shouldDodge = true; }
+        else if (isDesktop || isTaskbar || isShellUI) { b->shouldDodge = false; }
+        else if (fg && IsWindow(fg) && !(exStyle & WS_EX_TOOLWINDOW)) {
+            int cloaked = 0; DwmGetWindowAttribute(fg, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+            if (!cloaked && MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) == b->hMonitor) {
+                RECT rc;
+                if (SUCCEEDED(DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, &rc, sizeof(rc)))) {
+                    if (IsZoomed(fg) || rc.top <= (b->monitorRect.top + BAR_HEIGHT)) b->shouldDodge = true;
+                }
+            }
         }
     }
-    b->targetY = (over || !dodge) ? MARGIN_TOP : HIDE_OFFSET;
+
+    // FRECUENCIA 2: Lógica de Animación (33ms / Todos los pulsos)
+    bool mouseIn = (pt.x >= (float)b->monitorRect.left && pt.x <= (float)b->monitorRect.right);
+    bool over = false;
+
+    if (b->isLocked) {
+        if (b->isTriggerVisible) { ShowWindow(b->hwndTrigger, SW_HIDE); b->isTriggerVisible = false; }
+    } else {
+        if (!b->isTriggerVisible) { ShowWindow(b->hwndTrigger, SW_SHOWNA); b->isTriggerVisible = true; }
+        over = (b->currentY <= HIDE_OFFSET + 5) ? 
+               (mouseIn && pt.y >= (float)b->monitorRect.top && pt.y <= (float)b->monitorRect.top + MOUSE_TRIGGER_ZONE) : 
+               (mouseIn && pt.y >= (float)b->monitorRect.top && pt.y <= (float)b->monitorRect.top + BAR_HEIGHT + 4);
+    }
+
+    b->targetY = (over || !b->shouldDodge) ? MARGIN_TOP : HIDE_OFFSET;
     float diff = b->targetY - b->currentY;
     if (abs(diff) > 0.05f) {
         b->isAnimating = true;
-        if (abs(diff) < 0.8f) b->currentY = b->targetY;
-        else b->currentY += (diff * 0.25f);
+        if (abs(diff) < 0.8f) b->currentY = b->targetY; else b->currentY += (diff * 0.25f);
         SetWindowPos(b->hwndBar, HWND_TOPMOST, b->monitorRect.left+8, b->monitorRect.top+(int)b->currentY, (b->monitorRect.right-b->monitorRect.left)-16, BAR_HEIGHT, SWP_NOACTIVATE|SWP_ASYNCWINDOWPOS|SWP_NOCOPYBITS);
     } else if (b->isAnimating) { b->isAnimating = false; b->mouseTracked = false; InvalidateRect(b->hwndBar, NULL, FALSE); }
 }
 
 LRESULT CALLBACK BarWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
-    BarInstance* b = (BarInstance*)GetWindowLongPtr(h, GWLP_USERDATA);
+    TopBarInstance* b = (TopBarInstance*)GetWindowLongPtr(h, GWLP_USERDATA);
     switch (m) {
-        case WM_NCACTIVATE: return DefWindowProc(h, m, TRUE, l);
         case WM_MOUSEMOVE: {
             if (!b->mouseTracked) { TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme); b->mouseTracked = true; }
             POINT p = {(int)(short)LOWORD(l), (int)(short)HIWORD(l)}; g_modManager.HandleMouse(h, m, p); return 0;
         }
         case WM_MOUSELEAVE: { b->mouseTracked = false; g_modManager.hoveredID = -1; g_modManager.pressedID = -1; InvalidateRect(h, NULL, FALSE); return 0; }
         case WM_LBUTTONDOWN: case WM_LBUTTONUP: { POINT p = {(int)(short)LOWORD(l), (int)(short)HIWORD(l)}; g_modManager.HandleMouse(h, m, p); return 0; }
-        case WM_TIMER: if (w == TIMER_ID_MAIN && b) UpdateBarState(b); if (w == TIMER_ID_CLOCK) { g_cache.UpdateResources(); if(b && !b->isAnimating) InvalidateRect(h, NULL, FALSE); } return 0;
-        case WM_PAINT: {
-            if (!b) return 0;
-            if (b->isAnimating) { ValidateRect(h, NULL); return 0; }
-            CreateBarResources(b); b->pRT->BeginDraw(); b->pRT->Clear(D2D1::ColorF(0,0,0,0));
-            g_modManager.Render(b, GetForegroundWindow()); b->pRT->EndDraw(); ValidateRect(h, NULL); return 0;
-        }
+        case WM_TIMER: if (w == TIMER_ID_MAIN && b) UpdateState(b); if (w == TIMER_ID_CLOCK) { g_cache.UpdateResources(); if(b && !b->isAnimating) InvalidateRect(h, NULL, FALSE); } return 0;
+        case WM_PAINT: { if (!b) return 0; if (b->isAnimating) { ValidateRect(h, NULL); return 0; }
+            CreateBarResources(b); b->pRT->BeginDraw(); b->pRT->Clear(D2D1::ColorF(0,0,0,0)); g_modManager.Render(b, GetForegroundWindow()); b->pRT->EndDraw(); ValidateRect(h, NULL); return 0; }
         case WM_SETTINGCHANGE: g_cache.Update(); if(b) { b->ReleaseBrushes(); SyncDwmStyle(h); InvalidateRect(h, NULL, FALSE); } return 0;
         case WM_DESTROY: if (b) b->Release(); return 0;
     } return DefWindowProc(h, m, w, l);
@@ -402,14 +404,13 @@ LRESULT CALLBACK BarWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
 BOOL CALLBACK MonitorEnum(HMONITOR hM, HDC, LPRECT, LPARAM) {
     MONITORINFO mi = {sizeof(mi)}; GetMonitorInfo(hM, &mi);
-    BarInstance* b = new BarInstance(); b->hMonitor = hM; b->monitorRect = mi.rcMonitor;
+    TopBarInstance* b = new TopBarInstance(); b->hMonitor = hM; b->monitorRect = mi.rcMonitor;
     b->hwndTrigger = CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_TRANSPARENT, L"TopT", NULL, WS_POPUP|WS_VISIBLE, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right-mi.rcMonitor.left, MOUSE_TRIGGER_ZONE, NULL, NULL, GetModuleHandle(NULL), NULL);
     b->hwndBar = CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED, L"TopC", NULL, WS_POPUP|WS_VISIBLE, mi.rcMonitor.left+8, mi.rcMonitor.top+(int)MARGIN_TOP, (mi.rcMonitor.right-mi.rcMonitor.left)-16, BAR_HEIGHT, NULL, NULL, GetModuleHandle(NULL), NULL);
     if (b->hwndBar) {
         SetWindowLongPtr(b->hwndBar, GWLP_USERDATA, (LONG_PTR)b); SetLayeredWindowAttributes(b->hwndBar, 0, 255, LWA_ALPHA);
         SyncDwmStyle(b->hwndBar); SetTimer(b->hwndBar, TIMER_ID_MAIN, REFRESH_RATE, NULL); SetTimer(b->hwndBar, TIMER_ID_CLOCK, 1000, NULL); g_bars.push_back(b);
-    }
-    return TRUE;
+    } return TRUE;
 }
 
 BOOL Wh_ModInit() {
