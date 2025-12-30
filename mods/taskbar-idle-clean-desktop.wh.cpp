@@ -2,7 +2,7 @@
 // @id              taskbar-idle-clean-desktop
 // @name            Clean Desktop on Idle
 // @description     Hides the taskbar and minimizes all windows after a period of user inactivity. Includes smart detection.
-// @version         1.8
+// @version         1.9
 // @author          Breiq
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lshell32
@@ -30,12 +30,6 @@ Automatically hides the taskbar and minimizes windows when idle.
 
 #include <windows.h>
 #include <shellapi.h>
-#include <atomic>
-
-std::atomic<bool> g_running{false};
-std::atomic<bool> g_oculto{false};
-std::atomic<int> g_minutosConfig{5};
-HANDLE g_thread = nullptr;
 
 // Función de detección de pantalla completa/juegos
 bool IsUserBusy() {
@@ -63,66 +57,46 @@ void SetTaskbarHidden(bool hide) {
 void MinimizeAll() {
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (tray) {
-        // Comando para minimizar todas las ventanas
         PostMessageW(tray, WM_COMMAND, 419, 0);
     }
 }
 
-DWORD WINAPI IdleThread(LPVOID) {
-    while (g_running) {
+// PASO 1 y 2: En "Mods as tools", el punto de entrada es Wh_Main
+// No se usa Wh_ModInit ni hilos separados (CreateThread), porque el proceso ya es tuyo.
+void Wh_Main() {
+    int minutosConfig = Wh_GetIntSetting(L"minutesIdle");
+    bool oculto = false;
+
+    // Reset inicial
+    SetTaskbarHidden(false);
+
+    // Bucle principal del proceso dedicado
+    while (TRUE) {
+        // Actualizar configuración en cada ciclo o podrías usar una notificación
+        minutosConfig = Wh_GetIntSetting(L"minutesIdle");
+
         LASTINPUTINFO lii;
         lii.cbSize = sizeof(LASTINPUTINFO);
 
         if (GetLastInputInfo(&lii)) {
             ULONGLONG idleMs = GetTickCount64() - lii.dwTime;
-            ULONGLONG limitMs = (ULONGLONG)g_minutosConfig * 60 * 1000;
+            ULONGLONG limitMs = (ULONGLONG)minutosConfig * 60 * 1000;
 
-            if (idleMs >= limitMs && !g_oculto) {
+            if (idleMs >= limitMs && !oculto) {
                 if (!IsUserBusy()) {
                     SetTaskbarHidden(true);
                     MinimizeAll();
-                    g_oculto = true;
-                    Wh_Log(L"Inactividad detectada: Limpiando escritorio.");
+                    oculto = true;
                 }
             } 
-            else if (idleMs < limitMs && g_oculto) {
+            else if (idleMs < limitMs && oculto) {
                 SetTaskbarHidden(false);
-                g_oculto = false;
-                Wh_Log(L"Actividad detectada: Restaurando barra.");
+                oculto = false;
             }
         }
-        Sleep(1000); 
+        Sleep(1000);
     }
-    return 0;
 }
 
-BOOL Wh_ModInit() {
-    g_minutosConfig = Wh_GetIntSetting(L"minutesIdle");
-
-    // RESET DE ARRANQUE: Forzamos la barra visible al iniciar el mod
-    SetTaskbarHidden(false);
-    g_oculto = false;
-
-    g_running = true;
-    g_thread = CreateThread(nullptr, 0, IdleThread, nullptr, 0, nullptr);
-    
-    Wh_Log(L"Mod iniciado como proceso dedicado y barra reseteada.");
-    return g_thread != nullptr;
-}
-
-void Wh_ModSettingsChanged() {
-    g_minutosConfig = Wh_GetIntSetting(L"minutesIdle");
-    Wh_Log(L"Configuración actualizada.");
-}
-
-void Wh_ModUninit() {
-    g_running = false;
-    if (g_thread) {
-        WaitForSingleObject(g_thread, 1000);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
-    }
-    // Restauramos la barra al desactivar el mod
-    SetTaskbarHidden(false);
-    Wh_Log(L"Mod detenido.");
-}
+// Al ser un proceso dedicado, ya no necesitamos Wh_ModUninit para limpiar el hilo, 
+// pero Windhawk matará el proceso cuando se desactive el mod.
