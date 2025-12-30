@@ -27,12 +27,9 @@ Only the explorer.exe instance that owns the taskbar will activate this mod.
 
 #include <windhawk_utils.h>
 
-#define MUTEX_NAME L"Local\\TaskbarThumbnailHoverFix"
-
 static HANDLE g_workerThread = nullptr;
-static HANDLE g_mutex = nullptr;
 static HWINEVENTHOOK g_winEventHook = nullptr;
-static volatile bool g_running = false;
+static DWORD g_taskbarThreadId = 0;
 
 void TriggerHoverRefresh() {
     INPUT inputs[2] = {};
@@ -64,6 +61,12 @@ bool IsCursorOverThumbnail() {
         root = hwnd;
     }
 
+    // Check if window belongs to taskbar thread
+    DWORD windowThreadId = GetWindowThreadProcessId(root, nullptr);
+    if (windowThreadId != g_taskbarThreadId) {
+        return false;
+    }
+
     WCHAR className[256];
     if (GetClassName(root, className, ARRAYSIZE(className))) {
         if (wcsstr(className, L"Xaml") != nullptr) {
@@ -92,55 +95,40 @@ void CALLBACK WinEventProc(
     }
 }
 
-bool IsMutexOwned() {
-    HANDLE testMutex = OpenMutexW(SYNCHRONIZE, FALSE, MUTEX_NAME);
-    if (testMutex) {
-        CloseHandle(testMutex);
-        return true;
-    }
-    return false;
+// Find taskbar window in current process (other programs may use Shell_TrayWnd class)
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            wchar_t className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                wcscmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
 }
 
 DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
-    DWORD ourPid = GetCurrentProcessId();
-
-    // Wait for taskbar to appear and verify ownership
-    while (g_running) {
-        if (IsMutexOwned()) {
-            Wh_Log(L"Another instance already active");
-            return 0;
-        }
-
-        HWND taskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (taskbarWnd) {
-            DWORD taskbarPid = 0;
-            GetWindowThreadProcessId(taskbarWnd, &taskbarPid);
-
-            if (taskbarPid != ourPid) {
-                Wh_Log(L"Taskbar owned by different process");
-                return 0;
-            }
-
-            break;
-        }
-
-        Sleep(500);
-    }
-
-    if (!g_running) {
+    // Check if this process owns the taskbar
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!taskbarWnd) {
+        Wh_Log(L"Taskbar not found in current process");
         return 0;
     }
 
-    // Acquire mutex
-    g_mutex = CreateMutexW(nullptr, TRUE, MUTEX_NAME);
-    if (!g_mutex) {
-        Wh_Log(L"Failed to create mutex: %u", GetLastError());
-        return 0;
-    }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
-        Wh_Log(L"Another instance claimed mutex first");
+    // Get taskbar thread ID
+    g_taskbarThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
+    if (!g_taskbarThreadId) {
+        Wh_Log(L"Failed to get taskbar thread ID");
         return 0;
     }
 
@@ -155,28 +143,27 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
 
     if (!g_winEventHook) {
         Wh_Log(L"Failed to install WinEventHook: %u", GetLastError());
-        ReleaseMutex(g_mutex);
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
         return 1;
     }
 
     Wh_Log(L"Hook installed successfully");
 
     // Message pump for WinEventHook
+    BOOL bRet;
     MSG msg;
-    while (g_running) {
-        DWORD result = MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
-        if (result == WAIT_OBJECT_0) {
-            while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                if (msg.message == WM_QUIT) {
-                    g_running = false;
-                    break;
-                }
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
+    while ((bRet = GetMessage(&msg, NULL, 0, 0)) != 0) {
+        if (bRet == -1) {
+            msg.wParam = 0;
+            break;
         }
+
+        if (msg.hwnd == NULL && msg.message == WM_APP) {
+            PostQuitMessage(0);
+            continue;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
     if (g_winEventHook) {
@@ -190,7 +177,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing");
 
-    g_running = true;
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
 
     if (!g_workerThread) {
@@ -202,17 +188,10 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    g_running = false;
-
     if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 2000);
+        PostThreadMessage(GetThreadId(g_workerThread), WM_APP, 0, 0);
+        WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
-    }
-
-    if (g_mutex) {
-        ReleaseMutex(g_mutex);
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
     }
 }
