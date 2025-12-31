@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-31T10:27:24.000Z</updated>
+    <updated>2025-12-31T16:30:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Selection Rectangle Color 1.0]]></title>
+        <id>https://windhawk.net/mods/classic-selection-rectangle-color#2eedad131a99cf1c3ca9cc9716df2769856ab749</id>
+        <link href="https://windhawk.net/mods/classic-selection-rectangle-color"/>
+        <updated>2025-12-31T16:30:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicselectionrectanglecolor">Classic Selection Rectangle Color</h1>
+<p>Makes the selection rectangle background color like it was in Windows XP. Does not work with DirectUI list view.</p>
+<p><strong>Before</strong></p>
+<p><img src="https://i.imgur.com/5ImD1u6.png" alt="Before" /></p>
+<p><strong>After</strong></p>
+<p><img src="https://i.imgur.com/oAGCiJr.png" alt="After" /></p>]]></content>
+        <author>
+            <name>xalejandro</name>
+            <uri>https://github.com/tetawaves</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[IDA Aliased Fonts 1.0]]></title>
         <id>https://windhawk.net/mods/ida-aliased-fonts#1ba21e9903b765c5b53426afacdf895e5a926ef7</id>
@@ -338,20 +354,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Customize Windows notifications placement 1.2]]></title>
-        <id>https://windhawk.net/mods/notifications-placement#1748376b3e34dedbc9f685ce8c5804ba5aec7bd7</id>
-        <link href="https://windhawk.net/mods/notifications-placement"/>
-        <updated>2025-12-20T21:39:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to control the notification appearance animation direction.</li>
-<li>Fixed the notification content being cut off if the DPI of the target monitor is different than the primary monitor.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

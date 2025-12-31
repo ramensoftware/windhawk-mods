@@ -1183,6 +1183,34 @@
                 "version": "1.0.1"
             }
         },
+        "classic-selection-rectangle-color": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767198608000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767198608000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "xalejandro",
+                "compilerOptions": "-lversion",
+                "description": "XP styled selection rectangle color",
+                "github": "https://github.com/tetawaves",
+                "include": [
+                    "*"
+                ],
+                "name": "Classic Selection Rectangle Color",
+                "version": "1.0"
+            }
+        },
         "classic-start-menu-folders-icon": {
             "details": {
                 "defaultSorting": 1434,
