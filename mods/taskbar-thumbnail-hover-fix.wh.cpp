@@ -28,8 +28,26 @@ Only the explorer.exe instance that owns the taskbar will activate this mod.
 #include <windhawk_utils.h>
 
 static HANDLE g_workerThread = nullptr;
-static HWINEVENTHOOK g_winEventHook = nullptr;
 static DWORD g_taskbarThreadId = 0;
+
+// Find the thread ID that created Shell_TrayWnd across all processes
+DWORD FindTaskbarThreadId() {
+    DWORD taskbarThreadId = 0;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            wchar_t className[32];
+            if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                wcscmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<DWORD*>(lParam) = GetWindowThreadProcessId(hWnd, nullptr);
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&taskbarThreadId));
+
+    return taskbarThreadId;
+}
 
 void TriggerHoverRefresh() {
     INPUT inputs[2] = {};
@@ -61,6 +79,41 @@ bool IsCursorOverThumbnail() {
         root = hwnd;
     }
 
+    // First time we encounter a window destruction, verify we're in the taskbar owner process
+    if (g_taskbarThreadId == 0) {
+        DWORD taskbarThreadId = FindTaskbarThreadId();
+        if (taskbarThreadId == 0) {
+            // Shell_TrayWnd doesn't exist yet, skip for now and try again next time
+            return false;
+        }
+        
+        // Check if the taskbar thread belongs to our process
+        DWORD currentProcessId = GetCurrentProcessId();
+        HANDLE hThread = OpenThread(THREAD_QUERY_INFORMATION, FALSE, taskbarThreadId);
+        if (!hThread) {
+            Wh_Log(L"Shell_TrayWnd exists but not in our process - terminating mod");
+            if (g_workerThread) {
+                PostThreadMessage(GetThreadId(g_workerThread), WM_APP, 0, 0);
+            }
+            return false;
+        }
+        
+        DWORD threadProcessId = GetProcessIdOfThread(hThread);
+        CloseHandle(hThread);
+        
+        if (threadProcessId != currentProcessId) {
+            Wh_Log(L"Shell_TrayWnd exists but not in our process - terminating mod");
+            if (g_workerThread) {
+                PostThreadMessage(GetThreadId(g_workerThread), WM_APP, 0, 0);
+            }
+            return false;
+        }
+        
+        // Cache the taskbar thread ID
+        g_taskbarThreadId = taskbarThreadId;
+        Wh_Log(L"Taskbar ownership verified - thread ID: %u", g_taskbarThreadId);
+    }
+    
     // Check if window belongs to taskbar thread
     DWORD windowThreadId = GetWindowThreadProcessId(root, nullptr);
     if (windowThreadId != g_taskbarThreadId) {
@@ -95,45 +148,9 @@ void CALLBACK WinEventProc(
     }
 }
 
-// Find taskbar window in current process (other programs may use Shell_TrayWnd class)
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND hTaskbarWnd = nullptr;
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD dwProcessId;
-            wchar_t className[32];
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
-                dwProcessId == GetCurrentProcessId() &&
-                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
-                wcscmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd));
-
-    return hTaskbarWnd;
-}
-
 DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
-    // Check if this process owns the taskbar
-    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!taskbarWnd) {
-        Wh_Log(L"Taskbar not found in current process");
-        return 0;
-    }
-
-    // Get taskbar thread ID
-    g_taskbarThreadId = GetWindowThreadProcessId(taskbarWnd, nullptr);
-    if (!g_taskbarThreadId) {
-        Wh_Log(L"Failed to get taskbar thread ID");
-        return 0;
-    }
-
     // Install WinEvent hook
-    g_winEventHook = SetWinEventHook(
+    HWINEVENTHOOK winEventHook = SetWinEventHook(
         EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY,
         nullptr,
         WinEventProc,
@@ -141,7 +158,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
         WINEVENT_OUTOFCONTEXT
     );
 
-    if (!g_winEventHook) {
+    if (!winEventHook) {
         Wh_Log(L"Failed to install WinEventHook: %u", GetLastError());
         return 1;
     }
@@ -166,9 +183,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID lpParam) {
         DispatchMessage(&msg);
     }
 
-    if (g_winEventHook) {
-        UnhookWinEvent(g_winEventHook);
-        g_winEventHook = nullptr;
+    if (winEventHook) {
+        UnhookWinEvent(winEventHook);
     }
 
     return 0;
