@@ -5421,7 +5421,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1767175787000,
+                "updated": 1767211929000,
                 "users": 0
             },
             "metadata": {
@@ -5437,7 +5437,7 @@
                 ],
                 "license": "GPL-3.0",
                 "name": "Restore Explorer \"Exploring\" Mode",
-                "version": "1.0.0"
+                "version": "1.0.1"
             }
         },
         "ribbon-caption-icon-fix": {

@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-31T16:30:08.000Z</updated>
+    <updated>2025-12-31T20:12:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.1]]></title>
+        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#798fa042e8f36906125f320199412b3027c075ac</id>
+        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
+        <updated>2025-12-31T20:12:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix large Explorer window icon using the small image</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Selection Rectangle Color 1.0]]></title>
         <id>https://windhawk.net/mods/classic-selection-rectangle-color#2eedad131a99cf1c3ca9cc9716df2769856ab749</id>
@@ -341,19 +354,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.3.4]]></title>
-        <id>https://windhawk.net/mods/dark-menus#334e79cea972761014dadc9cc0b5118eb18d0521</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2025-12-21T08:23:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed: Outline in right click menu (https://github.com/MGGSK/DarkMenus/issues/17)</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>
