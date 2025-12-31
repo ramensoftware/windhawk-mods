@@ -2,7 +2,7 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.0.0
+// @version         1.0.1
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -237,7 +237,7 @@ void CShellBrowser__SetIcon_hook(void *pThis)
         pbe->SetIcon(hIcon, FALSE);
         hIcon = (HICON)LoadImageW(
             hShell32, MAKEINTRESOURCEW(IDI_STFLDRPROP), IMAGE_ICON,
-            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+            GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
         pbe->SetIcon(hIcon, TRUE);
     }
     else
