@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-31T10:09:47.000Z</updated>
+    <updated>2025-12-31T10:17:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Hover Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-hover-fix#ae05ec0cd9178a432718d142c31dcdaa3c4a0aba</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-hover-fix"/>
+        <updated>2025-12-31T10:17:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarthumbnailhoverfix">Taskbar Thumbnail Hover Fix</h1>
+<p>When you close a window via the taskbar thumbnail close button and another
+window slides into its position, Windows doesn't register that the mouse is
+now hovering over the new thumbnail until you move the cursor.</p>
+<p>This mod fixes that issue by sending a minimal mouse movement after a window
+closes while the cursor is over the thumbnail preview area.</p>
+<p>Only the explorer.exe instance that owns the taskbar will activate this mod.</p>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.0]]></title>
         <id>https://windhawk.net/mods/restore-explorer-exploring-mode#eb29cd883ae3c6f30829d3f3e2dae0c433d5ce64</id>
@@ -337,17 +354,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorer Drag/Drop 1.1]]></title>
-        <id>https://windhawk.net/mods/classic-explorer-dragdrop#707610439857bfad6e1a83486ee595bf0f67f540</id>
-        <link href="https://windhawk.net/mods/classic-explorer-dragdrop"/>
-        <updated>2025-12-20T20:36:53.000Z</updated>
-        <content type="html"><![CDATA[<p>Refactor and bug fixes</p>]]></content>
-        <author>
-            <name>Isabella Lulamoon (kawapure)</name>
-            <uri>https://github.com/kawapure</uri>
         </author>
     </entry>
 </feed>

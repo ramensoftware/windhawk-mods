@@ -6830,6 +6830,37 @@
                 "version": "1.2.4"
             }
         },
+        "taskbar-thumbnail-hover-fix": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767176232000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767176232000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Alchemy",
+                "description": "Fixes hover state not updating when closing a thumbnail and another slides into position",
+                "github": "https://github.com/alchemyyy",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "MIT",
+                "name": "Taskbar Thumbnail Hover Fix",
+                "version": "1.0"
+            }
+        },
         "taskbar-thumbnail-reorder": {
             "details": {
                 "defaultSorting": 140820,
