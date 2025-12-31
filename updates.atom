@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-30T19:20:51.000Z</updated>
+    <updated>2025-12-31T10:09:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.0]]></title>
+        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#eb29cd883ae3c6f30829d3f3e2dae0c433d5ce64</id>
+        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
+        <updated>2025-12-31T10:09:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="restoreexplorerexploringmode">Restore Explorer "Exploring" Mode</h1>
+<p>Before Windows 7, File Explorer acted different in many ways:</p>
+<ul>
+<li>Windows + E shortcut opens with the folder tree open by default.</li>
+<li>Directly invoking <code>explorer.exe</code> opens a different folder than the Windows + E shortcut.</li>
+<li>File Explorer windows have a different icon when the folder tree is open (Windows XP and before)</li>
+<li>The title of File Explorer windows is prefixed with "Exploring - " when it is opened via the explore
+verb (Windows + E shortcut, directly invoking <code>explorer.exe</code>)</li>
+</ul>
+<p>This mod addresses all of these.</p>
+<p><strong>Preview</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/aubymori/images/refs/heads/main/restore-explorer-exploring-mode-preview.png" alt="Preview" /></p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Dock Animation 1.7]]></title>
         <id>https://windhawk.net/mods/taskbar-dock-animation#e02578f8da0413422830baa6b5c0934d6446b1f4</id>
@@ -326,20 +348,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.6]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#de4cfd5ea752b671743eb99a1dd9abeba39e413f</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2025-12-20T17:03:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Implemented basic support for taskbar auto-hide.</li>
-<li>Fixed incorrect Alt+Tab window position with multiple monitors in some cases.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

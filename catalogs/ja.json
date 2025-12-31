@@ -5351,6 +5351,38 @@
                 "version": "1.0.2"
             }
         },
+        "restore-explorer-exploring-mode": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767175787000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767175787000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "compilerOptions": "-lshlwapi -lpropsys",
+                "description": "Reintroduces File Explorer's \"Exploring\" mode from Windows XP and before",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "GPL-3.0",
+                "name": "Restore Explorer \"Exploring\" Mode",
+                "version": "1.0.0"
+            }
+        },
         "ribbon-caption-icon-fix": {
             "details": {
                 "defaultSorting": 3000,
