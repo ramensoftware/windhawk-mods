@@ -3712,6 +3712,35 @@
                 "version": "1.0.3"
             }
         },
+        "ida-aliased-fonts": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767176844000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767176844000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Isabella Lulamoon (kawapure)",
+                "description": "Fix up aliased font rendering in IDA 9.x.",
+                "github": "https://github.com/kawapure",
+                "homepage": "https://kawapure.github.io/",
+                "include": [
+                    "ida.exe"
+                ],
+                "name": "IDA Aliased Fonts",
+                "twitter": "https://twitter.com/kawaipure",
+                "version": "1.0"
+            }
+        },
         "ignore-focus-loss": {
             "details": {
                 "defaultSorting": 9864,
