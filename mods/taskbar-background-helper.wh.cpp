@@ -2,7 +2,7 @@
 // @id              taskbar-background-helper
 // @name            Taskbar Background Helper
 // @description     Sets the taskbar background for the transparent parts, always or only when there's a maximized window, designed to be used with Windows 11 Taskbar Styler
-// @version         1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -113,7 +113,9 @@ a workaround.
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 enum class BackgroundStyle {
     blur,
@@ -136,8 +138,6 @@ struct {
 
 std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread;
-std::unordered_set<HMONITOR> g_pendingMonitors;
-UINT_PTR g_pendingMonitorsTimer;
 
 #if __cplusplus < 202302L
 // Missing in older MinGW headers.
@@ -153,6 +153,12 @@ WINOLEAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE Cookie);
 #ifndef EVENT_OBJECT_UNCLOAKED
 #define EVENT_OBJECT_UNCLOAKED 0x8018
 #endif
+
+// Aero Peek events (Show desktop preview).
+// Reference:
+// https://github.com/TranslucentTB/TranslucentTB/blob/9cfa9eeed5c264f33c8f005512a6649124a69845/Common/undoc/winuser.hpp
+static constexpr DWORD EVENT_SYSTEM_PEEKSTART = 0x0021;
+static constexpr DWORD EVENT_SYSTEM_PEEKEND = 0x0022;
 
 enum WINDOWCOMPOSITIONATTRIB {
     WCA_UNDEFINED = 0,
@@ -231,6 +237,11 @@ using SetWindowCompositionAttribute_t =
     BOOL(WINAPI*)(HWND hWnd, const WINDOWCOMPOSITIONATTRIBDATA* pAttrData);
 SetWindowCompositionAttribute_t SetWindowCompositionAttribute_Original;
 
+// Private API for window band (z-order band).
+// https://blog.adeltax.com/window-z-order-in-windows-10/
+using GetWindowBand_t = BOOL(WINAPI*)(HWND hWnd, PDWORD pdwBand);
+GetWindowBand_t pGetWindowBand;
+
 // https://stackoverflow.com/a/51336913
 bool IsWindowsDarkModeEnabled() {
     constexpr WCHAR kSubKeyPath[] =
@@ -256,7 +267,169 @@ bool IsWindowCloaked(HWND hwnd) {
            isCloaked;
 }
 
+class MonitorState {
+   public:
+    struct MonitorChange {
+        HMONITOR monitor;
+        bool hasMaximized;
+    };
+
+    // Update window state, returns list of monitors whose state changed
+    std::vector<MonitorChange> UpdateWindowState(HWND hWnd,
+                                                 bool isActive,
+                                                 HMONITOR monitor) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return UpdateWindowStateInternal(hWnd, isActive, monitor);
+    }
+
+    // Remove window entirely (on destruction)
+    std::vector<MonitorChange> RemoveWindow(HWND hWnd) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return UpdateWindowStateInternal(hWnd, false, nullptr);
+    }
+
+    bool HasMaximizedWindow(HMONITOR monitor) const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto it = m_maximizedWindowsPerMonitor.find(monitor);
+        return it != m_maximizedWindowsPerMonitor.end() && !it->second.empty();
+    }
+
+    void Clear() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_maximizedWindowsPerMonitor.clear();
+        m_windowMonitor.clear();
+    }
+
+    // For atomic repopulation - clears state, updates cached values, and
+    // returns a lock guard. Use AddWindowWhileLocked() to add windows while
+    // holding the lock.
+    [[nodiscard]] std::unique_lock<std::mutex> BeginRepopulate(
+        DWORD dwTaskbarThreadId,
+        HWND hShellWindow) {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_maximizedWindowsPerMonitor.clear();
+        m_windowMonitor.clear();
+        m_taskbarThreadId = dwTaskbarThreadId;
+        m_shellWindow = hShellWindow;
+        return lock;
+    }
+
+    // Add a window while holding the lock from BeginRepopulate()
+    void AddWindowWhileLocked(HWND hWnd, HMONITOR monitor) {
+        m_windowMonitor[hWnd] = monitor;
+        m_maximizedWindowsPerMonitor[monitor].insert(hWnd);
+    }
+
+    // Get cached values for event processing (single lock acquisition)
+    void GetCachedState(DWORD* pdwTaskbarThreadId, HWND* phShellWindow) const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        *pdwTaskbarThreadId = m_taskbarThreadId;
+        *phShellWindow = m_shellWindow;
+    }
+
+   private:
+    std::vector<MonitorChange> UpdateWindowStateInternal(HWND hWnd,
+                                                         bool isActive,
+                                                         HMONITOR monitor) {
+        std::vector<MonitorChange> changes;
+
+        auto windowIt = m_windowMonitor.find(hWnd);
+        HMONITOR oldMonitor =
+            (windowIt != m_windowMonitor.end()) ? windowIt->second : nullptr;
+
+        bool wasTracked = (oldMonitor != nullptr);
+        bool sameMonitor = (oldMonitor == monitor);
+
+        if (isActive) {
+            // Window should be tracked
+            if (!wasTracked) {
+                // New window to track
+                m_windowMonitor[hWnd] = monitor;
+                auto& newSet = m_maximizedWindowsPerMonitor[monitor];
+                newSet.insert(hWnd);
+                if (newSet.size() == 1) {
+                    changes.push_back({monitor, true});
+                }
+            } else if (!sameMonitor) {
+                // Window moved to different monitor
+                auto& oldSet = m_maximizedWindowsPerMonitor[oldMonitor];
+                oldSet.erase(hWnd);
+                if (oldSet.empty()) {
+                    changes.push_back({oldMonitor, false});
+                }
+
+                m_windowMonitor[hWnd] = monitor;
+                auto& newSet = m_maximizedWindowsPerMonitor[monitor];
+                newSet.insert(hWnd);
+                if (newSet.size() == 1) {
+                    changes.push_back({monitor, true});
+                }
+            }
+            // else: same monitor, still active - no change
+        } else {
+            // Window should not be tracked
+            if (wasTracked) {
+                auto& oldSet = m_maximizedWindowsPerMonitor[oldMonitor];
+                oldSet.erase(hWnd);
+                m_windowMonitor.erase(hWnd);
+                if (oldSet.empty()) {
+                    changes.push_back({oldMonitor, false});
+                }
+            }
+        }
+
+        return changes;
+    }
+
+    mutable std::mutex m_mutex;
+
+    // Track which windows are "active" (maximized/fullscreen) per monitor
+    std::unordered_map<HMONITOR, std::unordered_set<HWND>>
+        m_maximizedWindowsPerMonitor;
+
+    // Track each window's current monitor (for handling monitor changes)
+    std::unordered_map<HWND, HMONITOR> m_windowMonitor;
+
+    // Cached values to avoid expensive lookups in event processing
+    DWORD m_taskbarThreadId = 0;
+    HWND m_shellWindow = nullptr;
+};
+
+MonitorState g_monitorState;
+
+// Encapsulates special view modes (Peek, Multitasking View) that should
+// temporarily reset taskbar style to non-maximized.
+class SpecialViewModeState {
+   public:
+    enum class Mode { None, Peek, MultitaskingView };
+
+    // Returns true if any special view mode is active.
+    bool IsActive() const { return m_mode != Mode::None; }
+
+    // Sets the special view mode. Returns true if mode changed.
+    bool SetMode(Mode mode) {
+        Mode expected = Mode::None;
+        return m_mode.compare_exchange_strong(expected, mode);
+    }
+
+    // Clears a specific mode (only if it's the current mode).
+    // Returns true if mode was cleared.
+    bool ClearMode(Mode mode) {
+        Mode expected = mode;
+        return m_mode.compare_exchange_strong(expected, Mode::None);
+    }
+
+    void Reset() { m_mode = Mode::None; }
+
+   private:
+    std::atomic<Mode> m_mode{Mode::None};
+};
+
+SpecialViewModeState g_specialViewMode;
+
 BOOL SetTaskbarStyle(HWND hWnd) {
+    Wh_Log(L">");
+
     TaskbarStyle& style =
         (g_settings.darkModeStyle && IsWindowsDarkModeEnabled())
             ? *g_settings.darkModeStyle
@@ -303,6 +476,8 @@ BOOL SetTaskbarStyle(HWND hWnd) {
 }
 
 BOOL ResetTaskbarStyle(HWND hWnd) {
+    Wh_Log(L">");
+
     // TrayUI::_OnThemeChanged
     // TrayUI::OnShellModeChanged
     ACCENTPOLICY policy = {ACCENT_ENABLE_TRANSPARENTGRADIENT, 0x13, 0, 0};
@@ -379,6 +554,99 @@ HWND FindTaskbarWindows(std::unordered_set<HWND>* secondaryTaskbarWindows) {
     return hTaskbarWnd;
 }
 
+HWND GetTaskbarForMonitor(HMONITOR monitor) {
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd) {
+        return nullptr;
+    }
+
+    HMONITOR taskbarMonitor = (HMONITOR)GetProp(hTaskbarWnd, L"TaskbarMonitor");
+    if (taskbarMonitor == monitor) {
+        return hTaskbarWnd;
+    }
+
+    DWORD taskbarThreadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
+    if (!taskbarThreadId) {
+        return nullptr;
+    }
+
+    HWND hResultWnd = nullptr;
+
+    auto enumWindowsProc = [monitor, &hResultWnd](HWND hWnd) -> BOOL {
+        WCHAR szClassName[32];
+        if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+            return TRUE;
+        }
+
+        if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") != 0) {
+            return TRUE;
+        }
+
+        HMONITOR taskbarMonitor = (HMONITOR)GetProp(hWnd, L"TaskbarMonitor");
+        if (taskbarMonitor != monitor) {
+            return TRUE;
+        }
+
+        hResultWnd = hWnd;
+        return FALSE;
+    };
+
+    EnumThreadWindows(
+        taskbarThreadId,
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
+            return proc(hWnd);
+        },
+        reinterpret_cast<LPARAM>(&enumWindowsProc));
+
+    return hResultWnd;
+}
+
+void UpdateTaskbarStyleForMonitor(HMONITOR monitor, bool hasMaximized) {
+    HWND hMMTaskbarWnd = GetTaskbarForMonitor(monitor);
+    if (!hMMTaskbarWnd) {
+        return;
+    }
+
+    if (hasMaximized) {
+        SetTaskbarStyle(hMMTaskbarWnd);
+    } else {
+        ResetTaskbarStyle(hMMTaskbarWnd);
+    }
+}
+
+BOOL ApplyTaskbarStyleForWindow(HWND hWnd) {
+    if (!g_settings.onlyWhenMaximized) {
+        return SetTaskbarStyle(hWnd);
+    }
+
+    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (g_specialViewMode.IsActive() ||
+        !g_monitorState.HasMaximizedWindow(monitor)) {
+        return ResetTaskbarStyle(hWnd);
+    }
+
+    return SetTaskbarStyle(hWnd);
+}
+
+void EnsureMonitoringThreadStarted();
+
+// Updates all taskbars based on current special view mode and maximized state.
+void UpdateAllTaskbarStyles() {
+    std::unordered_set<HWND> secondaryTaskbarWindows;
+    HWND hTaskbarWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
+    if (!hTaskbarWnd) {
+        return;
+    }
+
+    EnsureMonitoringThreadStarted();
+    ApplyTaskbarStyleForWindow(hTaskbarWnd);
+
+    for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
+        ApplyTaskbarStyleForWindow(hSecondaryWnd);
+    }
+}
+
 // https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
 std::wstring GetWindowAppId(HWND hWnd) {
     // {c8900b66-a973-584b-8cae-355b7f55341b}
@@ -442,6 +710,63 @@ std::wstring GetWindowAppId(HWND hWnd) {
     return result;
 }
 
+std::wstring GetProcessFileName(DWORD dwProcessId) {
+    HANDLE hProcess =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
+    if (!hProcess) {
+        return std::wstring{};
+    }
+
+    WCHAR processPath[MAX_PATH];
+
+    DWORD dwSize = ARRAYSIZE(processPath);
+    if (!QueryFullProcessImageName(hProcess, 0, processPath, &dwSize)) {
+        CloseHandle(hProcess);
+        return std::wstring{};
+    }
+
+    CloseHandle(hProcess);
+
+    PCWSTR processFileNameUpper = wcsrchr(processPath, L'\\');
+    if (!processFileNameUpper) {
+        return std::wstring{};
+    }
+
+    processFileNameUpper++;
+    return processFileNameUpper;
+}
+
+std::wstring GetWindowLogInfo(HWND hWnd) {
+    DWORD dwProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &dwProcessId);
+    std::wstring processName = GetProcessFileName(dwProcessId);
+
+    WCHAR className[256];
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+        wcscpy_s(className, L"<unknown>");
+    }
+
+    WCHAR windowName[256];
+    if (!GetWindowText(hWnd, windowName, ARRAYSIZE(windowName))) {
+        windowName[0] = L'\0';
+    }
+
+    LONG style = GetWindowLong(hWnd, GWL_STYLE);
+    LONG exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+
+    RECT rect{};
+    GetWindowRect(hWnd, &rect);
+
+    WCHAR buffer[1024];
+    swprintf_s(buffer,
+               L"window %08X: PID=%u, process=%s, class=%s, name=%s, "
+               L"style=0x%08X, exStyle=0x%08X, rect={%d,%d,%d,%d}",
+               (DWORD)(DWORD_PTR)hWnd, dwProcessId, processName.c_str(),
+               className, windowName, style, exStyle, rect.left, rect.top,
+               rect.right, rect.bottom);
+    return buffer;
+}
+
 bool IsWindowExcluded(HWND hWnd) {
     if (g_settings.excludedPrograms.empty()) {
         return false;
@@ -502,70 +827,102 @@ bool IsWindowExcluded(HWND hWnd) {
     return false;
 }
 
-bool DoesMonitorHaveMaximizedWindow(HMONITOR monitor, HWND hMMTaskbarWnd) {
-    bool hasMaximizedWindow = false;
+// Detects Win+Tab / Task View window.
+// Uses ZBID_IMMERSIVE_APPCHROME band, MultitaskingView thread description, and
+// taskbar process.
+bool IsMultitaskingViewWindow(HWND hWnd) {
+    // Must be in the current process (explorer.exe).
+    DWORD dwProcessId = 0;
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, &dwProcessId);
+    if (!dwThreadId || dwProcessId != GetCurrentProcessId()) {
+        return false;
+    }
+
+    // Check window band - must be ZBID_IMMERSIVE_APPCHROME (5).
+    if (pGetWindowBand) {
+        DWORD band = 0;
+        if (!pGetWindowBand(hWnd, &band) || band != 5) {
+            return false;
+        }
+    }
+
+    // Check thread description for "MultitaskingView".
+    HANDLE hThread =
+        OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, dwThreadId);
+    if (!hThread) {
+        return false;
+    }
+
+    bool isMultitaskingView = false;
+    PWSTR description = nullptr;
+    if (SUCCEEDED(GetThreadDescription(hThread, &description)) && description) {
+        isMultitaskingView = wcscmp(description, L"MultitaskingView") == 0;
+        LocalFree(description);
+    }
+
+    CloseHandle(hThread);
+    return isMultitaskingView;
+}
+
+bool IsWindowActiveCandidate(HWND hWnd,
+                             DWORD dwTaskbarThreadId,
+                             HWND hShellWindow) {
+    DWORD dwProcessId = 0;
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId) == dwTaskbarThreadId) {
+        return false;
+    }
+
+    if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd) ||
+        (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
+        return false;
+    }
+
+    if (hWnd == hShellWindow || GetProp(hWnd, L"DesktopWindow")) {
+        return false;
+    }
+
+    // Exclude DWM aero peek window.
+    WCHAR className[256];
+    if (GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"LivePreview") == 0) {
+        return false;
+    }
+
+    // Check this after the other checks, as it's the most expensive one.
+    if (IsWindowExcluded(hWnd)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool IsWindowMaximizedOrFullscreen(HWND hWnd, HMONITOR monitor) {
+    WINDOWPLACEMENT wp{
+        .length = sizeof(WINDOWPLACEMENT),
+    };
+    if (GetWindowPlacement(hWnd, &wp) && wp.showCmd == SW_SHOWMAXIMIZED) {
+        Wh_Log(L"Maximized %s for monitor %p", GetWindowLogInfo(hWnd).c_str(),
+               monitor);
+        return true;
+    }
 
     MONITORINFO monitorInfo{
         .cbSize = sizeof(monitorInfo),
     };
     GetMonitorInfo(monitor, &monitorInfo);
 
-    HWND hShellWindow = GetShellWindow();
+    RECT windowRect{};
+    DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
+                          sizeof(windowRect));
 
-    DWORD dwTaskbarThreadId = GetWindowThreadProcessId(hMMTaskbarWnd, nullptr);
+    if (EqualRect(&windowRect, &monitorInfo.rcMonitor)) {
+        // Spans across the whole monitor, e.g. Win+Tab view.
+        Wh_Log(L"Fullscreen %s for monitor %p", GetWindowLogInfo(hWnd).c_str(),
+               monitor);
+        return true;
+    }
 
-    auto enumWindowsProc = [&](HWND hWnd) -> BOOL {
-        if (GetWindowThreadProcessId(hWnd, nullptr) == dwTaskbarThreadId) {
-            return TRUE;
-        }
-
-        if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) != monitor) {
-            return TRUE;
-        }
-
-        if (!IsWindowVisible(hWnd) || IsWindowCloaked(hWnd) || IsIconic(hWnd) ||
-            (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
-            return TRUE;
-        }
-
-        if (hWnd == hShellWindow || GetProp(hWnd, L"DesktopWindow")) {
-            return TRUE;
-        }
-
-        // Check this after the other checks, as it's the most expensive one.
-        if (IsWindowExcluded(hWnd)) {
-            return TRUE;
-        }
-
-        WINDOWPLACEMENT wp{
-            .length = sizeof(WINDOWPLACEMENT),
-        };
-        if (GetWindowPlacement(hWnd, &wp) && wp.showCmd == SW_SHOWMAXIMIZED) {
-            hasMaximizedWindow = true;
-            return FALSE;
-        }
-
-        RECT windowRect{};
-        DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &windowRect,
-                              sizeof(windowRect));
-
-        if (EqualRect(&windowRect, &monitorInfo.rcMonitor)) {
-            // Spans across the whole monitor, e.g. Win+Tab view.
-            hasMaximizedWindow = true;
-            return FALSE;
-        }
-
-        return TRUE;
-    };
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
-            return proc(hWnd);
-        },
-        reinterpret_cast<LPARAM>(&enumWindowsProc));
-
-    return hasMaximizedWindow;
+    return false;
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
@@ -585,61 +942,125 @@ void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook,
         return;
     }
 
-    Wh_Log(L"> %08X", (DWORD)(ULONG_PTR)hWnd);
+    auto logEvent = [event, hWnd] {
+        Wh_Log(
+            L"Event %s for %s",
+            [](DWORD event) -> PCWSTR {
+                switch (event) {
+                    case EVENT_OBJECT_CREATE:
+                        return L"OBJECT_CREATE";
+                    case EVENT_OBJECT_DESTROY:
+                        return L"OBJECT_DESTROY";
+                    case EVENT_OBJECT_SHOW:
+                        return L"OBJECT_SHOW";
+                    case EVENT_OBJECT_HIDE:
+                        return L"OBJECT_HIDE";
+                    case EVENT_OBJECT_LOCATIONCHANGE:
+                        return L"OBJECT_LOCATIONCHANGE";
+                    case EVENT_OBJECT_CLOAKED:
+                        return L"OBJECT_CLOAKED";
+                    case EVENT_OBJECT_UNCLOAKED:
+                        return L"OBJECT_UNCLOAKED";
+                    default:
+                        return L"UNKNOWN";
+                }
+            }(event),
+            GetWindowLogInfo(hWnd).c_str());
+    };
 
-    HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    g_pendingMonitors.insert(monitor);
+    // Check for Multitasking View (Win+Tab) window state changes.
+    if (IsMultitaskingViewWindow(hWnd)) {
+        bool entering = event == EVENT_OBJECT_SHOW ||
+                        event == EVENT_OBJECT_UNCLOAKED ||
+                        event == EVENT_OBJECT_CREATE;
+        bool leaving = event == EVENT_OBJECT_HIDE ||
+                       event == EVENT_OBJECT_CLOAKED ||
+                       event == EVENT_OBJECT_DESTROY;
 
-    if (g_pendingMonitorsTimer) {
+        if (entering) {
+            Wh_Log(L"MultitaskingView entering");
+            if (g_specialViewMode.SetMode(
+                    SpecialViewModeState::Mode::MultitaskingView)) {
+                UpdateAllTaskbarStyles();
+            }
+        } else if (leaving) {
+            Wh_Log(L"MultitaskingView leaving");
+            if (g_specialViewMode.ClearMode(
+                    SpecialViewModeState::Mode::MultitaskingView)) {
+                UpdateAllTaskbarStyles();
+            }
+        }
+
         return;
     }
 
-    g_pendingMonitorsTimer = SetTimer(
-        nullptr, 0, 200,
-        [](HWND hwnd,         // handle of window for timer messages
-           UINT uMsg,         // WM_TIMER message
-           UINT_PTR idEvent,  // timer identifier
-           DWORD dwTime       // current system time
-        ) {
-            Wh_Log(L">");
+    std::vector<MonitorState::MonitorChange> changes;
 
-            KillTimer(nullptr, g_pendingMonitorsTimer);
-            g_pendingMonitorsTimer = 0;
+    if (event == EVENT_OBJECT_DESTROY) {
+        logEvent();
 
-            std::unordered_set<HWND> secondaryTaskbarWindows;
-            HWND hTaskbarWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
+        // Window is being destroyed, remove it from tracking
+        changes = g_monitorState.RemoveWindow(hWnd);
+    } else if (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_CLOAKED) {
+        logEvent();
 
-            for (HMONITOR monitor : g_pendingMonitors) {
-                HWND hMMTaskbarWnd = nullptr;
+        // Window is being hidden or cloaked, mark it as inactive
+        HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
 
-                if (hTaskbarWnd &&
-                    MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST) ==
-                        monitor) {
-                    hMMTaskbarWnd = hTaskbarWnd;
-                } else {
-                    for (HWND hSecondaryTaskbarWnd : secondaryTaskbarWindows) {
-                        if (MonitorFromWindow(hSecondaryTaskbarWnd,
-                                              MONITOR_DEFAULTTONEAREST) ==
-                            monitor) {
-                            hMMTaskbarWnd = hSecondaryTaskbarWnd;
-                            break;
-                        }
-                    }
-                }
+        changes = g_monitorState.UpdateWindowState(hWnd, false, monitor);
+    } else {
+        // Use cached taskbar thread ID and shell window for candidate check
+        DWORD dwTaskbarThreadId;
+        HWND hShellWindow;
+        g_monitorState.GetCachedState(&dwTaskbarThreadId, &hShellWindow);
 
-                if (!hMMTaskbarWnd) {
-                    continue;
-                }
+        HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
 
-                if (DoesMonitorHaveMaximizedWindow(monitor, hMMTaskbarWnd)) {
-                    SetTaskbarStyle(hMMTaskbarWnd);
-                } else {
-                    ResetTaskbarStyle(hMMTaskbarWnd);
-                }
-            }
+        // Check if window is an active candidate (visible, not cloaked, etc.)
+        bool isCandidate =
+            IsWindowActiveCandidate(hWnd, dwTaskbarThreadId, hShellWindow);
 
-            g_pendingMonitors.clear();
-        });
+        if (isCandidate) {
+            logEvent();
+        }
+
+        // Check if window is maximized or fullscreen
+        bool isActive =
+            isCandidate && IsWindowMaximizedOrFullscreen(hWnd, monitor);
+
+        changes = g_monitorState.UpdateWindowState(hWnd, isActive, monitor);
+    }
+
+    // Update taskbar style for each monitor that changed
+    // (but not if in special view mode - handlers will restore when done)
+    if (!g_specialViewMode.IsActive()) {
+        for (const auto& change : changes) {
+            Wh_Log(L"Monitor %p state changed to %s", change.monitor,
+                   change.hasMaximized ? L"maximized" : L"not maximized");
+            UpdateTaskbarStyleForMonitor(change.monitor, change.hasMaximized);
+        }
+    }
+}
+
+void CALLBACK PeekEventProc(HWINEVENTHOOK hWinEventHook,
+                            DWORD event,
+                            HWND hWnd,
+                            LONG idObject,
+                            LONG idChild,
+                            DWORD dwEventThread,
+                            DWORD dwmsEventTime) {
+    bool entering = (event == EVENT_SYSTEM_PEEKSTART);
+    Wh_Log(L"Peek %s", entering ? L"start" : L"end");
+
+    if (entering) {
+        if (g_specialViewMode.SetMode(SpecialViewModeState::Mode::Peek)) {
+            UpdateAllTaskbarStyles();
+        }
+    } else {
+        if (g_specialViewMode.ClearMode(SpecialViewModeState::Mode::Peek)) {
+            UpdateAllTaskbarStyles();
+        }
+    }
 }
 
 DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
@@ -662,6 +1083,13 @@ DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
                         WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!winObjectEventHook3) {
         Wh_Log(L"Error: SetWinEventHook");
+    }
+
+    HWINEVENTHOOK winPeekEventHook =
+        SetWinEventHook(EVENT_SYSTEM_PEEKSTART, EVENT_SYSTEM_PEEKEND, nullptr,
+                        PeekEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!winPeekEventHook) {
+        Wh_Log(L"Error: SetWinEventHook for PEEK");
     }
 
     BOOL bRet;
@@ -693,27 +1121,60 @@ DWORD WINAPI WinEventHookThread(LPVOID lpThreadParameter) {
         UnhookWinEvent(winObjectEventHook3);
     }
 
+    if (winPeekEventHook) {
+        UnhookWinEvent(winPeekEventHook);
+    }
+
+    g_specialViewMode.Reset();
+    g_monitorState.Clear();
+
     return 0;
 }
 
-BOOL AdjustTaskbarStyle(HWND hWnd) {
-    if (g_settings.onlyWhenMaximized) {
-        if (!g_winEventHookThread) {
-            std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
+void PopulateMonitorState() {
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    DWORD dwTaskbarThreadId =
+        hTaskbarWnd ? GetWindowThreadProcessId(hTaskbarWnd, nullptr) : 0;
+    HWND hShellWindow = GetShellWindow();
 
-            if (!g_winEventHookThread) {
-                g_winEventHookThread = CreateThread(
-                    nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
-            }
+    // Hold the lock for the entire repopulation to ensure atomicity.
+    // Also caches taskbar thread ID and shell window for event processing.
+    auto lock = g_monitorState.BeginRepopulate(dwTaskbarThreadId, hShellWindow);
+
+    auto enumWindowsProc = [&](HWND hWnd) -> BOOL {
+        if (!IsWindowActiveCandidate(hWnd, dwTaskbarThreadId, hShellWindow)) {
+            return TRUE;
         }
 
         HMONITOR monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-        if (!DoesMonitorHaveMaximizedWindow(monitor, hWnd)) {
-            return ResetTaskbarStyle(hWnd);
+        if (IsWindowMaximizedOrFullscreen(hWnd, monitor)) {
+            Wh_Log(L"Initial scan: tracking %s",
+                   GetWindowLogInfo(hWnd).c_str());
+            g_monitorState.AddWindowWhileLocked(hWnd, monitor);
         }
+
+        return TRUE;
+    };
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& proc = *reinterpret_cast<decltype(enumWindowsProc)*>(lParam);
+            return proc(hWnd);
+        },
+        reinterpret_cast<LPARAM>(&enumWindowsProc));
+}
+
+void EnsureMonitoringThreadStarted() {
+    if (!g_settings.onlyWhenMaximized || g_winEventHookThread) {
+        return;
     }
 
-    return SetTaskbarStyle(hWnd);
+    std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
+    if (!g_winEventHookThread) {
+        PopulateMonitorState();
+        g_winEventHookThread =
+            CreateThread(nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
+    }
 }
 
 BOOL WINAPI SetWindowCompositionAttribute_Hook(
@@ -733,29 +1194,12 @@ BOOL WINAPI SetWindowCompositionAttribute_Hook(
         return original();
     }
 
-    WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+    if (!IsTaskbarWindow(hWnd)) {
         return original();
     }
 
-    if (_wcsicmp(szClassName, L"Shell_TrayWnd") != 0 &&
-        _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") != 0) {
-        return original();
-    }
-
-    return AdjustTaskbarStyle(hWnd);
-}
-
-void AdjustAllTaskbarStyles() {
-    std::unordered_set<HWND> secondaryTaskbarWindows;
-    HWND hWnd = FindTaskbarWindows(&secondaryTaskbarWindows);
-    if (hWnd) {
-        AdjustTaskbarStyle(hWnd);
-    }
-
-    for (HWND hSecondaryWnd : secondaryTaskbarWindows) {
-        AdjustTaskbarStyle(hSecondaryWnd);
-    }
+    EnsureMonitoringThreadStarted();
+    return ApplyTaskbarStyleForWindow(hWnd);
 }
 
 void LoadSettings() {
@@ -838,7 +1282,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    HMODULE hUser32 = LoadLibrary(L"user32.dll");
+    HMODULE hUser32 =
+        LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hUser32) {
         Wh_Log(L"Error loading user32.dll");
         return FALSE;
@@ -856,6 +1301,8 @@ BOOL Wh_ModInit() {
                                        SetWindowCompositionAttribute_Hook,
                                        &SetWindowCompositionAttribute_Original);
 
+    pGetWindowBand = (GetWindowBand_t)GetProcAddress(hUser32, "GetWindowBand");
+
     return TRUE;
 }
 
@@ -864,7 +1311,7 @@ void Wh_ModAfterInit() {
 
     WNDCLASS wndclass;
     if (GetClassInfo(GetModuleHandle(nullptr), L"Shell_TrayWnd", &wndclass)) {
-        AdjustAllTaskbarStyles();
+        UpdateAllTaskbarStyles();
     }
 }
 
@@ -894,7 +1341,7 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    if (!g_settings.onlyWhenMaximized) {
+    {
         std::lock_guard<std::mutex> guard(g_winEventHookThreadMutex);
 
         if (g_winEventHookThread) {
@@ -905,5 +1352,5 @@ void Wh_ModSettingsChanged() {
         }
     }
 
-    AdjustAllTaskbarStyles();
+    UpdateAllTaskbarStyles();
 }
