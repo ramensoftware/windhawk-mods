@@ -485,13 +485,13 @@ private:
 #define LOG_TRACE()
 #endif
 
-enum TaskBarVersion
+enum WindowsVersion
 {
-    WIN_10_TASKBAR = 0,
-    WIN_11_TASKBAR,
-    UNKNOWN_TASKBAR
+    WIN_10 = 0,
+    WIN_11,
+    UNKNOWN
 };
-const wchar_t *TaskBarVersionNames[] = {L"WIN_10_TASKBAR", L"WIN_11_TASKBAR", L"UNKNOWN_TASKBAR"};
+const wchar_t *WindowsVersionNames[] = {L"WIN_10", L"WIN_11", L"UNKNOWN"};
 
 // Enum for key modifiers used to detect specific key states during input events.
 enum KeyModifier
@@ -872,7 +872,8 @@ bool GetBit(const uint32_t &value, uint32_t bit)
     return (value & (1U << bit)) != 0;
 }
 
-static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
+static WindowsVersion g_taskbarVersion = UNKNOWN;
+static WindowsVersion g_osVersion = UNKNOWN;
 
 static DWORD g_dwTaskbarThreadId;
 static bool g_isWhInitialized = false;
@@ -887,6 +888,7 @@ static std::unordered_set<HWND> g_hookedInputSiteWindows;   // set of hooked Inp
 static std::unordered_set<void *> g_hookedInputSiteProcs;   // set of hooked InputSite window procs to avoid double hooking
 
 static HWND g_hTaskSwitchingWnd; // Alt+Tab window handle
+static bool g_isExplorerPatcherDetected = false;
 
 static bool g_isContextMenuSuppressed = false;
 static DWORD g_contextMenuSuppressionTimestamp = 0;
@@ -926,10 +928,10 @@ struct MouseClick
     }
 
     // Constructs MouseClick from window message parameters and detects if click is on empty taskbar space
-    MouseClick(WPARAM wParam, LPARAM lParam, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
+    MouseClick(WPARAM, LPARAM, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
     {
         timestamp = GetTickCount();
-        if (!GetMouseClickPosition(lParam, position))
+        if (!GetCursorPos(&position)) // use uniform approach for both Win10 and Win11
         {
             return; // without position there is no point to going further, other members are initialized so it's safe to return
         }
@@ -976,79 +978,63 @@ struct MouseClick
 #endif
     }
 
-    // Extracts mouse position from message parameters, handling Win10/Win11 differences
-    static bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation)
+    static MouseClick::Type GetPointerTypeWin10(LPARAM lParam)
     {
-        LOG_TRACE();
+        MouseClick::Type type = MouseClick::Type::INVALID;
 
-        // old Windows mouse handling of WM_MBUTTONDOWN message
-        if (g_taskbarVersion == WIN_10_TASKBAR)
+        // legacy messages have information about pointer id stored in extra info (lparam)
+        // https://learn.microsoft.com/en-us/windows/win32/tablet/system-events-and-mouse-messages?redirectedfrom=MSDN#distinguishing-pen-input-from-mouse-and-touch
+        const auto MI_WP_SIGNATURE = 0xFF515700U;
+        const auto SIGNATURE_MASK = 0xFFFFFF00U;
+        if ((lParam & SIGNATURE_MASK) == MI_WP_SIGNATURE) // IsPenEvent ?
         {
-            // message carries mouse position relative to the client window so use GetCursorPos() instead
-            if (!GetCursorPos(&pointerLocation))
+            type = MouseClick::Type::TOUCH;
+        }
+        else
+        {
+            type = MouseClick::Type::MOUSE;
+        }
+        return type;
+    }
+
+    static MouseClick::Type GetPointerTypeWin11(WPARAM wParam)
+    {
+        MouseClick::Type type = MouseClick::Type::INVALID;
+
+        // Retrieve common pointer information to find out source of the click
+        POINTER_INFO pointerInfo;
+        UINT32 pointerId = GET_POINTERID_WPARAM(wParam);
+        if (pointerId == 0) // from synthesized mouse event
+        {
+            type = MouseClick::Type::MOUSE;
+        }
+        else if (pointerId == 0xffff) // from synthesized mouse event
+        {
+            type = MouseClick::Type::TOUCH;
+        }
+        else if (GetPointerInfo(pointerId, &pointerInfo))
+        {
+            if ((pointerInfo.pointerType == PT_TOUCH) || (pointerInfo.pointerType == PT_PEN) || (pointerInfo.pointerType == PT_POINTER))
             {
-                LOG_ERROR(L"Failed to get mouse position");
-                return false;
+                type = MouseClick::Type::TOUCH;
+            }
+            else
+            {
+                type = MouseClick::Type::MOUSE;
             }
         }
         else
         {
-            pointerLocation.x = GET_X_LPARAM(lParam);
-            pointerLocation.y = GET_Y_LPARAM(lParam);
+            LOG_ERROR(L"Failed to retrieve pointer info for pointer id %d", pointerId);
         }
-        return true;
+        return type;
     }
 
     // Determines if input is from mouse or touch/pen based on pointer info
     static MouseClick::Type GetPointerType(WPARAM wParam, LPARAM lParam)
     {
-        MouseClick::Type type = MouseClick::Type::INVALID;
-
-        if (g_taskbarVersion == WIN_10_TASKBAR)
-        {
-            // legacy messages have information about pointer id stored in extra info (lparam)
-            // https://learn.microsoft.com/en-us/windows/win32/tablet/system-events-and-mouse-messages?redirectedfrom=MSDN#distinguishing-pen-input-from-mouse-and-touch
-            const auto MI_WP_SIGNATURE = 0xFF515700U;
-            const auto SIGNATURE_MASK = 0xFFFFFF00U;
-            if ((lParam & SIGNATURE_MASK) == MI_WP_SIGNATURE) // IsPenEvent ?
-            {
-                type = MouseClick::Type::TOUCH;
-            }
-            else
-            {
-                type = MouseClick::Type::MOUSE;
-            }
-        }
-        else
-        {
-            // Retrieve common pointer information to find out source of the click
-            POINTER_INFO pointerInfo;
-            UINT32 pointerId = GET_POINTERID_WPARAM(wParam);
-            if (pointerId == 0) // from synthesized mouse event
-            {
-                type = MouseClick::Type::MOUSE;
-            }
-            else if (pointerId == 0xffff) // from synthesized mouse event
-            {
-                type = MouseClick::Type::TOUCH;
-            }
-            else if (GetPointerInfo(pointerId, &pointerInfo))
-            {
-                if ((pointerInfo.pointerType == PT_TOUCH) || (pointerInfo.pointerType == PT_PEN) || (pointerInfo.pointerType == PT_POINTER))
-                {
-                    type = MouseClick::Type::TOUCH;
-                }
-                else
-                {
-                    type = MouseClick::Type::MOUSE;
-                }
-            }
-            else
-            {
-                LOG_ERROR(L"Failed to retrieve pointer info for pointer id %d", pointerId);
-            }
-        }
-        return type;
+        return (g_taskbarVersion == WIN_10) ? GetPointerTypeWin10(lParam) : GetPointerTypeWin11(wParam);
+        ;
     }
 
     // Returns bitmask of currently pressed modifier keys (Ctrl, Alt, Shift, Win)
@@ -1380,7 +1366,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
         }
     }
 
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_hookedInputSiteWindows.contains(hWnd))
+    if ((g_taskbarVersion == WIN_11) && !g_hookedInputSiteWindows.contains(hWnd))
     {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
         if (hXamlIslandWnd)
@@ -1418,7 +1404,7 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
         }
     }
 
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_hookedInputSiteWindows.contains(hWnd))
+    if ((g_taskbarVersion == WIN_11) && !g_hookedInputSiteWindows.contains(hWnd))
     {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
         if (hXamlIslandWnd)
@@ -1475,11 +1461,12 @@ void HandleLoadedExplorerPatcher()
         {
             if (IsExplorerPatcherModule(hMods[i]))
             {
-                if (g_taskbarVersion != WIN_10_TASKBAR)
+                g_isExplorerPatcherDetected = true;
+                if (g_taskbarVersion != WIN_10)
                 {
-                    LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10_TASKBAR mode");
+                    LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10 taskbar mode");
                 }
-                g_taskbarVersion = WIN_10_TASKBAR;
+                g_taskbarVersion = WIN_10;
                 break;
             }
         }
@@ -1493,11 +1480,12 @@ void HandleLoadedModuleIfExplorerPatcher(HMODULE module)
     {
         if (IsExplorerPatcherModule(module))
         {
-            if (g_taskbarVersion != WIN_10_TASKBAR)
+            g_isExplorerPatcherDetected = true;
+            if (g_taskbarVersion != WIN_10)
             {
-                LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10_TASKBAR mode");
+                LOG_INFO(L"ExplorerPatcher module detected, switching to WIN_10 taskbar mode");
             }
-            g_taskbarVersion = WIN_10_TASKBAR;
+            g_taskbarVersion = WIN_10;
         }
     }
 }
@@ -1605,7 +1593,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
     if (bTextualClassName && _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) // container for Windows 11 taskbar
     {
-        if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_hookedInputSiteWindows.contains(hWnd))
+        if ((g_taskbarVersion == WIN_11) && !g_hookedInputSiteWindows.contains(hWnd))
         {
             HWND hParentWnd = GetParent(hWnd);
             if (!hParentWnd || GetClassNameString(hParentWnd) != L"Windows.UI.Composition.DesktopWindowContentBridge")
@@ -1656,14 +1644,14 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
                 MSLLHOOKSTRUCT *pMouseStruct = (MSLLHOOKSTRUCT *)lParam;
                 HWND hClickedWnd = WindowFromPoint(pMouseStruct->pt);
                 HWND hRootWnd = GetAncestor(hClickedWnd, GA_ROOT);
-                HWND hReceiverWnd = hRootWnd;
+                HWND hReceiverWnd = NULL;
                 if (IsPrimaryTaskbarWindow(hRootWnd)) // send it to Win11 or Win10 windproc?
                 {
-                    hReceiverWnd = (g_taskbarVersion == WIN_11_TASKBAR) ? g_hTaskbarInputSiteWnd : g_hTaskbarWnd;
+                    hReceiverWnd = (g_taskbarVersion == WIN_11) ? g_hTaskbarInputSiteWnd : g_hTaskbarWnd;
                 }
                 else if (IsSecondaryTaskbarWindow(hRootWnd))
                 {
-                    const auto &windowSet = (g_taskbarVersion == WIN_11_TASKBAR) ? g_secondaryTaskbarInputSiteWindows : g_secondaryTaskbarWindows;
+                    const auto &windowSet = (g_taskbarVersion == WIN_11) ? g_secondaryTaskbarInputSiteWindows : g_secondaryTaskbarWindows;
                     if (!windowSet.empty())                // should be always true, but since we are dereferencing below...
                         hReceiverWnd = *windowSet.begin(); // forward to any secondary taskbar window
                 }
@@ -1684,14 +1672,9 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
                     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
                 }
 
-                // Detect if this is touch or mouse input
-                const auto MI_WP_SIGNATURE = 0xFF515700U;
-                const auto SIGNATURE_MASK = 0xFFFFFF00U;
-                BOOL isTouch = (pMouseStruct->dwExtraInfo & SIGNATURE_MASK) == MI_WP_SIGNATURE;
-
                 // Forward the click to taskbar window using custom message
-                PostMessage(hReceiverWnd, g_hookedClickMsg, MAKEWPARAM(LOWORD(wParam), isTouch), MAKELPARAM(pMouseStruct->pt.x, pMouseStruct->pt.y));
-                LOG_DEBUG(L"Forwarded suppressed %s click %s to taskbar window", isTouch ? L"touch" : L"mouse", GetMessageName((UINT)wParam));
+                PostMessage(hReceiverWnd, g_hookedClickMsg, wParam, lParam);
+                LOG_DEBUG(L"Forwarded suppressed click %s to taskbar window", GetMessageName((UINT)wParam));
                 return 1; // suppress the message from going to Desktop
             }
             else if ((GetTickCount() - g_suppressMouseInputTimestamp) > 500) // lets give the system some time to show the window
@@ -1993,23 +1976,24 @@ BOOL WindowsVersionInit()
 
     if (nMajor == 6)
     {
-        g_taskbarVersion = WIN_10_TASKBAR;
+        g_taskbarVersion = WIN_10;
     }
     else if (nMajor == 10)
     {
         if (nBuild < 22000)
         { // 21H2
-            g_taskbarVersion = WIN_10_TASKBAR;
+            g_taskbarVersion = WIN_10;
         }
         else
         {
-            g_taskbarVersion = WIN_11_TASKBAR;
+            g_taskbarVersion = WIN_11;
         }
     }
     else
     {
-        g_taskbarVersion = UNKNOWN_TASKBAR;
+        g_taskbarVersion = UNKNOWN;
     }
+    g_osVersion = g_taskbarVersion; // we don't care about exact OS version, just about pre-XAML and XAML UI
 
     return TRUE;
 }
@@ -2057,17 +2041,19 @@ HWND FindDesktopWindow()
     return hChildWnd;
 }
 
-// Finds XamlExplorerHostIslandWindow in current process
-HWND FindTaskSwitchingWindow()
+// Finds Task Switching window with given class name in current process
+HWND FindSpecificTaskSwitchingWindow(const std::wstring &i_className, const std::wstring &i_windowName)
 {
     LOG_TRACE();
 
     struct ENUM_WINDOWS_PARAM
     {
         HWND hWnd;
+        std::wstring className;
+        std::wstring windowName;
     };
 
-    ENUM_WINDOWS_PARAM param = {NULL};
+    ENUM_WINDOWS_PARAM param = {NULL, i_className, i_windowName};
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
         {
@@ -2077,22 +2063,39 @@ HWND FindTaskSwitchingWindow()
             if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId())
                 return TRUE;
 
-            if (GetClassNameString(hWnd) != L"XamlExplorerHostIslandWindow")
+            if (GetClassNameString(hWnd) != param.className)
                 return TRUE;
 
             // XamlExplorerHostIslandWindow is used as a host not just for the Task Switching window, but also for e.g. that laggy modern Window
             // tiling crap on Win11 - so we need to check the window title as well
             const auto windowName = GetWindowTextString(hWnd);
-            if (windowName.empty() || windowName != L"Task Switching")
+            if (windowName.empty() || windowName != param.windowName)
                 return TRUE;
 
-            LOG_DEBUG(L"Found XamlExplorerHostIslandWindow (Alt+Tab) window: %08X", (DWORD)(ULONG_PTR)hWnd);
+            LOG_DEBUG(L"Found %s (%s) window: %08X", param.windowName.c_str(), param.className.c_str(), (DWORD)(ULONG_PTR)hWnd);
             param.hWnd = hWnd;
             return FALSE;
         },
         (LPARAM)&param);
 
     return param.hWnd;
+}
+
+// Finds Task Switching window corresponding to current OS version
+HWND FindTaskSwitchingWindow()
+{
+    LOG_TRACE();
+
+    const std::wstring className = (g_osVersion == WIN_11) ? L"XamlExplorerHostIslandWindow" : L"MultitaskingViewFrame"; // dialog class on Win10
+    const std::wstring windowName = L"Task Switching";
+
+    HWND hWnd = FindSpecificTaskSwitchingWindow(className, windowName);
+    if (!hWnd && (g_osVersion == WIN_11) && g_isExplorerPatcherDetected)
+    {
+        // ExplorerPatcher offers to switch Alt+Tab dialog to Win10 style even on Win11
+        hWnd = FindSpecificTaskSwitchingWindow(L"MultitaskingViewFrame", windowName);
+    }
+    return hWnd;
 }
 
 // Checks if window is Shell_TrayWnd class
@@ -2737,7 +2740,7 @@ bool ClickStartMenu()
     com_ptr<IUIAutomationElement> pStartButton = NULL;
 
     // find the Start button element on the Taskbar so it can be clicked
-    if (g_taskbarVersion == WIN_10_TASKBAR)
+    if (g_taskbarVersion == WIN_10)
     {
         // *************** Handling Windows 10 Start Button ***************
 
@@ -2805,7 +2808,7 @@ bool ClickStartMenu()
     }
 
     // Perform the appropriate action based on the Taskbar version
-    if (g_taskbarVersion == WIN_10_TASKBAR)
+    if (g_taskbarVersion == WIN_10)
     {
         // Use Invoke pattern to click the Start button on Windows 10
         com_ptr<IUIAutomationInvokePattern> pInvoke = NULL;
@@ -3002,7 +3005,7 @@ void HideIcons()
 void CombineTaskbarButtons(const TaskBarButtonsState primaryTaskBarButtonsState1, const TaskBarButtonsState primaryTaskBarButtonsState2,
                            const TaskBarButtonsState secondaryTaskBarButtonsState1, const TaskBarButtonsState secondaryTaskBarButtonsState2)
 {
-    if (g_taskbarVersion != WIN_11_TASKBAR)
+    if (g_taskbarVersion != WIN_11)
     {
         LOG_INFO(L"Taskbar button combining is only supported on Windows 11 taskbar");
         return;
@@ -3155,7 +3158,7 @@ void ToggleTaskbarAlignment()
 {
     LOG_TRACE();
 
-    if (g_taskbarVersion != WIN_11_TASKBAR)
+    if (g_taskbarVersion != WIN_11)
     {
         LOG_INFO(L"Taskbar alignment toggle is only supported on Windows 11 taskbar");
         return;
@@ -3731,6 +3734,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     {
         RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
     }
+
     if (WM_NCDESTROY == uMsg)
     {
         LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -3740,6 +3744,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         }
         return result;
     }
+
     if (uMsg == g_uninitCOMAPIMsg)
     {
         LOG_INFO("Received uninit COM API message, uninitializing COM API");
@@ -3747,43 +3752,17 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         return 0;
     }
 
-    // // Handle hooked clicks forwarded from LowLevelMouseProc
-    // if (uMsg == g_hookedClickMsg)
-    // {
-    //     LOG_INFO(L"Received hooked click message: original msg=0x%X, coords=(%d,%d)",
-    //              wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+    if (!g_hMouseHook)
+    {
+        InstallMouseHook(); // Install mouse hook from taskbar thread (has message loop)
+    }
 
-    //     // Decode original message type from wParam
-    //     WPARAM originalMsg = wParam;
-
-    //     // Convert screen coordinates to client coordinates
-    //     POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-    //     ScreenToClient(hWnd, &pt);
-    //     LPARAM clientCoords = MAKELPARAM(pt.x, pt.y);
-
-    //     // Process as if it were the original message
-    //     // Reconstruct wParam based on message type
-    //     WPARAM originalWParam = 0;
-    //     if (originalMsg == WM_LBUTTONDOWN || originalMsg == WM_LBUTTONDBLCLK)
-    //     {
-    //         originalWParam = MK_LBUTTON;
-    //     }
-    //     else if (originalMsg == WM_RBUTTONDOWN || originalMsg == WM_RBUTTONDBLCLK)
-    //     {
-    //         originalWParam = MK_RBUTTON;
-    //     }
-    //     else if (originalMsg == WM_MBUTTONDOWN || originalMsg == WM_MBUTTONDBLCLK)
-    //     {
-    //         originalWParam = MK_MBUTTON;
-    //     }
-
-    //     // Continue processing with the decoded message
-    //     uMsg = originalMsg;
-    //     wParam = originalWParam;
-    //     lParam = clientCoords;
-
-    //     // Fall through to normal processing below
-    // }
+    // Handle hooked clicks forwarded from LowLevelMouseProc
+    if (uMsg == g_hookedClickMsg)
+    {
+        LOG_INFO(L"Received hooked click message: original msg=0x%X", wParam);
+        uMsg = wParam;
+    }
 
     // printMessage(uMsg);
 
@@ -3793,7 +3772,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
     const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
     const bool isXButton = (uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN) || (uMsg == WM_XBUTTONDBLCLK || uMsg == WM_NCXBUTTONDBLCLK);
-    if ((g_taskbarVersion == WIN_10_TASKBAR) && (isLeftButton || isRightButton || isMiddleButton || isXButton))
+    if ((g_taskbarVersion == WIN_10) && (isLeftButton || isRightButton || isMiddleButton || isXButton))
     {
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
         if (extraInfo != g_injectedClickID)
@@ -3862,34 +3841,31 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     return result;
 }
 
-std::tuple<UINT, WPARAM, LPARAM> TranslateMouseMessageFromMouseHookWin11(const UINT &uMsg, const WPARAM &wParam, const LPARAM &lParam)
+// Translates Win10 mouse messages sent from LowLevelMouseProc to Win11 WM_POINTERDOWN messages
+std::tuple<UINT, WPARAM, LPARAM> TranslateWin10MouseMessageToWin11(const UINT &uMsg, const WPARAM &wParam, const LPARAM &lParam)
 {
-    UINT origMsg = LOWORD(wParam);     // original mouse message type is in LOWORD of wParam
-    BOOL isTouch = HIWORD(wParam) > 0; // touch flag is in bit 0 of HIWORD of wParam
-
     // Map the message type to pointer button flags
-    // Pointer flags are in HIWORD, pointer ID is in LOWORD
     UINT pointerFlags = 0;
-    if (origMsg == WM_LBUTTONDOWN || origMsg == WM_LBUTTONDBLCLK)
+    if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONDBLCLK)
     {
         pointerFlags = POINTER_MESSAGE_FLAG_FIRSTBUTTON;
     }
-    else if (origMsg == WM_RBUTTONDOWN || origMsg == WM_RBUTTONDBLCLK)
+    else if (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONDBLCLK)
     {
         pointerFlags = POINTER_MESSAGE_FLAG_SECONDBUTTON;
     }
-    else if (origMsg == WM_MBUTTONDOWN || origMsg == WM_MBUTTONDBLCLK)
+    else if (wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONDBLCLK)
     {
         pointerFlags = POINTER_MESSAGE_FLAG_THIRDBUTTON;
     }
     else
     {
-        LOG_ERROR(L"Unsupported original mouse message 0x%X in TranslateMouseMessageFromMouseHookWin11", origMsg);
+        LOG_ERROR(L"Unsupported original mouse message 0x%X in TranslateWin10MouseMessageToWin11", wParam);
         std::make_tuple(uMsg, wParam, lParam);
     }
 
     // Continue as WM_POINTERDOWN
-    // wParam = MAKEWPARAM(pointerID, flags) - flags in HIWORD, pointer ID in LOWORD
+    BOOL isTouch = (MouseClick::GetPointerTypeWin10(lParam) == MouseClick::Type::TOUCH);
     UINT pointerId = isTouch ? 0xffff : 0;                                               // Use 0 for mouse, 0xffff for touch
     return std::make_tuple(WM_POINTERDOWN, MAKEWPARAM(pointerId, pointerFlags), lParam); // lParam stays as screen coordinates for WM_POINTERDOWN
 }
@@ -3907,8 +3883,8 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     // Handle hooked clicks forwarded from LowLevelMouseProc
     if (uMsg == g_hookedClickMsg)
     {
-        LOG_DEBUG(L"Received hooked click message in InputSite: original msg=0x%X, coords=(%d,%d)", LOWORD(wParam), GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-        std::tie(uMsg, wParam, lParam) = TranslateMouseMessageFromMouseHookWin11(uMsg, wParam, lParam);
+        LOG_DEBUG(L"Received hooked click message in InputSite: original msg=0x%X", wParam);
+        std::tie(uMsg, wParam, lParam) = TranslateWin10MouseMessageToWin11(uMsg, wParam, lParam);
     }
 
     if (!g_hMouseHook)
@@ -4048,17 +4024,17 @@ BOOL Wh_ModInit()
 
     LoadSettings();
 
-    if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN_TASKBAR))
+    if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN))
     {
         LOG_ERROR(L"Unsupported Windows version, ModInit failed");
         return FALSE;
     }
     // treat Windows 11 taskbar as on older windows
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && g_settings.oldTaskbarOnWin11)
+    if ((g_taskbarVersion == WIN_11) && g_settings.oldTaskbarOnWin11)
     {
-        g_taskbarVersion = WIN_10_TASKBAR;
+        g_taskbarVersion = WIN_10;
     }
-    LOG_INFO(L"Using taskbar version: %s", TaskBarVersionNames[g_taskbarVersion]);
+    LOG_INFO(L"Using taskbar version: %s", WindowsVersionNames[g_taskbarVersion]);
 
     // hook CreateWindowExW to be able to identify taskbar windows on re-creation
     if (!Wh_SetFunctionHook((void *)CreateWindowExW, (void *)CreateWindowExW_Hook, (void **)&CreateWindowExW_Original))
@@ -4086,7 +4062,7 @@ BOOL Wh_ModInit()
     }
 
     // autodetect Explorer Patcher on Windows 11 taskbar
-    if (g_taskbarVersion == WIN_11_TASKBAR)
+    if (g_taskbarVersion == WIN_11)
     {
         // hook LoadLibraryExW to detect Explorer Patcher loading after us
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
@@ -4109,7 +4085,7 @@ void Wh_ModAfterInit()
     LOG_TRACE();
 
     // autodetect Explorer Patcher on Windows 11 taskbar
-    if (g_taskbarVersion == WIN_11_TASKBAR)
+    if (g_taskbarVersion == WIN_11)
     {
         // Try again in case there's a race between the previous attempt and the LoadLibraryExW hook.
         HandleLoadedExplorerPatcher();
@@ -4132,21 +4108,6 @@ void Wh_ModAfterInit()
     else
     {
         LOG_ERROR(L"Failed to find Shell_TrayWnd class. Taskbar might not get hooked properly.");
-    }
-
-    // TODO: Win11 only
-    // these window hosts are created on demand and it is very likely they do not exist e.g. after a system startup
-    if (GetClassInfo(GetModuleHandle(NULL), L"XamlExplorerHostIslandWindow", &wndclass)) // if XamlExplorerHostIslandWindow class is defined
-    {
-        g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
-        if (!g_hTaskSwitchingWnd)
-        {
-            LOG_DEBUG(L"Failed to find TaskSwitching window, the window might not have been created yet.");
-        }
-    }
-    else
-    {
-        LOG_DEBUG(L"Failed to find XamlExplorerHostIslandWindow class. TaskbarSwitching windows were not created yet.");
     }
 }
 
