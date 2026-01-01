@@ -1,3 +1,8 @@
+## 1.2 ([Jan 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f95ae6263cf2d2d0fda26f2d1f87a658a259465b/mods/taskbar-background-helper.wh.cpp))
+
+* Improved responsiveness and performance when "Only when maximized" is enabled.
+* Added support for aero peek and Win+Tab when "Only when maximized" is enabled - in these modes, the taskbar is styled as if there are no maximized windows.
+
 ## 1.1 ([May 1, 2025](https://github.com/ramensoftware/windhawk-mods/blob/3399052539fc8d9230110504c79c49fb980ee42d/mods/taskbar-background-helper.wh.cpp))
 
 * Added an option to use the current theme accent color for the taskbar background.

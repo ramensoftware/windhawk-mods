@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-01T08:24:47.000Z</updated>
+    <updated>2026-01-01T09:13:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Background Helper 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-background-helper#f95ae6263cf2d2d0fda26f2d1f87a658a259465b</id>
+        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
+        <updated>2026-01-01T09:13:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved responsiveness and performance when "Only when maximized" is enabled.</li>
+<li>Added support for aero peek and Win+Tab when "Only when maximized" is enabled - in these modes, the taskbar is styled as if there are no maximized windows.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Old Explorer System Menu Behavior 1.0.0]]></title>
         <id>https://windhawk.net/mods/old-explorer-sysmenu-behavior#d2f1d9a0085e65795a84b70d792ac700b88e7b77</id>
@@ -344,22 +358,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.4]]></title>
-        <id>https://windhawk.net/mods/dark-menus#35fe88158b7b0b747cb24906a09716b9bb2e15d6</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2025-12-22T22:53:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed: The white outline problem in the latest version (https://github.com/MGGSK/DarkMenus/issues/18)</li>
-<li>Added support for mdi windows</li>
-<li>Code cleanup</li>
-<li>Improved readme</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>

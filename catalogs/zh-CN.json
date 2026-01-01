@@ -6089,7 +6089,7 @@
                     71
                 ],
                 "ratingUsers": 84,
-                "updated": 1746113817000,
+                "updated": 1767258790000,
                 "users": 9183
             },
             "metadata": {
@@ -6106,7 +6106,7 @@
                 ],
                 "name": "Taskbar Background Helper",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.1"
+                "version": "1.2"
             }
         },
         "taskbar-button-click": {
