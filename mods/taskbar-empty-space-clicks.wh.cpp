@@ -844,6 +844,20 @@ namespace stringtools
         }
         return std::equal(prefix.begin(), prefix.end(), s.begin());
     }
+
+    std::wstring join(const std::vector<std::wstring> &elements, const std::wstring &delimiter)
+    {
+        std::wstring result;
+        for (const auto &elem : elements)
+        {
+            if (!result.empty())
+            {
+                result += delimiter;
+            }
+            result += elem;
+        }
+        return result;
+    }
 }
 
 // Sets a bit in a bitmask
@@ -862,12 +876,15 @@ static TaskBarVersion g_taskbarVersion = UNKNOWN_TASKBAR;
 
 static DWORD g_dwTaskbarThreadId;
 static bool g_isWhInitialized = false;
-static bool g_inputSiteProcHooked = false;
 
 static HWND g_hTaskbarWnd;          // Shell_TrayWnd window handle
 static HWND g_hTaskbarInputSiteWnd; // Windows.UI.Input.InputSite.WindowClass window handle (Win11 taskbar)
 static std::unordered_set<HWND> g_secondaryTaskbarWindows;
 static std::unordered_set<HWND> g_secondaryTaskbarInputSiteWindows;
+
+static std::unordered_set<HWND> g_subclassedTaskbarWindows; // set of subclassed taskbar windows to avoid double subclassing
+static std::unordered_set<HWND> g_hookedInputSiteWindows;   // set of hooked InputSite windows to avoid double hooking
+static std::unordered_set<void *> g_hookedInputSiteProcs;   // set of hooked InputSite window procs to avoid double hooking
 
 static HWND g_hTaskSwitchingWnd; // Alt+Tab window handle
 
@@ -1296,54 +1313,54 @@ void UnsubclassTaskbarWindow(HWND hWnd)
 }
 
 // Hooks InputSite window proc for Win11 taskbar pointer events
-void HandleIdentifiedInputSiteWindow(HWND hWnd)
+bool HandleIdentifiedInputSiteWindow(HWND hWnd)
 {
     if (!g_dwTaskbarThreadId || GetWindowThreadProcessId(hWnd, nullptr) != g_dwTaskbarThreadId)
     {
-        return;
-    }
-
-    // just double check that we are trying to hook the right window
-    HWND hParentWnd = GetParent(hWnd);
-    WCHAR szClassName[64];
-    if (!hParentWnd || !GetClassName(hParentWnd, szClassName, ARRAYSIZE(szClassName)) ||
-        _wcsicmp(szClassName, L"Windows.UI.Composition.DesktopWindowContentBridge") != 0)
-    {
-        LOG_DEBUG("Parent window is not Windows.UI.Composition.DesktopWindowContentBridge, but %s", szClassName);
-        return;
-    }
-    hParentWnd = GetParent(hParentWnd);
-    if (!hParentWnd || !IsTaskbarWindow(hParentWnd))
-    {
-        LOG_DEBUG("Parent window of Windows.UI.Composition.DesktopWindowContentBridge is not taskbar window");
-        return;
+        return false;
     }
 
     // store hwnd of InputSite window so we can later send messages to its wndproc
+    HWND hParentWnd = GetAncestor(hWnd, GA_ROOT);
     if (IsPrimaryTaskbarWindow(hParentWnd))
     {
         g_hTaskbarInputSiteWnd = hWnd;
     }
-    else
+    else if (IsSecondaryTaskbarWindow(hParentWnd))
     {
         g_secondaryTaskbarInputSiteWindows = KeepOnlyValidWindows(g_secondaryTaskbarInputSiteWindows);
         g_secondaryTaskbarInputSiteWindows.insert(hWnd);
+    }
+    else
+    {
+        LOG_ERROR(L"InputSite window %08X parent is not a known taskbar window", (DWORD)(ULONG_PTR)hWnd);
     }
 
     // At first, I tried to subclass the window instead of hooking its wndproc,
     // but the inputsite.dll code checks that the value wasn't changed, and
     // crashes otherwise.
     void *wndProc = (void *)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
-    Wh_SetFunctionHook(wndProc, (void *)InputSiteWindowProc_Hook, (void **)&InputSiteWindowProc_Original);
-
-    if (g_isWhInitialized)
+    if (!g_hookedInputSiteProcs.contains(wndProc))
     {
-        LOG_DEBUG("Calling Wh_ApplyHookOperations");
-        Wh_ApplyHookOperations(); // from docs: Can't be called before Wh_ModInit returns or after Wh_ModBeforeUninit returns
-    }
+        if (!Wh_SetFunctionHook(wndProc, (void *)InputSiteWindowProc_Hook, (void **)&InputSiteWindowProc_Original))
+        {
+            LOG_ERROR(L"Failed to hook InputSite wndproc %p", wndProc);
+            return false;
+        }
 
-    LOG_DEBUG(L"Hooked InputSite wndproc %p", wndProc);
-    g_inputSiteProcHooked = true;
+        if (g_isWhInitialized)
+        {
+            Wh_ApplyHookOperations(); // from docs: Can't be called before Wh_ModInit returns or after Wh_ModBeforeUninit returns
+        }
+        g_hookedInputSiteProcs.insert(wndProc);
+
+        LOG_DEBUG(L"Hooked InputSite wndproc %p", wndProc);
+    }
+    else
+    {
+        LOG_DEBUG(L"InputSite wndproc %p already hooked, skipping", wndProc);
+    }
+    return true;
 }
 
 // Subclasses main taskbar and secondary taskbars, hooks InputSite for Win11
@@ -1353,19 +1370,17 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
 
     g_hTaskbarWnd = hWnd;
     g_dwTaskbarThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (SubclassTaskbarWindow(hWnd))
+
+    if (!g_subclassedTaskbarWindows.contains(hWnd))
     {
-        LOG_DEBUG(L"Main taskbar window %d subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
-    }
-    for (HWND hSecondaryWnd : g_secondaryTaskbarWindows)
-    {
-        if (SubclassTaskbarWindow(hSecondaryWnd))
+        if (SubclassTaskbarWindow(hWnd))
         {
-            LOG_DEBUG(L"Secondary taskbar window %d subclassed successfully", (DWORD)(ULONG_PTR)hSecondaryWnd);
+            g_subclassedTaskbarWindows.insert(hWnd);
+            LOG_DEBUG(L"Main taskbar window %08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
         }
     }
 
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked)
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_hookedInputSiteWindows.contains(hWnd))
     {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
         if (hXamlIslandWnd)
@@ -1373,7 +1388,10 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
             HWND hInputSiteWnd = FindWindowEx(hXamlIslandWnd, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr);
             if (hInputSiteWnd)
             {
-                HandleIdentifiedInputSiteWindow(hInputSiteWnd);
+                if (HandleIdentifiedInputSiteWindow(hInputSiteWnd))
+                {
+                    g_hookedInputSiteWindows.insert(hInputSiteWnd);
+                }
             }
         }
     }
@@ -1389,13 +1407,18 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
         return;
     }
 
+    g_secondaryTaskbarWindows = KeepOnlyValidWindows(g_secondaryTaskbarWindows);
     g_secondaryTaskbarWindows.insert(hWnd);
-    if (SubclassTaskbarWindow(hWnd))
+
+    if (!g_subclassedTaskbarWindows.contains(hWnd))
     {
-        LOG_DEBUG(L"Secondary taskbar window %d subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
+        if (SubclassTaskbarWindow(hWnd))
+        {
+            LOG_DEBUG(L"Secondary taskbar window %08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
+        }
     }
 
-    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked)
+    if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_hookedInputSiteWindows.contains(hWnd))
     {
         HWND hXamlIslandWnd = FindWindowEx(hWnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
         if (hXamlIslandWnd)
@@ -1403,7 +1426,10 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
             HWND hInputSiteWnd = FindWindowEx(hXamlIslandWnd, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr);
             if (hInputSiteWnd)
             {
-                HandleIdentifiedInputSiteWindow(hInputSiteWnd);
+                if (HandleIdentifiedInputSiteWindow(hInputSiteWnd))
+                {
+                    g_hookedInputSiteWindows.insert(hInputSiteWnd);
+                }
             }
         }
     }
@@ -1492,16 +1518,18 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 // Finds main and secondary taskbar windows in current process
-HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbarWindows)
+std::tuple<HWND, std::unordered_set<HWND>> FindTaskbarWindows()
 {
     struct ENUM_WINDOWS_PARAM
     {
-        HWND *hWnd;
-        std::unordered_set<HWND> *secondaryTaskbarWindows;
+        HWND *hPrimary;
+        std::unordered_set<HWND> *secondaries;
     };
 
-    HWND hWnd = nullptr;
-    ENUM_WINDOWS_PARAM param = {&hWnd, secondaryTaskbarWindows};
+    HWND hPrimaryWnd = NULL;
+    std::unordered_set<HWND> secondaryTaskbarWindows;
+
+    ENUM_WINDOWS_PARAM param = {&hPrimaryWnd, &secondaryTaskbarWindows};
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) WINAPI_LAMBDA_RETURN(BOOL)
         {
@@ -1517,18 +1545,18 @@ HWND FindCurrentProcessTaskbarWindows(std::unordered_set<HWND> *secondaryTaskbar
 
             if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0)
             {
-                *param.hWnd = hWnd;
+                *param.hPrimary = hWnd;
             }
             else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0)
             {
-                param.secondaryTaskbarWindows->insert(hWnd);
+                param.secondaries->insert(hWnd);
             }
 
             return TRUE;
         },
         (LPARAM)&param);
 
-    return hWnd;
+    return std::make_tuple(hPrimaryWnd, secondaryTaskbarWindows);
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -1575,11 +1603,23 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
         return hWnd;
 
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
-    if (bTextualClassName && _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) // Windows 11 taskbar
+    if (bTextualClassName && _wcsicmp(lpClassName, L"Windows.UI.Input.InputSite.WindowClass") == 0) // container for Windows 11 taskbar
     {
-        LOG_DEBUG(L"Windows.UI.Input.InputSite.WindowClass window created: %08X", (DWORD)(ULONG_PTR)hWnd);
-        if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_inputSiteProcHooked)
+        if ((g_taskbarVersion == WIN_11_TASKBAR) && !g_hookedInputSiteWindows.contains(hWnd))
         {
+            HWND hParentWnd = GetParent(hWnd);
+            if (!hParentWnd || GetClassNameString(hParentWnd) != L"Windows.UI.Composition.DesktopWindowContentBridge")
+            {
+                return hWnd;
+            }
+
+            hParentWnd = GetParent(hParentWnd);
+            if (!hParentWnd || !IsTaskbarWindow(hParentWnd))
+            {
+                return hWnd;
+            }
+
+            LOG_DEBUG(L"Taskbar InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
             HandleIdentifiedInputSiteWindow(hWnd);
         }
     }
@@ -1706,6 +1746,7 @@ void UninstallMouseHook()
 
 #pragma region win32_helpers
 
+#ifdef ENABLE_LOG_DEBUG
 const wchar_t *GetMessageName(UINT uMsg)
 {
     switch (uMsg)
@@ -1826,6 +1867,40 @@ const wchar_t *GetMessageName(UINT uMsg)
     }
     }
 }
+
+// Converts virtual key code to string representation
+std::wstring VKToString(UINT vk)
+{
+    UINT scanCode = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+    WCHAR keyName[50];
+    LONG lParam = scanCode << 16;
+
+    // Set extended-key flag (bit 24) for extended keys
+    switch (vk)
+    {
+    case VK_INSERT:
+    case VK_DELETE:
+    case VK_HOME:
+    case VK_END:
+    case VK_PRIOR: // Page Up
+    case VK_NEXT:  // Page Down
+    case VK_LEFT:
+    case VK_RIGHT:
+    case VK_UP:
+    case VK_DOWN:
+    case VK_RCONTROL:
+    case VK_RMENU: // Right Alt
+    case VK_NUMLOCK:
+    case VK_DIVIDE: // Numpad /
+        lParam |= (1 << 24);
+        break;
+    }
+
+    if (GetKeyNameText(lParam, keyName, ARRAYSIZE(keyName)))
+        return keyName;
+    return L"";
+}
+#endif
 
 std::wstring GetClassNameString(HWND hWnd)
 {
@@ -2534,10 +2609,18 @@ void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
         }
     }
 
-    const int NUM_KEYS = keys.size();
-    LOG_DEBUG(L"Sending %d keypresses", NUM_KEYS);
-    std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
+#ifdef ENABLE_LOG_DEBUG
+    std::vector<std::wstring> keyNamesStrs;
+    for (const auto &key : keys)
+    {
+        keyNamesStrs.emplace_back(VKToString(key));
+    }
+    const std::wstring keyNamesStr = stringtools::join(keyNamesStrs, L" + ");
+    LOG_DEBUG(L"Sending keypresses: %s", keyNamesStr.c_str());
+#endif
 
+    const int NUM_KEYS = keys.size();
+    std::unique_ptr<INPUT[]> input(new INPUT[NUM_KEYS * 2]);
     for (int i = 0; i < NUM_KEYS; i++)
     {
         input[i].type = INPUT_KEYBOARD;
@@ -2569,7 +2652,7 @@ void SendCtrlAltTabKeypress()
 {
     LOG_TRACE();
 
-    LOG_INFO(L"Sending Ctrl+Alt+Tab keypress");
+    LOG_INFO(L"Sending Ctrl+Alt+Tab keypress to open Alt+Tab dialog");
     SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
     if (!g_suppressMouseInput) // when opening, call twice, otherwise current window is selected
     {
@@ -3531,7 +3614,7 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
             {
                 allModifiersPressed &= (g_mouseClickQueue[-i].keyModifiersState == triggerAction.expectedKeyModifiersState);
                 isCorrectTaskbar &= IsCorrectTaskbarType(triggerAction.taskbarTypeName, g_mouseClickQueue[-i].hWnd);
-                LOG_DEBUG(L"Click %d key modifiers state: %u, expected: %u, taskbar type: %s",
+                LOG_DEBUG(L"Click #%d - key modifiers state: %u, expected: %u, taskbar type: %s",
                           i, g_mouseClickQueue[-i].keyModifiersState, triggerAction.expectedKeyModifiersState, triggerAction.taskbarTypeName.c_str());
             }
             if (allModifiersPressed && isCorrectTaskbar)
@@ -4036,15 +4119,19 @@ void Wh_ModAfterInit()
     WNDCLASS wndclass;
     if (GetClassInfo(GetModuleHandle(NULL), L"Shell_TrayWnd", &wndclass)) // if Shell_TrayWnd class is defined
     {
-        HWND hWnd = FindCurrentProcessTaskbarWindows(&g_secondaryTaskbarWindows);
-        if (hWnd)
+        const auto [hPrimaryTaskbarWnd, secondaryTaskbarWindows] = FindTaskbarWindows();
+        if (hPrimaryTaskbarWnd)
         {
-            HandleIdentifiedTaskbarWindow(hWnd); // hook
+            HandleIdentifiedTaskbarWindow(hPrimaryTaskbarWnd);
+        }
+        for (HWND hSecondaryWnd : secondaryTaskbarWindows)
+        {
+            HandleIdentifiedSecondaryTaskbarWindow(hSecondaryWnd);
         }
     }
     else
     {
-        LOG_DEBUG(L"Failed to find Shell_TrayWnd class. Taskbar might get hooked later on.");
+        LOG_ERROR(L"Failed to find Shell_TrayWnd class. Taskbar might not get hooked properly.");
     }
 
     // TODO: Win11 only
@@ -4079,16 +4166,26 @@ void Wh_ModUninit()
 
     g_windowFocusTracker.Stop();
 
-    if (g_hTaskbarWnd)
+    if (IsWindow(g_hTaskbarWnd))
     {
         SendMessage(g_hTaskbarWnd, g_uninitCOMAPIMsg, FALSE, 0); // uninitialize COM API from gui thread
 
         UnsubclassTaskbarWindow(g_hTaskbarWnd);
-        for (HWND hSecondaryWnd : g_secondaryTaskbarWindows)
+        g_hTaskbarWnd = NULL;
+        g_hTaskbarInputSiteWnd = NULL;
+    }
+
+    for (HWND hSecondaryWnd : g_secondaryTaskbarWindows)
+    {
+        if (IsWindow(hSecondaryWnd))
         {
             UnsubclassTaskbarWindow(hSecondaryWnd);
         }
     }
+    g_secondaryTaskbarWindows.clear();
+    g_secondaryTaskbarInputSiteWindows.clear();
+
+    g_hookedInputSiteProcs.clear();
 
     UninstallMouseHook();
 }
