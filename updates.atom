@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-01T09:13:10.000Z</updated>
+    <updated>2026-01-01T22:10:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.2]]></title>
+        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#f828d309ee213355f5bf325f0312eeaa1ce2ae1c</id>
+        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
+        <updated>2026-01-01T22:10:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Make "Explorer icon" option functional</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Background Helper 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-background-helper#f95ae6263cf2d2d0fda26f2d1f87a658a259465b</id>
@@ -344,20 +357,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.9]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#8d55be3283a54c65186cc221e3502adb27413d04</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2025-12-23T08:29:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed gap between the taskbar and the Start menu when the taskbar is on the right.</li>
-<li>Improved Start menu handling, especially when opened on a different monitor.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
