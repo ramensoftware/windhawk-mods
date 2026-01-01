@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2025-12-31T20:12:09.000Z</updated>
+    <updated>2026-01-01T08:24:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Old Explorer System Menu Behavior 1.0.0]]></title>
+        <id>https://windhawk.net/mods/old-explorer-sysmenu-behavior#d2f1d9a0085e65795a84b70d792ac700b88e7b77</id>
+        <link href="https://windhawk.net/mods/old-explorer-sysmenu-behavior"/>
+        <updated>2026-01-01T08:24:47.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="oldexplorersystemmenubehavior">Old Explorer System Menu Behavior</h1>
+<p>Before Windows Vista, the system menu (window icon) of File Explorer windows behaved differently:</p>
+<ul>
+<li>Could be dragged to create a shortcut to the currently folder</li>
+<li>Could be right clicked to show a context menu for the current folder</li>
+<li>Upon a left click, the system menu's appearance is delayed and shows up at the cursor position rather
+than the regular fixed position</li>
+</ul>
+<p>This mod restores the pre-Vista behavior.</p>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.1]]></title>
         <id>https://windhawk.net/mods/restore-explorer-exploring-mode#798fa042e8f36906125f320199412b3027c075ac</id>
@@ -341,19 +360,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>Mgg Sk</name>
             <uri>https://github.com/MGGSK</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#15a49670add29c0521d1825dc0e7cb263d053989</id>
-        <link href="https://windhawk.net/mods/taskbar-auto-hide-per-monitor"/>
-        <updated>2025-12-22T17:40:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed secondary taskbars being invisible on system start when auto-hide is disabled for them.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

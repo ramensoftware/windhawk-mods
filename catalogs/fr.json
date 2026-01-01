@@ -4915,6 +4915,37 @@
                 "version": "1.0.0"
             }
         },
+        "old-explorer-sysmenu-behavior": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767255887000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767255887000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "aubymori",
+                "description": "Restores Windows XP behavior to the window icon in File Explorer",
+                "github": "https://github.com/aubymori",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "GPL-3.0",
+                "name": "Old Explorer System Menu Behavior",
+                "version": "1.0.0"
+            }
+        },
         "old-regedit-tree-icons": {
             "details": {
                 "defaultSorting": 603,
