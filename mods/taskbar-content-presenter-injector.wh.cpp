@@ -4,6 +4,7 @@
 // @description     Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel and Taskbar.TaskListButtonPanel
 // @version         1.1
 // @author          Lockframe
+// @github          https://github.com/Lockframe
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
@@ -375,4 +376,5 @@ void Wh_ModUninit() {
     g_trackedPanels.clear();
     g_trackedPanelPtrs.clear();
     g_cachedTaskbarFrame = nullptr;
+
 }
