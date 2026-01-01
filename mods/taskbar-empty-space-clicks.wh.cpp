@@ -902,6 +902,7 @@ static const UINT g_hookedClickMsg = RegisterWindowMessageW(L"Windhawk_hookedCli
 static HHOOK g_hMouseHook = NULL;               // low-level mouse hook handle to suppress mouse input when Alt+Tab is active
 static bool g_suppressMouseInput = false;       // flag to indicate whether mouse input should be suppressed
 static DWORD g_suppressMouseInputTimestamp = 0; // timestamp of when mouse input suppression started
+static MSLLHOOKSTRUCT g_hookedMouseData;        // stable storage for MSLLHOOKSTRUCT data to pass between hook and window proc
 
 // Stores mouse click information including position, button, timestamp and empty space detection
 struct MouseClick
@@ -1623,7 +1624,8 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
     {
         bool isMouseButtonEvent = (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONDBLCLK ||
                                    wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONDBLCLK ||
-                                   wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONDBLCLK);
+                                   wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONDBLCLK ||
+                                   wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONDBLCLK);
         if (!isMouseButtonEvent) // avoid doing IsWindow calls for non-button events
         {
             return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
@@ -1672,8 +1674,11 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
                     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
                 }
 
-                // Forward the click to taskbar window using custom message
-                PostMessage(hReceiverWnd, g_hookedClickMsg, wParam, lParam);
+                // pMouseStruct lives who knows where and data might become invalid or altered (tested) =>
+                // => copy struct to stable global storage and forward pointer to taskbar window
+                // wParam = original message type, lParam = pointer to stable g_hookedMouseData
+                g_hookedMouseData = *pMouseStruct;
+                PostMessage(hReceiverWnd, g_hookedClickMsg, wParam, (LPARAM)&g_hookedMouseData);
                 LOG_DEBUG(L"Forwarded suppressed click %s to taskbar window", GetMessageName((UINT)wParam));
                 return 1; // suppress the message from going to Desktop
             }
@@ -3726,6 +3731,16 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
 
 #pragma region proc_handlers
 
+// Translates Win10 mouse messages sent from LowLevelMouseProc to Win10 format
+std::tuple<UINT, WPARAM, LPARAM> TranslateMouseHookMessageToWin10(const UINT &uMsg, const WPARAM &wParam, const LPARAM &lParam)
+{
+    UINT origMsg = (UINT)wParam;
+    MSLLHOOKSTRUCT *pMouseStruct = (MSLLHOOKSTRUCT *)lParam; // lParam contains pointer to stable g_hookedMouseData
+    WORD xButton = GET_XBUTTON_WPARAM(pMouseStruct->mouseData);
+    // Reconstruct proper wParam with button info in high word, preserve extraInfo in lParam for GetPointerType to work
+    return std::make_tuple(origMsg, MAKEWPARAM(0, xButton), pMouseStruct->dwExtraInfo);
+}
+
 // Proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
 LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
                                            _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
@@ -3761,7 +3776,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     if (uMsg == g_hookedClickMsg)
     {
         LOG_INFO(L"Received hooked click message: original msg=0x%X", wParam);
-        uMsg = wParam;
+        std::tie(uMsg, wParam, lParam) = TranslateMouseHookMessageToWin10(uMsg, wParam, lParam);
     }
 
     // printMessage(uMsg);
@@ -3842,7 +3857,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
 }
 
 // Translates Win10 mouse messages sent from LowLevelMouseProc to Win11 WM_POINTERDOWN messages
-std::tuple<UINT, WPARAM, LPARAM> TranslateWin10MouseMessageToWin11(const UINT &uMsg, const WPARAM &wParam, const LPARAM &lParam)
+std::tuple<UINT, WPARAM, LPARAM> TranslateMouseHookMessageToWin11(const UINT &uMsg, const WPARAM &wParam, const LPARAM &lParam)
 {
     // Map the message type to pointer button flags
     UINT pointerFlags = 0;
@@ -3858,9 +3873,22 @@ std::tuple<UINT, WPARAM, LPARAM> TranslateWin10MouseMessageToWin11(const UINT &u
     {
         pointerFlags = POINTER_MESSAGE_FLAG_THIRDBUTTON;
     }
+    else if (wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONDBLCLK)
+    {
+        MSLLHOOKSTRUCT *pMouseStruct = (MSLLHOOKSTRUCT *)lParam; // lParam contains pointer to stable g_hookedMouseData
+        WORD xButton = GET_XBUTTON_WPARAM(pMouseStruct->mouseData);
+        if (xButton == XBUTTON1)
+        {
+            pointerFlags = POINTER_MESSAGE_FLAG_FOURTHBUTTON;
+        }
+        else if (xButton == XBUTTON2)
+        {
+            pointerFlags = POINTER_MESSAGE_FLAG_FIFTHBUTTON;
+        }
+    }
     else
     {
-        LOG_ERROR(L"Unsupported original mouse message 0x%X in TranslateWin10MouseMessageToWin11", wParam);
+        LOG_ERROR(L"Unsupported original mouse message 0x%X in TranslateMouseHookMessageToWin11", wParam);
         std::make_tuple(uMsg, wParam, lParam);
     }
 
@@ -3884,7 +3912,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     if (uMsg == g_hookedClickMsg)
     {
         LOG_DEBUG(L"Received hooked click message in InputSite: original msg=0x%X", wParam);
-        std::tie(uMsg, wParam, lParam) = TranslateWin10MouseMessageToWin11(uMsg, wParam, lParam);
+        std::tie(uMsg, wParam, lParam) = TranslateMouseHookMessageToWin11(uMsg, wParam, lParam);
     }
 
     if (!g_hMouseHook)
