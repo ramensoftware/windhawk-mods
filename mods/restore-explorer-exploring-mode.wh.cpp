@@ -2,7 +2,7 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.0.1
+// @version         1.0.2
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -225,7 +225,7 @@ void CShellBrowser__SetTitle_hook(void *pThis)
 void (*CShellBrowser__SetIcon_orig)(void *);
 void CShellBrowser__SetIcon_hook(void *pThis)
 {
-    if (CShellBrowser__IsExplorerBandVisible(pThis))
+    if (g_fExplorerIcon && CShellBrowser__IsExplorerBandVisible(pThis))
     {
         IBrowserEvents *pbe = *((IBrowserEvents **)pThis + 78);
         static HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
