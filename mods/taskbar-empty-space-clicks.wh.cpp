@@ -1185,7 +1185,7 @@ void SetTaskbarAutohide(bool enabled);
 void ToggleTaskbarAutohide();
 void ShowDesktop();
 void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow = false);
-void SendCtrlAltTabKeypress();
+void SendCtrlAltTabKeypress(const bool inverse);
 void CloseCtrlAltTabDialog();
 void SendWinTabKeypress();
 void MediaPlayPause();
@@ -2313,6 +2313,23 @@ std::tuple<std::vector<int>, bool> ParseVirtualKeypressSetting(const std::wstrin
     return std::make_tuple(keys, focusPreviousWindow);
 }
 
+// Parses Ctrl+Alt+Tab action arguments
+bool ParseCtrlAltTabSetting(const std::wstring &args)
+{
+    LOG_TRACE();
+
+    bool inverse = false;
+    const auto argsSplit = SplitArgs(args);
+    for (const auto &arg : argsSplit)
+    {
+        if (stringtools::toLower(arg) == L"inverse")
+        {
+            inverse = true;
+        }
+    }
+    return inverse;
+}
+
 // Creates action executor lambda from action name and arguments
 std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName, const std::wstring &args)
 {
@@ -2332,8 +2349,9 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_ALT_TAB")
     {
-        return [](HWND)
-        { SendCtrlAltTabKeypress(); };
+        bool inverse = ParseCtrlAltTabSetting(args);
+        return [inverse](HWND)
+        { SendCtrlAltTabKeypress(inverse); };
     }
     else if (actionName == L"ACTION_TASK_MANAGER")
     {
@@ -2656,15 +2674,17 @@ void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
 }
 
 // Sends Ctrl+Alt+Tab keypress
-void SendCtrlAltTabKeypress()
+void SendCtrlAltTabKeypress(const bool inverse)
 {
     LOG_TRACE();
 
     LOG_INFO(L"Sending Ctrl+Alt+Tab keypress to open Alt+Tab dialog");
-    SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
+    
+    const std::vector<int> keyCombo = inverse ? std::vector<int>{VK_LCONTROL, VK_LMENU, VK_SHIFT, VK_TAB} : std::vector<int>{VK_LCONTROL, VK_LMENU, VK_TAB};
+    SendKeypress(keyCombo);
     if (!g_suppressMouseInput) // when opening, call twice, otherwise current window is selected
     {
-        SendKeypress({VK_LCONTROL, VK_LMENU, VK_TAB});
+        SendKeypress(keyCombo);
     }
     g_suppressMouseInput = true;
     g_suppressMouseInputTimestamp = GetTickCount();
