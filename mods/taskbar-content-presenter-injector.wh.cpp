@@ -268,7 +268,7 @@ void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
 // -------------------------------------------------------------------------
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Rename 'symbolHooks' to 'taskbarViewDllHooks' to satisfy the PR validator
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
@@ -293,7 +293,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         }
     };
 
-    // Update the array name in the HookSymbols call as well
     if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
         return false;
