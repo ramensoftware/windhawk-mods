@@ -6222,7 +6222,7 @@
                     884
                 ],
                 "ratingUsers": 1008,
-                "updated": 1766791920000,
+                "updated": 1767370411000,
                 "users": 56673
             },
             "featured": true,
@@ -6240,7 +6240,7 @@
                 ],
                 "name": "Taskbar Clock Customization",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.7"
+                "version": "1.7.1"
             }
         },
         "taskbar-disappearing-icon-fix-win11": {

@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-01T22:10:43.000Z</updated>
+    <updated>2026-01-02T16:13:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.7.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#273b8d750fd41ccabba8d53a70d0d8ddb7d6fafd</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2026-01-02T16:13:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to specify text for <code>%media_info%</code> when no media is playing.</li>
+<li>Added the <code>%n%</code> pattern as a shorter alternative to <code>%newline%</code>.</li>
+<li>Fixed <code>%battery%</code> to show 100% when fully charged. 99% was previously displayed in this case.</li>
+<li>Fixed network and GPU metrics not accounting for new adapters or processes.</li>
+<li>Fixed the mod preventing explorer.exe from exiting if media info patterns are used.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.2]]></title>
         <id>https://windhawk.net/mods/restore-explorer-exploring-mode#f828d309ee213355f5bf325f0312eeaa1ce2ae1c</id>
@@ -344,19 +361,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>u2x1</name>
             <uri>https://github.com/u2x1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dark mode context menus 1.4.1]]></title>
-        <id>https://windhawk.net/mods/dark-menus#4301dbfbb94e430a66f346b5454ce0d7e03b77e3</id>
-        <link href="https://windhawk.net/mods/dark-menus"/>
-        <updated>2025-12-23T10:34:48.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed: Firefox crashes after update 1.4 (https://github.com/MGGSK/DarkMenus/issues/19)</li>
-</ul>]]></content>
-        <author>
-            <name>Mgg Sk</name>
-            <uri>https://github.com/MGGSK</uri>
         </author>
     </entry>
 </feed>
