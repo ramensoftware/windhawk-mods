@@ -87,7 +87,7 @@ Once set, a simple middle-click on empty taskbar space will toggle the auto-hide
 Some actions support or require additional arguments. You can set them in the Settings menu. Arguments are separated by semicolon. For example: `arg1;arg2`.
 
 1. Show desktop - no additional arguments supported
-2. Ctrl+Alt+Tab - no additional arguments supported
+2. Ctrl+Alt+Tab - argument `inverse` inverts the order of iteration through the windows (Ctrl+ALt+Shift+Tab behavior)
 3. Task Manager - no additional arguments supported
 4. Mute system volume - no additional arguments supported
 5. Taskbar auto-hide - no additional arguments supported
