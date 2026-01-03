@@ -3,7 +3,7 @@
 // @name            Win+D per monitor(show desktop)
 // @description     Press Win+D to only manage the windows on the monitor where the mouse is located.
 // @description:zh-CN   按下Win+D时 只最小化/还原鼠标所在显示器的窗口
-// @version         1.1.20250811
+// @version         1.1.20251123
 // @author          easyatm
 // @github          https://github.com/easyatm
 // @include         explorer.exe
@@ -34,6 +34,13 @@ where the mouse cursor is located.
 按下win+d时,只最小化/还原鼠标所在监视器上的窗口
 
 ## Changelog
+
+### 2025-11-23 (v1.1.20251123)
+- Fixed window control to use ShowWindow instead of PostMessage for better compatibility with windows that have popups, such as Excel
+- 修复窗口控制，使用 ShowWindow 而非 PostMessage，以更好地兼容带有弹出窗口的窗口，如 Excel
+
+Fixes:
+- https://github.com/ramensoftware/windhawk-mods/issues/2709
 
 ### 2025-08-11 (v1.1.20250811)
 - Added option to ignore topmost tool windows without title bar during Win+D operation
@@ -78,7 +85,8 @@ using namespace std;
 #define log(...) Wh_Log(L"%s", ansi_unicode(format(__VA_ARGS__)).c_str());
 
 // 设置变量
-struct {
+struct
+{
     bool ignoreTopmostNoTitleBarWindows;
     int minWindowSize;
 } g_settings;
@@ -283,9 +291,10 @@ public:
                 GetWindowTextA(hWndCcc, windowTitle, sizeof(windowTitle));
 
                 // 输出窗口信息
-                log("Processing window: class='{}', title='{}', size={}x{}, hwnd=0x{:x}, owner=0x{:x}",
-                    wndClass, windowTitle, width, height, (uintptr_t)hWndCcc, (uintptr_t)ownerWnd);
+                log("Processing2 window: class='{}', title='{}', size={}x{}, hwnd=0x{:x}, owner=0x{:x}", wndClass, windowTitle, width, height,
+                    (uintptr_t)hWndCcc, (uintptr_t)ownerWnd);
 
+                log("hWnd:0x{:x}", (uintptr_t)hWndCcc);
                 vec.push_back({ hWndCcc, wndClass, ownerWnd });
             }
             return vec;
@@ -315,11 +324,16 @@ public:
                     continue;
 
                 if (rc.ownerWnd)
+                {
                     ShowOwnedPopups(rc.ownerWnd, false);
+                    log("ShowOwnedPopups 0x{:x} false", (uintptr_t)rc.ownerWnd);
+                }
                 else
                 {
-                    //::ShowWindow(rc.wnd, SW_MINIMIZE);
-                    PostMessage(rc.wnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+                    log("ShowWindow SC_MINIMIZE 0x{:x}", (uintptr_t)rc.wnd);
+
+                    ::ShowWindow(rc.wnd, SW_MINIMIZE);
+                    //PostMessage(rc.wnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
                 }
 
                 listWnd.emplace_back(std::move(rc));
@@ -344,8 +358,8 @@ public:
                 }
                 else
                 {
-                    //::ShowWindow(rc.wnd, SW_SHOWNOACTIVATE);
-                    PostMessage(rc.wnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+                    ::ShowWindow(rc.wnd, SW_SHOWNOACTIVATE);
+                    //PostMessage(rc.wnd, WM_SYSCOMMAND, SC_RESTORE, 0);
                     hLastWnd = rc.wnd;
                 }
 
