@@ -2,7 +2,7 @@
 // @id              taskbar-content-presenter-injector
 // @name            Taskbar ContentPresenter Injector
 // @description     Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel and Taskbar.TaskListButtonPanel
-// @version         1.1
+// @version         1.2
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         explorer.exe
@@ -39,21 +39,17 @@ This mod acts as an addon to the [Windows 11 Taskbar Styler mod](https://windhaw
 #include <string>
 #include <vector>
 #include <mutex>
-#include <unordered_set>
 
 using namespace winrt::Windows::UI::Xaml;
 
 // Global state tracking
 std::atomic<bool> g_taskbarViewDllLoaded = false;
 
-// Track Panels specifically for cleanup.
 struct TrackedPanelRef {
-    void* ptr; // Stored only for identification/deduplication
     winrt::weak_ref<Controls::Panel> ref;
 };
 
 std::vector<TrackedPanelRef> g_trackedPanels;
-std::unordered_set<void*> g_trackedPanelPtrs;
 std::mutex g_panelMutex;
 
 // Cache the TaskbarFrame to allow triggering global scans from local events
@@ -76,14 +72,10 @@ TaskListButton_UpdateButtonPadding_t TaskListButton_UpdateButtonPadding_Original
 using ExperienceToggleButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 ExperienceToggleButton_UpdateVisualStates_t ExperienceToggleButton_UpdateVisualStates_Original;
 
-using TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t = void(WINAPI*)(void* pThis);
-TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original;
-
 // -------------------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------------------
 
-// Helper to get FrameworkElement from native implementation pointer
 FrameworkElement GetFrameworkElementFromNative(void* pThis) {
     try {
         void* iUnknownPtr = (void**)pThis + 3;
@@ -95,20 +87,33 @@ FrameworkElement GetFrameworkElementFromNative(void* pThis) {
     }
 }
 
-// Register a panel to be cleaned up later. Safe to call repeatedly.
 void RegisterPanelForCleanup(Controls::Panel const& panel) {
     if (!panel) return;
     
     void* pAbi = winrt::get_abi(panel);
     
     std::lock_guard<std::mutex> lock(g_panelMutex);
-    if (g_trackedPanelPtrs.find(pAbi) == g_trackedPanelPtrs.end()) {
-        g_trackedPanelPtrs.insert(pAbi);
-        g_trackedPanels.push_back({ pAbi, winrt::make_weak(panel) });
+
+    // OPTIMIZATION: Prune dead references while scanning for duplicates.
+    // This prevents the vector from growing indefinitely over long sessions.
+    auto it = g_trackedPanels.begin();
+    while (it != g_trackedPanels.end()) {
+        auto existing = it->ref.get();
+        if (!existing) {
+            // Panel is dead, remove it from tracking
+            it = g_trackedPanels.erase(it);
+        } else {
+            // Panel is alive, check if it matches the one we are adding
+            if (winrt::get_abi(existing) == pAbi) {
+                return; // Already tracked
+            }
+            ++it;
+        }
     }
+    
+    g_trackedPanels.push_back({ winrt::make_weak(panel) });
 }
 
-// Helper: Check if the element is already injected
 bool IsAlreadyInjected(Controls::Panel panel) {
     for (auto child : panel.Children()) {
         if (auto elem = child.try_as<FrameworkElement>()) {
@@ -120,14 +125,12 @@ bool IsAlreadyInjected(Controls::Panel panel) {
     return false;
 }
 
-// Logic to inject the ContentPresenter
 void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
     if (!targetPanel) return;
 
     auto panel = targetPanel.try_as<Controls::Panel>();
     if (!panel) return;
 
-    // Track this panel immediately for future cleanup
     RegisterPanelForCleanup(panel);
 
     if (IsAlreadyInjected(panel)) return;
@@ -140,20 +143,17 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
     panel.Children().Append(presenter);
 }
 
-// Universal scanner: Checks current element and recurses
 void ScanAndInjectRecursive(FrameworkElement element) {
     if (!element) return;
 
-    std::wstring className = winrt::get_class_name(element).c_str();
+    // Optimization: Keep as hstring to avoid std::wstring allocation
+    auto className = winrt::get_class_name(element);
 
-    // Check if THIS element is one of our targets
     if (className == c_TargetPanelLabeled || className == c_TargetPanelButton) {
         InjectContentPresenterIntoPanel(element);
-        // We generally don't need to look inside the panel itself for another panel
         return; 
     }
 
-    // Recurse into children
     int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
     for (int i = 0; i < childrenCount; i++) {
         auto childDependencyObject = Media::VisualTreeHelper::GetChild(element, i);
@@ -164,36 +164,22 @@ void ScanAndInjectRecursive(FrameworkElement element) {
     }
 }
 
-// Checks if we have a cached TaskbarFrame. If not, walks up the tree from the 
-// provided element to find it, caches it, and triggers a full scan.
 void EnsureGlobalScanFromElement(FrameworkElement startNode) {
-    // If we already have a valid global frame cached, we assume global scanning 
-    // is being handled by the Layout hook or has already run.
-    if (g_cachedTaskbarFrame.get()) {
-        return;
-    }
+    if (g_cachedTaskbarFrame.get()) return;
 
     try {
         FrameworkElement current = startNode;
         while (current) {
-            std::wstring className = winrt::get_class_name(current).c_str();
+            auto className = winrt::get_class_name(current);
             if (className == c_RootFrameName) {
-                // Found the frame! Cache it.
                 g_cachedTaskbarFrame = winrt::make_weak(current);
-                
-                // Trigger the global scan immediately.
-                // This ensures that hitting one button populates the whole bar.
                 ScanAndInjectRecursive(current);
                 return;
             }
-            
-            // Walk up
             auto parent = Media::VisualTreeHelper::GetParent(current);
             current = parent.try_as<FrameworkElement>();
         }
-    } catch (...) {
-        // Safety catch for visual tree traversal issues
-    }
+    } catch (...) {}
 }
 
 // -------------------------------------------------------------------------
@@ -204,7 +190,6 @@ void RemoveInjectedFromPanel(Controls::Panel panel) {
     if (!panel) return;
     try {
         auto children = panel.Children();
-        // Iterate backwards to safely remove
         for (int i = children.Size() - 1; i >= 0; i--) {
             auto child = children.GetAt(i);
             if (auto childFe = child.try_as<FrameworkElement>()) {
@@ -213,54 +198,42 @@ void RemoveInjectedFromPanel(Controls::Panel panel) {
                 }
             }
         }
-    } catch (...) {
-        // Handle potential collection change errors or invalid state
-    }
+    } catch (...) {}
 }
 
 // -------------------------------------------------------------------------
 // Hooks
 // -------------------------------------------------------------------------
 
-// Hook for Standard App Buttons
+// Helper to reduce redundancy in hooks
+void InjectForElement(void* pThis) {
+    // SAFETY: Catch all exceptions to prevent crashing Explorer
+    try {
+        if (auto elem = GetFrameworkElementFromNative(pThis)) {
+            ScanAndInjectRecursive(elem);
+            // Optimization: Only trigger hierarchy walk if we don't have the frame yet
+            if (!g_cachedTaskbarFrame.get()) {
+                EnsureGlobalScanFromElement(elem);
+            }
+        }
+    } catch (...) {
+        // Swallow exceptions to maintain system stability
+    }
+}
+
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
-    if (auto elem = GetFrameworkElementFromNative(pThis)) {
-        ScanAndInjectRecursive(elem); // Local injection
-        EnsureGlobalScanFromElement(elem); // Try to upgrade to global injection
-    }
+    InjectForElement(pThis);
 }
 
 void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
     TaskListButton_UpdateButtonPadding_Original(pThis);
-    if (auto elem = GetFrameworkElementFromNative(pThis)) {
-        ScanAndInjectRecursive(elem);
-        EnsureGlobalScanFromElement(elem);
-    }
+    InjectForElement(pThis);
 }
 
-// Hook for System Buttons (Search, Widgets, etc.)
 void WINAPI ExperienceToggleButton_UpdateVisualStates_Hook(void* pThis) {
     ExperienceToggleButton_UpdateVisualStates_Original(pThis);
-    if (auto elem = GetFrameworkElementFromNative(pThis)) {
-        ScanAndInjectRecursive(elem);
-        EnsureGlobalScanFromElement(elem);
-    }
-}
-
-// Global Layout Hook
-void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
-    TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original(pThis);
-
-    auto taskbarFrame = GetFrameworkElementFromNative(pThis);
-    if (!taskbarFrame) return;
-
-    // Cache this pointer if we haven't already
-    if (!g_cachedTaskbarFrame.get()) {
-        g_cachedTaskbarFrame = winrt::make_weak(taskbarFrame);
-    }
-
-    ScanAndInjectRecursive(taskbarFrame);
+    InjectForElement(pThis);
 }
 
 // -------------------------------------------------------------------------
@@ -268,8 +241,7 @@ void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
 // -------------------------------------------------------------------------
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
@@ -285,15 +257,10 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &ExperienceToggleButton_UpdateVisualStates_Original,
             ExperienceToggleButton_UpdateVisualStates_Hook,
             true // Optional
-        },
-        {
-            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarFrame::OnTaskbarLayoutChildBoundsChanged(void))"},
-            &TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original,
-            TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook,
         }
     };
 
-    if (!HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
+    if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
         return false;
     }
@@ -333,7 +300,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Taskbar Injector Mod v1.3");
+    Wh_Log(L"Initializing Taskbar Injector Mod v1.4");
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
@@ -350,31 +317,28 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing Taskbar Injector Mod - Cleaning up %d tracked panels", g_trackedPanels.size());
+    Wh_Log(L"Uninitializing Taskbar Injector Mod");
 
-    std::lock_guard<std::mutex> lock(g_panelMutex);
+    std::vector<TrackedPanelRef> localPanels;
+    {
+        std::lock_guard<std::mutex> lock(g_panelMutex);
+        localPanels = std::move(g_trackedPanels);
+    }
     
-    for (auto& tracked : g_trackedPanels) {
+    for (auto& tracked : localPanels) {
         if (auto panel = tracked.ref.get()) {
-            // We must run cleanup on the UI thread.
             auto dispatcher = panel.Dispatcher();
-            
             if (dispatcher.HasThreadAccess()) {
                 RemoveInjectedFromPanel(panel);
             } else {
                 try {
-                    // Block until cleanup is done on the UI thread to ensure code is still valid
                     dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [panel]() {
                         RemoveInjectedFromPanel(panel);
                     }).get();
-                } catch (...) {
-                    Wh_Log(L"Failed to run cleanup on dispatcher for a panel");
-                }
+                } catch (...) {}
             }
         }
     }
     
-    g_trackedPanels.clear();
-    g_trackedPanelPtrs.clear();
     g_cachedTaskbarFrame = nullptr;
 }
