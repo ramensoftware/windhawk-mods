@@ -95,15 +95,12 @@ void RegisterPanelForCleanup(Controls::Panel const& panel) {
     std::lock_guard<std::mutex> lock(g_panelMutex);
 
     // OPTIMIZATION: Prune dead references while scanning for duplicates.
-    // This prevents the vector from growing indefinitely over long sessions.
     auto it = g_trackedPanels.begin();
     while (it != g_trackedPanels.end()) {
         auto existing = it->ref.get();
         if (!existing) {
-            // Panel is dead, remove it from tracking
             it = g_trackedPanels.erase(it);
         } else {
-            // Panel is alive, check if it matches the one we are adding
             if (winrt::get_abi(existing) == pAbi) {
                 return; // Already tracked
             }
@@ -146,7 +143,6 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
 void ScanAndInjectRecursive(FrameworkElement element) {
     if (!element) return;
 
-    // Optimization: Keep as hstring to avoid std::wstring allocation
     auto className = winrt::get_class_name(element);
 
     if (className == c_TargetPanelLabeled || className == c_TargetPanelButton) {
@@ -207,18 +203,14 @@ void RemoveInjectedFromPanel(Controls::Panel panel) {
 
 // Helper to reduce redundancy in hooks
 void InjectForElement(void* pThis) {
-    // SAFETY: Catch all exceptions to prevent crashing Explorer
     try {
         if (auto elem = GetFrameworkElementFromNative(pThis)) {
             ScanAndInjectRecursive(elem);
-            // Optimization: Only trigger hierarchy walk if we don't have the frame yet
             if (!g_cachedTaskbarFrame.get()) {
                 EnsureGlobalScanFromElement(elem);
             }
         }
-    } catch (...) {
-        // Swallow exceptions to maintain system stability
-    }
+    } catch (...) {}
 }
 
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
@@ -241,6 +233,7 @@ void WINAPI ExperienceToggleButton_UpdateVisualStates_Hook(void* pThis) {
 // -------------------------------------------------------------------------
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
@@ -300,7 +293,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Taskbar Injector Mod v1.4");
+    Wh_Log(L"Initializing Taskbar Injector Mod v1.5");
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
