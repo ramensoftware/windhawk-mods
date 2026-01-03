@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-03T13:48:43.000Z</updated>
+    <updated>2026-01-03T19:58:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Confirm Closing Multiple Tabs in File Explorer 1.0]]></title>
+        <id>https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs#743539ac506e912f2ca2375e3b4662bbb9e9ecc6</id>
+        <link href="https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs"/>
+        <updated>2026-01-03T19:58:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="confirmclosingmultipletabsinfileexplorer">Confirm Closing Multiple Tabs in File Explorer</h1>
+<p>This mod adds a confirmation dialog that spawns when you attempt to close a File Explorer window
+with multiple tabs open, preventing accidental closure of all tabs.</p>
+<p><img src="https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/confirm-closing-multiple-explorer-tabs.png" alt="Preview" /></p>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Press Esc to exit Task Manager 1.0]]></title>
         <id>https://windhawk.net/mods/taskmgr-esc#822ada8cbdbce0f88942e1b4dc935d3788afb0ab</id>
@@ -345,22 +359,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 2.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#37d5bb9775479a78c2fd5bbfbfd2d04216c42a66</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2025-12-24T11:57:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>send virtual key press to the last active window with <code>focusPreviousWindow</code> option - https://github.com/m1lhaus/windhawk-mods/issues/34</li>
-<li>added new action <code>Toggle Taskbar alignment</code> to toggle between <code>Left</code> and <code>Center</code> taskbar icons alignment - https://github.com/m1lhaus/windhawk-mods/issues/31</li>
-<li>implemented autodetection of ExplorerPatcher - https://github.com/m1lhaus/windhawk-mods/issues/46</li>
-<li>added taskbar type (primary/secondary) as a new condition to action trigger - https://github.com/m1lhaus/windhawk-mods/issues/45</li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>

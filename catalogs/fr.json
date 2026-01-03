@@ -1722,6 +1722,34 @@
                 "version": "1.0.0"
             }
         },
+        "confirm-closing-multiple-explorer-tabs": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767470289000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767470289000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Kitsune",
+                "compilerOptions": "-lcomctl32 -luser32",
+                "description": "Shows a confirmation dialog when closing a File Explorer window with multiple tabs open",
+                "github": "https://github.com/AromaKitsune",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Confirm Closing Multiple Tabs in File Explorer",
+                "version": "1.0"
+            }
+        },
         "console-error-to-ding": {
             "details": {
                 "defaultSorting": 1010,
