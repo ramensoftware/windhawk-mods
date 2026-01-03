@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S
-// @version         1.0
+// @version         1.1
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -104,29 +104,63 @@ void SendCtrlS() {
 
     g_isSendingCtrlS = true;
 
-    INPUT inputs[4] = {};
+    // Check if Shift or Alt are currently pressed
+    bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+    // Calculate how many inputs we need
+    // Base: Ctrl down, S down, S up, Ctrl up = 4
+    // Plus: Shift up (if pressed), Alt up (if pressed)
+    int inputCount = 4;
+    if (shiftPressed) inputCount++;
+    if (altPressed) inputCount++;
+
+    INPUT inputs[6] = {};  // Max 6 inputs
+    int idx = 0;
+
+    // Release Shift first if pressed (to avoid Ctrl+Shift+S = Apply Styles)
+    if (shiftPressed) {
+        inputs[idx].type = INPUT_KEYBOARD;
+        inputs[idx].ki.wVk = VK_SHIFT;
+        inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
+        idx++;
+        Wh_Log(L"Releasing Shift key before Ctrl+S");
+    }
+
+    // Release Alt if pressed (to avoid Alt+Ctrl+S combinations)
+    if (altPressed) {
+        inputs[idx].type = INPUT_KEYBOARD;
+        inputs[idx].ki.wVk = VK_MENU;
+        inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
+        idx++;
+        Wh_Log(L"Releasing Alt key before Ctrl+S");
+    }
 
     // Press Ctrl
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_CONTROL;
-    inputs[0].ki.dwFlags = 0;
+    inputs[idx].type = INPUT_KEYBOARD;
+    inputs[idx].ki.wVk = VK_CONTROL;
+    inputs[idx].ki.dwFlags = 0;
+    idx++;
 
     // Press S
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = 'S';
-    inputs[1].ki.dwFlags = 0;
+    inputs[idx].type = INPUT_KEYBOARD;
+    inputs[idx].ki.wVk = 'S';
+    inputs[idx].ki.dwFlags = 0;
+    idx++;
 
     // Release S
-    inputs[2].type = INPUT_KEYBOARD;
-    inputs[2].ki.wVk = 'S';
-    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[idx].type = INPUT_KEYBOARD;
+    inputs[idx].ki.wVk = 'S';
+    inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
+    idx++;
 
     // Release Ctrl
-    inputs[3].type = INPUT_KEYBOARD;
-    inputs[3].ki.wVk = VK_CONTROL;
-    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[idx].type = INPUT_KEYBOARD;
+    inputs[idx].ki.wVk = VK_CONTROL;
+    inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
+    idx++;
 
-    UINT sent = SendInput(4, inputs, sizeof(INPUT));
+    UINT sent = SendInput(idx, inputs, sizeof(INPUT));
 
     g_isSendingCtrlS = false;
 
