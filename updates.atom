@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-03T21:25:48.000Z</updated>
+    <updated>2026-01-03T21:39:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Size 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-size#efd71109380b48da97a905461ad3ef4e3191dac9</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-size"/>
+        <updated>2026-01-03T21:39:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added settings for fixed min/max width and height, enabling forced thumbnail sizes for better readability, maneuverability, and bulk window management. Contributed by <a href="https://github.com/alchemyyy">iZack</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.0]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#e3e6960a8a2ef064cc7f3391486c7607413ed2b6</id>
@@ -338,33 +351,6 @@ verb (Windows + E shortcut, directly invoking <code>explorer.exe</code>)</li>
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Corner Click Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-corner-fix#7a97b948c1747274d849d2c53f6f88be9920f95f</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-corner-fix"/>
-        <updated>2025-12-28T08:52:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startmenucornerclickfix">Start Menu Corner Click Fix</h1>
-<p>Fixes an issue on Windows 11 where clicking in the very corner of the taskbar doesn't open the Start menu
-on left-aligned taskbars when the start menu button is "in a sticky corner".</p>
-<h2 id="theproblem">The Problem</h2>
-<p>Windows 11's taskbar has an InputSite window (Windows.UI.Input.InputSite.WindowClass)
-that intercepts mouse clicks before they reach the Start button.</p>
-<p>This seems to be caused by the "sticky corners" feature, and thus only affects multi-monitor setups.</p>
-<h2 id="thesolution">The Solution</h2>
-<p>This mod hooks <code>CreateWindowInBand</code> to detect when the InputSite window is created,
-then installs a thread-specific mouse hook on its thread. This hook intercepts mouse
-clicks at the corner region and invokes the Start menu via UI Automation when the
-real button doesn't handle the click.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11 64-bit (tested on 25H2)</li>
-<li>Windhawk v1.4 or later</li>
-</ul>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>
