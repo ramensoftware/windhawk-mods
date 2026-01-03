@@ -3,115 +3,49 @@
 // @name            Press Esc to exit Task Manager
 // @description     Press Esc to exit Task Manager
 // @name:zh-CN      ESC键退出任务管理器
-// @description:zh-CN   ESC键退出任务管理器 
+// @description:zh-CN   ESC键退出任务管理器
 // @github          https://github.com/chenxustu1
 // @version         1.0
 // @author          chenxustu1
 // @include         taskmgr.exe
 // @license         MIT
 // ==/WindhawkMod==
- 
-#include <windows.h>
+
 #include <psapi.h>
 #include <windhawk_utils.h>
+#include <windows.h>
 
 static HHOOK g_keyboardHook = nullptr;
+static HANDLE g_thread = nullptr;
+static DWORD g_threadId = 0;
 
-void LogForegroundWindowInfo()
-{
+HWND GetTaskManagerForegroundWindow() {
     HWND hwnd = GetForegroundWindow();
     if (!hwnd)
-    {
-        Wh_Log(L"[ESC] No foreground window");
-        return;
-    }
-
-    wchar_t className[256] = L"";
-    GetClassNameW(hwnd, className, 256);
+        return nullptr;
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
 
-    wchar_t processName[MAX_PATH] = L"";
-    if (pid)
-    {
-        HANDLE hProc = OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
-            FALSE,
-            pid
-        );
-        if (hProc)
-        {
-            GetModuleBaseNameW(hProc, nullptr, processName, MAX_PATH);
-            CloseHandle(hProc);
-        }
-    }
+    if (pid != GetCurrentProcessId())
+        return nullptr;
 
-    Wh_Log(
-        L"[ESC] Foreground hwnd=0x%p class=\"%s\" pid=%lu process=\"%s\"",
-        hwnd,
-        className,
-        pid,
-        processName
-    );
+    return hwnd;
 }
 
-bool IsTaskManagerForeground()
-{
-    HWND hwnd = GetForegroundWindow();
-    if (!hwnd)
-        return false;
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (!pid)
-        return false;
-
-    HANDLE hProc = OpenProcess(
-        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
-        FALSE,
-        pid
-    );
-    if (!hProc)
-        return false;
-
-    wchar_t processName[MAX_PATH] = L"";
-    GetModuleBaseNameW(hProc, nullptr, processName, MAX_PATH);
-    CloseHandle(hProc);
-
-    if (_wcsicmp(processName, L"taskmgr.exe") != 0)
-        return false;
-
-    return true;
-}
-
-LRESULT CALLBACK LowLevelKeyboardProc(
-    int nCode, WPARAM wParam, LPARAM lParam)
-{
-    if (nCode == HC_ACTION)
-    {
-        auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        auto* kb = (KBDLLHOOKSTRUCT*)lParam;
 
         if ((wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) &&
-            kb->vkCode == VK_ESCAPE)
-        {
-            Wh_Log(L"[ESC] Key pressed");
+            kb->vkCode == VK_ESCAPE) {
+            Wh_Log(L"[ESC] pressed");
 
-            LogForegroundWindowInfo();
-
-            if (IsTaskManagerForeground())
-            {
-                HWND hwnd = GetForegroundWindow();
-                if (hwnd)
-                {
-                    Wh_Log(L"[ESC] Closing Task Manager");
-                    PostMessageW(hwnd, WM_CLOSE, 0, 0);
-                    return 1;  
-                }
-            }
-            else
-            {
-                Wh_Log(L"[ESC] Foreground is NOT Task Manager");
+            HWND hwnd = GetTaskManagerForegroundWindow();
+            if (hwnd) {
+                Wh_Log(L"[ESC] closing task manager");
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                return 1;
             }
         }
     }
@@ -119,33 +53,49 @@ LRESULT CALLBACK LowLevelKeyboardProc(
     return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
 }
 
-BOOL Wh_ModInit()
-{
-    Wh_Log(L"TaskManager ESC Mod init");
+DWORD WINAPI KeyboardThread(LPVOID) {
+    Wh_Log(L"Keyboard hook thread started");
 
-    g_keyboardHook = SetWindowsHookExW(
-        WH_KEYBOARD_LL,
-        LowLevelKeyboardProc,
-        GetModuleHandleW(nullptr),
-        0
-    );
+    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                       GetModuleHandleW(nullptr), 0);
 
-    if (!g_keyboardHook)
-    {
+    if (!g_keyboardHook) {
         Wh_Log(L"Failed to install keyboard hook");
-        return FALSE;
+        return 0;
     }
 
-    return TRUE;
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    return 0;
 }
 
-void Wh_ModUninit()
-{
-    Wh_Log(L"TaskManager ESC Mod uninit");
+BOOL Wh_ModInit() {
+    Wh_Log(L"Mod init");
 
-    if (g_keyboardHook)
-    {
+    g_thread =
+        CreateThread(nullptr, 0, KeyboardThread, nullptr, 0, &g_threadId);
+
+    return g_thread != nullptr;
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"Mod uninit");
+
+    if (g_threadId) {
+        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
+    }
+
+    if (g_keyboardHook) {
         UnhookWindowsHookEx(g_keyboardHook);
         g_keyboardHook = nullptr;
+    }
+
+    if (g_thread) {
+        CloseHandle(g_thread);
+        g_thread = nullptr;
     }
 }
