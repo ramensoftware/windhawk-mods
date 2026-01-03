@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-03T21:39:28.000Z</updated>
+    <updated>2026-01-03T22:47:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 1.1]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#f9ec9f9313b098032de9129f9bb7e96059794fdc</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-01-03T22:47:39.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix Apply Styles dialog opening during auto-save</p>
+<p>Problem:
+When typing uppercase letters (holding Shift) and auto-save triggers at the same time, Word receives Ctrl+Shift+S instead of Ctrl+S. This opens the "Apply Styles" dialog, interrupting the user's workflow.</p>
+<p>Solution:
+Before sending Ctrl+S, the mod now checks if Shift or Alt keys are currently pressed. If so, it sends key-up events for these modifiers first, ensuring Word receives a clean Ctrl+S command.</p>
+<p>Changes:
+1) Added detection for pressed Shift and Alt keys before auto-save
+2) Send key-up events for modifier keys before Ctrl+S to prevent unwanted shortcuts
+3) Version bumped to 1.1</p>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Thumbnail Size 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnail-size#efd71109380b48da97a905461ad3ef4e3191dac9</id>
@@ -333,24 +352,6 @@ verb (Windows + E shortcut, directly invoking <code>explorer.exe</code>)</li>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Click on empty taskbar space 2.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-empty-space-clicks#d5d60e47eb69f50bfa9ea4dd394d884e95eaf823</id>
-        <link href="https://windhawk.net/mods/taskbar-empty-space-clicks"/>
-        <updated>2025-12-28T14:10:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Implemented support for mouse side buttons (mouse4 and mouse5 buttons) - https://github.com/m1lhaus/windhawk-mods/issues/50</li>
-<li>Added new actions for media playback control - pause, next track, prev track - https://github.com/m1lhaus/windhawk-mods/issues/51</li>
-<li>Added Hints section to mod's description</li>
-<li>Start application action reworked - users can now open URLs and paths in Explorer - https://github.com/m1lhaus/windhawk-mods/issues/53</li>
-<li>Started applications will now try to start on currently active monitor - https://github.com/m1lhaus/windhawk-mods/issues/52</li>
-<li>Default keyboard modifiers (all selected) are now ignored - https://github.com/ramensoftware/windhawk-mods/issues/2745#issuecomment-3591791526</li>
-</ul>]]></content>
-        <author>
-            <name>m1lhaus</name>
-            <uri>https://github.com/m1lhaus</uri>
         </author>
     </entry>
 </feed>
