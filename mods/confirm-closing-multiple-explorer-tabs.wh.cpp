@@ -19,6 +19,7 @@ with multiple tabs open, preventing accidental closure of all tabs.
 */
 // ==/WindhawkModReadme==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <commctrl.h>
 #include <cstdio>
@@ -47,15 +48,12 @@ int GetTabCount(HWND hExplorer) {
 }
 
 // Subclass procedure to intercept WM_CLOSE
-LRESULT CALLBACK ExplorerSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK ExplorerSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg == WM_CLOSE) {
         int tabCount = GetTabCount(hWnd);
 
         // Only trigger if 2 or more tabs are open
         if (tabCount >= 2) {
-            // Play Asterisk sound
-            MessageBeep(MB_ICONASTERISK);
-
             // Prepare the dynamic Main Instruction text
             wchar_t mainInstruction[64];
             swprintf_s(mainInstruction, L"Close %d tabs?", tabCount);
@@ -71,13 +69,13 @@ LRESULT CALLBACK ExplorerSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             config.hwndParent = hWnd;
             config.hInstance = NULL;
             config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW; // Center over File Explorer window
-            
-            // Configuration requested
+
+            // Dialog Configuration
             config.pszWindowTitle = L"File Explorer";
             config.pszMainIcon = TD_INFORMATION_ICON; // "i" icon
             config.pszMainInstruction = mainInstruction; // Big blue text
-            config.pszContent = NULL; // No content text
-            
+            config.pszContent = NULL; // Reserved - Content text
+
             // Button Configuration
             config.pButtons = buttons;
             config.cButtons = ARRAYSIZE(buttons);
@@ -88,7 +86,7 @@ LRESULT CALLBACK ExplorerSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 
             if (SUCCEEDED(hr)) {
                 if (nButton != IDOK) {
-                    // User clicked Cancel (or X on dialog), block the close
+                    // User clicked "Cancel" or "X" on dialog, block the close action
                     return 0;
                 }
                 // If IDOK ("Close Tabs"), we fall through to DefSubclassProc to close the window
@@ -98,7 +96,7 @@ LRESULT CALLBACK ExplorerSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 
     if (uMsg == WM_NCDESTROY) {
         // Remove the subclass when a window is destroyed
-        RemoveWindowSubclass(hWnd, ExplorerSubclassProc, uIdSubclass);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ExplorerSubclassProc);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -107,13 +105,12 @@ LRESULT CALLBACK ExplorerSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 
 // Hook logic to attach the subclass to Explorer windows
 void AttachSubclass(HWND hWnd) {
-    // Check if we can attach. 0 is the subclass ID.
-    SetWindowSubclass(hWnd, ExplorerSubclassProc, 0, 0);
+    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ExplorerSubclassProc, 0);
 }
 
 // Hook logic to detach the subclass
 void DetachSubclass(HWND hWnd) {
-    RemoveWindowSubclass(hWnd, ExplorerSubclassProc, 0);
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ExplorerSubclassProc);
 }
 
 // Hook CreateWindowExW to catch new Explorer windows
