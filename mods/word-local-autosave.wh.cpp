@@ -28,6 +28,7 @@ short delay.
 - Configurable delay before saving
 - Optional minimum interval between saves to prevent excessive disk writes
 - Works with any locally saved Word document
+- Only saves when Word is the active window
 
 ## Settings
 
@@ -42,6 +43,7 @@ short delay.
   New unsaved documents will trigger the "Save As" dialog.
 - The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.
 - Manual Ctrl+S presses are detected and reset the auto-save timer.
+- Auto-save only triggers when Microsoft Word is the foreground window.
 */
 // ==/WindhawkModReadme==
 
@@ -69,6 +71,7 @@ UINT_PTR g_saveTimerId = 0;
 DWORD g_lastSaveTime = 0;
 DWORD g_lastInputTime = 0;
 bool g_isSendingCtrlS = false;
+DWORD g_wordProcessId = 0;
 
 // Original function pointer
 typedef BOOL (WINAPI *TranslateMessage_t)(const MSG*);
@@ -78,8 +81,27 @@ TranslateMessage_t g_originalTranslateMessage = nullptr;
 void ScheduleSave();
 void SendCtrlS();
 
+// Check if Word is the foreground window
+bool IsWordForeground() {
+    HWND foregroundWindow = GetForegroundWindow();
+    if (!foregroundWindow) {
+        return false;
+    }
+
+    DWORD foregroundProcessId = 0;
+    GetWindowThreadProcessId(foregroundWindow, &foregroundProcessId);
+
+    return (foregroundProcessId == g_wordProcessId);
+}
+
 // Send Ctrl+S keystroke
 void SendCtrlS() {
+    // Verify Word is still the foreground window before sending
+    if (!IsWordForeground()) {
+        Wh_Log(L"Word is not the foreground window, skipping auto-save");
+        return;
+    }
+
     g_isSendingCtrlS = true;
 
     INPUT inputs[4] = {};
@@ -133,7 +155,7 @@ void CALLBACK SaveTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime
 
     Wh_Log(L"Performing auto-save...");
 
-    // Send Ctrl+S
+    // Send Ctrl+S (function will verify Word is foreground)
     SendCtrlS();
 
     g_lastSaveTime = currentTime;
@@ -243,6 +265,9 @@ void LoadSettings() {
 // Mod initialization
 BOOL Wh_ModInit() {
     Wh_Log(L"Word Local AutoSave mod initializing...");
+
+    // Store current process ID for foreground window check
+    g_wordProcessId = GetCurrentProcessId();
 
     LoadSettings();
 
