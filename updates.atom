@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-03T20:24:46.000Z</updated>
+    <updated>2026-01-03T21:25:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 1.0]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#e3e6960a8a2ef064cc7f3391486c7607413ed2b6</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-01-03T21:25:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wordlocalautosave">Word Local AutoSave</h1>
+<p>This mod enables automatic saving for locally stored Word documents, similar to
+how AutoSave works with OneDrive files.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod monitors keyboard input in Microsoft Word. When you type, delete, paste,
+or make any changes to your document, it automatically triggers a save after a
+short delay.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Detects typing, backspace, delete, enter, and clipboard operations (Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y)</li>
+<li>Configurable delay before saving</li>
+<li>Optional minimum interval between saves to prevent excessive disk writes</li>
+<li>Works with any locally saved Word document</li>
+<li>Only saves when Word is the active window</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Save Delay (ms)</strong>: How long to wait after the last keystroke before saving.
+Default is 1000ms (1 second).</li>
+<li><strong>Minimum Time Between Saves (ms)</strong>: Minimum interval between consecutive saves.
+Set to 0 to disable this limit and allow saving as frequently as possible.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod only works with documents that have already been saved at least once.
+New unsaved documents will trigger the "Save As" dialog.</li>
+<li>The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.</li>
+<li>Manual Ctrl+S presses are detected and reset the auto-save timer.</li>
+<li>Auto-save only triggers when Microsoft Word is the foreground window.</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-content-presenter-injector#a2f2e08b1e0afbff9a7b36f6398489eac648d60a</id>
@@ -325,25 +365,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.6]]></title>
-        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#b10d6bd9375f96e105e8b13d2db6a2a75b4868bf</id>
-        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
-        <updated>2025-12-28T07:47:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for Spotify 1.2.76 to 1.2.80</li>
-<li>Add a 'transparent mode', which allows full transparency when the transparent rendering is enabled, and native frames are disabled</li>
-<li>To activate, call the <code>setTransparent(true)</code> function of the mod's JavaScript API</li>
-<li>This mode conflicts with DWM effect applicators like MicaForEveryone and Translucent Windows, and the Basic Themer Windhawk mod that has the Spotify window excluded by the exclusion options or the 'secure desktop only' mode.</li>
-<li>Please exclude Spotify from MicaForEveryone/Translucent Windows, and for the Basic Themer mod, Spotify must be included in the mod's basic theme apply list, or the mod must be fully disabled.</li>
-<li>Add support for removing DWM effects with the JS API via <code>setBackdrop('none')</code>.</li>
-<li>Update the readme and add documentation for the mod's JavaScript API.</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

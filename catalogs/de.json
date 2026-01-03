@@ -8622,6 +8622,36 @@
                 "version": "1.0.0"
             }
         },
+        "word-local-autosave": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767475548000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767475548000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "communism420",
+                "description": "Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S",
+                "github": "https://github.com/communism420",
+                "include": [
+                    "WINWORD.EXE"
+                ],
+                "name": "Word Local AutoSave",
+                "version": "1.0"
+            }
+        },
         "xs-discord-control-registered-games": {
             "details": {
                 "defaultSorting": 820,
