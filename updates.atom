@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-03T19:58:09.000Z</updated>
+    <updated>2026-01-03T20:24:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#a2f2e08b1e0afbff9a7b36f6398489eac648d60a</id>
+        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
+        <updated>2026-01-03T20:24:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarcontentpresenterinjector">Taskbar ContentPresenter Injector</h1>
+<p>This mod acts as an addon to the <a href="https://windhawk.net/mods/windows-11-taskbar-styler">Windows 11 Taskbar Styler mod</a>, enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a <code>ContentPresenter</code> named <code>CustomInjectedPresenter</code> into every <code>Taskbar.TaskListLabeledButtonPanel</code> and <code>Taskbar.TaskListButtonPanel</code>.</p>
+<h2 id="pathtotheinjectedelement">Path to the injected element:</h2>
+<p><code>Taskbar.TaskListButton &gt; Taskbar.TaskListLabeledButtonPanel &gt; Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter</code></p>
+<p><code>Taskbar.ExperienceToggleButton &gt; Taskbar.TaskListButtonPanel &gt; Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter</code></p>]]></content>
+        <author>
+            <name>Lockframe</name>
+            <uri>https://github.com/Lockframe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Confirm Closing Multiple Tabs in File Explorer 1.0]]></title>
         <id>https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs#743539ac506e912f2ca2375e3b4662bbb9e9ecc6</id>
@@ -329,36 +344,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#f5c9e38460918ba1fa4b643dedab4ecf42faf03c</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2025-12-26T23:32:00.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added new system performance metrics patterns:</li>
-<li><code>%total_speed%</code> - combined upload and download transfer rate.</li>
-<li><code>%disk_read%</code> - disk read speed.</li>
-<li><code>%disk_write%</code> - disk write speed.</li>
-<li><code>%disk_total%</code> - combined disk read and write speed.</li>
-<li><code>%gpu%</code> - GPU usage.</li>
-<li><code>%battery%</code> - battery level percentage.</li>
-<li><code>%battery_time%</code> - battery time remaining (charging/discharging time left).</li>
-<li><code>%power%</code> - battery power in watts (negative when discharging, positive when charging).</li>
-<li>Added media player info patterns, based on the work contributed by trashpanda (<a href="https://github.com/kaoshipaws">kaoshipaws</a>):</li>
-<li><code>%media_title%</code> - currently playing media title.</li>
-<li><code>%media_artist%</code> - currently playing media artist.</li>
-<li><code>%media_album%</code> - currently playing media album.</li>
-<li><code>%media_status%</code> - media playback status icon (⏯, ⏸, ⏹).</li>
-<li><code>%media_info%</code> - combined media info (Artist - Title), truncated with ellipsis.</li>
-<li>Added tooltip line mode option to replace the default tooltip instead of appending to it.</li>
-<li>Added network adapter name filter for upload/download metrics.</li>
-<li>Added "single space padding" option for percentage format (useful for monospaced fonts).</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

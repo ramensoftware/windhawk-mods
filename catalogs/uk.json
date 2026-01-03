@@ -6271,6 +6271,37 @@
                 "version": "1.7.1"
             }
         },
+        "taskbar-content-presenter-injector": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767471886000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767471886000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Lockframe",
+                "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+                "description": "Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel and Taskbar.TaskListButtonPanel",
+                "github": "https://github.com/Lockframe",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar ContentPresenter Injector",
+                "version": "1.2"
+            }
+        },
         "taskbar-disappearing-icon-fix-win11": {
             "details": {
                 "defaultSorting": 9890,
