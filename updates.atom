@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-02T16:13:31.000Z</updated>
+    <updated>2026-01-03T13:48:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Press Esc to exit Task Manager 1.0]]></title>
+        <id>https://windhawk.net/mods/taskmgr-esc#822ada8cbdbce0f88942e1b4dc935d3788afb0ab</id>
+        <link href="https://windhawk.net/mods/taskmgr-esc"/>
+        <updated>2026-01-03T13:48:43.000Z</updated>
+        <content type="html"><![CDATA[<p>Initial release.</p>]]></content>
+        <author>
+            <name>chenxustu1</name>
+            <uri>https://github.com/chenxustu1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.7.1]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#273b8d750fd41ccabba8d53a70d0d8ddb7d6fafd</id>
@@ -350,17 +361,6 @@ real button doesn't handle the click.</p>
         <author>
             <name>m1lhaus</name>
             <uri>https://github.com/m1lhaus</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 2.1.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#bf674013e9b1ad958972eb0c5cc632aa1674f17e</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2025-12-24T10:31:42.000Z</updated>
-        <content type="html"><![CDATA[<p>Add X (alongside E, N, Z) key option for "Switch to Next Desktop" hotkey, which cycles through virtual desktops in a wrap-around manner (1→2→3→…→1)</p>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>
