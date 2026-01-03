@@ -4,7 +4,8 @@
 // @description     Rename the Windows 11 Start menu power options (Lock, Sleep, Shut down, Restart) to any custom text.
 // @version         1.0.0
 // @author          BGsteppin
-// @github          https://github.com/BGsteppin/win11-start-power-text-renamer
+// @github          https://github.com/BGsteppin
+// @homepage        https://github.com/BGsteppin/win11-start-power-text-renamer
 // @include         StartMenuExperienceHost.exe
 // @license         MIT
 // ==/WindhawkMod==
