@@ -1158,6 +1158,7 @@ bool IsPrimaryTaskbarWindow(HWND hWnd);
 bool IsSecondaryTaskbarWindow(HWND hWnd);
 bool IsTaskbarWindow(HWND hWnd);
 std::unordered_set<HWND> KeepOnlyValidWindows(const std::unordered_set<HWND> &windows);
+bool UserClickedOnTaskViewItemOnTaskSwitchingWindow(const POINT &pt);
 
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName);
 bool IsTaskbarWindow(HWND hWnd);
@@ -1659,18 +1660,17 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
                 }
                 else
                 {
-                    // there is currently no way to tell where the user clicked since whole Desktop is overlayed by the Task Switching window,
-                    // and both WindowFromPoint and UIAutomation::ElementFromPoint return this window as the clicked window
-                    // so if you select a task thumbnail in the Task Switching dialog or click elsewhere on empty space on Desktop,
-                    // the returned window will always be the same Task Switching window
-                    // => if we send Enter, the user clicked Task thumbnail will be ignored
-                    // => if we dont send Enter, clicking outside the dialog wont confirm selected task thumbnail
-
-                    LOG_DEBUG("Clicked window is Task Switching dialog, stopping mouse input suppression");
-                    g_suppressMouseInput = false;
-                    g_suppressMouseInputTimestamp = 0;
-                    // do not send Enter, let the user chose the task
-
+                    if (!UserClickedOnTaskViewItemOnTaskSwitchingWindow(pMouseStruct->pt))
+                    {
+                        LOG_DEBUG("User clicked outside of Task Switching dialog, closing it and stopping mouse input suppression");
+                        CloseCtrlAltTabDialog();
+                    }
+                    else
+                    {
+                        LOG_DEBUG("User clicked on item from Task Switching dialog, stopping mouse input suppression");
+                        g_suppressMouseInput = false;
+                        g_suppressMouseInputTimestamp = 0;
+                    }
                     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
                 }
 
@@ -2140,6 +2140,53 @@ std::unordered_set<HWND> KeepOnlyValidWindows(const std::unordered_set<HWND> &wi
         }
     }
     return validWindows;
+}
+
+// Checks if user clicked on a Task View item (running app) on the Task Switching window
+bool UserClickedOnTaskViewItemOnTaskSwitchingWindow(const POINT &pt)
+{
+    LOG_TRACE();
+
+    com_ptr<IUIAutomation> pUIAutomation = g_comAPI.GetUIAutomation();
+    if (!pUIAutomation)
+    {
+        return false;
+    }
+
+    // UIAutomation::ElementFromPoint can be a bit buggy on Windows 11 on Task Switching window,
+    // for whatever reason pressing Win+Tab once fixes that behavior until session logout
+    com_ptr<IUIAutomationElement> pWindowElement = NULL;
+    if (FAILED(pUIAutomation->ElementFromPoint(pt, pWindowElement.put())) || !pWindowElement)
+    {
+        return false;
+    }
+
+    bstr_ptr uiaClassName_cstr;
+    pWindowElement->get_CurrentClassName(uiaClassName_cstr.GetAddress());
+    const std::wstring uiaClassName = !uiaClassName_cstr ? L"" : uiaClassName_cstr.GetBSTR();
+
+    bstr_ptr uiaName_cstr;
+    pWindowElement->get_CurrentName(uiaName_cstr.GetAddress());
+    const std::wstring uiaName = !uiaName_cstr ? L"" : uiaName_cstr.GetBSTR();
+
+    const HWND hRootWnd = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+    const auto wndClassName = GetClassNameString(hRootWnd);
+    const auto wndName = GetWindowTextString(hRootWnd);
+
+    LOG_DEBUG(L"Clicked element: UIA class name: %s", uiaClassName.c_str());
+    LOG_DEBUG(L"Clicked element: UIA name : %s", uiaName.c_str());
+    LOG_DEBUG(L"Clicked element: root Window class name: %s", wndClassName.c_str());
+    LOG_DEBUG(L"Clicked element: root Window name : %s", wndName.c_str());
+
+    if ((uiaClassName == L"ListViewItem") && (wndClassName == L"XamlExplorerHostIslandWindow") && (wndName == L"Task Switching"))
+    {
+        return true; // windows 11
+    }
+    else if ((wndClassName == L"MultitaskingViewFrame") && (wndName == L"Task Switching") && (uiaName != L"Dismiss Task Switching Window"))
+    {
+        return true; // windows 10
+    }
+    return false;
 }
 
 #pragma endregion // hooks_and_win32_methods
@@ -2679,7 +2726,7 @@ void SendCtrlAltTabKeypress(const bool inverse)
     LOG_TRACE();
 
     LOG_INFO(L"Sending Ctrl+Alt+Tab keypress to open Alt+Tab dialog");
-    
+
     const std::vector<int> keyCombo = inverse ? std::vector<int>{VK_LCONTROL, VK_LMENU, VK_SHIFT, VK_TAB} : std::vector<int>{VK_LCONTROL, VK_LMENU, VK_TAB};
     SendKeypress(keyCombo);
     if (!g_suppressMouseInput) // when opening, call twice, otherwise current window is selected
