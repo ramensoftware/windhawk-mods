@@ -70,23 +70,19 @@ This is caused by default by the AccentBlur API.❕
     - ThemeBackground: FALSE
       $name: Windows theme custom rendering
       $description: >-
-       Modifies parts of the Windows theme using the Direct2D graphics API.
+       Modifies parts of the Windows theme using the Direct2D graphics API and modifies 
+       Windows GDI text rendering by patching the alpha channel and adjusting text colors.
         ✨It is recommended to enable this with background translucent effects.
     - SysColors: FALSE
       $name: New system colors
       $description: >-
        Modifies additional system UI colors by calling SetSysColors API.
         ⚠️For issues with excluded processes, refer to the FAQ.
-         ✨It is recommended to enable this with background translucent effects.
+         ✨It is recommended to enable this with Windows theme custom rendering.
     - AccentColorControls: FALSE
       $name: Windows theme accent colorizer
       $description: >-
        Paint with accent color parts of windows theme. (Requires Windows theme custom rendering)
-    - TextAlphaBlend: FALSE
-      $name: Text alpha blending
-      $description: >-
-       Alpha blends Windows GDI text rendering.
-        ✨It is recommended to enable this with background translucent effects.
   $name: Rendering Customization
 - type: none
   $name: Background translucent effects
@@ -199,17 +195,13 @@ This is caused by default by the AccentBlur API.❕
           - ThemeBackground: FALSE
             $name: Windows theme custom rendering
             $description: >-
-              Modifies parts of the Windows theme using the Direct2D graphics API.
+              Modifies parts of the Windows theme using the Direct2D graphics API and modifies 
+              Windows GDI text rendering by patching the alpha channel and adjusting text colors.
                ✨It is recommended to enable this with background translucent effects.
           - AccentColorControls: FALSE
             $name: Windows theme accent colorizer
             $description: >-
               Paint with accent color parts of windows theme. (Requires Windows theme custom rendering)
-          - TextAlphaBlend: FALSE
-            $name: Text alpha blending
-            $description: >-
-              Alpha blends Windows GDI text rendering.
-               ✨It is recommended to enable this with background translucent effects.
       - type: none
         $name: Background translucent effects
         $description: >-
@@ -384,6 +376,7 @@ std::mutex g_subclassedflyoutsmutex;
 std::unordered_set<HWND> g_subclassedflyouts;
 
 HTHEME g_hTheme = nullptr;
+std::array<HBRUSH, COLOR_MENUBAR> g_cachedSysColorBrushes {nullptr};
 
 using PUNICODE_STRING = PVOID;
 constexpr auto MENUPOPUP_CLASS = L"#32768";
@@ -556,6 +549,7 @@ static decltype(&DwmSetWindowAttribute) DwmSetWindowAttribute_orig = nullptr;
 decltype(&TrackPopupMenuEx) TrackPopupMenuEx_orig;
 
 static decltype(&DrawTextW) DrawTextW_orig = nullptr;
+static decltype(&DrawTextExW) DrawTextExW_orig = nullptr;
 static decltype(&ExtTextOutW) ExtTextOutW_orig = nullptr;
 static decltype(&DrawThemeText) DrawThemeText_orig = nullptr;
 static decltype(&DrawThemeTextEx) DrawThemeTextEx_orig = nullptr;
@@ -912,6 +906,16 @@ INT WINAPI HookedDrawTextW(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT lprc, 
     return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
 }
 
+BOOL WINAPI HookedDrawTextExW(HDC hdc, LPWSTR lpchText, int cchText, LPRECT lprc, UINT format, LPDRAWTEXTPARAMS lpdtp)
+{
+    if (!lpdtp && !(format & DT_CALCRECT) && !g_DrawTextWithGlowEntry) {
+
+        auto ret = HookedDrawTextW(hdc, lpchText, cchText, lprc, format);
+        return ret;
+    }
+    return DrawTextExW_orig(hdc, lpchText, cchText, lprc, format, lpdtp);
+}
+
 BOOL WINAPI HookedExtTextOutW(
     HDC hdc,
     INT x,
@@ -1208,17 +1212,21 @@ constexpr INT SysColorElements[] = {
     COLOR_HOTLIGHT
 };
 
-VOID SetCurrentTheme(LPCWSTR themeclass)
+BOOL SetCurrentTheme(LPCWSTR themeclass)
 {
     if (g_hTheme != nullptr)
         g_hTheme = nullptr;
 
-    g_hTheme = OpenThemeData(NULL, themeclass); 
+    g_hTheme = OpenThemeData(NULL, themeclass);
+    return (g_hTheme) ? TRUE : FALSE;
 }
 
 VOID RevertSysColors()
 {
-    SetCurrentTheme(L"SysMetrics");
+    if (!SetCurrentTheme(L"sysmetrics")) {
+        CloseThemeData(g_hTheme);
+        return;
+    }
     COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
 
     for (UINT i = 0; i < ARRAYSIZE(SysColorElements); i++)
@@ -1276,7 +1284,9 @@ COLORREF WINAPI HookedGetSysColor(int nIndex) {
 
 HBRUSH WINAPI HookedGetSysColorBrush(int nIndex) {
     COLORREF color = GetCustomSysColor(nIndex);
-    return CreateSolidBrush(color);
+    if (!g_cachedSysColorBrushes[nIndex])
+        g_cachedSysColorBrushes[nIndex] = CreateSolidBrush(color);
+    return g_cachedSysColorBrushes[nIndex];
 }
 
 VOID ColorizeSysColors()
@@ -5252,7 +5262,7 @@ VOID DwmSetWindowAttributeHook(){
     WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, HookedDwmSetWindowAttribute, &DwmSetWindowAttribute_orig); 
 }
 
-VOID FillBackgroundElements()
+VOID CustomRendering()
 {
     InitDirect2D();
     #ifdef _WIN64
@@ -5268,11 +5278,8 @@ VOID FillBackgroundElements()
         WindhawkUtils::SetFunctionHook(GetSysColorBrush, HookedGetSysColorBrush, &GetSysColorBrush_orig);
     }
     WindhawkUtils::SetFunctionHook(GetThemeMargins, HookedGetThemeMargins, &GetThemeMargins_orig);
-}
-
-VOID TextRenderingHook()
-{
     WindhawkUtils::SetFunctionHook(DrawTextW, HookedDrawTextW, &DrawTextW_orig);
+    WindhawkUtils::SetFunctionHook(DrawTextExW, HookedDrawTextExW, &DrawTextExW_orig);
     WindhawkUtils::SetFunctionHook(ExtTextOutW, HookedExtTextOutW, &ExtTextOutW_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeText, HookedDrawThemeText, &DrawThemeText_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeTextEx, HookedDrawThemeTextEx, &DrawThemeTextEx_orig);
@@ -5457,11 +5464,9 @@ VOID GetCurrProcInfo(std::wstring& outName, DWORD& outPID) {
 VOID ApplyHooks()
 {
     if(g_settings.FillBg)
-        FillBackgroundElements();
+        CustomRendering();
     if (g_settings.SetSystemColors)
         ColorizeSysColors();
-    if(g_settings.TextAlphaBlend)
-        TextRenderingHook();
     if(g_settings.ExtendFrame)
         DwmExpandFrameIntoClientAreaHook();
     if (g_settings.TitlebarFlag || g_settings.BorderFlag || g_settings.CaptionTextFlag || g_settings.BgType != g_settings.Default)
@@ -5496,8 +5501,6 @@ VOID LoadWindowProcessRules()
                     g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
                 
                 g_settings.FillBg = Wh_GetIntSetting(L"RuledPrograms[%d].RenderingMod.ThemeBackground", i);
-
-                g_settings.TextAlphaBlend = Wh_GetIntSetting(L"RuledPrograms[%d].RenderingMod.TextAlphaBlend", i);
                 
                 auto strStyle = WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].type", i));
                 if (0 == wcscmp(strStyle, L"acrylicblur"))
@@ -5578,8 +5581,6 @@ VOID LoadSettings()
        g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
 
     g_settings.FillBg = Wh_GetIntSetting(L"RenderingMod.ThemeBackground");
-
-    g_settings.TextAlphaBlend = Wh_GetIntSetting(L"RenderingMod.TextAlphaBlend");
     
     g_settings.SetSystemColors = Wh_GetIntSetting(L"RenderingMod.Syscolors");
     
@@ -5691,6 +5692,8 @@ VOID Wh_ModUninit(VOID)
         g_d2dFactory->Release();
     if (g_settings.SetSystemColors)
         RevertSysColors();
+    for (HBRUSH& brush : g_cachedSysColorBrushes)
+        DeleteObject(brush);
 
     if (!g_rainbowWindows.empty())
     {
