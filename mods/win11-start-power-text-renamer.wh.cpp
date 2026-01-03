@@ -9,36 +9,28 @@
 // @include         StartMenuExperienceHost.exe
 // @license         MIT
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
 /*
 # Windows 11 Start Power Text Renamer
 
 ## What it does
-Attempts to rename the Windows 11 Start menu power flyout labels:
+Renames the Windows 11 Start menu power flyout labels:
 - Lock
 - Sleep
 - Shut down
 - Restart
 
-It does this by intercepting string creation inside StartMenuExperienceHost.exe:
-- Hooks WindowsCreateString
-- Hooks WindowsCreateStringReference
-- Hooks LoadStringW (fallback)
-
-When an exact-match string is created/loaded, it’s replaced with your custom text.
+The mod hooks string creation inside StartMenuExperienceHost.exe and replaces
+exact matches with your custom text.
 
 ## Notes / limitations
-- Works best when the Start menu uses plain strings matching the originals (in English).
-- If your system language is not English, set the "match*" settings to your exact visible strings.
-- Some Windows builds may generate these labels differently; in that case, nothing will change (check logs).
-- This mod is intentionally text-only (no styling/theme changes).
+- Best on English UI (or set match strings to your exact visible text).
+- If Windows changes how these strings are produced, replacements may stop working.
+- Text-only: no styling/theme changes.
 
 ## Testing
-1. Enable the mod in Windhawk.
-2. Open Start (Win key).
-3. Click the Power button.
-4. See if the labels changed.
-5. Check Windhawk logs for "PowerTextRenamer:" entries.
-
+Enable the mod, open Start → Power, and check whether labels changed.
 */
 // ==/WindhawkModReadme==
 
@@ -85,8 +77,6 @@ When an exact-match string is created/loaded, it’s replaced with your custom t
   $description: "New text to display"
 */
 // ==/WindhawkModSettings==
-
-
 
 #include <windhawk_api.h>
 #include <windows.h>
