@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-03T22:47:39.000Z</updated>
+    <updated>2026-01-03T23:12:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Start Power Text Renamer 1.0.1]]></title>
+        <id>https://windhawk.net/mods/win11-start-power-text-renamer#7721f673ddaa6772701c59d7d781b336c05a0963</id>
+        <link href="https://windhawk.net/mods/win11-start-power-text-renamer"/>
+        <updated>2026-01-03T23:12:28.000Z</updated>
+        <content type="html"><![CDATA[<p>Initial release.</p>]]></content>
+        <author>
+            <name>BGsteppin</name>
+            <uri>https://github.com/BGsteppin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.1]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#f9ec9f9313b098032de9129f9bb7e96059794fdc</id>
@@ -318,37 +329,6 @@ verb (Windows + E shortcut, directly invoking <code>explorer.exe</code>)</li>
         <link href="https://windhawk.net/mods/cpl-classic-view-lite"/>
         <updated>2025-12-28T16:51:04.000Z</updated>
         <content type="html"><![CDATA[<p>Improve readme</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Control Panel Classic View Lite 1.0.0]]></title>
-        <id>https://windhawk.net/mods/cpl-classic-view-lite#1f0073f78f9b78cf41fc487de538cd94e20ff47a</id>
-        <link href="https://windhawk.net/mods/cpl-classic-view-lite"/>
-        <updated>2025-12-28T15:46:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="controlpanelclassicviewlite">Control Panel Classic View Lite</h1>
-<p>This mod makes the Control Panel to look like a regular folder, the way it was before Windows 7.</p>
-<p>The mod is based on the finding by user Tetawaves and realized by them in a more extensive mod <a href="https://winclassic.net/thread/3416/classic-control-panel-view">Control Panel Classic View</a>.</p>
-<p>This mod differs in that</p>
-<ul>
-<li>It hooks only one function instead of 3.</li>
-<li>It does not provide the mechanism to use a custom UIFILE for Control Panel layout.</li>
-<li>It affects both the <code>all items</code> view and the <code>category view</code>.</li>
-</ul>
-<p>It has an option to also make the individual category folders to look like regular folders (this option is disabled by default).</p>
-<p><img src="https://i.imgur.com/etljMic.png" alt="All items view" /></p>
-<p>There is an empty, non-functional icon in Control panel, so to remove it, import this reg file</p>
-<pre><code>Windows Registry Editor Version 5.00
-[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{98F2AB62-0E29-4E4C-8EE7-B542E66740B1}]
-</code></pre>
-<p>To create a shortcut to the <code>all Items</code> view, create a folder with name extension: 
-<code>{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}</code>, </p>
-<p>or run a command <code>explorer shell:::{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}</code>.</p>
-<p>To create a shortcut to the <code>category view</code>, create a folder with name extension:
-<code>{26EE0668-A00A-44D7-9371-BEB064C98683}</code>, </p>
-<p>or run a command <code>explorer shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}</code>.</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
