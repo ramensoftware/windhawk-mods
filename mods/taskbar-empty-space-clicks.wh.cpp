@@ -25,22 +25,22 @@ This mod lets you assign an action to a mouse click on the Windows taskbar. Sing
 
 ## Supported actions:
 
-1. **Show desktop** - Toggle show/hide desktop
-2. **Ctrl+Alt+Tab** - Opens Ctrl+Alt+Tab dialog
-3. **Task Manager** - Opens Windows default Task Manager
-4. **Mute system volume** - Toggle mute of system volume (all sound)
-5. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature
-6. **Win+Tab** - Opens Win+Tab dialog
-7. **Hide desktop icons** - Toggle show/hide of all desktop icons
-8. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
-9. **Toggle Taskbar alignment** - Toggle taskbar icon alignment between left and center (Windows 11 only)
-10. **Open Start menu** - Sends Win key press to open Start menu
-11. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
-12. **Open application, path or URL** - Starts arbitrary application executable, opens path in Explorer or URL in web browser
-13. **Media Play/Pause** - Toggle play/pause for media playback
-14. **Media Stop** - Stop media playback
-15. **Media Next Track** - Skip to next track
-16. **Media Previous Track** - Skip to previous track
+1. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
+2. **Ctrl+Alt+Tab** - Opens Ctrl+Alt+Tab dialog (repeatedly cycles through windows until closed)
+3. **Hide desktop icons** - Toggle show/hide of all desktop icons
+4. **Media Next Track** - Skip to next track
+5. **Media Play/Pause** - Toggle play/pause for media playback
+6. **Media Previous Track** - Skip to previous track
+7. **Mute system volume** - Toggle mute of system volume (all sound)
+8. **Open Start menu** - Sends Win key press to open Start menu
+9. **Show desktop** - Toggle show/hide desktop
+10. **Switch virtual desktop** - Switch to next or previous virtual desktop
+11. **Open application, path or URL** - Starts arbitrary application executable, opens path in Explorer or URL in web browser
+12. **Task Manager** - Opens Windows default Task Manager
+13. **Taskbar auto-hide** - Toggle Windows taskbar auto-hide feature
+14. **Toggle Taskbar alignment** - Toggle taskbar icon alignment between left and center (Windows 11 only)
+15. **Virtual key press** - Sends virtual keypress (keyboard shortcut) to the system
+16. **Win+Tab** - Opens Win+Tab dialog
 
 ### Example
 
@@ -86,27 +86,22 @@ Once set, a simple middle-click on empty taskbar space will toggle the auto-hide
 
 Some actions support or require additional arguments. You can set them in the Settings menu. Arguments are separated by semicolon. For example: `arg1;arg2`.
 
-1. Show desktop - no additional arguments supported
-2. Ctrl+Alt+Tab - argument `inverse` inverts the order of iteration through the windows (Ctrl+ALt+Shift+Tab behavior)
-3. Task Manager - no additional arguments supported
-4. Mute system volume - no additional arguments supported
-5. Taskbar auto-hide - no additional arguments supported
-6. Win+Tab - no additional arguments supported
-7. Hide desktop icons - no additional arguments supported
-8. Combine Taskbar buttons - `priTaskBarBtnState1;priTaskBarBtnState2;secTaskBarBtnState1;secTaskBarBtnState2`
+1. Combine Taskbar buttons - `priTaskBarBtnState1;priTaskBarBtnState2;secTaskBarBtnState1;secTaskBarBtnState2`
     - priTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - priTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - secTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - secTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - Example: `COMBINE_ALWAYS;COMBINE_WHEN_FULL;COMBINE_ALWAYS;COMBINE_NEVER`
-9. Toggle Taskbar alignment - no additional arguments supported
-10. Open Start menu - no additional arguments supported
-11. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
-    - Example: `0x5B;0x45` or `0x7A;focusPreviousWindow`
-    - Each text field corresponds to one virtual key press. Fill in hexadecimal key codes of the keys you want to press. Key codes are defined in [Win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexadecimal (0x) or decimal format for a key code! Example: (0x5B and 0x45) corresponds to (Win + E) shortcut that opens an Explorer window. If your key combination has no effect, check the log for more information.
-    - There is a special keyword `focusPreviousWindow` that can be used to set focus back to the previously active window. This is useful when you want to send keypresses to the last active window instead of the taskbar. That way you can, for example, turn on fullscreen mode in the web browser by sending the F11 key. You can use this keyword anywhere in the sequence of virtual keys.
-    - Please note that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via the inputdev interface.
-12. Open application, path or URL - `applicationPath arg1 arg2 ... argN`
+2. Ctrl+Alt+Tab - argument `reverse` inverts the order of iteration through the windows (Ctrl+ALt+Shift+Tab behavior)
+3. Hide desktop icons - no additional arguments supported
+4. Media Next Track - no additional arguments supported
+5. Media Play/Pause - no additional arguments supported
+6. Media Previous Track - no additional arguments supported
+7. Mute system volume - no additional arguments supported
+8. Open Start menu - no additional arguments supported
+9. Show desktop - no additional arguments supported
+10. Switch virtual desktop - direction is forward, if `reverse` argument is provided, direction is backward
+11. Open application, path or URL - `applicationPath arg1 arg2 ... argN`
     - Example: `"c:\Program Files\Notepad++\notepad++.exe" C:\Users\username\Desktop\test.txt` - use quotes around paths with spaces
     - Example: `uac;C:\Windows\System32\notepad.exe C:\Windows\System32\drivers\etc\hosts` - start application with elevated privileges (UAC prompt will appear)
     - Example: `python.exe D:\MyScripts\my_python_script.py arg1 "arg 2 with space" arg3` - user must handle proper quoting of arguments
@@ -117,9 +112,15 @@ Some actions support or require additional arguments. You can set them in the Se
     - Uses [ShellExecute](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutea) to open applications, paths, or URLs. If the command starts with the special keyword `uac`, the application will be started with elevated privileges (UAC prompt will appear).
     - The command line parser attempts to intelligently handle spaces in file paths and arguments. However, if you encounter issues, enclose paths containing spaces in double quotes.
     - Error codes and error messages can be found in the mod log if the application fails to start.
-13. Media Play/Pause - no additional arguments supported
-14. Media Next Track - no additional arguments supported
-15. Media Previous Track - no additional arguments supported
+12. Task Manager - no additional arguments supported
+13. Taskbar auto-hide - no additional arguments supported
+14. Toggle Taskbar alignment - no additional arguments supported
+15. Virtual key press - `virtualKey1;virtualKey2;...;virtualKeyN`
+    - Example: `0x5B;0x45` or `0x7A;focusPreviousWindow`
+    - Each text field corresponds to one virtual key press. Fill in hexadecimal key codes of the keys you want to press. Key codes are defined in [Win32 inputdev docs](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes). Use only hexadecimal (0x) or decimal format for a key code! Example: (0x5B and 0x45) corresponds to (Win + E) shortcut that opens an Explorer window. If your key combination has no effect, check the log for more information.
+    - There is a special keyword `focusPreviousWindow` that can be used to set focus back to the previously active window. This is useful when you want to send keypresses to the last active window instead of the taskbar. That way you can, for example, turn on fullscreen mode in the web browser by sending the F11 key. You can use this keyword anywhere in the sequence of virtual keys.
+    - Please note that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via the inputdev interface.
+16. Win+Tab - no additional arguments supported
 
 ## Caveats and limitations:
 
@@ -296,6 +297,7 @@ If you have a request for new functions, suggestions, or you are experiencing so
       - ACTION_MUTE: Mute system volume
       - ACTION_OPEN_START_MENU: Open Start menu
       - ACTION_SHOW_DESKTOP: Show desktop
+      - ACTION_SWITCH_VIRTUAL_DESKTOP: Switch virtual desktop
       - ACTION_START_PROCESS: Open application, path or URL
       - ACTION_TASK_MANAGER: Task Manager
       - ACTION_TASKBAR_AUTOHIDE: Taskbar auto-hide
@@ -326,6 +328,7 @@ If you have a request for new functions, suggestions, or you are experiencing so
 #include <commctrl.h>
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
+#include <objectarray.h>
 #include <windef.h>
 #include <windhawk_api.h>
 #include <winerror.h>
@@ -874,6 +877,7 @@ bool GetBit(const uint32_t &value, uint32_t bit)
 
 static WindowsVersion g_taskbarVersion = UNKNOWN;
 static WindowsVersion g_osVersion = UNKNOWN;
+static WORD g_twinuiPCShellBuildNumber = 0;
 
 static DWORD g_dwTaskbarThreadId;
 static bool g_isWhInitialized = false;
@@ -1185,8 +1189,9 @@ bool GetTaskbarAutohideState();
 void SetTaskbarAutohide(bool enabled);
 void ToggleTaskbarAutohide();
 void ShowDesktop();
+void SwitchVirtualDesktop(bool reverse);
 void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow = false);
-void SendCtrlAltTabKeypress(const bool inverse);
+void SendCtrlAltTabKeypress(const bool reverse);
 void CloseCtrlAltTabDialog();
 void SendWinTabKeypress();
 void MediaPlayPause();
@@ -1963,7 +1968,7 @@ VS_FIXEDFILEINFO *GetModuleVersionInfo(HMODULE hModule, UINT *puPtrLen)
 }
 
 // Detects Windows version and sets taskbar version (Win10/Win11/Unknown)
-BOOL WindowsVersionInit()
+bool LoadExplorerVersion()
 {
     LOG_TRACE();
 
@@ -1971,13 +1976,14 @@ BOOL WindowsVersionInit()
     if (!pFixedFileInfo)
     {
         LOG_ERROR(L"Failed to get Windows module version info");
-        return FALSE;
+        return false;
     }
 
     WORD nMajor = HIWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nMinor = LOWORD(pFixedFileInfo->dwFileVersionMS);
     WORD nBuild = HIWORD(pFixedFileInfo->dwFileVersionLS);
-    LOG_INFO(L"Windows version (major.minor.build): %d.%d.%d", nMajor, nMinor, nBuild);
+    WORD nRevision = LOWORD(pFixedFileInfo->dwFileVersionLS);
+    LOG_INFO(L"Windows version: %d.%d.%d.%d", nMajor, nMinor, nBuild, nRevision);
 
     if (nMajor == 6)
     {
@@ -1999,8 +2005,44 @@ BOOL WindowsVersionInit()
         g_taskbarVersion = UNKNOWN;
     }
     g_osVersion = g_taskbarVersion; // we don't care about exact OS version, just about pre-XAML and XAML UI
+    return true;
+}
 
-    return TRUE;
+// Loads twinui.pcshell.dll version to get build number to properly switch virtual desktops
+bool LoadTwinuiPCShellVersion()
+{
+    bool success = false;
+    HMODULE hModule = GetModuleHandle(L"twinui.pcshell.dll");
+    if (hModule)
+    {
+        VS_FIXEDFILEINFO *pFixedFileInfo = GetModuleVersionInfo(hModule, NULL);
+        if (pFixedFileInfo)
+        {
+            success = true;
+            WORD major = HIWORD(pFixedFileInfo->dwFileVersionMS);
+            WORD minor = LOWORD(pFixedFileInfo->dwFileVersionMS);
+            WORD build = HIWORD(pFixedFileInfo->dwFileVersionLS);
+            WORD revision = LOWORD(pFixedFileInfo->dwFileVersionLS);
+            g_twinuiPCShellBuildNumber = build;
+            LOG_INFO(L"twinui.pcshell.dll version: %d.%d.%d.%d", major, minor, build, revision);
+        }
+        else
+        {
+            LOG_ERROR(L"Failed to get twinui.pcshell.dll version info");
+        }
+    }
+    else
+    {
+        LOG_ERROR(L"twinui.pcshell.dll not loaded in current process");
+    }
+    return success;
+}
+
+bool WindowsVersionInit()
+{
+    bool result = LoadExplorerVersion();
+    result &= LoadTwinuiPCShellVersion();
+    return result;
 }
 
 // Finds desktop window for show/hide icons command
@@ -2360,21 +2402,21 @@ std::tuple<std::vector<int>, bool> ParseVirtualKeypressSetting(const std::wstrin
     return std::make_tuple(keys, focusPreviousWindow);
 }
 
-// Parses Ctrl+Alt+Tab action arguments
-bool ParseCtrlAltTabSetting(const std::wstring &args)
+// Parses Ctrl+Alt+Tab, SwitchVirtualDesktop action arguments
+bool ParseReverseArg(const std::wstring &args)
 {
     LOG_TRACE();
 
-    bool inverse = false;
+    bool reverse = false;
     const auto argsSplit = SplitArgs(args);
     for (const auto &arg : argsSplit)
     {
-        if (stringtools::toLower(arg) == L"inverse")
+        if (stringtools::toLower(arg) == L"reverse")
         {
-            inverse = true;
+            reverse = true;
         }
     }
-    return inverse;
+    return reverse;
 }
 
 // Creates action executor lambda from action name and arguments
@@ -2396,9 +2438,15 @@ std::function<void(HWND)> ParseMouseActionSetting(const std::wstring &actionName
     }
     else if (actionName == L"ACTION_ALT_TAB")
     {
-        bool inverse = ParseCtrlAltTabSetting(args);
-        return [inverse](HWND)
-        { SendCtrlAltTabKeypress(inverse); };
+        bool reverse = ParseReverseArg(args);
+        return [reverse](HWND)
+        { SendCtrlAltTabKeypress(reverse); };
+    }
+    else if (actionName == L"ACTION_SWITCH_VIRTUAL_DESKTOP")
+    {
+        bool reverse = ParseReverseArg(args);
+        return [reverse](HWND)
+        { SwitchVirtualDesktop(reverse); };
     }
     else if (actionName == L"ACTION_TASK_MANAGER")
     {
@@ -2721,13 +2769,13 @@ void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
 }
 
 // Sends Ctrl+Alt+Tab keypress
-void SendCtrlAltTabKeypress(const bool inverse)
+void SendCtrlAltTabKeypress(const bool reverse)
 {
     LOG_TRACE();
 
     LOG_INFO(L"Sending Ctrl+Alt+Tab keypress to open Alt+Tab dialog");
 
-    const std::vector<int> keyCombo = inverse ? std::vector<int>{VK_LCONTROL, VK_LMENU, VK_SHIFT, VK_TAB} : std::vector<int>{VK_LCONTROL, VK_LMENU, VK_TAB};
+    const std::vector<int> keyCombo = reverse ? std::vector<int>{VK_LCONTROL, VK_LMENU, VK_SHIFT, VK_TAB} : std::vector<int>{VK_LCONTROL, VK_LMENU, VK_TAB};
     SendKeypress(keyCombo);
     if (!g_suppressMouseInput) // when opening, call twice, otherwise current window is selected
     {
@@ -2746,6 +2794,205 @@ void CloseCtrlAltTabDialog()
     g_suppressMouseInput = false;
     g_suppressMouseInputTimestamp = 0;
     SendKeypress({VK_RETURN});
+}
+
+// Switches to the next or previous virtual desktop (with wraparound)
+// main credits goes to: u2x1 (virtual-desktop-helper.wh.cpp)
+// Note: Since I don't have a header file, I am enclosing all this COM crap in this method to avoid cluttering the global namespace.
+void SwitchVirtualDesktop(bool reverse)
+{
+    LOG_TRACE();
+
+    // Minimal interface definitions for vtable-based access
+    struct IVirtualDesktop : public IUnknown
+    {
+        virtual HRESULT STDMETHODCALLTYPE IsViewVisible(IUnknown *, BOOL *) = 0;
+        virtual HRESULT STDMETHODCALLTYPE GetId(GUID *) = 0;
+    };
+
+    struct IVirtualDesktopManagerInternal : public IUnknown
+    {
+    };
+
+    // Virtual Desktop COM interfaces - vary by Windows version
+    // These are undocumented interfaces for virtual desktop management
+
+    // CLSID_ImmersiveShell: {C2F03A33-21F5-47FA-B4BB-156362A2F239}
+    const CLSID CLSID_ImmersiveShell = {0xC2F03A33, 0x21F5, 0x47FA, {0xB4, 0xBB, 0x15, 0x63, 0x62, 0xA2, 0xF2, 0x39}};
+
+    // CLSID_VirtualDesktopManagerInternal: {C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B}
+    const CLSID CLSID_VirtualDesktopManagerInternal = {0xC5E0CDCA, 0x7B6E, 0x41B2, {0x9F, 0xC4, 0xD9, 0x39, 0x75, 0xCC, 0x46, 0x7B}};
+
+    IID IID_IVirtualDesktopManagerInternal;
+    IID IID_IVirtualDesktop;
+    bool usesHMonitor;
+    if (g_twinuiPCShellBuildNumber >= 26100) // Windows 11 (Build 26100+ / 24H2)
+    {
+        // IVirtualDesktopManagerInternal: {53F5CA0B-158F-4124-900C-057158060B27}
+        // IVirtualDesktop: {3F07F4BE-B107-441A-AF0F-39D82529072C} (same as 22621)
+        IID_IVirtualDesktopManagerInternal = {0x53F5CA0B, 0x158F, 0x4124, {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}};
+        IID_IVirtualDesktop = {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
+        usesHMonitor = false;
+    }
+    else if (g_twinuiPCShellBuildNumber >= 22621) // Windows 11 (Build 22621/22631/23H2)
+    {
+        // IVirtualDesktopManagerInternal: {A3175F2D-239C-4BD2-8AA0-EEBA8B0B138E}
+        // IVirtualDesktop: {3F07F4BE-B107-441A-AF0F-39D82529072C}
+        IID_IVirtualDesktopManagerInternal = {0xA3175F2D, 0x239C, 0x4BD2, {0x8A, 0xA0, 0xEE, 0xBA, 0x8B, 0x0B, 0x13, 0x8E}};
+        IID_IVirtualDesktop = {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
+        usesHMonitor = false;
+    }
+    else if (g_twinuiPCShellBuildNumber >= 22000) // Windows 11 (Build 22000 - 22482)
+    {
+        // IVirtualDesktopManagerInternal: {B2F925B9-5A0F-4D2E-9F4D-2B1507593C10}
+        // IVirtualDesktop: {536D3495-B208-4CC9-AE26-DE8111275BF8}
+        IID_IVirtualDesktopManagerInternal = {0xB2F925B9, 0x5A0F, 0x4D2E, {0x9F, 0x4D, 0x2B, 0x15, 0x07, 0x59, 0x3C, 0x10}};
+        IID_IVirtualDesktop = {0x536D3495, 0xB208, 0x4CC9, {0xAE, 0x26, 0xDE, 0x81, 0x11, 0x27, 0x5B, 0xF8}};
+        usesHMonitor = true;
+    }
+    else if (g_twinuiPCShellBuildNumber >= 20348) // Windows Server 2022 (Build 20348 - 21999)
+    {
+        // IVirtualDesktopManagerInternal: {094AFE11-44F2-4BA0-976F-29A97E263EE0}
+        // IVirtualDesktop: {62FDF88B-11CA-4AFB-8BD8-2296DFAE49E2}
+        IID_IVirtualDesktopManagerInternal = {0x094AFE11, 0x44F2, 0x4BA0, {0x97, 0x6F, 0x29, 0xA9, 0x7E, 0x26, 0x3E, 0xE0}};
+        IID_IVirtualDesktop = {0x62FDF88B, 0x11CA, 0x4AFB, {0x8B, 0xD8, 0x22, 0x96, 0xDF, 0xAE, 0x49, 0xE2}};
+        usesHMonitor = true;
+    }
+    else // [0] Windows 10 (Build < 20348)
+    {
+        // IVirtualDesktopManagerInternal: {F31574D6-B682-4CDC-BD56-1827860ABEC6}
+        // IVirtualDesktop: {FF72FFDD-BE7E-43FC-9C03-AD81681E88E4}
+        IID_IVirtualDesktopManagerInternal = {0xF31574D6, 0xB682, 0x4CDC, {0xBD, 0x56, 0x18, 0x27, 0x86, 0x0A, 0xBE, 0xC6}};
+        IID_IVirtualDesktop = {0xFF72FFDD, 0xBE7E, 0x43FC, {0x9C, 0x03, 0xAD, 0x81, 0x68, 0x1E, 0x88, 0xE4}};
+        usesHMonitor = false;
+    }
+
+    LOG_INFO(L"Attempting to switch to %s virtual desktop", reverse ? L"previous" : L"next");
+
+    // Get IServiceProvider from ImmersiveShell
+    com_ptr<IServiceProvider> pServiceProvider;
+    HRESULT hr = CoCreateInstance(CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(pServiceProvider.put()));
+    if (FAILED(hr))
+    {
+        LOG_ERROR(L"Failed to get IServiceProvider: 0x%08X", hr);
+        return;
+    }
+
+    // Get IVirtualDesktopManagerInternal
+    com_ptr<IVirtualDesktopManagerInternal> pDesktopManagerInternal;
+    hr = pServiceProvider->QueryService(CLSID_VirtualDesktopManagerInternal, IID_IVirtualDesktopManagerInternal, pDesktopManagerInternal.put_void());
+    if (FAILED(hr))
+    {
+        LOG_ERROR(L"Failed to get IVirtualDesktopManagerInternal: 0x%08X", hr);
+        return;
+    }
+
+    // VTable method indices: GetCurrentDesktop=6, GetDesktops=7, SwitchDesktop=9
+    // Some Windows versions require HMONITOR parameter, others don't
+
+    // Get all desktops array (vtable index 7)
+    com_ptr<IObjectArray> pDesktopArray;
+    if (usesHMonitor)
+    {
+        typedef HRESULT(STDMETHODCALLTYPE * GetDesktopsProcWithMonitor)(IVirtualDesktopManagerInternal *, HMONITOR, IObjectArray **);
+        GetDesktopsProcWithMonitor GetDesktops = (GetDesktopsProcWithMonitor)(*(void ***)pDesktopManagerInternal.get())[7];
+        hr = GetDesktops(pDesktopManagerInternal.get(), nullptr, pDesktopArray.put());
+    }
+    else
+    {
+        typedef HRESULT(STDMETHODCALLTYPE * GetDesktopsProc)(IVirtualDesktopManagerInternal *, IObjectArray **);
+        GetDesktopsProc GetDesktops = (GetDesktopsProc)(*(void ***)pDesktopManagerInternal.get())[7];
+        hr = GetDesktops(pDesktopManagerInternal.get(), pDesktopArray.put());
+    }
+    if (FAILED(hr))
+    {
+        LOG_ERROR(L"Failed to get desktops array: 0x%08X", hr);
+        return;
+    }
+
+    // Get current desktop (vtable index 6)
+    com_ptr<IVirtualDesktop> pCurrentDesktop;
+    if (usesHMonitor)
+    {
+        typedef HRESULT(STDMETHODCALLTYPE * GetCurrentDesktopProcWithMonitor)(IVirtualDesktopManagerInternal *, HMONITOR, IVirtualDesktop **);
+        GetCurrentDesktopProcWithMonitor GetCurrentDesktop = (GetCurrentDesktopProcWithMonitor)(*(void ***)pDesktopManagerInternal.get())[6];
+        hr = GetCurrentDesktop(pDesktopManagerInternal.get(), nullptr, pCurrentDesktop.put());
+    }
+    else
+    {
+        typedef HRESULT(STDMETHODCALLTYPE * GetCurrentDesktopProc)(IVirtualDesktopManagerInternal *, IVirtualDesktop **);
+        GetCurrentDesktopProc GetCurrentDesktop = (GetCurrentDesktopProc)(*(void ***)pDesktopManagerInternal.get())[6];
+        hr = GetCurrentDesktop(pDesktopManagerInternal.get(), pCurrentDesktop.put());
+    }
+    if (FAILED(hr))
+    {
+        LOG_ERROR(L"Failed to get current desktop: 0x%08X", hr);
+        return;
+    }
+
+    // Get desktop count
+    UINT desktopCount = 0;
+    hr = pDesktopArray->GetCount(&desktopCount);
+    if (FAILED(hr) || desktopCount == 0)
+    {
+        LOG_ERROR(L"Failed to get desktop count or no desktops available: 0x%08X", hr);
+        return;
+    }
+
+    LOG_DEBUG(L"Found %u virtual desktops", desktopCount);
+
+    // Find current desktop index by comparing pointers
+    int currentIndex = -1;
+    for (UINT i = 0; i < desktopCount; i++)
+    {
+        com_ptr<IVirtualDesktop> pDesktop;
+        hr = pDesktopArray->GetAt(i, IID_IVirtualDesktop, pDesktop.put_void());
+        if (SUCCEEDED(hr) && pDesktop.get() == pCurrentDesktop.get())
+        {
+            currentIndex = i;
+            break;
+        }
+    }
+    if (currentIndex == -1)
+    {
+        LOG_ERROR(L"Failed to find current desktop index");
+        return;
+    }
+    LOG_DEBUG(L"Current desktop index: %d", currentIndex);
+
+    // Calculate target index with wraparound
+    int targetIndex = reverse ? ((currentIndex - 1 + desktopCount) % desktopCount) : ((currentIndex + 1) % desktopCount);
+    LOG_DEBUG(L"Target desktop index: %d", targetIndex);
+
+    // Get target desktop
+    com_ptr<IVirtualDesktop> pTargetDesktop;
+    hr = pDesktopArray->GetAt(targetIndex, IID_IVirtualDesktop, pTargetDesktop.put_void());
+    if (FAILED(hr))
+    {
+        LOG_ERROR(L"Failed to get target desktop: 0x%08X", hr);
+        return;
+    }
+
+    // Switch to target desktop (vtable index 9)
+    if (usesHMonitor)
+    {
+        typedef HRESULT(STDMETHODCALLTYPE * SwitchDesktopProcWithMonitor)(IVirtualDesktopManagerInternal *, HMONITOR, IVirtualDesktop *);
+        SwitchDesktopProcWithMonitor SwitchDesktop = (SwitchDesktopProcWithMonitor)(*(void ***)pDesktopManagerInternal.get())[9];
+        hr = SwitchDesktop(pDesktopManagerInternal.get(), nullptr, pTargetDesktop.get());
+    }
+    else
+    {
+        typedef HRESULT(STDMETHODCALLTYPE * SwitchDesktopProc)(IVirtualDesktopManagerInternal *, IVirtualDesktop *);
+        SwitchDesktopProc SwitchDesktop = (SwitchDesktopProc)(*(void ***)pDesktopManagerInternal.get())[9];
+        hr = SwitchDesktop(pDesktopManagerInternal.get(), pTargetDesktop.get());
+    }
+    if (FAILED(hr))
+    {
+        LOG_ERROR(L"Failed to switch desktop: 0x%08X", hr);
+        return;
+    }
+
+    LOG_INFO(L"Successfully switched to %s virtual desktop (index %d)", reverse ? L"previous" : L"next", targetIndex);
 }
 
 // Sends Win+Tab keypress
