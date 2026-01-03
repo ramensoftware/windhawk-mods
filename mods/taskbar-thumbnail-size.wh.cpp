@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-size
 // @name            Taskbar Thumbnail Size
 // @description     Customize the size of the new taskbar thumbnails in Windows 11
-// @version         1.0
+// @version         1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -26,6 +26,9 @@
 
 Customize the size of the new taskbar thumbnails in Windows 11.
 
+By default, this mod uses simple percentage-based scaling. You can optionally
+enable absolute sizing mode to set specific pixel dimensions for thumbnails.
+
 For older Windows versions, the size of taskbar thumbnails can be changed via the registry:
 
 * [Change Size of Taskbar Thumbnail Previews in Windows
@@ -41,8 +44,38 @@ For older Windows versions, the size of taskbar thumbnails can be changed via th
 // ==WindhawkModSettings==
 /*
 - size: 150
-  $name: Thumbnail size
-  $description: Percentage of the original size.
+  $name: Thumbnail size (percentage)
+  $description: Percentage of the original size. Used when absolute sizing is disabled.
+- useAbsoluteSize: false
+  $name: Use absolute sizing
+  $description: >-
+    When enabled, uses the min/max pixel constraints below instead of
+    percentage-based scaling.
+- minWidth: 180
+  $name: Minimum width (pixels)
+  $description: >-
+    Minimum thumbnail width in pixels. Only used when absolute sizing is
+    enabled. Set to 0 to disable.
+- maxWidth: 180
+  $name: Maximum width (pixels)
+  $description: >-
+    Maximum thumbnail width in pixels. Only used when absolute sizing is
+    enabled. Set to 0 to disable.
+- minHeight: 120
+  $name: Minimum height (pixels)
+  $description: >-
+    Minimum thumbnail height in pixels. Only used when absolute sizing is
+    enabled. Set to 0 to disable.
+- maxHeight: 120
+  $name: Maximum height (pixels)
+  $description: >-
+    Maximum thumbnail height in pixels. Only used when absolute sizing is
+    enabled. Set to 0 to disable.
+- preserveAspectRatio: true
+  $name: Preserve aspect ratio
+  $description: >-
+    When enabled, maintains the original aspect ratio when applying constraints.
+    Only used when absolute sizing is enabled.
 */
 // ==/WindhawkModSettings==
 
@@ -59,6 +92,12 @@ using namespace winrt::Windows::UI::Xaml;
 
 struct {
     int size;
+    bool useAbsoluteSize;
+    int minWidth;
+    int maxWidth;
+    int minHeight;
+    int maxHeight;
+    bool preserveAspectRatio;
 } g_settings;
 
 std::atomic<bool> g_taskbarViewDllLoaded;
@@ -77,13 +116,85 @@ ThumbnailHelpers_GetScaledThumbnailSize_Hook(
     float scale) {
     Wh_Log(L"> %fx%f %f", size.Width, size.Height, scale);
 
-    winrt::Windows::Foundation::Size* ret =
-        ThumbnailHelpers_GetScaledThumbnailSize_Original(
-            result, size, scale * g_settings.size / 100.0);
+    if (!g_settings.useAbsoluteSize) {
+        // Original percentage-based behavior
+        winrt::Windows::Foundation::Size* ret =
+            ThumbnailHelpers_GetScaledThumbnailSize_Original(
+                result, size, scale * g_settings.size / 100.0);
 
-    Wh_Log(L"%fx%f", ret->Width, ret->Height);
+        Wh_Log(L"%fx%f", ret->Width, ret->Height);
+        return ret;
+    }
 
-    return ret;
+    // Absolute sizing mode
+    winrt::Windows::Foundation::Size* originalResult =
+        ThumbnailHelpers_GetScaledThumbnailSize_Original(result, size, scale);
+
+    float currentWidth = originalResult->Width;
+    float currentHeight = originalResult->Height;
+    float aspectRatio = (currentWidth > 0) ? (currentHeight / currentWidth) : 1.0f;
+
+    float targetWidth = currentWidth;
+    float targetHeight = currentHeight;
+
+    if (g_settings.preserveAspectRatio) {
+        // Apply width constraints
+        if (g_settings.minWidth > 0 && targetWidth < g_settings.minWidth) {
+            targetWidth = static_cast<float>(g_settings.minWidth);
+        }
+        if (g_settings.maxWidth > 0 && targetWidth > g_settings.maxWidth) {
+            targetWidth = static_cast<float>(g_settings.maxWidth);
+        }
+
+        // Calculate height from width
+        targetHeight = targetWidth * aspectRatio;
+
+        // Check height constraints
+        bool heightAdjusted = false;
+        if (g_settings.minHeight > 0 && targetHeight < g_settings.minHeight) {
+            targetHeight = static_cast<float>(g_settings.minHeight);
+            heightAdjusted = true;
+        }
+        if (g_settings.maxHeight > 0 && targetHeight > g_settings.maxHeight) {
+            targetHeight = static_cast<float>(g_settings.maxHeight);
+            heightAdjusted = true;
+        }
+
+        // Recalculate width if height was adjusted
+        if (heightAdjusted) {
+            targetWidth = targetHeight / aspectRatio;
+
+            // Re-apply width constraints
+            if (g_settings.minWidth > 0 && targetWidth < g_settings.minWidth) {
+                targetWidth = static_cast<float>(g_settings.minWidth);
+                targetHeight = targetWidth * aspectRatio;
+            }
+            if (g_settings.maxWidth > 0 && targetWidth > g_settings.maxWidth) {
+                targetWidth = static_cast<float>(g_settings.maxWidth);
+                targetHeight = targetWidth * aspectRatio;
+            }
+        }
+    } else {
+        // Apply constraints independently (may distort aspect ratio)
+        if (g_settings.minWidth > 0 && targetWidth < g_settings.minWidth) {
+            targetWidth = static_cast<float>(g_settings.minWidth);
+        }
+        if (g_settings.maxWidth > 0 && targetWidth > g_settings.maxWidth) {
+            targetWidth = static_cast<float>(g_settings.maxWidth);
+        }
+        if (g_settings.minHeight > 0 && targetHeight < g_settings.minHeight) {
+            targetHeight = static_cast<float>(g_settings.minHeight);
+        }
+        if (g_settings.maxHeight > 0 && targetHeight > g_settings.maxHeight) {
+            targetHeight = static_cast<float>(g_settings.maxHeight);
+        }
+    }
+
+    result->Width = targetWidth;
+    result->Height = targetHeight;
+
+    Wh_Log(L"%fx%f", result->Width, result->Height);
+    return result;
 }
 
 using TaskItemThumbnailView_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
@@ -173,6 +284,12 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 void LoadSettings() {
     g_settings.size = Wh_GetIntSetting(L"size");
+    g_settings.useAbsoluteSize = Wh_GetIntSetting(L"useAbsoluteSize");
+    g_settings.minWidth = Wh_GetIntSetting(L"minWidth");
+    g_settings.maxWidth = Wh_GetIntSetting(L"maxWidth");
+    g_settings.minHeight = Wh_GetIntSetting(L"minHeight");
+    g_settings.maxHeight = Wh_GetIntSetting(L"maxHeight");
+    g_settings.preserveAspectRatio = Wh_GetIntSetting(L"preserveAspectRatio");
 }
 
 BOOL Wh_ModInit() {
