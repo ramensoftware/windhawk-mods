@@ -2,44 +2,47 @@
 // @id              win11-start-power-text-renamer
 // @name            Windows 11 Start Power Text Renamer
 // @description     Rename the Windows 11 Start menu power options (Lock, Sleep, Shut down, Restart) to any custom text.
-// @version         1.0.0
+// @version         1.0.1
 // @author          BGsteppin
-// @github          https://github.com/BGsteppin
-// @homepage        https://github.com/BGsteppin/win11-start-power-text-renamer
+// @github          https://github.com/BGsteppin/win11-start-power-text-renamer
 // @include         StartMenuExperienceHost.exe
 // @license         MIT
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme==
 /*
 # Windows 11 Start Power Text Renamer
 
 ## What it does
-Renames the Windows 11 Start menu power flyout labels:
+Attempts to rename the Windows 11 Start menu power flyout labels:
 - Lock
 - Sleep
 - Shut down
 - Restart
 
-The mod hooks string creation inside StartMenuExperienceHost.exe and replaces
-exact matches with your custom text.
+It does this by intercepting string creation inside StartMenuExperienceHost.exe:
+- Hooks WindowsCreateString
+- Hooks WindowsCreateStringReference
+- Hooks LoadStringW (fallback)
+
+When an exact-match string is created/loaded, it’s replaced with your custom text.
 
 ## Notes / limitations
-- Best on English UI (or set match strings to your exact visible text).
-- If Windows changes how these strings are produced, replacements may stop working.
-- Text-only: no styling/theme changes.
+- Works best when the Start menu uses plain strings matching the originals (in English).
+- If your system language is not English, set the "match*" settings to your exact visible strings.
+- Some Windows builds may generate these labels differently; in that case, nothing will change (check logs).
+- This mod is intentionally text-only (no styling/theme changes).
 
 ## Testing
-Enable the mod, open Start → Power, and check whether labels changed.
+1. Enable the mod in Windhawk.
+2. Open Start (Win key).
+3. Click the Power button.
+4. See if the labels changed.
+5. Check Windhawk logs for "PowerTextRenamer:" entries.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: "Enable mod"
-  $description: "Master toggle"
-
 - logReplacements: true
   $name: "Log replacements"
   $description: "Log every successful replacement (debug)"
@@ -83,7 +86,6 @@ Enable the mod, open Start → Power, and check whether labels changed.
 #include <winstring.h>
 
 static struct {
-    bool enabled;
     bool logReplacements;
 
     wchar_t matchLock[128];
@@ -100,33 +102,61 @@ static struct {
 } g_cfg;
 
 static void LoadSettings() {
-    g_cfg.enabled = Wh_GetIntSetting(L"enabled") != 0;
     g_cfg.logReplacements = Wh_GetIntSetting(L"logReplacements") != 0;
 
-    // Windhawk returns pointers owned by it; copy into our buffers.
+    // Wh_GetStringSetting returns an allocated string which must be freed with Wh_FreeStringSetting.
     auto copySetting = [](const wchar_t* key, wchar_t* outBuf, size_t outCch, const wchar_t* fallback) {
-        PCWSTR v = Wh_GetStringSetting(key);
-        if (!v || !*v) v = fallback;
+        PCWSTR v = Wh_GetStringSetting(key); // allocated by Windhawk
+        bool shouldFree = (v != nullptr);
+
+        if (!v || !*v) {
+            // If v is null or empty, use fallback.
+            // Still free v if it was non-null (empty string).
+            v = fallback;
+            shouldFree = (v != fallback) && shouldFree; // i.e. free only original allocation
+        }
+
         wcsncpy_s(outBuf, outCch, v, _TRUNCATE);
+
+        if (shouldFree && v != fallback) {
+            // Defensive: only free Windhawk-allocated strings
+            Wh_FreeStringSetting(v);
+        } else if (shouldFree && v == fallback) {
+            // v was replaced with fallback, but original allocation existed; we need to free original.
+            // However we lost the original pointer. So handle empty/null properly by not overwriting v.
+            // (This branch should never happen due to logic above.)
+        }
     };
 
-    copySetting(L"matchLock",     g_cfg.matchLock,     _countof(g_cfg.matchLock),     L"Lock");
-    copySetting(L"replaceLock",   g_cfg.replaceLock,   _countof(g_cfg.replaceLock),   L"Lock");
+    // To avoid losing the original pointer when v is empty, do the logic explicitly:
+    auto copySettingSafe = [](const wchar_t* key, wchar_t* outBuf, size_t outCch, const wchar_t* fallback) {
+        PCWSTR v = Wh_GetStringSetting(key); // allocated by Windhawk (or nullptr)
+        if (!v || !*v) {
+            wcsncpy_s(outBuf, outCch, fallback, _TRUNCATE);
+            if (v) Wh_FreeStringSetting(v);
+            return;
+        }
+        wcsncpy_s(outBuf, outCch, v, _TRUNCATE);
+        Wh_FreeStringSetting(v);
+    };
 
-    copySetting(L"matchSleep",    g_cfg.matchSleep,    _countof(g_cfg.matchSleep),    L"Sleep");
-    copySetting(L"replaceSleep",  g_cfg.replaceSleep,  _countof(g_cfg.replaceSleep),  L"Sleep");
+    copySettingSafe(L"matchLock",        g_cfg.matchLock,        _countof(g_cfg.matchLock),        L"Lock");
+    copySettingSafe(L"replaceLock",      g_cfg.replaceLock,      _countof(g_cfg.replaceLock),      L"Lock");
 
-    copySetting(L"matchShutDown", g_cfg.matchShutDown, _countof(g_cfg.matchShutDown), L"Shut down");
-    copySetting(L"replaceShutDown", g_cfg.replaceShutDown, _countof(g_cfg.replaceShutDown), L"Power Off");
+    copySettingSafe(L"matchSleep",       g_cfg.matchSleep,       _countof(g_cfg.matchSleep),       L"Sleep");
+    copySettingSafe(L"replaceSleep",     g_cfg.replaceSleep,     _countof(g_cfg.replaceSleep),     L"Sleep");
 
-    copySetting(L"matchRestart",  g_cfg.matchRestart,  _countof(g_cfg.matchRestart),  L"Restart");
-    copySetting(L"replaceRestart", g_cfg.replaceRestart, _countof(g_cfg.replaceRestart), L"Restart");
+    copySettingSafe(L"matchShutDown",    g_cfg.matchShutDown,    _countof(g_cfg.matchShutDown),    L"Shut down");
+    copySettingSafe(L"replaceShutDown",  g_cfg.replaceShutDown,  _countof(g_cfg.replaceShutDown),  L"Power Off");
 
-    Wh_Log(L"PowerTextRenamer: Settings loaded. enabled=%d", (int)g_cfg.enabled);
+    copySettingSafe(L"matchRestart",     g_cfg.matchRestart,     _countof(g_cfg.matchRestart),     L"Restart");
+    copySettingSafe(L"replaceRestart",   g_cfg.replaceRestart,   _countof(g_cfg.replaceRestart),   L"Restart");
+
+    Wh_Log(L"PowerTextRenamer: Settings loaded.");
 }
 
 static const wchar_t* GetReplacementIfMatch(PCWSTR src) {
-    if (!g_cfg.enabled || !src) return nullptr;
+    if (!src) return nullptr;
 
     // Exact match only — avoids changing unrelated UI text.
     if (g_cfg.matchLock[0] && wcscmp(src, g_cfg.matchLock) == 0) return g_cfg.replaceLock;
@@ -140,7 +170,7 @@ static const wchar_t* GetReplacementIfMatch(PCWSTR src) {
 // -----------------------------------------------------------------------------
 // Hook: WindowsCreateString / WindowsCreateStringReference (combase.dll)
 // -----------------------------------------------------------------------------
-typedef HRESULT (WINAPI *WindowsCreateString_t)(PCNZWCH sourceString, UINT32 length, HSTRING* string);
+typedef HRESULT(WINAPI* WindowsCreateString_t)(PCNZWCH sourceString, UINT32 length, HSTRING* string);
 static WindowsCreateString_t WindowsCreateString_Original = nullptr;
 
 HRESULT WINAPI WindowsCreateString_Hook(PCNZWCH sourceString, UINT32 length, HSTRING* string) {
@@ -163,7 +193,7 @@ HRESULT WINAPI WindowsCreateString_Hook(PCNZWCH sourceString, UINT32 length, HST
     return WindowsCreateString_Original(sourceString, length, string);
 }
 
-typedef HRESULT (WINAPI *WindowsCreateStringReference_t)(
+typedef HRESULT(WINAPI* WindowsCreateStringReference_t)(
     PCWSTR sourceString,
     UINT32 length,
     HSTRING_HEADER* hstringHeader,
@@ -189,9 +219,10 @@ HRESULT WINAPI WindowsCreateStringReference_Hook(
                 Wh_Log(L"PowerTextRenamer: WindowsCreateStringReference replace '%s' -> '%s'", tmp, repl);
             }
 
-            // Replace by creating a normal HSTRING (safe).
-            // We ignore the reference header path here intentionally.
-            return WindowsCreateString_Original(repl, (UINT32)wcslen(repl), string);
+            // Keep semantics: create a reference HSTRING using the provided header.
+            // repl lives in our global config buffers, so it remains valid.
+            UINT32 replLen = (UINT32)wcslen(repl);
+            return WindowsCreateStringReference_Original(repl, replLen, hstringHeader, string);
         }
     }
 
@@ -201,7 +232,7 @@ HRESULT WINAPI WindowsCreateStringReference_Hook(
 // -----------------------------------------------------------------------------
 // Hook: LoadStringW (user32.dll) fallback
 // -----------------------------------------------------------------------------
-typedef int (WINAPI *LoadStringW_t)(HINSTANCE, UINT, LPWSTR, int);
+typedef int(WINAPI* LoadStringW_t)(HINSTANCE, UINT, LPWSTR, int);
 static LoadStringW_t LoadStringW_Original = nullptr;
 
 int WINAPI LoadStringW_Hook(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int cchBufferMax) {
@@ -241,12 +272,12 @@ BOOL Wh_ModInit() {
     }
 
     Wh_SetFunctionHook(pWindowsCreateString,
-                       (void*)WindowsCreateString_Hook,
-                       (void**)&WindowsCreateString_Original);
+        (void*)WindowsCreateString_Hook,
+        (void**)&WindowsCreateString_Original);
 
     Wh_SetFunctionHook(pWindowsCreateStringReference,
-                       (void*)WindowsCreateStringReference_Hook,
-                       (void**)&WindowsCreateStringReference_Original);
+        (void*)WindowsCreateStringReference_Hook,
+        (void**)&WindowsCreateStringReference_Original);
 
     // Fallback for resource-based text
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
@@ -254,8 +285,8 @@ BOOL Wh_ModInit() {
         auto pLoadStringW = (void*)GetProcAddress(user32, "LoadStringW");
         if (pLoadStringW) {
             Wh_SetFunctionHook(pLoadStringW,
-                               (void*)LoadStringW_Hook,
-                               (void**)&LoadStringW_Original);
+                (void*)LoadStringW_Hook,
+                (void**)&LoadStringW_Original);
         }
     }
 
