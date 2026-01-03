@@ -234,7 +234,7 @@ void WINAPI ExperienceToggleButton_UpdateVisualStates_Hook(void* pThis) {
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
     // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
@@ -253,7 +253,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         }
     };
 
-    if (!HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"Failed to hook Taskbar.View.dll symbols");
         return false;
     }
@@ -293,7 +293,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Taskbar Injector Mod v1.5");
+    Wh_Log(L"Initializing Taskbar Injector Mod v1.6");
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
