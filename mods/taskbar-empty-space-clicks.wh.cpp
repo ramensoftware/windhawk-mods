@@ -362,6 +362,8 @@ You can contact me via Windhawk's [Discord channel](https://discord.com/servers/
 */
 // ==/WindhawkModSettings==
 
+#pragma region header_file
+
 #include <initguid.h>
 #include <commctrl.h>
 #include <endpointvolume.h>
@@ -388,6 +390,12 @@ You can contact me via Windhawk's [Discord channel](https://discord.com/servers/
 #include <filesystem>
 #include <tuple>
 
+// get the naming of smart ptrs somehow consistent since winapi naming is wild
+using winrt::com_ptr;
+using bstr_ptr = _bstr_t;
+
+#pragma region macros
+
 #if defined(__GNUC__) && __GNUC__ > 8
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t WINAPI
 #elif defined(__GNUC__)
@@ -395,10 +403,6 @@ You can contact me via Windhawk's [Discord channel](https://discord.com/servers/
 #else
 #define WINAPI_LAMBDA_RETURN(return_t) ->return_t
 #endif
-
-// get the naming of smart ptrs somehow consistent since winapi naming is wild
-using winrt::com_ptr;
-using bstr_ptr = _bstr_t;
 
 // =====================================================================
 
@@ -408,8 +412,6 @@ using bstr_ptr = _bstr_t;
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
 // =====================================================================
-
-#pragma region declarations
 
 #ifdef ENABLE_FILE_LOGGER
 #include <fstream>
@@ -526,6 +528,8 @@ private:
 #define LOG_TRACE()
 #endif
 
+#pragma endregion // macros
+
 enum WindowsVersion
 {
     WIN_10 = 0,
@@ -566,12 +570,52 @@ struct TriggerAction
     std::function<void(HWND)> actionExecutor; // function that executes the action
 };
 
-static struct
+#pragma region globals
+
+static WindowsVersion g_taskbarVersion = UNKNOWN;
+static WindowsVersion g_osVersion = UNKNOWN;
+static WORD g_twinuiPCShellBuildNumber = 0;
+
+static DWORD g_dwTaskbarThreadId;
+static bool g_isWhInitialized = false;
+
+static HWND g_hTaskbarWnd;          // Shell_TrayWnd window handle
+static HWND g_hTaskbarInputSiteWnd; // Windows.UI.Input.InputSite.WindowClass window handle (Win11 taskbar)
+static std::unordered_set<HWND> g_secondaryTaskbarWindows;
+static std::unordered_set<HWND> g_secondaryTaskbarInputSiteWindows;
+
+static std::unordered_set<HWND> g_subclassedTaskbarWindows; // set of subclassed taskbar windows to avoid double subclassing
+static std::unordered_set<HWND> g_hookedInputSiteWindows;   // set of hooked InputSite windows to avoid double hooking
+static std::unordered_set<void *> g_hookedInputSiteProcs;   // set of hooked InputSite window procs to avoid double hooking
+
+static HWND g_hTaskSwitchingWnd; // Alt+Tab window handle
+static bool g_isExplorerPatcherDetected = false;
+
+static bool g_isContextMenuSuppressed = false;
+static DWORD g_contextMenuSuppressionTimestamp = 0;
+
+static const int g_mouseClickTimeoutMs = 200; // time to wait since the last time an action was executed
+static UINT_PTR gMouseClickTimer = (UINT_PTR)NULL;
+static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
+
+static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
+static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
+static const UINT g_hookedClickMsg = RegisterWindowMessageW(L"Windhawk_hookedClick_empty-space-clicks");
+
+static HHOOK g_hMouseHook = NULL;               // low-level mouse hook handle to suppress mouse input when Alt+Tab is active
+static bool g_suppressMouseInput = false;       // flag to indicate whether mouse input should be suppressed
+static DWORD g_suppressMouseInputTimestamp = 0; // timestamp of when mouse input suppression started
+static MSLLHOOKSTRUCT g_hookedMouseData;        // stable storage for MSLLHOOKSTRUCT data to pass between hook and window proc
+
+#pragma endregion // declarations
+
+struct WindhawkModSettings
 {
     bool oldTaskbarOnWin11;
     bool eagerTriggerEvaluation;
     std::vector<TriggerAction> triggerActions;
-} g_settings;
+};
+static WindhawkModSettings g_settings;
 
 // Wrapper around COM API initialization and usage to enable lazy init and safe resource management
 class COMAPI
@@ -842,109 +886,8 @@ public:
 HWND WindowFocusTracker::g_hwndLastActive = NULL;
 static WindowFocusTracker g_windowFocusTracker;
 
-namespace stringtools
-{
-    std::wstring ltrim(const std::wstring &s)
-    {
-        std::wstring result = s;
-        if (!result.empty())
-        {
-            result.erase(result.begin(), std::find_if(result.begin(), result.end(), [](wchar_t ch)
-                                                      { return !std::iswspace(ch); }));
-        }
-        return result;
-    }
-
-    std::wstring rtrim(const std::wstring &s)
-    {
-        std::wstring result = s;
-        result.erase(std::find_if(result.rbegin(), result.rend(), [](wchar_t ch)
-                                  { return !std::iswspace(ch); })
-                         .base(),
-                     result.end());
-        return result;
-    }
-
-    std::wstring trim(const std::wstring &s)
-    {
-        return rtrim(ltrim(s));
-    }
-
-    std::wstring toLower(const std::wstring &s)
-    {
-        std::wstring result = s;
-        std::transform(result.begin(), result.end(), result.begin(), ::towlower);
-        return result;
-    }
-
-    bool startsWith(const std::wstring &s, const std::wstring &prefix)
-    {
-        if (s.length() < prefix.length())
-        {
-            return false;
-        }
-        return std::equal(prefix.begin(), prefix.end(), s.begin());
-    }
-
-    std::wstring join(const std::vector<std::wstring> &elements, const std::wstring &delimiter)
-    {
-        std::wstring result;
-        for (const auto &elem : elements)
-        {
-            if (!result.empty())
-            {
-                result += delimiter;
-            }
-            result += elem;
-        }
-        return result;
-    }
-}
-
-// Sets a bit in a bitmask
-void SetBit(uint32_t &value, uint32_t bit)
-{
-    value |= (1U << bit);
-}
-
-// Checks if a bit is set in a bitmask
-bool GetBit(const uint32_t &value, uint32_t bit)
-{
-    return (value & (1U << bit)) != 0;
-}
-
-static WindowsVersion g_taskbarVersion = UNKNOWN;
-static WindowsVersion g_osVersion = UNKNOWN;
-static WORD g_twinuiPCShellBuildNumber = 0;
-
-static DWORD g_dwTaskbarThreadId;
-static bool g_isWhInitialized = false;
-
-static HWND g_hTaskbarWnd;          // Shell_TrayWnd window handle
-static HWND g_hTaskbarInputSiteWnd; // Windows.UI.Input.InputSite.WindowClass window handle (Win11 taskbar)
-static std::unordered_set<HWND> g_secondaryTaskbarWindows;
-static std::unordered_set<HWND> g_secondaryTaskbarInputSiteWindows;
-
-static std::unordered_set<HWND> g_subclassedTaskbarWindows; // set of subclassed taskbar windows to avoid double subclassing
-static std::unordered_set<HWND> g_hookedInputSiteWindows;   // set of hooked InputSite windows to avoid double hooking
-static std::unordered_set<void *> g_hookedInputSiteProcs;   // set of hooked InputSite window procs to avoid double hooking
-
-static HWND g_hTaskSwitchingWnd; // Alt+Tab window handle
-static bool g_isExplorerPatcherDetected = false;
-
-static bool g_isContextMenuSuppressed = false;
-static DWORD g_contextMenuSuppressionTimestamp = 0;
-
-static const int g_mouseClickTimeoutMs = 200;       // time to wait since the last time an action was executed
-static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify synthesized clicks
-static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
-static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
-static const UINT g_hookedClickMsg = RegisterWindowMessageW(L"Windhawk_hookedClick_empty-space-clicks");
-
-static HHOOK g_hMouseHook = NULL;               // low-level mouse hook handle to suppress mouse input when Alt+Tab is active
-static bool g_suppressMouseInput = false;       // flag to indicate whether mouse input should be suppressed
-static DWORD g_suppressMouseInputTimestamp = 0; // timestamp of when mouse input suppression started
-static MSLLHOOKSTRUCT g_hookedMouseData;        // stable storage for MSLLHOOKSTRUCT data to pass between hook and window proc
+void SetBit(uint32_t &value, uint32_t bit);
+bool GetBit(const uint32_t &value, uint32_t bit);
 
 // Stores mouse click information including position, button, timestamp and empty space detection
 struct MouseClick
@@ -1173,10 +1116,9 @@ private:
 };
 static MouseClickQueue g_mouseClickQueue;
 
-static UINT_PTR gMouseClickTimer = (UINT_PTR)NULL;
-
 // =====================================================================
-// Forward declarations
+
+#pragma region forward_declarations
 
 const wchar_t *GetMessageName(UINT uMsg);
 std::wstring GetClassNameString(HWND hWnd);
@@ -1238,7 +1180,11 @@ void ToggleTaskbarAlignment();
 void StartProcess(std::wstring command);
 std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState> ParseTaskBarButtonsState(const std::wstring &args);
 
-#pragma endregion // declarations
+#pragma endregion // forward_declarations
+
+// =====================================================================
+
+#pragma endregion // header_file
 
 // =====================================================================
 
@@ -1758,6 +1704,83 @@ void UninstallMouseHook()
 }
 
 #pragma endregion // hooks_and_win32_methods
+
+// =====================================================================
+
+#pragma region general_helpers
+
+namespace stringtools
+{
+    std::wstring ltrim(const std::wstring &s)
+    {
+        std::wstring result = s;
+        if (!result.empty())
+        {
+            result.erase(result.begin(), std::find_if(result.begin(), result.end(), [](wchar_t ch)
+                                                      { return !std::iswspace(ch); }));
+        }
+        return result;
+    }
+
+    std::wstring rtrim(const std::wstring &s)
+    {
+        std::wstring result = s;
+        result.erase(std::find_if(result.rbegin(), result.rend(), [](wchar_t ch)
+                                  { return !std::iswspace(ch); })
+                         .base(),
+                     result.end());
+        return result;
+    }
+
+    std::wstring trim(const std::wstring &s)
+    {
+        return rtrim(ltrim(s));
+    }
+
+    std::wstring toLower(const std::wstring &s)
+    {
+        std::wstring result = s;
+        std::transform(result.begin(), result.end(), result.begin(), ::towlower);
+        return result;
+    }
+
+    bool startsWith(const std::wstring &s, const std::wstring &prefix)
+    {
+        if (s.length() < prefix.length())
+        {
+            return false;
+        }
+        return std::equal(prefix.begin(), prefix.end(), s.begin());
+    }
+
+    std::wstring join(const std::vector<std::wstring> &elements, const std::wstring &delimiter)
+    {
+        std::wstring result;
+        for (const auto &elem : elements)
+        {
+            if (!result.empty())
+            {
+                result += delimiter;
+            }
+            result += elem;
+        }
+        return result;
+    }
+}
+
+// Sets a bit in a bitmask
+void SetBit(uint32_t &value, uint32_t bit)
+{
+    value |= (1U << bit);
+}
+
+// Checks if a bit is set in a bitmask
+bool GetBit(const uint32_t &value, uint32_t bit)
+{
+    return (value & (1U << bit)) != 0;
+}
+
+#pragma endregion // general_helpers
 
 // =====================================================================
 
