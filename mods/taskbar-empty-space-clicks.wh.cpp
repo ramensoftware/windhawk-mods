@@ -23,7 +23,7 @@
 
 This mod lets you assign an action to a mouse click on the Windows taskbar. Single, double, and triple clicks are supported - both mouse and touchscreen clicks. You can also assign a keyboard modifier to the action. For example, you can set up a double-click on the taskbar to open Task Manager while holding down the Ctrl key. The mod is designed to be as flexible as possible. You can assign any action to any mouse click or touchscreen tap. You can also assign multiple actions to the same trigger. This mod reacts when empty space on the taskbar is clicked. Buttons, menus, or other taskbar functions are not affected. Click events are normally forwarded to the system, so you can still use the taskbar as usual. Both primary and secondary taskbars are supported.
 
-## Supported actions:
+## Supported actions
 
 1. **Combine Taskbar buttons** - Toggle combining of Taskbar buttons between two states set in the Settings menu (not available on older Windows 11 versions)
 2. **Ctrl+Alt+Tab** - Opens Ctrl+Alt+Tab dialog (repeatedly cycles through windows until closed)
@@ -52,7 +52,7 @@ Once set, a simple middle-click on empty taskbar space will toggle the auto-hide
 
 ![Demonstration of Toggle taskbar autohide mod for Windhawk](https://i.imgur.com/BRQrVnX.gif)
 
-## Supported triggers:
+## Supported triggers
 
 - **Keyboard** - Optional. Keyboard keypress modifiers. If None is selected or added, the modifier is ignored.
     - **Left Ctrl** - Left Ctrl key
@@ -82,7 +82,7 @@ Once set, a simple middle-click on empty taskbar space will toggle the auto-hide
     - **Tap Double** - Touchscreen double tap
     - **Tap Triple** - Touchscreen triple tap
 
-## Additional arguments:
+## Additional arguments
 
 Some actions support or require additional arguments. You can set them in the Settings menu. Arguments are separated by semicolon. For example: `arg1;arg2`.
 
@@ -92,7 +92,8 @@ Some actions support or require additional arguments. You can set them in the Se
     - secTaskBarBtnState1: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - secTaskBarBtnState2: `COMBINE_ALWAYS`, `COMBINE_WHEN_FULL`, `COMBINE_NEVER`
     - Example: `COMBINE_ALWAYS;COMBINE_WHEN_FULL;COMBINE_ALWAYS;COMBINE_NEVER`
-2. Ctrl+Alt+Tab - argument `reverse` inverts the order of iteration through the windows (Ctrl+ALt+Shift+Tab behavior)
+2. Ctrl+Alt+Tab - argument `reverse` inverts the order of iteration through the windows (Ctrl+Alt+Shift+Tab behavior)
+    - You can repeat the action to cycle through the windows like you would with a keyboard. If you click outside the taskbar or your next click gesture is not Ctrl+Alt+Tab trigger, the dialog will close.
 3. Hide desktop icons - no additional arguments supported
 4. Media Next Track - no additional arguments supported
 5. Media Play/Pause - no additional arguments supported
@@ -122,7 +123,31 @@ Some actions support or require additional arguments. You can set them in the Se
     - Please note that some special keyboard shortcuts like Win+L or Ctrl+Alt+Delete cannot be sent via the inputdev interface.
 16. Win+Tab - no additional arguments supported
 
-## Caveats and limitations:
+## Example presets
+
+Windows lets you set few handy touchpad gestures for media playback or window control. However, if you are using a mouse, you might miss those gestures. 
+
+Following examples serves as an inspiration for setting up your own actions. Of course you are not limited to these examples only. You can set up any action to any mouse click or touchscreen tap. Especially with the virtual key press action, you can setup own macros and shortcuts.
+
+### Media controls
+
+- **Side Button 1 click** - Media Previous Track
+- **Middle click** - Media Play/Pause
+- **Side Button 2 click** - Media Next Track
+- **Mouse scrolling** with [Taskbar Volume Control](https://windhawk.net/mods/taskbar-volume-control) mod installed - Volume control
+
+### Window management
+
+- **Side Button 1 click** - Ctrl+Alt+Tab
+- **Middle click** - Win+Tab
+- **Side Button 2 click** - Ctrl+Alt+Shift+Tab (use `reverse` argument)
+- **Left double-click** - Switch virtual desktop forward
+- **Right double-click** - Switch virtual desktop backward (use `reverse` argument)
+
+Consider installing [Alt+Tab per monitor](https://windhawk.net/mods/alt-tab-per-monitor) mod if you are using multiple monitors. Check out [Virtual Desktop Helper](https://windhawk.net/mods/virtual-desktop-helper) and [Virtual Desktop Preserve Taskbar Order
+](https://windhawk.net/mods/virtual-desktop-taskbar-order) mods if you are into virtual desktops.
+
+## Caveats and limitations
 
 ### Click/tap gesture evaluation
 
@@ -146,7 +171,7 @@ In other words, this option is a trade-off:
 - Off – slight delay, but more accurate recognition of single vs. double vs. triple gestures
 - On – no delay, but less precise gesture detection
 
-### Right-click behavior:
+### Right-click behavior
 When you configure any right-click trigger (single, double, or triple), the mod needs to temporarily delay the taskbar's context menu to detect your intended action.
 
 #### Here's how it works:
@@ -160,7 +185,7 @@ If you set up a right-click trigger without keyboard modifiers (for example, a r
 
 Tip: To avoid this delay, consider using keyboard modifiers with your right-click triggers (like Ctrl + right double-click). This way, the mod can instantly show the context menu when you right-click without holding the modifier key.
 
-## Supported Windows versions:
+## Supported Windows versions
 - Windows 10 22H2 (prior versions are not tested, but should work as well)
 - Windows 11 24H2 - latest major release (prior versions are not tested, but should work as well)
 
@@ -168,17 +193,21 @@ I will not be supporting Insider preview or other minor versions of Windows. How
 
 ⚠️ **Caution!** Avoid using the option "Get the latest updates as soon as they're available" in Windows Update. Microsoft releases symbols for new Windows versions with a delay. This can render Windhawk mods unusable until the symbols are released (usually a few days).
 
-## Windows 10 taskbar on Windows 11
+## Troubleshooting
+
+### I am using Windows 10 taskbar on Windows 11
 
 If you are using the old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** or a similar tool), enable the corresponding option in the Settings menu. ExplorerPatcher should get detected automatically.
 
-## Troubleshooting
+### I can't click on empty space when the taskbar gets full
 
-### I just installed/updated the mod, but no actions are triggered.
+If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
+
+### I just installed/updated the mod, but no actions are triggered
 
 The mod uses Windhawk's `ArrayOfNestedOptions` widget type that enables you to create multiple trigger+action configurations. However, if you have just installed or updated the mod, there are no configurations set up yet. It might happen that Windhawk spawns a default empty configuration with all keyboard modifiers selected and no mouse trigger or action selected. Users then overlook the modifiers and only set up the mouse trigger and action. The mod will never trigger any action since it is impossible to press all keyboard modifiers at once on most keyboards. If that's the case, open the mod's Settings and either remove the empty configuration or set up your desired trigger+action configuration (including keyboard modifiers). For more information, please see the gif animation on the mod's `Description` tab.
 
-### I have set my trigger correctly, but the action is not executed.
+### I have set my trigger correctly, but the action is not executed
 
 Please see the previous section about empty configuration. If that is not the issue, check the mod's log for any error messages or other clues:
 
@@ -202,7 +231,7 @@ If you can't find anything useful, try enabling `DEBUG` logging:
 6. Now much more information will be logged
 7. Try to trigger your action again and check the log for any error messages or other clues
 
-### I have tried everything, but the mod is still not working as expected.
+### I have tried everything, but the mod is still not working as expected
 
 Please open an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mods/issues) describing your problem. Please always include the following information:
 
@@ -211,13 +240,9 @@ Please open an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mo
 - Windhawk version
 - Mod version
 - Mod settings you are using - a screenshot of the mod's Settings tab, or ideally the entire settings JSON record from the `Advanced` tab
-- Mod log output, ideally with `DEBUG` logging enabled (see the previous section for instructions on how to enable it)
+- Mod log output with `DEBUG` logging enabled (see the previous section for instructions on how to enable it)
 
-### I can't click on empty space when the taskbar gets full.
-
-If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
-
-## Hints
+## Hints and tips
 
 ### Opening an application on the currently active monitor
 
@@ -231,9 +256,22 @@ The mod tries to find the Start button on the taskbar you clicked on to open the
 
 If you wish to extend media playback control further, you can use the [Taskbar Volume Control](https://windhawk.net/mods/taskbar-volume-control) mod. It lets you control the system volume by scrolling the mouse wheel over the taskbar.
 
+### Opening Ctrl+Alt+Tab on the currently active monitor
+
+By default, Windows opens Task Switching dialog on the primary monitor. If you want it to open on the currently active monitor, consider using [Alt+Tab per monitor](https://windhawk.net/mods/alt-tab-per-monitor) mod.
+
+### Fine grade control over virtual desktops
+
+The "Switch virtual desktop" feature is based on [u2x1](https://github.com/u2x1)'s  [Virtual Desktop Helper](https://windhawk.net/mods/virtual-desktop-helper) mod. If you want more fine-grained control over virtual desktops (e.g., switch to a specific desktop number, move the current window to another desktop, etc.), consider installing that mod and sending custom keypresses to it using this mod. Also checkout [Virtual Desktop Preserve Taskbar Order
+](https://windhawk.net/mods/virtual-desktop-taskbar-order) mod.
+
 ## Suggestions and new features
 
 If you have a request for new functions, suggestions, or you are experiencing some issues, please post an [Issue on the GitHub page](https://github.com/m1lhaus/windhawk-mods/issues). Please be as specific as possible and provide as much information as you can. Please consider using an AI chatbot if you are struggling to put everything together in English.
+
+## Contact
+
+You can contact me via Windhawk's [Discord channel](https://discord.com/servers/windhawk-923944342991818753) (@m1lhaus) or [GitHub page](https://github.com/m1lhaus/windhawk-mods/issues).
 
 */
 // ==/WindhawkModReadme==
