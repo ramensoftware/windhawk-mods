@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.7.0
+// @version         1.7.1
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -316,6 +316,7 @@ This is caused by default by the AccentBlur API.❕
 #include <array>
 #include <mutex>
 #include <unordered_set>
+#include <unordered_map>
 #include <d2d1.h>
 #include <wrl.h>
 #include <ShellScalingApi.h>
@@ -356,6 +357,18 @@ enum {
 std::wstring g_RainbowPropStr = L"Windhawk_TranslucentMod_Rainbow";
 std::mutex g_rainbowWindowsMutex;
 std::unordered_set<HWND> g_rainbowWindows;
+
+struct RainbowState {
+    DOUBLE initialHue = 0.0;
+    DOUBLE baseTime = 0.0;        // when timer first started
+    DOUBLE pausedTotal = 0.0;     // accumulated paused duration
+    DOUBLE pausedStart = 0.0;     // when current pause began
+    bool isPaused = false;
+    UINT_PTR timerId = 0;
+    bool initialized = false;
+};
+
+std::unordered_map<HWND, RainbowState> g_rainbowState;
 
 thread_local BOOL g_DrawTextWithGlowEntry;
 
@@ -4910,48 +4923,44 @@ static COLORREF HSLToRGB(FLOAT h, FLOAT s, FLOAT l) {
 
 VOID CALLBACK MyRainbowTimerProc(HWND, UINT, UINT_PTR t_id, DWORD)
 {
-    HWND WndHwnd= nullptr;
+    HWND WndHwnd = nullptr;
+    RainbowState stateCopy;
     {
         std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-        for(auto& hWnd : g_rainbowWindows)
-        {
-            HANDLE value = GetPropW(hWnd, g_RainbowPropStr.c_str());
-            if (value && (UINT_PTR)value == t_id)
-            {
-                WndHwnd = hWnd;
+        for (const auto& kv : g_rainbowState) {
+            if (kv.second.timerId == t_id) {
+                WndHwnd = kv.first;
+                stateCopy = kv.second;
                 break;
             }
         }
     }
 
-    if (WndHwnd)
+    if (!WndHwnd)
+        return;
+    // Credits to @m417z, modified and adapted for pause on movement.
+    DOUBLE tNow = TimerGetSeconds();
+    DOUBLE effectiveTime = (tNow - stateCopy.baseTime) - stateCopy.pausedTotal;
+    DOUBLE wndHue = fmod(stateCopy.initialHue + effectiveTime * g_settings.RainbowSpeed, 360.0);
+
+    if (g_settings.TitlebarRainbowFlag)
     {
-	    // Credits to @m417z
-        std::mt19937 gen((UINT_PTR)WndHwnd);
-        std::uniform_real_distribution<> distr(0.0, 360.0);
-        DOUBLE InitialHueOffset = distr(gen);
-
-        DOUBLE wndHue = fmod(InitialHueOffset + TimerGetSeconds() * g_settings.RainbowSpeed, 360.0);
-
+        COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
+    }
+    if (g_settings.CaptionRainbowFlag)
+    {
+        COLORREF captionColor;
         if (g_settings.TitlebarRainbowFlag)
-        {
-            COLORREF titlebarColor = HSLToRGB(wndHue, 1.0f, 0.5f); 
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_CAPTION_COLOR, &titlebarColor, sizeof(COLORREF));
-        }
-        if (g_settings.CaptionRainbowFlag)
-        {
-            COLORREF captionColor;
-            if (g_settings.TitlebarRainbowFlag)
-                captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
-            else
-                captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
-        }
-        if (g_settings.BorderRainbowFlag)
-        {
-            COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
-            DwmSetWindowAttribute_orig(WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
-        }
+            captionColor = HSLToRGB(fmod(wndHue + 120.0f, 360.0f), 1.0f, 0.5f);
+        else
+            captionColor = HSLToRGB(wndHue, 1.0f, 0.5f);
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_TEXT_COLOR, &captionColor, sizeof(COLORREF));
+    }
+    if (g_settings.BorderRainbowFlag)
+    {
+        COLORREF borderColor = HSLToRGB(wndHue, 1.0f, 0.5f);  
+        DwmSetWindowAttribute_orig(WndHwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(COLORREF));
     }
 }
 
@@ -5068,6 +5077,7 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
                 {
                     std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
                     g_rainbowWindows.erase(cwp->hwnd);
+                    g_rainbowState.erase(cwp->hwnd);
                     Wh_Log(L"Timer termination success for window: %p", cwp->hwnd);
                 }
                 else
@@ -5075,6 +5085,20 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
             }
 
             RemoveOrUnloadFlyoutSubclass(cwp->hwnd);
+            break;
+        }
+        case WM_ENTERSIZEMOVE:
+        {
+            // Pause rainbow effects while the window is being moved/resized.
+            if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
+                SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_UNLOAD, 0);
+            break;
+        }
+        case WM_EXITSIZEMOVE:
+        {
+            // Resume rainbow effects after move/resize ends.
+            if (g_settings.BorderRainbowFlag || g_settings.CaptionRainbowFlag || g_settings.TitlebarRainbowFlag)
+                SendMessage(cwp->hwnd, g_msgRainbowTimer, RAINBOW_LOAD, 0);
             break;
         }
         default:
@@ -5086,21 +5110,37 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
                     case RAINBOW_LOAD:
                     {
                         HANDLE value = GetPropW(cwp->hwnd, g_RainbowPropStr.c_str());
-                        if (!value)
-                        {
-                            UINT_PTR timersId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
-                            if (timersId)
-                            {
-                                SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)timersId);
-                                {
-                                    std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
-                                    g_rainbowWindows.insert(cwp->hwnd);
-                                }
-                                Wh_Log(L"Timer set success for window: %p", cwp->hwnd);
-                            }
-                            else
-                                Wh_Log(L"[ERROR] Timer set failure for window: %p", cwp->hwnd);
+                        if (value)
+                            break; // already running
+
+                        std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                        RainbowState &st = g_rainbowState[cwp->hwnd];
+                        DOUBLE now = TimerGetSeconds();
+                        if (!st.initialized) {
+                            std::mt19937 gen((UINT_PTR)cwp->hwnd);
+                            std::uniform_real_distribution<> distr(0.0, 360.0);
+                            st.initialHue = distr(gen);
+                            st.baseTime = now;
+                            st.pausedTotal = 0.0;
+                            st.pausedStart = 0.0;
+                            st.isPaused = false;
+                            st.initialized = true;
                         }
+                        if (st.isPaused) {
+                            st.pausedTotal += now - st.pausedStart;
+                            st.isPaused = false;
+                        }
+
+                        UINT_PTR timersId = SetTimer(NULL, NULL, 32, MyRainbowTimerProc);
+                        if (timersId)
+                        {
+                            st.timerId = timersId;
+                            SetPropW(cwp->hwnd, g_RainbowPropStr.c_str(), (HANDLE)timersId);
+                            g_rainbowWindows.insert(cwp->hwnd);
+                            Wh_Log(L"Timer set success for window: %p", cwp->hwnd);
+                        }
+                        else
+                            Wh_Log(L"[ERROR] Timer set failure for window: %p", cwp->hwnd);
                         break;
                     }
                     case RAINBOW_UNLOAD:
@@ -5108,6 +5148,20 @@ LRESULT CALLBACK CallWndProc(INT nCode, WPARAM wParam, LPARAM lParam)
                         HANDLE value = RemovePropW(cwp->hwnd, g_RainbowPropStr.c_str());
                         if (value)
                         {
+                            DOUBLE now = TimerGetSeconds();
+                            {
+                                std::lock_guard<std::mutex> guard(g_rainbowWindowsMutex);
+                                auto it = g_rainbowState.find(cwp->hwnd);
+                                if (it != g_rainbowState.end()) {
+                                    if (!it->second.isPaused) {
+                                        it->second.pausedStart = now;
+                                        it->second.isPaused = true;
+                                        it->second.timerId = 0;
+                                    }
+                                }
+                                g_rainbowWindows.erase(cwp->hwnd);
+                            }
+
                             if (KillTimer(NULL, (UINT_PTR)value))
                                 Wh_Log(L"Timer unload success for window: %p", cwp->hwnd);
                             else
