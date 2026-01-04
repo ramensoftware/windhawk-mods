@@ -50,6 +50,9 @@ Restart explorer.exe to change the background color.⚠️
 * ⚠️The background effects do not affect most modern windows (UWP/WinUI), 
 apps with different front-end rendering (e.g Qt, Electron, Chromium etc.. programs) and native windows with hardcoded colors.⚠️
 
+⚠️In case parts of Windows UI colors remain modified after disabling the mod, 
+delete the HKEY_CURRENT_USER\Control Panel\Colors registry key and reboot.⚠️
+
 * ❕The blur effect may show a bleeding effect at the edges of a window when maximized or snapped to the edge of the screen. 
 This is caused by default by the AccentBlur API.❕
 
@@ -5721,4 +5724,5 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
 
