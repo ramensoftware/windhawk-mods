@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-03T23:12:28.000Z</updated>
+    <updated>2026-01-04T12:04:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.7.0]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#c9918094a04b37d798d37825c404fa78407ef589</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2026-01-04T12:04:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Expand translucent effects to flyouts (popup menus, tooltips, dropdown menu) (thanks to <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> project)</li>
+<li>Update readme, provide more useful information.</li>
+<li>Add a setting option to modify system colors and custom rendering option settings in process rules.</li>
+<li>Some custom theme additions/tweaks.</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Start Power Text Renamer 1.0.1]]></title>
         <id>https://windhawk.net/mods/win11-start-power-text-renamer#7721f673ddaa6772701c59d7d781b336c05a0963</id>
@@ -318,17 +334,6 @@ verb (Windows + E shortcut, directly invoking <code>explorer.exe</code>)</li>
         <link href="https://windhawk.net/mods/classic-theme-uifile-fix"/>
         <updated>2025-12-29T08:54:24.000Z</updated>
         <content type="html"><![CDATA[<p>Updated version number and added additional context to the description.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Control Panel Classic View Lite 1.0.1]]></title>
-        <id>https://windhawk.net/mods/cpl-classic-view-lite#3f63d2ac428d4e1c591705701398c386aa54046c</id>
-        <link href="https://windhawk.net/mods/cpl-classic-view-lite"/>
-        <updated>2025-12-28T16:51:04.000Z</updated>
-        <content type="html"><![CDATA[<p>Improve readme</p>]]></content>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>

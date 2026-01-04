@@ -1,3 +1,10 @@
+## 1.7.0 ([Jan 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c9918094a04b37d798d37825c404fa78407ef589/mods/translucent-windows.wh.cpp))
+
+* Expand translucent effects to flyouts (popup menus, tooltips, dropdown menu) (thanks to [TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts) project)
+* Update readme, provide more useful information.
+* Add a setting option to modify system colors and custom rendering option settings in process rules.
+* Some custom theme additions/tweaks.
+
 ## 1.6.3 ([Aug 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/796ddb18e418ccf836aff5de138b2e5fdd783320/mods/translucent-windows.wh.cpp))
 
 * Fixed text alpha blending method, which now affects all texts rendered from GDI
