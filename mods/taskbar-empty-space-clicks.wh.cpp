@@ -1083,36 +1083,22 @@ struct MouseClick
     // Returns bitmask of currently pressed modifier keys (Ctrl, Alt, Shift, Win)
     static uint32_t GetKeyModifiersState()
     {
-        // using GetKeyboardState is not reliable for synthesized clicks, so using GetAsyncKeyState instead
         uint32_t currentKeyModifiersState = 0U;
-        if ((GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0)
+        const auto LogKeyIfPressed = [&currentKeyModifiersState](const int &vkCode, const KeyModifier &keyModifier)
         {
-            SetBit(currentKeyModifiersState, KEY_MODIFIER_LCTRL);
-        }
-        if ((GetAsyncKeyState(VK_LSHIFT) & 0x8000) != 0)
-        {
-            SetBit(currentKeyModifiersState, KEY_MODIFIER_LSHIFT);
-        }
-        if ((GetAsyncKeyState(VK_LMENU) & 0x8000) != 0)
-        {
-            SetBit(currentKeyModifiersState, KEY_MODIFIER_LALT);
-        }
-        if ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0)
-        {
-            SetBit(currentKeyModifiersState, KEY_MODIFIER_LWIN);
-        }
-        if ((GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0)
-        {
-            SetBit(currentKeyModifiersState, KEY_MODIFIER_RCTRL);
-        }
-        if ((GetAsyncKeyState(VK_RSHIFT) & 0x8000) != 0)
-        {
-            SetBit(currentKeyModifiersState, KEY_MODIFIER_RSHIFT);
-        }
-        if ((GetAsyncKeyState(VK_RMENU) & 0x8000) != 0)
-        {
-            SetBit(currentKeyModifiersState, KEY_MODIFIER_RALT);
-        }
+            // using GetKeyboardState is not reliable for synthesized clicks, so using GetAsyncKeyState instead
+            if ((GetAsyncKeyState(vkCode) & 0x8000) != 0)
+                SetBit(currentKeyModifiersState, keyModifier);
+        };
+
+        LogKeyIfPressed(VK_LCONTROL, KEY_MODIFIER_LCTRL);
+        LogKeyIfPressed(VK_LSHIFT, KEY_MODIFIER_LSHIFT);
+        LogKeyIfPressed(VK_LMENU, KEY_MODIFIER_LALT);
+        LogKeyIfPressed(VK_LWIN, KEY_MODIFIER_LWIN);
+        LogKeyIfPressed(VK_RCONTROL, KEY_MODIFIER_RCTRL);
+        LogKeyIfPressed(VK_RSHIFT, KEY_MODIFIER_RSHIFT);
+        LogKeyIfPressed(VK_RMENU, KEY_MODIFIER_RALT);
+
         return currentKeyModifiersState;
     }
 
