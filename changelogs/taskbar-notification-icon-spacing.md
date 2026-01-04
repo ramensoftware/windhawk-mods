@@ -1,3 +1,7 @@
+## 1.3 ([Jan 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7b60e3a794333aa37dc8841ac9093f4c101074b8/mods/taskbar-notification-icon-spacing.wh.cpp))
+
+* Added an option to choose the grid arrangement, e.g. whether to fill each row before moving to the next, or to fill each column first. The default option is now "Row-first, left-to-right". You can change it to "Column-first, top-to-bottom" to revert to the behavior of the previous version.
+
 ## 1.2 ([Jul 23, 2025](https://github.com/ramensoftware/windhawk-mods/blob/9d0606f5ffee0316c36fe9b2c5e3a780b8f40ab8/mods/taskbar-notification-icon-spacing.wh.cpp))
 
 * Added an option to have a grid of tray icons. This was a frequently requested option for **Vertical Taskbar for Windows 11** and **Multirow taskbar for Windows 11**. This mod can now be used together with those other mods for the tray icons grid option.

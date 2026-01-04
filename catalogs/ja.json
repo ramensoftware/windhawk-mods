@@ -6723,7 +6723,7 @@
                     308
                 ],
                 "ratingUsers": 330,
-                "updated": 1753289002000,
+                "updated": 1767557810000,
                 "users": 18725
             },
             "featured": true,
@@ -6741,7 +6741,7 @@
                 ],
                 "name": "Taskbar tray icon spacing and grid",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2"
+                "version": "1.3"
             }
         },
         "taskbar-notification-icons-show-all": {
