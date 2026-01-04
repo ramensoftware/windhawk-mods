@@ -35,7 +35,7 @@ the [SetSysColor](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf
 Intercepting and changing the system colors is quite difficult, more details
 in another software project that faced the same problem: https://github.com/namazso/SecureUxTheme/issues/9#issuecomment-611897882 ❗
 
-* ❗The text alpha blending settings fixes invisible text by restoring alpha and modifying text colors.
+* ❗The Windows custom theme rendering also fixes invisible text by restoring alpha and modifying text colors.
 Extending effects to the entire window can result in text being barely readable or even invisible in some cases. 
 Enabling HDR, 10bit color depth output, having a black color, or a white background behind the window can cause this. 
 This is because most GDI rendering operations ignore or do not preserve alpha values.❗
@@ -49,10 +49,6 @@ Restart explorer.exe to change the background color.⚠️
 #
 * ⚠️The background effects do not affect most modern windows (UWP/WinUI), 
 apps with different front-end rendering (e.g Qt, Electron, Chromium etc.. programs) and native windows with hardcoded colors.⚠️
-
-* ❕Text alpha blending converts cleartype antialising to greyscale, which in combination with the text color and default text font size/weight, 
-can result in weak appearance of the rendered text on opaque backgrounds that match or are close to that of the text color.
-Some text colors are retrieved from system colors.❕
 
 * ❕The blur effect may show a bleeding effect at the edges of a window when maximized or snapped to the edge of the screen. 
 This is caused by default by the AccentBlur API.❕
@@ -5725,3 +5721,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
