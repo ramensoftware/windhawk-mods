@@ -125,7 +125,7 @@ Some actions support or require additional arguments. You can set them in the Se
 
 ## Example presets
 
-Windows lets you set few handy touchpad gestures for media playback or window control. However, if you are using a mouse, you might miss those gestures. 
+Windows lets you set few handy touchpad gestures for media playback or window control. However, if you are using a mouse, you might miss those gestures.
 
 Following examples serves as an inspiration for setting up your own actions. Of course you are not limited to these examples only. You can set up any action to any mouse click or touchscreen tap. Especially with the virtual key press action, you can setup own macros and shortcuts.
 
@@ -402,8 +402,8 @@ using bstr_ptr = _bstr_t;
 
 // =====================================================================
 
-#define ENABLE_LOG_INFO  // info messages will be enabled
-#define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
+#define ENABLE_LOG_INFO // info messages will be enabled
+// #define ENABLE_LOG_DEBUG // verbose debug messages will be enabled
 // #define ENABLE_LOG_TRACE // method enter/leave messages will be enabled
 // #define ENABLE_FILE_LOGGER // enable file logger (log file is written to desktop)
 
