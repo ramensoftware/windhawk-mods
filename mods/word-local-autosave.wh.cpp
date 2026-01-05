@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S
-// @version         1.2
+// @version         1.3
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -29,7 +29,7 @@ short delay.
 - Optional minimum interval between saves to prevent excessive disk writes
 - Works with any locally saved Word document
 - Only saves when Word is the active window
-- Waits for modifier keys (Shift, Alt) to be released before saving
+- Waits for ALL keys to be released before saving to prevent shortcut conflicts
 
 ## Settings
 
@@ -45,7 +45,7 @@ short delay.
 - The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.
 - Manual Ctrl+S presses are detected and reset the auto-save timer.
 - Auto-save only triggers when Microsoft Word is the foreground window.
-- Auto-save waits for Shift/Alt keys to be released to avoid interfering with typing.
+- Auto-save waits for all keys to be released to avoid triggering wrong shortcuts.
 */
 // ==/WindhawkModReadme==
 
@@ -99,12 +99,66 @@ bool IsWordForeground() {
     return (foregroundProcessId == g_wordProcessId);
 }
 
-// Check if any modifier keys are pressed
-bool AreModifiersPressed() {
-    bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-    bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    // Note: We don't check Ctrl here because Ctrl+S is what we want
-    return shiftPressed || altPressed;
+// Check if any keys are currently pressed that could interfere with Ctrl+S
+bool AreAnyKeysPressed() {
+    BYTE keyState[256];
+    if (!GetKeyboardState(keyState)) {
+        return false;  // If we can't get state, assume no keys pressed
+    }
+    
+    // Check letters A-Z (0x41-0x5A) - if any letter is held, wait
+    for (int i = 0x41; i <= 0x5A; i++) {
+        if (keyState[i] & 0x80) {
+            Wh_Log(L"Key 0x%02X is pressed, delaying save", i);
+            return true;
+        }
+    }
+    
+    // Check numbers 0-9 (0x30-0x39)
+    for (int i = 0x30; i <= 0x39; i++) {
+        if (keyState[i] & 0x80) {
+            Wh_Log(L"Key 0x%02X is pressed, delaying save", i);
+            return true;
+        }
+    }
+    
+    // Check Shift and Alt (we don't want Ctrl+Shift+S or Ctrl+Alt+S)
+    if (keyState[VK_SHIFT] & 0x80) {
+        Wh_Log(L"Shift is pressed, delaying save");
+        return true;
+    }
+    if (keyState[VK_LSHIFT] & 0x80) return true;
+    if (keyState[VK_RSHIFT] & 0x80) return true;
+    
+    if (keyState[VK_MENU] & 0x80) {  // Alt
+        Wh_Log(L"Alt is pressed, delaying save");
+        return true;
+    }
+    if (keyState[VK_LMENU] & 0x80) return true;
+    if (keyState[VK_RMENU] & 0x80) return true;
+    
+    // Check common editing keys
+    if (keyState[VK_SPACE] & 0x80) return true;
+    if (keyState[VK_RETURN] & 0x80) return true;
+    if (keyState[VK_TAB] & 0x80) return true;
+    if (keyState[VK_BACK] & 0x80) return true;
+    if (keyState[VK_DELETE] & 0x80) return true;
+    
+    // Check numpad keys
+    for (int i = VK_NUMPAD0; i <= VK_DIVIDE; i++) {
+        if (keyState[i] & 0x80) return true;
+    }
+    
+    // Check OEM keys (punctuation, brackets, etc.)
+    int oemKeys[] = {
+        VK_OEM_1, VK_OEM_2, VK_OEM_3, VK_OEM_4, VK_OEM_5, VK_OEM_6, VK_OEM_7, VK_OEM_8,
+        VK_OEM_PLUS, VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PERIOD
+    };
+    for (int key : oemKeys) {
+        if (keyState[key] & 0x80) return true;
+    }
+    
+    return false;
 }
 
 // Send Ctrl+S keystroke
@@ -140,7 +194,7 @@ void SendCtrlS() {
     Wh_Log(L"Sent Ctrl+S for auto-save (sent %u inputs)", sent);
 }
 
-// Retry timer callback - checks if modifiers are released
+// Retry timer callback - checks if all keys are released
 void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     KillTimer(nullptr, g_retryTimerId);
     g_retryTimerId = 0;
@@ -148,7 +202,7 @@ void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
     TrySave();
 }
 
-// Try to perform save, retry if modifiers are pressed
+// Try to perform save, retry if any keys are pressed
 void TrySave() {
     // Verify Word is still the foreground window
     if (!IsWordForeground()) {
@@ -157,13 +211,12 @@ void TrySave() {
         return;
     }
 
-    // Check if Shift or Alt are currently pressed
-    if (AreModifiersPressed()) {
+    // Check if ANY keys are currently pressed
+    if (AreAnyKeysPressed()) {
         g_retryCount++;
         
-        // Retry up to 20 times (2 seconds total with 100ms intervals)
-        if (g_retryCount < 20) {
-            Wh_Log(L"Modifiers pressed, delaying save (retry %d)", g_retryCount);
+        // Retry up to 50 times (5 seconds total with 100ms intervals)
+        if (g_retryCount < 50) {
             // Try again in 100ms
             g_retryTimerId = SetTimer(nullptr, 0, 100, RetryTimerProc);
             return;
@@ -176,7 +229,7 @@ void TrySave() {
 
     g_retryCount = 0;
     
-    // Send Ctrl+S
+    // All keys released - safe to send Ctrl+S
     SendCtrlS();
     
     g_lastSaveTime = GetTickCount();
@@ -205,7 +258,7 @@ void CALLBACK SaveTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime
 
     Wh_Log(L"Performing auto-save...");
 
-    // Try to save (will retry if modifiers are pressed)
+    // Try to save (will retry if any keys are pressed)
     TrySave();
 }
 
@@ -318,7 +371,7 @@ void LoadSettings() {
 
 // Mod initialization
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave mod v1.2 initializing...");
+    Wh_Log(L"Word Local AutoSave mod v1.3 initializing...");
 
     // Store current process ID for foreground window check
     g_wordProcessId = GetCurrentProcessId();
