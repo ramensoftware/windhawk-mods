@@ -355,6 +355,10 @@ class ModMetadataValidator:
         expected = f'https://github.com/{self.expected_author}'
         if prop.value != expected and prop.value.lower() == expected.lower():
             prop.warn(f'Expected @@ to be "{expected}" (case-sensitive)')
+        elif prop.value == expected + '/':
+            prop.warn(f'Expected @@ to be "{expected}" (no trailing slash)')
+        elif prop.value.startswith(expected + '/'):
+            prop.warn(f'Expected @@ to be "{expected}" (user profile URL only)')
         elif prop.value != expected:
             prop.warn(
                 f'Expected @@ to be "{expected}".\n'
