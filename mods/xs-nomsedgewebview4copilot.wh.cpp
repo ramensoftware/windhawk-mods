@@ -2,7 +2,7 @@
 // @id              xs-nomsedgewebview4copilot
 // @name            No MS Edge WebView2 for Copilot
 // @description     Disables MSEdgeWebView2 child process creation for certain application, which is used for Copilot functionality.
-// @version         1.0
+// @version         1.1
 // @author          Xetrill
 // @github          https://github.com/Xetrill
 // @include         onedrive.exe
@@ -12,9 +12,7 @@
 // ==WindhawkModReadme==
 /*
 # Description
-All this mod does is disables certain processes from creating `msedgewebview2.exe` child processes to provide Copilot functionality within the app.
-
-This mod is minimal — it does only what's required to accomplish that goal. It does not handle the scenario where `msedgewebview2.exe` instances are already running; in that case restart the affected application.
+All this mod does is disables certain processes from creating `msedgewebview2.exe` child processes. Which are used to provide Copilot functionality within the app.
 
 # Hooked Processes
 ## OneDrive (`onedrive.exe`)
@@ -35,6 +33,7 @@ I haven't tested every scenario. I only verified that OneDrive (personal and bus
 #endif
 #include <windows.h>
 #include <wchar.h>
+#include <tlhelp32.h>
 
 static WINBOOL (WINAPI *orig_CreateProcessW)(
     LPCWSTR,
@@ -100,6 +99,45 @@ static WINBOOL WINAPI hk_CreateProcessW(
     );
 }
 
+static void TerminateRunningChildren()
+{
+    const auto myPid = GetCurrentProcessId();
+    auto snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return;
+
+    // We only need to find the main broker process, its children will terminate automatically
+    auto foundChild = false;
+    PROCESSENTRY32W pe{ sizeof(pe) };
+    for (BOOL ok = Process32FirstW(snapshot, &pe); ok; ok = Process32NextW(snapshot, &pe)) {
+        if (pe.th32ParentProcessID != myPid) {
+            continue;
+        }
+        if (_wcsicmp(pe.szExeFile, L"msedgewebview2.exe") == 0) {
+            foundChild = true;
+            break;
+        }
+    }
+    CloseHandle(snapshot);
+
+    if (!foundChild) {
+        return;
+    }
+
+    auto proc = OpenProcess(
+        PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+        FALSE,
+        pe.th32ProcessID
+    );
+    if (proc) {
+        Wh_Log(L"[TerminateRunningChildren] Killing pid=%u", pe.th32ProcessID);
+        TerminateProcess(proc, 1);
+        CloseHandle(proc);
+    } else {
+        Wh_Log(L"[TerminateRunningChildren] Found pid=%u but OpenProcess failed (err=%u)", pe.th32ProcessID, GetLastError());
+    }
+}
+
 BOOL Wh_ModInit() {
     const auto hKernel32 = LoadLibraryW(L"Kernel32.dll");    
     const auto pCreateProcessW = (decltype(&CreateProcessW))GetProcAddress(hKernel32, "CreateProcessW");
@@ -108,4 +146,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    TerminateRunningChildren();
 }
