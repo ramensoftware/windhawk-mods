@@ -2,7 +2,7 @@
 // @id              xs-nomsedgewebview4copilot
 // @name            No MS Edge WebView2 for Copilot
 // @description     Disables MSEdgeWebView2 child process creation for certain application, which is used for Copilot functionality.
-// @version         1.0
+// @version         1.1
 // @author          Xetrill
 // @github          https://github.com/Xetrill
 // @include         onedrive.exe
@@ -145,8 +145,9 @@ BOOL Wh_ModInit() {
         Wh_Log(L"SetFunctionHook(CreateProcessW) failed (err=%u).", GetLastError());
         return FALSE;
     }
-
-    TerminateRunningChildren();
-
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    TerminateRunningChildren();
 }
