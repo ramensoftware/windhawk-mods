@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S
-// @version         1.1
+// @version         1.2
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -29,6 +29,7 @@ short delay.
 - Optional minimum interval between saves to prevent excessive disk writes
 - Works with any locally saved Word document
 - Only saves when Word is the active window
+- Waits for modifier keys (Shift, Alt) to be released before saving
 
 ## Settings
 
@@ -44,6 +45,7 @@ short delay.
 - The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.
 - Manual Ctrl+S presses are detected and reset the auto-save timer.
 - Auto-save only triggers when Microsoft Word is the foreground window.
+- Auto-save waits for Shift/Alt keys to be released to avoid interfering with typing.
 */
 // ==/WindhawkModReadme==
 
@@ -68,10 +70,12 @@ struct {
 
 // Global state
 UINT_PTR g_saveTimerId = 0;
+UINT_PTR g_retryTimerId = 0;
 DWORD g_lastSaveTime = 0;
 DWORD g_lastInputTime = 0;
 bool g_isSendingCtrlS = false;
 DWORD g_wordProcessId = 0;
+int g_retryCount = 0;
 
 // Original function pointer
 typedef BOOL (WINAPI *TranslateMessage_t)(const MSG*);
@@ -80,6 +84,7 @@ TranslateMessage_t g_originalTranslateMessage = nullptr;
 // Forward declarations
 void ScheduleSave();
 void SendCtrlS();
+void TrySave();
 
 // Check if Word is the foreground window
 bool IsWordForeground() {
@@ -94,77 +99,88 @@ bool IsWordForeground() {
     return (foregroundProcessId == g_wordProcessId);
 }
 
-// Send Ctrl+S keystroke
-void SendCtrlS() {
-    // Verify Word is still the foreground window before sending
-    if (!IsWordForeground()) {
-        Wh_Log(L"Word is not the foreground window, skipping auto-save");
-        return;
-    }
-
-    g_isSendingCtrlS = true;
-
-    // Check if Shift or Alt are currently pressed
+// Check if any modifier keys are pressed
+bool AreModifiersPressed() {
     bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    // Note: We don't check Ctrl here because Ctrl+S is what we want
+    return shiftPressed || altPressed;
+}
 
-    // Calculate how many inputs we need
-    // Base: Ctrl down, S down, S up, Ctrl up = 4
-    // Plus: Shift up (if pressed), Alt up (if pressed)
-    int inputCount = 4;
-    if (shiftPressed) inputCount++;
-    if (altPressed) inputCount++;
+// Send Ctrl+S keystroke
+void SendCtrlS() {
+    g_isSendingCtrlS = true;
 
-    INPUT inputs[6] = {};  // Max 6 inputs
-    int idx = 0;
-
-    // Release Shift first if pressed (to avoid Ctrl+Shift+S = Apply Styles)
-    if (shiftPressed) {
-        inputs[idx].type = INPUT_KEYBOARD;
-        inputs[idx].ki.wVk = VK_SHIFT;
-        inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
-        idx++;
-        Wh_Log(L"Releasing Shift key before Ctrl+S");
-    }
-
-    // Release Alt if pressed (to avoid Alt+Ctrl+S combinations)
-    if (altPressed) {
-        inputs[idx].type = INPUT_KEYBOARD;
-        inputs[idx].ki.wVk = VK_MENU;
-        inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
-        idx++;
-        Wh_Log(L"Releasing Alt key before Ctrl+S");
-    }
+    INPUT inputs[4] = {};
 
     // Press Ctrl
-    inputs[idx].type = INPUT_KEYBOARD;
-    inputs[idx].ki.wVk = VK_CONTROL;
-    inputs[idx].ki.dwFlags = 0;
-    idx++;
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[0].ki.dwFlags = 0;
 
     // Press S
-    inputs[idx].type = INPUT_KEYBOARD;
-    inputs[idx].ki.wVk = 'S';
-    inputs[idx].ki.dwFlags = 0;
-    idx++;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = 'S';
+    inputs[1].ki.dwFlags = 0;
 
     // Release S
-    inputs[idx].type = INPUT_KEYBOARD;
-    inputs[idx].ki.wVk = 'S';
-    inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
-    idx++;
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = 'S';
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
 
     // Release Ctrl
-    inputs[idx].type = INPUT_KEYBOARD;
-    inputs[idx].ki.wVk = VK_CONTROL;
-    inputs[idx].ki.dwFlags = KEYEVENTF_KEYUP;
-    idx++;
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_CONTROL;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 
-    UINT sent = SendInput(idx, inputs, sizeof(INPUT));
+    UINT sent = SendInput(4, inputs, sizeof(INPUT));
 
     g_isSendingCtrlS = false;
 
     Wh_Log(L"Sent Ctrl+S for auto-save (sent %u inputs)", sent);
+}
+
+// Retry timer callback - checks if modifiers are released
+void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    KillTimer(nullptr, g_retryTimerId);
+    g_retryTimerId = 0;
+    
+    TrySave();
+}
+
+// Try to perform save, retry if modifiers are pressed
+void TrySave() {
+    // Verify Word is still the foreground window
+    if (!IsWordForeground()) {
+        Wh_Log(L"Word is not the foreground window, skipping auto-save");
+        g_retryCount = 0;
+        return;
+    }
+
+    // Check if Shift or Alt are currently pressed
+    if (AreModifiersPressed()) {
+        g_retryCount++;
+        
+        // Retry up to 20 times (2 seconds total with 100ms intervals)
+        if (g_retryCount < 20) {
+            Wh_Log(L"Modifiers pressed, delaying save (retry %d)", g_retryCount);
+            // Try again in 100ms
+            g_retryTimerId = SetTimer(nullptr, 0, 100, RetryTimerProc);
+            return;
+        } else {
+            Wh_Log(L"Too many retries, giving up on this save");
+            g_retryCount = 0;
+            return;
+        }
+    }
+
+    g_retryCount = 0;
+    
+    // Send Ctrl+S
+    SendCtrlS();
+    
+    g_lastSaveTime = GetTickCount();
+    g_lastInputTime = 0;
 }
 
 // Timer callback for delayed save
@@ -189,22 +205,24 @@ void CALLBACK SaveTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime
 
     Wh_Log(L"Performing auto-save...");
 
-    // Send Ctrl+S (function will verify Word is foreground)
-    SendCtrlS();
-
-    g_lastSaveTime = currentTime;
-    g_lastInputTime = 0;
+    // Try to save (will retry if modifiers are pressed)
+    TrySave();
 }
 
 // Schedule a save operation
 void ScheduleSave() {
     g_lastInputTime = GetTickCount();
 
-    // Kill existing timer if any
+    // Kill existing timers
     if (g_saveTimerId != 0) {
         KillTimer(nullptr, g_saveTimerId);
         g_saveTimerId = 0;
     }
+    if (g_retryTimerId != 0) {
+        KillTimer(nullptr, g_retryTimerId);
+        g_retryTimerId = 0;
+    }
+    g_retryCount = 0;
 
     // Set new timer
     g_saveTimerId = SetTimer(nullptr, 0, g_settings.saveDelay, SaveTimerProc);
@@ -232,6 +250,10 @@ bool IsEditingKey(WPARAM wParam) {
             KillTimer(nullptr, g_saveTimerId);
             g_saveTimerId = 0;
         }
+        if (g_retryTimerId != 0) {
+            KillTimer(nullptr, g_retryTimerId);
+            g_retryTimerId = 0;
+        }
         Wh_Log(L"Manual save detected, resetting timer");
         return false;
     }
@@ -239,7 +261,6 @@ bool IsEditingKey(WPARAM wParam) {
     // Ctrl combinations that modify document
     if (ctrlPressed) {
         if (wParam == 'V' || wParam == 'X' || wParam == 'Z' || wParam == 'Y') {
-            Wh_Log(L"Edit key detected: Ctrl+%c", static_cast<char>(wParam));
             return true;
         }
         return false;
@@ -261,7 +282,6 @@ bool IsEditingKey(WPARAM wParam) {
         case VK_DELETE:
         case VK_RETURN:
         case VK_TAB:
-            Wh_Log(L"Edit key detected: VK=%zu", static_cast<size_t>(wParam));
             return true;
     }
 
@@ -298,7 +318,7 @@ void LoadSettings() {
 
 // Mod initialization
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave mod initializing...");
+    Wh_Log(L"Word Local AutoSave mod v1.2 initializing...");
 
     // Store current process ID for foreground window check
     g_wordProcessId = GetCurrentProcessId();
@@ -337,10 +357,14 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Word Local AutoSave mod uninitializing...");
 
-    // Kill timer
+    // Kill timers
     if (g_saveTimerId != 0) {
         KillTimer(nullptr, g_saveTimerId);
         g_saveTimerId = 0;
+    }
+    if (g_retryTimerId != 0) {
+        KillTimer(nullptr, g_retryTimerId);
+        g_retryTimerId = 0;
     }
 
     Wh_Log(L"Word Local AutoSave mod uninitialized");
