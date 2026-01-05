@@ -6054,7 +6054,7 @@
                     307
                 ],
                 "ratingUsers": 370,
-                "updated": 1746809412000,
+                "updated": 1767578051000,
                 "users": 26400
             },
             "featured": true,
@@ -6063,7 +6063,7 @@
                     "x86-64"
                 ],
                 "author": "m417z",
-                "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lversion",
+                "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -lversion",
                 "description": "Makes the taskbar auto-hide only when a window is maximized or intersects the taskbar",
                 "github": "https://github.com/m417z",
                 "homepage": "https://m417z.com/",
@@ -6072,7 +6072,7 @@
                 ],
                 "name": "Taskbar auto-hide when maximized",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.2.3"
+                "version": "1.2.4"
             }
         },
         "taskbar-autohide-better": {

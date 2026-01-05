@@ -1,3 +1,8 @@
+## 1.2.4 ([Jan 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e1771115d4c8ce364c0413eb79e6cd268b98000c/mods/taskbar-auto-hide-when-maximized.wh.cpp))
+
+* Excluded Task Switcher view (Win+Tab), now the taskbar is always visible when Task Switcher is open.
+* Added support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).
+
 ## 1.2.3 ([May 9, 2025](https://github.com/ramensoftware/windhawk-mods/blob/f8c259486b46a48a4fd3d8ddc0dee2ee98a4b4e1/mods/taskbar-auto-hide-when-maximized.wh.cpp))
 
 * The mod no longer permanently changes the system auto-hide settings.
