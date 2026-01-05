@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-per-monitor
 // @name            Taskbar auto-hide per monitor
 // @description     By default, Windows uses the same auto-hide setting for all monitors. This mod allows setting different auto-hide settings for each monitor.
-// @version         1.0.1
+// @version         1.0.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -30,6 +30,45 @@ allows setting different auto-hide settings for each monitor.
 This mod requires auto-hide to be enabled in Windows settings.
 
 This mod is only supported on Windows 11.
+
+## Selecting a monitor
+
+You can select a monitor by its number or by its interface name in the mod
+settings.
+
+### By monitor number
+
+Set the **Monitor** setting to the desired monitor number (1, 2, 3, etc.). Note
+that this number may differ from the monitor number shown in Windows Display
+Settings.
+
+### By interface name
+
+If monitor numbers change frequently (e.g., after locking your PC or
+restarting), you can use the monitor's interface name instead. To find the
+interface name:
+
+1. Go to the mod's **Advanced** tab.
+2. Set **Debug logging** to **Mod logs**.
+3. Click on **Show log output**.
+4. In the mod settings, enter any text (e.g., `TEST`) in the **Monitor interface
+   name** field.
+5. Hover over one of the taskbars to trigger the mod's logic.
+6. In the log output, look for lines containing `Found display device`. You will
+   see one line per monitor, for example:
+   ```
+   Found display device \\.\DISPLAY1, interface name: \\?\DISPLAY#DELA1D2#5&abc123#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+   Found display device \\.\DISPLAY2, interface name: \\?\DISPLAY#GSM5B09#4&def456#0#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+   ```
+   Use the interface name that follows the "interface name:" text. You may need
+   to experiment to determine which interface name corresponds to which physical
+   monitor.
+7. Copy the relevant interface name (or a unique substring of it) into the
+   **Monitor interface name** setting.
+8. Set **Debug logging** back to **None** when done.
+
+The **Monitor interface name** setting takes priority over the **Monitor**
+number when both are configured.
 */
 // ==/WindhawkModReadme==
 
@@ -85,6 +124,7 @@ enum class WinVersion {
 
 WinVersion g_winVersion;
 
+std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
@@ -188,6 +228,29 @@ std::optional<bool> GetAutoHideDisabledForMonitor(HMONITOR monitor) {
     }
 
     return std::nullopt;
+}
+
+using ViewCoordinator_ShouldTaskbarBeExpanded_t =
+    bool(WINAPI*)(void* pThis, HWND hMMTaskbarWnd, bool expanded);
+ViewCoordinator_ShouldTaskbarBeExpanded_t
+    ViewCoordinator_ShouldTaskbarBeExpanded_Original;
+bool WINAPI ViewCoordinator_ShouldTaskbarBeExpanded_Hook(void* pThis,
+                                                         HWND hMMTaskbarWnd,
+                                                         bool expanded) {
+    Wh_Log(L"> hMMTaskbarWnd=%08X, expanded=%d",
+           (DWORD)(ULONG_PTR)hMMTaskbarWnd, expanded);
+
+    // Return true if auto-hide is disabled for this monitor.
+    HMONITOR monitor =
+        MonitorFromWindow(hMMTaskbarWnd, MONITOR_DEFAULTTONEAREST);
+    auto autoHideDisabled = GetAutoHideDisabledForMonitor(monitor);
+    if (autoHideDisabled && *autoHideDisabled) {
+        Wh_Log(L"Returning true for monitor with auto-hide disabled");
+        return true;
+    }
+
+    return ViewCoordinator_ShouldTaskbarBeExpanded_Original(
+        pThis, hMMTaskbarWnd, expanded);
 }
 
 using CSecondaryTray_GetMonitor_t = HMONITOR(WINAPI*)(void* pThis);
@@ -377,6 +440,45 @@ WinVersion GetExplorerVersion() {
     return WinVersion::Unsupported;
 }
 
+bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(unsigned __int64,bool))"},
+            &ViewCoordinator_ShouldTaskbarBeExpanded_Original,
+            ViewCoordinator_ShouldTaskbarBeExpanded_Hook,
+            true,
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+    return module;
+}
+
+void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
+        !g_taskbarViewDllLoaded.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookTaskbarViewDllSymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
 struct EXPLORER_PATCHER_HOOK {
     PCSTR symbol;
     void** pOriginalFunction;
@@ -488,16 +590,23 @@ bool HandleLoadedExplorerPatcher() {
     return true;
 }
 
+void HandleLoadedModuleIfExplorerPatcher(HMODULE module) {
+    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
+        if (IsExplorerPatcherModule(module)) {
+            HookExplorerPatcherSymbols(module);
+        }
+    }
+}
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module && !((ULONG_PTR)module & 3) && !g_explorerPatcherInitialized) {
-        if (IsExplorerPatcherModule(module)) {
-            HookExplorerPatcherSymbols(module);
-        }
+    if (module) {
+        HandleLoadedModuleIfExplorerPatcher(module);
+        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
     }
 
     return module;
@@ -614,6 +723,17 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if (g_winVersion >= WinVersion::Win11) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            g_taskbarViewDllLoaded = true;
+            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                return FALSE;
+            }
+        } else {
+            Wh_Log(L"Taskbar view module not loaded yet");
+        }
+    }
+
     if (!HandleLoadedExplorerPatcher()) {
         Wh_Log(L"HandleLoadedExplorerPatcher failed");
         return FALSE;
@@ -633,6 +753,17 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
+
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
+        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+            if (!g_taskbarViewDllLoaded.exchange(true)) {
+                Wh_Log(L"Got Taskbar.View.dll");
+                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
 
     // Try again in case there's a race between the previous attempt and the
     // LoadLibraryExW hook.
