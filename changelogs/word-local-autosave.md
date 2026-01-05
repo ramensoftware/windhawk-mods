@@ -1,3 +1,27 @@
+## 1.3 ([Jan 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/66bf7d5b8752a2b92bf976b8ee2c779386a758eb/mods/word-local-autosave.wh.cpp))
+
+Problem
+When typing quickly, the mod would send Ctrl key at the exact moment user was pressing another letter (like K or F). Word interpreted this as Ctrl+K (Insert Hyperlink) or Ctrl+F (Navigation) instead of Ctrl+S (Save).
+Root Cause
+Version 1.2 only checked if Shift and Alt were pressed. It did not check if regular letter keys were being held down.
+Solution
+Added AreAnyKeysPressed() function that uses GetKeyboardState() to check if any key is currently pressed before sending Ctrl+S.
+Changes
+
+New function AreAnyKeysPressed() — checks all keyboard keys, not just modifiers
+Checks letters A-Z (virtual keys 0x41-0x5A)
+Checks numbers 0-9 (virtual keys 0x30-0x39)
+Checks Shift/Alt (both left and right variants)
+Checks common keys — Space, Enter, Tab, Backspace, Delete
+Checks numpad keys — NumPad0-9, operators
+Checks OEM keys — punctuation, brackets, comma, period, etc.
+Increased retry limit — from 20 to 50 attempts (5 seconds max wait)
+Better logging — logs which specific key is blocking the save
+Version bumped to 1.3
+
+Behavior
+The mod now waits until the keyboard is completely idle before sending Ctrl+S. This eliminates all shortcut conflicts.
+
 ## 1.2 ([Jan 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3c7c9ac8e40174aaff1620d925bdceaaea56f1d4/mods/word-local-autosave.wh.cpp))
 
 Fix Shift key interference during typing
