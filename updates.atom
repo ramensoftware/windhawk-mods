@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-05T09:25:31.000Z</updated>
+    <updated>2026-01-05T21:47:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar auto-hide per monitor 1.0.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-auto-hide-per-monitor#242ebc0abbd768ac6dab8cf705673af01676fb7d</id>
+        <link href="https://windhawk.net/mods/taskbar-auto-hide-per-monitor"/>
+        <updated>2026-01-05T21:47:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the new taskbar auto-hide animation in Windows 11 preview builds (ViVeTool ID: 41356296).</li>
+<li>Added more details about monitor selection to the mod description.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No MS Edge WebView2 for Copilot 1.1]]></title>
         <id>https://windhawk.net/mods/xs-nomsedgewebview4copilot#85afec37f213d4fa5dbc28db36d2570f732ba152</id>
@@ -320,23 +334,6 @@ than the regular fixed position</li>
         <author>
             <name>Isabella Lulamoon (kawapure)</name>
             <uri>https://github.com/kawapure</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Hover Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-hover-fix#ae05ec0cd9178a432718d142c31dcdaa3c4a0aba</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-hover-fix"/>
-        <updated>2025-12-31T10:17:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarthumbnailhoverfix">Taskbar Thumbnail Hover Fix</h1>
-<p>When you close a window via the taskbar thumbnail close button and another
-window slides into its position, Windows doesn't register that the mouse is
-now hovering over the new thumbnail until you move the cursor.</p>
-<p>This mod fixes that issue by sending a minimal mouse movement after a window
-closes while the cursor is over the thumbnail preview area.</p>
-<p>Only the explorer.exe instance that owns the taskbar will activate this mod.</p>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>

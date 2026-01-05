@@ -5988,7 +5988,7 @@
                     5
                 ],
                 "ratingUsers": 5,
-                "updated": 1766425215000,
+                "updated": 1767649677000,
                 "users": 183
             },
             "metadata": {
@@ -6005,7 +6005,7 @@
                 ],
                 "name": "Taskbar auto-hide per monitor",
                 "twitter": "https://twitter.com/m417z",
-                "version": "1.0.1"
+                "version": "1.0.2"
             }
         },
         "taskbar-auto-hide-speed": {
