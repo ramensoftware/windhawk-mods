@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-04T20:16:50.000Z</updated>
+    <updated>2026-01-05T00:35:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 1.2]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#3c7c9ac8e40174aaff1620d925bdceaaea56f1d4</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-01-05T00:35:26.000Z</updated>
+        <content type="html"><![CDATA[<p>Fix Shift key interference during typing</p>
+<p>Problem:
+Version 1.1 forcibly released the Shift key before sending Ctrl+S. This caused issues when typing:</p>
+<ul>
+<li>Uppercase letters would randomly become lowercase</li>
+<li>Comma (Shift+period on some layouts) would become a period</li>
+<li>Any Shift+key combination could be interrupted mid-keystroke</li>
+</ul>
+<p>Solution:
+Instead of forcing modifier keys to release, the mod now <strong>waits</strong> for the user to naturally release Shift/Alt before triggering auto-save.</p>
+<h3 id="changes">Changes</h3>
+<ul>
+<li><strong>Removed forced key release</strong> — no longer sends synthetic Shift/Alt key-up events</li>
+<li><strong>Added retry mechanism</strong> — if Shift or Alt is pressed when save triggers, the mod waits and retries</li>
+<li><strong>Retry polling</strong> — checks every 100ms whether modifiers are released (up to 20 attempts = 2 seconds)</li>
+<li><strong>Graceful timeout</strong> — if modifiers are held for more than 2 seconds, skip this save (will save on next edit)</li>
+<li>Added <code>g_retryTimerId</code> and <code>g_retryCount</code> for retry state management</li>
+<li>Added <code>AreModifiersPressed()</code> helper function</li>
+<li>Added <code>TrySave()</code> function that handles retry logic</li>
+<li>Version bumped to 1.2</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.3]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#7b60e3a794333aa37dc8841ac9093f4c101074b8</id>
@@ -319,26 +350,6 @@ verb (Windows + E shortcut, directly invoking <code>explorer.exe</code>)</li>
         <author>
             <name>Ph0en1x-dev</name>
             <uri>https://github.com/Ph0en1x-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No MS Edge WebView2 for Copilot 1.0]]></title>
-        <id>https://windhawk.net/mods/xs-nomsedgewebview4copilot#c679b5821fce82b0225f4586949ddc2b4448eb72</id>
-        <link href="https://windhawk.net/mods/xs-nomsedgewebview4copilot"/>
-        <updated>2025-12-29T14:10:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="description">Description</h1>
-<p>All this mod does is disables certain processes from creating <code>msedgewebview2.exe</code> child processes to provide Copilot functionality within the app.</p>
-<p>This mod is minimal — it does only what's required to accomplish that goal. It does not handle the scenario where <code>msedgewebview2.exe</code> instances are already running; in that case restart the affected application.</p>
-<h1 id="hookedprocesses">Hooked Processes</h1>
-<h2 id="onedriveonedriveexe">OneDrive (<code>onedrive.exe</code>)</h2>
-<p>As of version <code>25.222.1112.0002</code>, OneDrive may launch <code>msedgewebview2.exe</code> child processes. This appears related to the Copilot Actions feature. You may see this regardless of whether you have an M365-enabled Copilot license.</p>
-<h2 id="gamebarxboxgamebarwidgetsexe">Gamebar (<code>XboxGameBarWidgets.exe</code>)</h2>
-<p>After updating to 25H2 build 7462 I observed <code>msedgewebview2.exe</code> instances started by <code>XboxGameBarWidgets.exe</code> (the Windows Game Bar). This is again for Copilot integration.</p>
-<h1 id="disclaimer">Disclaimer</h1>
-<p>I haven't tested every scenario. I only verified that OneDrive (personal and business, running together) still starts and sync works.</p>]]></content>
-        <author>
-            <name>Xetrill</name>
-            <uri>https://github.com/Xetrill</uri>
         </author>
     </entry>
 </feed>
