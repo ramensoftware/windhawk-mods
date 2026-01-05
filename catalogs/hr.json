@@ -8720,7 +8720,7 @@
                     1
                 ],
                 "ratingUsers": 2,
-                "updated": 1767017454000,
+                "updated": 1767605131000,
                 "users": 71
             },
             "metadata": {
@@ -8732,7 +8732,7 @@
                     "XboxGameBarWidgets.exe"
                 ],
                 "name": "No MS Edge WebView2 for Copilot",
-                "version": "1.0"
+                "version": "1.1"
             }
         }
     }
