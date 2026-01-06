@@ -5322,6 +5322,38 @@
                 "version": "1.0.1"
             }
         },
+        "remove-context-menu-items": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767731948000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767731948000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "Armaninyow",
+                "compilerOptions": "-lole32 -loleaut32",
+                "description": "Removes unwanted items from file context menus with configurable options",
+                "github": "https://github.com/armaninyow",
+                "include": [
+                    "explorer.exe"
+                ],
+                "license": "MIT",
+                "name": "Remove Unwanted Context Menu Items",
+                "version": "1.0"
+            }
+        },
         "remove-fullscreen-popup-chrome": {
             "details": {
                 "defaultSorting": 11660,

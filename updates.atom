@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-06T20:29:51.000Z</updated>
+    <updated>2026-01-06T20:39:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Unwanted Context Menu Items 1.0]]></title>
+        <id>https://windhawk.net/mods/remove-context-menu-items#a4314662a227e624ff2784b29a48c7c99618a29c</id>
+        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
+        <updated>2026-01-06T20:39:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="removeunwantedcontextmenuitems">Remove Unwanted Context Menu Items</h1>
+<p>This mod removes unwanted items from file context menus with configurable options.</p>
+<h2 id="configurableoptions">Configurable Options</h2>
+<p>You can enable/disable removal of each item in the mod settings:</p>
+<h3 id="defaulton">Default ON:</h3>
+<ul>
+<li>"Move to OneDrive"</li>
+<li>"Ask Copilot"</li>
+<li>"Scan with Microsoft Defender…"</li>
+<li>"Create with Designer"</li>
+<li>"Edit with Clipchamp"</li>
+</ul>
+<h3 id="defaultoff">Default OFF:</h3>
+<ul>
+<li>"Print"</li>
+<li>"Add to Favorites"</li>
+<li>"Cast to Device"</li>
+<li>"Give access to"</li>
+<li>"Share"</li>
+<li>"Restore previous versions"</li>
+<li>"Add to VLC's media player's Playlist"</li>
+<li>"Play with VLC media player"</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks into the context menu creation process and removes unwanted menu items
+by checking their text labels before they are displayed.</p>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Confirm Closing Multiple Tabs in File Explorer 1.0.1]]></title>
         <id>https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs#205c15a80013cb0955950c43677cc39da0124b35</id>
@@ -332,19 +368,6 @@ with multiple tabs open, preventing accidental closure of all tabs.</p>
 than the regular fixed position</li>
 </ul>
 <p>This mod restores the pre-Vista behavior.</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.1]]></title>
-        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#798fa042e8f36906125f320199412b3027c075ac</id>
-        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
-        <updated>2025-12-31T20:12:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix large Explorer window icon using the small image</li>
-</ul>]]></content>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
