@@ -4,6 +4,7 @@
 // @description     Enables seconds in the taskbar clock.
 // @version         1.0
 // @author          Half
+// @github       https://github.com/halfofknowledge-cpu
 // @include         explorer.exe
 // @license         MIT
 // ==/WindhawkMod==
