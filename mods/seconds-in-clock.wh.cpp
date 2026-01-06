@@ -9,7 +9,9 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
+/*
 Shows seconds in clock on Windows 10 taskbar running either on Windows 10 or Windows 11. Restart of Explorer is needed.
+*/
 // ==/WindhawkModReadme==
 
 #include <windows.h>
