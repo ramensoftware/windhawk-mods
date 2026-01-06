@@ -1735,7 +1735,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1767470289000,
+                "updated": 1767731391000,
                 "users": 15
             },
             "metadata": {
@@ -1747,7 +1747,7 @@
                     "explorer.exe"
                 ],
                 "name": "Confirm Closing Multiple Tabs in File Explorer",
-                "version": "1.0"
+                "version": "1.0.1"
             }
         },
         "console-error-to-ding": {

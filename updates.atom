@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-05T22:56:01.000Z</updated>
+    <updated>2026-01-06T20:29:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Confirm Closing Multiple Tabs in File Explorer 1.0.1]]></title>
+        <id>https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs#205c15a80013cb0955950c43677cc39da0124b35</id>
+        <link href="https://windhawk.net/mods/confirm-closing-multiple-explorer-tabs"/>
+        <updated>2026-01-06T20:29:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to choose whether "Close Tabs" or "Cancel" is the default button in the confirmation dialog.</li>
+</ul>]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.3]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#66bf7d5b8752a2b92bf976b8ee2c779386a758eb</id>
@@ -335,22 +348,6 @@ than the regular fixed position</li>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Selection Rectangle Color 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-selection-rectangle-color#2eedad131a99cf1c3ca9cc9716df2769856ab749</id>
-        <link href="https://windhawk.net/mods/classic-selection-rectangle-color"/>
-        <updated>2025-12-31T16:30:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicselectionrectanglecolor">Classic Selection Rectangle Color</h1>
-<p>Makes the selection rectangle background color like it was in Windows XP. Does not work with DirectUI list view.</p>
-<p><strong>Before</strong></p>
-<p><img src="https://i.imgur.com/5ImD1u6.png" alt="Before" /></p>
-<p><strong>After</strong></p>
-<p><img src="https://i.imgur.com/oAGCiJr.png" alt="After" /></p>]]></content>
-        <author>
-            <name>xalejandro</name>
-            <uri>https://github.com/tetawaves</uri>
         </author>
     </entry>
 </feed>
