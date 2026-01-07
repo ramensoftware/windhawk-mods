@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-size
 // @name            Taskbar Thumbnail Size
 // @description     Customize the size of the new taskbar thumbnails in Windows 11
-// @version         1.1
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -56,15 +56,15 @@ For older Windows versions, the size of taskbar thumbnails can be changed via th
   $description: >-
     Minimum thumbnail width in pixels. Only used when absolute sizing is
     enabled. Set to 0 to disable.
-- maxWidth: 180
-  $name: Maximum width (pixels)
-  $description: >-
-    Maximum thumbnail width in pixels. Only used when absolute sizing is
-    enabled. Set to 0 to disable.
 - minHeight: 120
   $name: Minimum height (pixels)
   $description: >-
     Minimum thumbnail height in pixels. Only used when absolute sizing is
+    enabled. Set to 0 to disable.
+- maxWidth: 180
+  $name: Maximum width (pixels)
+  $description: >-
+    Maximum thumbnail width in pixels. Only used when absolute sizing is
     enabled. Set to 0 to disable.
 - maxHeight: 120
   $name: Maximum height (pixels)
@@ -74,8 +74,8 @@ For older Windows versions, the size of taskbar thumbnails can be changed via th
 - preserveAspectRatio: true
   $name: Preserve aspect ratio
   $description: >-
-    When enabled, maintains the original aspect ratio when applying constraints.
-    Only used when absolute sizing is enabled.
+    Forcibly preserves thumbnail aspect ratios while fitting Maximum constraints.
+    Fits Minimum constraints as best as possible.
 */
 // ==/WindhawkModSettings==
 
@@ -85,7 +85,6 @@ For older Windows versions, the size of taskbar thumbnails can be changed via th
 
 #undef GetCurrentTime
 
-#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.h>
 
 using namespace winrt::Windows::UI::Xaml;
@@ -118,75 +117,82 @@ ThumbnailHelpers_GetScaledThumbnailSize_Hook(
 
     if (!g_settings.useAbsoluteSize) {
         // Original percentage-based behavior
-        winrt::Windows::Foundation::Size* ret =
-            ThumbnailHelpers_GetScaledThumbnailSize_Original(
-                result, size, scale * g_settings.size / 100.0);
-
-        Wh_Log(L"%fx%f", ret->Width, ret->Height);
-        return ret;
+        ThumbnailHelpers_GetScaledThumbnailSize_Original(
+            result, size, scale * g_settings.size / 100.0);
+        Wh_Log(L"%fx%f", result->Width, result->Height);
+        return result;
     }
 
     // Absolute sizing mode
-    winrt::Windows::Foundation::Size* originalResult =
-        ThumbnailHelpers_GetScaledThumbnailSize_Original(result, size, scale);
+    ThumbnailHelpers_GetScaledThumbnailSize_Original(result, size, scale);
 
-    float currentWidth = originalResult->Width;
-    float currentHeight = originalResult->Height;
-    float aspectRatio = (currentWidth > 0) ? (currentHeight / currentWidth) : 1.0f;
+    float currentWidth = result->Width;
+    float currentHeight = result->Height;
 
     float targetWidth = currentWidth;
     float targetHeight = currentHeight;
 
     if (g_settings.preserveAspectRatio) {
-        // Apply width constraints
-        if (g_settings.minWidth > 0 && targetWidth < g_settings.minWidth) {
-            targetWidth = static_cast<float>(g_settings.minWidth);
-        }
-        if (g_settings.maxWidth > 0 && targetWidth > g_settings.maxWidth) {
-            targetWidth = static_cast<float>(g_settings.maxWidth);
-        }
+        if (currentWidth > 0 && currentHeight > 0) {
+            // Calculate the scale factors needed to satisfy each constraint
+            // A scale > 1 means we need to enlarge, < 1 means shrink
+            float minScaleForWidth = 1.0f;
+            float minScaleForHeight = 1.0f;
+            float maxScaleForWidth = std::numeric_limits<float>::infinity();
+            float maxScaleForHeight = std::numeric_limits<float>::infinity();
 
-        // Calculate height from width
-        targetHeight = targetWidth * aspectRatio;
-
-        // Check height constraints
-        bool heightAdjusted = false;
-        if (g_settings.minHeight > 0 && targetHeight < g_settings.minHeight) {
-            targetHeight = static_cast<float>(g_settings.minHeight);
-            heightAdjusted = true;
-        }
-        if (g_settings.maxHeight > 0 && targetHeight > g_settings.maxHeight) {
-            targetHeight = static_cast<float>(g_settings.maxHeight);
-            heightAdjusted = true;
-        }
-
-        // Recalculate width if height was adjusted
-        if (heightAdjusted) {
-            targetWidth = targetHeight / aspectRatio;
-
-            // Re-apply width constraints
-            if (g_settings.minWidth > 0 && targetWidth < g_settings.minWidth) {
-                targetWidth = static_cast<float>(g_settings.minWidth);
-                targetHeight = targetWidth * aspectRatio;
+            if (g_settings.minWidth > 0) {
+                minScaleForWidth = g_settings.minWidth / currentWidth;
             }
-            if (g_settings.maxWidth > 0 && targetWidth > g_settings.maxWidth) {
-                targetWidth = static_cast<float>(g_settings.maxWidth);
-                targetHeight = targetWidth * aspectRatio;
+            if (g_settings.minHeight > 0) {
+                minScaleForHeight = g_settings.minHeight / currentHeight;
             }
+            if (g_settings.maxWidth > 0) {
+                maxScaleForWidth = g_settings.maxWidth / currentWidth;
+            }
+            if (g_settings.maxHeight > 0) {
+                maxScaleForHeight = g_settings.maxHeight / currentHeight;
+            }
+
+            // The minimum scale we must apply (to satisfy min constraints)
+            float minRequiredScale = (std::max)(minScaleForWidth, minScaleForHeight);
+            // The maximum scale we can apply (to satisfy max constraints)
+            float maxAllowedScale = (std::min)(maxScaleForWidth, maxScaleForHeight);
+
+            // Choose the scale that results in minimal change from original
+            float finalScale = 1.0f;
+
+            if (maxAllowedScale >= minRequiredScale) {
+                // Constraints are satisfiable - pick scale closest to 1.0
+                if (minRequiredScale > 1.0f) {
+                    // Need to enlarge to meet minimum constraints
+                    finalScale = minRequiredScale;
+                } else if (maxAllowedScale < 1.0f) {
+                    // Need to shrink to meet maximum constraints
+                    finalScale = maxAllowedScale;
+                }
+                // else: current size already satisfies all constraints, keep scale = 1.0
+            } else {
+                // Constraints conflict - prioritize max constraints (fit within bounds)
+                finalScale = maxAllowedScale;
+            }
+
+            targetWidth = currentWidth * finalScale;
+            targetHeight = currentHeight * finalScale;
         }
     } else {
-        // Apply constraints independently (may distort aspect ratio)
+        // Apply constraints without regard to aspect ratio
         if (g_settings.minWidth > 0 && targetWidth < g_settings.minWidth) {
-            targetWidth = static_cast<float>(g_settings.minWidth);
+            targetWidth = g_settings.minWidth;
         }
         if (g_settings.maxWidth > 0 && targetWidth > g_settings.maxWidth) {
-            targetWidth = static_cast<float>(g_settings.maxWidth);
+            targetWidth = g_settings.maxWidth;
         }
         if (g_settings.minHeight > 0 && targetHeight < g_settings.minHeight) {
-            targetHeight = static_cast<float>(g_settings.minHeight);
+            targetHeight = g_settings.minHeight;
         }
         if (g_settings.maxHeight > 0 && targetHeight > g_settings.maxHeight) {
-            targetHeight = static_cast<float>(g_settings.maxHeight);
+            targetHeight = g_settings.maxHeight;
         }
     }
 
@@ -221,13 +227,11 @@ void WINAPI TaskItemThumbnailView_OnApplyTemplate_Hook(void* pThis) {
         Wh_Log(L"maxWidth=%f", element.MaxWidth());
         element.MaxWidth(std::numeric_limits<double>::infinity());
     } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
+        Wh_Log(L"Error %08X", winrt::to_hresult());
     }
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(struct winrt::Windows::Foundation::Size __cdecl winrt::Taskbar::implementation::ThumbnailHelpers::GetScaledThumbnailSize(struct winrt::Windows::Foundation::Size,float))"},
@@ -286,8 +290,8 @@ void LoadSettings() {
     g_settings.size = Wh_GetIntSetting(L"size");
     g_settings.useAbsoluteSize = Wh_GetIntSetting(L"useAbsoluteSize");
     g_settings.minWidth = Wh_GetIntSetting(L"minWidth");
-    g_settings.maxWidth = Wh_GetIntSetting(L"maxWidth");
     g_settings.minHeight = Wh_GetIntSetting(L"minHeight");
+    g_settings.maxWidth = Wh_GetIntSetting(L"maxWidth");
     g_settings.maxHeight = Wh_GetIntSetting(L"maxHeight");
     g_settings.preserveAspectRatio = Wh_GetIntSetting(L"preserveAspectRatio");
 }
