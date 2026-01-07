@@ -588,7 +588,10 @@ static std::unordered_set<HWND> g_subclassedTaskbarWindows; // set of subclassed
 static std::unordered_set<HWND> g_hookedInputSiteWindows;   // set of hooked InputSite windows to avoid double hooking
 static std::unordered_set<void *> g_hookedInputSiteProcs;   // set of hooked InputSite window procs to avoid double hooking
 
-static HWND g_hTaskSwitchingWnd; // Alt+Tab window handle
+static HWND g_hTaskSwitchingWnd = NULL;        // Alt+Tab window handle
+static bool g_keepTaskSwitchingOpened = false; // flag to indicate whether mouse input should be suppressed
+static BOOL g_isTaskSwitchingWindowSubclassed = FALSE;
+
 static bool g_isExplorerPatcherDetected = false;
 
 static bool g_isContextMenuSuppressed = false;
@@ -600,12 +603,6 @@ static const DWORD g_injectedClickID = 0xEADBEAF1u; // magic number to identify 
 
 static const UINT g_explorerPatcherContextMenuMsg = RegisterWindowMessageW(L"Windows11ContextMenu_{D17F1E1A-5919-4427-8F89-A1A8503CA3EB}");
 static const UINT g_uninitCOMAPIMsg = RegisterWindowMessageW(L"Windhawk_UnInit_COMAPI_empty-space-clicks");
-static const UINT g_hookedClickMsg = RegisterWindowMessageW(L"Windhawk_hookedClick_empty-space-clicks");
-
-static HHOOK g_hMouseHook = NULL;               // low-level mouse hook handle to suppress mouse input when Alt+Tab is active
-static bool g_suppressMouseInput = false;       // flag to indicate whether mouse input should be suppressed
-static DWORD g_suppressMouseInputTimestamp = 0; // timestamp of when mouse input suppression started
-static MSLLHOOKSTRUCT g_hookedMouseData;        // stable storage for MSLLHOOKSTRUCT data to pass between hook and window proc
 
 #pragma endregion // declarations
 
@@ -1129,6 +1126,7 @@ bool IsSecondaryTaskbarWindow(HWND hWnd);
 bool IsTaskbarWindow(HWND hWnd);
 std::unordered_set<HWND> KeepOnlyValidWindows(const std::unordered_set<HWND> &windows);
 bool UserClickedOnTaskViewItemOnTaskSwitchingWindow(const POINT &pt);
+bool HandleTaskSwitchingWindowClick();
 
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName);
 bool IsTaskbarWindow(HWND hWnd);
@@ -1194,14 +1192,11 @@ std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBa
 LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
                                            _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData);
 
-LRESULT CALLBACK TaskSwitchingWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
-                                                 _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData);
+LRESULT CALLBACK TaskSwitchingWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData);
 
 // proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
 WNDPROC InputSiteWindowProc_Original;
-WNDPROC InputSiteWindowProc2_Original;
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK InputSiteWindowProc2_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // wParam - TRUE to subclass, FALSE to unsubclass
 // lParam - subclass data
@@ -1592,117 +1587,6 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
     return hWnd;
 }
 
-// Low-level mouse hook callback used to suppress mouse input when Clt+Alt+Tab is active so user can simulate Clt+Alt+Tab keypress
-// without Task Switching dialog closing (we clicked outside of it)
-LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
-{
-    if ((nCode == HC_ACTION) && g_suppressMouseInput)
-    {
-        bool isMouseButtonEvent = (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONDBLCLK ||
-                                   wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONDBLCLK ||
-                                   wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONDBLCLK ||
-                                   wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONDBLCLK);
-        if (!isMouseButtonEvent) // avoid doing IsWindow calls for non-button events
-        {
-            return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
-        }
-
-        // Task switching window is created on demand and the only way to really identify it is by checking not just class name (generic), but
-        // windows text as well - however the text is not present during window creation (window create hooks above), so we need to find it lazily here
-        if (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd))
-        {
-            g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
-        }
-
-        if (g_hTaskSwitchingWnd && IsWindow(g_hTaskSwitchingWnd))
-        {
-            if (IsWindowVisible(g_hTaskSwitchingWnd))
-            {
-                // even though we suppress mouse event, we want to still forward it to taskbar window, if it was clicked
-                MSLLHOOKSTRUCT *pMouseStruct = (MSLLHOOKSTRUCT *)lParam;
-                HWND hClickedWnd = WindowFromPoint(pMouseStruct->pt);
-                HWND hRootWnd = GetAncestor(hClickedWnd, GA_ROOT);
-                HWND hReceiverWnd = NULL;
-                if (IsPrimaryTaskbarWindow(hRootWnd)) // send it to Win11 or Win10 windproc?
-                {
-                    hReceiverWnd = (g_taskbarVersion == WIN_11) ? g_hTaskbarInputSiteWnd : g_hTaskbarWnd;
-                }
-                else if (IsSecondaryTaskbarWindow(hRootWnd))
-                {
-                    const auto &windowSet = (g_taskbarVersion == WIN_11) ? g_secondaryTaskbarInputSiteWindows : g_secondaryTaskbarWindows;
-                    if (!windowSet.empty())                // should be always true, but since we are dereferencing below...
-                        hReceiverWnd = *windowSet.begin(); // forward to any secondary taskbar window
-                }
-                else
-                {
-                    if (!UserClickedOnTaskViewItemOnTaskSwitchingWindow(pMouseStruct->pt))
-                    {
-                        LOG_DEBUG("User clicked outside of Task Switching dialog, closing it and stopping mouse input suppression");
-                        CloseCtrlAltTabDialog();
-                    }
-                    else
-                    {
-                        LOG_DEBUG("User clicked on item from Task Switching dialog, stopping mouse input suppression");
-                        g_suppressMouseInput = false;
-                        g_suppressMouseInputTimestamp = 0;
-                    }
-                    return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
-                }
-
-                // pMouseStruct lives who knows where and data might become invalid or altered (tested) =>
-                // => copy struct to stable global storage and forward pointer to taskbar window
-                // wParam = original message type, lParam = pointer to stable g_hookedMouseData
-                g_hookedMouseData = *pMouseStruct;
-                PostMessage(hReceiverWnd, g_hookedClickMsg, wParam, (LPARAM)&g_hookedMouseData);
-                LOG_DEBUG(L"Forwarded suppressed click %s to taskbar window", GetMessageName((UINT)wParam));
-                return 1; // suppress the message from going to Desktop
-            }
-            else if ((GetTickCount() - g_suppressMouseInputTimestamp) > 500) // lets give the system some time to show the window
-            {
-                LOG_DEBUG("Task switching window is not visible anymore, stopping mouse input suppression");
-                g_suppressMouseInput = false;
-                g_suppressMouseInputTimestamp = 0;
-            }
-        }
-        else if ((GetTickCount() - g_suppressMouseInputTimestamp) > 500) // lets give the system some time to create the window
-        {
-            LOG_ERROR("Failed to find task switching window, stopping mouse input suppression");
-            g_suppressMouseInput = false;
-            g_suppressMouseInputTimestamp = 0;
-        }
-    }
-
-    return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
-}
-
-// Install the hook (call from Wh_ModInit or when needed)
-void InstallMouseHook()
-{
-    if (!g_hMouseHook)
-    {
-        g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
-        if (g_hMouseHook)
-        {
-            LOG_INFO(L"Low-level mouse hook installed");
-        }
-        else
-        {
-            LOG_ERROR(L"Failed to install mouse hook, error: %d", GetLastError());
-        }
-    }
-}
-
-// Remove the hook (call from Wh_ModUninit)
-void UninstallMouseHook()
-{
-    if (g_hMouseHook)
-    {
-        UnhookWindowsHookEx(g_hMouseHook);
-        g_hMouseHook = NULL;
-        LOG_INFO(L"Mouse hook uninstalled");
-    }
-}
-
 #pragma endregion // hooks_and_win32_methods
 
 // =====================================================================
@@ -1791,7 +1675,6 @@ const wchar_t *GetMessageName(UINT uMsg)
 {
     switch (uMsg)
     {
-    // Mouse messages
     case WM_MOUSEMOVE:
         return L"WM_MOUSEMOVE";
     case WM_LBUTTONDOWN:
@@ -1818,8 +1701,6 @@ const wchar_t *GetMessageName(UINT uMsg)
         return L"WM_XBUTTONUP";
     case WM_XBUTTONDBLCLK:
         return L"WM_XBUTTONDBLCLK";
-
-    // Non-client mouse messages
     case WM_NCLBUTTONDOWN:
         return L"WM_NCLBUTTONDOWN";
     case WM_NCLBUTTONUP:
@@ -1844,16 +1725,12 @@ const wchar_t *GetMessageName(UINT uMsg)
         return L"WM_NCXBUTTONUP";
     case WM_NCXBUTTONDBLCLK:
         return L"WM_NCXBUTTONDBLCLK";
-
-    // Pointer messages (touch/pen)
     case WM_POINTERDOWN:
         return L"WM_POINTERDOWN";
     case WM_POINTERUP:
         return L"WM_POINTERUP";
     case WM_POINTERUPDATE:
         return L"WM_POINTERUPDATE";
-
-    // Common window messages
     case WM_CREATE:
         return L"WM_CREATE";
     case WM_DESTROY:
@@ -1898,6 +1775,26 @@ const wchar_t *GetMessageName(UINT uMsg)
         return L"WM_GETOBJECT";
     case WM_SETCURSOR:
         return L"WM_SETCURSOR";
+    case WM_IME_SETCONTEXT:
+        return L"WM_IME_SETCONTEXT";
+    case WM_IME_NOTIFY:
+        return L"WM_IME_NOTIFY";
+    case WM_KEYUP:
+        return L"WM_KEYUP";
+    case WM_KEYDOWN:
+        return L"WM_KEYDOWN";
+    case WM_POINTERENTER:
+        return L"WM_POINTERENTER";
+    case WM_POINTERLEAVE:
+        return L"WM_POINTERLEAVE";
+    case WM_MOUSEACTIVATE:
+        return L"WM_MOUSEACTIVATE";
+    case WM_NCHITTEST:
+        return L"WM_NCHITTEST";
+    case WM_NOTIFY:
+        return L"WM_NOTIFY";
+    case WM_NCMOUSEMOVE:
+        return L"WM_NCMOUSEMOVE";
 
     default:
     {
@@ -2276,6 +2173,27 @@ bool UserClickedOnTaskViewItemOnTaskSwitchingWindow(const POINT &pt)
         return true; // windows 10
     }
     return false;
+}
+
+// Handles mouse click on Task Switching window, returns true to suppress the click
+bool HandleTaskSwitchingWindowClick()
+{
+    bool supressClick = false;
+    POINT position{};
+    GetCursorPos(&position);
+
+    if (!UserClickedOnTaskViewItemOnTaskSwitchingWindow(position))
+    {
+        LOG_DEBUG("User clicked outside of Task Switching dialog, closing it and stopping mouse input suppression");
+        CloseCtrlAltTabDialog();
+        supressClick = true; // suppress the message
+    }
+    else
+    {
+        LOG_DEBUG("User clicked on item from Task Switching dialog, stopping mouse input suppression");
+        g_keepTaskSwitchingOpened = false;
+    }
+    return supressClick;
 }
 
 #pragma endregion // hooks_and_win32_methods
@@ -2824,12 +2742,11 @@ void SendCtrlAltTabKeypress(const bool reverse)
 
     const std::vector<int> keyCombo = reverse ? std::vector<int>{VK_LCONTROL, VK_LMENU, VK_SHIFT, VK_TAB} : std::vector<int>{VK_LCONTROL, VK_LMENU, VK_TAB};
     SendKeypress(keyCombo);
-    if (!g_suppressMouseInput) // when opening, call twice, otherwise current window is selected
+    if (!g_keepTaskSwitchingOpened) // when opening, call twice, otherwise current window is selected
     {
         SendKeypress(keyCombo);
     }
-    g_suppressMouseInput = true;
-    g_suppressMouseInputTimestamp = GetTickCount();
+    g_keepTaskSwitchingOpened = true;
 }
 
 // Sends Enter keypress to close Ctrl+Alt+Tab dialog
@@ -2838,8 +2755,11 @@ void CloseCtrlAltTabDialog()
     LOG_TRACE();
 
     LOG_DEBUG(L"Closing Alt+Tab dialog by sending Enter keypress");
-    g_suppressMouseInput = false;
-    g_suppressMouseInputTimestamp = 0;
+
+    if (g_hTaskSwitchingWnd) // clicking on the Taskbar might have changed the foreground window and the Enter keypress would go to the wrong window
+        SetForegroundWindow(g_hTaskSwitchingWnd);
+
+    g_keepTaskSwitchingOpened = false;
     SendKeypress({VK_RETURN});
 }
 
@@ -3877,7 +3797,7 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD)
         wasActionExecuted = actionExecutor(); // execute taskbar action
     }
 
-    if (g_suppressMouseInput && !wasActionExecuted) // close Ctrl+Alt+Tab dialog
+    if (g_keepTaskSwitchingOpened && !wasActionExecuted) // close Ctrl+Alt+Tab dialog
     {
         CloseCtrlAltTabDialog();
     }
@@ -3992,7 +3912,7 @@ bool ExecuteTaskbarAction(const std::wstring &mouseTriggerName, const uint32_t n
                 {
                     LOG_INFO(L"Executing action: %s", triggerAction.actionName.c_str());
 
-                    if (g_suppressMouseInput && (triggerAction.actionName != L"ACTION_ALT_TAB"))
+                    if (g_keepTaskSwitchingOpened && (triggerAction.actionName != L"ACTION_ALT_TAB"))
                     {
                         CloseCtrlAltTabDialog();
                     }
@@ -4092,16 +4012,6 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
 
 #pragma region proc_handlers
 
-// Translates Win10 mouse messages sent from LowLevelMouseProc to Win10 format
-std::tuple<UINT, WPARAM, LPARAM> TranslateMouseHookMessageToWin10(const UINT &uMsg, const WPARAM &wParam, const LPARAM &lParam)
-{
-    UINT origMsg = (UINT)wParam;
-    MSLLHOOKSTRUCT *pMouseStruct = (MSLLHOOKSTRUCT *)lParam; // lParam contains pointer to stable g_hookedMouseData
-    WORD xButton = GET_XBUTTON_WPARAM(pMouseStruct->mouseData);
-    // Reconstruct proper wParam with button info in high word, preserve extraInfo in lParam for GetPointerType to work
-    return std::make_tuple(origMsg, MAKEWPARAM(0, xButton), pMouseStruct->dwExtraInfo);
-}
-
 // Proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
 LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
                                            _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
@@ -4128,19 +4038,24 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         return 0;
     }
 
-    if (!g_hMouseHook)
+    // on Windows 10 Task Switching window is opened only when invoked, so we can try to subclass it lazily here
+    if (g_keepTaskSwitchingOpened && (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd) || !g_isTaskSwitchingWindowSubclassed))
     {
-        InstallMouseHook(); // Install mouse hook from taskbar thread (has message loop)
+        LOG_DEBUG(L"Trying to subclass Task Switching window");
+        g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
+        if (g_hTaskSwitchingWnd)
+        {
+            g_isTaskSwitchingWindowSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc, NULL);
+            if (!g_isTaskSwitchingWindowSubclassed)
+            {
+                LOG_ERROR(L"Failed to subclass desktop window");
+            }
+            else
+            {
+                LOG_INFO(L"Subclassed desktop window successfully");
+            }
+        }
     }
-
-    // Handle hooked clicks forwarded from LowLevelMouseProc
-    if (uMsg == g_hookedClickMsg)
-    {
-        LOG_INFO(L"Received hooked click message: original msg=0x%X", wParam);
-        std::tie(uMsg, wParam, lParam) = TranslateMouseHookMessageToWin10(uMsg, wParam, lParam);
-    }
-
-    // printMessage(uMsg);
 
     bool suppress = false;
     // button up messages seems really unreliable, so only process down and dblclk messages
@@ -4217,48 +4132,6 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     return result;
 }
 
-// Translates Win10 mouse messages sent from LowLevelMouseProc to Win11 WM_POINTERDOWN messages
-std::tuple<UINT, WPARAM, LPARAM> TranslateMouseHookMessageToWin11(const UINT &uMsg, const WPARAM &wParam, const LPARAM &lParam)
-{
-    // Map the message type to pointer button flags
-    UINT pointerFlags = 0;
-    if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONDBLCLK)
-    {
-        pointerFlags = POINTER_MESSAGE_FLAG_FIRSTBUTTON;
-    }
-    else if (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONDBLCLK)
-    {
-        pointerFlags = POINTER_MESSAGE_FLAG_SECONDBUTTON;
-    }
-    else if (wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONDBLCLK)
-    {
-        pointerFlags = POINTER_MESSAGE_FLAG_THIRDBUTTON;
-    }
-    else if (wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONDBLCLK)
-    {
-        MSLLHOOKSTRUCT *pMouseStruct = (MSLLHOOKSTRUCT *)lParam; // lParam contains pointer to stable g_hookedMouseData
-        WORD xButton = GET_XBUTTON_WPARAM(pMouseStruct->mouseData);
-        if (xButton == XBUTTON1)
-        {
-            pointerFlags = POINTER_MESSAGE_FLAG_FOURTHBUTTON;
-        }
-        else if (xButton == XBUTTON2)
-        {
-            pointerFlags = POINTER_MESSAGE_FLAG_FIFTHBUTTON;
-        }
-    }
-    else
-    {
-        LOG_ERROR(L"Unsupported original mouse message 0x%X in TranslateMouseHookMessageToWin11", wParam);
-        std::make_tuple(uMsg, wParam, lParam);
-    }
-
-    // Continue as WM_POINTERDOWN
-    BOOL isTouch = (MouseClick::GetPointerTypeWin10(lParam) == MouseClick::Type::TOUCH);
-    UINT pointerId = isTouch ? 0xffff : 0;                                               // Use 0 for mouse, 0xffff for touch
-    return std::make_tuple(WM_POINTERDOWN, MAKEWPARAM(pointerId, pointerFlags), lParam); // lParam stays as screen coordinates for WM_POINTERDOWN
-}
-
 // Proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -4269,25 +4142,44 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         return 0;
     }
 
-    // Handle hooked clicks forwarded from LowLevelMouseProc
-    if (uMsg == g_hookedClickMsg)
+    // Task switching window is created on demand and the only way to really identify it is by checking not just class name (generic), but
+    // windows text as well - however the text is not present during window creation (window create hooks above), so we need to find it lazily here
+    if (g_keepTaskSwitchingOpened && (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd)))
     {
-        LOG_DEBUG(L"Received hooked click message in InputSite: original msg=0x%X", wParam);
-        std::tie(uMsg, wParam, lParam) = TranslateMouseHookMessageToWin11(uMsg, wParam, lParam);
+        g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
+        if (g_hTaskSwitchingWnd)
+        {
+            LOG_DEBUG(L"Found task switching window: 0x%p", g_hTaskSwitchingWnd);
+            if (!g_isTaskSwitchingWindowSubclassed)
+            {
+                g_isTaskSwitchingWindowSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc, NULL);
+                if (!g_isTaskSwitchingWindowSubclassed)
+                {
+                    LOG_ERROR(L"Failed to subclass desktop window");
+                }
+                else
+                {
+                    LOG_INFO(L"Subclassed desktop window successfully");
+                }
+            }
+        }
     }
 
-    if (!g_hMouseHook)
+    // if user clicked on Task Switching window
+    const HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+    if (g_keepTaskSwitchingOpened && g_hTaskSwitchingWnd && (uMsg == WM_POINTERDOWN) && IsWindow(g_hTaskSwitchingWnd) &&
+        IsWindowVisible(g_hTaskSwitchingWnd) && (hRootWnd == g_hTaskSwitchingWnd))
     {
-        InstallMouseHook(); // Install mouse hook from taskbar thread (has message loop)
+        if (HandleTaskSwitchingWindowClick())
+        {
+            return 0; // suppress the message
+        }
     }
-
-    // printMessage(uMsg);
 
     bool suppressMsg = false;
     switch (uMsg)
     {
     case WM_POINTERDOWN:
-        HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
         if (IsTaskbarWindow(hRootWnd))
         {
             MouseClick::Button button = MouseClick::Button::INVALID;
@@ -4353,6 +4245,42 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     }
 }
 
+LRESULT CALLBACK TaskSwitchingWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
+{
+    if ((uMsg == WM_NCDESTROY) && (hWnd == g_hTaskSwitchingWnd))
+    {
+        LOG_DEBUG("WM_NCDESTROY received, removing subclass");
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskSwitchingWindowSubclassProc);
+        g_hTaskSwitchingWnd = NULL;
+        g_isTaskSwitchingWindowSubclassed = false;
+        g_keepTaskSwitchingOpened = false;
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // Task Switching gets closed via these messages, so suppress them to keep it open
+    if ((uMsg == WM_ACTIVATEAPP || uMsg == WM_ACTIVATE || uMsg == WM_SHOWWINDOW || uMsg == WM_NCACTIVATE) && g_keepTaskSwitchingOpened && IsWindowVisible(hWnd))
+    {
+        LOG_DEBUG("Suppressing WM_NCACTIVATE, WM_ACTIVATEAPP, WM_ACTIVATE and WM_SHOWWINDOW to keep Task Switching window open");
+        return 0;
+    }
+
+    const bool isMouseButtonDown = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN ||
+                                    uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN ||
+                                    uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN ||
+                                    uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN);
+
+    // handle the click if user clicked on opened Task Switching window
+    if (g_hTaskSwitchingWnd && isMouseButtonDown)
+    {
+        if (HandleTaskSwitchingWindowClick())
+        {
+            return 0; // suppress the click
+        }
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
 // Processes mouse clicks, starts timer for multi-click detection, called from taskbar window proc handlers
 bool OnMouseClick(MouseClick click)
 {
@@ -4382,7 +4310,7 @@ bool OnMouseClick(MouseClick click)
             LOG_DEBUG(L"Eagerly executing taskbar action for current click sequence");
             bool wasActionExecuted = actionExecutor(); // execute taskbar action
 
-            if (g_suppressMouseInput && !wasActionExecuted) // close Ctrl+Alt+Tab dialog
+            if (g_keepTaskSwitchingOpened && !wasActionExecuted) // close Ctrl+Alt+Tab dialog
             {
                 CloseCtrlAltTabDialog();
             }
@@ -4537,7 +4465,11 @@ void Wh_ModUninit()
 
     g_hookedInputSiteProcs.clear();
 
-    UninstallMouseHook();
+    if (g_hTaskSwitchingWnd && g_isTaskSwitchingWindowSubclassed && IsWindow(g_hTaskSwitchingWnd))
+    {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc);
+        g_hTaskSwitchingWnd = NULL;
+    }
 }
 
 #pragma endregion // windhawk_mod_functions
