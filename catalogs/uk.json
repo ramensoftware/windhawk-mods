@@ -4711,7 +4711,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1695580544000,
+                "updated": 1767782672000,
                 "users": 73
             },
             "metadata": {
@@ -4725,7 +4725,7 @@
                     "explorer.exe"
                 ],
                 "name": "No Taskbar Item Glow",
-                "version": "1.0.0"
+                "version": "1.1.0"
             }
         },
         "no-windows-ink-tooltips": {

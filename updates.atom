@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-06T20:39:08.000Z</updated>
+    <updated>2026-01-07T10:44:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No Taskbar Item Glow 1.1.0]]></title>
+        <id>https://windhawk.net/mods/no-taskbar-item-glow#68106e1c12e32f7635a93c0e8dfecb69cb6a474f</id>
+        <link href="https://windhawk.net/mods/no-taskbar-item-glow"/>
+        <updated>2026-01-07T10:44:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix bug where glow would still render on stacked items</li>
+<li>Restructure mod to fit modern conventions</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Unwanted Context Menu Items 1.0]]></title>
         <id>https://windhawk.net/mods/remove-context-menu-items#a4314662a227e624ff2784b29a48c7c99618a29c</id>
@@ -352,25 +366,6 @@ with multiple tabs open, preventing accidental closure of all tabs.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Old Explorer System Menu Behavior 1.0.0]]></title>
-        <id>https://windhawk.net/mods/old-explorer-sysmenu-behavior#d2f1d9a0085e65795a84b70d792ac700b88e7b77</id>
-        <link href="https://windhawk.net/mods/old-explorer-sysmenu-behavior"/>
-        <updated>2026-01-01T08:24:47.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="oldexplorersystemmenubehavior">Old Explorer System Menu Behavior</h1>
-<p>Before Windows Vista, the system menu (window icon) of File Explorer windows behaved differently:</p>
-<ul>
-<li>Could be dragged to create a shortcut to the currently folder</li>
-<li>Could be right clicked to show a context menu for the current folder</li>
-<li>Upon a left click, the system menu's appearance is delayed and shows up at the cursor position rather
-than the regular fixed position</li>
-</ul>
-<p>This mod restores the pre-Vista behavior.</p>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
