@@ -2,7 +2,7 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons visibility with a configurable hotkey (default: Ctrl+Alt+D)
-// @version         1.3.1
+// @version         1.3.2
 // @author          Cinabutts
 // @github          https://github.com/Cinabutts
 // @include         explorer.exe
@@ -89,9 +89,9 @@ BOOL SetupHotkeyHandling();
 void CleanupHotkeyHandling();
 void RestoreIconsToVisible();
 BOOL IsWindowInCurrentProcess(HWND hwnd);
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass);
+LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
+LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
 
 // Helper function to convert character to uppercase
 WCHAR ToUpperCase(WCHAR ch) {
@@ -173,6 +173,10 @@ HWND FindDesktopListView() {
     
     // Find SHELLDLL_DefView under Program Manager
     HWND hShellView = FindWindowExW(hProgman, nullptr, L"SHELLDLL_DefView", nullptr);
+    if (hShellView && !IsWindowInCurrentProcess(hShellView)) {
+        Wh_Log(L"SHELLDLL_DefView under Progman not in current process, ignoring");
+        hShellView = nullptr;
+    }
     
     // If not found under Progman, try WorkerW windows
     if (!hShellView) {
@@ -251,7 +255,7 @@ void ToggleDesktopIcons() {
 }
 
 // Custom window procedure for SHELLDLL_DefView
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -264,14 +268,22 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             
         case WM_CHAR:
             // Handle Ctrl+character combinations that produce control codes
-            if (wParam > 0 && wParam < 32) {
+            if (wParam > 0 && wParam < 32 && g_state.bUseCtrl) {
+                SHORT ctrlState = GetAsyncKeyState(VK_CONTROL);
+                if ((ctrlState & 0x8000) == 0) {
+                    break; // Control not pressed; ignore
+                }
+
                 WCHAR expectedChar = (WCHAR)(wParam + 64); // Convert control code back to character
                 WCHAR upperExpected = ToUpperCase(expectedChar);
                 WCHAR upperConfig = ToUpperCase(g_state.cHotkeyChar);
                 
                 if (upperExpected == upperConfig) {
+                    BOOL altRequired = g_state.bUseAlt;
                     SHORT altState = GetAsyncKeyState(VK_MENU);
-                    if ((altState & 0x8000) && g_state.bUseAlt) {
+                    BOOL altPressed = (altState & 0x8000) != 0;
+
+                    if (!altRequired || altPressed) {
                         Wh_Log(L"Hotkey detected via WM_CHAR in ShellView window");
                         ToggleDesktopIcons();
                         return 0;
@@ -289,7 +301,7 @@ LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 }
 
 // Custom window procedure for ListView
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
@@ -309,7 +321,7 @@ LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
 }
 
 // Custom window procedure for Program Manager (for global hotkey handling)
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
+LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_HOTKEY:
             if (wParam == HOTKEY_ID) {
@@ -545,6 +557,16 @@ void Wh_ModSettingsChanged() {
     
     // Reload settings
     LoadSettings();
+
+    // Refresh handles after settings change
+    g_state.hDesktopListView = FindDesktopListView();
+    if (g_state.hDesktopListView && !IsWindowInCurrentProcess(g_state.hDesktopListView)) {
+        Wh_Log(L"Desktop ListView belongs to a different process after settings change, ignoring");
+        g_state.hDesktopListView = nullptr;
+    }
+    if (g_state.hDesktopListView) {
+        g_state.bIconsVisible = IsWindowVisible(g_state.hDesktopListView);
+    }
     
     // Setup hotkey handling with new settings
     SetupHotkeyHandling();
