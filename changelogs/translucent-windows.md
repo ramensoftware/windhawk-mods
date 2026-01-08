@@ -1,3 +1,7 @@
+## 1.7.2 ([Jan 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1e21dfbca9fbd4a9acffc5f424d76c7896b7fec6/mods/translucent-windows.wh.cpp))
+
+* Fixed a minor custom theme bug created in  v1.7.1
+
 ## 1.7.1 ([Jan 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6297af12068c934f44285fd5ce660868b5ab92ff/mods/translucent-windows.wh.cpp))
 
 * Add text glow effect wherever is possible.

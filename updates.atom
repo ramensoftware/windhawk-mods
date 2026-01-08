@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-08T09:41:50.000Z</updated>
+    <updated>2026-01-08T13:53:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.7.2]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#1e21dfbca9fbd4a9acffc5f424d76c7896b7fec6</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2026-01-08T13:53:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a minor custom theme bug created in  v1.7.1</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.7.1]]></title>
         <id>https://windhawk.net/mods/translucent-windows#6297af12068c934f44285fd5ce660868b5ab92ff</id>
@@ -354,19 +367,6 @@ with multiple tabs open, preventing accidental closure of all tabs.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.2]]></title>
-        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#f828d309ee213355f5bf325f0312eeaa1ce2ae1c</id>
-        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
-        <updated>2026-01-01T22:10:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Make "Explorer icon" option functional</li>
-</ul>]]></content>
-        <author>
-            <name>aubymori</name>
-            <uri>https://github.com/aubymori</uri>
         </author>
     </entry>
 </feed>
