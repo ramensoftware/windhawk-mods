@@ -4712,8 +4712,8 @@ HRESULT WINAPI HookedDrawThemeBackground(
     {
         RECT clipRect{*pRect};
         if (pClipRect)
-            IntersectRect(&clipRect, &clipRect, pClipRect);
-        FillRect(hdc, pClipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            IntersectRect(&clipRect, pRect, pClipRect);
+        FillRect(hdc, &clipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return S_OK;
     }
     else if (ThemeClassName == L"Menu" && (iPartId == MENU_POPUPBACKGROUND || iPartId == MENU_POPUPBORDERS || iPartId == MENU_POPUPGUTTER || 
@@ -4722,7 +4722,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
         
         RECT clipRect{*pRect};
         if (pClipRect)
-            IntersectRect(&clipRect, &clipRect, pClipRect);
+            IntersectRect(&clipRect, pRect, pClipRect);
         if (g_settings.BgType)
             FillRect(hdc, &clipRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
         else if (g_settings.FillBg) {
@@ -5487,7 +5487,6 @@ VOID DwmSetWindowAttributeHook(){
     WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, HookedDwmSetWindowAttribute, &DwmSetWindowAttribute_orig); 
 }
 
-
 VOID CustomRendering()
 {
     InitDirect2D();
@@ -5510,8 +5509,6 @@ VOID CustomRendering()
     WindhawkUtils::SetFunctionHook(DrawThemeText, HookedDrawThemeText, &DrawThemeText_orig);
     WindhawkUtils::SetFunctionHook(DrawThemeTextEx, HookedDrawThemeTextEx, &DrawThemeTextEx_orig);
 }
-
-
 
 VOID RestoreWindowCustomizations(HWND hWnd)
 {
