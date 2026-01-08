@@ -96,16 +96,26 @@ static void Cache() {
 }
 }  // namespace ModSettings
 
-class Selection {
+namespace Selection {
+enum class Span { BASE, EXT, WHOLE };
+
+static Span ChooseSpan(short f2Count) {
+    auto timesF2 = f2Count % 3;
+    if (ModSettings::ReverseCycle) {
+        timesF2 = 2 - timesF2;
+    }
+    return timesF2 == 0 ? Span::WHOLE : (timesF2 == 1 ? Span::BASE : Span::EXT);
+}
+
+class Selector {
    private:
     HWND editControl;
     std::wstring text;
     size_t dotIndex;
 
-    Selection(HWND ctrl, std::wstring buffer, size_t dot)
+    Selector(HWND ctrl, std::wstring buffer, size_t dot)
         : editControl(ctrl), text(buffer), dotIndex(dot) {}
 
-   public:
     // default f2 behavior
     // if it's a dotfile or dotless, explorer selects the whole name
     void SelectBaseName() {
@@ -135,7 +145,22 @@ class Selection {
         Wh_Log(L"Selected whole name \"%s\".", text.c_str());
     }
 
-    static std::optional<Selection> InsideControl(HWND editControl) {
+   public:
+    void Select(Span span) {
+        switch (span) {
+            case Span::BASE:
+                SelectBaseName();
+                break;
+            case Span::EXT:
+                SelectExtension();
+                break;
+            case Span::WHOLE:
+                SelectWholeName();
+                break;
+        }
+    }
+
+    static std::optional<Selector> InsideControl(HWND editControl) {
         // typical max filename length
         std::wstring text(260, L'\0');
         int copied = GetWindowTextW(editControl, text.data(), (int)text.size());
@@ -143,12 +168,13 @@ class Selection {
             // trim to actual length
             text.resize(copied);
             size_t dotIndex = text.find_last_of(L'.');
-            return Selection(editControl, text, dotIndex);
+            return Selector(editControl, text, dotIndex);
         } else {
             return std::nullopt;
         }
     }
 };
+}  // namespace Selection
 
 class KeyStreak {
    private:
@@ -328,26 +354,10 @@ static bool ApplyMultiF2Selection(WPARAM pressedKey) {
                        ? L"reverse"
                        : L"original",  // because I'm worth it :-)
                    f2Count);
-            auto selection = Selection::InsideControl(focus);
+            auto selection = Selection::Selector::InsideControl(focus);
             if (selection.has_value()) {
-                auto timesF2 = f2Count % 3;
-                if (ModSettings::ReverseCycle) {
-                    timesF2 = 2 - timesF2;
-                }
-                switch (timesF2) {
-                    // standard explorer f2
-                    case 1:
-                        selection.value().SelectBaseName();
-                        break;
-                    // original feature: double f2 = extension
-                    case 2:
-                        selection.value().SelectExtension();
-                        break;
-                    // new: triple f2 = whole name
-                    case 0:
-                        selection.value().SelectWholeName();
-                        break;
-                }
+                auto span = Selection::ChooseSpan(f2Count);
+                selection.value().Select(span);
                 return true;
             }
         }
