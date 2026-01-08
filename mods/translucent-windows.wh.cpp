@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.7.1
+// @version         1.7.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -5950,3 +5950,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload)
     *bReload = TRUE;
     return TRUE;
 }
+
