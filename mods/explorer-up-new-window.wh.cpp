@@ -1,0 +1,534 @@
+// ==WindhawkMod==
+// @id              explorer-up-new-window
+// @name            Explorer Up → New Window (Ctrl-click or Middle-click)
+// @description     Ctrl or middle-click on explorer up-button opens parent in a new window.
+// @version         1.1
+// @author          Tobias Lind
+// @github          https://github.com/TobbeLino
+// @include         explorer.exe
+// @compilerOptions -lole32 -loleaut32 -luiautomationcore -lshell32 -luser32 -luuid
+// @license         MIT
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Explorer Up → New Window
+
+Opens the parent folder in a **new** Explorer window when you:
+- **Middle-click** on the Up button
+- **Ctrl + Left-click** on the Up button
+- Press **Ctrl + Alt + Up** keyboard shortcut
+
+Useful when you want to keep your current folder open while exploring the parent.
+*/
+// ==/WindhawkModReadme==
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <UIAutomation.h>
+#include <OleAuto.h>
+#include <string>
+#include <atomic>
+
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#endif
+
+// ---------- Globals ----------
+static std::atomic_bool g_inProgress{false};
+
+static thread_local bool t_comInit = false;
+static thread_local IUIAutomation* t_uia = nullptr;
+static thread_local IUIAutomationTreeWalker* t_walker = nullptr;
+
+static HHOOK g_mouseHook = nullptr;
+static HHOOK g_kbdHook   = nullptr;
+
+enum class SuppressBtn : int { None = 0, Left = 1, Middle = 2, Key = 3 };
+SuppressBtn g_suppress = SuppressBtn::None;
+
+// Timing constants
+const int maxKeyWaitTimeMs = 5000;
+const int kMouseDebounceMs = 200;  // Ignore clicks too close together
+const int kNewWindowWaitMs = 700;  // Time to wait for new Explorer window
+const int kFocusDelayMs = 120;     // Delay before sending keyboard commands
+
+std::atomic<ULONGLONG> lastMouseUpEventTime{0};
+
+static ULONGLONG g_midCooldownUntil = 0;
+static bool g_midCooldownSwallowNextUp = false;
+static constexpr ULONGLONG kMidCooldownMs = 1000; // ~1s cooldown
+
+// ---------- Helpers ----------
+static inline bool IsInProgress() {
+    return g_inProgress.load(std::memory_order_acquire);
+}
+
+// Returns true iff we *successfully* took the latch (i.e., it was idle)
+static inline bool SetInProgressIfIdle() {
+    // exchange() sets true and returns the *previous* value
+    // We succeed when previous was false.
+    return !g_inProgress.exchange(true, std::memory_order_acq_rel);
+}
+
+static inline void ResetInProgress() {
+    g_inProgress.store(false, std::memory_order_release);
+}
+
+static void CleanupThreadUia() {
+    if (t_walker) {
+        t_walker->Release();
+        t_walker = nullptr;
+    }
+    if (t_uia) {
+        t_uia->Release();
+        t_uia = nullptr;
+    }
+    if (t_comInit) {
+        CoUninitialize();
+        t_comInit = false;
+    }
+}
+
+static void EnsureUiaForThisThread() {
+    if (!t_comInit) {
+        // UIA client prefers MTA
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE) {
+            t_comInit = true;
+        }
+    }
+    if (!t_uia) {
+        if (SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARGS(&t_uia))) && t_uia) {
+            t_uia->get_ControlViewWalker(&t_walker); // ignore failure, we check null later
+        }
+    }
+}
+
+static bool IsExplorerTop(HWND h) {
+    if (!h) return false;
+    HWND top = GetAncestor(h, GA_ROOT);
+    if (!top) return false;
+    wchar_t cls[64]{};
+    if (!GetClassNameW(top, cls, (int)ARRAYSIZE(cls))) return false;
+    return wcscmp(cls, L"CabinetWClass") == 0;
+}
+
+static void ExtractNameAutoId(IUIAutomationElement* el, std::wstring& name, std::wstring& autoId) {
+    name.clear();
+    autoId.clear();
+    if (!el) return;
+    VARIANT v; VariantInit(&v);
+    if (SUCCEEDED(el->GetCurrentPropertyValue(UIA_NamePropertyId, &v)) && v.vt == VT_BSTR && v.bstrVal)
+        name.assign(v.bstrVal, SysStringLen(v.bstrVal));
+    VariantClear(&v);
+    if (SUCCEEDED(el->GetCurrentPropertyValue(UIA_AutomationIdPropertyId, &v)) && v.vt == VT_BSTR && v.bstrVal)
+        autoId.assign(v.bstrVal, SysStringLen(v.bstrVal));
+    VariantClear(&v);
+}
+
+static bool StartsWithI(const std::wstring& s, const wchar_t* prefix) {
+    size_t n = wcslen(prefix);
+    if (s.size() < n) return false;
+    return _wcsnicmp(s.c_str(), prefix, (unsigned)n) == 0;
+}
+
+static bool LooksLikeUp(const wchar_t* name, const wchar_t* autoId) {
+    // Check AutomationId first (language-independent, case-insensitive)
+    if (autoId && _wcsicmp(autoId, L"UpButton") == 0)
+        return true;
+
+    // Fallback: check localized Name property
+    // "Up" prefix covers English ("Up"), Swedish ("Upp"), etc.
+    if (name && StartsWithI(name, L"Up"))
+        return true;
+
+    return false;
+}
+
+static bool CheckElementAndAncestorsForUp(
+    IUIAutomationTreeWalker* walker,
+    IUIAutomationElement* el,
+    std::wstring& hitName,
+    std::wstring& hitAutoId
+) {
+    hitName.clear();
+    hitAutoId.clear();
+    if (!el || !walker) return false;
+    IUIAutomationElement* cur = el; cur->AddRef();
+    bool isUp = false;
+    for (int i = 0; i < 6 && cur && !isUp; ++i) {
+        std::wstring nm, id;
+        ExtractNameAutoId(cur, nm, id);
+        if (LooksLikeUp(nm.c_str(), id.c_str())) {
+            hitName = nm; hitAutoId = id; isUp = true; break;
+        }
+        IUIAutomationElement* parent = nullptr;
+        if (FAILED(walker->GetParentElement(cur, &parent)) || !parent) break;
+        cur->Release(); cur = parent;
+    }
+    if (cur) cur->Release();
+    return isUp;
+}
+
+static void ForceForeground(HWND h) {
+    if (!IsWindow(h)) return;
+    HWND fg = GetForegroundWindow();
+    DWORD fgTid = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
+    DWORD curTid = GetCurrentThreadId();
+    if (fgTid) AttachThreadInput(fgTid, curTid, TRUE);
+    ShowWindow(h, SW_SHOW);
+    SetForegroundWindow(h);
+    BringWindowToTop(h);
+    SetActiveWindow(h);
+    if (fgTid) AttachThreadInput(fgTid, curTid, FALSE);
+}
+
+struct FindNewWinCtx { HWND exclude; DWORD pid; HWND found; };
+static BOOL CALLBACK EnumNewExplorerProc(HWND hwnd, LPARAM lp) {
+    FindNewWinCtx* ctx = (FindNewWinCtx*)lp;
+    if (!IsWindowVisible(hwnd) || hwnd == ctx->exclude) return TRUE;
+    wchar_t cls[64]{};
+    if (!GetClassNameW(hwnd, cls, (int)ARRAYSIZE(cls))) return TRUE;
+    if (wcscmp(cls, L"CabinetWClass") != 0) return TRUE;
+    DWORD pid = 0; GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != ctx->pid) return TRUE;
+    ctx->found = hwnd; return FALSE;
+}
+
+static void SendKeysSequence(const INPUT* inputs, UINT count) {
+    if (!count) return;
+    SendInput(count, const_cast<INPUT*>(inputs), sizeof(INPUT));
+}
+
+static bool isKeyDown(int key) {
+    return (GetAsyncKeyState(key) & 0x8000) != 0;
+}
+
+static bool awaitKeyRelease(int key) {
+    DWORD t0 = GetTickCount();
+    while (isKeyDown(key) && GetTickCount() - t0 < maxKeyWaitTimeMs) {
+        // Wh_Log(L"Waiting for key (%d) release...", key);
+        Sleep(30);
+    }
+    return !isKeyDown(key);
+}
+
+static void AltUp() {
+    // Alt + Up
+    // If Alt is already down, just 'Up'; else Alt+Up
+    Wh_Log(L"AltUp");
+
+    // If Ctrl is down: Wait for user to release it! (or else "Alt + up" will become "Ctrl + Alt + up" and fail)
+    awaitKeyRelease(VK_CONTROL);
+
+    bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    INPUT inps[4]; ZeroMemory(inps, sizeof(inps));
+    UINT idx = 0;
+    if (!altDown) {
+        inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = VK_MENU; idx++;
+    }
+    inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = VK_UP;   idx++;
+    inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = VK_UP;   inps[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    if (!altDown) {
+        inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = VK_MENU; inps[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    }
+    SendKeysSequence(inps, idx);
+}
+
+static void CtrlN() {
+    // Ctrl + N
+    // If Ctrl is already down, just 'N'; else Ctrl+N
+    Wh_Log(L"CtrlN");
+
+    // If Alt is down: Wait for user to release it! (or else "Ctrl + N" will become "Ctrl + Alt + N" and fail)
+    awaitKeyRelease(VK_MENU);
+
+    bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    INPUT inps[4]; ZeroMemory(inps, sizeof(inps));
+    UINT idx = 0;
+    if (!ctrlDown) {
+        inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = VK_CONTROL; idx++;
+    }
+    inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = 'N'; idx++;
+    inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = 'N'; inps[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    if (!ctrlDown) {
+        inps[idx].type = INPUT_KEYBOARD; inps[idx].ki.wVk = VK_CONTROL; inps[idx].ki.dwFlags = KEYEVENTF_KEYUP; idx++;
+    }
+    SendKeysSequence(inps, idx);
+}
+
+static bool InvokeUpInWindow(HWND top) {
+    Wh_Log(L"InvokeUpInWindow");
+    if (!IsWindow(top)) return false;
+
+    SetForegroundWindow(top);
+    Sleep(kFocusDelayMs);
+    AltUp();
+    return true;
+}
+
+// ---------- Action: Ctrl+N → focus new → UIA Up ----------
+static void DuplicateAndInvokeUp(HWND top) {
+    if (!IsWindow(top)) return;
+
+    // Ensure keystrokes go to the source window
+    SetForegroundWindow(top);
+
+    // Duplicate window
+    Sleep(15);
+    CtrlN();
+
+    // Find the new window (same process)
+    DWORD srcPid = 0; GetWindowThreadProcessId(top, &srcPid);
+    HWND target = nullptr;
+
+    DWORD t0 = GetTickCount();
+    while (!target && GetTickCount() - t0 < kNewWindowWaitMs) {
+        // Wait for newly opened window...
+        Sleep(30);
+        HWND fg = GetForegroundWindow();
+        if (fg && fg != top) {
+            wchar_t cls[64]{};
+            if (GetClassNameW(fg, cls, (int)ARRAYSIZE(cls)) && wcscmp(cls, L"CabinetWClass") == 0) {
+                DWORD pid = 0; GetWindowThreadProcessId(fg, &pid);
+                if (pid == srcPid) target = fg;
+            }
+        }
+    }
+    if (!target) {
+        FindNewWinCtx ctx{ top, srcPid, nullptr };
+        EnumWindows(EnumNewExplorerProc, (LPARAM)&ctx);
+        if (ctx.found) target = ctx.found;
+    }
+
+    if (target) {
+        // Wh_Log(L"New window found, navigating up");
+        ForceForeground(target);
+        InvokeUpInWindow(target);
+    } else {
+        // Fallback: try current foreground window
+        // Wh_Log(L"New window not found, trying foreground");
+        HWND fg = GetForegroundWindow();
+        if (IsExplorerTop(fg)) {
+            ForceForeground(fg);
+            Sleep(kFocusDelayMs);
+            InvokeUpInWindow(fg);
+        }
+    }
+}
+
+// ---------- Worker ----------
+struct NewWindowTask { HWND top; };
+
+static DWORD WINAPI OpenParentWorker(LPVOID param) {
+    NewWindowTask* t = (NewWindowTask*)param;
+    if (t) {
+        HWND top = t->top;
+        delete t;
+
+        Wh_Log(L"[Act] Ctrl+N → focus new → UIA Up");
+        DuplicateAndInvokeUp(top);
+    }
+
+    ResetInProgress();
+    return 0;
+}
+
+static void OpenParentInNewWindow(HWND top) {
+    NewWindowTask* t = new NewWindowTask{ top };
+    HANDLE h = CreateThread(nullptr, 0, OpenParentWorker, t, 0, nullptr);
+    if (h) {
+        CloseHandle(h);
+    } else {
+        // Thread creation failed, clean up and reset
+        Wh_Log(L"[err] CreateThread failed: %lu", GetLastError());
+        delete t;
+        ResetInProgress();
+    }
+}
+
+// ---------- Mouse hook (Middle button up, Ctrl + left button up) ----------
+static LRESULT CALLBACK MouseLLProc(int code, WPARAM wp, LPARAM lp) {
+    if (code == HC_ACTION) {
+        ULONGLONG now = GetTickCount64();
+        const MSLLHOOKSTRUCT* ms = (const MSLLHOOKSTRUCT*)lp;
+        bool ctrlDown = isKeyDown(VK_CONTROL);
+
+        // Ignore our own injected events (avoid recursion)
+        // Also ignore mouse events we're not interested in
+        if (ms->flags & LLMHF_INJECTED ||
+            (
+                (wp != WM_LBUTTONDOWN || !ctrlDown) &&
+                (wp != WM_LBUTTONUP) &&
+                (wp != WM_MBUTTONDOWN) &&
+                (wp != WM_MBUTTONUP) &&
+                (wp != WM_MBUTTONDBLCLK)
+            )) {
+            return CallNextHookEx(g_mouseHook, code, wp, lp);
+        }
+
+        // Swallow matching UP if we already handled DOWN
+        if (g_suppress == SuppressBtn::Middle) {
+            if (wp == WM_MBUTTONUP) {
+                g_suppress = SuppressBtn::None;
+                // start cooldown after the matching UP
+                g_midCooldownUntil = now + kMidCooldownMs;
+                g_midCooldownSwallowNextUp = false;
+                return 1; // matching UP
+            }
+        } else if (g_suppress == SuppressBtn::Left) {
+            if (wp == WM_LBUTTONUP) {
+                g_suppress = SuppressBtn::None;
+                g_midCooldownUntil = now + kMidCooldownMs;
+                g_midCooldownSwallowNextUp = false;
+                return 1;
+            }
+        }
+
+        // cooldown right after a handled middle-click
+        if (now < g_midCooldownUntil) {
+            if (wp == WM_MBUTTONDBLCLK || wp == WM_MBUTTONDOWN) {
+                // if the system synthesized a DBLCLK, remember to eat its following UP
+                g_midCooldownSwallowNextUp = true;
+                return 1;
+            } else if (wp == WM_MBUTTONDOWN || wp == WM_LBUTTONDOWN) {
+                return 1;
+            }
+        }
+        if ((wp == WM_MBUTTONDOWN || wp == WM_LBUTTONDOWN) && g_midCooldownSwallowNextUp) {
+            g_midCooldownSwallowNextUp = false; // balanced pair swallowed
+            return 1;
+        }
+
+        if (IsInProgress()) {
+            // Wh_Log(L"inProgress(Mouse): Ignore");
+            return CallNextHookEx(g_mouseHook, code, wp, lp);
+        }
+
+        if (wp == WM_LBUTTONUP || wp == WM_MBUTTONUP) {
+            lastMouseUpEventTime.store(now, std::memory_order_release);
+            // Wh_Log(L"Mouse up: Skip");
+            return CallNextHookEx(g_mouseHook, code, wp, lp);
+        } else if (now - lastMouseUpEventTime.load(std::memory_order_acquire) < kMouseDebounceMs) {
+            // Wh_Log(L"Mouse down too close to mouse up (%d ms): Skip", now - lastMouseUpEventTime);
+            return CallNextHookEx(g_mouseHook, code, wp, lp);
+        }
+
+        POINT pt = ms->pt;
+        HWND hwndAtPt = WindowFromPoint(pt);
+        HWND top = GetAncestor(hwndAtPt, GA_ROOT);
+
+        // Wh_Log(L"hwndAtPt: %p", hwndAtPt);
+
+        if ((wp == WM_LBUTTONDOWN || wp == WM_MBUTTONDOWN) && IsExplorerTop(hwndAtPt)) {
+            // Optimization: Avoid expensive UIA calls if not clicking near the top (toolbar)
+            RECT rc;
+            if (GetWindowRect(top, &rc)) {
+                // Address bar is typically at the top. 200px is a safe generous margin.
+                if ((long)ms->pt.y - rc.top > 200) {
+                     return CallNextHookEx(g_mouseHook, code, wp, lp);
+                }
+            }
+
+            EnsureUiaForThisThread();
+            if (t_uia) {
+                IUIAutomationElement* el = nullptr;
+                if (SUCCEEDED(t_uia->ElementFromPoint(pt, &el)) && el) {
+                    std::wstring nm, id;
+                    bool isUp = CheckElementAndAncestorsForUp(t_walker, el, nm, id);
+                    if (isUp) {
+                        SuppressBtn which = SuppressBtn::None;
+                        bool shouldHandle = false;
+                        if (wp == WM_MBUTTONDOWN) {
+                            Wh_Log(L"Mbutton down");
+                            shouldHandle = true;
+                            which = SuppressBtn::Middle;
+                        } else if (wp == WM_LBUTTONDOWN && ctrlDown) {
+                            Wh_Log(L"Ctrl + Lbutton down");
+                            shouldHandle = true;
+                            which = SuppressBtn::Left;
+                        }
+
+                        if (shouldHandle) {
+                            Wh_Log(L"[Up+] %s on Up (Ctrl=%d) → NEW window",
+                                (which == SuppressBtn::Middle) ? L"Middle-down" : L"Ctrl+Left-down",
+                                ctrlDown ? 1 : 0);
+                            g_suppress = which;
+                            if (!SetInProgressIfIdle()) {
+                                el->Release();
+                                return CallNextHookEx(g_mouseHook, code, wp, lp);
+                            }
+                            OpenParentInNewWindow(top);
+                            return 1; // swallow DOWN; matching UP swallowed above
+                        }
+                    }
+                    el->Release();
+                }
+            }
+        }
+    }
+    return CallNextHookEx(g_mouseHook, code, wp, lp);
+}
+
+// ---------- Keyboard hook (Ctrl+Alt+Up) ----------
+static LRESULT CALLBACK KbdLLProc(int code, WPARAM wp, LPARAM lp) {
+    if (!IsInProgress() && code == HC_ACTION && (wp == WM_KEYDOWN || wp == WM_KEYUP || wp == WM_SYSKEYDOWN)) {
+        const KBDLLHOOKSTRUCT* ks = (const KBDLLHOOKSTRUCT*)lp;
+
+        // Swallow matching UP if we already handled DOWN
+        if (wp == WM_KEYUP) {
+            if (g_suppress == SuppressBtn::Key) {
+                g_suppress = SuppressBtn::None;
+                return 1;
+            } else {
+                return CallNextHookEx(g_kbdHook, code, wp, lp);
+            }
+        }
+
+        if (ks->vkCode == VK_UP) {
+            if (isKeyDown(VK_MENU) && isKeyDown(VK_CONTROL)) {
+                HWND fg = GetForegroundWindow();
+                if (IsExplorerTop(fg)) {
+                    Wh_Log(L"[Up+] Ctrl+Alt+Up → NEW window (Ctrl + N, Alt + Up)");
+                    g_suppress = SuppressBtn::Key;
+                    if (!SetInProgressIfIdle()) {
+                        return CallNextHookEx(g_kbdHook, code, wp, lp);
+                    }
+                    OpenParentInNewWindow(fg);
+                    return 1;
+                }
+            }
+        }
+    }
+    return CallNextHookEx(g_kbdHook, code, wp, lp);
+}
+
+// ---------- Windhawk entry points ----------
+BOOL Wh_ModInit() {
+    Wh_Log(L"Init (Up → New Window, UIA invoke + Ctrl-latch)");
+
+    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseLLProc, nullptr, 0);
+    if (!g_mouseHook) Wh_Log(L"[err] SetWindowsHookEx WH_MOUSE_LL failed: %lu", GetLastError());
+
+    g_kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, KbdLLProc, nullptr, 0);
+    if (!g_kbdHook) Wh_Log(L"[err] SetWindowsHookEx WH_KEYBOARD_LL failed: %lu", GetLastError());
+
+    ResetInProgress();
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
+    if (g_kbdHook)   { UnhookWindowsHookEx(g_kbdHook);   g_kbdHook   = nullptr; }
+    g_suppress = SuppressBtn::None;
+    ResetInProgress();
+
+    // Clean up thread-local COM objects for current thread
+    CleanupThreadUia();
+}
+
+void Wh_ModSettingsChanged() {
+    // No settings.
+}
