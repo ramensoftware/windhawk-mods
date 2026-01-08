@@ -32,11 +32,12 @@ This mod works great together with
 /*
 - DoubleF2MilliSeconds: 1000
   $name: Double F2 timing
-  $description: Time window for double press (milliseconds, 100-10000)
+  $description: >
+    Time window for double press (milliseconds, 100-10000)
 - ReverseCycle: false
   $name: Swap double/triple F2
-  $description: 'Select the whole name on double F2 and the extension on triple
-F2?'
+  $description: >
+    Select the whole name on double F2 and the extension on triple F2?
 */
 // ==/WindhawkModSettings==
 
