@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-08T13:53:56.000Z</updated>
+    <updated>2026-01-08T19:22:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Up → New Window (Ctrl-click or Middle-click) 1.3]]></title>
+        <id>https://windhawk.net/mods/explorer-up-new-window#18de106a734f50c7f85bd828453ff27f839067d3</id>
+        <link href="https://windhawk.net/mods/explorer-up-new-window"/>
+        <updated>2026-01-08T19:22:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerupnewwindow">Explorer Up → New Window</h1>
+<p>Opens the parent folder in a <strong>new</strong> Explorer window when you:</p>
+<ul>
+<li><strong>Middle-click</strong> on the Up button</li>
+<li><strong>Ctrl + Left-click</strong> on the Up button</li>
+<li>Press <strong>Ctrl + Alt + Up</strong> keyboard shortcut</li>
+</ul>
+<p>Useful when you want to keep your current folder open while exploring the parent.</p>]]></content>
+        <author>
+            <name>Tobias Lind</name>
+            <uri>https://github.com/TobbeLino</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.7.2]]></title>
         <id>https://windhawk.net/mods/translucent-windows#1e21dfbca9fbd4a9acffc5f424d76c7896b7fec6</id>
@@ -350,23 +368,6 @@ with multiple tabs open, preventing accidental closure of all tabs.</p>
         <author>
             <name>chenxustu1</name>
             <uri>https://github.com/chenxustu1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock Customization 1.7.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-customization#273b8d750fd41ccabba8d53a70d0d8ddb7d6fafd</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
-        <updated>2026-01-02T16:13:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to specify text for <code>%media_info%</code> when no media is playing.</li>
-<li>Added the <code>%n%</code> pattern as a shorter alternative to <code>%newline%</code>.</li>
-<li>Fixed <code>%battery%</code> to show 100% when fully charged. 99% was previously displayed in this case.</li>
-<li>Fixed network and GPU metrics not accounting for new adapters or processes.</li>
-<li>Fixed the mod preventing explorer.exe from exiting if media info patterns are used.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

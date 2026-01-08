@@ -2993,6 +2993,35 @@
                 "version": "1.0.0"
             }
         },
+        "explorer-up-new-window": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1767900121000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1767900121000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Tobias Lind",
+                "compilerOptions": "-lole32 -loleaut32 -luiautomationcore -lshell32 -luser32 -luuid",
+                "description": "Ctrl or middle-click on explorer up-button opens parent in a new window.",
+                "github": "https://github.com/TobbeLino",
+                "include": [
+                    "windhawk.exe"
+                ],
+                "license": "MIT",
+                "name": "Explorer Up → New Window (Ctrl-click or Middle-click)",
+                "version": "1.3"
+            }
+        },
         "explorerframe-fixes-for-win11-22h2plus": {
             "details": {
                 "defaultSorting": 15426,
