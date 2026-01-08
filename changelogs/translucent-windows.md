@@ -1,3 +1,9 @@
+## 1.7.1 ([Jan 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6297af12068c934f44285fd5ce660868b5ab92ff/mods/translucent-windows.wh.cpp))
+
+* Add text glow effect wherever is possible.
+* Fix issue with colored borders in fullscreen windows.
+* Pause rainbow hue during move/resize. (Thanks to [@AltyFox](https://github.com/AltyFox))
+
 ## 1.7.0 ([Jan 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c9918094a04b37d798d37825c404fa78407ef589/mods/translucent-windows.wh.cpp))
 
 * Expand translucent effects to flyouts (popup menus, tooltips, dropdown menu) (thanks to [TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts) project)

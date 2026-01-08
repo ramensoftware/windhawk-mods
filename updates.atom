@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-07T10:44:32.000Z</updated>
+    <updated>2026-01-08T09:41:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.7.1]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#6297af12068c934f44285fd5ce660868b5ab92ff</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2026-01-08T09:41:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add text glow effect wherever is possible.</li>
+<li>Fix issue with colored borders in fullscreen windows.</li>
+<li>Pause rainbow hue during move/resize. (Thanks to <a href="https://github.com/AltyFox">@AltyFox</a>)</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No Taskbar Item Glow 1.1.0]]></title>
         <id>https://windhawk.net/mods/no-taskbar-item-glow#68106e1c12e32f7635a93c0e8dfecb69cb6a474f</id>
@@ -352,20 +367,6 @@ with multiple tabs open, preventing accidental closure of all tabs.</p>
         <author>
             <name>aubymori</name>
             <uri>https://github.com/aubymori</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Background Helper 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-background-helper#f95ae6263cf2d2d0fda26f2d1f87a658a259465b</id>
-        <link href="https://windhawk.net/mods/taskbar-background-helper"/>
-        <updated>2026-01-01T09:13:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved responsiveness and performance when "Only when maximized" is enabled.</li>
-<li>Added support for aero peek and Win+Tab when "Only when maximized" is enabled - in these modes, the taskbar is styled as if there are no maximized windows.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

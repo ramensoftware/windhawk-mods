@@ -7553,7 +7553,7 @@
                     543
                 ],
                 "ratingUsers": 771,
-                "updated": 1767528284000,
+                "updated": 1767865310000,
                 "users": 42804
             },
             "metadata": {
@@ -7565,7 +7565,7 @@
                     "*"
                 ],
                 "name": "Translucent Windows",
-                "version": "1.7.0"
+                "version": "1.7.1"
             }
         },
         "transparent-screensaver-fix": {
