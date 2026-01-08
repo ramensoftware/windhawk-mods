@@ -2,7 +2,7 @@
 // @id              explorer-up-new-window
 // @name            Explorer Up → New Window (Ctrl-click or Middle-click)
 // @description     Ctrl or middle-click on explorer up-button opens parent in a new window.
-// @version         1.1
+// @version         1.2
 // @author          Tobias Lind
 // @github          https://github.com/TobbeLino
 // @include         explorer.exe
@@ -43,6 +43,10 @@ static thread_local IUIAutomationTreeWalker* t_walker = nullptr;
 
 static HHOOK g_mouseHook = nullptr;
 static HHOOK g_kbdHook   = nullptr;
+
+// Hook thread (LL hooks require a message pump)
+static volatile HANDLE g_hookThread = nullptr;
+static DWORD g_hookThreadId = 0;
 
 enum class SuppressBtn : int { None = 0, Left = 1, Middle = 2, Key = 3 };
 SuppressBtn g_suppress = SuppressBtn::None;
@@ -473,6 +477,62 @@ static LRESULT CALLBACK MouseLLProc(int code, WPARAM wp, LPARAM lp) {
 }
 
 // ---------- Keyboard hook (Ctrl+Alt+Up) ----------
+static LRESULT CALLBACK KbdLLProc(int code, WPARAM wp, LPARAM lp);
+
+// ---------- Hook thread (LL hooks require a message pump) ----------
+static DWORD WINAPI HookThreadProc(LPVOID pParameter) {
+    HANDLE hThreadReadyEvent = (HANDLE)pParameter;
+
+    // Create message queue before signaling ready
+    MSG msg;
+    PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    // Install hooks from this thread
+    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseLLProc, nullptr, 0);
+    if (!g_mouseHook) {
+        Wh_Log(L"[err] SetWindowsHookEx WH_MOUSE_LL failed: %lu", GetLastError());
+    }
+
+    g_kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, KbdLLProc, nullptr, 0);
+    if (!g_kbdHook) {
+        Wh_Log(L"[err] SetWindowsHookEx WH_KEYBOARD_LL failed: %lu", GetLastError());
+    }
+
+    // Signal that we're ready
+    SetEvent(hThreadReadyEvent);
+
+    // Message loop - required for LL hooks to work
+    BOOL bRet;
+    while ((bRet = GetMessage(&msg, nullptr, 0, 0)) != 0) {
+        if (bRet == -1) {
+            break;
+        }
+
+        // WM_APP signals us to exit
+        if (msg.hwnd == nullptr && msg.message == WM_APP) {
+            break;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    // Cleanup hooks
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
+    if (g_kbdHook) {
+        UnhookWindowsHookEx(g_kbdHook);
+        g_kbdHook = nullptr;
+    }
+
+    // Cleanup thread-local UIA resources
+    CleanupThreadUia();
+
+    return 0;
+}
+
 static LRESULT CALLBACK KbdLLProc(int code, WPARAM wp, LPARAM lp) {
     if (!IsInProgress() && code == HC_ACTION && (wp == WM_KEYDOWN || wp == WM_KEYUP || wp == WM_SYSKEYDOWN)) {
         const KBDLLHOOKSTRUCT* ks = (const KBDLLHOOKSTRUCT*)lp;
@@ -507,26 +567,43 @@ static LRESULT CALLBACK KbdLLProc(int code, WPARAM wp, LPARAM lp) {
 
 // ---------- Windhawk entry points ----------
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init (Up → New Window, UIA invoke + Ctrl-latch)");
-
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseLLProc, nullptr, 0);
-    if (!g_mouseHook) Wh_Log(L"[err] SetWindowsHookEx WH_MOUSE_LL failed: %lu", GetLastError());
-
-    g_kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, KbdLLProc, nullptr, 0);
-    if (!g_kbdHook) Wh_Log(L"[err] SetWindowsHookEx WH_KEYBOARD_LL failed: %lu", GetLastError());
+    Wh_Log(L"Init (Up → New Window, LL hooks in dedicated thread)");
 
     ResetInProgress();
+
+    // Create event to signal when hook thread is ready
+    HANDLE hThreadReadyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!hThreadReadyEvent) {
+        Wh_Log(L"[err] CreateEvent failed: %lu", GetLastError());
+        return FALSE;
+    }
+
+    // Create hook thread (LL hooks require a message pump)
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, hThreadReadyEvent, 0, &g_hookThreadId);
+    if (!g_hookThread) {
+        Wh_Log(L"[err] CreateThread failed: %lu", GetLastError());
+        CloseHandle(hThreadReadyEvent);
+        return FALSE;
+    }
+
+    // Wait for hook thread to initialize
+    WaitForSingleObject(hThreadReadyEvent, INFINITE);
+    CloseHandle(hThreadReadyEvent);
+
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
-    if (g_kbdHook)   { UnhookWindowsHookEx(g_kbdHook);   g_kbdHook   = nullptr; }
+    // Signal hook thread to exit and wait for it
+    HANDLE hThread = InterlockedExchangePointer(&g_hookThread, nullptr);
+    if (hThread) {
+        PostThreadMessage(g_hookThreadId, WM_APP, 0, 0);
+        WaitForSingleObject(hThread, INFINITE);
+        CloseHandle(hThread);
+    }
+
     g_suppress = SuppressBtn::None;
     ResetInProgress();
-
-    // Clean up thread-local COM objects for current thread
-    CleanupThreadUia();
 }
 
 void Wh_ModSettingsChanged() {
