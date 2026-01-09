@@ -776,8 +776,8 @@ private:
                         }
                     }
 
-                    LOG_DEBUG(L"Foreground window changed: CurrentThread: %u HWND=%p PID=%u ClassName=%s Title=%s",
-                              GetCurrentThreadId(), hwnd, dwProcessId, className, windowTitle.c_str());
+                    LOG_DEBUG(L"Foreground window changed: CurrentThread: %u HWND=0x%08X PID=%u ClassName=%s Title=%s",
+                              GetCurrentThreadId(), (DWORD)(ULONG_PTR)hwnd, dwProcessId, className, windowTitle.c_str());
 #endif
                     g_hwndLastActive = hwnd;
                 }
@@ -1013,11 +1013,53 @@ struct MouseClick
         return type;
     }
 
-    // Determines if input is from mouse or touch/pen based on pointer info
-    static MouseClick::Type GetPointerType(WPARAM wParam, LPARAM lParam)
+    static MouseClick::Button GetMouseButtonWin11(WPARAM wParam)
     {
-        return (g_taskbarVersion == WIN_10) ? GetPointerTypeWin10(lParam) : GetPointerTypeWin11(wParam);
-        ;
+        MouseClick::Button button = MouseClick::Button::INVALID;
+        if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
+        {
+            button = MouseClick::Button::LEFT;
+        }
+        else if (IS_POINTER_SECONDBUTTON_WPARAM(wParam))
+        {
+            button = MouseClick::Button::RIGHT;
+        }
+        else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
+        {
+            button = MouseClick::Button::MIDDLE;
+        }
+        else if (IS_POINTER_FOURTHBUTTON_WPARAM(wParam))
+        {
+            button = MouseClick::Button::MOUSE4;
+        }
+        else if (IS_POINTER_FIFTHBUTTON_WPARAM(wParam))
+        {
+            button = MouseClick::Button::MOUSE5;
+        }
+        return button;
+    }
+
+    static MouseClick::Button GetMouseButtonWin10(UINT uMsg, WPARAM wParam)
+    {
+        // button up messages seems really unreliable, so only process down and dblclk messages
+        MouseClick::Button button = MouseClick::Button::INVALID;
+        if ((uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK))
+        {
+            button = MouseClick::Button::LEFT;
+        }
+        else if ((uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK))
+        {
+            button = MouseClick::Button::RIGHT;
+        }
+        else if ((uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK))
+        {
+            button = MouseClick::Button::MIDDLE;
+        }
+        else if ((uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN) || (uMsg == WM_XBUTTONDBLCLK || uMsg == WM_NCXBUTTONDBLCLK))
+        {
+            button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? MouseClick::Button::MOUSE4 : MouseClick::Button::MOUSE5;
+        }
+        return button;
     }
 
     // Returns bitmask of currently pressed modifier keys (Ctrl, Alt, Shift, Win)
@@ -1148,7 +1190,7 @@ void CALLBACK ProcessDelayedMouseClick(HWND, UINT, UINT_PTR, DWORD);
 std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderClicks);
 bool isTriggerDefined(const std::wstring &mouseTriggerName, const int numClicks);
 std::wstring GetActionName(const MouseClick::Type clickType, const uint32_t numClicks, const MouseClick::Button button = MouseClick::Button::INVALID);
-bool OnMouseClick(MouseClick click);
+bool OnMouseClick(const MouseClick &click);
 bool GetTaskbarAutohideState();
 void SetTaskbarAutohide(bool enabled);
 void ToggleTaskbarAutohide();
@@ -1189,9 +1231,9 @@ std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBa
 #pragma region hooks_and_win32_methods
 
 // proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
-LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
-                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData);
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData);
 
+// proc handler for Alt+Tab (task switching) window to suppress mouse input when needed
 LRESULT CALLBACK TaskSwitchingWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData);
 
 // proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
@@ -1202,72 +1244,33 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 // lParam - subclass data
 UINT g_subclassRegisteredMsg = RegisterWindowMessage(L"Windhawk_SetWindowSubclassFromAnyThread_empty-space-clicks");
 
-// Subclasses window from any thread using temporary hook
-BOOL SetWindowSubclassFromAnyThread(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
-{
-    LOG_TRACE();
-
-    struct SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM
-    {
-        SUBCLASSPROC pfnSubclass;
-        UINT_PTR uIdSubclass;
-        DWORD_PTR dwRefData;
-        BOOL result;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0)
-    {
-        return FALSE;
-    }
-
-    if (dwThreadId == GetCurrentThreadId())
-    {
-        return SetWindowSubclass(hWnd, pfnSubclass, uIdSubclass, dwRefData);
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI_LAMBDA_RETURN(LRESULT)
-        {
-            if (nCode == HC_ACTION)
-            {
-                const CWPSTRUCT *cwp = (const CWPSTRUCT *)lParam;
-                if (cwp->message == g_subclassRegisteredMsg && cwp->wParam)
-                {
-                    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *param = (SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM *)cwp->lParam;
-                    param->result = SetWindowSubclass(cwp->hwnd, param->pfnSubclass, param->uIdSubclass, param->dwRefData);
-                }
-            }
-
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, dwThreadId);
-    if (!hook)
-    {
-        return FALSE;
-    }
-
-    SET_WINDOW_SUBCLASS_FROM_ANY_THREAD_PARAM param;
-    param.pfnSubclass = pfnSubclass;
-    param.uIdSubclass = uIdSubclass;
-    param.dwRefData = dwRefData;
-    param.result = FALSE;
-    SendMessage(hWnd, g_subclassRegisteredMsg, TRUE, (WPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return param.result;
-}
-
 BOOL SubclassTaskbarWindow(HWND hWnd)
 {
-    return SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, 0, 0);
+    return WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc, NULL);
 }
 
 void UnsubclassTaskbarWindow(HWND hWnd)
 {
     SendMessage(hWnd, g_subclassRegisteredMsg, FALSE, 0);
+}
+
+void SubclassTaskSwitchingWindow()
+{
+    LOG_DEBUG(L"Trying to subclass Task Switching window");
+    g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
+    if (g_hTaskSwitchingWnd)
+    {
+        LOG_DEBUG(L"Found task switching window: 0x%08X", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
+        g_isTaskSwitchingWindowSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc, NULL);
+        if (!g_isTaskSwitchingWindowSubclassed)
+        {
+            LOG_ERROR(L"Failed to subclass desktop window");
+        }
+        else
+        {
+            LOG_INFO(L"Subclassed desktop window successfully");
+        }
+    }
 }
 
 // Hooks InputSite window proc for Win11 taskbar pointer events
@@ -1291,7 +1294,7 @@ bool HandleIdentifiedInputSiteWindow(HWND hWnd)
     }
     else
     {
-        LOG_ERROR(L"InputSite window %08X parent is not a known taskbar window", (DWORD)(ULONG_PTR)hWnd);
+        LOG_ERROR(L"InputSite window 0x%08X parent is not a known taskbar window", (DWORD)(ULONG_PTR)hWnd);
     }
 
     // At first, I tried to subclass the window instead of hooking its wndproc,
@@ -1334,7 +1337,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
         if (SubclassTaskbarWindow(hWnd))
         {
             g_subclassedTaskbarWindows.insert(hWnd);
-            LOG_DEBUG(L"Main taskbar window %08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
+            LOG_DEBUG(L"Main taskbar window 0x%08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
         }
     }
 
@@ -1372,7 +1375,7 @@ void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd)
     {
         if (SubclassTaskbarWindow(hWnd))
         {
-            LOG_DEBUG(L"Secondary taskbar window %08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
+            LOG_DEBUG(L"Secondary taskbar window 0x%08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
         }
     }
 
@@ -1535,12 +1538,12 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
     if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0)
     {
-        LOG_DEBUG(L"Shell_TrayWnd window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        LOG_DEBUG(L"Shell_TrayWnd window created: 0x%08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedTaskbarWindow(hWnd);
     }
     else if (bTextualClassName && _wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0)
     {
-        LOG_DEBUG(L"Shell_SecondaryTrayWnd window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        LOG_DEBUG(L"Shell_SecondaryTrayWnd window created: 0x%08X", (DWORD)(ULONG_PTR)hWnd);
         HandleIdentifiedSecondaryTaskbarWindow(hWnd);
     }
 
@@ -1579,7 +1582,7 @@ HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
                 return hWnd;
             }
 
-            LOG_DEBUG(L"Taskbar InputSite window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+            LOG_DEBUG(L"Taskbar InputSite window created: 0x%08X", (DWORD)(ULONG_PTR)hWnd);
             HandleIdentifiedInputSiteWindow(hWnd);
         }
     }
@@ -1850,7 +1853,7 @@ std::wstring GetClassNameString(HWND hWnd)
     WCHAR szClassName[64];
     if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
     {
-        LOG_ERROR(L"GetClassName failed for HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+        LOG_ERROR(L"GetClassName failed for HWND 0x%08X", (DWORD)(ULONG_PTR)hWnd);
         return std::wstring();
     }
     return std::wstring(szClassName);
@@ -1867,7 +1870,7 @@ std::wstring GetWindowTextString(HWND hWnd)
     WCHAR szWindowText[256];
     if (GetWindowText(hWnd, szWindowText, ARRAYSIZE(szWindowText)) == 0)
     {
-        LOG_ERROR(L"GetWindowText failed for HWND %08X", (DWORD)(ULONG_PTR)hWnd);
+        LOG_ERROR(L"GetWindowText failed for HWND 0x%08X", (DWORD)(ULONG_PTR)hWnd);
         return std::wstring();
     }
     return std::wstring(szWindowText);
@@ -2063,7 +2066,7 @@ HWND FindSpecificTaskSwitchingWindow(const std::wstring &i_className, const std:
             if (windowName.empty() || windowName != param.windowName)
                 return TRUE;
 
-            LOG_DEBUG(L"Found %s (%s) window: %08X", param.windowName.c_str(), param.className.c_str(), (DWORD)(ULONG_PTR)hWnd);
+            LOG_DEBUG(L"Found %s (%s) window: 0x%08X", param.windowName.c_str(), param.className.c_str(), (DWORD)(ULONG_PTR)hWnd);
             param.hWnd = hWnd;
             return FALSE;
         },
@@ -2122,7 +2125,7 @@ std::unordered_set<HWND> KeepOnlyValidWindows(const std::unordered_set<HWND> &wi
         }
         else
         {
-            LOG_DEBUG(L"Filtered out invalid window handle: %p", hWnd);
+            LOG_DEBUG(L"Filtered out invalid window handle: 0x%08X", (DWORD)(ULONG_PTR)hWnd);
         }
     }
     return validWindows;
@@ -2680,7 +2683,7 @@ void SendKeypress(const std::vector<int> &keys, const bool focusPreviousWindow)
     if (focusPreviousWindow && WindowFocusTracker::g_hwndLastActive && IsWindow(WindowFocusTracker::g_hwndLastActive))
     {
         // bring the target window to foreground to ensure it receives the keypresses
-        LOG_DEBUG(L"Focusing the previously active window (HWND=%p) before sending keypresses", WindowFocusTracker::g_hwndLastActive);
+        LOG_DEBUG(L"Focusing the previously active window (HWND=0x%08X) before sending keypresses", (DWORD)(ULONG_PTR)WindowFocusTracker::g_hwndLastActive);
         SetForegroundWindow(WindowFocusTracker::g_hwndLastActive);
 
         // Wait until the window is actually in the foreground
@@ -3553,7 +3556,7 @@ void StartProcess(std::wstring command)
     POINT cursorPos;
     GetCursorPos(&cursorPos);
     HMONITOR hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
-    LOG_DEBUG(L"Launching process on monitor handle: %p", hMonitor);
+    LOG_DEBUG(L"Launching process on monitor handle: 0x%08X", (DWORD)(ULONG_PTR)hMonitor);
 
     // Use ShellExecuteEx with hMonitor to launch on the correct monitor
     SHELLEXECUTEINFO sei = {sizeof(sei)};
@@ -4013,12 +4016,11 @@ std::function<bool()> GetTaskbarActionExecutor(const bool checkForHigherOrderCli
 #pragma region proc_handlers
 
 // Proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
-LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam,
-                                           _In_ UINT_PTR uIdSubclass, _In_ DWORD_PTR dwRefData)
+LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData)
 {
     if (uMsg == WM_NCDESTROY || (uMsg == g_subclassRegisteredMsg && !wParam))
     {
-        RemoveWindowSubclass(hWnd, TaskbarWindowSubclassProc, 0);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarWindowSubclassProc);
     }
 
     if (WM_NCDESTROY == uMsg)
@@ -4038,35 +4040,18 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         return 0;
     }
 
-    // on Windows 10 Task Switching window is opened only when invoked, so we can try to subclass it lazily here
+    // on Windows 10 Task Switching window is opened only when invoked, so we need to subclass it lazily here
     if (g_keepTaskSwitchingOpened && (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd) || !g_isTaskSwitchingWindowSubclassed))
     {
-        LOG_DEBUG(L"Trying to subclass Task Switching window");
-        g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
-        if (g_hTaskSwitchingWnd)
-        {
-            g_isTaskSwitchingWindowSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc, NULL);
-            if (!g_isTaskSwitchingWindowSubclassed)
-            {
-                LOG_ERROR(L"Failed to subclass desktop window");
-            }
-            else
-            {
-                LOG_INFO(L"Subclassed desktop window successfully");
-            }
-        }
+        SubclassTaskSwitchingWindow();
     }
 
-    bool suppress = false;
-    // button up messages seems really unreliable, so only process down and dblclk messages
-    const bool isLeftButton = (uMsg == WM_LBUTTONDOWN || uMsg == WM_NCLBUTTONDOWN) || (uMsg == WM_LBUTTONDBLCLK || uMsg == WM_NCLBUTTONDBLCLK);
-    const bool isRightButton = (uMsg == WM_RBUTTONDOWN || uMsg == WM_NCRBUTTONDOWN) || (uMsg == WM_RBUTTONDBLCLK || uMsg == WM_NCRBUTTONDBLCLK);
-    const bool isMiddleButton = (uMsg == WM_MBUTTONDOWN || uMsg == WM_NCMBUTTONDOWN) || (uMsg == WM_MBUTTONDBLCLK || uMsg == WM_NCMBUTTONDBLCLK);
-    const bool isXButton = (uMsg == WM_XBUTTONDOWN || uMsg == WM_NCXBUTTONDOWN) || (uMsg == WM_XBUTTONDBLCLK || uMsg == WM_NCXBUTTONDBLCLK);
-    if ((g_taskbarVersion == WIN_10) && (isLeftButton || isRightButton || isMiddleButton || isXButton))
+    const auto button = MouseClick::GetMouseButtonWin10(uMsg, wParam);
+    if ((g_taskbarVersion == WIN_10) && (button != MouseClick::Button::INVALID))
     {
-        const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-        if (extraInfo != g_injectedClickID)
+        const LPARAM messageExtraInfo = GetMessageExtraInfo();
+        const LPARAM dwExtraInfo = messageExtraInfo & 0xFFFFFFFFu;
+        if (dwExtraInfo != g_injectedClickID)
         {
             // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
             if (!g_comAPI.IsInitialized())
@@ -4074,24 +4059,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
                 g_comAPI.Init(); // make sure it gets initialied from GUI thread
             }
 
-            MouseClick::Button button = MouseClick::Button::INVALID;
-            if (isLeftButton)
-            {
-                button = MouseClick::Button::LEFT;
-            }
-            else if (isRightButton)
-            {
-                button = MouseClick::Button::RIGHT;
-            }
-            else if (isMiddleButton)
-            {
-                button = MouseClick::Button::MIDDLE;
-            }
-            else if (isXButton)
-            {
-                button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? MouseClick::Button::MOUSE4 : MouseClick::Button::MOUSE5;
-            }
-            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, lParam), button, hWnd);
+            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerTypeWin10(messageExtraInfo), button, hWnd);
             if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
                 ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
             {
@@ -4116,7 +4084,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
             (lastClick.button == MouseClick::Button::RIGHT) && ShallSuppressContextMenu(lastClick))
         {
-            suppress = true; // suppress the right click menu (otherwise a double click would be impossible)
+            return 0; // suppress the right click menu (otherwise a double click would be impossible)
         }
         else
         {
@@ -4124,15 +4092,11 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
         }
     }
 
-    LRESULT result = 0;
-    if (!suppress)
-    {
-        result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
-    return result;
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 // Proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
+// Proc handler is shared between Taskbar, TaskSwitching and possibly other windows
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (uMsg == g_uninitCOMAPIMsg)
@@ -4144,31 +4108,16 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
 
     // Task switching window is created on demand and the only way to really identify it is by checking not just class name (generic), but
     // windows text as well - however the text is not present during window creation (window create hooks above), so we need to find it lazily here
-    if (g_keepTaskSwitchingOpened && (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd)))
+    // even though the window stays open, when user logs in, the window doesn't exist yet
+    if (g_keepTaskSwitchingOpened && (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd) || !g_isTaskSwitchingWindowSubclassed))
     {
-        g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
-        if (g_hTaskSwitchingWnd)
-        {
-            LOG_DEBUG(L"Found task switching window: 0x%p", g_hTaskSwitchingWnd);
-            if (!g_isTaskSwitchingWindowSubclassed)
-            {
-                g_isTaskSwitchingWindowSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc, NULL);
-                if (!g_isTaskSwitchingWindowSubclassed)
-                {
-                    LOG_ERROR(L"Failed to subclass desktop window");
-                }
-                else
-                {
-                    LOG_INFO(L"Subclassed desktop window successfully");
-                }
-            }
-        }
+        SubclassTaskSwitchingWindow();
     }
 
     // if user clicked on Task Switching window
     const HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-    if (g_keepTaskSwitchingOpened && g_hTaskSwitchingWnd && (uMsg == WM_POINTERDOWN) && IsWindow(g_hTaskSwitchingWnd) &&
-        IsWindowVisible(g_hTaskSwitchingWnd) && (hRootWnd == g_hTaskSwitchingWnd))
+    if (g_keepTaskSwitchingOpened && g_hTaskSwitchingWnd && (uMsg == WM_POINTERDOWN) && (hRootWnd == g_hTaskSwitchingWnd) &&
+        IsWindow(g_hTaskSwitchingWnd) && IsWindowVisible(g_hTaskSwitchingWnd))
     {
         if (HandleTaskSwitchingWindowClick())
         {
@@ -4176,73 +4125,35 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         }
     }
 
-    bool suppressMsg = false;
-    switch (uMsg)
+    // if user clicked on taskbar window
+    if ((uMsg == WM_POINTERDOWN) && IsTaskbarWindow(hRootWnd))
     {
-    case WM_POINTERDOWN:
-        if (IsTaskbarWindow(hRootWnd))
+        // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
+        if (!g_comAPI.IsInitialized())
         {
-            MouseClick::Button button = MouseClick::Button::INVALID;
-            if (IS_POINTER_FIRSTBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::LEFT;
-            }
-            else if (IS_POINTER_SECONDBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::RIGHT;
-            }
-            else if (IS_POINTER_THIRDBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::MIDDLE;
-            }
-            else if (IS_POINTER_FOURTHBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::MOUSE4;
-            }
-            else if (IS_POINTER_FIFTHBUTTON_WPARAM(wParam))
-            {
-                button = MouseClick::Button::MOUSE5;
-            }
-            else
-            {
-                break;
-            }
-
-            // do lazy init, since doing Init during Wh_ModInit breaks Spotify's global (media) shortcuts
-            if (!g_comAPI.IsInitialized())
-            {
-                g_comAPI.Init(); // make sure it gets initialied from GUI thread
-            }
-
-            // check whether we need to suppress the context menu for right clicks
-            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerType(wParam, 0), button, hRootWnd);
-            if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
-            {
-                LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
-                if (extraInfo == g_injectedClickID)
-                {
-                    LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
-                    break;
-                }
-                if (ShallSuppressContextMenu(lastClick))
-                {
-                    g_isContextMenuSuppressed = true;
-                    suppressMsg = true; // suppress the right click menu (otherwise a double click would be impossible)
-                }
-            }
-            OnMouseClick(lastClick);
+            g_comAPI.Init(); // make sure it gets initialied from GUI thread
         }
-        break;
+
+        // check whether we need to suppress the context menu for right clicks
+        const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerTypeWin11(wParam), MouseClick::GetMouseButtonWin11(wParam), hRootWnd);
+        if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
+        {
+            LPARAM dwExtraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
+            if (dwExtraInfo == g_injectedClickID)
+            {
+                LOG_DEBUG("Recognized synthesized right click via extra info tag, skipping");
+                return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
+            }
+            if (ShallSuppressContextMenu(lastClick))
+            {
+                g_isContextMenuSuppressed = true;
+                return 0; // suppress the message // suppress the right click menu (otherwise a double click would be impossible)
+            }
+        }
+        OnMouseClick(lastClick);
     }
 
-    if (suppressMsg)
-    {
-        return 0; // suppress the message
-    }
-    else
-    {
-        return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam); // pass the message to the original wndproc (make e.g. right click work)
-    }
+    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
 }
 
 LRESULT CALLBACK TaskSwitchingWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
@@ -4258,7 +4169,8 @@ LRESULT CALLBACK TaskSwitchingWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
     }
 
     // Task Switching gets closed via these messages, so suppress them to keep it open
-    if ((uMsg == WM_ACTIVATEAPP || uMsg == WM_ACTIVATE || uMsg == WM_SHOWWINDOW || uMsg == WM_NCACTIVATE) && g_keepTaskSwitchingOpened && IsWindowVisible(hWnd))
+    if ((uMsg == WM_ACTIVATEAPP || uMsg == WM_ACTIVATE || uMsg == WM_SHOWWINDOW || uMsg == WM_NCACTIVATE) &&
+        g_keepTaskSwitchingOpened && IsWindowVisible(hWnd))
     {
         LOG_DEBUG("Suppressing WM_NCACTIVATE, WM_ACTIVATEAPP, WM_ACTIVATE and WM_SHOWWINDOW to keep Task Switching window open");
         return 0;
@@ -4282,7 +4194,7 @@ LRESULT CALLBACK TaskSwitchingWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
 }
 
 // Processes mouse clicks, starts timer for multi-click detection, called from taskbar window proc handlers
-bool OnMouseClick(MouseClick click)
+bool OnMouseClick(const MouseClick &click)
 {
     LOG_TRACE();
 
@@ -4465,6 +4377,7 @@ void Wh_ModUninit()
 
     g_hookedInputSiteProcs.clear();
 
+    // TODO: move this to separate method and probably remove subclassing message from taskbar hook
     if (g_hTaskSwitchingWnd && g_isTaskSwitchingWindowSubclassed && IsWindow(g_hTaskSwitchingWnd))
     {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc);
