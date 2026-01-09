@@ -2,7 +2,7 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.0.2
+// @version         1.0.3
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         explorer.exe
@@ -122,13 +122,15 @@ void _InvokeVerbOnParsingName_hook(HWND hwnd, LPCWSTR pszUnused, LPCWSTR pszUnus
 // open Documents or drive root instead
 //
 
-thread_local bool g_fInWinMain = false;
-
 BOOL WINAPI ShellExecuteExW_hook(
     SHELLEXECUTEINFOW *pExecInfo
 )
 {
-    if (g_fInWinMain)
+    if (pExecInfo
+    && pExecInfo->lpVerb
+    && !wcscmp(pExecInfo->lpVerb, L"OpenNewWindow")
+    && pExecInfo->lpFile
+    && !wcscmp(pExecInfo->lpFile, L"shell:::{52205fd8-5dfb-447d-801a-d0b52f2e83e1}"))
     {
         switch (g_exeInvokeLocation)
         {
@@ -157,20 +159,6 @@ BOOL WINAPI ShellExecuteExW_hook(
     }
     
     return ShellExecuteExW_orig(pExecInfo);
-}
-
-int (WINAPI *wWinMain_orig)(HINSTANCE, HINSTANCE, LPWSTR, int);
-int WINAPI wWinMain_hook(
-    HINSTANCE hInstance,
-    HINSTANCE hPrevInstance,
-    LPWSTR    lpCmdLine,
-    int       nCmdShow
-)
-{
-    g_fInWinMain = true;
-    int nRet = wWinMain_orig(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
-    g_fInWinMain = false;
-    return nRet;
 }
 
 //
@@ -299,14 +287,6 @@ const WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         },
         &_InvokeVerbOnParsingName_orig,
         _InvokeVerbOnParsingName_hook,
-        false
-    },
-    {
-        {
-            L"wWinMain"
-        },
-        &wWinMain_orig,
-        wWinMain_hook,
         false
     },
 };
