@@ -2,7 +2,7 @@
 // @id              passkey-popup-blocker
 // @name            Sign in with passkey popup blocker 
 // @description     Blocks automatic Windows Security "Sign in with a passkey" popup in browser when you open login pages, even if you didn't click login by passkey. while manual click on "Login by passkey" button will work.
-// @version         2.0.0
+// @version         1.0.0
 // @author          mode0192
 // @github          https://github.com/mode0192
 // @include         msedge.exe
@@ -16,17 +16,14 @@
 // @include         librewolf.exe
 // @include         thorium.exe
 // @include         chromium.exe
-// @license         CC BY-NC-SA 4.0
+// @license         CC-BY-NC-SA-4.0
 // @compilerOptions -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Block "Sign in with a passkey" Popup
-
-‎‎‎‎‎‎‎‎ㅤ
 ## ⫸ Description:
-
 This mod blocks the annoying automatic Windows Security "Sign in with a passkey" popup that appears immediately when loading a login page where you have previously saved passkey for it, even if you didn't click login by passkey. It uses a **Smart Sensor** to distinguish between automated "Sign in by a passkey" and real user intent so it can appears.
 
 ‎‎‎‎‎‎‎‎ㅤ
@@ -80,11 +77,12 @@ Transparency is critical for mods that handle input.
 ‎‎‎‎‎‎‎‎ㅤ
 ## 📄 Credits
 * **Author**: [mode0192](https://github.com/mode0192)
-* **License**: CC BY-NC-SA 4.0 (Free for personal use, no commercial sale)
-* **Project Updates**:
-  * v2.0.0 (1/10/2026):
-    1. Fixed: Referrals to login page triggering the passkey popup.
-    2. Added: Setting to change the Interaction timeout.
+* **License**: CC-BY-NC-SA-4.0 (Free for personal use, no commercial sale)
+
+‎‎‎‎‎‎‎‎ㅤ
+## 📜 Changelog
+1.0.0 (Jan 9, 2026)
+Initial release
 */
 // ==/WindhawkModReadme==
 
