@@ -2,7 +2,7 @@
 // @id              passkey-popup-blocker
 // @name            Sign in with passkey popup blocker 
 // @description     Blocks automatic Windows Security "Sign in with a passkey" popup in browser when you open login pages, even if you didn't click login by passkey. while manual click on "Login by passkey" button will work.
-// @version         1.0.0
+// @version         2.0.0
 // @author          mode0192
 // @github          https://github.com/mode0192
 // @include         msedge.exe
@@ -77,12 +77,16 @@ Transparency is critical for mods that handle input.
 ‎‎‎‎‎‎‎‎ㅤ
 ## 📄 Credits
 * **Author**: [mode0192](https://github.com/mode0192)
-* **License**: CC-BY-NC-SA-4.0 (Free for personal use, no commercial sale)
+* **License**: CC BY-NC-SA 4.0 (Free for personal use, no commercial sale)
 
 ‎‎‎‎‎‎‎‎ㅤ
 ## 📜 Changelog
-1.0.0 (Jan 9, 2026)
-Initial release
+**2.0.0** (Jan 10, 2026)
+* Fixed: Referrals to login page triggering the passkey popup
+* Added: Setting to change the Interaction timeout
+
+**1.0.0** (Jan 9, 2026)
+* Initial release
 */
 // ==/WindhawkModReadme==
 
@@ -185,11 +189,6 @@ HRESULT WINAPI DetourGetAssertion(
     DWORD currentTime = GetTickCount();
     DWORD timeSinceInteraction = currentTime - g_LastInteractionTime;
 
-    // Timer overflow protection
-    if (currentTime < g_LastInteractionTime) {
-        timeSinceInteraction = (0xFFFFFFFF - g_LastInteractionTime) + currentTime;
-    }
-
     // --- CHECK ---
     // If user clicked < [Configured Time] seconds ago -> ALLOW
     if (timeSinceInteraction < (DWORD)g_AllowedLatencyMs) {
@@ -209,7 +208,7 @@ BOOL Wh_ModInit()
     LoadSettings();
 
     // 1. Hook WebAuthn (The Popup)
-    HMODULE hWebAuthn = LoadLibrary(L"webauthn.dll");
+    HMODULE hWebAuthn = LoadLibraryEx(L"webauthn.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hWebAuthn) return FALSE;
 
     void* pFuncAddrAssertion = (void*)GetProcAddress(hWebAuthn, "WebAuthNAuthenticatorGetAssertion");
