@@ -1,3 +1,8 @@
+## 1.0.3 ([Jan 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7946c3ffec884c0c0323ebb020749f5226985114/mods/restore-explorer-exploring-mode.wh.cpp))
+
+- Fix bugs with ExplorerEx
+- Fix infinite uninitializing
+
 ## 1.0.2 ([Jan 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f828d309ee213355f5bf325f0312eeaa1ce2ae1c/mods/restore-explorer-exploring-mode.wh.cpp))
 
 - Make "Explorer icon" option functional

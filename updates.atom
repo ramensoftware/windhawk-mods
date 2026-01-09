@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-08T19:22:01.000Z</updated>
+    <updated>2026-01-09T18:08:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Restore Explorer "Exploring" Mode 1.0.3]]></title>
+        <id>https://windhawk.net/mods/restore-explorer-exploring-mode#7946c3ffec884c0c0323ebb020749f5226985114</id>
+        <link href="https://windhawk.net/mods/restore-explorer-exploring-mode"/>
+        <updated>2026-01-09T18:08:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix bugs with ExplorerEx</li>
+<li>Fix infinite uninitializing</li>
+</ul>]]></content>
+        <author>
+            <name>aubymori</name>
+            <uri>https://github.com/aubymori</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Up → New Window (Ctrl-click or Middle-click) 1.3]]></title>
         <id>https://windhawk.net/mods/explorer-up-new-window#18de106a734f50c7f85bd828453ff27f839067d3</id>
@@ -357,17 +371,6 @@ with multiple tabs open, preventing accidental closure of all tabs.</p>
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Press Esc to exit Task Manager 1.0]]></title>
-        <id>https://windhawk.net/mods/taskmgr-esc#822ada8cbdbce0f88942e1b4dc935d3788afb0ab</id>
-        <link href="https://windhawk.net/mods/taskmgr-esc"/>
-        <updated>2026-01-03T13:48:43.000Z</updated>
-        <content type="html"><![CDATA[<p>Initial release.</p>]]></content>
-        <author>
-            <name>chenxustu1</name>
-            <uri>https://github.com/chenxustu1</uri>
         </author>
     </entry>
 </feed>
