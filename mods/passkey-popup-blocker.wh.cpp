@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              passkey-popup-blocker
-// @name            Sign in with passkey popup blocker 
+// @name            "Sign in with a passkey" popup blocker 
 // @description     Blocks automatic Windows Security "Sign in with a passkey" popup in browser when you open login pages, even if you didn't click login by passkey. while manual click on "Login by passkey" button will work.
 // @version         2.0.0
 // @author          mode0192
