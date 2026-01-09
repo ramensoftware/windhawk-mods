@@ -2,12 +2,12 @@
 // @id              desktop-icons-toggle
 // @name            Desktop Icons Toggle
 // @description     Toggle desktop icons visibility with a configurable hotkey (default: Ctrl+Alt+D)
-// @version         1.3.3
+// @version         1.3.4
 // @author          Cinabutts
 // @github          https://github.com/Cinabutts
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lkernel32 -lshell32 -lcomctl32
+// @compilerOptions -luser32 -lkernel32 -lshell32 -lcomctl32 --optimize=0 --debug
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -65,14 +65,9 @@ This mod allows you to toggle the visibility of desktop icons using a configurab
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-// Constants
-static const UINT HOTKEY_ID = 0x1001;
-
-
 // Global state structure
 struct ModState {
     HWND hDesktopListView;
-    HWND hDesktopWindow;
     HWND hShellViewWindow;
     BOOL bIconsVisible;
     
@@ -82,16 +77,15 @@ struct ModState {
     WCHAR cHotkeyChar;
 } g_state = {0};
 
+// Original function pointers
+using TranslateMessage_t = BOOL(WINAPI*)(const MSG*);
+TranslateMessage_t TranslateMessage_Original;
+
 // Forward declarations
 HWND FindDesktopListView();
 void ToggleDesktopIcons();
-BOOL SetupHotkeyHandling();
-void CleanupHotkeyHandling();
 void RestoreIconsToVisible();
 BOOL IsWindowInCurrentProcess(HWND hwnd);
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData);
 
 // Helper function to convert character to uppercase
 WCHAR ToUpperCase(WCHAR ch) {
@@ -247,187 +241,33 @@ void ToggleDesktopIcons() {
         return;
     }
     
-    // Force desktop refresh
-    InvalidateRect(nullptr, nullptr, TRUE);
-    UpdateWindow(GetDesktopWindow());
+    // Force a targeted desktop refresh
+    if (g_state.hShellViewWindow && IsWindow(g_state.hShellViewWindow)) {
+        RedrawWindow(
+            g_state.hShellViewWindow,
+            nullptr,
+            nullptr,
+            RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    } else {
+        InvalidateRect(GetDesktopWindow(), nullptr, TRUE);
+        UpdateWindow(GetDesktopWindow());
+    }
     
     Wh_Log(L"Desktop icons %s", g_state.bIconsVisible ? L"shown" : L"hidden");
 }
 
-// Custom window procedure for SHELLDLL_DefView
-LRESULT CALLBACK CustomShellViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    switch (uMsg) {
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
-            if (IsHotkeyMatch(wParam)) {
-                Wh_Log(L"Hotkey detected in ShellView window");
-                ToggleDesktopIcons();
-                return 0;
-            }
-            break;
-            
-        case WM_CHAR:
-            // Handle Ctrl+character combinations that produce control codes
-            if (wParam > 0 && wParam < 32 && g_state.bUseCtrl) {
-                SHORT ctrlState = GetAsyncKeyState(VK_CONTROL);
-                if ((ctrlState & 0x8000) == 0) {
-                    break; // Control not pressed; ignore
-                }
-
-                WCHAR expectedChar = (WCHAR)(wParam + 64); // Convert control code back to character
-                WCHAR upperExpected = ToUpperCase(expectedChar);
-                WCHAR upperConfig = ToUpperCase(g_state.cHotkeyChar);
-                
-                if (upperExpected == upperConfig) {
-                    BOOL altRequired = g_state.bUseAlt;
-                    SHORT altState = GetAsyncKeyState(VK_MENU);
-                    BOOL altPressed = (altState & 0x8000) != 0;
-
-                    if (!altRequired || altPressed) {
-                        Wh_Log(L"Hotkey detected via WM_CHAR in ShellView window");
-                        ToggleDesktopIcons();
-                        return 0;
-                    }
-                }
-            }
-            break;
-            
-        case WM_NCDESTROY:
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CustomShellViewWndProc);
-            break;
-    }
-    
-    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-}
-
-// Custom window procedure for ListView
-LRESULT CALLBACK CustomListViewWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    switch (uMsg) {
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
-            if (IsHotkeyMatch(wParam)) {
-                Wh_Log(L"Hotkey detected in ListView window");
-                ToggleDesktopIcons();
-                return 0;
-            }
-            break;
-            
-        case WM_NCDESTROY:
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CustomListViewWndProc);
-            break;
-    }
-    
-    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-}
-
-// Custom window procedure for Program Manager (for global hotkey handling)
-LRESULT CALLBACK CustomProgmanWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    switch (uMsg) {
-        case WM_HOTKEY:
-            if (wParam == HOTKEY_ID) {
-                Wh_Log(L"Global hotkey detected (ID: %d)", (int)wParam);
-                ToggleDesktopIcons();
-                return 0;
-            }
-            break;
-            
-        case WM_NCDESTROY:
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CustomProgmanWndProc);
-            break;
-    }
-    
-    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-}
-
-// Setup hotkey handling by subclassing windows
-BOOL SetupHotkeyHandling() {
-    // Find Program Manager window for hotkey registration
-    g_state.hDesktopWindow = FindWindowW(L"Progman", L"Program Manager");
-    if (!g_state.hDesktopWindow) {
-        Wh_Log(L"Could not find Program Manager window for hotkey setup");
-        return FALSE;
-    }
-    
-    Wh_Log(L"Found Program Manager window: %p", g_state.hDesktopWindow);
-    
-    // Try to register the global hotkey
-    UINT modifiers = 0;
-    if (g_state.bUseCtrl) modifiers |= MOD_CONTROL;
-    if (g_state.bUseAlt) modifiers |= MOD_ALT;
-    
-    if (RegisterHotKey(g_state.hDesktopWindow, HOTKEY_ID, modifiers, g_state.cHotkeyChar)) {
-        Wh_Log(L"Successfully registered global hotkey");
-        
-        // Subclass the Program Manager window to handle WM_HOTKEY messages
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-            g_state.hDesktopWindow, 
-            CustomProgmanWndProc, 
-            0)) {
-            Wh_Log(L"Successfully subclassed Program Manager window: %p", g_state.hDesktopWindow);
-        } else {
-            Wh_Log(L"Failed to subclass Program Manager window");
-        }
-    } else {
-        DWORD error = GetLastError();
-        if (error == 1408) { // ERROR_HOTKEY_ALREADY_REGISTERED
-            Wh_Log(L"Global hotkey already in use by another application (error: %lu) - using window subclassing only", error);
-        } else {
-            Wh_Log(L"Failed to register global hotkey (error: %lu), using window subclassing only", error);
+// Hook for TranslateMessage to intercept keyboard messages
+BOOL WINAPI TranslateMessage_Hook(const MSG* lpMsg) {
+    if (lpMsg && (lpMsg->message == WM_KEYDOWN || lpMsg->message == WM_SYSKEYDOWN)) {
+        if (IsHotkeyMatch(lpMsg->wParam)) {
+            Wh_Log(L"Hotkey detected - toggling desktop icons");
+            ToggleDesktopIcons();
+            // Return TRUE to skip translating this message
+            return TRUE;
         }
     }
     
-    // Subclass the SHELLDLL_DefView window for keyboard input
-    if (g_state.hShellViewWindow) {
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-            g_state.hShellViewWindow, 
-            CustomShellViewWndProc, 
-            0)) {
-            Wh_Log(L"Successfully subclassed SHELLDLL_DefView window: %p", g_state.hShellViewWindow);
-        } else {
-            Wh_Log(L"Failed to subclass SHELLDLL_DefView window");
-        }
-    }
-    
-    // Also subclass the ListView for additional hotkey detection
-    if (g_state.hDesktopListView) {
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-            g_state.hDesktopListView, 
-            CustomListViewWndProc, 
-            0)) {
-            Wh_Log(L"Successfully subclassed ListView window: %p", g_state.hDesktopListView);
-        } else {
-            Wh_Log(L"Failed to subclass ListView window");
-        }
-    }
-    
-    return TRUE;
-}
-
-// Cleanup hotkey handling and remove window subclasses
-void CleanupHotkeyHandling() {
-    // Unregister global hotkey
-    if (g_state.hDesktopWindow) {
-        UnregisterHotKey(g_state.hDesktopWindow, HOTKEY_ID);
-        Wh_Log(L"Unregistered global hotkey");
-    }
-    
-    // Remove window subclasses (the WindhawkUtils system handles cleanup automatically)
-    if (g_state.hDesktopWindow) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_state.hDesktopWindow, CustomProgmanWndProc);
-        Wh_Log(L"Removed Program Manager window subclass");
-        g_state.hDesktopWindow = nullptr;
-    }
-    
-    if (g_state.hShellViewWindow) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_state.hShellViewWindow, CustomShellViewWndProc);
-        Wh_Log(L"Removed SHELLDLL_DefView window subclass");
-        g_state.hShellViewWindow = nullptr;
-    }
-    
-    if (g_state.hDesktopListView) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_state.hDesktopListView, CustomListViewWndProc);
-        Wh_Log(L"Removed ListView window subclass");
-    }
+    return TranslateMessage_Original(lpMsg);
 }
 
 // Restore icons to visible state
@@ -444,8 +284,16 @@ void RestoreIconsToVisible() {
         // Verify the operation worked
         if (IsWindowVisible(g_state.hDesktopListView)) {
             g_state.bIconsVisible = TRUE;
-            InvalidateRect(nullptr, nullptr, TRUE);
-            UpdateWindow(GetDesktopWindow());
+            if (g_state.hShellViewWindow && IsWindow(g_state.hShellViewWindow)) {
+                RedrawWindow(
+                    g_state.hShellViewWindow,
+                    nullptr,
+                    nullptr,
+                    RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            } else {
+                InvalidateRect(GetDesktopWindow(), nullptr, TRUE);
+                UpdateWindow(GetDesktopWindow());
+            }
             Wh_Log(L"Desktop icons restored to visible state");
         } else {
             Wh_Log(L"Failed to restore desktop icons visibility");
@@ -503,14 +351,28 @@ BOOL Wh_ModInit() {
         g_state.bIconsVisible = IsWindowVisible(g_state.hDesktopListView);
         Wh_Log(L"Initial icons state: %s", g_state.bIconsVisible ? L"visible" : L"hidden");
     } else {
-        Wh_Log(L"Could not find desktop ListView during initialization");
+        Wh_Log(L"Desktop ListView not found during initialization (will retry after init)");
     }
     
-    // Setup hotkey handling
-    if (!SetupHotkeyHandling()) {
-        Wh_Log(L"Failed to setup hotkey handling, but continuing...");
+    // Hook TranslateMessage to intercept keyboard input
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (!hUser32) {
+        Wh_Log(L"Failed to get handle for user32.dll");
+        return FALSE;
     }
     
+    void* pTranslateMessage = (void*)GetProcAddress(hUser32, "TranslateMessage");
+    if (!pTranslateMessage) {
+        Wh_Log(L"Failed to get TranslateMessage address");
+        return FALSE;
+    }
+    
+    if (!Wh_SetFunctionHook(pTranslateMessage, (void*)TranslateMessage_Hook, (void**)&TranslateMessage_Original)) {
+        Wh_Log(L"Failed to hook TranslateMessage");
+        return FALSE;
+    }
+    
+    Wh_Log(L"Hooked TranslateMessage for hotkey detection");
     Wh_Log(L"Desktop Icons Toggle mod initialized successfully");
     return TRUE;
 }
@@ -522,9 +384,6 @@ void Wh_ModUninit() {
     // Restore icons before cleanup
     RestoreIconsToVisible();
     
-    // Cleanup hotkey handling
-    CleanupHotkeyHandling();
-    
     // Clear state
     ZeroMemory(&g_state, sizeof(g_state));
     
@@ -535,26 +394,17 @@ void Wh_ModUninit() {
 void Wh_ModAfterInit() {
     // Try to find ListView again if not found initially
     if (!g_state.hDesktopListView) {
-        Wh_Log(L"Desktop ListView not found during init, retrying...");
-        EnsureValidListView();
+        Wh_Log(L"Retrying desktop ListView discovery after initialization...");
+        if (EnsureValidListView()) {
+            Wh_Log(L"Successfully found desktop ListView on retry");
+        } else {
+            Wh_Log(L"Desktop ListView still not found (will retry on first toggle attempt)");
+        }
     }
-    
-    // Setup or re-setup hotkey handling if needed
-    if (!g_state.hDesktopWindow) {
-        SetupHotkeyHandling();
-    }
-}
-
-// Called before uninitialization
-void Wh_ModBeforeUninit() {
-    // This function is called before Wh_ModUninit
 }
 
 // Called when settings are changed
 void Wh_ModSettingsChanged() {
-    // Cleanup current hotkey handling
-    CleanupHotkeyHandling();
-    
     // Reload settings
     LoadSettings();
 
@@ -567,7 +417,4 @@ void Wh_ModSettingsChanged() {
     if (g_state.hDesktopListView) {
         g_state.bIconsVisible = IsWindowVisible(g_state.hDesktopListView);
     }
-    
-    // Setup hotkey handling with new settings
-    SetupHotkeyHandling();
 }
