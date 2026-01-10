@@ -6945,6 +6945,39 @@
                 "version": "1.1"
             }
         },
+        "taskbar-reorder-right-drag": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768066660000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768066660000,
+                "users": 0
+            },
+            "metadata": {
+                "architecture": [
+                    "x86-64"
+                ],
+                "author": "m417z",
+                "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -lshlwapi",
+                "description": "Reorder taskbar items within and between groups by dragging with the right mouse button",
+                "github": "https://github.com/m417z",
+                "homepage": "https://m417z.com/",
+                "include": [
+                    "explorer.exe"
+                ],
+                "name": "Taskbar reorder within/between groups",
+                "twitter": "https://twitter.com/m417z",
+                "version": "1.0"
+            }
+        },
         "taskbar-scroll-actions": {
             "details": {
                 "defaultSorting": 9396,

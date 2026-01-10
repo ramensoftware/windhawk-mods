@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-10T15:52:24.000Z</updated>
+    <updated>2026-01-10T17:37:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar reorder within/between groups 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-reorder-right-drag#38856bbf1c2b01c8e23f16db35f9777adeaafd02</id>
+        <link href="https://windhawk.net/mods/taskbar-reorder-right-drag"/>
+        <updated>2026-01-10T17:37:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarreorderwithinbetweengroups">Taskbar reorder within/between groups</h1>
+<p>Reorder taskbar items within and between groups by dragging with the right mouse
+button.</p>
+<p>The mod works best with the "Combine taskbar buttons and hide labels" option set
+to "Never" in the taskbar settings.</p>
+<p>Only Windows 11 is supported. For older Windows versions check out <a href="https://tweaker.ramensoftware.com/">7+ Taskbar
+Tweaker</a>.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Windows of programs running as administrator cannot be moved to different
+groups.</li>
+<li>Some Store/modern/UWP apps cannot be moved to different groups.</li>
+</ul>
+<p><img src="https://i.imgur.com/RgMASfK.gif" alt="demonstration" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.4]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#fb96bf6b44b3dbabe393a42bcd5464ce15688618</id>
@@ -419,46 +443,6 @@ Before sending Ctrl+S, the mod now checks if Shift or Alt keys are currently pre
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 1.0]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#e3e6960a8a2ef064cc7f3391486c7607413ed2b6</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-01-03T21:25:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="wordlocalautosave">Word Local AutoSave</h1>
-<p>This mod enables automatic saving for locally stored Word documents, similar to
-how AutoSave works with OneDrive files.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod monitors keyboard input in Microsoft Word. When you type, delete, paste,
-or make any changes to your document, it automatically triggers a save after a
-short delay.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Detects typing, backspace, delete, enter, and clipboard operations (Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+Y)</li>
-<li>Configurable delay before saving</li>
-<li>Optional minimum interval between saves to prevent excessive disk writes</li>
-<li>Works with any locally saved Word document</li>
-<li>Only saves when Word is the active window</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Save Delay (ms)</strong>: How long to wait after the last keystroke before saving.
-Default is 1000ms (1 second).</li>
-<li><strong>Minimum Time Between Saves (ms)</strong>: Minimum interval between consecutive saves.
-Set to 0 to disable this limit and allow saving as frequently as possible.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The mod only works with documents that have already been saved at least once.
-New unsaved documents will trigger the "Save As" dialog.</li>
-<li>The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.</li>
-<li>Manual Ctrl+S presses are detected and reset the auto-save timer.</li>
-<li>Auto-save only triggers when Microsoft Word is the foreground window.</li>
-</ul>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>
