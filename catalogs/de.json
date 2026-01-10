@@ -5062,6 +5062,45 @@
                 "version": "1.0.1"
             }
         },
+        "passkey-popup-blocker": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768051218000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768051218000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "mode0192",
+                "compilerOptions": "-luser32",
+                "description": "Blocks automatic Windows Security \"Sign in with a passkey\" popup in browser when you open login pages, even if you didn't click login by passkey. while manual click on \"Login by passkey\" button will work.",
+                "github": "https://github.com/mode0192",
+                "include": [
+                    "msedge.exe",
+                    "chrome.exe",
+                    "brave.exe",
+                    "opera.exe",
+                    "opera_gx.exe",
+                    "vivaldi.exe",
+                    "firefox.exe",
+                    "waterfox.exe",
+                    "librewolf.exe",
+                    "thorium.exe",
+                    "chromium.exe"
+                ],
+                "license": "CC-BY-NC-SA-4.0",
+                "name": "\"Sign in with a passkey\" popup blocker",
+                "version": "2.0.0"
+            }
+        },
         "per-app-language-preferences": {
             "details": {
                 "defaultSorting": 747,
