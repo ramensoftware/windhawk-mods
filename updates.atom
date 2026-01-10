@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-10T13:20:18.000Z</updated>
+    <updated>2026-01-10T15:52:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 1.4]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#fb96bf6b44b3dbabe393a42bcd5464ce15688618</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-01-10T15:52:24.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="fixraceconditioncausingrandomshortcutstotrigger">Fix race condition causing random shortcuts to trigger</h2>
+<h3 id="problem">Problem</h3>
+<p>Despite checking if keys were pressed before sending Ctrl+S, random Word shortcuts would still trigger:</p>
+<ul>
+<li>Ctrl+H (Find and Replace)</li>
+<li>Ctrl+F (Navigation)</li>
+<li>Ctrl+Shift+S (Apply Styles)</li>
+</ul>
+<p>This happened because of a <strong>race condition</strong>: between the moment the mod checked keyboard state and the moment it sent the Ctrl key, the user could press a new key. Word would then receive Ctrl+[that key] instead of Ctrl+S.</p>
+<h3 id="rootcause">Root Cause</h3>
+<p><code>GetKeyboardState()</code> returns keyboard state from the message queue, not the actual physical state. The check and send operations were not atomic, allowing new keypresses to slip in between.</p>
+<h3 id="solution">Solution</h3>
+<p>Implemented a <strong>quiet period</strong> mechanism: the mod now tracks the timestamp of every keypress and only saves after 100ms of complete keyboard inactivity.</p>
+<h3 id="changes">Changes</h3>
+<ul>
+<li><strong>Added <code>g_lastKeyPressTime</code></strong> — tracks the timestamp of every key press (including non-editing keys)</li>
+<li><strong>Added <code>QUIET_PERIOD_MS</code> constant</strong> — 100ms minimum quiet time before saving</li>
+<li><strong>Added <code>HasQuietPeriodPassed()</code> function</strong> — checks if enough time has passed since last keypress</li>
+<li><strong>Track ALL keypresses</strong> — now monitors <code>WM_KEYDOWN</code> and <code>WM_SYSKEYDOWN</code> for quiet period, not just editing keys</li>
+<li><strong>Switched to <code>GetAsyncKeyState()</code></strong> — checks physical key state in real-time instead of message queue state</li>
+<li><strong>Dual safety check</strong> — save only triggers when BOTH conditions are met:</li>
+</ul>
+<ol>
+<li>No keys physically pressed (<code>AreAnyKeysPressed() == false</code>)</li>
+<li>100ms passed since last keypress (<code>HasQuietPeriodPassed() == true</code>)</li>
+</ol>
+<ul>
+<li>Version bumped to 1.4</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA["Sign in with a passkey" popup blocker 2.0.0]]></title>
         <id>https://windhawk.net/mods/passkey-popup-blocker#00fadbde61a8961e0566e701552f23c43c370227</id>
@@ -420,21 +459,6 @@ New unsaved documents will trigger the "Save As" dialog.</li>
         <author>
             <name>communism420</name>
             <uri>https://github.com/communism420</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar ContentPresenter Injector 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-content-presenter-injector#a2f2e08b1e0afbff9a7b36f6398489eac648d60a</id>
-        <link href="https://windhawk.net/mods/taskbar-content-presenter-injector"/>
-        <updated>2026-01-03T20:24:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarcontentpresenterinjector">Taskbar ContentPresenter Injector</h1>
-<p>This mod acts as an addon to the <a href="https://windhawk.net/mods/windows-11-taskbar-styler">Windows 11 Taskbar Styler mod</a>, enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a <code>ContentPresenter</code> named <code>CustomInjectedPresenter</code> into every <code>Taskbar.TaskListLabeledButtonPanel</code> and <code>Taskbar.TaskListButtonPanel</code>.</p>
-<h2 id="pathtotheinjectedelement">Path to the injected element:</h2>
-<p><code>Taskbar.TaskListButton &gt; Taskbar.TaskListLabeledButtonPanel &gt; Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter</code></p>
-<p><code>Taskbar.ExperienceToggleButton &gt; Taskbar.TaskListButtonPanel &gt; Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter</code></p>]]></content>
-        <author>
-            <name>Lockframe</name>
-            <uri>https://github.com/Lockframe</uri>
         </author>
     </entry>
 </feed>

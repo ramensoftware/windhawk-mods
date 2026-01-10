@@ -8763,7 +8763,7 @@
                     0
                 ],
                 "ratingUsers": 0,
-                "updated": 1767653761000,
+                "updated": 1768060344000,
                 "users": 22
             },
             "metadata": {
@@ -8777,7 +8777,7 @@
                     "WINWORD.EXE"
                 ],
                 "name": "Word Local AutoSave",
-                "version": "1.3"
+                "version": "1.4"
             }
         },
         "xs-discord-control-registered-games": {

@@ -1,3 +1,36 @@
+## 1.4 ([Jan 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fb96bf6b44b3dbabe393a42bcd5464ce15688618/mods/word-local-autosave.wh.cpp))
+
+## Fix race condition causing random shortcuts to trigger
+
+### Problem
+
+Despite checking if keys were pressed before sending Ctrl+S, random Word shortcuts would still trigger:
+- Ctrl+H (Find and Replace)
+- Ctrl+F (Navigation)
+- Ctrl+Shift+S (Apply Styles)
+
+This happened because of a **race condition**: between the moment the mod checked keyboard state and the moment it sent the Ctrl key, the user could press a new key. Word would then receive Ctrl+[that key] instead of Ctrl+S.
+
+### Root Cause
+
+`GetKeyboardState()` returns keyboard state from the message queue, not the actual physical state. The check and send operations were not atomic, allowing new keypresses to slip in between.
+
+### Solution
+
+Implemented a **quiet period** mechanism: the mod now tracks the timestamp of every keypress and only saves after 100ms of complete keyboard inactivity.
+
+### Changes
+
+- **Added `g_lastKeyPressTime`** — tracks the timestamp of every key press (including non-editing keys)
+- **Added `QUIET_PERIOD_MS` constant** — 100ms minimum quiet time before saving
+- **Added `HasQuietPeriodPassed()` function** — checks if enough time has passed since last keypress
+- **Track ALL keypresses** — now monitors `WM_KEYDOWN` and `WM_SYSKEYDOWN` for quiet period, not just editing keys
+- **Switched to `GetAsyncKeyState()`** — checks physical key state in real-time instead of message queue state
+- **Dual safety check** — save only triggers when BOTH conditions are met:
+  1. No keys physically pressed (`AreAnyKeysPressed() == false`)
+  2. 100ms passed since last keypress (`HasQuietPeriodPassed() == true`)
+- Version bumped to 1.4
+
 ## 1.3 ([Jan 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/66bf7d5b8752a2b92bf976b8ee2c779386a758eb/mods/word-local-autosave.wh.cpp))
 
 Problem
