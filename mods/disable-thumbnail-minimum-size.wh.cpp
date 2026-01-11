@@ -92,14 +92,8 @@ unsigned int __fastcall GetThumbnailCutoffFromType_hook_storage(LPCWSTR szType)
     return 0;
 }
 
-#define THUMBNAILCUTOFF_DEBUGMSG 0
-#if THUMBNAILCUTOFF_DEBUGMSG
-    #define ThumbnailCutoffLog Wh_Log
-#else
-    __forceinline void ThumbnailCutoffLog(LPCWSTR sz, ...) {}
-#endif
+#define ThumbnailCutoffLog Wh_Log
 
-thread_local IUnknown *g_pCurrentDefItem = nullptr;
 DEFINE_PROPERTYKEY(PKEY_ItemType, 0x28636aa6, 0x953d, 0x11d2, 0xb5, 0xd6, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0xd0, 0x0b);
 
 HRESULT (__thiscall *CImageManager___GetItem_orig)(void *pThis, void *pImageStore, REFIID riid, void **ppvOut) = nullptr;
@@ -110,30 +104,22 @@ unsigned int __thiscall CImageManager___GetThumbnailCutoff_hook(void *pThis, voi
 {
     bool fIsExcluded = false;
 
-    wchar_t szItemType[MAX_PATH] = {};
-
     if (g_fKeepFolderCutoff)
     {
         ComPtr<IShellItem2> pShellItem;
         if (SUCCEEDED(CImageManager___GetItem_orig(pThis, pImageStore, IID_PPV_ARGS(&pShellItem))))
         {
-            ThumbnailCutoffLog(L"A current CDefItem pointer is set on the current thread");
             PROPVARIANT pvar;
             if (SUCCEEDED(pShellItem->GetProperty(PKEY_ItemType, &pvar)))
             {
                 LPCWSTR pszItemType = nullptr;
                 if (nullptr != (pszItemType = PropVariantToStringWithDefault(pvar, nullptr)))
                 {
-                    ThumbnailCutoffLog(L"We actually have an item type: %s", pszItemType);
-                    wcscpy_s(szItemType, pszItemType);
+                    ThumbnailCutoffLog(L"Item type: %s", pszItemType);
                     if (IsDirectoryItemType(pszItemType))
                     {
                         fIsExcluded = true;
-                        ThumbnailCutoffLog(L"Everything is handled :DDD");
-                    }
-                    else
-                    {
-                        ThumbnailCutoffLog(L"Item type is %s, which is NOT a directory item type", pszItemType);
+                        ThumbnailCutoffLog(L"Found a folder type, which will be excluded.");
                     }
                 }
                 else
@@ -227,8 +213,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    HMODULE shell32 = LoadLibraryW(L"shell32.dll");
-    HMODULE windowsStorageDll = LoadLibraryW(L"windows.storage.dll");
+    HMODULE shell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE windowsStorageDll = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (!shell32)
     {
