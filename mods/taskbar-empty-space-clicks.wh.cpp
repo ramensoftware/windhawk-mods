@@ -381,6 +381,8 @@ You can contact me via Windhawk's [Discord channel](https://discord.com/servers/
 #include <comutil.h>
 #include <winrt/base.h>
 #include <psapi.h>
+#include <shlobj.h>
+#include <Knownfolders.h>
 
 #include <string>
 #include <unordered_set>
@@ -421,23 +423,19 @@ class FileLogger
 public:
     FileLogger()
     {
-        const char *filename = "empty_space_clicks_log.txt";
-        std::string filepath;
+        const std::wstring filename = L"empty_space_clicks_log.txt";
 
-        // get the path to the desktop
-        const char *homeDir = std::getenv("USERPROFILE");
-        if (homeDir)
+        PWSTR desktopPath = nullptr; // because Microsoft is moving Desktop to Onedrive
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, NULL, &desktopPath)))
         {
-            std::string path(homeDir);
-            path += "\\Desktop\\";
-            path += filename;
-            filepath = path;
+            m_filepath = std::wstring(desktopPath) + L"\\empty_space_clicks_log.txt";
+            CoTaskMemFree(desktopPath);
         }
         else
         {
-            filepath = filename;
+            m_filepath = filename;
         }
-        m_file.open(filepath, std::ios_base::out | std::ios_base::app);
+        m_file.open(m_filepath, std::ios_base::out | std::ios_base::app);
         if (m_file.is_open())
         {
             std::time_t t = std::time(nullptr);
@@ -454,6 +452,20 @@ public:
         m_file.close();
     }
 
+    // print status of the logger to actually know if it opened the file correctly
+    void printStatus()
+    {
+        if (m_file.is_open())
+        {
+            Wh_Log(L"INFO: FileLogger: Log file opened at path: %s", m_filepath.c_str());
+        }
+        else
+        {
+            Wh_Log(L"ERROR: FileLogger: Log file is not open! File path: %s", m_filepath.c_str());
+        }
+    }
+
+    // called by log macros, write formatted string to the log file
     void write(const wchar_t *format, ...)
     {
         if (m_file.is_open())
@@ -475,6 +487,7 @@ public:
 
 private:
     std::wofstream m_file;
+    std::wstring m_filepath;
 } g_fileLogger;
 
 #define LOG(format, ...)                                       \
@@ -1255,7 +1268,7 @@ std::tuple<TaskBarButtonsState, TaskBarButtonsState, TaskBarButtonsState, TaskBa
 // proc handler for older Windows (nonXAML taskbar) versions and ExplorerPatcher
 LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData);
 
-// proc handler for Alt+Tab (task switching) window to suppress mouse input when needed
+// proc handler for Alt+Tab (Task Switching) window to suppress mouse input when needed
 LRESULT CALLBACK TaskSwitchingWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam, _In_ DWORD_PTR dwRefData);
 
 // proc handler for newer Windows versions (Windows 11 21H2 and newer) and ExplorerPatcher (Win11 menu)
@@ -1281,15 +1294,15 @@ void SubclassTaskSwitchingWindow()
     g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
     if (g_hTaskSwitchingWnd)
     {
-        LOG_DEBUG(L"Found task switching window: 0x%08X", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
+        LOG_DEBUG(L"Found Task Switching window: 0x%08X", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
         g_isTaskSwitchingWindowSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc, NULL);
         if (!g_isTaskSwitchingWindowSubclassed)
         {
-            LOG_ERROR(L"Failed to subclass desktop window 0x%08X", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
+            LOG_ERROR(L"Failed to subclass Task Switching window 0x%08X", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
         }
         else
         {
-            LOG_INFO(L"Subclassed desktop window 0x%08X successfully", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
+            LOG_INFO(L"Subclassed Task Switching window 0x%08X successfully", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
         }
     }
 }
@@ -1336,7 +1349,7 @@ bool HandleIdentifiedInputSiteWindow(HWND hWnd)
         }
         g_hookedInputSiteProcs.insert(wndProc);
 
-        LOG_DEBUG(L"Hooked InputSite wndproc %p", wndProc);
+        LOG_INFO(L"Hooked InputSite wndproc %p", wndProc);
     }
     else
     {
@@ -1358,7 +1371,7 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd)
         if (SubclassTaskbarWindow(hWnd))
         {
             g_subclassedTaskbarWindows.insert(hWnd);
-            LOG_DEBUG(L"Main taskbar window 0x%08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
+            LOG_INFO(L"Main taskbar window 0x%08X subclassed successfully", (DWORD)(ULONG_PTR)hWnd);
         }
     }
 
@@ -2004,13 +2017,6 @@ bool LoadTwinuiPCShellVersion()
         LOG_ERROR(L"twinui.pcshell.dll not loaded in current process");
     }
     return success;
-}
-
-bool WindowsVersionInit()
-{
-    bool result = LoadExplorerVersion();
-    result &= LoadTwinuiPCShellVersion();
-    return result;
 }
 
 // Finds desktop window for show/hide icons command
@@ -2790,6 +2796,12 @@ void CloseCtrlAltTabDialog()
 void SwitchVirtualDesktop(bool reverse)
 {
     LOG_TRACE();
+
+    if ((g_twinuiPCShellBuildNumber == 0) && !LoadTwinuiPCShellVersion()) // load lazily
+    {
+        LOG_ERROR(L"Cannot switch virtual desktops - failed to determine twinui.pcshell.dll version");
+        return;
+    }
 
     // Minimal interface definitions for vtable-based access
     struct IVirtualDesktop : public IUnknown
@@ -4273,9 +4285,13 @@ BOOL Wh_ModInit()
 {
     LOG_TRACE();
 
+#ifdef ENABLE_FILE_LOGGER
+    g_fileLogger.printStatus();
+#endif
+
     LoadSettings();
 
-    if (!WindowsVersionInit() || (g_taskbarVersion == UNKNOWN))
+    if (!LoadExplorerVersion() || (g_taskbarVersion == UNKNOWN))
     {
         LOG_ERROR(L"Unsupported Windows version, ModInit failed");
         return FALSE;
@@ -4358,7 +4374,7 @@ void Wh_ModAfterInit()
     }
     else
     {
-        LOG_ERROR(L"Failed to find Shell_TrayWnd class. Taskbar might not get hooked properly.");
+        LOG_INFO(L"Failed to find Shell_TrayWnd class. Taskbar might not get hooked properly.");
     }
 }
 
