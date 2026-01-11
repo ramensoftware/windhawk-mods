@@ -203,6 +203,14 @@ If you are using the old Windows 10 taskbar on Windows 11 (**ExplorerPatcher** o
 
 If your taskbar becomes fully occupied by open windows and pinned icons, there is no empty space left to click on. To reserve minimal empty space on the taskbar (the `Reserve empty space` feature from 7+ Taskbar Tweaker), you can use the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod with [this example configuration](https://github.com/ramensoftware/windhawk-mods/issues/1089#issuecomment-2576243679).
 
+### Task Switching (Ctrl+Alt+Tab) window always reopens on consecutive triggers
+
+If you are using [Vertical Taskbar for Windows 11](https://windhawk.net/mods/taskbar-vertical) or [Taskbar on top for Windows 11](https://windhawk.net/mods/taskbar-on-top) mod, taskbar click detection might not work correctly when the Task Switching window is opened. As a workaround, you can install [Alt+Tab per monitor](https://windhawk.net/mods/alt-tab-per-monitor) that implicitly fixes the Task Switching window rect size so that the taskbar is not overlaid by it anymore.
+
+### Selected app/window from Task Switching (Ctrl+Alt+Tab) window is not focused
+
+If you've manually selected an app/window from the Task Switching dialog using the mouse, but the window is not focused after closing the dialog, try pressing Win+Tab once. I encountered a weird issue where the underlying mechanism used to identify what you clicked would work only once and then stop working. Opening the Win+Tab window once seems to fix the issue until the next logout/restart.
+
 ### I just installed/updated the mod, but no actions are triggered
 
 The mod uses Windhawk's `ArrayOfNestedOptions` widget type that enables you to create multiple trigger+action configurations. However, if you have just installed or updated the mod, there are no configurations set up yet. It might happen that Windhawk spawns a default empty configuration with all keyboard modifiers selected and no mouse trigger or action selected. Users then overlook the modifiers and only set up the mouse trigger and action. The mod will never trigger any action since it is impossible to press all keyboard modifiers at once on most keyboards. If that's the case, open the mod's Settings and either remove the empty configuration or set up your desired trigger+action configuration (including keyboard modifiers). For more information, please see the gif animation on the mod's `Description` tab.
