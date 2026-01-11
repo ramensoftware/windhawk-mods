@@ -4181,6 +4181,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
             if (ShallSuppressContextMenu(lastClick))
             {
                 g_isContextMenuSuppressed = true;
+                OnMouseClick(lastClick);
                 return 0; // suppress the message // suppress the right click menu (otherwise a double click would be impossible)
             }
         }
