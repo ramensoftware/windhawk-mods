@@ -162,7 +162,7 @@ unsigned int __thiscall CImageManager___GetThumbnailCutoff_hook(void *pThis, voi
     }
 }
 
-// shell32.dll (which is mostly just another copy of windows.storage's code)
+// shell32.dll
 WindhawkUtils::SYMBOL_HOOK shell32Hooks[] =
 {
     {
@@ -179,7 +179,7 @@ WindhawkUtils::SYMBOL_HOOK shell32Hooks[] =
 };
 
 // windows.storage.dll 
-WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] =
+WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] =
 {
     {
         {
@@ -242,7 +242,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (!WindhawkUtils::HookSymbols(windowsStorageDll, windowsStorageDllHooks, ARRAYSIZE(windowsStorageDllHooks)))
+    if (!WindhawkUtils::HookSymbols(windowsStorageDll, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)))
     {
         Wh_Log(L"Failed to hook symbols in windows.storage.dll.");
         return FALSE;
