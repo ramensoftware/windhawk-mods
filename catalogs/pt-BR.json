@@ -2217,6 +2217,37 @@
                 "version": "1.0.1"
             }
         },
+        "disable-thumbnail-minimum-size": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768123077000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768123077000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Leymonaide",
+                "compilerOptions": "-lshlwapi -lpropsys -lole32",
+                "description": "Desativa o tamanho limite usado para exibir miniaturas no Explorador de Arquivos.",
+                "github": "https://github.com/Leymonaide",
+                "homepage": "https://leymonaide.github.io/",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "Desativar tamanho mínimo de miniaturas",
+                "twitter": "https://twitter.com/Leym0naide",
+                "version": "1.2"
+            }
+        },
         "disable-tray-icons": {
             "details": {
                 "defaultSorting": 5910,

@@ -2217,6 +2217,37 @@
                 "version": "1.0.1"
             }
         },
+        "disable-thumbnail-minimum-size": {
+            "details": {
+                "defaultSorting": 0,
+                "published": 1768123077000,
+                "rating": 0,
+                "ratingBreakdown": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "ratingUsers": 0,
+                "updated": 1768123077000,
+                "users": 0
+            },
+            "metadata": {
+                "author": "Leymonaide",
+                "compilerOptions": "-lshlwapi -lpropsys -lole32",
+                "description": "エクスプローラーでサムネイルを表示する際に使用される最小サイズの制限を無効にします。",
+                "github": "https://github.com/Leymonaide",
+                "homepage": "https://leymonaide.github.io/",
+                "include": [
+                    "*"
+                ],
+                "license": "MIT",
+                "name": "サムネイルの最小サイズを無効化",
+                "twitter": "https://twitter.com/Leym0naide",
+                "version": "1.2"
+            }
+        },
         "disable-tray-icons": {
             "details": {
                 "defaultSorting": 5910,
