@@ -911,10 +911,10 @@ struct MouseClick
     }
 
     // Constructs MouseClick from window message parameters and detects if click is on empty taskbar space
-    MouseClick(WPARAM, LPARAM, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
+    MouseClick(WPARAM, LPARAM lParam, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
     {
         timestamp = GetTickCount();
-        if (!GetCursorPos(&position)) // use uniform approach for both Win10 and Win11
+        if (!GetMouseClickPosition(lParam, position)) // use uniform approach for both Win10 and Win11
         {
             return; // without position there is no point to going further, other members are initialized so it's safe to return
         }
@@ -931,9 +931,10 @@ struct MouseClick
         // From that we can't really tell reliably whether user clicked on the taskbar empty space or on some UI element on that taskbar, like
         // opened window, icon, start menu, etc.
         com_ptr<IUIAutomationElement> pWindowElement = NULL;
-        if (FAILED(pUIAutomation->ElementFromPoint(position, pWindowElement.put())) || !pWindowElement)
+        HRESULT hr = pUIAutomation->ElementFromPoint(position, pWindowElement.put());
+        if (FAILED(hr) || !pWindowElement)
         {
-            LOG_ERROR(L"Failed to retrieve UI element from mouse click");
+            LOG_ERROR(L"Failed to retrieve UI element from mouse click at (%ld, %ld), HRESULT: 0x%08X", position.x, position.y, hr);
             return; // without element info we cannot determine its type, other members are initialized so it's safe to return
         }
 
@@ -959,6 +960,29 @@ struct MouseClick
         LOG_DEBUG(L"Taskbar clicked clicked at x=%ld, y=%ld, type=%d, btn=%d, element=%s, isEmptySpace=%d, keyModifiersState=%s",
                   position.x, position.y, static_cast<int>(type), static_cast<int>(button), className.GetBSTR(), onEmptySpace, keyModifiersStateBinRepr.c_str());
 #endif
+    }
+
+    // Extracts mouse position from message parameters, handling Win10/Win11 differences
+    static bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation)
+    {
+        LOG_TRACE();
+
+        // old Windows mouse handling of WM_MBUTTONDOWN message
+        if (g_taskbarVersion == WIN_10)
+        {
+            // message carries mouse position relative to the client window so use GetCursorPos() instead
+            if (!GetCursorPos(&pointerLocation))
+            {
+                LOG_ERROR(L"Failed to get mouse position");
+                return false;
+            }
+        }
+        else
+        {
+            pointerLocation.x = GET_X_LPARAM(lParam);
+            pointerLocation.y = GET_Y_LPARAM(lParam);
+        }
+        return true;
     }
 
     static MouseClick::Type GetPointerTypeWin10(LPARAM lParam)
