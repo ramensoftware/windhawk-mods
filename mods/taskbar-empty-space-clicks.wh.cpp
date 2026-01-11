@@ -995,7 +995,6 @@ struct MouseClick
         LOG_TRACE();
 
         // message carries mouse position relative to the client window so use GetCursorPos() instead
-        // FIXME: this needs to be fixed for touch input
         POINT pointerLocation{};
         if (!GetCursorPos(&pointerLocation))
         {
