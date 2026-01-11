@@ -911,14 +911,9 @@ struct MouseClick
     }
 
     // Constructs MouseClick from window message parameters and detects if click is on empty taskbar space
-    MouseClick(WPARAM, LPARAM lParam, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position{0, 0}, timestamp(0), onEmptySpace(false), hWnd(hWnd)
+    MouseClick(const POINT &ptrPos, Type ptrType, Button btn, HWND hWnd) : type(ptrType), button(btn), position(ptrPos), timestamp(0), onEmptySpace(false), hWnd(hWnd)
     {
         timestamp = GetTickCount();
-        if (!GetMouseClickPosition(lParam, position)) // use uniform approach for both Win10 and Win11
-        {
-            return; // without position there is no point to going further, other members are initialized so it's safe to return
-        }
-
         auto pUIAutomation = g_comAPI.GetUIAutomation();
         if (!pUIAutomation)
         {
@@ -962,27 +957,30 @@ struct MouseClick
 #endif
     }
 
-    // Extracts mouse position from message parameters, handling Win10/Win11 differences
-    static bool GetMouseClickPosition(LPARAM lParam, POINT &pointerLocation)
+    // Extracts mouse position from Win11 pointer message
+    static POINT GetMouseClickPositionWin11(LPARAM lParam)
     {
         LOG_TRACE();
 
-        // old Windows mouse handling of WM_MBUTTONDOWN message
-        if (g_taskbarVersion == WIN_10)
+        POINT pointerLocation{};
+        pointerLocation.x = GET_X_LPARAM(lParam);
+        pointerLocation.y = GET_Y_LPARAM(lParam);
+        return pointerLocation;
+    }
+
+    // Extracts mouse position from message parameters, handling Win10/Win11 differences
+    static POINT GetMouseClickPositionWin10()
+    {
+        LOG_TRACE();
+
+        // message carries mouse position relative to the client window so use GetCursorPos() instead
+        // FIXME: this needs to be fixed for touch input
+        POINT pointerLocation{};
+        if (!GetCursorPos(&pointerLocation))
         {
-            // message carries mouse position relative to the client window so use GetCursorPos() instead
-            if (!GetCursorPos(&pointerLocation))
-            {
-                LOG_ERROR(L"Failed to get mouse position");
-                return false;
-            }
+            LOG_ERROR(L"Failed to get mouse position");
         }
-        else
-        {
-            pointerLocation.x = GET_X_LPARAM(lParam);
-            pointerLocation.y = GET_Y_LPARAM(lParam);
-        }
-        return true;
+        return pointerLocation;
     }
 
     static MouseClick::Type GetPointerTypeWin10(LPARAM lParam)
@@ -1192,7 +1190,7 @@ bool IsSecondaryTaskbarWindow(HWND hWnd);
 bool IsTaskbarWindow(HWND hWnd);
 std::unordered_set<HWND> KeepOnlyValidWindows(const std::unordered_set<HWND> &windows);
 bool UserClickedOnTaskViewItemOnTaskSwitchingWindow(const POINT &pt);
-bool HandleTaskSwitchingWindowClick();
+bool HandleTaskSwitchingWindowClick(const POINT &pt);
 
 KeyModifier GetKeyModifierFromName(const std::wstring &keyName);
 bool IsTaskbarWindow(HWND hWnd);
@@ -1280,7 +1278,6 @@ void UnsubclassTaskbarWindow(HWND hWnd)
 
 void SubclassTaskSwitchingWindow()
 {
-    LOG_DEBUG(L"Trying to subclass Task Switching window");
     g_hTaskSwitchingWnd = FindTaskSwitchingWindow();
     if (g_hTaskSwitchingWnd)
     {
@@ -1288,11 +1285,11 @@ void SubclassTaskSwitchingWindow()
         g_isTaskSwitchingWindowSubclassed = WindhawkUtils::SetWindowSubclassFromAnyThread(g_hTaskSwitchingWnd, TaskSwitchingWindowSubclassProc, NULL);
         if (!g_isTaskSwitchingWindowSubclassed)
         {
-            LOG_ERROR(L"Failed to subclass desktop window");
+            LOG_ERROR(L"Failed to subclass desktop window 0x%08X", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
         }
         else
         {
-            LOG_INFO(L"Subclassed desktop window successfully");
+            LOG_INFO(L"Subclassed desktop window 0x%08X successfully", (DWORD)(ULONG_PTR)g_hTaskSwitchingWnd);
         }
     }
 }
@@ -2203,12 +2200,9 @@ bool UserClickedOnTaskViewItemOnTaskSwitchingWindow(const POINT &pt)
 }
 
 // Handles mouse click on Task Switching window, returns true to suppress the click
-bool HandleTaskSwitchingWindowClick()
+bool HandleTaskSwitchingWindowClick(const POINT &position)
 {
     bool supressClick = false;
-    POINT position{};
-    GetCursorPos(&position);
-
     if (!UserClickedOnTaskViewItemOnTaskSwitchingWindow(position))
     {
         LOG_DEBUG("User clicked outside of Task Switching dialog, closing it and stopping mouse input suppression");
@@ -4067,6 +4061,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
     // on Windows 10 Task Switching window is opened only when invoked, so we need to subclass it lazily here
     if (g_keepTaskSwitchingOpened && (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd) || !g_isTaskSwitchingWindowSubclassed))
     {
+        LOG_DEBUG(L"Trying to find and subclass Task Switching window");
         SubclassTaskSwitchingWindow();
     }
 
@@ -4083,7 +4078,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
                 g_comAPI.Init(); // make sure it gets initialied from GUI thread
             }
 
-            const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerTypeWin10(messageExtraInfo), button, hWnd);
+            const auto lastClick = MouseClick(MouseClick::GetMouseClickPositionWin10(), MouseClick::GetPointerTypeWin10(messageExtraInfo), button, hWnd);
             if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT) &&
                 ShallSuppressContextMenu(lastClick)) // avoid opening right click menu when performing a right click action
             {
@@ -4102,7 +4097,7 @@ LRESULT CALLBACK TaskbarWindowSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg, _In_ 
              (WM_CONTEXTMENU == uMsg) ||                // WM_CONTEXTMENU for ExplorerPatcher Win10 menu
              (uMsg == g_explorerPatcherContextMenuMsg)) // g_explorerPatcherContextMenuMsg for ExplorerPatcher Win11 menu
     {
-        const auto lastClick = MouseClick(wParam, lParam, MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
+        const auto lastClick = MouseClick(MouseClick::GetMouseClickPositionWin10(), MouseClick::Type::MOUSE, MouseClick::Button::RIGHT, hWnd);
         const LPARAM extraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
         const bool isSuppressionStillValid = (GetTickCount() - g_contextMenuSuppressionTimestamp) <= 1000; // reset context menu suppression after 1 second
         if (isSuppressionStillValid && g_isContextMenuSuppressed && (extraInfo != g_injectedClickID) && lastClick.onEmptySpace &&
@@ -4133,8 +4128,11 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     // Task switching window is created on demand and the only way to really identify it is by checking not just class name (generic), but
     // windows text as well - however the text is not present during window creation (window create hooks above), so we need to find it lazily here
     // even though the window stays open, when user logs in, the window doesn't exist yet
-    if (g_keepTaskSwitchingOpened && (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd) || !g_isTaskSwitchingWindowSubclassed))
+    if (g_keepTaskSwitchingOpened &&
+        (!g_hTaskSwitchingWnd || !IsWindow(g_hTaskSwitchingWnd) || !g_isTaskSwitchingWindowSubclassed) &&
+        (g_dwTaskbarThreadId == GetWindowThreadProcessId(hWnd, NULL)))
     {
+        LOG_DEBUG(L"Trying to find and subclass Task Switching window");
         SubclassTaskSwitchingWindow();
     }
 
@@ -4143,7 +4141,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
     if (g_keepTaskSwitchingOpened && g_hTaskSwitchingWnd && (uMsg == WM_POINTERDOWN) && (hRootWnd == g_hTaskSwitchingWnd) &&
         IsWindow(g_hTaskSwitchingWnd) && IsWindowVisible(g_hTaskSwitchingWnd))
     {
-        if (HandleTaskSwitchingWindowClick())
+        if (HandleTaskSwitchingWindowClick(MouseClick::GetMouseClickPositionWin11(lParam)))
         {
             return 0; // suppress the message
         }
@@ -4159,7 +4157,7 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, L
         }
 
         // check whether we need to suppress the context menu for right clicks
-        const auto lastClick = MouseClick(wParam, lParam, MouseClick::GetPointerTypeWin11(wParam), MouseClick::GetMouseButtonWin11(wParam), hRootWnd);
+        const auto lastClick = MouseClick(MouseClick::GetMouseClickPositionWin11(lParam), MouseClick::GetPointerTypeWin11(wParam), MouseClick::GetMouseButtonWin11(wParam), hRootWnd);
         if (lastClick.onEmptySpace && (lastClick.button == MouseClick::Button::RIGHT))
         {
             LPARAM dwExtraInfo = GetMessageExtraInfo() & 0xFFFFFFFFu;
@@ -4208,7 +4206,7 @@ LRESULT CALLBACK TaskSwitchingWindowSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
     // handle the click if user clicked on opened Task Switching window
     if (g_hTaskSwitchingWnd && isMouseButtonDown)
     {
-        if (HandleTaskSwitchingWindowClick())
+        if (HandleTaskSwitchingWindowClick(MouseClick::GetMouseClickPositionWin10()))
         {
             return 0; // suppress the click
         }
