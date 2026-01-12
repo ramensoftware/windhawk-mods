@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-11T09:17:57.000Z</updated>
+    <updated>2026-01-12T19:54:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Word Local AutoSave 1.5]]></title>
+        <id>https://windhawk.net/mods/word-local-autosave#df9a07b7e0359a0c3074b69cd0be6353df6a09c8</id>
+        <link href="https://windhawk.net/mods/word-local-autosave"/>
+        <updated>2026-01-12T19:54:58.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="fixraceconditionwithlowsavedelayvalues">Fix race condition with low save delay values</h2>
+<h3 id="problem">Problem</h3>
+<p>Users with very low save delay settings (e.g., 100ms) still experienced random shortcut triggers (Ctrl+K, Ctrl+H, etc.). The 100ms quiet period was not sufficient because:</p>
+<ul>
+<li>Fast typing produces keystrokes every 50-100ms</li>
+<li>With save delay = 100ms and quiet period = 100ms, saves would trigger during active typing</li>
+<li>A key could be pressed in the microseconds between the final check and SendInput call</li>
+</ul>
+<h3 id="solution">Solution</h3>
+<ol>
+<li>Increased quiet period from 100ms to 250ms (longer than typical fast typing interval)</li>
+<li>Added a final safety check immediately before SendInput</li>
+</ol>
+<h3 id="changes">Changes</h3>
+<ul>
+<li><strong>Increased <code>QUIET_PERIOD_MS</code> from 100 to 250</strong> — ensures save only triggers during actual pauses in typing, not between keystrokes</li>
+<li><strong>Added final safety check in <code>SendCtrlS()</code></strong> — checks <code>AreAnyKeysPressed()</code> one more time right before calling <code>SendInput()</code>, aborts and reschedules if any key is detected</li>
+<li><strong>Added forward declaration for <code>RetryTimerProc</code></strong> — needed because <code>SendCtrlS()</code> now references it</li>
+<li>Version bumped to 1.5</li>
+</ul>]]></content>
+        <author>
+            <name>communism420</name>
+            <uri>https://github.com/communism420</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Thumbnail Minimum Size 1.2]]></title>
         <id>https://windhawk.net/mods/disable-thumbnail-minimum-size#9a03d1edada2671f707184e04a78ad480d354b7d</id>
@@ -426,25 +456,6 @@ Instead of forcing modifier keys to release, the mod now <strong>waits</strong> 
         <author>
             <name>BGsteppin</name>
             <uri>https://github.com/BGsteppin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Word Local AutoSave 1.1]]></title>
-        <id>https://windhawk.net/mods/word-local-autosave#f9ec9f9313b098032de9129f9bb7e96059794fdc</id>
-        <link href="https://windhawk.net/mods/word-local-autosave"/>
-        <updated>2026-01-03T22:47:39.000Z</updated>
-        <content type="html"><![CDATA[<p>Fix Apply Styles dialog opening during auto-save</p>
-<p>Problem:
-When typing uppercase letters (holding Shift) and auto-save triggers at the same time, Word receives Ctrl+Shift+S instead of Ctrl+S. This opens the "Apply Styles" dialog, interrupting the user's workflow.</p>
-<p>Solution:
-Before sending Ctrl+S, the mod now checks if Shift or Alt keys are currently pressed. If so, it sends key-up events for these modifiers first, ensuring Word receives a clean Ctrl+S command.</p>
-<p>Changes:
-1) Added detection for pressed Shift and Alt keys before auto-save
-2) Send key-up events for modifier keys before Ctrl+S to prevent unwanted shortcuts
-3) Version bumped to 1.1</p>]]></content>
-        <author>
-            <name>communism420</name>
-            <uri>https://github.com/communism420</uri>
         </author>
     </entry>
 </feed>

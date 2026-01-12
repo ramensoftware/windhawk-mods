@@ -1,3 +1,26 @@
+## 1.5 ([Jan 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/df9a07b7e0359a0c3074b69cd0be6353df6a09c8/mods/word-local-autosave.wh.cpp))
+
+## Fix race condition with low save delay values
+
+### Problem
+
+Users with very low save delay settings (e.g., 100ms) still experienced random shortcut triggers (Ctrl+K, Ctrl+H, etc.). The 100ms quiet period was not sufficient because:
+- Fast typing produces keystrokes every 50-100ms
+- With save delay = 100ms and quiet period = 100ms, saves would trigger during active typing
+- A key could be pressed in the microseconds between the final check and SendInput call
+
+### Solution
+
+1. Increased quiet period from 100ms to 250ms (longer than typical fast typing interval)
+2. Added a final safety check immediately before SendInput
+
+### Changes
+
+- **Increased `QUIET_PERIOD_MS` from 100 to 250** — ensures save only triggers during actual pauses in typing, not between keystrokes
+- **Added final safety check in `SendCtrlS()`** — checks `AreAnyKeysPressed()` one more time right before calling `SendInput()`, aborts and reschedules if any key is detected
+- **Added forward declaration for `RetryTimerProc`** — needed because `SendCtrlS()` now references it
+- Version bumped to 1.5
+
 ## 1.4 ([Jan 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fb96bf6b44b3dbabe393a42bcd5464ce15688618/mods/word-local-autosave.wh.cpp))
 
 ## Fix race condition causing random shortcuts to trigger
