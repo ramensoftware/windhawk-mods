@@ -2,7 +2,7 @@
 // @id              word-local-autosave
 // @name            Word Local AutoSave
 // @description     Enables AutoSave functionality for local documents in Microsoft Word by sending Ctrl+S
-// @version         1.4
+// @version         1.5
 // @author          communism420
 // @github          https://github.com/communism420
 // @include         WINWORD.EXE
@@ -29,7 +29,7 @@ short delay.
 - Optional minimum interval between saves to prevent excessive disk writes
 - Works with any locally saved Word document
 - Only saves when Word is the active window
-- Requires a quiet period (no key presses) before saving to prevent shortcut conflicts
+- Requires a quiet period (250ms no key presses) before saving to prevent shortcut conflicts
 
 ## Settings
 
@@ -45,7 +45,7 @@ short delay.
 - The mod simulates pressing Ctrl+S, so it behaves exactly like manual saving.
 - Manual Ctrl+S presses are detected and reset the auto-save timer.
 - Auto-save only triggers when Microsoft Word is the foreground window.
-- Auto-save requires 100ms of keyboard inactivity to prevent triggering wrong shortcuts.
+- Auto-save requires 250ms of keyboard inactivity to prevent triggering wrong shortcuts.
 */
 // ==/WindhawkModReadme==
 
@@ -69,7 +69,8 @@ struct {
 } g_settings;
 
 // Minimum quiet time before saving (no key presses for this duration)
-const DWORD QUIET_PERIOD_MS = 100;
+// Must be longer than typical time between keystrokes when typing fast (~50-100ms)
+const DWORD QUIET_PERIOD_MS = 250;
 
 // Global state
 UINT_PTR g_saveTimerId = 0;
@@ -89,6 +90,7 @@ TranslateMessage_t g_originalTranslateMessage = nullptr;
 void ScheduleSave();
 void SendCtrlS();
 void TrySave();
+void CALLBACK RetryTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 
 // Check if Word is the foreground window
 bool IsWordForeground() {
@@ -167,6 +169,17 @@ bool AreAnyKeysPressed() {
 
 // Send Ctrl+S keystroke
 void SendCtrlS() {
+    // Final safety check RIGHT before sending - if any key is pressed, abort
+    if (AreAnyKeysPressed()) {
+        Wh_Log(L"Key pressed at last moment, aborting send");
+        // Reschedule retry
+        g_retryCount++;
+        if (g_retryCount < 50) {
+            g_retryTimerId = SetTimer(nullptr, 0, 100, RetryTimerProc);
+        }
+        return;
+    }
+    
     g_isSendingCtrlS = true;
 
     INPUT inputs[4] = {};
@@ -385,7 +398,7 @@ void LoadSettings() {
 
 // Mod initialization
 BOOL Wh_ModInit() {
-    Wh_Log(L"Word Local AutoSave mod v1.4 initializing...");
+    Wh_Log(L"Word Local AutoSave mod v1.5 initializing...");
 
     // Store current process ID for foreground window check
     g_wordProcessId = GetCurrentProcessId();
