@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-01-12T19:54:58.000Z</updated>
+    <updated>2026-01-12T22:10:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disappearing Tray Icons Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix#cbb50a1cb10d76cd7c499e02ddaa63a147f2f148</id>
+        <link href="https://windhawk.net/mods/taskbar-disappearing-tray-icons-fix"/>
+        <updated>2026-01-12T22:10:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disappearingtrayiconsfix">Disappearing Tray Icons Fix</h1>
+<p>Fixes system tray icons going missing in Windows 11 by rebroadcasting the
+<code>TaskbarCreated</code> window message.</p>
+<h2 id="theproblem">The Problem</h2>
+<p>Windows 11 has a known issue where system tray icons can randomly vanish (not
+just hide in the overflow area). This happens because:</p>
+<ol>
+<li>Apps register tray icons by calling <code>Shell_NotifyIcon</code></li>
+<li>When <code>explorer.exe</code> restarts or the shell initializes, it broadcasts
+<code>TaskbarCreated</code> to tell apps to re-register their icons</li>
+<li>Some apps miss this message due to race conditions, sleep/wake cycles, or
+timing issues</li>
+<li>Result: icons vanish completely with no way to recover except restarting
+the app</li>
+</ol>
+<h2 id="thesolution">The Solution</h2>
+<p>This mod detects when the taskbar is created and rebroadcasts the <code>TaskbarCreated</code>
+message after a defined delay, giving apps another chance to register their tray
+icons. This mod can also run a passive rebroadcast to catch bizarre instances of this
+occurring while the taskbar is running.</p>
+<p>Only the explorer.exe instance that owns the taskbar will activate this mod.</p>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Word Local AutoSave 1.5]]></title>
         <id>https://windhawk.net/mods/word-local-autosave#df9a07b7e0359a0c3074b69cd0be6353df6a09c8</id>
@@ -445,17 +476,6 @@ Instead of forcing modifier keys to release, the mod now <strong>waits</strong> 
         <author>
             <name>Undisputed00x</name>
             <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Start Power Text Renamer 1.0.1]]></title>
-        <id>https://windhawk.net/mods/win11-start-power-text-renamer#7721f673ddaa6772701c59d7d781b336c05a0963</id>
-        <link href="https://windhawk.net/mods/win11-start-power-text-renamer"/>
-        <updated>2026-01-03T23:12:28.000Z</updated>
-        <content type="html"><![CDATA[<p>Initial release.</p>]]></content>
-        <author>
-            <name>BGsteppin</name>
-            <uri>https://github.com/BGsteppin</uri>
         </author>
     </entry>
 </feed>
