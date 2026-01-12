@@ -2,7 +2,7 @@
 // @id             ai-taskbar
 // @name           Modern AI Taskbar
 // @description    An ai assistant built into your taskbar
-// @version        1.1
+// @version        1.2
 // @author         Frqme
 // @github         https://github.com/Frqmelikescheese
 // @include        explorer.exe
@@ -49,6 +49,7 @@ static int g_currentMode = 0;
 static BOOL g_isOpen = FALSE;
 static HFONT g_hFontNormal = NULL;
 static HFONT g_hFontBold = NULL;
+static HBRUSH g_hBrushInput = NULL;
 
 #define C_BG        RGB(32, 32, 32)
 #define C_INPUT     RGB(50, 50, 50)
@@ -95,7 +96,10 @@ struct ThreadData { std::wstring prompt; std::wstring sys; };
 DWORD WINAPI ApiThread(LPVOID param) {
     ThreadData* data = (ThreadData*)param;
     HINTERNET hSession = WinHttpOpen(L"WindhawkAI/4.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!hSession) return 0;
+    if (!hSession) {
+        delete data;
+        return 0;
+    }
     HINTERNET hConnect = WinHttpConnect(hSession, L"openrouter.ai", INTERNET_DEFAULT_HTTPS_PORT, 0);
     
     std::wstring headers = L"Authorization: Bearer " + g_apiKey + L"\r\nContent-Type: application/json";
@@ -148,7 +152,9 @@ DWORD WINAPI ApiThread(LPVOID param) {
         SendMessage(g_hOut, WM_VSCROLL, SB_BOTTOM, 0);
     }
     
-    WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+    WinHttpCloseHandle(hRequest); 
+    WinHttpCloseHandle(hConnect); 
+    WinHttpCloseHandle(hSession);
     delete data;
     return 0;
 }
@@ -180,7 +186,10 @@ void SendChat() {
     if (g_currentMode == 1) sys = L"You are a master programmer. Code only.";
     if (g_currentMode == 2) sys = L"You are a creative writer.";
     
-    CreateThread(NULL, 0, ApiThread, new ThreadData{prompt, sys}, 0, NULL);
+    HANDLE hThread = CreateThread(NULL, 0, ApiThread, new ThreadData{prompt, sys}, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
+    }
 }
 
 LRESULT CALLBACK InputSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -198,6 +207,7 @@ LRESULT CALLBACK ChatProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             LoadLibrary(L"Msftedit.dll");
             g_hFontNormal = CreateFont(17,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Segoe UI");
             g_hFontBold = CreateFont(16,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+            g_hBrushInput = CreateSolidBrush(C_INPUT);
 
             g_hOut = CreateWindowEx(0, MSFTEDIT_CLASS, L"", 
                 WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL, 
@@ -268,11 +278,19 @@ LRESULT CALLBACK ChatProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             break;
         }
         case WM_CTLCOLOREDIT: {
-            HDC hdc = (HDC)wParam; SetBkMode(hdc, TRANSPARENT); SetTextColor(hdc, C_TEXT); SetBkColor(hdc, C_INPUT); 
-            return (LRESULT)CreateSolidBrush(C_INPUT);
+            HDC hdc = (HDC)wParam; 
+            SetBkMode(hdc, TRANSPARENT); 
+            SetTextColor(hdc, C_TEXT); 
+            SetBkColor(hdc, C_INPUT); 
+            return (LRESULT)g_hBrushInput;
         }
         case WM_COMMAND:
             if(LOWORD(wParam) == ID_BTN_CLEAR) SetWindowText(g_hOut, L"Chat Cleared.\r\n");
+            break;
+        case WM_DESTROY:
+            if (g_hBrushInput) DeleteObject(g_hBrushInput);
+            if (g_hFontNormal) DeleteObject(g_hFontNormal);
+            if (g_hFontBold) DeleteObject(g_hFontBold);
             break;
     }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -330,9 +348,20 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    if(g_apiKey.empty()) { MessageBox(NULL, L"Please set API Key", L"Windhawk", MB_OK); return FALSE; }
+    if(g_apiKey.empty()) { 
+        MessageBox(NULL, L"Please set API Key", L"Windhawk", MB_OK | MB_TOPMOST); 
+        return FALSE; 
+    }
     CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
     return TRUE;
 }
-void Wh_ModUninit() { if (g_hBtn) SendMessage(g_hBtn, WM_CLOSE, 0, 0); if (g_hChat) SendMessage(g_hChat, WM_CLOSE, 0, 0); }
-void Wh_ModSettingsChanged() { LoadSettings(); UpdatePosition(); }
+
+void Wh_ModUninit() { 
+    if (g_hBtn) SendMessage(g_hBtn, WM_CLOSE, 0, 0); 
+    if (g_hChat) SendMessage(g_hChat, WM_CLOSE, 0, 0); 
+}
+
+void Wh_ModSettingsChanged() { 
+    LoadSettings(); 
+    UpdatePosition(); 
+}
